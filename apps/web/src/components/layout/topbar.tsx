@@ -1,10 +1,11 @@
 'use client';
 
-import { Bell, LogOut, Search, User } from 'lucide-react';
+import { AlertTriangle, Bell, LogOut, Search, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
+import { ErrorBoundary } from '@/components/error-boundary';
 import { TenantSwitcher } from '@/components/platform/tenant-switcher';
 import {
   DropdownMenu,
@@ -67,8 +68,28 @@ export function Topbar() {
 
         {/* NetEnroll staff only, and rendered on every page: an operator must
             never be able to forget which agency's data they are looking at.
-            Renders nothing for an agency user. */}
-        <TenantSwitcher />
+            Renders nothing for an agency user.
+
+            Inside a boundary because this control sits in the layout: an
+            uncaught error here unmounts the whole app from the root, which is
+            how a single mis-read field locked every platform admin out of the
+            portal. Contained, the operator keeps the sidebar, the topbar and
+            every page — they lose only the switcher, and are told so. */}
+        <ErrorBoundary
+          label="The agency switcher"
+          fallback={() => (
+            <span
+              role="alert"
+              title="The agency switcher could not be loaded. Everything else on this page still works. Please reload, and let NetEnroll know if it keeps happening."
+              className="flex items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Agency switcher unavailable
+            </span>
+          )}
+        >
+          <TenantSwitcher />
+        </ErrorBoundary>
 
         <button
           type="button"

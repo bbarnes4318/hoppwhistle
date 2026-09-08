@@ -1,6 +1,19 @@
 /**
  * NetEnroll platform operations: who you are, and which agency you are inside.
  *
+ * ── Every route here answers `{ data: ... }` ─────────────────────────────────
+ *
+ * Three of these four used to answer with a bare object while `/tenants`
+ * answered with an envelope, and the switcher read `/tenants` as though it were
+ * bare. It got an object where it expected an array, called `.map` on it, threw
+ * inside the dashboard layout, and locked every platform admin out of the whole
+ * portal with "Application error: a client-side exception has occurred".
+ *
+ * One shape across the surface removes the question. `/api/v1/platform/*`,
+ * `/api/v1/delivery/*` and `/api/v1/rating/*` are now uniformly enveloped, and
+ * `api-response-contract.test.ts` drives the real web client against these
+ * routes so a caller reading the wrong key fails a test rather than a page.
+ *
  * ── The switch, and why it looks like this ───────────────────────────────────
  *
  * Phase 1 removed every wire input from tenant resolution: no header, no query
@@ -62,11 +75,13 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       };
 
       return reply.send({
-        isPlatformAdmin: isPlatform,
-        actingTenant:
-          isPlatform && principal.actingTenantId
-            ? { id: principal.actingTenantId, name: principal.actingTenantName ?? null }
-            : null,
+        data: {
+          isPlatformAdmin: isPlatform,
+          actingTenant:
+            isPlatform && principal.actingTenantId
+              ? { id: principal.actingTenantId, name: principal.actingTenantName ?? null }
+              : null,
+        },
       });
     }
   );
@@ -128,11 +143,13 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
         });
 
         return reply.send({
-          actingTenant: { id: entered.tenantId, name: entered.tenantName },
-          enteredAt: entered.enteredAt.toISOString(),
-          // Said plainly because it is surprising: this response is not served
-          // from inside the agency just entered.
-          appliesFrom: 'next-request',
+          data: {
+            actingTenant: { id: entered.tenantId, name: entered.tenantName },
+            enteredAt: entered.enteredAt.toISOString(),
+            // Said plainly because it is surprising: this response is not
+            // served from inside the agency just entered.
+            appliesFrom: 'next-request',
+          },
         });
       } catch (err) {
         if (err instanceof PlatformSwitchError) {
@@ -170,9 +187,11 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       });
 
       return reply.send({
-        actingTenant: null,
-        leftTenantId,
-        appliesFrom: 'next-request',
+        data: {
+          actingTenant: null,
+          leftTenantId,
+          appliesFrom: 'next-request',
+        },
       });
     }
   );

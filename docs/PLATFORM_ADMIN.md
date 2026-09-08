@@ -125,6 +125,69 @@ render the new agency's chrome around the old agency's data.
 page: the condition, and the one action that resolves it. `/settings` and
 `/admin` are exempt — neither is agency data.
 
+### The switcher crashed the whole portal, and why one field could do that
+
+Selecting an agency threw `TypeError: s.tenants.map is not a function` and every
+platform admin got "Application error: a client-side exception has occurred" on
+a blank page, with no way to reach any agency.
+
+**The defect.** `apiClient`'s `data` is the parsed response **body**, not the
+payload inside it — the client does not unwrap anything.
+`GET /api/v1/platform/tenants` answers `{ data: tenants }`, so the body is an
+object and the array is one level in. The hook read the body as the array,
+`tenants` became an object, and the switcher called `.map` on it.
+
+**Why one field took the application down.** The switcher is in the top bar,
+which is in the dashboard layout. React's response to an uncaught error during
+render is to unmount from the root, so the layout went with it — the sidebar,
+the top bar and every route out. That is the Phase 1b login loop's failure mode
+in a different place: one narrow defect that removes every escape from itself.
+
+**Why nothing caught it.** Phase 2 built the switcher and Phase 4 reviewed these
+screens; neither exercised the switcher's primary action against a real
+response. The API test that does hit this route asserted with a helper walking
+the body **recursively** for any `id` key, so `{ data: [{id}] }`,
+`{ tenants: [{id}] }` and a bare `[{id}]` satisfied it identically. It could not
+fail on an envelope change however wrong the client was. TypeScript could not
+help either: `get<T>` types the body as whatever the caller claims, so
+`get<PlatformTenant[]>` against an enveloped route compiles and is wrong.
+
+**What changed.**
+
+| | |
+| --- | --- |
+| the read | `payload()` in `@/lib/api` — one named, typed unwrap, replacing three ad-hoc copies. `Array.isArray` guards the switcher's list, because the crash was a non-null non-array reaching state |
+| the shape | `/platform/context` and both `acting-tenant` verbs now answer `{ data: ... }` like everything else on the surface (see §2d) |
+| the test | `api-response-contract.test.ts` boots the real routes and drives the **real web client** against them, asserting what each consumer's accessor yields. Reintroducing the bug fails three of its cases |
+| the blast radius | `ErrorBoundary` around the switcher and around the layout's children. A failure in the chrome now renders "Agency switcher unavailable" in place; a failure in a page keeps the shell |
+
+Next's `error.tsx` would not have helped: it catches errors from a segment's
+children, not from the layout itself, and the switcher is layout chrome.
+
+## 2d. Every route on this surface answers `{ data: ... }`
+
+`/api/v1/platform/*`, `/api/v1/delivery/*` and `/api/v1/rating/*` are uniformly
+enveloped. Three routes in `platform.ts` used to answer with a bare object while
+`/tenants` beside them was enveloped, and that inconsistency inside one file is
+what made "which key do I read" a question at all. **Changed:**
+
+- `GET /api/v1/platform/context`
+- `POST /api/v1/platform/acting-tenant`
+- `DELETE /api/v1/platform/acting-tenant`
+
+The bodies are otherwise identical — the same fields, one level in. The only
+consumer is `use-platform-context.ts`, updated with them; the enter and leave
+calls read nothing but `response.error`, so they were unaffected either way.
+
+**This is a breaking response change**, so the API and the web app have to
+deploy together. Deploying the API alone leaves the switcher's context read
+looking one level too shallow — the operator is treated as not-staff and the
+switcher disappears — and the fix restores it.
+
+Elsewhere in the app plenty of routes legitimately answer with a bare body, so
+the client does **not** unwrap globally: `payload()` is called where the route
+is enveloped, and `Envelope<T>` names that in the type.
+
 **Inside an agency, an operator carries that agency's ADMIN and OWNER roles**
 (`ACTING_TENANT_ROLES`), attached to the principal and never written as
 `UserRole` rows. Without this the switch is a button that does nothing: the
@@ -363,7 +426,7 @@ directly, which the same command already does.
 
 ## 5. Tests
 
-`apps/api/src/__tests__/platform-admin.test.ts` — 32 cases against a real
+`apps/api/src/__tests__/platform-admin.test.ts` — 38 cases against a real
 database, driving the real auth hook and the real route plugins.
 
 1. **An agency OWNER is refused every re-gated route** — the shared dialer, the
@@ -395,6 +458,32 @@ database, driving the real auth hook and the real route plugins.
    `409 NO_ACTING_TENANT` rather than 403 or 401; an agency AGENT is still
    refused the payroll surface; and an operator whose capability has been
    revoked is refused with a plain 403, not the staff-only "pick an agency".
+
+7. **The response shape the switcher reads** — the agency list is asserted at
+   `data`, not "somewhere in the body". That assertion used `idsIn()`, which
+   walks recursively and therefore passed throughout the crash; `idsIn()` is
+   still used for the leak checks it suits, and now carries a comment saying it
+   must not be used for shape.
+
+`apps/api/src/__tests__/api-response-contract.test.ts` — 18 cases. Boots the
+real routes on a real port and drives **the real web client** — the same
+`apps/web/src/lib/api.ts` module the browser runs — against them over HTTP,
+asserting what each consumer's accessor actually yields rather than what is
+present somewhere in the body.
+
+It pins the switcher's exact operation (`payload(...)` is an array, and
+`.map()` over it returns the agency names), that the body is *not* the payload,
+that `payload()` answers `undefined` rather than throwing for every non-envelope
+shape, that all four platform GETs and six delivery GETs answer `{ data: ... }`,
+that entering and leaving an agency do too, that the delivery panel's fields
+arrive as values rather than `undefined`, and that a refusal is an error rather
+than a payload. Reverting the route to a bare body fails three of its cases,
+which was checked rather than assumed.
+
+`apps/web/src/lib/__tests__/api-envelope.test.ts` — the client-side half:
+`payload()` unwraps, preserves a legitimate `null`, and returns `undefined` for
+every shape a component might be handed. It also pins the bug itself — that
+`response.data` is the envelope, and `.map` on it throws.
 
 `apps/api/src/__tests__/platform-capability-closure.test.ts` — 12 cases, added in
 Phase 2 alongside the permission widening and extended with the provisioning

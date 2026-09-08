@@ -30,6 +30,9 @@ export default defineConfig({
       // The delivery portal's polling: a floor of 45 agents leaves this open
       // all day, and a hidden tab must cost nothing.
       'src/hooks/__tests__/**/*.test.ts',
+      // The error boundary that keeps one broken component from unmounting the
+      // whole application, as the agency switcher did.
+      'src/components/__tests__/**/*.test.tsx',
     ],
   },
 });

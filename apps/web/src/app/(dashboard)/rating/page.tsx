@@ -14,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
@@ -121,15 +122,16 @@ export default function RatingPage(): JSX.Element {
   const load = useCallback(async () => {
     setLoading(true);
     const [summaryResponse, historyResponse] = await Promise.all([
-      apiClient.get<RatingSummary>('/api/v1/rating/summary'),
-      apiClient.get<RateChangeRow[]>('/api/v1/rating/history?limit=30'),
+      apiClient.get<Envelope<RatingSummary>>('/api/v1/rating/summary'),
+      apiClient.get<Envelope<RateChangeRow[]>>('/api/v1/rating/history?limit=30'),
     ]);
 
     if (summaryResponse.error) setError(summaryResponse.error.message);
     else setError(null);
 
-    setSummary(summaryResponse.data ?? null);
-    setHistory(historyResponse.data ?? []);
+    setSummary(payload(summaryResponse) ?? null);
+    const rows = payload(historyResponse);
+    setHistory(Array.isArray(rows) ? rows : []);
     setLoading(false);
   }, []);
 

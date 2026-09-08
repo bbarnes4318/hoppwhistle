@@ -24,6 +24,40 @@ export function isNoActingTenant(response: { error?: { code: string } }): boolea
   return response.error?.code === NO_ACTING_TENANT;
 }
 
+/**
+ * What a call to this client returns.
+ *
+ * ── `data` is the RESPONSE BODY, not the payload inside it ───────────────────
+ *
+ * This is the single most important thing to know about this type, and not
+ * knowing it put a crash into production. `request()` returns `{ data }` where
+ * `data` is the parsed body exactly as the server sent it. It does not unwrap
+ * anything.
+ *
+ * So for a route that answers with a bare object:
+ *
+ *     reply.send({ isPlatformAdmin: true })   ->  response.data.isPlatformAdmin
+ *
+ * and for a route that answers with an envelope:
+ *
+ *     reply.send({ data: tenants })           ->  response.data.data
+ *
+ * The generic `T` therefore describes the BODY. Declaring
+ * `get<PlatformTenant[]>('/api/v1/platform/tenants')` against an enveloped
+ * route type-checks and is wrong: the body is `{ data: PlatformTenant[] }`, so
+ * `response.data` is an object, `.map` is undefined, and the component throws.
+ * That is exactly what happened to the agency switcher.
+ *
+ * TypeScript cannot catch it, because `T` is whatever the caller claims. So for
+ * an enveloped route, say so in the type and unwrap it by name:
+ *
+ *     const response = await apiClient.get<Envelope<PlatformTenant[]>>(path);
+ *     const tenants = payload(response) ?? [];
+ *
+ * `apps/api/src/__tests__/api-response-contract.test.ts` drives the real
+ * endpoints through this real client and fails if a route's shape and its
+ * caller's accessor ever disagree again.
+ */
 export interface ApiResponse<T> {
   data?: T;
   error?: {
@@ -36,6 +70,32 @@ export interface ApiResponse<T> {
     total?: number;
     totalPages?: number;
   };
+}
+
+/**
+ * The body shape of a route that answers `reply.send({ data: ... })`.
+ *
+ * Every route under `/api/v1/platform/*`, `/api/v1/delivery/*` and
+ * `/api/v1/rating/*` does. Naming it makes the envelope visible at the call
+ * site rather than something a reader has to know.
+ */
+export type Envelope<T> = { data: T };
+
+/**
+ * The payload inside an enveloped response, or `undefined`.
+ *
+ * `undefined` for a failed request and for a body that is not an envelope --
+ * both are "there is nothing to render", and both are cases a caller has to
+ * handle anyway. It never throws: a malformed response should leave a component
+ * with no data, not unmount the tree above it.
+ *
+ * Three ad-hoc copies of this unwrap existed before it did, each written by
+ * somebody who had just been caught by the same thing.
+ */
+export function payload<T>(response: ApiResponse<Envelope<T>>): T | undefined {
+  const body = response.data;
+  if (!body || typeof body !== 'object' || !('data' in body)) return undefined;
+  return body.data;
 }
 
 export interface RequestOptions {

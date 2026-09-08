@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 
 /**
  * Who the signed-in user is to the platform, and which agency they are inside.
@@ -24,6 +25,17 @@ import { apiClient } from '@/lib/api';
  * on the request that makes it — the server writes a row that later requests
  * read — so both reload the page rather than pretending the current one has
  * moved.
+ *
+ * ── Every read here goes through `payload()` ─────────────────────────────────
+ *
+ * `apiClient`'s `data` is the response BODY, not the payload inside it, and
+ * every platform route answers `{ data: ... }`. This hook read `/tenants` as
+ * though the body were the array, so `tenants` became an object, the switcher
+ * called `.map` on it, and the exception unmounted the dashboard layout — a
+ * platform admin saw "Application error" and could not reach any agency.
+ *
+ * `payload()` names the unwrap and types it, so the mistake is visible rather
+ * than a silent cast. See `ApiResponse` in `@/lib/api`.
  */
 
 export interface ActingTenant {
@@ -76,16 +88,16 @@ export function usePlatformContext(): PlatformContextState {
         return;
       }
 
-      const response = await apiClient.get<{
-        isPlatformAdmin: boolean;
-        actingTenant: ActingTenant | null;
-      }>('/api/v1/platform/context');
+      const response = await apiClient.get<
+        Envelope<{ isPlatformAdmin: boolean; actingTenant: ActingTenant | null }>
+      >('/api/v1/platform/context');
 
       if (cancelled) return;
 
-      if (response.data) {
-        setIsPlatformAdmin(response.data.isPlatformAdmin === true);
-        setActingTenant(response.data.actingTenant ?? null);
+      const context = payload(response);
+      if (context) {
+        setIsPlatformAdmin(context.isPlatformAdmin === true);
+        setActingTenant(context.actingTenant ?? null);
       }
       setLoading(false);
     })();
@@ -97,8 +109,18 @@ export function usePlatformContext(): PlatformContextState {
 
   const loadTenants = useCallback(async () => {
     setTenantsLoading(true);
-    const response = await apiClient.get<PlatformTenant[]>('/api/v1/platform/tenants');
-    setTenants(response.data ?? []);
+    const response =
+      await apiClient.get<Envelope<PlatformTenant[]>>('/api/v1/platform/tenants');
+
+    /*
+     * `Array.isArray` and not just `?? []`. The crash this replaces was a
+     * non-null, non-array value reaching state and the switcher calling `.map`
+     * on it — so the guard has to be about the SHAPE, not about presence. An
+     * unexpected body leaves the list empty and the menu says so; it does not
+     * take the page down.
+     */
+    const tenants = payload(response);
+    setTenants(Array.isArray(tenants) ? tenants : []);
     setTenantsLoading(false);
   }, []);
 

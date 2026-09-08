@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { ThemeScope } from '@/components/domain/theme-scope';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -150,7 +151,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <LiveStripMount />
           </ThemeScope>
           <main className="flex-1 bg-background flex flex-col min-h-0 overflow-y-auto">
-            {needsAgency ? <CrossAgencyPrompt /> : children}
+            {/*
+              A page that throws loses the page, not the shell. Before this, an
+              uncaught render error anywhere under the layout unmounted the
+              whole tree from the root: the sidebar, the topbar and the agency
+              switcher went with it, and the operator's only route out of a
+              blank "Application error" screen was to know a URL by heart.
+
+              Keyed on the pathname, so navigating away from a broken page
+              clears the boundary rather than leaving somebody stuck on the
+              message.
+            */}
+            <ErrorBoundary label="This page" resetKey={pathname}>
+              {needsAgency ? <CrossAgencyPrompt /> : children}
+            </ErrorBoundary>
           </main>
           {/* Footer removed - legal links accessible via Settings page */}
         </div>

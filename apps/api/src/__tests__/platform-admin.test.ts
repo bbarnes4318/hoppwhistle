@@ -165,7 +165,25 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
     return { id: tenant.id, ownerId: owner.id, callId: call.id };
   }
 
-  /** Every id-shaped string anywhere in a response body. */
+  /**
+   * Every id-shaped string anywhere in a response body.
+   *
+   * ── This helper is shape-BLIND, and that is now a deliberate, narrow use ────
+   *
+   * It walks recursively, so `{ data: [{id}] }`, `{ tenants: [{id}] }` and a
+   * bare `[{id}]` all satisfy it identically. That is fine for the question it
+   * is asked here -- "did this agency's rows leak into that agency's response"
+   * -- where the answer must not depend on where in the body they appear.
+   *
+   * It is NOT a check that a response has the shape its caller reads. Used as
+   * one it cannot fail: the agency switcher crashed in production on
+   * `/api/v1/platform/tenants` while this helper passed on the same route
+   * throughout, because the ids were present and the envelope was not what the
+   * client expected.
+   *
+   * Shape is asserted in `api-response-contract.test.ts`, which drives the real
+   * web client against the real endpoint. Do not add shape assertions here.
+   */
   function idsIn(body: unknown): string[] {
     const found: string[] = [];
     const walk = (node: unknown) => {
@@ -307,7 +325,24 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
       });
 
       expect(response.statusCode).toBe(200);
-      const ids = idsIn(response.json());
+
+      /*
+       * Read at the key the client reads, not "somewhere in the body".
+       *
+       * This assertion used to be `idsIn(response.json())`, which walks the
+       * body recursively and therefore passed whatever the envelope was. The
+       * switcher read this route as though the body were the array, called
+       * `.map` on an object, and took the whole application down with it -- and
+       * this test stayed green the entire time.
+       *
+       * The full contract, through the real web client, is in
+       * `api-response-contract.test.ts`. This is the same fact asserted where
+       * the route's own permission test can see it.
+       */
+      const body = response.json() as { data?: unknown };
+      expect(Array.isArray(body.data), 'the agency list must be at `data`').toBe(true);
+
+      const ids = (body.data as Array<{ id: string }>).map(tenant => tenant.id);
       expect(ids).toContain(tenantA.id);
       expect(ids).toContain(tenantB.id);
     });
@@ -354,7 +389,13 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({ isPlatformAdmin: true, actingTenant: null });
+      // Enveloped, like every other route on this surface. `/platform/context`
+      // answered with a bare object until the switcher crash made the
+      // inconsistency worth removing -- see `api-response-contract.test.ts`.
+      expect(response.json().data).toMatchObject({
+        isPlatformAdmin: true,
+        actingTenant: null,
+      });
     });
 
     it('reads exactly one agency once it has entered one', async () => {
@@ -415,7 +456,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
 
       // Name as well as id: the banner has to be readable by a person who is
       // about to mistake one agency's numbers for the platform's.
-      expect(response.json()).toMatchObject({
+      expect(response.json().data).toMatchObject({
         isPlatformAdmin: true,
         actingTenant: { id: tenantA.id, name: 'Alpha Insurance' },
       });
@@ -597,7 +638,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
       });
 
       expect(enter.statusCode).toBe(200);
-      expect(enter.json().appliesFrom).toBe('next-request');
+      expect(enter.json().data.appliesFrom).toBe('next-request');
     });
 
     it('refuses to enter an agency that does not exist', async () => {
@@ -631,7 +672,13 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(operatorId, null),
       });
 
-      expect(response.json()).toMatchObject({ isPlatformAdmin: true, actingTenant: null });
+      // Enveloped, like every other route on this surface. `/platform/context`
+      // answered with a bare object until the switcher crash made the
+      // inconsistency worth removing -- see `api-response-contract.test.ts`.
+      expect(response.json().data).toMatchObject({
+        isPlatformAdmin: true,
+        actingTenant: null,
+      });
     });
   });
 
@@ -649,7 +696,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
           headers: tokenFor(agency.ownerId, agency.id),
         });
         expect(response.statusCode).toBe(200);
-        expect(response.json().isPlatformAdmin).toBe(false);
+        expect(response.json().data.isPlatformAdmin).toBe(false);
       }
     });
 
