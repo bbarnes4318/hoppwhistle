@@ -26,6 +26,20 @@ export default defineConfig({
      * does not need one. `environmentMatchGlobs` gives jsdom only to the
      * rendering tests, which is what lets the platform-landing test mount the
      * real layout and the real pages.
+     *
+     * ── jsdom is PINNED to 26.x, and the reason is CI's Node ─────────────────
+     *
+     * jsdom 27 and later require Node 22.22 or newer, through an undici that
+     * calls `markAsUncloneable` from `node:worker_threads`. `.github/workflows`
+     * runs Node 20, where that does not exist, so importing jsdom throws before
+     * a single test in this file runs.
+     *
+     * That failure is worse than it looks. Vitest reports it as an unhandled
+     * error rather than as a failed file: the run said "14 passed" with the
+     * rendering file simply absent, and only the error count made it red. A
+     * dependency bump here can therefore delete this coverage while the summary
+     * still reads green. Bump jsdom only together with NODE_VERSION in the
+     * workflows, and check the file count afterwards.
      */
     environmentMatchGlobs: [['src/app/__tests__/*.render.test.tsx', 'jsdom']],
     // Scoped deliberately: apps/web has 141 pre-existing type errors across
