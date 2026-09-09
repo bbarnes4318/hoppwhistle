@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
  *    reverts wholesale with no runtime error and no environment variable to
  *    inspect. This is the one that has already happened once on this codebase,
  *    with NEXT_PUBLIC_GOOGLE_CLIENT_ID; the autopsy is at
- *    apps/web/src/app/login/page.tsx:15-30.
+ *    apps/web/src/app/login/page.tsx:23-37.
  *
  * The first two are asserted by reading the tree. The third is asserted by
  * running the build guard and requiring it to fail.

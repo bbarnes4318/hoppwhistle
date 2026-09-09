@@ -1,16 +1,24 @@
 'use client';
 
-import { Eye, EyeOff, Loader2, XCircle, AlertCircle, CheckCircle2 } from 'lucide-react';
-import Image from 'next/image';
+import { AlertCircle, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
-import { useState, useCallback, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 
+import { Wordmark } from '@/components/brand/wordmark';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/hooks/use-auth';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
+import { cn } from '@/lib/utils';
 
 /**
  * Public OAuth client identifier — not a secret; it ships in the page HTML.
@@ -35,6 +43,23 @@ const API_BASE =
     ? window.location.origin
     : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+/**
+ * The focus treatment, on every control this page owns.
+ *
+ * globals.css gives the product one `:focus-visible` outline, but `Input` and
+ * `Button` both cancel it with `focus-visible:outline-none` and draw a ring
+ * instead — and `Input`'s ring is a single pixel. This is the only screen a
+ * person reaches with no session and possibly no mouse, so every field, every
+ * button and every link here carries the same two-pixel offset ring in
+ * --brand-ink. `cn` is tailwind-merge, so this wins over the primitive's own.
+ */
+const FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink ' +
+  'focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
+/** One field, so the eleven inputs on this page cannot drift apart. */
+const FIELD = cn('h-10 w-full rounded-control border-rule bg-surface text-sm text-ink', FOCUS_RING);
+
 interface AuthResponse {
   token: string;
   csrfToken: string;
@@ -55,12 +80,35 @@ interface PasswordStrength {
   hasNumber: boolean;
 }
 
+/** The same three rules `PASSWORD_REGEX` enforces in apps/api/src/routes/auth.ts. */
 function validatePasswordStrength(password: string): PasswordStrength {
   const hasLength = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
   const hasNumber = /\d/.test(password);
   const score = [hasLength, hasUppercase, hasNumber].filter(Boolean).length;
   return { score, hasLength, hasUppercase, hasNumber };
+}
+
+/**
+ * Read an error out of a response without ever producing an empty panel.
+ *
+ * `res.json()` throws on a body that is not JSON — an nginx 502, a proxy's
+ * HTML error page — and the thrown SyntaxError is what used to reach the
+ * banner. Every failure gets a sentence a person can act on: the server's own
+ * message when there is one, and a plain description of the status when there
+ * is not.
+ */
+async function messageFor(res: Response, fallback: string): Promise<string> {
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Not JSON. The status is all there is to go on.
+  }
+  const message = (body as { error?: { message?: string } } | null)?.error?.message;
+  if (typeof message === 'string' && message.trim()) return message.trim();
+  if (res.status >= 500) return `${fallback} The server is not answering right now.`;
+  return `${fallback} (HTTP ${res.status})`;
 }
 
 interface GoogleAccountsWindow extends Window {
@@ -79,23 +127,22 @@ interface GoogleAccountsWindow extends Window {
  *
  * WHY THIS IS NOT AN EFFECT DOING getElementById.
  *
- * It used to be, and that is why the button never appeared on the signup tab.
- * The two panels are Radix `TabsContent`, which does not render an inactive
- * panel's children at all -- and when a panel becomes active, Radix mounts the
- * children a render LATER than the tab state changes: `Presence` keeps its own
- * state machine, starts at "unmounted", and only sends MOUNT from a layout
- * effect, so on the commit where `activeTab` first becomes 'signup' the panel
- * div exists but is still rendering `present && children`, i.e. nothing. The
- * page's effect ran on that commit, looked up `#google-signup-button`, got
- * null, and returned -- and because the follow-up render that finally mounts
- * the children does not change `activeTab`, the effect never ran again. The
- * sign-in button worked only because its panel is the one selected on first
- * mount, where Presence initialises straight to "mounted".
+ * It used to be, and that is why the button never appeared on the second
+ * panel. The slot is inside a conditionally rendered branch, so on the commit
+ * where that branch first becomes the one being shown, the container exists in
+ * the element tree but is not yet in the document. The effect ran on that
+ * commit, looked the id up, got null, and returned — and because nothing about
+ * the next commit changed the state it depended on, it never ran again.
  *
  * A ref callback has no such ordering to get wrong: React invokes it with the
- * node at the moment the node is attached, whenever that turns out to be, and
- * invokes it again if `ready` flips afterwards. That covers both orders -- tab
- * opened before the Google script loaded, and after.
+ * node at the moment the node is attached, whenever that turns out to be. It
+ * is kept in state so the draw below re-runs for either order — the panel
+ * mounted before the Google script loaded, and after.
+ *
+ * The width is measured rather than fixed. Google draws to an integer pixel
+ * width, so the 300 this used to pass overflowed the card on a 360px phone;
+ * the button is redrawn when the measurement actually changes, which is a
+ * rotation or a resize and not the redraw itself.
  */
 function GoogleButton({
   ready,
@@ -106,36 +153,112 @@ function GoogleButton({
   text: 'continue_with' | 'signup_with';
   id: string;
 }): JSX.Element {
-  const mount = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (!node || !ready) return;
-      const googleWindow = window as unknown as GoogleAccountsWindow;
-      if (!googleWindow.google) return;
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const mount = useCallback((node: HTMLDivElement | null) => setSlot(node), []);
 
-      // React re-invokes this ref when `ready` changes, handing back the same
-      // node; clearing first stops a second call stacking a duplicate button.
-      node.replaceChildren();
-      googleWindow.google.accounts.id.renderButton(node, {
+  useEffect(() => {
+    if (!slot || !ready) return;
+    const googleWindow = window as unknown as GoogleAccountsWindow;
+    const accounts = googleWindow.google?.accounts;
+    if (!accounts) return;
+
+    let drawnAt = 0;
+    const draw = () => {
+      const measured = Math.round(slot.getBoundingClientRect().width);
+      // Google's own accepted range. 320 is the fallback for a slot measured
+      // at zero, which is what a display:none ancestor reports.
+      const width = Math.min(400, Math.max(200, measured || 320));
+      if (width === drawnAt) return;
+      drawnAt = width;
+      // React does not own these children — Google does — so clearing first is
+      // what stops a redraw stacking a second button under the first.
+      slot.replaceChildren();
+      accounts.id.renderButton(slot, {
         type: 'standard',
         theme: 'outline',
         size: 'large',
         text,
         shape: 'rectangular',
         logo_alignment: 'left',
-        width: 300,
+        width,
       });
-    },
-    [ready, text]
-  );
+    };
 
-  return <div id={id} ref={mount} className="w-full flex justify-center" />;
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, [slot, ready, text]);
+
+  return <div id={id} ref={mount} className="flex w-full justify-center" />;
+}
+
+/** The error and the invitation notice are the same shape; only the tone moves. */
+function Banner({ tone, children }: { tone: 'error' | 'info'; children: ReactNode }) {
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'flex items-start gap-2.5 rounded-control border px-3 py-2.5',
+        tone === 'error'
+          ? 'border-dropped bg-dropped-tint text-dropped-ink'
+          : 'border-rule bg-sunken text-ink-2'
+      )}
+    >
+      {tone === 'error' ? (
+        <AlertCircle className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
+      ) : null}
+      <p className="t-body min-w-0">{children}</p>
+    </div>
+  );
+}
+
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="t-meta block font-medium text-ink-2">
+      {children}
+    </label>
+  );
 }
 
 export default function AuthPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
 
-  // Form state
+  /**
+   * Tell the session provider about the token before navigating.
+   *
+   * `AuthSessionProvider` lives in the root layout and asks `/api/auth/me`
+   * exactly once, when it mounts. On this page it mounts while there is no
+   * token, so it settles on `user: null` -- and a client-side push to
+   * /dashboard does not remount it. The dashboard layout then reads that stale
+   * null and replaces the route back to /login, which is what a signed-in user
+   * saw: correct credentials, a stored token, and the sign-in page again. It
+   * cleared on a manual reload, which is why it looked intermittent.
+   *
+   * Refetching first is what makes the session real to the rest of the app
+   * before anything navigates. `refetch` resolves either way -- it reports a
+   * failure through the provider's own error state rather than throwing -- so
+   * this cannot strand someone who is holding a valid token.
+   */
+  const { refetch: refreshSession } = useAuth();
+
+  const enter = useCallback(
+    async (auth: AuthResponse) => {
+      persistSessionToken(auth.token);
+      await refreshSession();
+      router.push(getRedirectPath(auth.user.roles));
+    },
+    [refreshSession, router]
+  );
+
+  /**
+   * Which of the two things this page does. Read from the URL and from nothing
+   * else: there is no self-serve registration, so there is no control on this
+   * page that puts it into 'activate'. A person gets here with an invitation
+   * link or they get here to sign in.
+   */
+  const [mode, setMode] = useState<'signin' | 'activate'>('signin');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -147,31 +270,31 @@ export default function AuthPage() {
    * The activation token from the invitation link, e.g.
    * `https://agents.netenroll.com/login?activation=<token>&email=<address>`.
    *
-   * Signing up is no longer something a stranger can do from this page. The
-   * server used to work out which agency a new account belonged to by looking
-   * at the request -- Host, then Referer, then Origin, then whichever tenant
-   * row happened to be oldest -- which on a shared host put strangers inside a
+   * Signing up is not something a stranger can do from this page. The server
+   * used to work out which agency a new account belonged to by looking at the
+   * request -- Host, then Referer, then Origin, then whichever tenant row
+   * happened to be oldest -- which on a shared host put strangers inside a
    * paying agency. The tenant now travels with this token, which the server
-   * issued when it verified a payment or an administrator's invitation, and
+   * issued when it verified an administrator's invitation, and
    * `POST /api/auth/register` refuses without one.
    */
   const [activationToken, setActivationToken] = useState('');
   const [agencyName, setAgencyName] = useState<string | null>(null);
+  /*
+   * Set when the server has answered that this link cannot be used. It is what
+   * takes the invitation notice down: "This link is not valid" directly above
+   * "You have been invited to join…" is two answers to the same question.
+   */
+  const [invitationRefused, setInvitationRefused] = useState(false);
 
-  // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Registration no longer signs you in, so it needs somewhere to say so that
-  // is not the error banner -- the signup succeeded, it just isn't a session.
-  const [notice, setNotice] = useState<string | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
   // Set once accounts.id.initialize() has run; the buttons cannot render before it.
   const [googleReady, setGoogleReady] = useState(false);
 
-  // Password strength for signup
   const passwordStrength = validatePasswordStrength(password);
 
-  // Handle Google credential response
   const handleGoogleResponse = useCallback(
     async (response: { credential: string }) => {
       setIsLoading(true);
@@ -192,33 +315,34 @@ export default function AuthPage() {
           credentials: 'include',
         });
 
-        const data = await res.json();
-
         if (!res.ok) {
-          throw new Error(data.error?.message || 'Google authentication failed');
+          throw new Error(await messageFor(res, 'Google could not sign you in.'));
         }
 
-        // Store token
-        const authData = data as AuthResponse;
-        persistSessionToken(authData.token);
-
-        // Redirect based on role - BUYER goes to buyer portal
-        const redirectPath = getRedirectPath(authData.user.roles);
-        router.push(redirectPath);
+        await enter((await res.json()) as AuthResponse);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Google authentication failed');
+        setError(err instanceof Error ? err.message : 'Google could not sign you in.');
       } finally {
         setIsLoading(false);
       }
     },
-    [router, activationToken]
+    [enter, activationToken]
   );
 
-  // Pick the invitation up out of the URL and show who it is for.
-  //
-  // The preview call consumes nothing -- the grant is still single-use
-  // afterwards -- and answers only with the agency's display name, never its
-  // id, so a stolen link cannot be turned into a tenant identifier.
+  /**
+   * Pick the invitation up out of the URL and show who it is for.
+   *
+   * The preview call consumes nothing -- the grant is still single-use
+   * afterwards -- and answers only with the agency's display name, never its
+   * id, so a stolen link cannot be turned into a tenant identifier.
+   *
+   * A rejected preview is now SHOWN. It is the server's own answer for a link
+   * that has expired or has already been used, and telling someone that before
+   * they choose a password is the difference between a clear refusal and a
+   * form that fails after they have filled it in. Only a rejection is
+   * surfaced: a preview that could not be reached at all leaves the form
+   * alone, because registration validates the token again either way.
+   */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('activation');
@@ -226,7 +350,7 @@ export default function AuthPage() {
 
     const invitedEmail = params.get('email') ?? '';
     setActivationToken(token);
-    setActiveTab('signup');
+    setMode('activate');
     if (invitedEmail) setEmail(invitedEmail);
 
     if (!invitedEmail) return;
@@ -238,17 +362,21 @@ export default function AuthPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: invitedEmail, activationToken: token }),
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          setError(await messageFor(res, 'This invitation link cannot be used.'));
+          setInvitationRefused(true);
+          return;
+        }
         const data = (await res.json()) as { agencyName?: string };
         if (data.agencyName) setAgencyName(data.agencyName);
       } catch {
-        // A failed preview is cosmetic; registration still validates the token.
+        // Unreachable, not rejected. Registration still validates the token.
       }
     })();
   }, []);
 
   // Initialize the Google client once the script is in. Rendering the buttons is
-  // deliberately NOT done here -- see GoogleButton below for why.
+  // deliberately NOT done here -- see GoogleButton above for why.
   useEffect(() => {
     if (!googleLoaded || !GOOGLE_CLIENT_ID) return;
     const googleWindow = window as unknown as GoogleAccountsWindow;
@@ -263,7 +391,6 @@ export default function AuthPage() {
     setGoogleReady(true);
   }, [googleLoaded, handleGoogleResponse]);
 
-  // Email/Password Login
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -277,39 +404,30 @@ export default function AuthPage() {
         credentials: 'include',
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Login failed');
+        throw new Error(await messageFor(res, 'We could not sign you in.'));
       }
 
-      const authData = data as AuthResponse;
-      persistSessionToken(authData.token);
-
-      // Redirect based on role - BUYER goes to buyer portal
-      const redirectPath = getRedirectPath(authData.user.roles);
-      router.push(redirectPath);
+      await enter((await res.json()) as AuthResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'We could not sign you in.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Email Registration
-  const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
+  const handleActivate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (passwordStrength.score < 3) {
-      setError('Please use a stronger password');
+      setError('Please choose a password that meets all three requirements below.');
       return;
     }
 
     if (!activationToken) {
       setError(
         'An invitation link is required to create an account. ' +
-          'Agencies receive one when their plan is purchased; agents receive one ' +
-          'from their agency administrator.'
+          'Your agency administrator can send you one.'
       );
       return;
     }
@@ -325,31 +443,71 @@ export default function AuthPage() {
         credentials: 'include',
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Registration failed');
+        throw new Error(await messageFor(res, 'We could not set up your account.'));
       }
 
       // 201 with a token and a session. The activation grant IS the approval --
-      // it exists because the server verified a payment or an administrator's
-      // invitation -- so there is no second manual step to wait on. This used
-      // to be a 202 with no token and a PENDING account, which left a paying
-      // customer with no way in.
-      const authData = data as AuthResponse;
-      persistSessionToken(authData.token);
-      router.push(getRedirectPath(authData.user.roles));
+      // it exists because the server verified an administrator's invitation --
+      // so there is no second manual step to wait on. This used to be a 202
+      // with no token and a PENDING account, which left a paying customer with
+      // no way in.
+      await enter((await res.json()) as AuthResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(err instanceof Error ? err.message : 'We could not set up your account.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const clearError = () => {
-    setError(null);
-    setNotice(null);
-  };
+  const passwordField = (id: string, autoComplete: 'current-password' | 'new-password') => (
+    <div className="relative">
+      <Input
+        id={id}
+        type={showPassword ? 'text' : 'password'}
+        value={password}
+        onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+        required
+        autoComplete={autoComplete}
+        className={cn(FIELD, 'pr-11')}
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        aria-label={showPassword ? 'Hide password' : 'Show password'}
+        aria-pressed={showPassword}
+        className={cn(
+          'absolute right-1 top-1/2 flex h-8 w-9 -translate-y-1/2 items-center justify-center',
+          'rounded-control text-ink-2 hover:text-ink',
+          FOCUS_RING
+        )}
+      >
+        {showPassword ? (
+          <EyeOff className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <Eye className="h-4 w-4" aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
+
+  /*
+   * Only drawn once Google's script has initialised. The slot above it is
+   * always mounted -- the ref has to be able to attach, and a hidden slot
+   * measures zero and would draw the button at the wrong width -- but an "or"
+   * with nothing above it is a dead end for anyone whose network or extension
+   * blocks accounts.google.com, which is who this branch is for.
+   */
+  const divider = (label: string) => (
+    <div className="relative py-1" aria-hidden="true">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-rule" />
+      </div>
+      <div className="relative flex justify-center">
+        <span className="t-meta bg-surface px-3 text-ink-2">{label}</span>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -359,441 +517,248 @@ export default function AuthPage() {
         strategy="lazyOnload"
       />
 
-      <div className="min-h-screen flex">
-        {/* Left Panel - Brand */}
-        <div className="hidden lg:flex lg:w-1/2 bg-zinc-950 border-r border-border relative overflow-hidden flex-col justify-between p-12">
-          {/* System Grid Overlay */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-
-          {/* Top Logotype */}
-          <div className="relative z-10 flex items-center justify-start">
-            <Image src="/hopwhistle.png" alt="NetEnroll" width={200} height={66} priority />
-          </div>
-
-          {/* Center Content / Core Value */}
-          <div className="relative z-10 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] font-mono text-zinc-400 font-semibold tracking-widest uppercase">
-                All systems operational
-              </span>
-            </div>
-            <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
-              Welcome to NetEnroll
+      {/*
+        The one screen that runs before there is a session, and — since the
+        root of agents.netenroll.com redirects here — the front door of the
+        domain. One centred card on --paper, the wordmark above it, and the
+        line under the wordmark that tells someone who arrived by mistake
+        whether this is for them. Nothing decorative: no gradient, no hero, no
+        marketing copy. Brand green appears on the primary action and the focus
+        ring, and nowhere else.
+      */}
+      <main className="flex min-h-screen flex-col bg-paper px-4 py-10 sm:px-6 sm:py-16">
+        <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center">
+          <header className="text-center">
+            <h1>
+              <Wordmark size="lg" />
             </h1>
-            <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
-              Qualified calls delivered to your agents, billed per submitted application. Watch
-              today&apos;s delivery as it happens, and settle against your Insertion Order without
-              spreadsheets.
+            <p className="t-body mt-3 text-ink-2">
+              The agent portal for licensed insurance agencies.
             </p>
-          </div>
+          </header>
 
-          {/* Bottom System Stats */}
-          <div className="relative z-10 border-t border-zinc-800/50 pt-8 mt-12 grid grid-cols-2 gap-6 w-full max-w-md">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Calls
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Routed in real time</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Reporting
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Live calls and spend</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Buyers and publishers
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Managed side by side</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Payouts
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Tracked per campaign</p>
-            </div>
-          </div>
-        </div>
+          <section
+            aria-labelledby="auth-heading"
+            className="mt-8 rounded-card border border-rule bg-surface p-6 sm:p-8"
+          >
+            <h2 id="auth-heading" className="t-title text-ink">
+              {mode === 'signin' ? 'Sign in' : 'Set your password'}
+            </h2>
+            <p className="t-body mt-1.5 text-ink-2">
+              {mode === 'signin'
+                ? 'Use the account your agency set up for you.'
+                : 'Choose a password to finish setting up your account.'}
+            </p>
 
-        {/* Right Panel - Auth Form */}
-        <div className="flex-1 flex flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24 bg-background">
-          <div className="mx-auto w-full max-w-sm">
-            {/* Mobile logo */}
-            <div className="lg:hidden flex justify-center mb-10">
-              <Image src="/hopwhistle.png" alt="NetEnroll" width={180} height={60} priority />
-            </div>
+            {error ? (
+              <div className="mt-5">
+                <Banner tone="error">{error}</Banner>
+              </div>
+            ) : null}
 
-            <div className="space-y-8">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {activeTab === 'signin' ? 'Sign in' : 'Create account'}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {activeTab === 'signin'
-                    ? 'Enter your email and password to sign in to your account.'
-                    : 'Create an account to start buying or sending calls.'}
+            {mode === 'signin' ? (
+              <div className="mt-6 space-y-6">
+                <GoogleButton ready={googleReady} text="continue_with" id="google-signin-button" />
+
+                {googleReady ? divider('or') : null}
+
+                <form onSubmit={e => void handleLogin(e)} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <FieldLabel htmlFor="signin-email">Email address</FieldLabel>
+                    <Input
+                      id="signin-email"
+                      type="email"
+                      placeholder="you@agency.com"
+                      value={email}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      autoFocus
+                      className={FIELD}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <FieldLabel htmlFor="signin-password">Password</FieldLabel>
+                    {passwordField('signin-password', 'current-password')}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className={cn('h-10 w-full', FOCUS_RING)}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Sign in
+                  </Button>
+                </form>
+
+                {/*
+                  There is no self-serve registration and no password-reset
+                  route to link to. Saying who to ask is more use than a link
+                  that does not exist.
+                */}
+                <p className="t-meta text-center text-ink-2">
+                  Accounts are created by invitation. If you need one, or you cannot get in, please
+                  ask your agency administrator.
                 </p>
               </div>
+            ) : (
+              <div className="mt-6 space-y-6">
+                {/*
+                  Which agency this invitation is for, when the link named one.
+                  Worth showing before the password field: an agent following a
+                  link should be able to see they are joining the right agency,
+                  and someone who is not expecting an invitation should be able
+                  to see that they are not.
+                */}
+                {invitationRefused ? null : (
+                  <Banner tone="info">
+                    {agencyName
+                      ? `You have been invited to join ${agencyName}.`
+                      : 'You have been invited to join the agency that sent you this link.'}
+                  </Banner>
+                )}
 
-              {/* Awaiting-approval notice: a completed signup, not a failure */}
-              {notice && (
-                <div className="flex items-center gap-3 p-4 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium shadow-sm">
-                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                  <span className="flex-1">{notice}</span>
-                  <button
-                    onClick={() => setNotice(null)}
-                    className="flex-shrink-0 hover:opacity-70 transition-opacity"
-                    aria-label="Dismiss"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                <GoogleButton ready={googleReady} text="signup_with" id="google-activate-button" />
 
-              {/* Error Alert */}
-              {error && (
-                <div className="flex items-center gap-3 p-4 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium shadow-sm">
-                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                  <span className="flex-1">{error}</span>
-                  <button
-                    onClick={clearError}
-                    className="flex-shrink-0 hover:opacity-70 transition-opacity"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                {googleReady ? divider('or') : null}
 
-              <Tabs
-                value={activeTab}
-                onValueChange={v => {
-                  setActiveTab(v as 'signin' | 'signup');
-                  clearError();
-                }}
-                className="w-full"
-              >
-                <TabsList className="grid w-full grid-cols-2 h-10 mb-8 bg-muted/50 rounded-md">
-                  <TabsTrigger value="signin" className="text-xs font-medium">
-                    Sign in
-                  </TabsTrigger>
-                  <TabsTrigger value="signup" className="text-xs font-medium">
-                    Create account
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Sign In Form */}
-                <TabsContent value="signin" className="space-y-6 outline-none">
-                  <GoogleButton
-                    ready={googleReady}
-                    text="continue_with"
-                    id="google-signin-button"
-                  />
-
-                  {/* Divider */}
-                  <div className="relative my-8">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or sign in with email
-                      </span>
-                    </div>
-                  </div>
-
-                  <form onSubmit={e => void handleLogin(e)} className="space-y-5">
+                <form onSubmit={e => void handleActivate(e)} className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="signin-email"
-                        className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                      >
-                        Email Address
-                      </label>
+                      <FieldLabel htmlFor="activate-firstname">First name</FieldLabel>
                       <Input
-                        id="signin-email"
-                        type="email"
-                        placeholder="you@company.com"
-                        value={email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                        required
-                        autoComplete="email"
-                        className="h-10 font-mono text-sm shadow-none"
+                        id="activate-firstname"
+                        type="text"
+                        value={firstName}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setFirstName(e.target.value)
+                        }
+                        autoComplete="given-name"
+                        className={FIELD}
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label
-                          htmlFor="signin-password"
-                          className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                        >
-                          Password
-                        </label>
-                      </div>
-                      <div className="relative">
-                        <Input
-                          id="signin-password"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setPassword(e.target.value)
-                          }
-                          required
-                          autoComplete="current-password"
-                          className="h-10 pr-10 font-mono text-sm shadow-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full h-10 font-medium shadow-none mt-2"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Sign in
-                    </Button>
-                  </form>
-                </TabsContent>
-
-                {/* Sign Up Form */}
-                <TabsContent value="signup" className="space-y-6 outline-none">
-                  {/*
-                    Which agency this invitation is for, when the link named
-                    one. Worth showing before the password field: an agent
-                    following a link should be able to see they are joining the
-                    right agency, and someone who is not expecting an invitation
-                    should be able to see that they are not.
-                  */}
-                  {activationToken ? (
-                    <div className="rounded-sm border border-border bg-muted/40 px-4 py-3">
-                      <p className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
-                        Invitation
-                      </p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {agencyName
-                          ? `You are joining ${agencyName}.`
-                          : 'You are joining the agency that sent you this link.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="rounded-sm border border-border bg-muted/40 px-4 py-3">
-                      <p className="text-sm text-muted-foreground">
-                        Creating an account needs an invitation link. Agencies receive one when
-                        their plan is purchased; agents receive one from their agency
-                        administrator.
-                      </p>
-                    </div>
-                  )}
-
-                  <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
-
-                  {/* Divider */}
-                  <div className="relative my-8">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or sign up with email
-                      </span>
+                      <FieldLabel htmlFor="activate-lastname">Last name</FieldLabel>
+                      <Input
+                        id="activate-lastname"
+                        type="text"
+                        value={lastName}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
+                        autoComplete="family-name"
+                        className={FIELD}
+                      />
                     </div>
                   </div>
 
-                  <form onSubmit={e => void handleRegister(e)} className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="signup-firstname"
-                          className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                        >
-                          First Name
-                        </label>
-                        <Input
-                          id="signup-firstname"
-                          type="text"
-                          placeholder="Jane"
-                          value={firstName}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setFirstName(e.target.value)
-                          }
-                          autoComplete="given-name"
-                          className="h-10 text-sm shadow-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="signup-lastname"
-                          className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                        >
-                          Last Name
-                        </label>
-                        <Input
-                          id="signup-lastname"
-                          type="text"
-                          placeholder="Smith"
-                          value={lastName}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setLastName(e.target.value)
-                          }
-                          autoComplete="family-name"
-                          className="h-10 text-sm shadow-none"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="signup-email"
-                        className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                      >
-                        Email Address
-                      </label>
-                      <Input
-                        id="signup-email"
-                        type="email"
-                        placeholder="you@company.com"
-                        value={email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                        required
-                        autoComplete="email"
-                        className="h-10 font-mono text-sm shadow-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="signup-position"
-                        className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                      >
-                        Position
-                      </label>
-                      <select
-                        id="signup-position"
-                        value={position}
-                        onChange={e => setPosition(e.target.value)}
-                        required
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <option value="">Select Position...</option>
-                        <option value="Licensed Agent">Licensed Agent</option>
-                        <option value="Sales Support">Sales Support</option>
-                        <option value="Retention">Retention</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="signup-password"
-                        className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
-                      >
-                        Password
-                      </label>
-                      <div className="relative">
-                        <Input
-                          id="signup-password"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setPassword(e.target.value)
-                          }
-                          required
-                          autoComplete="new-password"
-                          className="pr-10 h-10 font-mono text-sm shadow-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
+                  <div className="space-y-1.5">
+                    <FieldLabel htmlFor="activate-email">Email address</FieldLabel>
+                    <Input
+                      id="activate-email"
+                      type="email"
+                      placeholder="you@agency.com"
+                      value={email}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      className={FIELD}
+                    />
+                  </div>
 
-                      {/* Password Strength Indicator */}
-                      {password && (
-                        <div className="space-y-2 mt-3 pt-1">
-                          <div className="flex gap-1.5">
-                            <div
-                              className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 1 ? 'bg-destructive' : 'bg-muted'}`}
-                            />
-                            <div
-                              className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 2 ? 'bg-yellow-500' : 'bg-muted'}`}
-                            />
-                            <div
-                              className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 3 ? 'bg-emerald-500' : 'bg-muted'}`}
-                            />
-                          </div>
-                          <div className="text-[10px] uppercase font-mono tracking-wider space-y-1 pt-1">
-                            <div
-                              className={
-                                passwordStrength.hasLength
-                                  ? 'text-emerald-500'
-                                  : 'text-muted-foreground'
-                              }
-                            >
-                              {passwordStrength.hasLength ? '✓' : '○'} At least 8 characters
-                            </div>
-                            <div
-                              className={
-                                passwordStrength.hasUppercase
-                                  ? 'text-emerald-500'
-                                  : 'text-muted-foreground'
-                              }
-                            >
-                              {passwordStrength.hasUppercase ? '✓' : '○'} One uppercase
-                            </div>
-                            <div
-                              className={
-                                passwordStrength.hasNumber
-                                  ? 'text-emerald-500'
-                                  : 'text-muted-foreground'
-                              }
-                            >
-                              {passwordStrength.hasNumber ? '✓' : '○'} One number
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full h-10 font-medium mt-4 shadow-none"
-                      disabled={isLoading || passwordStrength.score < 3}
+                  <div className="space-y-1.5">
+                    <FieldLabel htmlFor="activate-position">Position</FieldLabel>
+                    <select
+                      id="activate-position"
+                      value={position}
+                      onChange={e => setPosition(e.target.value)}
+                      required
+                      className={cn(FIELD, 'border px-3')}
                     >
-                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Create account
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
+                      <option value="">Select a position…</option>
+                      <option value="Licensed Agent">Licensed Agent</option>
+                      <option value="Sales Support">Sales Support</option>
+                      <option value="Retention">Retention</option>
+                    </select>
+                  </div>
 
-              {/* Terms */}
-              <p className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground text-center pt-8">
-                By continuing, you agree to our{' '}
-                <a
-                  href="/legal/terms"
-                  className="underline underline-offset-2 hover:text-foreground transition-colors"
-                >
-                  Terms of Service
-                </a>
-              </p>
-            </div>
-          </div>
+                  <div className="space-y-1.5">
+                    <FieldLabel htmlFor="activate-password">Password</FieldLabel>
+                    {passwordField('activate-password', 'new-password')}
+
+                    {/*
+                      The three rules the API enforces, listed rather than
+                      scored: "weak" tells someone nothing they can act on.
+                      Announced politely — a person typing does not need each
+                      keystroke read out, so the region is polite, not assertive.
+                    */}
+                    <ul className="space-y-1 pt-1.5" aria-live="polite">
+                      {[
+                        { met: passwordStrength.hasLength, label: 'At least 8 characters' },
+                        { met: passwordStrength.hasUppercase, label: 'One uppercase letter' },
+                        { met: passwordStrength.hasNumber, label: 'One number' },
+                      ].map(rule => (
+                        <li
+                          key={rule.label}
+                          className={cn(
+                            't-meta flex items-center gap-1.5',
+                            rule.met ? 'text-live-ink' : 'text-ink-2'
+                          )}
+                        >
+                          {rule.met ? (
+                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <span
+                              className="h-1 w-1 shrink-0 rounded-full bg-ink-3"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span>{rule.label}</span>
+                          <span className="sr-only">{rule.met ? ' — met' : ' — not yet met'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className={cn('h-10 w-full', FOCUS_RING)}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Create my account
+                  </Button>
+                </form>
+              </div>
+            )}
+          </section>
+
+          {/*
+            Underlined rather than green. Brand green carries the primary
+            action on this page and, through globals.css, the focus ring; a
+            second green thing at the bottom of the card would make the accent
+            mean less on the one screen where it has to mean "this is the
+            button".
+          */}
+          <p className="t-meta mt-6 text-center text-ink-2">
+            By continuing, you agree to our{' '}
+            <a
+              href="/legal/terms"
+              className={cn(
+                'rounded-control text-ink underline underline-offset-2 hover:text-brand-ink',
+                FOCUS_RING
+              )}
+            >
+              Terms of Service
+            </a>
+            .
+          </p>
         </div>
-      </div>
+      </main>
     </>
   );
 }
