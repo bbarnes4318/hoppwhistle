@@ -569,20 +569,32 @@ const GSI_STUB = `
 /**
  * What must not be on this page.
  *
- * Onboarding is internal: an account exists because an administrator issued an
- * activation grant, and `POST /api/auth/register` refuses without one. A
- * "create an account" control is therefore a door onto a corridor with no
- * rooms, and a "forgot password" link is a promise to a route that does not
- * exist. Both are worse than their absence.
+ * A "forgot password" link is a promise to a route that does not exist, and a
+ * refusal a person cannot act on is worse than no control at all.
+ *
+ * ── Why "create account" is no longer on this list ───────────────────────────
+ *
+ * It was, on the reasoning that `POST /api/auth/register` refuses without an
+ * activation grant, so a create-account control was a door onto a corridor
+ * with no rooms. That was wrong about who uses it. The grant is real and it is
+ * held by the person, not by the link: an invitation code read out over the
+ * phone, forwarded as text, or opened in a different browser leaves an invited
+ * agent holding a working grant and, with no second tab, nowhere on the site
+ * to spend it. The corridor has rooms; the door was missing.
+ *
+ * The refusal still stands where it belongs -- server-side, on a request with
+ * no grant -- and `checkLoginTabs` below pins the door open.
  */
-const ABSENT_FROM_LOGIN = [
-  /sign\s*up/i,
-  /create an account/i,
-  /create account/i,
-  /\bregister\b/i,
-  /forgot (your )?password/i,
-  /reset (your )?password/i,
-];
+const ABSENT_FROM_LOGIN = [/forgot (your )?password/i, /reset (your )?password/i];
+
+/**
+ * What must be on it.
+ *
+ * Both halves of the front door, as tabs a person can see and click. This has
+ * gone missing twice: once the Google button on the second panel, once the
+ * whole panel with a redesign.
+ */
+const LOGIN_TABS = ['Sign in', 'Create account'];
 
 /**
  * Refusals this sweep knows about, and will not fail on.
@@ -1769,6 +1781,9 @@ async function checkLoginPage(browser, viewport) {
     controls: Array.from(document.querySelectorAll('main a, main button')).map(el =>
       (el.textContent || '').trim()
     ),
+    tabs: Array.from(document.querySelectorAll('main [role="tab"]')).map(el =>
+      (el.textContent || '').trim()
+    ),
   }));
 
   // 1. It rendered.
@@ -1798,19 +1813,29 @@ async function checkLoginPage(browser, viewport) {
     );
   }
 
-  // 4. No door onto a corridor with no rooms.
+  // 4. No promise to a route that does not exist.
   for (const forbidden of ABSENT_FROM_LOGIN) {
     const offender = state.controls.find(label => forbidden.test(label));
     if (offender) {
       fail(
-        `${who}: offers ${JSON.stringify(offender)}. There is no self-serve registration and no ` +
-          'password-reset route — accounts exist because an administrator issued an activation ' +
-          'grant, and POST /api/auth/register refuses without one.'
+        `${who}: offers ${JSON.stringify(offender)}, and there is no password-reset route behind ` +
+          'it. Saying who to ask is more use than a link that does not exist.'
       );
     }
   }
 
-  // 5. It fits the window, and it is legible on the light ground.
+  // 5. Both doors, and both of them visible without hunting.
+  for (const tab of LOGIN_TABS) {
+    if (!state.tabs.includes(tab)) {
+      fail(
+        `${who}: there is no ${JSON.stringify(tab)} tab. The front door has two halves — signing ` +
+          'in, and spending an invitation code — and an invited agent whose link was read out to ' +
+          `them has nowhere to go without the second.\n  saw tabs: ${JSON.stringify(state.tabs)}`
+      );
+    }
+  }
+
+  // 6. It fits the window, and it is legible on the light ground.
   await checkFits(page, who);
   await checkLegibility(page, who);
   reportRefusals(who, responses, 'A signed-out page load must not be refused anything');
@@ -1974,10 +1999,17 @@ async function checkActivation(browser, fixture, viewport) {
   await checkFits(page, who);
   await checkLegibility(page, who);
 
-  await page.fill('#activate-firstname', 'Nia');
-  await page.fill('#activate-lastname', 'Newagent');
-  await page.selectOption('#activate-position', 'Licensed Agent');
-  await page.fill('#activate-password', 'Ridgeline1');
+  // The link carried the code, so there is no code field to fill and there
+  // must not be one: asking again for something already satisfied is how a
+  // person concludes the link did not work.
+  if (await page.isVisible('#create-invitation')) {
+    fail(`${who}: the invitation code field is shown even though the link carried the code.`);
+  }
+
+  await page.fill('#create-firstname', 'Nia');
+  await page.fill('#create-lastname', 'Newagent');
+  await page.selectOption('#create-position', 'Licensed Agent');
+  await page.fill('#create-password', 'Ridgeline1');
   await page.click('main form button[type="submit"]');
 
   const landed = await settleOnPath(page, LOGIN_ROUTE);
@@ -2056,6 +2088,47 @@ async function checkGoogleButton(browser, viewport) {
     }
     if (!(await page.isVisible('#google-signin-button button'))) {
       fail(`${who}: the slot exists but no button is visible in it.`);
+    }
+  }
+
+  /*
+   * And the same on the other half.
+   *
+   * This is the check that would have caught the original defect. The slot on
+   * the second panel is mounted by a tab switch, long after Google's script
+   * settled, and the effect that used to draw into it looked its container up
+   * by id on the commit where the panel was not yet in the document — got
+   * null, returned, and never ran again. Nothing about the sign-in panel can
+   * see that: it is mounted on the first commit and has always worked.
+   */
+  await page.click('main [role="tab"]:has-text("Create account")');
+  await page
+    .waitForFunction(() => Boolean(document.querySelector('#google-signup-button button')), null, {
+      timeout: 20_000,
+    })
+    .catch(() => {});
+
+  const onCreate = await page.evaluate(() =>
+    (window.__gsi?.renderButton ?? []).find(call => call.id === 'google-signup-button')
+  );
+  if (!onCreate) {
+    fail(
+      `${who}: Google was never asked to draw a button into the create-account slot. ` +
+        'Signing up with Google is how most people have an account here at all.'
+    );
+  } else {
+    const slot = await page.evaluate(() => {
+      const el = document.getElementById('google-signup-button');
+      return el ? Math.round(el.getBoundingClientRect().width) : null;
+    });
+    if (slot !== null && onCreate.width > slot + 1) {
+      fail(
+        `${who}: the create-account button was drawn ${onCreate.width}px wide into a ${slot}px ` +
+          'slot, which overflows the card.'
+      );
+    }
+    if (!(await page.isVisible('#google-signup-button button'))) {
+      fail(`${who}: the create-account slot exists but no button is visible in it.`);
     }
   }
 

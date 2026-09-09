@@ -41,7 +41,10 @@ export default defineConfig({
      * still reads green. Bump jsdom only together with NODE_VERSION in the
      * workflows, and check the file count afterwards.
      */
-    environmentMatchGlobs: [['src/app/__tests__/*.render.test.tsx', 'jsdom']],
+    environmentMatchGlobs: [
+      ['src/app/__tests__/*.render.test.tsx', 'jsdom'],
+      ['src/app/login/__tests__/*.render.test.tsx', 'jsdom'],
+    ],
     // Scoped deliberately: apps/web has 141 pre-existing type errors across
     // unrelated components, so a whole-app suite would be red for reasons this
     // work did not cause.
@@ -62,6 +65,12 @@ export default defineConfig({
       // Keeps the login page's Google client id equal to the API's. A mismatch
       // removes the sign-in buttons with no error anywhere.
       'src/app/login/__tests__/**/*.test.ts',
+      // The front door, RENDERED: two tabs, and a Google button on BOTH of
+      // them. The create-account half has now gone missing twice -- once the
+      // button, once the whole tab -- and each time the source still read as
+      // though it were there, which is precisely what a source-level test
+      // cannot see.
+      'src/app/login/__tests__/**/*.render.test.tsx',
       // The login loop: a platform admin with no acting tenant must not be
       // treated as signed out. This one cost production access.
       'src/lib/__tests__/**/*.test.ts',

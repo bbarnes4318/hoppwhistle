@@ -15,6 +15,7 @@ import {
 import { Wordmark } from '@/components/brand/wordmark';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
@@ -137,7 +138,9 @@ interface GoogleAccountsWindow extends Window {
  * A ref callback has no such ordering to get wrong: React invokes it with the
  * node at the moment the node is attached, whenever that turns out to be. It
  * is kept in state so the draw below re-runs for either order — the panel
- * mounted before the Google script loaded, and after.
+ * mounted before the Google script loaded, and after. That matters more now
+ * that the panel is a tab a person switches to, which mounts a brand new slot
+ * long after the script settled.
  *
  * The width is measured rather than fixed. Google draws to an integer pixel
  * width, so the 300 this used to pass overflowed the card on a 360px phone;
@@ -252,12 +255,15 @@ export default function AuthPage() {
   );
 
   /**
-   * Which of the two things this page does. Read from the URL and from nothing
-   * else: there is no self-serve registration, so there is no control on this
-   * page that puts it into 'activate'. A person gets here with an invitation
-   * link or they get here to sign in.
+   * Which of the two things this page does.
+   *
+   * Both halves are reachable by hand, from the tabs below. An invitation link
+   * still selects 'create' on arrival, but a person who was sent an invitation
+   * code out of band -- pasted into an email, read off a screen -- has a door
+   * to walk through as well, and that door carries the same Google button the
+   * sign-in half does.
    */
-  const [mode, setMode] = useState<'signin' | 'activate'>('signin');
+  const [mode, setMode] = useState<'signin' | 'create'>('signin');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -267,18 +273,26 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   /**
-   * The activation token from the invitation link, e.g.
-   * `https://agents.netenroll.com/login?activation=<token>&email=<address>`.
+   * The activation token, either from the invitation link --
+   * `https://agents.netenroll.com/login?activation=<token>&email=<address>` --
+   * or typed into the field on the Create account tab.
    *
-   * Signing up is not something a stranger can do from this page. The server
-   * used to work out which agency a new account belonged to by looking at the
-   * request -- Host, then Referer, then Origin, then whichever tenant row
-   * happened to be oldest -- which on a shared host put strangers inside a
-   * paying agency. The tenant now travels with this token, which the server
-   * issued when it verified an administrator's invitation, and
-   * `POST /api/auth/register` refuses without one.
+   * It is required, and that is deliberate. The server used to work out which
+   * agency a new account belonged to by looking at the request -- Host, then
+   * Referer, then Origin, then whichever tenant row happened to be oldest --
+   * which on a shared host put strangers inside a paying agency. The tenant
+   * now travels with this token, which the server issued when it verified a
+   * purchase or an administrator's invitation, and both
+   * `POST /api/auth/register` and `POST /api/auth/google` refuse without one.
    */
   const [activationToken, setActivationToken] = useState('');
+  /**
+   * Whether the token arrived in the URL. A person who followed an invitation
+   * link should not be shown a code field they have already satisfied; a
+   * person who opened the Create account tab cold has to be given somewhere to
+   * put theirs.
+   */
+  const [tokenFromLink, setTokenFromLink] = useState(false);
   const [agencyName, setAgencyName] = useState<string | null>(null);
   /*
    * Set when the server has answered that this link cannot be used. It is what
@@ -310,7 +324,7 @@ export default function AuthPage() {
           // agency a stranger belongs to.
           body: JSON.stringify({
             credential: response.credential,
-            ...(activationToken ? { activationToken } : {}),
+            ...(activationToken.trim() ? { activationToken: activationToken.trim() } : {}),
           }),
           credentials: 'include',
         });
@@ -336,21 +350,27 @@ export default function AuthPage() {
    * afterwards -- and answers only with the agency's display name, never its
    * id, so a stolen link cannot be turned into a tenant identifier.
    *
-   * A rejected preview is now SHOWN. It is the server's own answer for a link
-   * that has expired or has already been used, and telling someone that before
-   * they choose a password is the difference between a clear refusal and a
-   * form that fails after they have filled it in. Only a rejection is
-   * surfaced: a preview that could not be reached at all leaves the form
-   * alone, because registration validates the token again either way.
+   * A rejected preview is SHOWN. It is the server's own answer for a link that
+   * has expired or has already been used, and telling someone that before they
+   * choose a password is the difference between a clear refusal and a form
+   * that fails after they have filled it in. Only a rejection is surfaced: a
+   * preview that could not be reached at all leaves the form alone, because
+   * registration validates the token again either way.
    */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('activation');
+    // ?mode=create (or ?signup=1) opens the second tab without an invitation
+    // link, which is what a "create an account" link from anywhere else on the
+    // site can point at.
+    const wantsCreate = params.get('mode') === 'create' || params.get('signup') !== null;
+    if (wantsCreate) setMode('create');
     if (!token) return;
 
     const invitedEmail = params.get('email') ?? '';
     setActivationToken(token);
-    setMode('activate');
+    setTokenFromLink(true);
+    setMode('create');
     if (invitedEmail) setEmail(invitedEmail);
 
     if (!invitedEmail) return;
@@ -416,7 +436,7 @@ export default function AuthPage() {
     }
   };
 
-  const handleActivate = async (e: FormEvent<HTMLFormElement>) => {
+  const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (passwordStrength.score < 3) {
@@ -424,9 +444,9 @@ export default function AuthPage() {
       return;
     }
 
-    if (!activationToken) {
+    if (!activationToken.trim()) {
       setError(
-        'An invitation link is required to create an account. ' +
+        'An invitation code is required to create an account. ' +
           'Your agency administrator can send you one.'
       );
       return;
@@ -439,7 +459,14 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, firstName, lastName, position, activationToken }),
+        body: JSON.stringify({
+          email,
+          password,
+          firstName,
+          lastName,
+          position,
+          activationToken: activationToken.trim(),
+        }),
         credentials: 'include',
       });
 
@@ -448,10 +475,10 @@ export default function AuthPage() {
       }
 
       // 201 with a token and a session. The activation grant IS the approval --
-      // it exists because the server verified an administrator's invitation --
-      // so there is no second manual step to wait on. This used to be a 202
-      // with no token and a PENDING account, which left a paying customer with
-      // no way in.
+      // it exists because the server verified a purchase or an administrator's
+      // invitation -- so there is no second manual step to wait on. This used
+      // to be a 202 with no token and a PENDING account, which left a paying
+      // customer with no way in.
       await enter((await res.json()) as AuthResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'We could not set up your account.');
@@ -542,12 +569,12 @@ export default function AuthPage() {
             className="mt-8 rounded-card border border-rule bg-surface p-6 sm:p-8"
           >
             <h2 id="auth-heading" className="t-title text-ink">
-              {mode === 'signin' ? 'Sign in' : 'Set your password'}
+              {mode === 'signin' ? 'Sign in' : 'Create account'}
             </h2>
             <p className="t-body mt-1.5 text-ink-2">
               {mode === 'signin'
                 ? 'Use the account your agency set up for you.'
-                : 'Choose a password to finish setting up your account.'}
+                : 'Finish setting up the account your agency invited you to.'}
             </p>
 
             {error ? (
@@ -556,8 +583,31 @@ export default function AuthPage() {
               </div>
             ) : null}
 
-            {mode === 'signin' ? (
-              <div className="mt-6 space-y-6">
+            {/*
+              Two doors, both always visible. The heading above already says
+              which one is open, so the tabs are the switch and not a second
+              title: equal width, so neither reads as the afterthought.
+            */}
+            <Tabs
+              value={mode}
+              onValueChange={value => {
+                setMode(value as 'signin' | 'create');
+                // The previous half's failure is not this half's. Carrying it
+                // across reads as though the tab itself was refused.
+                setError(null);
+              }}
+              className="mt-6"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin" className={FOCUS_RING}>
+                  Sign in
+                </TabsTrigger>
+                <TabsTrigger value="create" className={FOCUS_RING}>
+                  Create account
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin" className="mt-6 space-y-6 outline-none">
                 <GoogleButton ready={googleReady} text="continue_with" id="google-signin-button" />
 
                 {googleReady ? divider('or') : null}
@@ -596,17 +646,15 @@ export default function AuthPage() {
                 </form>
 
                 {/*
-                  There is no self-serve registration and no password-reset
-                  route to link to. Saying who to ask is more use than a link
-                  that does not exist.
+                  There is no password-reset route to link to. Saying who to
+                  ask is more use than a link that does not exist.
                 */}
                 <p className="t-meta text-center text-ink-2">
-                  Accounts are created by invitation. If you need one, or you cannot get in, please
-                  ask your agency administrator.
+                  Cannot get in? Your agency administrator can reset your access.
                 </p>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-6">
+              </TabsContent>
+
+              <TabsContent value="create" className="mt-6 space-y-6 outline-none">
                 {/*
                   Which agency this invitation is for, when the link named one.
                   Worth showing before the password field: an agent following a
@@ -614,24 +662,24 @@ export default function AuthPage() {
                   and someone who is not expecting an invitation should be able
                   to see that they are not.
                 */}
-                {invitationRefused ? null : (
+                {tokenFromLink && !invitationRefused ? (
                   <Banner tone="info">
                     {agencyName
                       ? `You have been invited to join ${agencyName}.`
                       : 'You have been invited to join the agency that sent you this link.'}
                   </Banner>
-                )}
+                ) : null}
 
-                <GoogleButton ready={googleReady} text="signup_with" id="google-activate-button" />
+                <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
 
                 {googleReady ? divider('or') : null}
 
-                <form onSubmit={e => void handleActivate(e)} className="space-y-4">
+                <form onSubmit={e => void handleCreate(e)} className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <FieldLabel htmlFor="activate-firstname">First name</FieldLabel>
+                      <FieldLabel htmlFor="create-firstname">First name</FieldLabel>
                       <Input
-                        id="activate-firstname"
+                        id="create-firstname"
                         type="text"
                         value={firstName}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -642,9 +690,9 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <FieldLabel htmlFor="activate-lastname">Last name</FieldLabel>
+                      <FieldLabel htmlFor="create-lastname">Last name</FieldLabel>
                       <Input
-                        id="activate-lastname"
+                        id="create-lastname"
                         type="text"
                         value={lastName}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
@@ -655,9 +703,9 @@ export default function AuthPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <FieldLabel htmlFor="activate-email">Email address</FieldLabel>
+                    <FieldLabel htmlFor="create-email">Email address</FieldLabel>
                     <Input
-                      id="activate-email"
+                      id="create-email"
                       type="email"
                       placeholder="you@agency.com"
                       value={email}
@@ -668,10 +716,49 @@ export default function AuthPage() {
                     />
                   </div>
 
+                  {/*
+                    The invitation code, for anyone who did not arrive on the
+                    link itself -- it was read out, forwarded as text, or the
+                    link was opened in another browser. Following the link
+                    fills this in and there is nothing left to type, so the
+                    field is not shown then.
+
+                    It is required either way. The API refuses a registration
+                    without one, and it is what tells the server which agency
+                    the new account belongs to; there is no self-serve signup
+                    that skips it.
+                  */}
+                  {tokenFromLink ? null : (
+                    <div className="space-y-1.5">
+                      <FieldLabel htmlFor="create-invitation">Invitation code</FieldLabel>
+                      <Input
+                        id="create-invitation"
+                        type="text"
+                        value={activationToken}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                          setActivationToken(e.target.value);
+                          // A new code is a new question; the last refusal was
+                          // about the old one.
+                          setInvitationRefused(false);
+                        }}
+                        required
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-describedby="create-invitation-help"
+                        className={cn(FIELD, 'font-mono')}
+                      />
+                      <p id="create-invitation-help" className="t-meta text-ink-2">
+                        From your invitation email. It is the{' '}
+                        <code className="font-mono">activation</code> value in the link your agency
+                        administrator sent you.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
-                    <FieldLabel htmlFor="activate-position">Position</FieldLabel>
+                    <FieldLabel htmlFor="create-position">Position</FieldLabel>
                     <select
-                      id="activate-position"
+                      id="create-position"
                       value={position}
                       onChange={e => setPosition(e.target.value)}
                       required
@@ -685,8 +772,8 @@ export default function AuthPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <FieldLabel htmlFor="activate-password">Password</FieldLabel>
-                    {passwordField('activate-password', 'new-password')}
+                    <FieldLabel htmlFor="create-password">Password</FieldLabel>
+                    {passwordField('create-password', 'new-password')}
 
                     {/*
                       The three rules the API enforces, listed rather than
@@ -733,8 +820,13 @@ export default function AuthPage() {
                     Create my account
                   </Button>
                 </form>
-              </div>
-            )}
+
+                <p className="t-meta text-center text-ink-2">
+                  Accounts are created by invitation. If you do not have a code, please ask your
+                  agency administrator.
+                </p>
+              </TabsContent>
+            </Tabs>
           </section>
 
           {/*
