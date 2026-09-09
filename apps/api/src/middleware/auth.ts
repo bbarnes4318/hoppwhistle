@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 
 import { loadPlatformContext } from '../lib/platform-admin.js';
+import { authorizationFromUser } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
@@ -110,9 +111,11 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
           // Don't fail if update fails
         });
 
-      // Extract roles
-      const roles = user.roles.map(ur => ur.role.name);
-      const publisherId = user.publisherId || (user.metadata as any)?.publisherId || null;
+      // Roles and the publisher/buyer links come from the row, never from the
+      // token -- `routes/auth.ts` does not put them in one. Derived by the same
+      // function the /api/v1 hook uses, so the two auth paths cannot drift into
+      // disagreeing about what a principal is. See `lib/principal.ts`.
+      const { roles, publisherId, buyerId } = authorizationFromUser(user);
 
       // NetEnroll staff, and the agency they have explicitly entered.
       //
@@ -133,11 +136,8 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         // Inside an agency, a platform operator carries that agency's
         // administrator roles; in the cross-agency view they carry none. See
         // ACTING_TENANT_ROLES for why.
-        roles: [
-          ...roles,
-          ...platform.actingRoles.filter(r => !(roles as string[]).includes(r)),
-        ],
-        buyerId: user.buyerId || null,
+        roles: [...roles, ...platform.actingRoles.filter(r => !roles.includes(r))],
+        buyerId,
         publisherId,
         isPlatformAdmin: platform.isPlatformAdmin,
         actingTenantId: platform.actingTenantId,

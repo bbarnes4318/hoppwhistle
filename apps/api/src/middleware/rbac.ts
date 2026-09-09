@@ -513,31 +513,65 @@ export function requireRole(...roles: RoleName[]) {
 }
 
 /**
+ * What the three helpers below read off a request.
+ *
+ * `roles` and `publisherId` are NOT in the JWT: `routes/auth.ts` signs
+ * `{ tenantId, userId, email }` and nothing more. They are resolved from
+ * `UserRole` and `User.publisherId` on every authenticated request, by
+ * `hydratePrincipal()` in `lib/principal.ts` -- called from the /api/v1 auth
+ * hook and from `authenticateJWT`. See that file for why the token stays small.
+ *
+ * The contract is one-directional and fails closed: a principal that was never
+ * hydrated has no roles, and every branch here then denies. That is what these
+ * functions did for EVERY publisher before the resolution existed, so a future
+ * auth path that forgets to hydrate produces a visible 403 rather than a silent
+ * grant.
+ */
+export interface ScopedPrincipal {
+  roles?: string[];
+  publisherId?: string | null;
+}
+
+/**
  * Check if the user has the PUBLISHER role
  */
-export function isPublisherUser(user: any): boolean {
-  return !!(user && user.roles?.includes('PUBLISHER'));
+export function isPublisherUser(user: ScopedPrincipal | null | undefined): boolean {
+  return !!user?.roles?.includes('PUBLISHER');
 }
 
 /**
  * Enforce that the user has access to a specific publisherId.
  * Admin/Owner users always have access.
  * Publisher users only have access if they belong to that publisherId.
+ *
+ * ADMIN and OWNER are PER-TENANT roles, so the `true` they get here means "an
+ * administrator of some agency", not "an administrator of the agency that owns
+ * this publisher". Callers must still scope their query by the acting tenant --
+ * this decides role, never tenancy.
  */
-export function requirePublisherAccess(user: any, publisherId: string): boolean {
+export function requirePublisherAccess(
+  user: ScopedPrincipal | null | undefined,
+  publisherId: string
+): boolean {
   if (!user) return false;
   const userRoles = user.roles || [];
   if (userRoles.includes('ADMIN') || userRoles.includes('OWNER')) return true;
   if (userRoles.includes('PUBLISHER')) {
-    return user.publisherId === publisherId;
+    // A publisher reaches their own publisher's data and nothing else. An empty
+    // link must never match an empty parameter, hence the explicit truthiness.
+    return !!user.publisherId && user.publisherId === publisherId;
   }
   return false;
 }
 
 /**
- * Builds a Prisma scoping where clause based on user roles
+ * Builds a Prisma scoping where clause based on user roles.
+ *
+ * The `{}` an administrator gets narrows nothing, including by tenant: merge it
+ * into a where clause that already carries the acting tenant, never use it as
+ * the whole clause.
  */
-export function buildPublisherScopedWhere(user: any) {
+export function buildPublisherScopedWhere(user: ScopedPrincipal | null | undefined) {
   if (!user) return { publisherId: 'none' };
   const userRoles = user.roles || [];
   if (userRoles.includes('ADMIN') || userRoles.includes('OWNER')) return {};

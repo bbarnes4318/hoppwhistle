@@ -59,7 +59,7 @@
 
 import { FastifyReply, FastifyRequest } from 'fastify';
 
-import { applyPlatformContext } from './api-v1-auth.js';
+import { resolvePrincipal } from './api-v1-auth.js';
 
 /** Must match SESSION_COOKIE in apps/web/src/lib/session-token.ts. */
 export const SESSION_COOKIE = 'hw_session';
@@ -114,31 +114,35 @@ export async function authenticateFromSessionCookie(
   }
 
   /*
-   * The same overlay the Bearer path applies: for NetEnroll staff, the agency
-   * they have ENTERED replaces the tenant their token was minted with.
+   * The same resolution the Bearer path applies: the caller's roles and
+   * publisher/buyer links read from the database, and then, for NetEnroll
+   * staff, the agency they have ENTERED replacing the tenant their token was
+   * minted with. The cookie is the same JWT, so it carries neither — a
+   * principal built from it and left unresolved has no roles at all, which is
+   * the defect `lib/principal.ts` exists to remove.
    *
    * This fails closed, and deliberately not the way the Bearer path does. The
-   * overlay is a database read, and `request.user` has to be populated before
-   * it runs because that is what it reads — so a throw leaves a principal that
-   * has been authenticated but NOT had its acting agency applied. For a
-   * platform operator that principal names the tenant their token was minted
-   * with, which is exactly the stale tenant this overlay exists to prevent
-   * being served.
+   * resolution is a database read, and `request.user` has to be populated
+   * before it runs because that is what it reads — so a throw leaves a
+   * principal that has been authenticated but NOT had its roles or its acting
+   * agency applied. For a platform operator that principal names the tenant
+   * their token was minted with, which is exactly the stale tenant this exists
+   * to prevent being served.
    *
-   * So an overlay that cannot complete un-authenticates the request rather than
-   * serving it half-applied. This costs nothing real: the overlay only fails
-   * when the database is unreachable, and a stream whose leads live behind that
-   * same database has nothing to deliver in that state anyway.
+   * So a resolution that cannot complete un-authenticates the request rather
+   * than serving it half-applied. This costs nothing real: it only fails when
+   * the database is unreachable, and a stream whose leads live behind that same
+   * database has nothing to deliver in that state anyway.
    */
   try {
-    await applyPlatformContext(request);
+    await resolvePrincipal(request);
   } catch (err) {
     // `request.user` is typed as always-present, so the cast is how a request
     // is put back to unauthenticated. `getActingTenantId` reads it as absent.
     (request as { user?: unknown }).user = undefined;
     request.log.error(
       { err },
-      'session cookie: could not resolve the acting agency, refusing rather than serving the token tenant'
+      'session cookie: could not resolve the principal, refusing rather than serving the token tenant'
     );
   }
 }

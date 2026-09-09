@@ -21,6 +21,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from '../lib/demo-auth.js';
 import { loadPlatformContext } from '../lib/platform-admin.js';
+import { hydratePrincipal } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
@@ -63,25 +64,42 @@ export function registerApiV1Auth(server: FastifyInstance): void {
     const authHeader = request.headers.authorization;
     const queryToken = (request.query as { token?: string } | undefined)?.token;
 
-    // Try JWT first
+    // Try JWT first.
+    //
+    // `resolvePrincipal` deliberately sits OUTSIDE these catches. They mean
+    // "this token is not valid, try another credential", and a database failure
+    // while resolving the caller's roles is not that: swallowing it would serve
+    // the request with an empty role set, which reads to a publisher as a
+    // revoked role and produces exactly the silent 403 this resolution exists
+    // to remove. A resolution failure is a failed request.
     if (authHeader && authHeader.startsWith('Bearer ')) {
+      let verified = false;
       try {
         await request.jwtVerify();
-        await applyPlatformContext(request);
-        return;
+        verified = true;
       } catch {
         // JWT failed, try API key / demo tenant fallback
       }
-    } else if (queryToken) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const decoded = server.jwt.verify(queryToken);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        request.user = decoded as any;
-        await applyPlatformContext(request);
+
+      if (verified) {
+        await resolvePrincipal(request);
         return;
+      }
+    } else if (queryToken) {
+      let decoded: unknown;
+      let verified = false;
+      try {
+        decoded = server.jwt.verify(queryToken);
+        verified = true;
       } catch {
         // JWT failed, try API key / demo tenant fallback
+      }
+
+      if (verified) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        request.user = decoded as any;
+        await resolvePrincipal(request);
+        return;
       }
     }
 
@@ -152,6 +170,33 @@ export function registerApiV1Auth(server: FastifyInstance): void {
 }
 
 /**
+ * Turn a verified token into a principal that can actually be authorized.
+ *
+ * `request.jwtVerify()` leaves `request.user` as the token payload verbatim,
+ * and this platform's login tokens carry `{ tenantId, userId, email }` and
+ * nothing else. Every role- and publisher-aware check downstream reads
+ * `user.roles` and `user.publisherId`, so without this step they all read
+ * undefined: `requirePublisherAccess()` denied every publisher their own
+ * dashboard, earnings, API keys and docs, on every route that called it.
+ *
+ * Resolving here rather than at each call site means one place decides what a
+ * request may do, and a role revoked in the database takes effect on the next
+ * request instead of when a 7-day token expires. See `lib/principal.ts`.
+ *
+ * Order matters: the database grants land first, then the acting-tenant roles
+ * are merged on top of them, so a platform operator inside an agency keeps both
+ * their own roles and the agency's.
+ *
+ * Exported for the same reason `applyPlatformContext` is: the session-cookie
+ * authenticator builds a principal the same way, and a second answer to "what
+ * is this caller allowed to be" is how one of them goes stale.
+ */
+export async function resolvePrincipal(request: FastifyRequest): Promise<void> {
+  await hydratePrincipal(request.user);
+  await applyPlatformContext(request);
+}
+
+/**
  * Overlay NetEnroll staff state onto a principal built from a JWT.
  *
  * Exported so the session-cookie authenticator can apply the identical overlay
@@ -159,12 +204,11 @@ export function registerApiV1Auth(server: FastifyInstance): void {
  * is this operator inside" is precisely how a stale tenant gets served, so
  * there is one.
  *
- * `request.jwtVerify()` populates `request.user` straight from the token, which
- * carries the tenant the operator had at login and knows nothing about the
- * agency they entered afterwards. For platform staff the entered agency
- * REPLACES it: the `PlatformActingTenant` row is the authority, the token only
- * says who is asking, and a stale tenant in a long-lived token must never
- * decide whose data is served.
+ * The token carries the tenant the operator had at login and knows nothing
+ * about the agency they entered afterwards. For platform staff the entered
+ * agency REPLACES it: the `PlatformActingTenant` row is the authority, the
+ * token only says who is asking, and a stale tenant in a long-lived token must
+ * never decide whose data is served.
  *
  * For everyone else this is a no-op beyond one indexed lookup that misses.
  */

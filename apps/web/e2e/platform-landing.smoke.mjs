@@ -231,18 +231,18 @@ const DARK_SCOPE_ROUTE = '/design-preview';
  *
  * ── Read this before adding to it ────────────────────────────────────────────
  *
- * Two entries, every one a defect this sweep FOUND on its first run, every one
- * older than the work that added the sweep. They are listed here rather than
- * quietly tolerated so that the list is the record: anything not on it still
- * fails, and each of these fails again the moment its path or status changes.
+ * One entry, a defect this sweep FOUND on its first run and older than the work
+ * that added the sweep. It is listed here rather than quietly tolerated so that
+ * the list is the record: anything not on it still fails, and it fails again
+ * the moment its path or status changes.
  *
  * An entry is not permission to leave something broken. Fix the cause and
  * delete the entry. Do not add one without the same standard of evidence: the
  * exact path and status, and a diagnosis of the cause rather than a note that
  * it came out red.
  *
- * There were four. Two have left, both by being fixed rather than tolerated,
- * which is what an entry leaving this list is supposed to look like:
+ * There were four. Three have left, every one by being fixed rather than
+ * tolerated, which is what an entry leaving this list is supposed to look like:
  *
  *   - The lead-injection stream. `EventSource` cannot send an Authorization
  *     header, so that read-only GET now authenticates from the session cookie
@@ -254,6 +254,13 @@ const DARK_SCOPE_ROUTE = '/design-preview';
  *     `GET /api/v1/quota/summary` now, which names no tenant at all: the
  *     server answers for whoever is asking. The route is swept under all three
  *     principals below, agency and staff, with and without an agency entered.
+ *   - The publisher portal, which answered 403 to every publisher on their own
+ *     dashboard, earnings, keys and docs. `requirePublisherAccess` read roles
+ *     and a publisher id off a token that carries neither, so it denied
+ *     everyone. Roles and the publisher link are now resolved from the database
+ *     on each authenticated request, in one place rather than at the dozen call
+ *     sites. See apps/api/src/lib/principal.ts. The publisher principal below
+ *     sweeps all seven of those pages with nothing allowed to be refused.
  *
  * The count above is part of the record. It once said "two" while the list held
  * four, because entries were appended without touching the sentence that
@@ -268,29 +275,6 @@ const KNOWN_REFUSALS = [
       'The campaign-profitability tab asks for an endpoint apps/api does not ' +
       'implement. The tab has never worked; building the report is a feature, ' +
       'not a repaint.',
-  },
-  /*
-   * A publisher, refused their own numbers. The worse of the two.
-   *
-   * `requirePublisherAccess` (apps/api/src/middleware/rbac.ts) reads
-   * `user.roles` and `user.publisherId`, and `request.user` is the JWT payload
-   * verbatim — which apps/api/src/routes/auth.ts mints as
-   * `{ tenantId, userId, email }` and nothing else. So the role check sees no
-   * roles and no publisher id, and answers false for every publisher, on their
-   * own dashboard, earnings, keys and docs. It is not a scoping mistake in one
-   * route; it is every route that calls it.
-   *
-   * Putting roles in the token, or resolving them per request, is an
-   * authorization change with a blast radius across the whole API. This branch
-   * repaints the product; it is not the branch to change who can read what in
-   * it. Recorded here so the sweep stays honest and so the next person has the
-   * diagnosis rather than the symptom.
-   */
-  {
-    path: /^\/api\/v1\/publishers\/[^/]+\/(stats|keys|docs)$/,
-    status: 403,
-    where: null,
-    why: 'see above',
   },
 ];
 
