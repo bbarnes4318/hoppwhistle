@@ -71,6 +71,10 @@ export default defineConfig({
       // The error boundary that keeps one broken component from unmounting the
       // whole application, as the agency switcher did.
       'src/components/__tests__/**/*.test.tsx',
+      // The strip above every page: which figures each reading gets, that an
+      // agency not enrolled in billing is shown no money at all, and that the
+      // rate in force and the rate tomorrow is tracking toward stay apart.
+      'src/components/layout/__tests__/**/*.test.ts',
       // Every page under the dashboard offers the cross-agency prompt rather
       // than rendering broken for an operator with no agency selected.
       'src/app/__tests__/**/*.test.ts',

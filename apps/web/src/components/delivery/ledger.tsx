@@ -72,7 +72,20 @@ export function Figure({
   ...props
 }: FigureProps) {
   return (
-    <div className={cn('flex min-w-0 flex-col', className)} title={title} {...props}>
+    <div
+      className={cn('flex min-w-0 flex-col', className)}
+      title={title}
+      /*
+        Machine-readable, for the browser smoke test that checks the live strip
+        above the page and the figure below it report the same number for the
+        same tenant. Only the plain-string cases carry the attributes; a figure
+        whose label or value is composed of elements is not one the strip also
+        shows.
+      */
+      data-figure-label={typeof label === 'string' ? label : undefined}
+      data-figure-value={typeof value === 'string' ? value : undefined}
+      {...props}
+    >
       <div className="t-label text-ink-3">{label}</div>
       <div
         className={cn(

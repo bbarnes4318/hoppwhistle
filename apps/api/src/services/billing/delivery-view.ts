@@ -188,21 +188,27 @@ const NOT_ENROLLED_VIEW: Omit<
 };
 
 /**
- * Calls connected to an agent at this instant.
+ * What "connected to an agent at this instant" means, without the agency.
  *
  * Answered, not ended, and not blocked. Deliberately NOT scoped to today's
  * calendar day: a call that connected at 23:58 and is still up at 00:02 is
  * still in progress, and dropping it because the Delivery Day rolled over would
  * show an empty floor to a principal watching a live one.
+ *
+ * Exported without the tenant so the cross-agency reading -- "how many agencies
+ * are delivering right now" -- can ask it of several tenants in one query
+ * rather than restating the predicate. One definition; two scopes.
  */
+export const CALL_IN_PROGRESS: Prisma.CallWhereInput = {
+  direction: 'INBOUND',
+  blocked: false,
+  answeredAt: { not: null },
+  endedAt: null,
+};
+
+/** The same predicate, for one agency. */
 function callsInProgressWhere(tenantId: string): Prisma.CallWhereInput {
-  return {
-    tenantId,
-    direction: 'INBOUND',
-    blocked: false,
-    answeredAt: { not: null },
-    endedAt: null,
-  };
+  return { tenantId, ...CALL_IN_PROGRESS };
 }
 
 /**

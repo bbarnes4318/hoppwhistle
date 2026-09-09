@@ -30,6 +30,7 @@ import {
   registerAdminRateCardRoutes,
 } from './routes/index.js';
 import { registerLiveMetricsRoutes } from './routes/live-metrics.js';
+import { registerLiveStripRoutes } from './routes/live-strip.js';
 import { registerQuotaRoutes } from './routes/quotas.js';
 import { registerTranscriptRoutes } from './routes/transcripts.js';
 import { registerWebSocketRoutes } from './routes/websocket.js';
@@ -219,8 +220,13 @@ async function buildServer() {
    */
   const { registerStripeWebhookRoutes } = await import('./routes/stripe-webhooks.js');
   await server.register(registerStripeWebhookRoutes);
-  // Single aggregate endpoint powering the LiveStrip for every role.
+  // The publisher and buyer strip: calls in flight, billable calls, earnings,
+  // spend against a call cap. Still the shapes those two roles were built for.
   await server.register(registerLiveMetricsRoutes);
+
+  // The agency, agent and platform strip. A separate endpoint because the
+  // platform reading is the one caller that legitimately has no acting tenant.
+  await server.register(registerLiveStripRoutes);
 
   // Register WebSocket and demo event routes
   await server.register(registerWebSocketRoutes);
