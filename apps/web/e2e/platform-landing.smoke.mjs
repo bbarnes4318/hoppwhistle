@@ -221,14 +221,20 @@ const DARK_SCOPE_ROUTE = '/design-preview';
  *
  * ── Read this before adding to it ────────────────────────────────────────────
  *
- * Two entries, both defects this sweep FOUND on its first run, both older than
- * the work that added the sweep, and both needing a change this rebrand has no
- * business making. They are listed here rather than quietly tolerated so that
- * the list is the record: anything not on it still fails, and each of these
- * fails again the moment its path or status changes.
+ * Four entries, every one a defect this sweep FOUND on its first run, every one
+ * older than the work that added the sweep, and every one needing a change this
+ * rebrand has no business making. They are listed here rather than quietly
+ * tolerated so that the list is the record: anything not on it still fails, and
+ * each of these fails again the moment its path or status changes.
  *
  * An entry is not permission to leave something broken. Fix the cause and
- * delete the entry; do not add a third without the same standard of evidence.
+ * delete the entry. Do not add one without the same standard of evidence: the
+ * exact path and status, and a diagnosis of the cause rather than a note that
+ * it came out red.
+ *
+ * The count above is part of the record. It said "two" while the list held
+ * four, because two were appended without touching the sentence that counted
+ * them — so if you change the list, change the number with it.
  */
 const KNOWN_REFUSALS = [
   {
