@@ -190,7 +190,13 @@ const SWEEP = [
     who: 'platform admin, no agency entered',
     roles: ['ADMIN'],
     platform: true,
-    routes: ['/admin/agencies', '/admin/onboarding', '/settings', '/settings/users'],
+    routes: [
+      '/admin/agencies',
+      '/admin/onboarding',
+      '/settings',
+      '/settings/users',
+      '/settings/quotas',
+    ],
   },
   {
     who: 'platform admin, inside one agency',
@@ -204,6 +210,10 @@ const SWEEP = [
       '/delivery/settlements',
       '/calls',
       '/admin/agencies',
+      // The one page whose controls only exist for this principal: staff
+      // inside an agency administer that agency's ceilings, addressed to the
+      // tenant they entered rather than to anything in the URL.
+      '/settings/quotas',
     ],
   },
 ];
@@ -221,22 +231,29 @@ const DARK_SCOPE_ROUTE = '/design-preview';
  *
  * ── Read this before adding to it ────────────────────────────────────────────
  *
- * Three entries, every one a defect this sweep FOUND on its first run, every
- * one older than the work that added the sweep. They are listed here rather
- * than quietly tolerated so that the list is the record: anything not on it
- * still fails, and each of these fails again the moment its path or status
- * changes.
+ * Two entries, every one a defect this sweep FOUND on its first run, every one
+ * older than the work that added the sweep. They are listed here rather than
+ * quietly tolerated so that the list is the record: anything not on it still
+ * fails, and each of these fails again the moment its path or status changes.
  *
  * An entry is not permission to leave something broken. Fix the cause and
  * delete the entry. Do not add one without the same standard of evidence: the
  * exact path and status, and a diagnosis of the cause rather than a note that
  * it came out red.
  *
- * There were four. The lead-injection stream is gone from this list because it
- * was fixed rather than tolerated: `EventSource` cannot send an Authorization
- * header, so that read-only GET now authenticates from the session cookie the
- * app already maintains. See apps/api/src/middleware/session-cookie-auth.ts.
- * That is what an entry leaving this list is supposed to look like.
+ * There were four. Two have left, both by being fixed rather than tolerated,
+ * which is what an entry leaving this list is supposed to look like:
+ *
+ *   - The lead-injection stream. `EventSource` cannot send an Authorization
+ *     header, so that read-only GET now authenticates from the session cookie
+ *     the app already maintains. See
+ *     apps/api/src/middleware/session-cookie-auth.ts.
+ *   - /settings/quotas, which asked three admin endpoints about tenant
+ *     00000000-0000-0000-0000-000000000000 — a placeholder the page carried
+ *     because it had no id and made one up. It reads
+ *     `GET /api/v1/quota/summary` now, which names no tenant at all: the
+ *     server answers for whoever is asking. The route is swept under all three
+ *     principals below, agency and staff, with and without an agency entered.
  *
  * The count above is part of the record. It once said "two" while the list held
  * four, because entries were appended without touching the sentence that
@@ -253,7 +270,7 @@ const KNOWN_REFUSALS = [
       'not a repaint.',
   },
   /*
-   * A publisher, refused their own numbers. The worst of the three.
+   * A publisher, refused their own numbers. The worse of the two.
    *
    * `requirePublisherAccess` (apps/api/src/middleware/rbac.ts) reads
    * `user.roles` and `user.publisherId`, and `request.user` is the JWT payload
@@ -274,19 +291,6 @@ const KNOWN_REFUSALS = [
     status: 403,
     where: null,
     why: 'see above',
-  },
-  /*
-   * /settings/quotas asks about tenant 00000000-0000-0000-0000-000000000000,
-   * which is a placeholder the page still carries ("For now, using a
-   * placeholder"). Three admin endpoints answer 404 for it on every load. The
-   * page needs to take its tenant from the session — the one rule this
-   * platform does not bend — and that is a rebuild of the page, not a colour.
-   */
-  {
-    path: /^\/admin\/api\/v1\/tenants\/0{8}-0{4}-0{4}-0{4}-0{12}\//,
-    status: 404,
-    where: '/settings/quotas',
-    why: 'placeholder tenant id',
   },
 ];
 
@@ -571,6 +575,49 @@ await prisma.ratingSettings.upsert({
     activeCurveVersionId: '00000000-0000-4000-8000-00000000c001',
   },
   update: { activeCurveVersionId: '00000000-0000-4000-8000-00000000c001' },
+});
+
+/*
+ * Ceilings and a budget for the agency, so /settings/quotas is swept with
+ * figures on it rather than only in its empty state.
+ *
+ * Without these rows the page renders "Unlimited" everywhere and a load proves
+ * only that the empty path does not throw -- which is exactly the half that was
+ * never broken. The spend figures are Decimal columns, and a Decimal read as a
+ * string and formatted as a fixed-point number is how a money tile becomes
+ * "NaN"; that only shows up when there is a number to render.
+ *
+ * Generous enough not to change any other page under test: nothing in the
+ * sweep places a call, and the hard stop is off.
+ */
+await prisma.tenantQuota.upsert({
+  where: { tenantId: tenant.id },
+  update: {},
+  create: {
+    tenantId: tenant.id,
+    maxConcurrentCalls: 25,
+    maxMinutesPerDay: 1200,
+    maxPhoneNumbers: 40,
+    maxRecordingRetentionDays: 90,
+    maxStorageGB: 50,
+    enabled: true,
+  },
+});
+
+await prisma.tenantBudget.upsert({
+  where: { tenantId: tenant.id },
+  update: {},
+  create: {
+    tenantId: tenant.id,
+    monthlyBudget: 5000,
+    dailyBudget: 250,
+    currentMonthSpend: 1234.56,
+    currentDaySpend: 78.9,
+    alertThreshold: 80,
+    alertEmails: ['finance@platform-smoke.invalid'],
+    hardStopEnabled: false,
+    enabled: true,
+  },
 });
 
 await prisma.userRole.deleteMany({ where: { userId: user.id } });
