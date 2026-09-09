@@ -3,19 +3,11 @@
 import { Download, Globe, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { Ledger, count, dollars, pct } from '@/components/delivery/ledger';
+import { StatusChip } from '@/components/domain/status-chip';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 
@@ -79,19 +71,6 @@ interface AgencyOption {
   enrolled: boolean;
 }
 
-function pct(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)}%`;
-}
-
-function dollars(value: number | null): string {
-  return value === null
-    ? '—'
-    : `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
-}
-
 /**
  * A dry run is not a failure and a halt is not a decline.
  *
@@ -100,10 +79,11 @@ function dollars(value: number | null): string {
  * the debit. Rendering either in the red reserved for a declined debit is how a
  * deliberate pre-go-live watch period reads as an outage.
  */
-function statusVariant(status: string): 'secondary' | 'destructive' | 'outline' {
-  if (status === 'SUCCEEDED' || status === 'NOT_CHARGED') return 'secondary';
-  if (status === 'PENDING' || status === 'DRY_RUN') return 'outline';
-  return 'destructive';
+function statusTone(status: string): 'live' | 'ringing' | 'dropped' | 'neutral' {
+  if (status === 'SUCCEEDED') return 'live';
+  if (status === 'NOT_CHARGED' || status === 'DRY_RUN') return 'neutral';
+  if (status === 'PENDING') return 'ringing';
+  return 'dropped';
 }
 
 export function PlatformSettlementsView(): JSX.Element {
@@ -193,7 +173,7 @@ export function PlatformSettlementsView(): JSX.Element {
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
+    <CompactPageShell fullHeight={false} data-print="page">
       <CompactPageHeader
         title="Settlements — every agency"
         subtitle="One row per agency per settled Delivery Day"
@@ -205,152 +185,172 @@ export function PlatformSettlementsView(): JSX.Element {
         </Button>
       </CompactPageHeader>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6">
-          <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor="from">
-              From
-            </label>
-            <Input
-              id="from"
-              type="date"
-              value={from}
-              onChange={event => setFrom(event.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor="to">
-              To
-            </label>
-            <Input
-              id="to"
-              type="date"
-              value={to}
-              onChange={event => setTo(event.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor="agency">
-              Agency
-            </label>
-            <select
-              id="agency"
-              value={agencyId}
-              onChange={event => setAgencyId(event.target.value)}
-              className="h-9 rounded-control border border-rule bg-paper px-2 text-sm"
-            >
-              <option value="">Every agency</option>
-              {agencies.map(agency => (
-                <option key={agency.tenantId} value={agency.tenantId}>
-                  {agency.name}
-                  {agency.isNonProduction ? ' (non-production)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 pb-2 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={includeNonProduction}
-              onChange={event => setIncludeNonProduction(event.target.checked)}
-            />
-            Include non-production tenants
+      {/* The filters, on one line, no box: they are controls, not content. */}
+      <div className="flex flex-wrap items-end gap-3" data-print="hide">
+        <div>
+          <label className="mb-1 block t-meta text-ink-3" htmlFor="from">
+            From
           </label>
-        </CardContent>
-      </Card>
+          <Input
+            id="from"
+            type="date"
+            value={from}
+            onChange={event => setFrom(event.target.value)}
+            className="h-8 w-36"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block t-meta text-ink-3" htmlFor="to">
+            To
+          </label>
+          <Input
+            id="to"
+            type="date"
+            value={to}
+            onChange={event => setTo(event.target.value)}
+            className="h-8 w-36"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block t-meta text-ink-3" htmlFor="agency">
+            Agency
+          </label>
+          <select
+            id="agency"
+            value={agencyId}
+            onChange={event => setAgencyId(event.target.value)}
+            className="h-8 rounded-control border border-rule bg-surface px-2 t-body text-ink"
+          >
+            <option value="">Every agency</option>
+            {agencies.map(agency => (
+              <option key={agency.tenantId} value={agency.tenantId}>
+                {agency.name}
+                {agency.isNonProduction ? ' (non-production)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="flex h-8 cursor-pointer items-center gap-2 t-meta text-ink-2">
+          <input
+            type="checkbox"
+            checked={includeNonProduction}
+            onChange={event => setIncludeNonProduction(event.target.checked)}
+            className="accent-brand-ink"
+          />
+          Include non-production tenants
+        </label>
+      </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="t-body text-dropped-ink">{error}</p>}
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center py-12 text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center py-12 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Agency</TableHead>
-                  <TableHead>Delivery Day</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Applications</TableHead>
-                  <TableHead className="text-right">Window</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Overrun</TableHead>
-                  <TableHead className="text-right">Next block</TableHead>
-                  <TableHead className="text-right">Charged</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground">
-                      No settlements in this range.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map(row => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium">{row.agency ?? row.tenantId}</span>
-                        {row.isNonProduction && (
-                          <Badge variant="outline" className="text-[10px]">
-                            non-production
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="tabular-nums">{row.deliveryDay}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.submittedApplications}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {pct(row.windowClosingPct)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      <span>{dollars(row.rate)}</span>
-                      {/*
-                        The two halves of the price where an offset applies.
-                        Not a fee: `charged` below is the rate times the
-                        quantities and nothing is added to it.
-                      */}
-                      {row.rateOffset > 0 && (
-                        <span className="ml-1 text-[10px] text-muted-foreground">
-                          ({dollars(row.curveRate)} + {dollars(row.rateOffset)})
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.overrunQuantity} · {dollars(row.overrunAmount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.nextBlockQuantity} · {dollars(row.nextBlockAmount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {dollars(row.totalCharged)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(row.paymentStatus)} className="text-[10px]">
-                        {row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="overflow-auto rounded-card border border-rule bg-surface">
+          <Ledger>
+            <thead>
+              <tr>
+                <th scope="col">Agency</th>
+                <th scope="col">Delivery day</th>
+                <th scope="col" className="num">
+                  Calls
+                </th>
+                <th scope="col" className="num">
+                  Apps
+                </th>
+                <th
+                  scope="col"
+                  className="num"
+                  title="The trailing-window closing percentage that set this day's rate"
+                >
+                  Window
+                </th>
+                <th scope="col" className="num">
+                  Rate
+                </th>
+                <th scope="col" className="num">
+                  Overrun
+                </th>
+                <th scope="col" className="num">
+                  Overrun $
+                </th>
+                <th scope="col" className="num">
+                  Next block
+                </th>
+                <th scope="col" className="num">
+                  Block $
+                </th>
+                <th scope="col" className="num">
+                  Charged
+                </th>
+                <th scope="col">Payment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="text-center t-body text-ink-3">
+                    No settlements in this range.
+                  </td>
+                </tr>
+              )}
+              {rows.map(row => (
+                <tr key={row.id} className="hover:bg-sunken">
+                  <td className="max-w-[16rem]">
+                    <span className="truncate font-medium text-ink">
+                      {row.agency ?? row.tenantId}
+                    </span>
+                    {row.isNonProduction && (
+                      <span className="ml-1.5 t-meta text-ink-3">non-production</span>
+                    )}
+                  </td>
+                  <td className="t-data whitespace-nowrap text-ink">{row.deliveryDay}</td>
+                  <td className="num">{count(row.deliveredCalls)}</td>
+                  <td className="num">{count(row.submittedApplications)}</td>
+                  <td className="num">{pct(row.windowClosingPct)}</td>
+                  <td className="num">
+                    {/*
+                      The two halves of the price where an offset applies, on
+                      hover. Not a fee: `charged` is the rate times the
+                      quantities and nothing is added to it.
+                    */}
+                    <span
+                      title={
+                        row.rateOffset > 0
+                          ? `curve ${dollars(row.curveRate)} + offset ${dollars(row.rateOffset)}`
+                          : undefined
+                      }
+                    >
+                      {dollars(row.rate)}
+                      {row.rateOffset > 0 && <span className="text-ink-3">*</span>}
+                    </span>
+                  </td>
+                  <td className="num">{count(row.overrunQuantity)}</td>
+                  <td className="num">{dollars(row.overrunAmount)}</td>
+                  <td className="num">{count(row.nextBlockQuantity)}</td>
+                  <td className="num">{dollars(row.nextBlockAmount)}</td>
+                  <td className="num font-medium">{dollars(row.totalCharged)}</td>
+                  <td className="whitespace-nowrap">
+                    <StatusChip
+                      value={row.paymentStatus}
+                      label={row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
+                      tone={statusTone(row.paymentStatus)}
+                      size="sm"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Ledger>
+        </div>
       )}
 
-      <p className="text-[11px] text-muted-foreground">
-        Enter an agency in the switcher to narrow this page to it. Leaving returns here.
+      <p className="t-meta text-ink-3">
+        * rate includes an agreed offset above the curve; hover for the two halves. Enter an agency
+        in the switcher to narrow this page to it; leaving returns here.
       </p>
     </CompactPageShell>
   );

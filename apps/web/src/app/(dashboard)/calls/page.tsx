@@ -606,7 +606,11 @@ export default function OperationsCallLogsPage() {
     <audio
       ref={audioRef}
       src={audioUrl || undefined}
-      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'absolute w-0 h-0 opacity-0 pointer-events-none'}
+      className={
+        isAudioPlayerInDrawer
+          ? 'h-8 flex-1 accent-brand'
+          : 'absolute w-0 h-0 opacity-0 pointer-events-none'
+      }
       controls={isAudioPlayerInDrawer}
       onEnded={() => setPlayingId(null)}
     />
@@ -617,23 +621,20 @@ export default function OperationsCallLogsPage() {
     switch (s.toUpperCase()) {
       case 'CHARGED':
         return (
-          <Badge
-            variant="outline"
-            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-          >
+          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
             Charged
           </Badge>
         );
       case 'NOT_BILLABLE':
         return (
-          <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">
+          <Badge variant="outline" className="bg-sunken text-ink-2 border-rule">
             Not Billable
           </Badge>
         );
       case 'PENDING':
       default:
         return (
-          <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
             Pending
           </Badge>
         );
@@ -645,29 +646,26 @@ export default function OperationsCallLogsPage() {
     switch (s.toUpperCase()) {
       case 'PAID':
         return (
-          <Badge
-            variant="outline"
-            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-          >
+          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
             Paid
           </Badge>
         );
       case 'PAYABLE':
         return (
-          <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+          <Badge variant="outline" className="bg-money-tint text-money-ink border-money/40">
             Payable
           </Badge>
         );
       case 'NOT_PAYABLE':
         return (
-          <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">
+          <Badge variant="outline" className="bg-sunken text-ink-2 border-rule">
             Not Payable
           </Badge>
         );
       case 'PENDING':
       default:
         return (
-          <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
             Pending
           </Badge>
         );
@@ -679,10 +677,7 @@ export default function OperationsCallLogsPage() {
     switch (status.toUpperCase()) {
       case 'RESOLVED':
         return (
-          <Badge
-            variant="outline"
-            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-          >
+          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
             Disputed - Resolved
           </Badge>
         );
@@ -691,14 +686,14 @@ export default function OperationsCallLogsPage() {
         return (
           <Badge
             variant="outline"
-            className="bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse"
+            className="bg-dropped-tint text-dropped-ink border-dropped/40 animate-pulse"
           >
             Disputed - Review
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30">
+          <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
             {status}
           </Badge>
         );
@@ -717,20 +712,20 @@ export default function OperationsCallLogsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white font-medium gap-2 h-8 text-xs"
+              className="bg-surface border-rule text-ink hover:bg-sunken hover:text-ink font-medium gap-2 h-8 text-xs"
             >
               <SlidersHorizontal className="h-4 w-4" />
               Columns
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="bg-slate-900 border-white/10 text-white min-w-[200px]"
+            className="bg-surface border-rule text-ink min-w-[200px]"
             align="end"
           >
-            <DropdownMenuLabel className="text-gray-400 text-xs">
+            <DropdownMenuLabel className="text-ink-3 text-xs">
               Configure Ledger Columns
             </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuSeparator className="bg-rule" />
             {columns.map(col => {
               if (!col.canSee) return null;
               return (
@@ -738,7 +733,7 @@ export default function OperationsCallLogsPage() {
                   key={col.id}
                   checked={visibleColumns[col.id]}
                   onCheckedChange={() => toggleColumn(col.id)}
-                  className="focus:bg-cyan-600 focus:text-white text-xs"
+                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
                 >
                   {col.label}
                 </DropdownMenuCheckboxItem>
@@ -751,7 +746,7 @@ export default function OperationsCallLogsPage() {
           onClick={handleExportCSV}
           disabled={exporting || calls.length === 0}
           size="sm"
-          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 shadow-lg h-8 text-xs"
+          className="bg-brand hover:bg-brand-ink text-ink hover:text-surface font-medium gap-2 h-8 text-xs"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -763,10 +758,10 @@ export default function OperationsCallLogsPage() {
       </CompactPageHeader>
 
       {/* Filter Panel */}
-      <div className="bg-card border border-border/40 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 flex-shrink-0">
+      <div className="bg-surface border border-rule rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 flex-shrink-0">
         {/* Search Box */}
         <div className="relative col-span-1 md:col-span-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-3" />
           <Input
             placeholder="Search ID / Caller / Notes..."
             value={search}
@@ -774,7 +769,7 @@ export default function OperationsCallLogsPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="pl-9 bg-white/5 border-white/10 text-white placeholder-gray-500 focus:border-cyan-500"
+            className="pl-9 bg-surface border-rule text-ink placeholder:text-ink-3 focus:border-brand-ink"
           />
         </div>
 
@@ -787,10 +782,10 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+            <SelectTrigger className="bg-surface border-rule text-ink">
               <SelectValue placeholder="Dispute Status" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-white/10 text-white">
+            <SelectContent className="bg-surface border-rule text-ink">
               <SelectItem value="all">All Disputes</SelectItem>
               <SelectItem value="NONE">No Disputes</SelectItem>
               <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
@@ -809,10 +804,10 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+            <SelectTrigger className="bg-surface border-rule text-ink">
               <SelectValue placeholder="All Campaigns" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-white/10 text-white">
+            <SelectContent className="bg-surface border-rule text-ink">
               <SelectItem value="all">All Campaigns</SelectItem>
               {campaigns.map(c => (
                 <SelectItem key={c.id} value={c.id}>
@@ -832,10 +827,10 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+            <SelectTrigger className="bg-surface border-rule text-ink">
               <SelectValue placeholder="All Lead Lists" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-white/10 text-white">
+            <SelectContent className="bg-surface border-rule text-ink">
               <SelectItem value="all">All Lead Lists</SelectItem>
               {leadLists.map(l => (
                 <SelectItem key={l.id} value={l.id}>
@@ -856,10 +851,10 @@ export default function OperationsCallLogsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectTrigger className="bg-surface border-rule text-ink">
                 <SelectValue placeholder="All Publishers" />
               </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectContent className="bg-surface border-rule text-ink">
                 <SelectItem value="all">All Publishers</SelectItem>
                 {publishers.map(p => (
                   <SelectItem key={p.id} value={p.id}>
@@ -881,10 +876,10 @@ export default function OperationsCallLogsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectTrigger className="bg-surface border-rule text-ink">
                 <SelectValue placeholder="All Buyers" />
               </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectContent className="bg-surface border-rule text-ink">
                 <SelectItem value="all">All Buyers</SelectItem>
                 {buyers.map(b => (
                   <SelectItem key={b.id} value={b.id}>
@@ -899,10 +894,10 @@ export default function OperationsCallLogsPage() {
         {/* Date Picker preset */}
         <div>
           <Select value={datePreset} onValueChange={handlePresetChange}>
-            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+            <SelectTrigger className="bg-surface border-rule text-ink">
               <SelectValue placeholder="All Time" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-white/10 text-white">
+            <SelectContent className="bg-surface border-rule text-ink">
               <SelectItem value="All Time">All Time</SelectItem>
               <SelectItem value="Today">Today</SelectItem>
               <SelectItem value="Yesterday">Yesterday</SelectItem>
@@ -924,9 +919,9 @@ export default function OperationsCallLogsPage() {
                 setFromDate(e.target.value);
                 setPage(1);
               }}
-              className="bg-white/5 border-white/10 text-white"
+              className="bg-surface border-rule text-ink"
             />
-            <span className="text-gray-500 text-xs">to</span>
+            <span className="text-ink-3 text-xs">to</span>
             <Input
               type="date"
               value={toDate}
@@ -934,7 +929,7 @@ export default function OperationsCallLogsPage() {
                 setToDate(e.target.value);
                 setPage(1);
               }}
-              className="bg-white/5 border-white/10 text-white"
+              className="bg-surface border-rule text-ink"
             />
           </div>
         )}
@@ -945,86 +940,80 @@ export default function OperationsCallLogsPage() {
         <div className="flex-1 min-h-0 overflow-auto">
           <Table className="table-dense">
             <TableHeader>
-              <TableRow className="border-white/10 hover:bg-transparent">
+              <TableRow className="border-rule hover:bg-transparent">
                 {visibleColumns.time && (
-                  <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
+                  <TableHead className="text-ink-3 font-medium pl-6">Time</TableHead>
                 )}
                 {visibleColumns.publisherName && isAdminOrOwner && (
-                  <TableHead className="text-gray-400 font-medium">Publisher</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Publisher</TableHead>
                 )}
                 {visibleColumns.buyerName && isAdminOrOwner && (
-                  <TableHead className="text-gray-400 font-medium">Buyer</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Buyer</TableHead>
                 )}
                 {visibleColumns.campaignName && (
-                  <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Campaign</TableHead>
                 )}
                 {visibleColumns.callerId && (
-                  <TableHead className="text-gray-400 font-medium">Customer Phone</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Customer Phone</TableHead>
                 )}
                 {visibleColumns.did && !isBuyer && (
-                  <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
+                  <TableHead className="text-ink-3 font-medium">DID (DNIS)</TableHead>
                 )}
                 {visibleColumns.toNumber && !isPublisher && (
-                  <TableHead className="text-gray-400 font-medium">Destination</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Destination</TableHead>
                 )}
                 {visibleColumns.duration && (
-                  <TableHead className="text-gray-400 font-medium">Duration</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Duration</TableHead>
                 )}
                 {visibleColumns.connectedDuration && (
-                  <TableHead className="text-gray-400 font-medium">Connected</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Connected</TableHead>
                 )}
                 {visibleColumns.billable && (
-                  <TableHead className="text-gray-400 font-medium">Billable</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Billable</TableHead>
                 )}
                 {/* Financial Fields */}
                 {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                  <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-right">Charge</TableHead>
                 )}
                 {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                  <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-right">Payout</TableHead>
                 )}
                 {visibleColumns.cost && isAdminOrOwner && (
-                  <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-right">Cost</TableHead>
                 )}
                 {visibleColumns.profit && isAdminOrOwner && (
-                  <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-right">Profit</TableHead>
                 )}
                 {visibleColumns.margin && isAdminOrOwner && (
-                  <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-right">Margin</TableHead>
                 )}
                 {visibleColumns.status && (
-                  <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-center">Status</TableHead>
                 )}{' '}
                 {visibleColumns.dispositionNotes && (
-                  <TableHead className="text-gray-400 font-medium">Call Notes</TableHead>
+                  <TableHead className="text-ink-3 font-medium">Call Notes</TableHead>
                 )}
                 {visibleColumns.recording && (
-                  <TableHead className="text-gray-400 font-medium text-center">Recording</TableHead>
+                  <TableHead className="text-ink-3 font-medium text-center">Recording</TableHead>
                 )}
-                <TableHead className="text-gray-400 font-medium text-right pr-6">Action</TableHead>
+                <TableHead className="text-ink-3 font-medium text-right pr-6">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={activeColumnsCount}
-                    className="h-64 text-center text-gray-500"
-                  >
+                  <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-ink-3">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                      <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
                       <span>Loading pay-per-call ledger...</span>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : calls.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={activeColumnsCount}
-                    className="h-64 text-center text-gray-500"
-                  >
+                  <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-ink-3">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <AlertCircle className="h-8 w-8 text-gray-600" />
+                      <AlertCircle className="h-8 w-8 text-ink-3" />
                       <span>No call events found</span>
                     </div>
                   </TableCell>
@@ -1037,10 +1026,10 @@ export default function OperationsCallLogsPage() {
                     <TableRow
                       key={call.id}
                       onClick={() => void handleOpenDetailDrawer(call.id)}
-                      className="border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                      className="border-rule hover:bg-sunken transition-colors cursor-pointer"
                     >
                       {visibleColumns.time && (
-                        <TableCell className="pl-6 font-mono text-xs text-white">
+                        <TableCell className="pl-6 font-mono text-xs text-ink">
                           {new Date(call.createdAt).toLocaleString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -1050,22 +1039,22 @@ export default function OperationsCallLogsPage() {
                         </TableCell>
                       )}
                       {visibleColumns.publisherName && isAdminOrOwner && (
-                        <TableCell className="text-gray-300 font-medium text-xs">
+                        <TableCell className="text-ink-2 font-medium text-xs">
                           {call.publisherName || '—'}
                         </TableCell>
                       )}
                       {visibleColumns.buyerName && isAdminOrOwner && (
-                        <TableCell className="text-gray-300 font-medium text-xs">
+                        <TableCell className="text-ink-2 font-medium text-xs">
                           {call.buyerName || '—'}
                         </TableCell>
                       )}
                       {visibleColumns.campaignName && (
-                        <TableCell className="text-gray-300 font-semibold text-xs">
+                        <TableCell className="text-ink-2 font-semibold text-xs">
                           {call.campaignName || '—'}
                         </TableCell>
                       )}
                       {visibleColumns.callerId && (
-                        <TableCell className="font-mono text-xs text-white font-semibold">
+                        <TableCell className="font-mono text-xs text-ink font-semibold">
                           {(() => {
                             const phone =
                               call.direction?.toLowerCase() === 'outbound'
@@ -1076,26 +1065,26 @@ export default function OperationsCallLogsPage() {
                         </TableCell>
                       )}
                       {visibleColumns.did && !isBuyer && (
-                        <TableCell className="font-mono text-xs text-gray-400">
+                        <TableCell className="font-mono text-xs text-ink-2">
                           {call.did ? formatPhoneNumber(call.did) : '—'}
                         </TableCell>
                       )}
                       {visibleColumns.toNumber && !isPublisher && (
-                        <TableCell className="font-mono text-xs text-gray-400">
+                        <TableCell className="font-mono text-xs text-ink-2">
                           {showToDetails ? (
                             formatPhoneNumber(call.toNumber || call.targetNumber || '')
                           ) : (
-                            <span className="text-gray-600 italic">Masked</span>
+                            <span className="text-ink-3 italic">Masked</span>
                           )}
                         </TableCell>
                       )}
                       {visibleColumns.duration && (
-                        <TableCell className="font-mono text-xs text-gray-300">
+                        <TableCell className="font-mono text-xs text-ink-2">
                           {call.duration ? formatDuration(call.duration) : '—'}
                         </TableCell>
                       )}
                       {visibleColumns.connectedDuration && (
-                        <TableCell className="font-mono text-xs text-gray-300">
+                        <TableCell className="font-mono text-xs text-ink-2">
                           {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
                         </TableCell>
                       )}
@@ -1105,8 +1094,8 @@ export default function OperationsCallLogsPage() {
                             variant="outline"
                             className={
                               call.billable
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                ? 'bg-live-tint text-live-ink border-live/40'
+                                : 'bg-dropped-tint text-dropped-ink border-dropped/40'
                             }
                           >
                             {call.billable ? 'Billable' : 'No'}
@@ -1115,7 +1104,7 @@ export default function OperationsCallLogsPage() {
                       )}
                       {/* Financial Ledger Columns */}
                       {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                        <TableCell className="text-right font-mono text-xs font-semibold text-white">
+                        <TableCell className="text-right font-mono text-xs font-semibold text-ink">
                           {call.buyerBillableAmount !== null &&
                           call.buyerBillableAmount !== undefined
                             ? `$${Number(call.buyerBillableAmount).toFixed(2)}`
@@ -1123,7 +1112,7 @@ export default function OperationsCallLogsPage() {
                         </TableCell>
                       )}
                       {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                        <TableCell className="text-right font-mono text-xs font-semibold text-emerald-400">
+                        <TableCell className="text-right font-mono text-xs font-semibold text-money-ink">
                           {call.publisherPayoutAmount !== null &&
                           call.publisherPayoutAmount !== undefined
                             ? `$${Number(call.publisherPayoutAmount).toFixed(2)}`
@@ -1131,17 +1120,17 @@ export default function OperationsCallLogsPage() {
                         </TableCell>
                       )}
                       {visibleColumns.cost && isAdminOrOwner && (
-                        <TableCell className="text-right font-mono text-xs text-gray-400">
+                        <TableCell className="text-right font-mono text-xs text-ink-2">
                           {call.cost !== null ? `$${Number(call.cost).toFixed(2)}` : '—'}
                         </TableCell>
                       )}
                       {visibleColumns.profit && isAdminOrOwner && (
-                        <TableCell className="text-right font-mono text-xs font-bold text-cyan-400">
+                        <TableCell className="text-right font-mono text-xs font-bold text-brand-ink">
                           {call.profit !== null ? `$${Number(call.profit).toFixed(2)}` : '—'}
                         </TableCell>
                       )}
                       {visibleColumns.margin && isAdminOrOwner && (
-                        <TableCell className="text-right font-mono text-xs text-gray-400">
+                        <TableCell className="text-right font-mono text-xs text-ink-2">
                           {call.margin !== null ? `${Number(call.margin).toFixed(1)}%` : '—'}
                         </TableCell>
                       )}
@@ -1162,7 +1151,7 @@ export default function OperationsCallLogsPage() {
                       )}
                       {visibleColumns.dispositionNotes && (
                         <TableCell
-                          className="text-gray-300 text-xs max-w-xs truncate"
+                          className="text-ink-2 text-xs max-w-xs truncate"
                           title={call.dispositionNotes || ''}
                         >
                           {call.dispositionNotes || '—'}
@@ -1182,7 +1171,7 @@ export default function OperationsCallLogsPage() {
                                 disabled={
                                   audioLoading && playingId === (call.primaryRecordingId || call.id)
                                 }
-                                className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-cyan-400 hover:text-cyan-300"
+                                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
                               >
                                 {audioLoading &&
                                 playingId === (call.primaryRecordingId || call.id) ? (
@@ -1202,17 +1191,17 @@ export default function OperationsCallLogsPage() {
                                     `call-${call.id}-recording.wav`
                                   )
                                 }
-                                className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
+                                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
                             </div>
                           ) : (
-                            <span className="text-gray-600 text-xs italic">—</span>
+                            <span className="text-ink-3 text-xs italic">—</span>
                           )}
                         </TableCell>
                       )}
-                      <TableCell className="text-right pr-6 font-medium text-cyan-400 hover:text-cyan-300 text-xs">
+                      <TableCell className="text-right pr-6 font-medium text-brand-ink hover:text-brand-ink text-xs">
                         Inspect →
                       </TableCell>
                     </TableRow>
@@ -1225,8 +1214,8 @@ export default function OperationsCallLogsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-white/10 pr-24">
-            <span className="text-xs text-gray-400">
+          <div className="flex items-center justify-between p-4 border-t border-rule pr-24">
+            <span className="text-xs text-ink-3">
               Page {page} of {totalPages}
             </span>
             <div className="flex gap-2">
@@ -1238,7 +1227,7 @@ export default function OperationsCallLogsPage() {
                   e.stopPropagation();
                   setPage(p => Math.max(1, p - 1));
                 }}
-                className="bg-white/5 border-white/10 text-white"
+                className="bg-surface border-rule text-ink"
               >
                 Previous
               </Button>
@@ -1250,7 +1239,7 @@ export default function OperationsCallLogsPage() {
                   e.stopPropagation();
                   setPage(p => Math.min(totalPages, p + 1));
                 }}
-                className="bg-white/5 border-white/10 text-white"
+                className="bg-surface border-rule text-ink"
               >
                 Next
               </Button>
@@ -1266,17 +1255,17 @@ export default function OperationsCallLogsPage() {
           if (!open) setDetailCallId(null);
         }}
       >
-        <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-0 shadow-2xl transition-all duration-300 ease-in-out text-white translate-x-0 translate-y-0 left-auto top-0 bottom-0">
+        <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-rule bg-surface p-0 shadow-2xl transition-all duration-300 ease-in-out text-ink translate-x-0 translate-y-0 left-auto top-0 bottom-0">
           <div className="h-full flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
+            <div className="p-6 border-b border-rule flex items-center justify-between bg-sunken">
               <div>
-                <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-extrabold flex items-center gap-1.5">
+                <span className="text-[10px] text-brand-ink uppercase tracking-widest font-extrabold flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5" />
                   Call Auditor
                 </span>
                 <DialogHeader>
-                  <h2 className="text-xl font-bold text-white mt-1">
+                  <h2 className="text-xl font-bold text-ink mt-1">
                     {detailCall
                       ? `Call Detail: ${detailCall.id.slice(0, 8)}...`
                       : 'Loading Call Details...'}
@@ -1287,7 +1276,7 @@ export default function OperationsCallLogsPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setDetailCallId(null)}
-                className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
+                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -1297,43 +1286,43 @@ export default function OperationsCallLogsPage() {
             <div className="flex-1 overflow-y-auto p-6 min-h-0">
               {detailLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-2">
-                  <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
-                  <span className="text-sm text-gray-500">Retrieving operations ledger...</span>
+                  <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
+                  <span className="text-sm text-ink-3">Retrieving operations ledger...</span>
                 </div>
               ) : !detailCall ? (
-                <div className="text-center py-12 text-gray-500">
+                <div className="text-center py-12 text-ink-3">
                   Failed to load call audit details.
                 </div>
               ) : (
                 <Tabs defaultValue="overview" className="w-full h-full flex flex-col">
-                  <TabsList className="bg-white/5 border border-white/10 w-full grid grid-cols-5 p-1 mb-6 flex-shrink-0">
+                  <TabsList className="bg-sunken border border-rule w-full grid grid-cols-5 p-1 mb-6 flex-shrink-0">
                     <TabsTrigger
                       value="overview"
-                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                      className="text-xs data-[state=active]:bg-brand-tint data-[state=active]:text-brand-ink"
                     >
                       Overview
                     </TabsTrigger>
                     <TabsTrigger
                       value="timeline"
-                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                      className="text-xs data-[state=active]:bg-brand-tint data-[state=active]:text-brand-ink"
                     >
                       Timeline
                     </TabsTrigger>
                     <TabsTrigger
                       value="billing"
-                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                      className="text-xs data-[state=active]:bg-brand-tint data-[state=active]:text-brand-ink"
                     >
                       Billing
                     </TabsTrigger>
                     <TabsTrigger
                       value="rtb"
-                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                      className="text-xs data-[state=active]:bg-brand-tint data-[state=active]:text-brand-ink"
                     >
                       Ping/Post
                     </TabsTrigger>
                     <TabsTrigger
                       value="admin"
-                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                      className="text-xs data-[state=active]:bg-brand-tint data-[state=active]:text-brand-ink"
                     >
                       Ledger
                     </TabsTrigger>
@@ -1343,9 +1332,9 @@ export default function OperationsCallLogsPage() {
                   <TabsContent value="overview" className="space-y-6">
                     {/* Recording Player card */}
                     {detailCall.recordingUrl && (
-                      <Card className="bg-cyan-950/20 border-cyan-500/30">
+                      <Card className="bg-surface border-rule">
                         <CardHeader className="py-3 px-4">
-                          <CardTitle className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                          <CardTitle className="text-xs font-bold text-brand-ink flex items-center gap-1.5">
                             <Volume2 className="h-4 w-4" />
                             Stream Call Recording
                           </CardTitle>
@@ -1358,7 +1347,7 @@ export default function OperationsCallLogsPage() {
                               void handlePlayRecording(detailCall.primaryRecordingId || '')
                             }
                             disabled={audioLoading}
-                            className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium border-none flex-shrink-0 h-9 w-9 p-0 rounded-full"
+                            className="bg-brand hover:bg-brand-ink text-ink font-medium border-none flex-shrink-0 h-9 w-9 p-0 rounded-full"
                           >
                             {audioLoading && playingId === detailCall.primaryRecordingId ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1371,7 +1360,7 @@ export default function OperationsCallLogsPage() {
                           {isAudioPlayerInDrawer ? (
                             audioPlayer
                           ) : (
-                            <div className="h-2 bg-white/10 rounded-full flex-1" />
+                            <div className="h-2 bg-sunken rounded-full flex-1" />
                           )}
                         </CardContent>
                       </Card>
@@ -1379,16 +1368,16 @@ export default function OperationsCallLogsPage() {
 
                     {/* Metadata grids */}
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-1">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      <div className="bg-sunken border border-rule rounded-lg p-3 space-y-1">
+                        <span className="text-[10px] text-ink-3 uppercase tracking-widest font-bold">
                           Caller Number
                         </span>
                         <p className="font-mono text-sm font-semibold">
                           {detailCall.callerId ? formatPhoneNumber(detailCall.callerId) : '—'}
                         </p>
                       </div>
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-1">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      <div className="bg-sunken border border-rule rounded-lg p-3 space-y-1">
+                        <span className="text-[10px] text-ink-3 uppercase tracking-widest font-bold">
                           Destination Number
                         </span>
                         <p className="font-mono text-sm font-semibold">
@@ -1400,27 +1389,27 @@ export default function OperationsCallLogsPage() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      <div className="bg-sunken border border-rule rounded-lg p-3 space-y-0.5">
+                        <span className="text-[10px] text-ink-3 uppercase tracking-widest font-bold">
                           Campaign
                         </span>
-                        <p className="text-xs font-semibold text-white truncate">
+                        <p className="text-xs font-semibold text-ink truncate">
                           {detailCall.campaignName || '—'}
                         </p>
                       </div>
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      <div className="bg-sunken border border-rule rounded-lg p-3 space-y-0.5">
+                        <span className="text-[10px] text-ink-3 uppercase tracking-widest font-bold">
                           Publisher
                         </span>
-                        <p className="text-xs font-semibold text-white truncate">
+                        <p className="text-xs font-semibold text-ink truncate">
                           {detailCall.publisherName || '—'}
                         </p>
                       </div>
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      <div className="bg-sunken border border-rule rounded-lg p-3 space-y-0.5">
+                        <span className="text-[10px] text-ink-3 uppercase tracking-widest font-bold">
                           Buyer
                         </span>
-                        <p className="text-xs font-semibold text-white truncate">
+                        <p className="text-xs font-semibold text-ink truncate">
                           {detailCall.buyerName || '—'}
                         </p>
                       </div>
@@ -1429,29 +1418,29 @@ export default function OperationsCallLogsPage() {
                     {/* Financial Performance snapshot */}
                     {canSeeFinance && (
                       <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                        <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                           Financial Summary
                         </h3>
                         <div className="grid grid-cols-3 gap-4">
-                          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-                            <span className="text-[10px] text-gray-400">Buyer Charge</span>
-                            <p className="text-lg font-bold font-mono text-white mt-1">
+                          <div className="bg-sunken border border-rule rounded-lg p-3">
+                            <span className="text-[10px] text-ink-3">Buyer Charge</span>
+                            <p className="text-lg font-bold font-mono text-ink mt-1">
                               {detailCall.buyerBillableAmount !== null
                                 ? `$${Number(detailCall.buyerBillableAmount).toFixed(2)}`
                                 : '$0.00'}
                             </p>
                           </div>
-                          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-                            <span className="text-[10px] text-gray-400">Publisher Payout</span>
-                            <p className="text-lg font-bold font-mono text-emerald-400 mt-1">
+                          <div className="bg-sunken border border-rule rounded-lg p-3">
+                            <span className="text-[10px] text-ink-3">Publisher Payout</span>
+                            <p className="text-lg font-bold font-mono text-money-ink mt-1">
                               {detailCall.publisherPayoutAmount !== null
                                 ? `$${Number(detailCall.publisherPayoutAmount).toFixed(2)}`
                                 : '$0.00'}
                             </p>
                           </div>
-                          <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-                            <span className="text-[10px] text-gray-400">Platform Margin</span>
-                            <p className="text-lg font-bold font-mono text-cyan-400 mt-1">
+                          <div className="bg-sunken border border-rule rounded-lg p-3">
+                            <span className="text-[10px] text-ink-3">Platform Margin</span>
+                            <p className="text-lg font-bold font-mono text-brand-ink mt-1">
                               {detailCall.margin !== null
                                 ? `${Number(detailCall.margin).toFixed(1)}%`
                                 : '0.0%'}
@@ -1462,11 +1451,11 @@ export default function OperationsCallLogsPage() {
                     )}
 
                     {/* Outcome notes */}
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-2">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    <div className="bg-sunken border border-rule rounded-lg p-4 space-y-2">
+                      <h4 className="text-xs font-bold text-ink-3 uppercase tracking-widest">
                         Agent Notes / Outcome
                       </h4>
-                      <p className="text-xs text-gray-300 leading-relaxed font-sans">
+                      <p className="text-xs text-ink-2 leading-relaxed font-sans">
                         {detailCall.dispositionNotes || 'No notes were recorded for this call.'}
                       </p>
                     </div>
@@ -1474,30 +1463,30 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 2: TIMELINE */}
                   <TabsContent value="timeline" className="space-y-4">
-                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-4">
+                    <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest mb-4">
                       Call Event Timeline
                     </h3>
                     {detailCall.legs && detailCall.legs.length > 0 ? (
-                      <div className="relative border-l border-white/10 pl-6 ml-2 space-y-6">
+                      <div className="relative border-l border-rule pl-6 ml-2 space-y-6">
                         {detailCall.legs.map((leg, idx) => (
                           <div key={leg.id} className="relative">
                             {/* Point */}
-                            <span className="absolute -left-[30px] top-1 h-3.5 w-3.5 rounded-full border border-cyan-400 bg-slate-950 flex items-center justify-center">
-                              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                            <span className="absolute -left-[30px] top-1 h-3.5 w-3.5 rounded-full border border-brand-ink bg-surface flex items-center justify-center">
+                              <span className="h-1.5 w-1.5 rounded-full bg-brand-ink" />
                             </span>
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold text-xs text-white">
+                                <span className="font-semibold text-xs text-ink">
                                   Leg {idx + 1}: {leg.direction}
                                 </span>
                                 <Badge
                                   variant="outline"
-                                  className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-[10px] py-0"
+                                  className="bg-money-tint text-money-ink border-money/40 text-[10px] py-0"
                                 >
                                   {leg.status}
                                 </Badge>
                               </div>
-                              <div className="text-[10px] text-gray-400 font-mono space-y-0.5">
+                              <div className="text-[10px] text-ink-3 font-mono space-y-0.5">
                                 {leg.startedAt && (
                                   <p>Initiated: {new Date(leg.startedAt).toLocaleString()}</p>
                                 )}
@@ -1514,7 +1503,7 @@ export default function OperationsCallLogsPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-600 gap-1">
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-ink-3 gap-1">
                         <Clock className="w-8 h-8" />
                         <span className="text-xs">Timeline logs unavailable.</span>
                       </div>
@@ -1524,41 +1513,41 @@ export default function OperationsCallLogsPage() {
                   {/* TAB 3: BILLING */}
                   <TabsContent value="billing" className="space-y-6">
                     <div className="space-y-4">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                      <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                         Billing Snapshot Rules
                       </h3>
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3 text-xs">
+                      <div className="bg-sunken border border-rule rounded-lg p-4 space-y-3 text-xs">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <span className="text-gray-400 font-medium">Billable Threshold</span>
-                            <p className="font-bold text-white mt-0.5">
+                            <span className="text-ink-3 font-medium">Billable Threshold</span>
+                            <p className="font-bold text-ink mt-0.5">
                               {detailCall.billableDurationThreshold
                                 ? `${detailCall.billableDurationThreshold} seconds`
                                 : '60 seconds (Default)'}
                             </p>
                           </div>
                           <div>
-                            <span className="text-gray-400 font-medium">Billable Result</span>
-                            <p className="font-bold text-white mt-0.5">
+                            <span className="text-ink-3 font-medium">Billable Result</span>
+                            <p className="font-bold text-ink mt-0.5">
                               {detailCall.billable ? 'Billable' : 'Non-Billable'}
                             </p>
                           </div>
                         </div>
-                        <Separator className="bg-white/5" />
+                        <Separator className="bg-rule" />
                         <div>
-                          <span className="text-gray-400 font-medium">Billing Reason</span>
-                          <p className="font-medium text-cyan-400 mt-1 font-sans leading-relaxed">
+                          <span className="text-ink-3 font-medium">Billing Reason</span>
+                          <p className="font-medium text-brand-ink mt-1 font-sans leading-relaxed">
                             {detailCall.billableReason || '—'}
                           </p>
                         </div>
                         {detailCall.noPayoutReason && (
                           <>
-                            <Separator className="bg-white/5" />
+                            <Separator className="bg-rule" />
                             <div>
-                              <span className="text-rose-400 font-medium">
+                              <span className="text-dropped-ink font-medium">
                                 Payout Denied Reason
                               </span>
-                              <p className="font-medium text-rose-300 mt-0.5 font-mono">
+                              <p className="font-medium text-dropped-ink mt-0.5 font-mono">
                                 {detailCall.noPayoutReason}
                               </p>
                             </div>
@@ -1570,36 +1559,36 @@ export default function OperationsCallLogsPage() {
                     {/* Accruals ledger lists (Admin only) */}
                     {isAdminOrOwner && (
                       <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                        <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                           Accruals Ledger Entries
                         </h3>
                         {detailCall.accruals && detailCall.accruals.length > 0 ? (
-                          <div className="border border-white/10 rounded-lg overflow-hidden">
+                          <div className="border border-rule rounded-lg overflow-hidden">
                             <Table>
-                              <TableHeader className="bg-white/5">
+                              <TableHeader className="bg-sunken">
                                 <TableRow>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold">
+                                  <TableHead className="text-ink-3 text-[10px] font-bold">
                                     Type
                                   </TableHead>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold">
+                                  <TableHead className="text-ink-3 text-[10px] font-bold">
                                     Description
                                   </TableHead>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                  <TableHead className="text-ink-3 text-[10px] font-bold text-right">
                                     Amount
                                   </TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {detailCall.accruals.map(acc => (
-                                  <TableRow key={acc.id} className="border-white/5">
-                                    <TableCell className="font-mono text-[10px] text-white uppercase">
+                                  <TableRow key={acc.id} className="border-rule">
+                                    <TableCell className="font-mono text-[10px] text-ink uppercase">
                                       {acc.type.replace('_', ' ')}
                                     </TableCell>
-                                    <TableCell className="text-[10px] text-gray-300">
+                                    <TableCell className="text-[10px] text-ink-2">
                                       {acc.description}
                                     </TableCell>
                                     <TableCell
-                                      className={`text-right font-mono text-[10px] font-bold ${acc.type.includes('PAYOUT') ? 'text-emerald-400' : 'text-white'}`}
+                                      className={`text-right font-mono text-[10px] font-bold ${acc.type.includes('PAYOUT') ? 'text-money-ink' : 'text-ink'}`}
                                     >
                                       ${Number(acc.amount).toFixed(2)}
                                     </TableCell>
@@ -1609,7 +1598,7 @@ export default function OperationsCallLogsPage() {
                             </Table>
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-500 italic">No accrual records stored.</p>
+                          <p className="text-xs text-ink-3 italic">No accrual records stored.</p>
                         )}
                       </div>
                     )}
@@ -1617,29 +1606,29 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 4: PING/POST BIDS */}
                   <TabsContent value="rtb" className="space-y-6">
-                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                    <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                       Lead Auction Details
                     </h3>
                     {detailCall.pingRequest ? (
                       <div className="space-y-4">
-                        <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3 text-xs">
+                        <div className="bg-sunken border border-rule rounded-lg p-4 space-y-3 text-xs">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <span className="text-gray-400 font-medium">Vertical</span>
-                              <p className="font-bold text-white mt-0.5 uppercase">
+                              <span className="text-ink-3 font-medium">Vertical</span>
+                              <p className="font-bold text-ink mt-0.5 uppercase">
                                 {detailCall.pingRequest.vertical || '—'}
                               </p>
                             </div>
                             <div>
-                              <span className="text-gray-400 font-medium">Auction Status</span>
-                              <p className="font-bold text-white mt-0.5 uppercase">
+                              <span className="text-ink-3 font-medium">Auction Status</span>
+                              <p className="font-bold text-ink mt-0.5 uppercase">
                                 {detailCall.pingRequest.status || '—'}
                               </p>
                             </div>
                           </div>
                           <div>
-                            <span className="text-gray-400 font-medium">Demographics Payload</span>
-                            <pre className="bg-slate-950 border border-white/5 p-2 rounded mt-1.5 font-mono text-[10px] text-cyan-300 overflow-x-auto">
+                            <span className="text-ink-3 font-medium">Demographics Payload</span>
+                            <pre className="bg-sunken border border-rule p-2 rounded mt-1.5 font-mono text-[10px] text-ink overflow-x-auto">
                               {JSON.stringify(detailCall.pingRequest.payload, null, 2)}
                             </pre>
                           </div>
@@ -1647,29 +1636,29 @@ export default function OperationsCallLogsPage() {
 
                         {/* Bids list */}
                         <div className="space-y-2">
-                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                          <h4 className="text-xs font-bold text-ink-3 uppercase tracking-widest">
                             Auction Bids
                           </h4>
                           {detailCall.pingRequest.bids && detailCall.pingRequest.bids.length > 0 ? (
-                            <div className="border border-white/10 rounded-lg overflow-hidden">
+                            <div className="border border-rule rounded-lg overflow-hidden">
                               <Table>
-                                <TableHeader className="bg-white/5">
+                                <TableHeader className="bg-sunken">
                                   <TableRow>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold">
+                                    <TableHead className="text-ink-3 text-[10px] font-bold">
                                       Buyer
                                     </TableHead>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold">
+                                    <TableHead className="text-ink-3 text-[10px] font-bold">
                                       Status
                                     </TableHead>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                    <TableHead className="text-ink-3 text-[10px] font-bold text-right">
                                       Bid Amount
                                     </TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {detailCall.pingRequest.bids.map(bid => (
-                                    <TableRow key={bid.id} className="border-white/5">
-                                      <TableCell className="text-[10px] font-semibold text-white">
+                                    <TableRow key={bid.id} className="border-rule">
+                                      <TableCell className="text-[10px] font-semibold text-ink">
                                         {bid.buyer?.name || 'Unknown'}
                                       </TableCell>
                                       <TableCell>
@@ -1677,14 +1666,14 @@ export default function OperationsCallLogsPage() {
                                           variant="outline"
                                           className={
                                             bid.status === 'WON'
-                                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] py-0'
-                                              : 'bg-slate-500/10 text-gray-400 border-slate-500/30 text-[9px] py-0'
+                                              ? 'bg-live-tint text-live-ink border-live/40 text-[9px] py-0'
+                                              : 'bg-sunken text-ink-2 border-rule text-[9px] py-0'
                                           }
                                         >
                                           {bid.status}
                                         </Badge>
                                       </TableCell>
-                                      <TableCell className="text-right font-mono text-[10px] font-bold text-white">
+                                      <TableCell className="text-right font-mono text-[10px] font-bold text-ink">
                                         ${Number(bid.amount).toFixed(2)}
                                       </TableCell>
                                     </TableRow>
@@ -1693,14 +1682,14 @@ export default function OperationsCallLogsPage() {
                               </Table>
                             </div>
                           ) : (
-                            <p className="text-xs text-gray-500 italic">
+                            <p className="text-xs text-ink-3 italic">
                               No bids recorded in this auction.
                             </p>
                           )}
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-600 gap-1">
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-ink-3 gap-1">
                         <ArrowRightLeft className="w-8 h-8" />
                         <span className="text-xs">
                           Call did not originate from a Ping/Post RTB auction.
@@ -1713,16 +1702,16 @@ export default function OperationsCallLogsPage() {
                   <TabsContent value="admin" className="space-y-6">
                     {/* Disputes note */}
                     <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                      <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                         Dispute Review
                       </h3>
-                      <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-2 text-xs">
+                      <div className="bg-sunken border border-rule rounded-lg p-4 space-y-2 text-xs">
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-400 font-medium">Dispute Status</span>
+                          <span className="text-ink-3 font-medium">Dispute Status</span>
                           {detailCall.disputeStatus ? (
                             getDisputeBadge(detailCall.disputeStatus)
                           ) : (
-                            <span className="text-gray-500 italic">No Active Disputes</span>
+                            <span className="text-ink-3 italic">No Active Disputes</span>
                           )}
                         </div>
                       </div>
@@ -1730,41 +1719,41 @@ export default function OperationsCallLogsPage() {
 
                     {/* Manual Adjustments log */}
                     <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                      <h3 className="text-xs font-bold text-brand-ink uppercase tracking-widest">
                         Manual adjustments history
                       </h3>
                       {detailCall.buyerTransactions && detailCall.buyerTransactions.length > 0 ? (
-                        <div className="border border-white/10 rounded-lg overflow-hidden">
+                        <div className="border border-rule rounded-lg overflow-hidden">
                           <Table>
-                            <TableHeader className="bg-white/5">
+                            <TableHeader className="bg-sunken">
                               <TableRow>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                <TableHead className="text-ink-3 text-[10px] font-bold">
                                   Date
                                 </TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                <TableHead className="text-ink-3 text-[10px] font-bold">
                                   Type
                                 </TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                <TableHead className="text-ink-3 text-[10px] font-bold">
                                   Description
                                 </TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                <TableHead className="text-ink-3 text-[10px] font-bold text-right">
                                   Amount
                                 </TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {detailCall.buyerTransactions.map(tx => (
-                                <TableRow key={tx.id} className="border-white/5">
-                                  <TableCell className="font-mono text-[9px] text-gray-400">
+                                <TableRow key={tx.id} className="border-rule">
+                                  <TableCell className="font-mono text-[9px] text-ink-2">
                                     {new Date(tx.createdAt).toLocaleDateString()}
                                   </TableCell>
-                                  <TableCell className="text-[10px] font-semibold uppercase text-white">
+                                  <TableCell className="text-[10px] font-semibold uppercase text-ink">
                                     {tx.type}
                                   </TableCell>
-                                  <TableCell className="text-[10px] text-gray-300">
+                                  <TableCell className="text-[10px] text-ink-2">
                                     {tx.description}
                                   </TableCell>
-                                  <TableCell className="text-right font-mono text-[10px] font-bold text-rose-400">
+                                  <TableCell className="text-right font-mono text-[10px] font-bold text-dropped-ink">
                                     -${Number(tx.amount).toFixed(2)}
                                   </TableCell>
                                 </TableRow>
@@ -1773,7 +1762,7 @@ export default function OperationsCallLogsPage() {
                           </Table>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center py-6 text-center text-gray-600 gap-1">
+                        <div className="flex flex-col items-center justify-center py-6 text-center text-ink-3 gap-1">
                           <History className="w-6 h-6" />
                           <span className="text-xs">No manual billing adjustments recorded.</span>
                         </div>

@@ -12,11 +12,12 @@ import {
 } from 'lucide-react';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
-import { getAutomationAuthHeaders, getAutomationAuthQuery } from './automation-auth';
 
 import { Button } from '@/components/ui/button';
 import type { ProspectData } from '@/lib/call-center/types';
 import { cn } from '@/lib/utils';
+
+import { getAutomationAuthHeaders, getAutomationAuthQuery } from './automation-auth';
 
 // ============================================================================
 // Types for Automation Status
@@ -336,12 +337,12 @@ export function ApplicationSubmission({
     <div className={cn('space-y-4', className)}>
       {/* Missing Fields Warning */}
       {state === 'idle' && !isReadyToSubmit && missingFields.length > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+        <div className="bg-ringing-tint border border-ringing rounded-lg p-3">
           <div className="flex items-start gap-2 mb-2">
-            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="w-4 h-4 text-ringing-ink mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-amber-400 font-medium text-sm">Complete Required Fields</p>
-              <p className="text-amber-300/70 text-xs">
+              <p className="text-ringing-ink font-medium text-sm">Complete Required Fields</p>
+              <p className="text-ringing-ink text-xs">
                 The following fields must be completed before submitting:
               </p>
             </div>
@@ -349,12 +350,12 @@ export function ApplicationSubmission({
           <div className="grid grid-cols-2 gap-1 mt-2">
             {missingFields.slice(0, 8).map(f => (
               <div key={f.key} className="flex items-center gap-1.5 text-xs">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-400/50" />
-                <span className="text-amber-200/80">{f.label}</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-ringing-tint" />
+                <span className="text-ringing-ink">{f.label}</span>
               </div>
             ))}
             {missingFields.length > 8 && (
-              <div className="text-xs text-amber-300/50 col-span-2">
+              <div className="text-xs text-ringing-ink col-span-2">
                 +{missingFields.length - 8} more fields required
               </div>
             )}
@@ -366,37 +367,37 @@ export function ApplicationSubmission({
       {state !== 'idle' && (
         <div
           className={cn(
-            'rounded-xl border p-4',
-            state === 'connecting' && 'border-blue-500/30 bg-blue-500/5',
-            state === 'running' && 'border-amber-500/30 bg-amber-500/5',
-            state === 'success' && 'border-emerald-500/30 bg-emerald-500/5',
-            state === 'error' && 'border-red-500/30 bg-red-500/5'
+            'rounded-card border p-4',
+            state === 'connecting' && 'border-money bg-money-tint',
+            state === 'running' && 'border-ringing bg-ringing-tint',
+            state === 'success' && 'border-live bg-live-tint',
+            state === 'error' && 'border-dropped bg-dropped-tint'
           )}
         >
           {/* Header */}
           <div className="flex items-center gap-3 mb-3">
             {state === 'connecting' && (
               <>
-                <Wifi className="w-5 h-5 text-blue-400 animate-pulse" />
-                <span className="text-blue-400 font-medium">Connecting to carrier portal...</span>
+                <Wifi className="w-5 h-5 text-money-ink animate-pulse" />
+                <span className="text-money-ink font-medium">Connecting to carrier portal...</span>
               </>
             )}
             {state === 'running' && (
               <>
-                <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
-                <span className="text-amber-400 font-medium">Submitting Application...</span>
+                <Loader2 className="w-5 h-5 text-ringing-ink animate-spin" />
+                <span className="text-ringing-ink font-medium">Submitting Application...</span>
               </>
             )}
             {state === 'success' && (
               <>
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">Application Submitted!</span>
+                <CheckCircle2 className="w-5 h-5 text-live-ink" />
+                <span className="text-live-ink font-medium">Application Submitted!</span>
               </>
             )}
             {state === 'error' && (
               <>
-                <XCircle className="w-5 h-5 text-red-400" />
-                <span className="text-red-400 font-medium">Submission Failed</span>
+                <XCircle className="w-5 h-5 text-dropped-ink" />
+                <span className="text-dropped-ink font-medium">Submission Failed</span>
               </>
             )}
           </div>
@@ -404,13 +405,13 @@ export function ApplicationSubmission({
           {/* Progress Bar (for running state) */}
           {(state === 'running' || state === 'connecting') && (
             <div className="mb-3">
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <div className="flex justify-between text-xs text-ink-2 mb-1">
                 <span>
                   Step {currentStatus?.step || 0} of {currentStatus?.totalSteps || 12}
                 </span>
                 <span>{progressPercent}%</span>
               </div>
-              <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div className="h-2 bg-sunken rounded-full overflow-hidden">
                 <div
                   className="h-full transition-all duration-500"
                   style={{ width: `${progressPercent}%` }}
@@ -421,17 +422,17 @@ export function ApplicationSubmission({
 
           {/* Current Status Message */}
           {currentStatus && (state === 'running' || state === 'connecting') && (
-            <p className="text-gray-300 text-sm">{currentStatus.message}</p>
+            <p className="text-ink-2 text-sm">{currentStatus.message}</p>
           )}
 
           {/* Application Number (success) */}
           {state === 'success' && applicationNumber && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mt-3">
+            <div className="bg-live-tint border border-live rounded-lg p-4 mt-3">
               <div className="flex items-center gap-3">
-                <FileCheck className="w-8 h-8 text-emerald-400" />
+                <FileCheck className="w-8 h-8 text-live-ink" />
                 <div>
-                  <p className="text-gray-400 text-sm">Application Number</p>
-                  <p className="text-emerald-400 font-bold text-xl tracking-wider">
+                  <p className="text-ink-2 text-sm">Application Number</p>
+                  <p className="text-live-ink font-bold text-xl tracking-wider">
                     {applicationNumber}
                   </p>
                 </div>
@@ -441,29 +442,29 @@ export function ApplicationSubmission({
 
           {/* Error Message */}
           {state === 'error' && errorMessage && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mt-3">
+            <div className="bg-dropped-tint border border-dropped rounded-lg p-3 mt-3">
               <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                <p className="text-red-400 text-sm">{errorMessage}</p>
+                <AlertCircle className="w-4 h-4 text-dropped-ink mt-0.5 flex-shrink-0" />
+                <p className="text-dropped-ink text-sm">{errorMessage}</p>
               </div>
             </div>
           )}
 
           {/* Job ID (for reference) */}
-          {jobId && <p className="text-gray-500 text-xs mt-3">Job ID: {jobId}</p>}
+          {jobId && <p className="text-ink-3 text-xs mt-3">Job ID: {jobId}</p>}
         </div>
       )}
 
       {/* Status History (collapsible) */}
       {statusHistory.length > 0 && state === 'running' && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-gray-500 hover:text-gray-400">
+          <summary className="cursor-pointer text-ink-3 hover:text-ink">
             View status history ({statusHistory.length} updates)
           </summary>
-          <div className="mt-2 max-h-32 overflow-y-auto space-y-1 pl-2 border-l border-gray-700">
+          <div className="mt-2 max-h-32 overflow-y-auto space-y-1 pl-2 border-l border-rule">
             {statusHistory.map((status, i) => (
-              <div key={i} className="text-gray-400">
-                <span className="text-gray-500">
+              <div key={i} className="text-ink-2">
+                <span className="text-ink-3">
                   [{status.step}/{status.totalSteps}]
                 </span>{' '}
                 {status.message}
@@ -479,10 +480,10 @@ export function ApplicationSubmission({
           onClick={handleSubmit}
           disabled={disabled || !isReadyToSubmit}
           className={cn(
-            'w-full h-12 font-semibold text-lg shadow-lg transition-all',
+            'w-full h-12 font-semibold text-lg transition-all',
             isReadyToSubmit
-              ? 'bg-primary hover: hover: text-white '
-              : 'bg-slate-700 text-gray-400 cursor-not-allowed shadow-none'
+              ? 'bg-brand text-brand-fg '
+              : 'bg-sunken text-ink-2 cursor-not-allowed shadow-none'
           )}
         >
           <Rocket className="w-5 h-5 mr-2" />
@@ -492,10 +493,7 @@ export function ApplicationSubmission({
 
       {/* Retry Button */}
       {state === 'error' && (
-        <Button
-          onClick={handleRetry}
-          className="w-full h-12 hover: hover: text-white font-semibold"
-        >
+        <Button onClick={handleRetry} className="w-full h-12 text-ink font-semibold">
           <RefreshCw className="w-5 h-5 mr-2" />
           Retry Submission
         </Button>
@@ -506,7 +504,7 @@ export function ApplicationSubmission({
         <Button
           onClick={handleRetry}
           variant="outline"
-          className="w-full border-white/10 hover:bg-white/5 text-gray-300"
+          className="w-full border-rule hover:bg-sunken text-ink-2"
         >
           Start New Application
         </Button>
@@ -514,8 +512,8 @@ export function ApplicationSubmission({
 
       {/* Carrier Info */}
       {state === 'idle' && selectedCarrier && (
-        <div className="text-center text-sm text-gray-400">
-          Submitting to <span className="text-white font-medium">{selectedCarrier}</span> • $
+        <div className="text-center text-sm text-ink-2">
+          Submitting to <span className="text-ink font-medium">{selectedCarrier}</span> • $
           {selectedCoverage.toLocaleString()} • ${selectedPremium.toFixed(2)}/mo
         </div>
       )}

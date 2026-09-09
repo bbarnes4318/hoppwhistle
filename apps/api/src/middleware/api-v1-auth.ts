@@ -186,25 +186,33 @@ export function registerApiV1Auth(server: FastifyInstance): void {
  * Order matters: the database grants land first, then the acting-tenant roles
  * are merged on top of them, so a platform operator inside an agency keeps both
  * their own roles and the agency's.
+ *
+ * Exported for the same reason `applyPlatformContext` is: the session-cookie
+ * authenticator builds a principal the same way, and a second answer to "what
+ * is this caller allowed to be" is how one of them goes stale.
  */
-async function resolvePrincipal(request: FastifyRequest): Promise<void> {
+export async function resolvePrincipal(request: FastifyRequest): Promise<void> {
   await hydratePrincipal(request.user);
   await applyPlatformContext(request);
 }
 
 /**
- * Overlay NetEnroll staff state onto a principal this hook just built from a
- * JWT.
+ * Overlay NetEnroll staff state onto a principal built from a JWT.
+ *
+ * Exported so the session-cookie authenticator can apply the identical overlay
+ * — see middleware/session-cookie-auth.ts. Two implementations of "which agency
+ * is this operator inside" is precisely how a stale tenant gets served, so
+ * there is one.
  *
  * The token carries the tenant the operator had at login and knows nothing
  * about the agency they entered afterwards. For platform staff the entered
- * agency REPLACES it: the `PlatformActingTenant` row is the authority, the token only
- * says who is asking, and a stale tenant in a long-lived token must never
- * decide whose data is served.
+ * agency REPLACES it: the `PlatformActingTenant` row is the authority, the
+ * token only says who is asking, and a stale tenant in a long-lived token must
+ * never decide whose data is served.
  *
  * For everyone else this is a no-op beyond one indexed lookup that misses.
  */
-async function applyPlatformContext(request: FastifyRequest): Promise<void> {
+export async function applyPlatformContext(request: FastifyRequest): Promise<void> {
   const principal = request.user as
     | {
         userId?: string;

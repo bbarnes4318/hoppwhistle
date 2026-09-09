@@ -8,24 +8,26 @@ import {
   Loader2,
   PauseCircle,
   RefreshCw,
-  Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 
+import {
+  Figure,
+  FigureRow,
+  Ledger,
+  Notice,
+  SectionRule,
+  count,
+  dollars,
+  duration,
+  pct,
+  points,
+} from '@/components/delivery/ledger';
+import { StatusChip } from '@/components/domain/status-chip';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { PlatformDeliveryView } from '@/components/platform/platform-delivery-view';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
@@ -148,36 +150,6 @@ type SortKey =
   | 'availableSeconds'
   | 'name';
 
-/** A percentage, or an em dash. Never a fabricated 0%. */
-function pct(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)}%`;
-}
-
-/**
- * Dollars to the cent, or an em dash. Under review there is no rate, not a $0.
- *
- * Two decimal places because that is what the server stores and what the
- * settlement will debit. This rounded to whole dollars, so an overrun of
- * $2,948.50 read as $2,949 here and $2,948.50 on the bank statement -- a
- * fifty-cent discrepancy between the screen an agency checks and the charge
- * they are checking it against.
- */
-function dollars(value: number | null): string {
-  return value === null
-    ? '—'
-    : `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
-}
-
-function duration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
 /**
  * Time on the queue, or an em dash.
  *
@@ -211,7 +183,7 @@ export default function DeliveryPage(): JSX.Element {
   if (platform.loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading delivery
         </div>
@@ -301,16 +273,16 @@ function AgencyDeliveryPanel(): JSX.Element {
   function sortIcon(key: SortKey): JSX.Element | null {
     if (key !== sortKey) return null;
     return sortAsc ? (
-      <ArrowUp className="ml-1 inline h-3 w-3" />
+      <ArrowUp className="ml-1 inline h-3 w-3" aria-label="ascending" />
     ) : (
-      <ArrowDown className="ml-1 inline h-3 w-3" />
+      <ArrowDown className="ml-1 inline h-3 w-3" aria-label="descending" />
     );
   }
 
   if (loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading delivery
         </div>
@@ -322,7 +294,7 @@ function AgencyDeliveryPanel(): JSX.Element {
     return (
       <CompactPageShell>
         <CompactPageHeader title="Delivery" icon={Gauge} />
-        <p className="text-sm text-muted-foreground">{error ?? 'No delivery data yet.'}</p>
+        <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
       </CompactPageShell>
     );
   }
@@ -341,79 +313,43 @@ function AgencyDeliveryPanel(): JSX.Element {
           subtitle={`${today.calendarDay} · ${today.timeZone}`}
           icon={Gauge}
         >
-          <Badge variant="secondary">delivering</Badge>
+          <StatusChip value="ACTIVE" label="Delivering" tone="live" />
         </CompactPageHeader>
 
         {/*
           Operational figures only. These are true whether or not an agency is
           in the billing system, and a principal running a floor needs them.
         */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Calls today
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{today.callsAnswered}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                answered by an agent · {today.callsRouted} routed
-              </p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium">
-                <span
-                  className={cn(
-                    'inline-block h-2 w-2 rounded-full',
-                    today.callsInProgress > 0 ? 'bg-emerald-500' : 'bg-muted-foreground/40'
-                  )}
-                />
-                <span className="tabular-nums">{today.callsInProgress}</span>
-                <span className="font-normal text-muted-foreground">
-                  {today.callsInProgress === 1 ? 'call in progress now' : 'calls in progress now'}
-                </span>
-              </p>
-            </CardContent>
-          </Card>
+        <FigureRow>
+          <Figure
+            label="Calls today"
+            value={count(today.callsAnswered)}
+            sub={`answered by an agent · ${count(today.callsRouted)} routed`}
+          />
+          <Figure
+            label="In progress now"
+            value={count(today.callsInProgress)}
+            tone={today.callsInProgress > 0 ? 'live' : 'ink'}
+            sub="this instant, not today"
+          />
+          <Figure
+            label="Applications today"
+            value={count(today.applicationsSubmitted)}
+            sub="submitted today"
+          />
+          <Figure
+            label="Today so far"
+            value={pct(today.todayClosingPct)}
+            sub="applications as a share of answered calls"
+          />
+        </FigureRow>
 
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Applications today
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{today.applicationsSubmitted}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">submitted today</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Today so far
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{pct(today.todayClosingPct)}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                applications as a share of answered calls
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm font-medium">Billing is not enabled for this agency.</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Calls are delivered without a prepaid block, an overrun ceiling or a nightly
-              settlement. There is nothing to charge and nothing to run out of.
-            </p>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              NetEnroll enables it per agency, once the terms and a bank mandate are in place.
-            </p>
-          </CardContent>
-        </Card>
+        <SectionRule>Billing is not enabled for this agency</SectionRule>
+        <p className="t-body max-w-prose text-ink-2">
+          Calls are delivered without a prepaid block, an overrun ceiling or a nightly settlement.
+          There is nothing to charge and nothing to run out of. NetEnroll enables it per agency,
+          once the terms and a bank mandate are in place.
+        </p>
       </CompactPageShell>
     );
   }
@@ -431,423 +367,415 @@ function AgencyDeliveryPanel(): JSX.Element {
         icon={Gauge}
       >
         <div className="flex items-center gap-2">
-          <Badge variant={today.delivering ? 'secondary' : 'destructive'}>
-            {today.delivering ? 'delivering' : 'paused'}
-          </Badge>
+          {today.delivering ? (
+            <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+          ) : (
+            <StatusChip value="PAUSED" label="Paused" tone="blocked" />
+          )}
           <Button variant="outline" size="sm" onClick={refresh}>
             <RefreshCw className="mr-2 h-3 w-3" />
             Refresh
           </Button>
-          <Link href="/delivery/settlements">
-            <Button variant="outline" size="sm">
-              Settlement history
-            </Button>
-          </Link>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/delivery/settlements">Settlement history</Link>
+          </Button>
         </div>
       </CompactPageHeader>
 
       {!today.delivering && (
-        <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
-          <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div>
-            <p className="font-medium">
+        <Notice
+          tone="blocked"
+          icon={<PauseCircle className="h-4 w-4" />}
+          title={
+            <>
               Delivery is paused
-              {today.holdSince
-                ? ` — since ${new Date(today.holdSince).toLocaleTimeString()}`
-                : ''}
-            </p>
-            <p className="text-muted-foreground">{today.holdDetail}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Applications you have already paid for are untouched and available when delivery
-              resumes: {today.applicationsRemainingOnBlock} remaining.
-            </p>
-          </div>
-        </div>
+              {today.holdSince ? ` — since ${new Date(today.holdSince).toLocaleTimeString()}` : ''}
+            </>
+          }
+        >
+          <p>{today.holdDetail}</p>
+          <p className="t-meta mt-0.5">
+            Applications you have already paid for are untouched and available when delivery
+            resumes: {count(today.applicationsRemainingOnBlock)} remaining.
+          </p>
+        </Notice>
       )}
 
       {!today.chargesEnabled && (
-        <div className="flex items-start gap-2 rounded border border-sky-500/40 bg-sky-500/10 p-3 text-sm">
-          <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-          <div>
-            <p className="font-medium">Settlements are running without charging</p>
-            <p className="text-muted-foreground">
-              Every figure on this page is real and each night&rsquo;s settlement is recorded in
-              full, but no payment is taken. NetEnroll turns charging on separately.
-            </p>
-          </div>
-        </div>
+        <Notice
+          tone="money"
+          icon={<Gauge className="h-4 w-4" />}
+          title="Settlements are running without charging"
+        >
+          Every figure on this page is real and each night&rsquo;s settlement is recorded in full,
+          but no payment is taken. NetEnroll turns charging on separately.
+        </Notice>
       )}
 
       {today.mandate.status !== 'ACTIVE' && (
-        <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <div>
-            <p className="font-medium">No valid ACH mandate</p>
-            <p className="text-muted-foreground">
-              Delivery requires a verified bank mandate. Contact NetEnroll to set one up.
-            </p>
-          </div>
-        </div>
+        <Notice
+          tone="ringing"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          title="No valid ACH mandate"
+        >
+          Delivery requires a verified bank mandate. Contact NetEnroll to set one up.
+        </Notice>
       )}
 
-      {/* ── Today ────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Calls today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{today.callsAnswered}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              answered by an agent · {today.callsRouted} routed
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              answered is the delivered-call count your rate is measured on
-            </p>
-            {/*
-              The only figure on this panel about this instant rather than the
-              day. A principal watching the queue wants to know whether the
-              floor is busy right now, and no daily total can tell them.
-            */}
-            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium">
-              <span
-                className={cn(
-                  'inline-block h-2 w-2 rounded-full',
-                  today.callsInProgress > 0 ? 'bg-emerald-500' : 'bg-muted-foreground/40'
-                )}
-              />
-              <span className="tabular-nums">{today.callsInProgress}</span>
-              <span className="font-normal text-muted-foreground">
-                {today.callsInProgress === 1 ? 'call in progress now' : 'calls in progress now'}
-              </span>
-            </p>
-          </CardContent>
-        </Card>
+      {/*
+        ── The two numbers this screen is about ──────────────────────────────
 
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Applications today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{today.applicationsSubmitted}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {today.applicationsConsumedToday} on the block · {today.overrunToday} overrun
-            </p>
-          </CardContent>
-        </Card>
+        What tonight will cost, and the price it is being charged at. Everything
+        under the rule below is the support for these two. The projected charge
+        is provisional and says so in its sub line rather than in a muted
+        colour: a muted hero is a hero the reader is told to ignore.
+      */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:[&>*+*]:border-l md:[&>*+*]:border-rule md:[&>*+*]:pl-6">
+        <Figure
+          size="hero"
+          label="Projected charge at tonight's settlement"
+          value={dollars(today.projectedTotalCharge)}
+          sub={`${dollars(today.overrunAmountTonight)} for ${count(today.overrunToday)} overrun ${
+            today.overrunToday === 1 ? 'application' : 'applications'
+          } plus a block of ${count(today.projectedNextBlockQuantity)} · provisional until 23:59:59`}
+        />
+        <Figure
+          size="hero"
+          label="Current rate"
+          value={dollars(today.currentRate)}
+          sub={
+            <>
+              per submitted application, today
+              {/*
+                An agreed rate offset is shown as part of the price, not as a
+                fee beside it. There is deliberately no line anywhere on this
+                page that adds anything to a charge.
+              */}
+              {today.rateOffset > 0 && (
+                <>
+                  {' '}
+                  · {dollars(today.curveRate)} from the curve plus your agreed offset of{' '}
+                  {dollars(today.rateOffset)}
+                </>
+              )}
+            </>
+          }
+        />
+      </div>
 
-        {/* Today so far. Prices nothing, and says so. */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Today so far
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-muted-foreground">
-              {pct(today.todayClosingPct)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              closing percentage · does not set today&rsquo;s rate
-            </p>
-          </CardContent>
-        </Card>
+      {/*
+        ── The rate, and what set it ─────────────────────────────────────────
 
-        {/* The window that set the rate. Deliberately not adjacent to "today". */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Rating window — sets the rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{pct(today.windowClosingPct)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Delivery days: {windowLabel}
+        The trailing-window closing percentage lives HERE, beside the rate it
+        produced and away from today's counts. "Today so far" is in the next
+        group with the other things that happened today. They are different
+        numbers with different jobs, and putting them side by side as two
+        percentages is how an agency comes to believe its price moved at 10am.
+      */}
+      <SectionRule note="Tonight's settlement re-measures the window and sets tomorrow's rate.">
+        What sets the rate
+      </SectionRule>
+      <FigureRow className="md:grid-cols-3">
+        <Figure
+          label="Rating window closing"
+          value={pct(today.windowClosingPct)}
+          sub={
+            <>
+              set today&rsquo;s rate · Delivery Days {windowLabel}
               {today.windowDaysFound < today.windowDeliveryDays
                 ? ` · ${today.windowDaysFound} of ${today.windowDeliveryDays} found`
                 : ''}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            </>
+          }
+        />
+        <Figure
+          size="quiet"
+          label="Tomorrow is tracking toward"
+          value={today.trackingBelowMinimum ? 'review' : dollars(today.trackingRate)}
+          tone={today.trackingBelowMinimum ? 'ringing' : 'ink'}
+          sub={
+            today.trackingBelowMinimum
+              ? 'the window ending today is below the curve minimum'
+              : 'if today closed now · provisional'
+          }
+        />
+        <Figure
+          label="Ceiling"
+          value={count(today.distanceToCeiling)}
+          tone={today.distanceToCeiling === 0 ? 'dropped' : 'ink'}
+          sub={`more applications before delivery stops for today · ceiling ${count(
+            today.overrunCeiling
+          )}`}
+        />
+      </FigureRow>
 
-      {/* ── The block, the overrun and tonight ───────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Remaining on the block
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">
-              {today.applicationsRemainingOnBlock}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              applications paid for and unused · daily block {today.dailyBlockApplications}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Overrun today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{today.overrunToday}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {dollars(today.overrunAmountTonight)} at tonight&rsquo;s rate
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Distance to the ceiling
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                'text-3xl font-bold tabular-nums',
-                today.distanceToCeiling === 0 && 'text-destructive'
-              )}
-            >
-              {today.distanceToCeiling}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              more applications before delivery stops for today · ceiling{' '}
-              {today.overrunCeiling}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Projected at settlement
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-muted-foreground">
-              {dollars(today.projectedTotalCharge)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              tonight&rsquo;s overrun plus a block of {today.projectedNextBlockQuantity} ·
-              provisional
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── The two rates ───────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Current rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{dollars(today.currentRate)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              per submitted application, today
-            </p>
-            {/*
-              An agreed rate offset is shown as part of the price, not as a fee
-              beside it. This is what makes the number above add up for an
-              agency reading its own terms — and there is deliberately no line
-              anywhere on this page that adds anything to a charge.
-            */}
-            {today.rateOffset > 0 && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {dollars(today.curveRate)} from the curve, plus your agreed rate offset of{' '}
-                {dollars(today.rateOffset)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Tomorrow is tracking toward
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                'text-3xl font-bold tabular-nums',
-                today.trackingBelowMinimum ? 'text-amber-500' : 'text-muted-foreground'
-              )}
-            >
-              {today.trackingBelowMinimum ? 'review' : dollars(today.trackingRate)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {today.trackingBelowMinimum
-                ? 'the window ending today is below the curve minimum'
-                : 'what tonight will settle at, if today closed now · provisional'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* ── Today ────────────────────────────────────────────────────────── */}
+      <SectionRule
+        note={`${count(today.callsInProgress)} ${today.callsInProgress === 1 ? 'call' : 'calls'} in progress now`}
+      >
+        Today
+      </SectionRule>
+      <FigureRow>
+        <Figure
+          label="Calls answered"
+          value={count(today.callsAnswered)}
+          sub={`${count(today.callsRouted)} routed · answered is what your rate is measured on`}
+        />
+        <Figure
+          label="Applications"
+          value={count(today.applicationsSubmitted)}
+          sub={`${count(today.applicationsConsumedToday)} on the block · ${count(
+            today.overrunToday
+          )} overrun`}
+        />
+        <Figure
+          label="Remaining on the block"
+          value={count(today.applicationsRemainingOnBlock)}
+          sub={`paid for and unused · daily block ${count(today.dailyBlockApplications)}`}
+        />
+        {/* Today so far. Prices nothing, and says so. */}
+        <Figure
+          size="quiet"
+          label="Closing today so far"
+          value={pct(today.todayClosingPct)}
+          sub="moves all day · does not set today's rate"
+        />
+      </FigureRow>
 
       {/* ── Per agent ───────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Agents today
-            </span>
-            {/*
-              The reference line. This table is the lever: an agency that moves
-              its two worst closers off the queue raises its blended closing
-              percentage, which lowers its rate. Reading who is above and who is
-              below the agency's own figure is the whole decision, and it should
-              not require holding a number in your head while you scan a column.
-
-              Served by the server alongside the rows, not summed from them: the
-              agency figure counts calls no agent is attributed on.
-            */}
-            <span className="flex items-center gap-2 text-[11px] font-normal text-muted-foreground">
-              <span
-                className="inline-block h-0 w-6 border-t-2 border-dashed border-sky-500"
-                aria-hidden
-              />
-              Agency today {pct(agencyClosingPct)} — the line each agent is read against
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sortedAgents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No calls answered yet today.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead
-                    className="cursor-pointer select-none"
-                    onClick={() => toggleSort('name')}
-                  >
-                    Agent{sortIcon('name')}
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right"
-                    onClick={() => toggleSort('callsTaken')}
-                  >
-                    Calls{sortIcon('callsTaken')}
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right"
-                    onClick={() => toggleSort('applications')}
-                  >
-                    Applications{sortIcon('applications')}
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right"
-                    onClick={() => toggleSort('closingPct')}
-                  >
-                    Closing{sortIcon('closingPct')}
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right"
-                    onClick={() => toggleSort('talkTimeSeconds')}
-                  >
-                    Talk time{sortIcon('talkTimeSeconds')}
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right"
-                    onClick={() => toggleSort('availableSeconds')}
-                    title="Time on the queue today, waiting for a call. A low closer who was available all day and one who was available for forty minutes are different problems."
-                  >
-                    On queue{sortIcon('availableSeconds')}
-                  </TableHead>
-                  <TableHead className="text-right">Occupancy</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedAgents.map(agent => (
-                  <TableRow key={agent.userId ?? 'unattributed'}>
-                    <TableCell
-                      className={cn(
-                        'font-medium',
-                        agent.userId === null && 'italic text-muted-foreground'
-                      )}
-                      title={
-                        agent.userId === null
-                          ? 'Delivered calls with no agent recorded on them. Shown so this ' +
-                            'table adds up to the agency total rather than quietly losing them.'
-                          : (agent.email ?? undefined)
-                      }
-                    >
-                      {agent.name}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{agent.callsTaken}</TableCell>
-                    <TableCell className="text-right tabular-nums">{agent.applications}</TableCell>
-                    {/*
-                      Read against the agency's own figure rather than against
-                      nothing. Muted where there is no comparison to make: an
-                      agent with no calls has no percentage, and an agency with
-                      no delivered calls has no line to be above or below.
-                    */}
-                    <TableCell
-                      className={cn(
-                        'text-right font-medium tabular-nums',
-                        agent.closingPct !== null &&
-                          agencyClosingPct !== null &&
-                          (agent.closingPct >= agencyClosingPct
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-amber-600 dark:text-amber-400')
-                      )}
-                      title={
-                        agent.closingPct !== null && agencyClosingPct !== null
-                          ? `${(agent.closingPct - agencyClosingPct >= 0 ? '+' : '') + (agent.closingPct - agencyClosingPct).toFixed(2)} points against the agency's ${agencyClosingPct.toFixed(2)}% today`
-                          : undefined
-                      }
-                    >
-                      {pct(agent.closingPct)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {duration(agent.talkTimeSeconds)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {agent.availableSeconds === null ? (
-                        <span title="No status transitions were recorded for this agent today. That is not the same as no time on the queue, so it is shown as absent rather than as zero.">
-                          —
-                        </span>
-                      ) : (
-                        available(agent.availableSeconds)
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {agent.occupancyPct === null ? (
-                        <span title="Working hours have not been recorded for this agent today, so there is no denominator. An absent number, not 0%.">
-                          —
-                        </span>
-                      ) : (
-                        `${agent.occupancyPct.toFixed(0)}%`
-                      )}
-                    </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
-                      {agent.currentStatus}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <AgentTable
+        agents={sortedAgents}
+        agencyClosingPct={agencyClosingPct}
+        sortKey={sortKey}
+        sortAsc={sortAsc}
+        onSort={toggleSort}
+        sortIcon={sortIcon}
+      />
     </CompactPageShell>
+  );
+}
+
+/**
+ * Softphone presence, as a chip tone. Available is live; on a call is in
+ * progress; away is a deliberate stop, so it takes the blocked violet rather
+ * than a failure red; offline, unknown and "n/a" are neutral.
+ */
+function agentStatusTone(status: string): 'live' | 'ringing' | 'blocked' | 'neutral' {
+  switch (status) {
+    case 'available':
+      return 'live';
+    case 'on_call':
+      return 'ringing';
+    case 'away':
+      return 'blocked';
+    default:
+      return 'neutral';
+  }
+}
+
+/**
+ * The per-agent table: the product's real lever.
+ *
+ * A principal decides who to coach or pull off the queue here. So: weakest
+ * closer first, closing percentage the largest thing in the row, the agency's
+ * own figure drawn THROUGH the table as a rule between the agents below it and
+ * the agents above it, and a sticky header so 45 rows never scroll past the
+ * column names. Every other column is support and set in the quieter data
+ * face.
+ */
+function AgentTable({
+  agents,
+  agencyClosingPct,
+  sortKey,
+  sortAsc,
+  onSort,
+  sortIcon,
+}: {
+  agents: AgentRow[];
+  agencyClosingPct: number | null;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onSort: (key: SortKey) => void;
+  sortIcon: (key: SortKey) => JSX.Element | null;
+}): JSX.Element {
+  /*
+   * Where to draw the agency line. Only meaningful when the rows are ordered
+   * by closing percentage: it goes before the first agent at or above the
+   * agency figure (ascending) or the first one below it (descending). With any
+   * other sort the reference is carried per row instead.
+   */
+  const lineBefore = useMemo(() => {
+    if (sortKey !== 'closingPct' || agencyClosingPct === null) return -1;
+    const index = agents.findIndex(a =>
+      a.closingPct === null
+        ? false
+        : sortAsc
+          ? a.closingPct >= agencyClosingPct
+          : a.closingPct < agencyClosingPct
+    );
+    return index;
+  }, [agents, sortKey, sortAsc, agencyClosingPct]);
+
+  const header = (key: SortKey, label: string, extra?: { title?: string; numeric?: boolean }) => (
+    <th
+      scope="col"
+      className={cn(extra?.numeric && 'num', 'cursor-pointer select-none')}
+      aria-sort={sortKey === key ? (sortAsc ? 'ascending' : 'descending') : 'none'}
+      title={extra?.title}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(key)}
+        className="t-label text-ink-3 hover:text-ink"
+      >
+        {label}
+        {sortIcon(key)}
+      </button>
+    </th>
+  );
+
+  const agencyLine = (
+    <tr aria-hidden className="bg-sunken">
+      <td colSpan={9} className="!h-6 !border-b-0 !py-0">
+        <span className="flex items-center gap-2 t-meta text-ink-2">
+          <span className="h-px flex-1 border-t border-dashed border-ink-3" />
+          agency {pct(agencyClosingPct)}
+          <span className="h-px flex-1 border-t border-dashed border-ink-3" />
+        </span>
+      </td>
+    </tr>
+  );
+
+  return (
+    <div>
+      <SectionRule
+        note={
+          <>
+            Agency today <span className="t-data text-ink">{pct(agencyClosingPct)}</span> — the line
+            each agent is read against
+          </>
+        }
+      >
+        Agents today
+      </SectionRule>
+
+      {agents.length === 0 ? (
+        <p className="mt-3 t-body text-ink-3">No calls answered yet today.</p>
+      ) : (
+        <div className="mt-3 max-h-[calc(100vh-12rem)] overflow-auto rounded-card border border-rule bg-surface">
+          <Ledger>
+            <thead>
+              <tr>
+                {header('name', 'Agent')}
+                {header('closingPct', 'Closing', { numeric: true })}
+                <th
+                  scope="col"
+                  className="num"
+                  title="Points against the agency's own figure today"
+                >
+                  vs agency
+                </th>
+                {header('callsTaken', 'Calls', { numeric: true })}
+                {header('applications', 'Apps', { numeric: true })}
+                {header('talkTimeSeconds', 'Talk', { numeric: true })}
+                {header('availableSeconds', 'On queue', {
+                  numeric: true,
+                  title:
+                    'Time on the queue today, waiting for a call. A low closer who was available all day and one who was available for forty minutes are different problems.',
+                })}
+                <th scope="col" className="num">
+                  Occupancy
+                </th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent, index) => {
+                const delta =
+                  agent.closingPct !== null && agencyClosingPct !== null
+                    ? agent.closingPct - agencyClosingPct
+                    : null;
+                return (
+                  <Fragment key={agent.userId ?? 'unattributed'}>
+                    {index === lineBefore && agencyLine}
+                    <tr className="hover:bg-sunken">
+                      <td
+                        className={cn(
+                          'max-w-[16rem] truncate font-medium text-ink',
+                          agent.userId === null && 'italic font-normal text-ink-3'
+                        )}
+                        title={
+                          agent.userId === null
+                            ? 'Delivered calls with no agent recorded on them. Shown so this ' +
+                              'table adds up to the agency total rather than quietly losing them.'
+                            : (agent.email ?? undefined)
+                        }
+                      >
+                        {agent.name}
+                      </td>
+                      {/*
+                        The one number in the row. Set a step larger and heavier
+                        than the support columns; coloured only when it is BELOW
+                        the agency line, because below is the finding and above
+                        is the norm.
+                      */}
+                      <td
+                        className={cn(
+                          'num !t-figure !text-[15px] font-medium',
+                          delta !== null && delta < 0 ? '!text-dropped-ink' : '!text-ink',
+                          agent.closingPct === null && '!text-ink-3 !font-normal'
+                        )}
+                      >
+                        {pct(agent.closingPct)}
+                      </td>
+                      <td
+                        className={cn(
+                          'num',
+                          delta !== null && delta < 0 ? '!text-dropped-ink' : '!text-ink-3'
+                        )}
+                      >
+                        {delta === null ? '—' : points(delta)}
+                      </td>
+                      <td className="num">{count(agent.callsTaken)}</td>
+                      <td className="num">{count(agent.applications)}</td>
+                      <td className="num !text-ink-2">{duration(agent.talkTimeSeconds)}</td>
+                      <td className="num !text-ink-2">
+                        {agent.availableSeconds === null ? (
+                          <span title="No status transitions were recorded for this agent today. That is not the same as no time on the queue, so it is shown as absent rather than as zero.">
+                            —
+                          </span>
+                        ) : (
+                          available(agent.availableSeconds)
+                        )}
+                      </td>
+                      <td className="num !text-ink-2">
+                        {agent.occupancyPct === null ? (
+                          <span title="Working hours have not been recorded for this agent today, so there is no denominator. An absent number, not 0%.">
+                            —
+                          </span>
+                        ) : (
+                          `${agent.occupancyPct.toFixed(0)}%`
+                        )}
+                      </td>
+                      <td>
+                        <StatusChip
+                          value={agent.currentStatus}
+                          label={agent.currentStatus.replace(/_/g, ' ')}
+                          tone={agentStatusTone(agent.currentStatus)}
+                          size="sm"
+                        />
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
+              {lineBefore === -1 && sortKey === 'closingPct' && agencyClosingPct !== null && sortAsc
+                ? agencyLine
+                : null}
+            </tbody>
+          </Ledger>
+        </div>
+      )}
+    </div>
   );
 }

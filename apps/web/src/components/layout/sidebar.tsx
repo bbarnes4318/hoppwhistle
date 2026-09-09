@@ -1,10 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
+import { Wordmark } from '@/components/brand/wordmark';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
@@ -62,11 +62,11 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       className={cn(
         'flex items-center gap-2 rounded-control px-2 py-1.5 t-body transition-colors',
         active
-          ? 'bg-money-tint font-medium text-money-ink'
+          ? 'bg-brand-tint font-medium text-brand-ink'
           : 'text-ink-2 hover:bg-sunken hover:text-ink'
       )}
     >
-      <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-money' : 'text-ink-3')} />
+      <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-brand-ink' : 'text-ink-3')} />
       <span className="truncate">{item.name}</span>
     </Link>
   );
@@ -138,15 +138,8 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           be a second one. */}
       {drawer ? null : (
         <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
-          <Link href="/dashboard" className="rounded-control">
-            <Image
-              src="/hopwhistle.png"
-              alt="NetEnroll"
-              width={100}
-              height={32}
-              className="h-6 w-auto"
-              priority
-            />
+          <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
+            <Wordmark />
           </Link>
         </div>
       )}

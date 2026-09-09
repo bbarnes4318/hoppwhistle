@@ -32,9 +32,9 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
  <Card
  className={cn(
  'transition-all hover:shadow-md',
- statusConfig.priority === 'high' && 'border-amber-500/30 bg-amber-500/5',
+ statusConfig.priority === 'high' && 'border-ringing bg-ringing-tint',
  statusConfig.priority === 'critical' &&
- 'border-red-500/30 bg-red-500/5 animate-pulse cursor-pointer',
+ 'border-dropped bg-dropped-tint animate-pulse cursor-pointer',
  statusConfig.priority === 'complete' && 'opacity-75'
  )}
  onClick={isClickable ? onClick : undefined}
@@ -47,9 +47,9 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
  className={cn(
  'w-12 h-12 rounded-full flex items-center justify-center',
  statusConfig.priority === 'critical'
- ? 'bg-red-500/20'
+ ? 'bg-dropped-tint'
  : statusConfig.priority === 'high'
- ? 'bg-amber-500/20'
+ ? 'bg-ringing-tint'
  : 'bg-primary/10'
  )}
  >
@@ -57,9 +57,9 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
  className={cn(
  'h-6 w-6',
  statusConfig.priority === 'critical'
- ? 'text-red-500'
+ ? 'text-dropped-ink'
  : statusConfig.priority === 'high'
- ? 'text-amber-500'
+ ? 'text-ringing-ink'
  : 'text-primary'
  )}
  />
@@ -124,9 +124,9 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
  className={cn(
  'font-semibold',
  policy.onboardingAttempts >= 7
- ? 'text-red-500'
+ ? 'text-dropped-ink'
  : policy.onboardingAttempts >= 4
- ? 'text-amber-500'
+ ? 'text-ringing-ink'
  : 'text-foreground'
  )}
  >
@@ -137,9 +137,9 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
  className={cn(
  'h-2 rounded-full transition-all',
  policy.onboardingAttempts >= 7
- ? 'bg-red-500'
+ ? 'bg-dropped'
  : policy.onboardingAttempts >= 4
- ? 'bg-amber-500'
+ ? 'bg-ringing'
  : 'bg-primary'
  )}
  style={{ width: `${(policy.onboardingAttempts / 9) * 100}%` }}
@@ -174,8 +174,8 @@ export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): 
 
  {/* Critical Alert Banner */}
  {policy.status === 'DECLINED' && (
- <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
- <p className="text-sm text-red-500 font-medium flex items-center gap-2">
+ <div className="mt-3 p-3 rounded-lg bg-dropped-tint border border-dropped">
+ <p className="text-sm text-dropped-ink font-medium flex items-center gap-2">
  <StatusIcon className="h-4 w-4" />
  Policy Declined - Present Guaranteed Issue Offer to Customer
  </p>

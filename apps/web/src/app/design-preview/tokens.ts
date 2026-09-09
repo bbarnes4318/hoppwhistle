@@ -62,6 +62,23 @@ export const RULE_TOKENS: TokenRow[] = [
   },
 ];
 
+/**
+ * The NetEnroll accent. `--brand` is a fill and never text; `--brand-ink` is
+ * the only brand green used for text; `--brand-fg` is what sits on the fill.
+ */
+export const BRAND_TOKENS: TokenRow[] = [
+  { name: '--brand', light: '#10B981', dark: '#10B981', role: 'the accent, as a fill only' },
+  {
+    name: '--brand-ink',
+    light: '#047857',
+    dark: '#34D399',
+    role: 'brand green as text: links, active nav',
+    onPaper: { light: 5.26, dark: 9.81 },
+  },
+  { name: '--brand-tint', light: '#DEF5ED', dark: '#214334', role: 'active or selected ground' },
+  { name: '--brand-fg', light: '#171614', dark: '#121110', role: 'text on a brand fill' },
+];
+
 export const SIGNAL_TOKENS: TokenRow[] = [
   {
     name: '--live',

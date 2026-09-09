@@ -20,6 +20,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+import { apiClient } from '@/lib/api';
+import { syncSessionCookie } from '@/lib/session-token';
+
 export interface LeadData {
   lead_token?: string;
   caller_id?: string;
@@ -80,12 +83,35 @@ export function useLeadInjection(): UseLeadInjectionReturn {
       eventSourceRef.current.close();
     }
 
-    const apiBase =
-      typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? 'http://localhost:3001'
-        : '';
+    /*
+     * How this connection authenticates, and why it is shaped like this.
+     *
+     * `EventSource` cannot set request headers, so the Authorization header
+     * every other call in this app sends is not available here. For as long as
+     * this hook has existed the stream therefore arrived unauthenticated and
+     * was refused 401, and the reconnect below turned that into a refusal every
+     * few seconds for the whole time an agent had the console open.
+     *
+     * What an EventSource DOES send is cookies, on a same-origin request. The
+     * app already mirrors its token into the `hw_session` cookie for server
+     * rendering, and the API accepts it on this one read-only GET — see
+     * apps/api/src/middleware/session-cookie-auth.ts.
+     *
+     * Two things follow, and both matter:
+     *
+     *   - The URL is RELATIVE. It must go to this page's own origin so the
+     *     cookie is attached and Next's rewrite forwards it to the API. This
+     *     used to point at http://localhost:3001 whenever the hostname was
+     *     localhost, which is a different origin: no cookie, and a CORS
+     *     preflight this route deliberately does not answer.
+     *   - The cookie is synced first. A session that predates the cookie has a
+     *     token in localStorage and no cookie, and would connect as nobody.
+     *     `syncSessionCookie` is a synchronous document.cookie write, so it has
+     *     landed before EventSource reads it on the next line.
+     */
+    syncSessionCookie();
 
-    const url = `${apiBase}/api/v1/lead-inject/stream`;
+    const url = '/api/v1/lead-inject/stream';
 
     console.log('[LeadInjection] Connecting to SSE stream:', url);
 
@@ -157,29 +183,32 @@ export function useLeadInjection(): UseLeadInjectionReturn {
     connect();
   }, [connect]);
 
+  /*
+   * The same endpoint family, reached the ordinary way.
+   *
+   * This is a normal fetch, so unlike the stream it CAN send a header — and it
+   * was not sending one either, against a route that resolves a tenant from the
+   * authenticated principal. Going through `apiClient` gives it the token, the
+   * right base URL, and the shared handling of a dead session, rather than a
+   * third hand-rolled copy of all three.
+   */
   const lookupLead = useCallback(async (phoneNumber: string): Promise<LeadData | null> => {
-    const apiBase =
-      typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        ? 'http://localhost:3001'
-        : '';
-
     const normalizedPhone = phoneNumber.replace(/\D/g, '');
-    const url = `${apiBase}/api/v1/lead-inject/lookup/${normalizedPhone}`;
 
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
+    const response = await apiClient.get<{ found?: boolean; lead?: LeadData }>(
+      `/api/v1/lead-inject/lookup/${normalizedPhone}`
+    );
 
-      if (data.found && data.lead) {
-        const lead = data.lead as LeadData;
-        setLeadData(lead);
-        return lead;
-      }
-      return null;
-    } catch (err) {
-      console.error('[LeadInjection] Lookup failed:', err);
+    if (response.error) {
+      console.error('[LeadInjection] Lookup failed:', response.error.message);
       return null;
     }
+
+    const lead = response.data?.found ? response.data.lead : undefined;
+    if (!lead) return null;
+
+    setLeadData(lead);
+    return lead;
   }, []);
 
   const clearLead = useCallback(() => {

@@ -17,6 +17,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -29,9 +37,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiClient } from '@/lib/api';
-
 
 interface Campaign {
   id: string;
@@ -88,19 +94,19 @@ interface CallRecord {
 
 const statusColors: Record<string, string> = {
   DRAFT: 'bg-secondary text-muted-foreground border-border',
-  READY: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  RUNNING: 'bg-green-500/20 text-green-400 border-green-500/30 animate-pulse',
-  PAUSED: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  COMPLETED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  READY: 'bg-money-tint text-money-ink border-money/40',
+  RUNNING: 'bg-live-tint text-live-ink border-live/40 animate-pulse',
+  PAUSED: 'bg-ringing-tint text-ringing-ink border-ringing/40',
+  COMPLETED: 'bg-sunken text-ink-2 border-rule',
 };
 
 const contactStatusColors: Record<string, string> = {
   PENDING: 'bg-secondary text-muted-foreground',
-  CALLING: 'bg-blue-500/20 text-blue-400 animate-pulse',
-  COMPLETED: 'bg-green-500/20 text-green-400',
-  FAILED: 'bg-red-500/20 text-red-400',
+  CALLING: 'bg-ringing-tint text-ringing-ink animate-pulse',
+  COMPLETED: 'bg-live-tint text-live-ink',
+  FAILED: 'bg-dropped-tint text-dropped-ink',
   SKIPPED: 'bg-secondary text-muted-foreground',
-  NO_ANSWER: 'bg-yellow-500/20 text-yellow-400',
+  NO_ANSWER: 'bg-dropped-tint text-dropped-ink',
 };
 
 export default function CampaignDetailPage() {
@@ -151,7 +157,9 @@ export default function CampaignDetailPage() {
 
   const fetchContacts = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ data: Contact[] }>(`/api/v1/ai-campaigns/${campaignId}/contacts`);
+      const res = await apiClient.get<{ data: Contact[] }>(
+        `/api/v1/ai-campaigns/${campaignId}/contacts`
+      );
       if (res.error) return;
       setContacts(res.data?.data || []);
     } catch (error) {
@@ -161,7 +169,9 @@ export default function CampaignDetailPage() {
 
   const fetchCalls = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ data: CallRecord[] }>(`/api/v1/ai-campaigns/${campaignId}/calls`);
+      const res = await apiClient.get<{ data: CallRecord[] }>(
+        `/api/v1/ai-campaigns/${campaignId}/calls`
+      );
       if (res.error) return;
       setCalls(res.data?.data || []);
     } catch (error) {
@@ -230,7 +240,9 @@ export default function CampaignDetailPage() {
   const fetchRestartPreview = async () => {
     setPreviewLoading(true);
     try {
-      const res = await apiClient.get<any>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached/preview`);
+      const res = await apiClient.get<any>(
+        `/api/v1/ai-campaigns/${campaignId}/restart-unreached/preview`
+      );
       if (res.error) throw new Error(res.error.message);
       setPreviewData(res.data);
     } catch (error) {
@@ -266,14 +278,14 @@ export default function CampaignDetailPage() {
       console.error('Error executing restart:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to restart unreached contacts',
+        description:
+          error instanceof Error ? error.message : 'Failed to restart unreached contacts',
         variant: 'destructive',
       });
     } finally {
       setRestartLoading(false);
     }
   };
-
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -319,7 +331,6 @@ export default function CampaignDetailPage() {
         title: 'Contacts Uploaded',
         description: `Imported ${res.data?.imported || 0} contacts (${res.data?.skipped || 0} skipped)`,
       });
-
 
       void fetchStats();
       void fetchContacts();
@@ -435,7 +446,6 @@ export default function CampaignDetailPage() {
               Start
             </Button>
           ) : null}
-
         </div>
       </div>
 
@@ -467,13 +477,13 @@ export default function CampaignDetailPage() {
             <CardTitle className="text-2xl">{stats?.totalContacts || 0}</CardTitle>
           </CardHeader>
         </Card>
-        <Card className="bg-card border-green-500/20">
+        <Card className="bg-card border-live/40">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
               Completed Calls
             </CardDescription>
-            <CardTitle className="text-2xl text-green-400">{stats?.completedCalls || 0}</CardTitle>
+            <CardTitle className="text-2xl text-live-ink">{stats?.completedCalls || 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -676,9 +686,11 @@ export default function CampaignDetailPage() {
                   <p className="text-lg">
                     <Badge
                       variant="outline"
-                      className={campaign.carrier === 'signalwire'
-                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                        : 'text-sm'}
+                      className={
+                        campaign.carrier === 'signalwire'
+                          ? 'bg-live-tint text-live-ink border-live/40'
+                          : 'text-sm'
+                      }
                     >
                       {campaign.carrier === 'signalwire' ? 'SignalWire' : 'BulkVS / FreeSWITCH'}
                     </Badge>
@@ -732,11 +744,9 @@ export default function CampaignDetailPage() {
                 </label>
                 <p className="mt-1">
                   {campaign.vapiAssistantId ? (
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                      Provisioned
-                    </Badge>
+                    <Badge className="bg-live-tint text-live-ink border-live/40">Provisioned</Badge>
                   ) : (
-                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                    <Badge className="bg-ringing-tint text-ringing-ink border-ringing/40">
                       Pending
                     </Badge>
                   )}
@@ -764,56 +774,84 @@ export default function CampaignDetailPage() {
             </div>
           ) : previewData ? (
             <div className="space-y-4 my-2">
-              <div className="grid grid-cols-2 gap-2 text-sm border border-border p-3 rounded-md bg-muted/20">
+              <div className="grid grid-cols-2 gap-2 text-sm border border-border p-3 rounded-md bg-sunken">
                 <span className="text-muted-foreground">Total Contacts:</span>
                 <span className="font-semibold text-right">{previewData.totalContacts}</span>
-                
+
                 <span className="text-muted-foreground">Customer Reached (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.humanReachedExcluded}</span>
-                
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.humanReachedExcluded}
+                </span>
+
                 <span className="text-muted-foreground">Assistant Ended (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.assistantEndedExcluded || 0}</span>
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.assistantEndedExcluded || 0}
+                </span>
 
                 <span className="text-muted-foreground">Ambiguous / Unknown (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.unknownExcluded || 0}</span>
-                
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.unknownExcluded || 0}
+                </span>
+
                 <span className="text-muted-foreground">DNC (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.dncExcluded}</span>
-                
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.dncExcluded}
+                </span>
+
                 <span className="text-muted-foreground">Wrong Number (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.wrongNumberExcluded}</span>
-                
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.wrongNumberExcluded}
+                </span>
+
                 <span className="text-muted-foreground">Active Call (Excluded):</span>
-                <span className="font-semibold text-destructive text-right">-{previewData.activeCallExcluded}</span>
-                
+                <span className="font-semibold text-destructive text-right">
+                  -{previewData.activeCallExcluded}
+                </span>
+
                 <div className="col-span-2 border-t border-border my-1" />
 
                 <span className="text-muted-foreground">Never Attempted (Eligible):</span>
-                <span className="font-semibold text-green-500 text-right">+{previewData.neverAttemptedEligible}</span>
+                <span className="font-semibold text-live-ink text-right">
+                  +{previewData.neverAttemptedEligible}
+                </span>
 
                 <span className="text-muted-foreground">No Answer (Eligible):</span>
-                <span className="font-semibold text-green-500 text-right">+{previewData.noAnswerEligible}</span>
+                <span className="font-semibold text-live-ink text-right">
+                  +{previewData.noAnswerEligible}
+                </span>
 
                 <span className="text-muted-foreground">Busy (Eligible):</span>
-                <span className="font-semibold text-green-500 text-right">+{previewData.busyEligible}</span>
+                <span className="font-semibold text-live-ink text-right">
+                  +{previewData.busyEligible}
+                </span>
 
                 <span className="text-muted-foreground font-medium">Voicemail (Eligible):</span>
-                <span className="font-semibold text-green-500 text-right">+{previewData.voicemailEligible}</span>
+                <span className="font-semibold text-live-ink text-right">
+                  +{previewData.voicemailEligible}
+                </span>
 
                 <span className="text-muted-foreground">Failed/Silence (Eligible):</span>
-                <span className="font-semibold text-green-500 text-right">+{previewData.failedOrSilenceEligible}</span>
-                
+                <span className="font-semibold text-live-ink text-right">
+                  +{previewData.failedOrSilenceEligible}
+                </span>
+
                 <div className="col-span-2 border-t border-border my-1" />
 
                 <span className="font-semibold text-primary">Total to Restart:</span>
-                <span className="font-bold text-primary text-right">{previewData.totalEligible}</span>
+                <span className="font-bold text-primary text-right">
+                  {previewData.totalEligible}
+                </span>
               </div>
 
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-xs text-yellow-500 space-y-1">
+              <div className="bg-ringing-tint border border-ringing/40 rounded p-3 text-xs text-ringing-ink space-y-1">
                 <p className="font-medium">⚠️ Important Compliance Note:</p>
-                <p>Contacts previously reached by a customer, assistant-ended calls, ambiguous completions, wrong numbers, or numbers placed on the Do Not Call list are strictly excluded because human contact cannot be verified. The campaign status will reset to READY; calling will not begin automatically.</p>
+                <p>
+                  Contacts previously reached by a customer, assistant-ended calls, ambiguous
+                  completions, wrong numbers, or numbers placed on the Do Not Call list are strictly
+                  excluded because human contact cannot be verified. The campaign status will reset
+                  to READY; calling will not begin automatically.
+                </p>
               </div>
-
             </div>
           ) : (
             <div className="text-center py-4 text-sm text-destructive">
@@ -831,7 +869,9 @@ export default function CampaignDetailPage() {
             </Button>
             <Button
               onClick={() => void handleExecuteRestart()}
-              disabled={previewLoading || !previewData || previewData.totalEligible === 0 || restartLoading}
+              disabled={
+                previewLoading || !previewData || previewData.totalEligible === 0 || restartLoading
+              }
             >
               {restartLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Restart Contacts
@@ -842,4 +882,3 @@ export default function CampaignDetailPage() {
     </div>
   );
 }
-

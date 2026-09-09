@@ -1,10 +1,10 @@
-import React from 'react';
 import {
   DISPOSITIONS,
   DISPOSITION_LABELS,
   DISPOSITION_COLORS,
   FOLLOW_UP_DISPOSITIONS,
 } from '@hopwhistle/shared';
+import React from 'react';
 
 // Build button list from shared constants
 const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
@@ -48,25 +48,29 @@ export function DispositionPanel({
   // If disposition is saved, show confirmation
   if (dispositionSaved) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-background border border-border p-6 rounded">
-        <div className="w-2 h-2 bg-primary mb-4" />
-        <h3 className="text-sm font-mono uppercase tracking-widest text-primary mb-2">Disposition Logged</h3>
-        <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Awaiting next action</p>
+      <div className="flex-1 flex flex-col items-center justify-center bg-surface border border-rule p-6 rounded">
+        <div className="w-2 h-2 bg-live mb-4" />
+        <h3 className="text-sm font-mono uppercase tracking-widest text-brand-ink mb-2">
+          Disposition Logged
+        </h3>
+        <p className="text-xs font-mono text-ink-2 uppercase tracking-widest">
+          Awaiting next action
+        </p>
       </div>
     );
   }
 
   const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
-  const isFollowUpRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
+  const isFollowUpRequired =
+    selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
 
   // Validate save: disposition required, follow-up date required for callback/follow-up
   const canSave =
-    !!selectedDisposition &&
-    (!isFollowUpRequired || (!!followUpDate && !!followUpTime));
+    !!selectedDisposition && (!isFollowUpRequired || (!!followUpDate && !!followUpTime));
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-background p-4">
-      <h3 className="text-sm font-mono uppercase tracking-widest text-foreground pb-4 border-b border-border mb-4">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-surface p-4">
+      <h3 className="text-sm font-mono uppercase tracking-widest text-ink pb-4 border-b border-rule mb-4">
         Call Disposition
       </h3>
 
@@ -82,8 +86,9 @@ export function DispositionPanel({
             className={
               'w-full p-3 rounded text-left text-xs font-mono uppercase tracking-widest transition-all border ' +
               (selectedDisposition === value
-                ? (DISPOSITION_COLORS[value as keyof typeof DISPOSITION_COLORS] || 'bg-primary/10 border-primary text-primary')
-                : 'bg-card border-border text-muted-foreground hover:bg-muted')
+                ? DISPOSITION_COLORS[value as keyof typeof DISPOSITION_COLORS] ||
+                  'bg-brand-tint border-brand text-brand-ink'
+                : 'bg-surface border-rule text-ink-2 hover:bg-sunken')
             }
           >
             {label}
@@ -93,36 +98,40 @@ export function DispositionPanel({
 
       {/* Follow-Up Date/Time (for appointment, callback, follow-up) */}
       {needsFollowUp && (
-        <div className="bg-card border border-border rounded p-4 mb-4 space-y-3">
-          <h4 className="text-xs font-mono uppercase tracking-widest text-foreground pb-2 border-b border-border flex items-center gap-2">
-            {selectedDisposition === 'SET_APPOINTMENT' ? '📅 Appointment Details' :
-             selectedDisposition === 'SET_CALLBACK' ? '📞 Callback Schedule' :
-             '📋 Follow-Up Schedule'}
+        <div className="bg-surface border border-rule rounded p-4 mb-4 space-y-3">
+          <h4 className="text-xs font-mono uppercase tracking-widest text-ink pb-2 border-b border-rule flex items-center gap-2">
+            {selectedDisposition === 'SET_APPOINTMENT'
+              ? '📅 Appointment Details'
+              : selectedDisposition === 'SET_CALLBACK'
+                ? '📞 Callback Schedule'
+                : '📋 Follow-Up Schedule'}
             {isFollowUpRequired && (
-              <span className="text-[10px] text-amber-400 normal-case tracking-normal">(required)</span>
+              <span className="text-[10px] text-ringing-ink normal-case tracking-normal">
+                (required)
+              </span>
             )}
           </h4>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-ink-2 mb-1 block">
                 Date
               </label>
               <input
                 type="date"
                 value={followUpDate}
                 onChange={e => setFollowUpDate(e.target.value)}
-                className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
+                className="w-full bg-sunken border border-rule rounded px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:border-brand-ink"
               />
             </div>
             <div>
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-ink-2 mb-1 block">
                 Time
               </label>
               <input
                 type="time"
                 value={followUpTime}
                 onChange={e => setFollowUpTime(e.target.value)}
-                className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
+                className="w-full bg-sunken border border-rule rounded px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:border-brand-ink"
               />
             </div>
           </div>
@@ -132,7 +141,7 @@ export function DispositionPanel({
       {/* Notes */}
       {selectedDisposition && (
         <div className="mb-4">
-          <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
+          <label className="text-[10px] font-mono uppercase tracking-widest text-ink-2 mb-1 block">
             Notes
           </label>
           <textarea
@@ -140,7 +149,7 @@ export function DispositionPanel({
             onChange={e => setCallNotes(e.target.value)}
             placeholder="Add call notes..."
             rows={3}
-            className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary resize-none"
+            className="w-full bg-sunken border border-rule rounded px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:border-brand-ink resize-none"
           />
         </div>
       )}
@@ -150,13 +159,13 @@ export function DispositionPanel({
         <button
           onClick={handleSaveDisposition}
           disabled={!canSave}
-          className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
+          className="w-full py-3 bg-brand hover:bg-brand-ink hover:text-surface disabled:bg-sunken disabled:text-ink-3 disabled:cursor-not-allowed text-ink font-mono uppercase tracking-widest text-xs rounded transition-colors"
         >
           Save & Exit
         </button>
         <button
           onClick={handleSkipDisposition}
-          className="w-full py-3 bg-card hover:bg-muted border border-border text-muted-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
+          className="w-full py-3 bg-surface hover:bg-sunken border border-rule text-ink-2 font-mono uppercase tracking-widest text-xs rounded transition-colors"
         >
           Skip Entry
         </button>

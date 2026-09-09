@@ -631,57 +631,57 @@ export function BetterPlanCallbackScriptPanel({
   }, [activeNode.type, activeStepId]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border border-white/10 rounded-xl overflow-hidden shadow-2xl lg:flex-row">
+    <div className="flex flex-col h-full bg-surface border border-rule rounded-card overflow-hidden lg:flex-row">
       {/* Main script wizard section */}
-      <div className="flex-1 flex flex-col p-5 overflow-y-auto border-r border-white/5 space-y-4">
+      <div className="flex-1 flex flex-col p-5 overflow-y-auto border-r border-rule space-y-4">
         {/* Timing & Phase progress indicator */}
-        <div className="bg-slate-950/40 rounded-lg p-3 border border-white/5 flex flex-col gap-2">
+        <div className="bg-sunken rounded-lg p-3 border border-rule flex flex-col gap-2">
           <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-primary font-bold uppercase tracking-wider">
+            <span className="text-brand-ink font-bold uppercase tracking-wider">
               {activeNode.phaseName}
             </span>
-            <span className="text-muted-foreground flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-primary/70" />
+            <span className="text-ink-2 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-brand-ink" />
               {activeNode.timingLabel}
             </span>
           </div>
           {/* Phase progress bar */}
-          <div className="grid grid-cols-4 gap-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+          <div className="grid grid-cols-4 gap-1.5 h-1 bg-sunken rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-colors ${activeNode.phase >= 1 ? 'bg-primary' : 'bg-transparent'}`}
+              className={`h-full rounded-full transition-colors ${activeNode.phase >= 1 ? 'bg-brand' : 'bg-transparent'}`}
             />
             <div
-              className={`h-full rounded-full transition-colors ${activeNode.phase >= 2 ? 'bg-primary' : 'bg-transparent'}`}
+              className={`h-full rounded-full transition-colors ${activeNode.phase >= 2 ? 'bg-brand' : 'bg-transparent'}`}
             />
             <div
-              className={`h-full rounded-full transition-colors ${activeNode.phase >= 3 ? 'bg-primary' : 'bg-transparent'}`}
+              className={`h-full rounded-full transition-colors ${activeNode.phase >= 3 ? 'bg-brand' : 'bg-transparent'}`}
             />
             <div
-              className={`h-full rounded-full transition-colors ${activeNode.phase >= 4 ? 'bg-primary' : 'bg-transparent'}`}
+              className={`h-full rounded-full transition-colors ${activeNode.phase >= 4 ? 'bg-brand' : 'bg-transparent'}`}
             />
           </div>
         </div>
 
         {/* Script Content Card */}
-        <div className="flex-1 flex flex-col justify-between bg-slate-950/20 border border-white/5 rounded-xl p-5 min-h-[220px]">
+        <div className="flex-1 flex flex-col justify-between bg-sunken border border-rule rounded-card p-5 min-h-[220px]">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-primary/80 font-mono mb-2 font-semibold">
+            <div className="text-[10px] uppercase tracking-widest text-brand-ink font-mono mb-2 font-semibold">
               Read to Prospect:
             </div>
-            <p className="text-sm md:text-base font-medium text-slate-200 leading-relaxed font-sans whitespace-pre-line">
+            <p className="text-sm md:text-base font-medium text-ink leading-relaxed font-sans whitespace-pre-line">
               {interpolatedText}
             </p>
           </div>
 
           {/* Dynamic input captures depending on node */}
-          <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-rule">
             {activeStepId === 'schedule_callback' && (
               <div className="flex flex-col gap-2 max-w-sm">
                 <input
                   type="datetime-local"
                   value={customCallbackTime}
                   onChange={e => setCustomCallbackTime(e.target.value)}
-                  className="bg-slate-900 border border-white/10 rounded px-2.5 py-1.5 text-xs font-mono outline-none text-slate-100 focus:border-primary"
+                  className="bg-surface border border-rule rounded px-2.5 py-1.5 text-xs font-mono outline-none text-ink focus:border-brand-ink"
                 />
                 <button
                   disabled={!customCallbackTime}
@@ -692,7 +692,7 @@ export function BetterPlanCallbackScriptPanel({
                     );
                     navigateTo(activeNode.options['Yes (Confirm Callback)']);
                   }}
-                  className="bg-primary px-3 py-1.5 text-xs text-white font-mono rounded disabled:opacity-50"
+                  className="bg-brand px-3 py-1.5 text-xs text-ink font-mono rounded disabled:opacity-50"
                 >
                   Save & Confirm Callback
                 </button>
@@ -717,10 +717,10 @@ export function BetterPlanCallbackScriptPanel({
                         onClick={() => navigateTo(targetId)}
                         className={`px-4 py-2 text-xs font-mono uppercase tracking-widest rounded border transition-all ${
                           isPositive
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20'
+                            ? 'bg-live-tint text-live-ink border-live hover:bg-brand hover:text-ink'
                             : isNegative
-                              ? 'bg-red-500/10 text-red-400 border-red-500/25 hover:bg-red-500/20'
-                              : 'bg-slate-800 border-white/5 text-slate-300 hover:bg-slate-700'
+                              ? 'bg-dropped-tint text-dropped-ink border-dropped hover:bg-dropped-tint'
+                              : 'bg-sunken border-rule text-ink-2 hover:bg-sunken'
                         }`}
                       >
                         {label}
@@ -733,16 +733,16 @@ export function BetterPlanCallbackScriptPanel({
 
             {/* Suggested disposition button for exit nodes */}
             {suggestedDisposition && (
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="bg-live-tint border border-live rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 text-live-ink shrink-0" />
                   <div className="text-left">
-                    <div className="text-xs font-mono uppercase text-emerald-400 tracking-wider">
+                    <div className="text-xs font-mono uppercase text-live-ink tracking-wider">
                       Suggested Call Action
                     </div>
-                    <div className="text-slate-300 text-xs">
+                    <div className="text-ink-2 text-xs">
                       Ready to log disposition:{' '}
-                      <span className="font-semibold text-emerald-300">
+                      <span className="font-semibold text-live-ink">
                         {suggestedDisposition.label}
                       </span>
                     </div>
@@ -750,7 +750,7 @@ export function BetterPlanCallbackScriptPanel({
                 </div>
                 <button
                   onClick={() => handleApplyDisposition(suggestedDisposition.disp)}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-mono text-xs uppercase tracking-widest px-4 py-2 rounded shrink-0 transition-colors font-bold"
+                  className="bg-brand hover:bg-brand-ink hover:text-surface text-ink font-mono text-xs uppercase tracking-widest px-4 py-2 rounded shrink-0 transition-colors font-bold"
                 >
                   Set Call Disposition
                 </button>
@@ -760,189 +760,189 @@ export function BetterPlanCallbackScriptPanel({
         </div>
 
         {/* Objection Jumps section */}
-        <div className="bg-slate-950/20 rounded-xl p-4 border border-white/5 space-y-3">
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold font-mono flex items-center gap-1.5">
-            <HelpCircle className="w-3.5 h-3.5 text-primary/70" />
+        <div className="bg-sunken rounded-card p-4 border border-rule space-y-3">
+          <div className="text-[10px] uppercase tracking-widest text-ink-2 font-semibold font-mono flex items-center gap-1.5">
+            <HelpCircle className="w-3.5 h-3.5 text-brand-ink" />
             Quick Objection Handling Jumps
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               onClick={() => handleObjectionJump('what_is_this_about')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💬 What is this about?
             </button>
             <button
               onClick={() => handleObjectionJump('already_have_insurance')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🛡️ Already Have Insurance
             </button>
             <button
               onClick={() => handleObjectionJump('is_this_sales_call')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               📞 Is this a Sales Call?
             </button>
             <button
               onClick={() => handleObjectionJump('trying_to_sell_another_policy')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🛍️ Selling another policy?
             </button>
             <button
               onClick={() => handleObjectionJump('dont_want_to_change_anything')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ❌ {"Don't want to change"}
             </button>
             <button
               onClick={() => handleObjectionJump('something_wrong_with_policy')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ❓ Wrong with policy?
             </button>
             <button
               onClick={() => handleObjectionJump('why_didnt_i_get_plan_before')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🕒 Why not before?
             </button>
             <button
               onClick={() => handleObjectionJump('what_is_new_price')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💲 What is new price?
             </button>
             <button
               onClick={() => handleObjectionJump('how_much_will_i_save')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💰 How much will I save?
             </button>
             <button
               onClick={() => handleObjectionJump('im_busy')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ⌛ {"I'm Busy"}
             </button>
             <button
               onClick={() => handleObjectionJump('make_it_quick')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ⚡ Make it Quick
             </button>
             <button
               onClick={() => handleObjectionJump('send_me_something')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ✉️ Send Me Something
             </button>
             <button
               onClick={() => handleObjectionJump('need_to_think_about_it')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💭 Need to Think
             </button>
             <button
               onClick={() => handleObjectionJump('talk_to_family')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               👥 Spouse / Family
             </button>
             <button
               onClick={() => handleObjectionJump('dont_trust_this')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🔒 {"Don't Trust This"}
             </button>
             <button
               onClick={() => handleObjectionJump('know_this_is_real')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🛡️ Is This Real?
             </button>
             <button
               onClick={() => handleObjectionJump('dont_give_personal_info')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               📇 No Info on Phone
             </button>
             <button
               onClick={() => handleObjectionJump('cant_afford_more')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💸 {"Can't Afford More"}
             </button>
             <button
               onClick={() => handleObjectionJump('dont_want_two_payments')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               💳 Two Payments fear
             </button>
             <button
               onClick={() => handleObjectionJump('canceling_current_policy')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🛑 Canceling policy?
             </button>
             <button
               onClick={() => handleObjectionJump('will_i_lose_coverage')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               📉 Lose Coverage?
             </button>
             <button
               onClick={() => handleObjectionJump('did_my_payment_go_up')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               📈 Payment went up?
             </button>
             <button
               onClick={() => handleObjectionJump('stopped_paying_policy')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🚫 Stopped paying
             </button>
             <button
               onClick={() => handleObjectionJump('never_bought_that')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               ❌ Never Bought That
             </button>
             <button
               onClick={() => handleObjectionJump('who_are_you_again')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               👤 Who are you again?
             </button>
             <button
               onClick={() => handleObjectionJump('what_company_are_you_with')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🏢 What company?
             </button>
             <button
               onClick={() => handleObjectionJump('not_interested')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               🚫 Not Interested
             </button>
             <button
               onClick={() => handleObjectionJump('angry_customer')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-amber-500 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ringing-ink hover:bg-sunken"
             >
               🔥 Angry Prospect
             </button>
             <button
               onClick={() => handleObjectionJump('what_do_you_need_from_me')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-slate-400 hover:bg-slate-800"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-ink-2 hover:bg-sunken"
             >
               📝 What do you need?
             </button>
             <button
               onClick={() => handleObjectionJump('take_me_off_list')}
-              className="px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-left text-[10px] font-mono uppercase text-red-400/80 hover:bg-slate-800 border-red-500/10"
+              className="px-2.5 py-1.5 bg-surface border border-rule rounded text-left text-[10px] font-mono uppercase text-dropped-ink hover:bg-sunken border-dropped"
             >
               ⚠️ Remove from list
             </button>
@@ -950,14 +950,14 @@ export function BetterPlanCallbackScriptPanel({
         </div>
 
         {/* Compliance checklist card */}
-        <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold font-mono flex items-center gap-1.5">
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+        <div className="bg-ringing-tint border border-ringing rounded-card p-4 space-y-2">
+          <div className="text-[10px] uppercase tracking-widest text-ringing-ink font-semibold font-mono flex items-center gap-1.5">
+            <ShieldAlert className="w-3.5 h-3.5 text-ringing-ink" />
             Compliance Guidelines & Warnings
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-sans leading-relaxed text-amber-200/70">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-sans leading-relaxed text-ringing-ink">
             <div>
-              <span className="font-bold text-red-400">DO NOT SAY</span>
+              <span className="font-bold text-dropped-ink">DO NOT SAY</span>
               <ul className="list-disc pl-4 mt-1 space-y-1">
                 <li>“You are approved.”</li>
                 <li>“Your current policy is being canceled.”</li>
@@ -968,7 +968,7 @@ export function BetterPlanCallbackScriptPanel({
               </ul>
             </div>
             <div>
-              <span className="font-bold text-emerald-400">ALWAYS SAY</span>
+              <span className="font-bold text-live-ink">ALWAYS SAY</span>
               <ul className="list-disc pl-4 mt-1 space-y-1">
                 <li>“Nothing changes today unless you decide it makes sense.”</li>
                 <li>“Your licensed agent will go over the details.”</li>
@@ -982,18 +982,18 @@ export function BetterPlanCallbackScriptPanel({
         </div>
 
         {/* Global Nav Controls */}
-        <div className="flex items-center gap-2 border-t border-white/5 pt-3">
+        <div className="flex items-center gap-2 border-t border-rule pt-3">
           <button
             onClick={handleGoBack}
             disabled={history.length === 0}
-            className="flex items-center gap-1 px-3 py-1.5 border border-white/10 hover:bg-slate-800 disabled:opacity-50 text-slate-300 rounded text-xs font-mono uppercase"
+            className="flex items-center gap-1 px-3 py-1.5 border border-rule hover:bg-sunken disabled:opacity-50 text-ink-2 rounded text-xs font-mono uppercase"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             Back
           </button>
           <button
             onClick={handleRestart}
-            className="flex items-center gap-1 px-3 py-1.5 border border-white/10 hover:bg-slate-800 text-slate-300 rounded text-xs font-mono uppercase"
+            className="flex items-center gap-1 px-3 py-1.5 border border-rule hover:bg-sunken text-ink-2 rounded text-xs font-mono uppercase"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Restart
@@ -1002,33 +1002,33 @@ export function BetterPlanCallbackScriptPanel({
       </div>
 
       {/* Captured details sidebar */}
-      <div className="w-full lg:w-72 bg-slate-950/40 p-5 flex flex-col space-y-4">
+      <div className="w-full lg:w-72 bg-sunken p-5 flex flex-col space-y-4">
         <div>
-          <h3 className="text-xs font-semibold font-mono uppercase tracking-widest text-slate-200 pb-2 border-b border-white/10 mb-3">
+          <h3 className="text-xs font-semibold font-mono uppercase tracking-widest text-ink pb-2 border-b border-rule mb-3">
             Captured Lead Details
           </h3>
-          <p className="text-[10px] text-muted-foreground leading-normal mb-4 font-sans">
+          <p className="text-[10px] text-ink-2 leading-normal mb-4 font-sans">
             Carrier from Column R of lead list & live callback logs.
           </p>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-2.5 font-mono text-[11px] max-h-[250px] lg:max-h-none">
-          <div className="flex items-center justify-between border-b border-white/5 pb-1">
-            <span className="text-muted-foreground uppercase">Current Carrier:</span>
-            <span className="text-slate-200 font-semibold">{carrierName}</span>
+          <div className="flex items-center justify-between border-b border-rule pb-1">
+            <span className="text-ink-2 uppercase">Current Carrier:</span>
+            <span className="text-ink font-semibold">{carrierName}</span>
           </div>
           {capturedData.callbackTime && (
-            <div className="flex flex-col border-b border-white/5 pb-1 gap-0.5">
-              <span className="text-muted-foreground uppercase">Callback Scheduled:</span>
-              <span className="text-emerald-400 font-semibold">{capturedData.callbackTime}</span>
+            <div className="flex flex-col border-b border-rule pb-1 gap-0.5">
+              <span className="text-ink-2 uppercase">Callback Scheduled:</span>
+              <span className="text-live-ink font-semibold">{capturedData.callbackTime}</span>
             </div>
           )}
         </div>
 
         {leadId && (
-          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded p-2.5 flex items-center gap-1.5 mt-auto">
-            <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="text-[10px] text-emerald-300/80 font-mono">
+          <div className="bg-live-tint border border-live rounded p-2.5 flex items-center gap-1.5 mt-auto">
+            <UserCheck className="w-3.5 h-3.5 text-live-ink shrink-0" />
+            <span className="text-[10px] text-live-ink font-mono">
               Real-time sync active (ID: {leadId.slice(0, 8)})
             </span>
           </div>

@@ -108,10 +108,7 @@ export function ManualLeadEntryForm(): JSX.Element {
     return missing;
   }, [form, sendToBuyer]);
 
-  const update = <K extends keyof ManualLeadFormState>(
-    key: K,
-    value: ManualLeadFormState[K]
-  ) => {
+  const update = <K extends keyof ManualLeadFormState>(key: K, value: ManualLeadFormState[K]) => {
     setForm(previous => ({ ...previous, [key]: value }));
     setError('');
     setResult(null);
@@ -189,10 +186,10 @@ export function ManualLeadEntryForm(): JSX.Element {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-5">
+      <section className="rounded-card border border-rule bg-surface p-5">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-white">Manual CRM Lead Entry</h2>
-          <p className="mt-1 text-sm text-slate-400">
+          <h2 className="text-lg font-semibold text-ink">Manual CRM Lead Entry</h2>
+          <p className="mt-1 text-sm text-ink-2">
             Enter the lead once, then decide whether it stays in the CRM or is sent immediately.
           </p>
         </div>
@@ -201,8 +198,8 @@ export function ManualLeadEntryForm(): JSX.Element {
           <label
             className={`cursor-pointer rounded-lg border p-4 transition-colors ${
               form.deliveryChoice === 'CRM_ONLY'
-                ? 'border-emerald-500 bg-emerald-500/10'
-                : 'border-slate-700 bg-slate-950/40 hover:border-slate-500'
+                ? 'border-brand bg-brand-tint'
+                : 'border-rule bg-sunken hover:border-rule-strong'
             }`}
           >
             <div className="flex items-start gap-3">
@@ -215,11 +212,11 @@ export function ManualLeadEntryForm(): JSX.Element {
                 className="mt-1"
               />
               <div>
-                <div className="flex items-center gap-2 font-semibold text-white">
-                  <Save className="h-4 w-4 text-emerald-400" />
+                <div className="flex items-center gap-2 font-semibold text-ink">
+                  <Save className="h-4 w-4 text-brand-ink" />
                   Save to CRM Only
                 </div>
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-ink-2">
                   Store the lead for follow-up. Nothing is sent to the buyer.
                 </p>
               </div>
@@ -229,8 +226,8 @@ export function ManualLeadEntryForm(): JSX.Element {
           <label
             className={`cursor-pointer rounded-lg border p-4 transition-colors ${
               form.deliveryChoice === 'SEND_NOW'
-                ? 'border-amber-500 bg-amber-500/10'
-                : 'border-slate-700 bg-slate-950/40 hover:border-slate-500'
+                ? 'border-ringing bg-ringing-tint'
+                : 'border-rule bg-sunken hover:border-rule-strong'
             }`}
           >
             <div className="flex items-start gap-3">
@@ -243,12 +240,13 @@ export function ManualLeadEntryForm(): JSX.Element {
                 className="mt-1"
               />
               <div>
-                <div className="flex items-center gap-2 font-semibold text-white">
-                  <Send className="h-4 w-4 text-amber-400" />
+                <div className="flex items-center gap-2 font-semibold text-ink">
+                  <Send className="h-4 w-4 text-ringing-ink" />
                   Save &amp; Send to Buyer
                 </div>
-                <p className="mt-1 text-sm text-slate-400">
-                  Save the lead and immediately submit it using the server’s current TEST or LIVE mode.
+                <p className="mt-1 text-sm text-ink-2">
+                  Save the lead and immediately submit it using the server’s current TEST or LIVE
+                  mode.
                 </p>
               </div>
             </div>
@@ -256,7 +254,7 @@ export function ManualLeadEntryForm(): JSX.Element {
         </div>
 
         {sendToBuyer && (
-          <div className="mt-4 flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+          <div className="mt-4 flex gap-3 rounded-lg bg-ringing-tint p-3 text-sm text-ringing-ink">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
               This selection performs an immediate buyer submission. Confirm the information before
@@ -266,17 +264,17 @@ export function ManualLeadEntryForm(): JSX.Element {
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-5">
+      <section className="rounded-card border border-rule bg-surface p-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
-            <Label htmlFor="vertical" className="text-slate-300">
+            <Label htmlFor="vertical" className="text-ink-2">
               Lead Type
             </Label>
             <select
               id="vertical"
               value={form.vertical}
               onChange={event => update('vertical', event.target.value as Vertical)}
-              className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+              className="h-10 w-full rounded-md border border-rule bg-surface px-3 text-sm text-ink"
             >
               <option value="FE">Final Expense</option>
               <option value="ACA">ACA</option>
@@ -284,38 +282,38 @@ export function ManualLeadEntryForm(): JSX.Element {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="firstName" className="text-slate-300">
-              First Name <span className="text-red-400">*</span>
+            <Label htmlFor="firstName" className="text-ink-2">
+              First Name <span className="text-dropped-ink">*</span>
             </Label>
             <Input
               id="firstName"
               value={form.firstName}
               onChange={event => update('firstName', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="lastName" className="text-slate-300">
-              Last Name <span className="text-red-400">*</span>
+            <Label htmlFor="lastName" className="text-ink-2">
+              Last Name <span className="text-dropped-ink">*</span>
             </Label>
             <Input
               id="lastName"
               value={form.lastName}
               onChange={event => update('lastName', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-slate-300">
-              Phone <span className="text-red-400">*</span>
+            <Label htmlFor="phone" className="text-ink-2">
+              Phone <span className="text-dropped-ink">*</span>
             </Label>
             <Input
               id="phone"
               value={form.phone}
               onChange={event => update('phone', formatPhone(event.target.value))}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
               placeholder="(555) 123-4567"
             />
           </div>
@@ -323,53 +321,53 @@ export function ManualLeadEntryForm(): JSX.Element {
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-slate-300">
-              Email {sendToBuyer && <span className="text-red-400">*</span>}
+            <Label htmlFor="email" className="text-ink-2">
+              Email {sendToBuyer && <span className="text-dropped-ink">*</span>}
             </Label>
             <Input
               id="email"
               type="email"
               value={form.email}
               onChange={event => update('email', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="address" className="text-slate-300">
-              Street Address {sendToBuyer && <span className="text-red-400">*</span>}
+            <Label htmlFor="address" className="text-ink-2">
+              Street Address {sendToBuyer && <span className="text-dropped-ink">*</span>}
             </Label>
             <Input
               id="address"
               value={form.address}
               onChange={event => update('address', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="city" className="text-slate-300">
-              City {sendToBuyer && <span className="text-red-400">*</span>}
+            <Label htmlFor="city" className="text-ink-2">
+              City {sendToBuyer && <span className="text-dropped-ink">*</span>}
             </Label>
             <Input
               id="city"
               value={form.city}
               onChange={event => update('city', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
-            <Label htmlFor="state" className="text-slate-300">
-              State <span className="text-red-400">*</span>
+            <Label htmlFor="state" className="text-ink-2">
+              State <span className="text-dropped-ink">*</span>
             </Label>
             <select
               id="state"
               value={form.state}
               onChange={event => update('state', event.target.value)}
-              className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+              className="h-10 w-full rounded-md border border-rule bg-surface px-3 text-sm text-ink"
             >
               <option value="">Select state</option>
               {US_STATES.map(state => (
@@ -381,41 +379,41 @@ export function ManualLeadEntryForm(): JSX.Element {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="zipCode" className="text-slate-300">
-              ZIP Code {sendToBuyer && <span className="text-red-400">*</span>}
+            <Label htmlFor="zipCode" className="text-ink-2">
+              ZIP Code {sendToBuyer && <span className="text-dropped-ink">*</span>}
             </Label>
             <Input
               id="zipCode"
               inputMode="numeric"
               value={form.zipCode}
               onChange={event => update('zipCode', digitsOnly(event.target.value, 5))}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="birthDate" className="text-slate-300">
-              Date of Birth {sendToBuyer && <span className="text-red-400">*</span>}
+            <Label htmlFor="birthDate" className="text-ink-2">
+              Date of Birth {sendToBuyer && <span className="text-dropped-ink">*</span>}
             </Label>
             <Input
               id="birthDate"
               type="date"
               value={form.birthDate}
               onChange={event => update('birthDate', event.target.value)}
-              className="border-slate-600 bg-slate-800 text-white"
+              className="border-rule bg-surface text-ink"
             />
           </div>
 
           {form.vertical === 'FE' ? (
             <div className="space-y-1.5">
-              <Label htmlFor="gender" className="text-slate-300">
-                Gender {sendToBuyer && <span className="text-red-400">*</span>}
+              <Label htmlFor="gender" className="text-ink-2">
+                Gender {sendToBuyer && <span className="text-dropped-ink">*</span>}
               </Label>
               <select
                 id="gender"
                 value={form.gender}
                 onChange={event => update('gender', event.target.value)}
-                className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+                className="h-10 w-full rounded-md border border-rule bg-surface px-3 text-sm text-ink"
               >
                 <option value="">Select</option>
                 <option value="Male">Male</option>
@@ -425,8 +423,8 @@ export function ManualLeadEntryForm(): JSX.Element {
             </div>
           ) : (
             <div className="space-y-1.5">
-              <Label htmlFor="weight" className="text-slate-300">
-                Weight (lb) {sendToBuyer && <span className="text-red-400">*</span>}
+              <Label htmlFor="weight" className="text-ink-2">
+                Weight (lb) {sendToBuyer && <span className="text-dropped-ink">*</span>}
               </Label>
               <Input
                 id="weight"
@@ -434,7 +432,7 @@ export function ManualLeadEntryForm(): JSX.Element {
                 min="1"
                 value={form.weight}
                 onChange={event => update('weight', event.target.value)}
-                className="border-slate-600 bg-slate-800 text-white"
+                className="border-rule bg-surface text-ink"
               />
             </div>
           )}
@@ -442,14 +440,14 @@ export function ManualLeadEntryForm(): JSX.Element {
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="smoker" className="text-slate-300">
+            <Label htmlFor="smoker" className="text-ink-2">
               Tobacco Use
             </Label>
             <select
               id="smoker"
               value={form.smoker}
               onChange={event => update('smoker', event.target.value)}
-              className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-white"
+              className="h-10 w-full rounded-md border border-rule bg-surface px-3 text-sm text-ink"
             >
               <option value="">Unknown</option>
               <option value="No">No</option>
@@ -460,8 +458,8 @@ export function ManualLeadEntryForm(): JSX.Element {
           {form.vertical === 'ACA' && (
             <>
               <div className="space-y-1.5">
-                <Label htmlFor="heightFeet" className="text-slate-300">
-                  Height Feet {sendToBuyer && <span className="text-red-400">*</span>}
+                <Label htmlFor="heightFeet" className="text-ink-2">
+                  Height Feet {sendToBuyer && <span className="text-dropped-ink">*</span>}
                 </Label>
                 <Input
                   id="heightFeet"
@@ -470,12 +468,12 @@ export function ManualLeadEntryForm(): JSX.Element {
                   max="8"
                   value={form.heightFeet}
                   onChange={event => update('heightFeet', event.target.value)}
-                  className="border-slate-600 bg-slate-800 text-white"
+                  className="border-rule bg-surface text-ink"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="heightInches" className="text-slate-300">
-                  Height Inches {sendToBuyer && <span className="text-red-400">*</span>}
+                <Label htmlFor="heightInches" className="text-ink-2">
+                  Height Inches {sendToBuyer && <span className="text-dropped-ink">*</span>}
                 </Label>
                 <Input
                   id="heightInches"
@@ -484,7 +482,7 @@ export function ManualLeadEntryForm(): JSX.Element {
                   max="11"
                   value={form.heightInches}
                   onChange={event => update('heightInches', event.target.value)}
-                  className="border-slate-600 bg-slate-800 text-white"
+                  className="border-rule bg-surface text-ink"
                 />
               </div>
             </>
@@ -492,7 +490,7 @@ export function ManualLeadEntryForm(): JSX.Element {
         </div>
 
         <div className="mt-4 space-y-1.5">
-          <Label htmlFor="notes" className="text-slate-300">
+          <Label htmlFor="notes" className="text-ink-2">
             Notes
           </Label>
           <textarea
@@ -500,23 +498,21 @@ export function ManualLeadEntryForm(): JSX.Element {
             value={form.notes}
             onChange={event => update('notes', event.target.value)}
             rows={3}
-            className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+            className="w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand-ink"
           />
         </div>
       </section>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-          {error}
-        </div>
+        <div className="rounded-lg bg-dropped-tint p-3 text-sm text-dropped-ink">{error}</div>
       )}
 
       {result && (
         <div
           className={`rounded-lg border p-4 ${
             result.sentToBuyer && result.postStatus === 'ERROR'
-              ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              ? 'bg-ringing-tint text-ringing-ink'
+              : 'bg-live-tint text-live-ink'
           }`}
         >
           <div className="flex items-start gap-3">
@@ -525,7 +521,10 @@ export function ManualLeadEntryForm(): JSX.Element {
               <p className="font-semibold">{result.message}</p>
               <div className="mt-2 space-y-1 text-sm opacity-90">
                 <p>CRM status: {result.validationStatus || 'Saved'}</p>
-                <p>Buyer delivery: {result.sentToBuyer ? result.buyerStatus || result.postStatus : 'Not sent'}</p>
+                <p>
+                  Buyer delivery:{' '}
+                  {result.sentToBuyer ? result.buyerStatus || result.postStatus : 'Not sent'}
+                </p>
                 {result.postMode && <p>Delivery mode: {result.postMode}</p>}
                 {result.buyerError && <p>Buyer response: {result.buyerError}</p>}
               </div>
@@ -550,7 +549,7 @@ export function ManualLeadEntryForm(): JSX.Element {
         <Button
           type="submit"
           disabled={submitting}
-          className={sendToBuyer ? 'bg-amber-600 text-white hover:bg-amber-700' : ''}
+          className={sendToBuyer ? 'bg-ringing text-ink hover:opacity-90' : ''}
         >
           {submitting ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

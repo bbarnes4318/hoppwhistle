@@ -91,7 +91,7 @@ export function PhoneCell({
           onClick={() => void copy()}
           className={cn(
             't-data group inline-flex items-center gap-1.5 rounded-control text-ink',
-            'hover:text-money-ink focus-visible:outline-none'
+            'hover:text-brand-ink focus-visible:outline-none'
           )}
           // The accessible name has to say what the button does, not just
           // repeat the number the sighted user is already reading.

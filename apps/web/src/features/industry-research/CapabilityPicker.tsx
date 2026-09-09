@@ -66,7 +66,7 @@ export function CapabilityPicker({
   return (
     <div className="space-y-4">
       {/* Selected chips */}
-      <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <div className="rounded-lg border border-border bg-sunken p-3">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Selected capabilities

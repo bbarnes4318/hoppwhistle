@@ -1,9 +1,9 @@
 'use client';
 
-import * as React from 'react';
 import * as ToastPrimitives from '@radix-ui/react-toast';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -30,10 +30,10 @@ const toastVariants = cva(
  variants: {
  variant: {
  default: 'border bg-background text-foreground',
- success: 'border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400',
+ success: 'border-live/40 bg-live-tint text-live-ink',
  destructive:
  'destructive group border-destructive bg-destructive text-destructive-foreground',
- warning: 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+ warning: 'border-ringing/40 bg-ringing-tint text-ringing-ink',
  },
  },
  defaultVariants: {
@@ -78,7 +78,7 @@ const ToastClose = React.forwardRef<
  <ToastPrimitives.Close
  ref={ref}
  className={cn(
- 'absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600',
+ 'absolute right-2 top-2 rounded-md p-1 text-ink-3 opacity-0 transition-opacity hover:text-ink focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-dropped-ink group-[.destructive]:hover:text-ink',
  className
  )}
  toast-close=""
@@ -117,13 +117,13 @@ const ToastIcon = ({
 }) => {
  switch (variant) {
  case 'success':
- return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+ return <CheckCircle2 className="h-5 w-5 text-live" />;
  case 'destructive':
- return <AlertCircle className="h-5 w-5 text-red-500" />;
+ return <AlertCircle className="h-5 w-5 text-dropped" />;
  case 'warning':
- return <AlertCircle className="h-5 w-5 text-amber-500" />;
+ return <AlertCircle className="h-5 w-5 text-ringing" />;
  default:
- return <Info className="h-5 w-5 text-blue-500" />;
+ return <Info className="h-5 w-5 text-money" />;
  }
 };
 

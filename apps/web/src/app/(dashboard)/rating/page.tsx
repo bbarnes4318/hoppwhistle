@@ -236,8 +236,8 @@ function AgencyRatingPanel(): JSX.Element {
       </CompactPageHeader>
 
       {summary.reviewFlag && (
-        <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-2 rounded border border-ringing bg-ringing-tint p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
           <div>
             <p className="font-medium">Flagged for review</p>
             <p className="text-muted-foreground">
@@ -334,7 +334,7 @@ function AgencyRatingPanel(): JSX.Element {
             <p
               className={cn(
                 'text-3xl font-bold tabular-nums',
-                summary.trackingBelowMinimum ? 'text-amber-500' : 'text-muted-foreground'
+                summary.trackingBelowMinimum ? 'text-ringing-ink' : 'text-muted-foreground'
               )}
             >
               {summary.trackingBelowMinimum ? 'review' : dollars(summary.trackingRate)}
@@ -399,7 +399,7 @@ function AgencyRatingPanel(): JSX.Element {
                     <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.status === 'BELOW_MINIMUM' ? (
-                        <span className="text-amber-500">review</span>
+                        <span className="text-ringing-ink">review</span>
                       ) : (
                         <>
                           {row.previousRate !== null && row.previousRate !== row.newRate && (

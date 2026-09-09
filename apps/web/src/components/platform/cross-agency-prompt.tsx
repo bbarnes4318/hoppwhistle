@@ -94,7 +94,7 @@ export function CrossAgencyPrompt({
           </ul>
         )}
 
-        {ctx.error && <p className="mt-3 t-meta text-red-600">{ctx.error}</p>}
+        {ctx.error && <p className="mt-3 t-meta text-dropped-ink">{ctx.error}</p>}
       </div>
     </div>
   );

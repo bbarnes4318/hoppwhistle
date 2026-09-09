@@ -22,6 +22,19 @@ import {
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
+import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
+import { useLeadInjection } from '@/hooks/useLeadInjection';
+import { useScriptAccess } from '@/hooks/useUserRoles';
+import { apiClient } from '@/lib/api';
+import type { CustomerLookupResponse } from '@/lib/api/leads';
+import {
+  fetchCustomerLookup,
+  updateInsuranceLead,
+  deleteLeadList,
+  deleteInsuranceLeads,
+} from '@/lib/api/leads';
+
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
 import { ActiveCallControls } from './ActiveCallControls';
@@ -51,18 +64,6 @@ import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
-import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
-import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
-import { useLeadInjection } from '@/hooks/useLeadInjection';
-import { useScriptAccess } from '@/hooks/useUserRoles';
-import { apiClient } from '@/lib/api';
-import type { CustomerLookupResponse } from '@/lib/api/leads';
-import {
-  fetchCustomerLookup,
-  updateInsuranceLead,
-  deleteLeadList,
-  deleteInsuranceLeads,
-} from '@/lib/api/leads';
 
 // ============================================================================
 // DEFAULT SCRIPT CONTENT FOR EDITOR
@@ -1234,45 +1235,45 @@ export function CallCenterPortal(): JSX.Element {
   // =========================================================================
   if (currentView === 'roleSelect') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-paper flex items-center justify-center p-4">
         <div className="max-w-5xl w-full">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg ">
-              <Phone className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 bg-brand rounded-card flex items-center justify-center mx-auto mb-4 ">
+              <Phone className="w-8 h-8 text-ink" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-800 mb-2">Call Center Platform</h1>
-            <p className="text-slate-500">Select your workspace to continue</p>
+            <h1 className="text-3xl font-bold text-ink mb-2">Call Center Platform</h1>
+            <p className="text-ink-3">Select your workspace to continue</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div
               onClick={() => setCurrentView('agentDashboard')}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer group hover:shadow-sm hover: transition-all duration-300 border border-slate-100 hover:border-cyan-300"
+              className="bg-surface rounded-card overflow-hidden cursor-pointer group transition-all duration-300 border border-rule hover:border-brand"
             >
-              <div className="bg-primary p-4">
+              <div className="bg-brand p-4">
                 <div className="flex items-center justify-between">
-                  <Headphones className="w-8 h-8 text-white" />
-                  <span className="px-3 py-1 bg-white/20 text-white text-xs font-bold rounded-full ">
+                  <Headphones className="w-8 h-8 text-ink" />
+                  <span className="px-3 py-1 bg-sunken text-ink text-xs font-bold rounded-full ">
                     RECOMMENDED
                   </span>
                 </div>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-cyan-600 transition-colors">
+                <h3 className="text-xl font-bold text-ink mb-2 group-hover:text-brand-ink transition-colors">
                   Agent Dialer
                 </h3>
-                <p className="text-slate-500 text-sm mb-4">
+                <p className="text-ink-3 text-sm mb-4">
                   Full-featured softphone with 3-way calling, screen pop, call recording, and CRM
                   integration.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 bg-cyan-50 text-cyan-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     3-Way Calling
                   </span>
-                  <span className="px-2 py-1 bg-cyan-50 text-cyan-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Screen Pop
                   </span>
-                  <span className="px-2 py-1 bg-cyan-50 text-cyan-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Quick Notes
                   </span>
                 </div>
@@ -1281,23 +1282,23 @@ export function CallCenterPortal(): JSX.Element {
 
             <div
               onClick={() => setCurrentView('publisherSetup')}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer group hover:shadow-sm hover: transition-all duration-300 border border-slate-100 hover:border-green-300"
+              className="bg-surface rounded-card overflow-hidden cursor-pointer group transition-all duration-300 border border-rule hover:border-brand"
             >
-              <div className="bg-primary p-4">
-                <LogIn className="w-8 h-8 text-white" />
+              <div className="bg-brand p-4">
+                <LogIn className="w-8 h-8 text-ink" />
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-green-600 transition-colors">
+                <h3 className="text-xl font-bold text-ink mb-2 group-hover:text-brand-ink transition-colors">
                   Publisher Setup
                 </h3>
-                <p className="text-slate-500 text-sm mb-4">
+                <p className="text-ink-3 text-sm mb-4">
                   Configure webhook endpoints, call routing rules, and data field mappings.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Webhooks
                   </span>
-                  <span className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Routing
                   </span>
                 </div>
@@ -1306,23 +1307,23 @@ export function CallCenterPortal(): JSX.Element {
 
             <div
               onClick={() => setCurrentView('crmDashboard')}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer group hover:shadow-sm hover: transition-all duration-300 border border-slate-100 hover:border-purple-300"
+              className="bg-surface rounded-card overflow-hidden cursor-pointer group transition-all duration-300 border border-rule hover:border-brand"
             >
-              <div className="bg-accent p-4">
-                <FileText className="w-8 h-8 text-white" />
+              <div className="bg-sunken p-4">
+                <FileText className="w-8 h-8 text-ink" />
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-600 transition-colors">
+                <h3 className="text-xl font-bold text-ink mb-2 group-hover:text-brand-ink transition-colors">
                   CRM Records
                 </h3>
-                <p className="text-slate-500 text-sm mb-4">
+                <p className="text-ink-3 text-sm mb-4">
                   View call history, disposition outcomes, and customer profile management.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Call Logs
                   </span>
-                  <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
+                  <span className="px-2 py-1 bg-sunken text-ink-2 text-xs rounded-full">
                     Profiles
                   </span>
                 </div>
@@ -1333,7 +1334,7 @@ export function CallCenterPortal(): JSX.Element {
           <div className="text-center">
             <button
               onClick={() => setCurrentView('agentDashboard')}
-              className="px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:shadow-sm hover: transition-all"
+              className="px-8 py-3 bg-brand text-brand-fg font-bold rounded-card transition-all"
             >
               Quick Start - Open Agent Dialer
             </button>
@@ -1356,7 +1357,7 @@ export function CallCenterPortal(): JSX.Element {
   // AGENT DASHBOARD VIEW
   // =========================================================================
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-screen bg-paper flex flex-col overflow-hidden">
       <CallCenterHeader
         agentStatus={agentStatus}
         setAgentStatus={setAgentStatus}
@@ -1378,50 +1379,46 @@ export function CallCenterPortal(): JSX.Element {
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div
-            className={`bg-card rounded-xl border border-border w-full ${settingsTab === 'scripts' ? 'max-w-2xl' : 'max-w-md'} shadow-sm transition-all duration-200`}
+            className={`bg-surface rounded-card border border-rule shadow-lg w-full ${settingsTab === 'scripts' ? 'max-w-2xl' : 'max-w-md'} transition-all duration-200`}
           >
-            <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="p-4 border-b border-rule flex items-center justify-between">
               <div className="flex gap-4">
                 <button
                   onClick={() => setSettingsTab('general')}
-                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'general' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'general' ? 'border-brand text-ink' : 'border-transparent text-ink-2'}`}
                 >
                   General Settings
                 </button>
                 <button
                   onClick={() => setSettingsTab('scripts')}
-                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'scripts' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'scripts' ? 'border-brand text-ink' : 'border-transparent text-ink-2'}`}
                 >
                   Script Customizer
                 </button>
               </div>
               <button
                 onClick={() => setShowSettings(false)}
-                className="p-1 hover:bg-muted rounded-lg transition-colors"
+                className="p-1 hover:bg-sunken rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-muted-foreground" />
+                <X className="w-5 h-5 text-ink-2" />
               </button>
             </div>
 
             {settingsTab === 'general' ? (
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-2">
-                    Your Position / Role
-                  </label>
-                  <div className="w-full bg-muted text-white text-sm p-3 rounded-lg border border-border">
+                  <label className="block text-sm text-ink-2 mb-2">Your Position / Role</label>
+                  <div className="w-full bg-sunken text-ink text-sm p-3 rounded-lg border border-rule">
                     {rolesLoading ? (
-                      <span className="text-muted-foreground">Loading...</span>
+                      <span className="text-ink-2">Loading...</span>
                     ) : (
-                      <span className="text-slate-300 font-medium">{derivedJobTitle}</span>
+                      <span className="text-ink-2 font-medium">{derivedJobTitle}</span>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-2">
-                    Default Script Preference
-                  </label>
+                  <label className="block text-sm text-ink-2 mb-2">Default Script Preference</label>
                   <select
                     value={defaultScript || (position === 'Retention' ? 'retention' : 'sales')}
                     onChange={e => {
@@ -1437,13 +1434,13 @@ export function CallCenterPortal(): JSX.Element {
                         }
                       })();
                     }}
-                    className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="flex h-10 w-full rounded-md border border-rule bg-sunken px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <option value="sales">Contractor Script</option>
                     <option value="retention">Retention Script</option>
                     <option value="underwriting">Underwriting Script</option>
                   </select>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-ink-2 mt-2">
                     This script will automatically display first when you answer incoming calls.
                   </p>
                 </div>
@@ -1452,13 +1449,13 @@ export function CallCenterPortal(): JSX.Element {
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">
+                    <label className="block text-xs text-ink-2 mb-1.5 uppercase font-semibold">
                       Select Script
                     </label>
                     <select
                       value={editingScriptType}
                       onChange={e => handleScriptTypeChange(e.target.value as any)}
-                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="sales">Contractor Script</option>
                       <option value="retention">Retention Script</option>
@@ -1466,13 +1463,13 @@ export function CallCenterPortal(): JSX.Element {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">
+                    <label className="block text-xs text-ink-2 mb-1.5 uppercase font-semibold">
                       Select Step / Node
                     </label>
                     <select
                       value={editingNodeId}
                       onChange={e => setEditingNodeId(e.target.value)}
-                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       {EDITABLE_NODES[editingScriptType].map(nodeOpt => (
                         <option key={nodeOpt.id} value={nodeOpt.id}>
@@ -1485,11 +1482,11 @@ export function CallCenterPortal(): JSX.Element {
 
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-xs text-muted-foreground uppercase font-semibold">
+                    <label className="block text-xs text-ink-2 uppercase font-semibold">
                       Script Text Template
                     </label>
                     {customScripts && customScripts[editingNodeId] !== undefined && (
-                      <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded font-mono font-medium">
+                      <span className="text-[10px] bg-brand-tint text-brand-ink px-2 py-0.5 rounded font-mono font-medium">
                         Customized
                       </span>
                     )}
@@ -1501,24 +1498,24 @@ export function CallCenterPortal(): JSX.Element {
                       setSaveSuccess(false);
                     }}
                     rows={8}
-                    className="flex w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-sans leading-relaxed"
+                    className="flex w-full rounded-md border border-rule bg-sunken px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-sans leading-relaxed"
                     placeholder="Enter script text template..."
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
+                  <p className="text-[10px] text-ink-2 mt-1.5 leading-normal">
                     You can use variables like{' '}
-                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                    <code className="bg-sunken px-1 py-0.5 rounded text-ink font-mono">
                       {'{first_name}'}
                     </code>
                     ,{' '}
-                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                    <code className="bg-sunken px-1 py-0.5 rounded text-ink font-mono">
                       {'{last_name}'}
                     </code>
                     ,{' '}
-                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                    <code className="bg-sunken px-1 py-0.5 rounded text-ink font-mono">
                       {'{state}'}
                     </code>
                     , and{' '}
-                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                    <code className="bg-sunken px-1 py-0.5 rounded text-ink font-mono">
                       {'{agent_name}'}
                     </code>{' '}
                     in the template.
@@ -1546,13 +1543,13 @@ export function CallCenterPortal(): JSX.Element {
                       })();
                     }}
                     disabled={savingScript}
-                    className="text-xs text-amber-500 hover:text-amber-400 font-medium transition-colors disabled:opacity-50"
+                    className="text-xs text-ringing-ink hover:text-ringing-ink font-medium transition-colors disabled:opacity-50"
                   >
                     Reset to Default
                   </button>
                   <div className="flex items-center gap-3">
                     {saveSuccess && (
-                      <span className="text-xs text-green-400 font-medium">
+                      <span className="text-xs text-live-ink font-medium">
                         ✓ Saved successfully
                       </span>
                     )}
@@ -1575,7 +1572,7 @@ export function CallCenterPortal(): JSX.Element {
                         })();
                       }}
                       disabled={savingScript}
-                      className="px-4 py-2 bg-primary text-white font-medium text-xs rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                      className="px-4 py-2 bg-brand text-brand-fg font-medium text-xs rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
                     >
                       {savingScript ? 'Saving...' : 'Save Script Step'}
                     </button>
@@ -1584,10 +1581,10 @@ export function CallCenterPortal(): JSX.Element {
               </div>
             )}
 
-            <div className="p-4 border-t border-border">
+            <div className="p-4 border-t border-rule">
               <button
                 onClick={() => setShowSettings(false)}
-                className="w-full py-2 bg-muted text-white font-medium rounded-lg hover:bg-muted/80 transition-colors"
+                className="w-full py-2 bg-sunken text-ink font-medium rounded-lg hover:bg-sunken transition-colors"
               >
                 Close Settings
               </button>
@@ -1599,7 +1596,7 @@ export function CallCenterPortal(): JSX.Element {
       {/* Main Content - 3 Column Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Column - Dialer */}
-        <div className="w-full md:w-80 flex-shrink-0 md:border-r border-b md:border-b-0 border-border flex flex-col bg-card">
+        <div className="w-full md:w-80 flex-shrink-0 md:border-r border-b md:border-b-0 border-rule flex flex-col bg-surface">
           {isIncomingCall && incomingCallData && (
             <IncomingCallPanel
               incomingCallData={incomingCallData}
@@ -1689,21 +1686,21 @@ export function CallCenterPortal(): JSX.Element {
             !isCallActive &&
             !showDisposition &&
             (isAutoDialing && autoDialStatus === 'wrapup' ? (
-              <div className="flex-1 p-6 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between">
+              <div className="flex-1 p-6 bg-surface border border-rule rounded-card flex flex-col justify-between">
                 <div>
-                  <h3 className="text-sm font-mono uppercase tracking-widest text-slate-400 mb-2">
+                  <h3 className="text-sm font-mono uppercase tracking-widest text-ink-2 mb-2">
                     Auto-Dialer Queue
                   </h3>
-                  <div className="text-xs text-slate-500 mb-4">
+                  <div className="text-xs text-ink-3 mb-4">
                     Lead {autoDialIndex + 1} of {applications.length}
                   </div>
 
                   <div className="flex flex-col items-center justify-center py-8">
                     <div className="relative flex items-center justify-center">
-                      <div className="w-24 h-24 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin absolute" />
-                      <div className="text-3xl font-bold text-white">{wrapUpCountdown}s</div>
+                      <div className="w-24 h-24 rounded-full border-4 border-rule border-t-brand-ink animate-spin absolute" />
+                      <div className="text-3xl font-bold text-ink">{wrapUpCountdown}s</div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-6 text-center font-medium">
+                    <p className="text-xs text-ink-2 mt-6 text-center font-medium">
                       Wrap-up period active. Preparing to dial the next lead...
                     </p>
                   </div>
@@ -1712,7 +1709,7 @@ export function CallCenterPortal(): JSX.Element {
                 <div className="space-y-2">
                   <button
                     onClick={() => setWrapUpCountdown(0)}
-                    className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 text-xs"
+                    className="w-full py-2.5 bg-brand hover:bg-brand-ink hover:text-surface text-ink font-mono font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 text-xs"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     Dial Next Now
@@ -1722,17 +1719,17 @@ export function CallCenterPortal(): JSX.Element {
                       setIsAutoDialing(false);
                       setAutoDialStatus('paused');
                     }}
-                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-red-400 font-mono font-bold uppercase tracking-widest rounded-lg border border-red-500/20 transition-colors text-xs"
+                    className="w-full py-2.5 bg-sunken hover:bg-rule text-dropped-ink font-mono font-bold uppercase tracking-widest rounded-lg border border-dropped transition-colors text-xs"
                   >
                     Pause Dialer
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex-grow flex flex-col p-4 bg-background justify-between">
+              <div className="flex-grow flex flex-col p-4 bg-surface justify-between">
                 <div className="space-y-4 flex-grow flex flex-col">
-                  <div className="flex items-center justify-between pb-2 border-b border-border">
-                    <h3 className="text-xs font-mono uppercase tracking-widest font-bold text-foreground">
+                  <div className="flex items-center justify-between pb-2 border-b border-rule">
+                    <h3 className="text-xs font-mono uppercase tracking-widest font-bold text-ink">
                       Agent Dialer
                     </h3>
                   </div>
@@ -1835,7 +1832,7 @@ export function CallCenterPortal(): JSX.Element {
                         />
                       )
                     ) : (
-                      <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center bg-white/5 border border-white/10 rounded-xl">
+                      <div className="flex-1 flex items-center justify-center text-ink-2 p-8 text-center bg-sunken border border-rule rounded-card">
                         <p className="text-sm">Script is not available when no call is active.</p>
                       </div>
                     )}
@@ -1843,7 +1840,7 @@ export function CallCenterPortal(): JSX.Element {
                 )}
 
                 {activeCallView === 'captured_data' && (
-                  <div className="flex-1 overflow-hidden flex flex-col bg-card border border-border rounded-xl p-4">
+                  <div className="flex-1 overflow-hidden flex flex-col bg-surface border border-rule rounded-card p-4">
                     <CapturedScriptDataPanel activeCallData={activeCallData} crmPhone={crmPhone} />
                   </div>
                 )}
@@ -1879,9 +1876,9 @@ export function CallCenterPortal(): JSX.Element {
                         }
                       />
                     ) : (
-                      <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center">
+                      <div className="flex-1 flex items-center justify-center text-ink-2 p-8 text-center">
                         <div>
-                          <User className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-40" />
+                          <User className="w-10 h-10 text-ink-2 mx-auto mb-2 opacity-40" />
                           <p className="text-sm">
                             No profile data loaded. Dial a number or receive a call to fetch CRM
                             records.
@@ -1895,7 +1892,7 @@ export function CallCenterPortal(): JSX.Element {
 
               {/* PreClosed Premium Calculator Panel */}
               {isPreClosed && (
-                <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-y-auto shadow-xl">
+                <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col bg-surface border border-rule rounded-card p-4 overflow-y-auto">
                   <PreClosedStatsCard leadData={crmData?.customer || activeCallData} />
                 </div>
               )}
@@ -1912,27 +1909,27 @@ export function CallCenterPortal(): JSX.Element {
               />
 
               {/* Auto-Dialer Control Panel */}
-              <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-lg">
+              <div className="p-4 bg-surface border border-rule rounded-card flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div
                     className={`w-3 h-3 rounded-full ${
                       isAutoDialing
                         ? autoDialStatus === 'paused'
-                          ? 'bg-amber-500 animate-pulse'
-                          : 'bg-emerald-500 animate-pulse'
-                        : 'bg-slate-700'
+                          ? 'bg-ringing animate-pulse'
+                          : 'bg-live animate-pulse'
+                        : 'bg-ink-3'
                     }`}
                   />
                   <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-sans">
+                    <h3 className="text-sm font-bold text-ink flex items-center gap-1.5 font-sans">
                       Auto-Dialer Queue
                       {isAutoDialing && (
-                        <span className="text-[10px] font-mono uppercase bg-cyan-400/20 text-cyan-400 px-1.5 py-0.5 rounded font-normal">
+                        <span className="text-[10px] font-mono uppercase bg-brand-tint text-brand-ink px-1.5 py-0.5 rounded font-normal">
                           {autoDialStatus}
                         </span>
                       )}
                     </h3>
-                    <p className="text-xs text-slate-400 mt-0.5 font-sans">
+                    <p className="text-xs text-ink-2 mt-0.5 font-sans">
                       {applications.length > 0
                         ? `Loaded: ${applications.length} leads. Current index: ${autoDialIndex + 1}.`
                         : 'Queue is empty. Upload leads to start.'}
@@ -1942,8 +1939,8 @@ export function CallCenterPortal(): JSX.Element {
 
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Target List Dropdown */}
-                  <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-white text-xs font-mono font-medium uppercase tracking-widest transition-all">
-                    <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  <div className="flex items-center gap-2 bg-sunken border border-rule hover:border-rule-strong rounded-lg px-3 py-2 text-ink text-xs font-mono font-medium uppercase tracking-widest transition-all">
+                    <Database className="w-3.5 h-3.5 text-brand-ink" />
                     <select
                       value={selectedListId}
                       onChange={e => {
@@ -1954,13 +1951,11 @@ export function CallCenterPortal(): JSX.Element {
                         setAutoDialStatus('idle');
                         dialedLeadIdsRef.current.clear();
                       }}
-                      className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
+                      className="bg-transparent text-ink text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
                     >
-                      <option value="" className="bg-slate-900 text-slate-400">
-                        All Lists
-                      </option>
+                      <option value="">All Lists</option>
                       {leadLists.map(list => (
-                        <option key={list.id} value={list.id} className="bg-slate-900 text-white">
+                        <option key={list.id} value={list.id} className="bg-surface text-ink">
                           {list.name} ({list._count?.leads ?? 0})
                         </option>
                       ))}
@@ -1972,7 +1967,7 @@ export function CallCenterPortal(): JSX.Element {
                       onClick={() => {
                         void handleDeleteList();
                       }}
-                      className="px-4 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 hover:border-red-700 text-red-400 text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                      className="px-4 py-2 bg-dropped-tint hover:bg-dropped-tint border border-dropped hover:border-dropped text-dropped-ink text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
                       title="Delete Selected List"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1982,7 +1977,7 @@ export function CallCenterPortal(): JSX.Element {
 
                   <button
                     onClick={() => setShowUploadModal(true)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                    className="px-4 py-2 bg-sunken hover:bg-rule border border-rule hover:border-rule-strong text-ink text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     Upload Leads
@@ -1995,7 +1990,7 @@ export function CallCenterPortal(): JSX.Element {
                         setIsAutoDialing(false);
                         setAutoDialStatus('paused');
                       }}
-                      className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                      className="px-4 py-2 bg-ringing-tint border border-ringing hover:bg-ringing-tint text-ringing-ink text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
                     >
                       <Pause className="w-3.5 h-3.5" />
                       Pause Dialer
@@ -2023,7 +2018,7 @@ export function CallCenterPortal(): JSX.Element {
                         }
                       }}
                       disabled={applications.length === 0}
-                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-850 disabled:shadow-none text-slate-950 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 shadow-lg hover:shadow-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="px-4 py-2 bg-brand hover:bg-brand-ink hover:text-surface disabled:bg-sunken disabled:text-ink-3 disabled:border-rule text-ink text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       Start Dialer
@@ -2039,7 +2034,7 @@ export function CallCenterPortal(): JSX.Element {
                       dialedLeadIdsRef.current.clear();
                     }}
                     disabled={applications.length === 0 || autoDialIndex === 0}
-                    className="p-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 disabled:border-slate-850 border border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                    className="p-2 bg-sunken hover:bg-rule disabled:bg-sunken disabled:text-ink-3 disabled:border-rule border border-rule text-ink-2 hover:text-ink rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
                     title="Reset Dialer Queue"
                   >
                     <RotateCcw className="w-4 h-4" />

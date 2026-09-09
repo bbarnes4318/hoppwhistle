@@ -79,6 +79,9 @@ export default defineConfig({
       // Three phases running, a defect reached production that one load of
       // these pages would have caught and this suite could not.
       'src/app/__tests__/**/*.render.test.tsx',
+      // The colour contract: light by default, the brand green at 4.5:1 as
+      // text, and the call-state signals untouched and distinct from it.
+      'src/app/__tests__/theme-tokens.test.ts',
     ],
   },
 });

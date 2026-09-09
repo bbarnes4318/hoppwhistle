@@ -109,7 +109,7 @@ export function ScheduleEditor({ value, onChange, className }: ScheduleEditorPro
  return (
  <div className={cn('space-y-4', className)}>
  {/* 24/7 Toggle */}
- <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/30">
+ <div className="flex items-center justify-between rounded-lg border p-4 bg-sunken">
  <div className="space-y-0.5">
  <Label className="text-base">24/7 Availability</Label>
  <p className="text-sm text-muted-foreground">Accept calls at any time, any day</p>
@@ -127,7 +127,7 @@ export function ScheduleEditor({ value, onChange, className }: ScheduleEditorPro
  return (
  <div key={key} className="rounded-lg border overflow-hidden">
  {/* Day Header */}
- <div className="flex items-center justify-between px-4 py-3 bg-muted/30">
+ <div className="flex items-center justify-between px-4 py-3 bg-sunken">
  <div className="flex items-center gap-3">
  <Switch
  checked={isOpen}
