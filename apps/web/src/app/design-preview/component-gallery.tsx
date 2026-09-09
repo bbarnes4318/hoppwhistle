@@ -406,59 +406,119 @@ function EmptyStateGallery() {
 
 function LiveStripGallery() {
   // Ticks so the flash-and-settle behaviour is visible on the page.
-  const [earnings, setEarnings] = React.useState(184026);
-  const [inFlight, setInFlight] = React.useState(7);
+  const [applications, setApplications] = React.useState(12);
+  const [inProgress, setInProgress] = React.useState(7);
 
   React.useEffect(() => {
     const t = setInterval(() => {
-      setEarnings(v => v + Math.round(Math.random() * 900));
-      setInFlight(() => 4 + Math.floor(Math.random() * 8));
+      setApplications(v => v + 1);
+      setInProgress(() => 4 + Math.floor(Math.random() * 8));
     }, 3000);
     return () => clearInterval(t);
   }, []);
 
-  const money = (cents: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
-
-  const roles: {
-    role: string;
+  const readings: {
+    reading: string;
     conn: LiveConnectionState;
+    asOf?: string;
     metrics: React.ComponentProps<typeof LiveStrip>['metrics'];
   }[] = [
     {
-      role: 'Publisher — live',
+      reading: 'Agency principal — enrolled in billing',
       conn: 'live',
+      asOf: '2026-09-09 · America/New_York',
       metrics: [
-        { id: 'a', label: 'Calls live', value: String(inFlight), tone: 'live' },
-        { id: 'b', label: 'Billable today', value: '42', sub: 'of 118 calls' },
-        { id: 'c', label: 'Earnings today', value: money(earnings), tone: 'money' },
+        {
+          id: 'applications',
+          label: 'Applications',
+          value: String(applications),
+          sub: 'of 40 block',
+        },
+        {
+          id: 'calls',
+          label: 'Calls delivered',
+          value: '168',
+          sub: `${inProgress} in progress`,
+          tone: 'live',
+        },
+        { id: 'block', label: 'Block left', value: '28', sub: 'paid, unused' },
+        { id: 'overrun', label: 'Overrun', value: '0', sub: '$0.00 tonight' },
+        {
+          id: 'tonight',
+          label: 'Tonight',
+          value: '$6,360.00',
+          sub: 'projected debit',
+          tone: 'money',
+        },
+        { id: 'rate', label: 'Rate now', value: '$159.00', sub: 'per application' },
+        { id: 'tracking', label: 'Rate tomorrow', value: '$149.00', sub: 'if today closed now' },
       ],
     },
     {
-      role: 'Buyer — live',
+      reading: 'Agency principal — not enrolled in billing (operational counts only)',
       conn: 'live',
+      asOf: '2026-09-09 · America/New_York',
       metrics: [
-        { id: 'a', label: 'Calls live', value: String(inFlight), tone: 'live' },
-        { id: 'b', label: 'Spend today', value: '$3,412.00', sub: 'of $5,000 cap', tone: 'money' },
-        { id: 'c', label: 'Billable rate', value: '38%', sub: 'target 45%', tone: 'ringing' },
+        { id: 'applications', label: 'Applications', value: '12', sub: 'submitted today' },
+        {
+          id: 'calls',
+          label: 'Calls delivered',
+          value: '168',
+          sub: `${inProgress} in progress`,
+          tone: 'live',
+        },
       ],
     },
     {
-      role: 'Admin — degraded, polling',
+      reading: 'Agent — their own day, no money and no other agent',
+      conn: 'live',
+      asOf: '2026-09-09',
+      metrics: [
+        { id: 'calls', label: 'Your calls', value: '31', sub: 'answered today' },
+        { id: 'applications', label: 'Your applications', value: '2', sub: 'submitted today' },
+        {
+          id: 'closing',
+          label: 'Your closing',
+          value: '6.45%',
+          sub: 'agency 7.14% · −0.7 pts',
+          tone: 'dropped',
+        },
+      ],
+    },
+    {
+      reading: 'NetEnroll staff — no agency entered',
       conn: 'degraded',
+      asOf: '2026-09-09 · America/New_York',
       metrics: [
-        { id: 'a', label: 'In flight', value: '31' },
-        { id: 'b', label: 'Answer rate', value: '71%', sub: 'this hour' },
-        { id: 'c', label: 'Abandon rate', value: '9.4%', sub: 'over 8% target', tone: 'dropped' },
-        { id: 'd', label: 'Revenue run rate', value: '$1,840/hr', tone: 'money' },
+        { id: 'delivering', label: 'Delivering', value: '2', sub: 'of 5 agencies', tone: 'live' },
+        { id: 'calls', label: 'Calls delivered', value: '604', sub: 'today, all agencies' },
+        { id: 'applications', label: 'Applications', value: '41', sub: 'today, all agencies' },
+        {
+          id: 'tonight',
+          label: 'Tonight',
+          value: '$11,840.00',
+          sub: 'projected settlement',
+          tone: 'money',
+        },
+        { id: 'attention', label: 'Needs attention', value: '1', sub: 'agency', tone: 'dropped' },
       ],
     },
     {
-      role: 'Offline — never show stale numbers as live',
+      reading:
+        'An absent figure — an em dash and the server\u2019s reason, never a fabricated number',
       conn: 'offline',
       metrics: [
-        { id: 'a', label: 'In flight', value: '—' },
-        { id: 'b', label: 'Answer rate', value: '—' },
+        { id: 'applications', label: 'Applications', value: '12', sub: 'of 40 block' },
+        {
+          id: 'rate',
+          label: 'Rate now',
+          value: '\u2014',
+          sub: 'per application',
+          unavailable: true,
+          title:
+            'There is no rate in force for this agency today: it is under review, or no ' +
+            'opening rate has been agreed.',
+        },
       ],
     },
   ];
@@ -470,13 +530,14 @@ function LiveStripGallery() {
         <code className="t-data">prefers-reduced-motion</code> the flash is replaced by a static dot
         beside the number.
       </p>
-      {roles.map(r => (
-        <div key={r.role}>
-          <StateLabel>{r.role}</StateLabel>
+      {readings.map(r => (
+        <div key={r.reading}>
+          <StateLabel>{r.reading}</StateLabel>
           <div className="overflow-hidden rounded-card border border-rule">
             <LiveStrip
               metrics={r.metrics}
               connection={r.conn}
+              asOf={r.asOf}
               lastUpdated={r.conn === 'live' ? null : new Date()}
             />
           </div>
@@ -798,7 +859,7 @@ export function ComponentGallery() {
         <EmptyStateGallery />
       </Section>
 
-      <Section title="LiveStrip" sub="Signature 2. Role scoped, with degraded and offline states.">
+      <Section title="LiveStrip" sub="Signature 2. One dense row, scoped to the signed-in person.">
         <LiveStripGallery />
       </Section>
 

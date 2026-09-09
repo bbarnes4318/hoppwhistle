@@ -6,11 +6,33 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * LiveStrip — signature 2. A persistent strip under the topbar, role scoped.
+ * LiveStrip — one dense row under the topbar, on every page.
  *
- * Publishers keep a competitor's tab open all day because their earnings number
- * ticks up while they watch. That is the mechanic worth copying, and it is
- * honest here because it is real money in real time.
+ * ── What it is for ──────────────────────────────────────────────────────────
+ *
+ * An agency principal glancing at any screen asks three things in this order:
+ * am I on pace today, what is today costing me, and where is my rate going.
+ * An agent asks about their own day. NetEnroll staff ask about the platform.
+ * The strip answers whichever of those the signed-in person is asking, and
+ * nothing else. See `use-live-metrics.ts` for which figures each reading gets
+ * and why.
+ *
+ * ── Why it is a row and not four cards ───────────────────────────────────────
+ *
+ * It used to be four large cards across the full width, and it took forty-odd
+ * pixels off the top of every page in the application to say very little. This
+ * is a single dense row: a small uppercase label, the figure in the tabular
+ * mono face at the reading size, and its denominator or caveat inline beside it
+ * rather than on a third line. Legible from across a desk; it does not dominate
+ * the page beneath it.
+ *
+ * ── An absent figure is an em dash and an explanation ────────────────────────
+ *
+ * A figure the server could not source correctly renders muted, as an em dash,
+ * carrying the server's own reason as its tooltip. Nothing is estimated,
+ * derived from an unrelated number, or carried forward from an earlier poll: a
+ * fabricated live number on a screen where somebody watches their own money is
+ * worse than an absent one.
  *
  * When a value changes the digits briefly take the live colour and settle back
  * over 600ms. Nothing else on the page moves. Under prefers-reduced-motion the
@@ -18,8 +40,6 @@ import { cn } from '@/lib/utils';
  * without the animation.
  *
  * This component is presentational: it renders values and a connection state.
- * Prompt 3 wires it to the websocket at apps/api/src/routes/websocket.ts and
- * owns the polling fallback.
  */
 
 export type LiveConnectionState = 'live' | 'degraded' | 'offline';
@@ -29,7 +49,7 @@ export interface LiveMetric {
   label: string;
   /** Preformatted. Pass what should be read, e.g. "$1,284.60" or "38%". */
   value: string;
-  /** Secondary context: "of $5,000 cap", "target 65%". */
+  /** Secondary context, rendered INLINE after the value: "of 40 block". */
   sub?: string;
   /**
    * Tooltip. Used to explain a value the strip cannot show — an em dash with no
@@ -49,8 +69,8 @@ export interface LiveStripProps {
   metrics: LiveMetric[];
   /**
    * `live` — socket connected. `degraded` — socket dropped, values are from
-   * five-second polling. `offline` — neither. Never render a stale number as
-   * if it were live.
+   * polling. `offline` — neither. Never render a stale number as if it were
+   * live.
    */
   connection?: LiveConnectionState;
   /** When the values were last confirmed. Shown in degraded and offline. */
@@ -61,6 +81,18 @@ export interface LiveStripProps {
    * never asserts a cause it does not know.
    */
   note?: string;
+  /**
+   * The day and timezone the figures are for, shown once at the right rather
+   * than repeated under every figure. "2026-09-09 · America/New_York".
+   */
+  asOf?: string;
+  /**
+   * Which reading these figures are: `agency`, `agent`, `platform`, or one of
+   * the two marketplace roles. Not rendered — it is stamped on the row as
+   * `data-scope` so the browser smoke test can assert that the person signed
+   * in got the reading meant for them, rather than inferring it from labels.
+   */
+  scope?: string;
   className?: string;
 }
 
@@ -138,6 +170,8 @@ export function LiveStrip({
   connection = 'live',
   lastUpdated,
   note,
+  asOf,
+  scope,
   className,
 }: LiveStripProps) {
   const [reducedMotion, setReducedMotion] = React.useState(false);
@@ -155,8 +189,10 @@ export function LiveStrip({
 
   return (
     <div
+      data-testid="live-strip"
+      data-scope={scope}
       className={cn(
-        'flex items-stretch gap-0 overflow-x-auto border-b border-rule bg-surface',
+        'flex items-stretch overflow-x-auto border-b border-rule bg-surface',
         className
       )}
       // Polite, not assertive: these tick constantly and must never interrupt.
@@ -167,57 +203,61 @@ export function LiveStrip({
         <div
           key={m.id}
           title={m.title}
-          className="flex min-w-[132px] shrink-0 flex-col justify-center border-r border-rule px-3 py-1.5"
+          /*
+            Machine-readable, so the browser smoke test can compare this figure
+            with the one the page below reports for the same tenant rather than
+            parsing it out of the rendered text. The attribute carries the SAME
+            string that is rendered a line down, so the two cannot disagree.
+            See apps/web/e2e/platform-landing.smoke.mjs.
+          */
+          data-figure={m.id}
+          data-figure-value={m.value}
+          className="flex shrink-0 flex-col justify-center whitespace-nowrap border-r border-rule px-3 py-1"
         >
           <span className="t-label text-ink-3">{m.label}</span>
-          <LiveValue
-            value={m.value}
-            tone={m.tone ?? 'ink'}
-            reducedMotion={reducedMotion}
-            unavailable={m.unavailable}
-          />
-          {m.sub ? <span className="t-meta truncate text-ink-3">{m.sub}</span> : null}
+          {/*
+            The value and its denominator on ONE line. A third line per figure
+            is what made this a band of cards rather than a strip, and the
+            denominator is only ever read together with the number anyway.
+          */}
+          <span className="flex items-baseline gap-1.5">
+            <LiveValue
+              value={m.value}
+              tone={m.tone ?? 'ink'}
+              reducedMotion={reducedMotion}
+              unavailable={m.unavailable}
+            />
+            {m.sub ? <span className="t-meta text-ink-3">{m.sub}</span> : null}
+          </span>
         </div>
       ))}
 
-      {stale ? (
-        <div className="flex min-w-0 shrink items-center gap-1.5 px-3 py-1.5">
-          <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
-          <span className="t-meta min-w-0 text-ringing-ink">
-            {note ? (
-              <>
-                {note}
-                {lastUpdated ? (
-                  <span className="text-ink-3">
-                    {' '}
-                    · updated {lastUpdated.toLocaleTimeString('en-US')}
-                  </span>
-                ) : null}
-              </>
-            ) : connection === 'degraded' ? (
-              <>
-                Live feed dropped — polling every 5s
-                {lastUpdated ? (
-                  <span className="text-ink-3">
-                    {' '}
-                    · updated {lastUpdated.toLocaleTimeString('en-US')}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              <>
-                Not connected
-                {lastUpdated ? (
-                  <span className="text-ink-3">
-                    {' '}
-                    · last known {lastUpdated.toLocaleTimeString('en-US')}
-                  </span>
-                ) : null}
-              </>
-            )}
+      {/*
+        The tail: the day these figures are for, and the connection state when
+        it is not live. Pushed right and allowed to shrink, so a narrow window
+        loses the caveat before it loses a number.
+      */}
+      <div className="ml-auto flex min-w-0 shrink items-center gap-3 px-3 py-1">
+        {asOf ? (
+          <span className="t-meta hidden min-w-0 truncate text-ink-3 lg:inline">{asOf}</span>
+        ) : null}
+        {stale ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
+            <span className="t-meta min-w-0 truncate text-ringing-ink">
+              {note ??
+                (connection === 'degraded' ? 'Live feed dropped — polling' : 'Not connected')}
+              {lastUpdated ? (
+                <span className="text-ink-3">
+                  {' '}
+                  · {connection === 'offline' ? 'last known' : 'updated'}{' '}
+                  {lastUpdated.toLocaleTimeString('en-US')}
+                </span>
+              ) : null}
+            </span>
           </span>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -497,6 +497,18 @@ the wait up to a five-minute ceiling. `/api/v1/agent/my-numbers` was the same
 shape in the softphone provider — `enabled` gated the SIP registration but not
 that fetch — and is now behind the same gate.
 
+> **Amended in Phase 6.** The strip's figures were replaced (see
+> `docs/LIVE_STRIP.md`), and with them the endpoint it polls. An operator with
+> no agency selected now gets the **cross-agency** reading from
+> `GET /api/v1/live/strip`, which scopes itself from the session and answers
+> that state rather than refusing it — the same correction Phase 5 made to
+> `/delivery` and `/rating`, applied to the chrome above them. The gate on the
+> agency-scoped `/api/v1/live/metrics` is unchanged and still holds: the
+> publisher and buyer readings, which are the only ones that still use it, do
+> not start without an acting tenant. The poll interval is thirty seconds, not
+> five: these figures move by the delivered call and by the submitted
+> application, not by the second.
+
 ### How this is verified now
 
 The honest reading of three consecutive phases is that nothing in this
