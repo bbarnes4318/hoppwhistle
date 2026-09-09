@@ -3,242 +3,243 @@
 import { BarChart3, Copy, Edit, Pause, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { CreateCampaignWizard } from '@/components/campaigns/create-campaign-wizard';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
- Dialog,
- DialogContent,
- DialogDescription,
- DialogFooter,
- DialogHeader,
- DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
- Table,
- TableBody,
- TableCell,
- TableHead,
- TableHeader,
- TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 interface Campaign {
- id: string;
- name: string;
- offerName: string | null;
- country: string;
- recordingEnabled: boolean;
- status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
- publisherId: string;
- publisher: { id: string; name: string; code: string } | null;
- flowId: string | null;
- flow: { id: string; name: string } | null;
- calls: number;
- phoneNumbers: number;
- createdAt: string;
- updatedAt: string;
+  id: string;
+  name: string;
+  offerName: string | null;
+  country: string;
+  recordingEnabled: boolean;
+  status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+  publisherId: string;
+  publisher: { id: string; name: string; code: string } | null;
+  flowId: string | null;
+  flow: { id: string; name: string } | null;
+  calls: number;
+  phoneNumbers: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CampaignStats {
- campaignId: string;
- liveCount: number;
- hourCount: number;
- dayCount: number;
- monthCount: number;
- totalCount: number;
+  campaignId: string;
+  liveCount: number;
+  hourCount: number;
+  dayCount: number;
+  monthCount: number;
+  totalCount: number;
 }
 
 interface CampaignsResponse {
- data: Campaign[];
- meta: { page: number; limit: number; total: number; totalPages: number };
+  data: Campaign[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
 interface StatsResponse {
- data: CampaignStats[];
+  data: CampaignStats[];
 }
 
 // Country flag emoji helper
 function getCountryFlag(countryCode: string): string {
- const code = countryCode.toUpperCase();
- if (code.length !== 2) return '🌐';
- const offset = 127397;
- return String.fromCodePoint(...[...code].map(c => c.charCodeAt(0) + offset));
+  const code = countryCode.toUpperCase();
+  if (code.length !== 2) return '🌐';
+  const offset = 127397;
+  return String.fromCodePoint(...[...code].map(c => c.charCodeAt(0) + offset));
 }
 
 // Status badge component
 function StatusBadge({ status }: { status: Campaign['status'] }) {
- const config = {
- ACTIVE: {
- label: 'Live',
- bg: 'bg-emerald-500/10',
- text: 'text-emerald-400',
- dot: 'bg-emerald-500',
- },
- PAUSED: { label: 'Paused', bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-500' },
- ARCHIVED: {
- label: 'Setup',
- bg: 'bg-slate-500/10',
- text: 'text-muted-foreground',
- dot: 'bg-slate-500',
- },
- };
- const c = config[status] || config.ARCHIVED;
- return (
- <span
- className={cn(
- 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
- c.bg,
- c.text
- )}
- >
- <span className={cn('h-1.5 w-1.5 rounded-full', c.dot)} />
- {c.label}
- </span>
- );
+  const config = {
+    ACTIVE: {
+      label: 'Live',
+      bg: 'bg-live-tint',
+      text: 'text-live-ink',
+      dot: 'bg-live',
+    },
+    PAUSED: { label: 'Paused', bg: 'bg-ringing-tint', text: 'text-ringing-ink', dot: 'bg-ringing' },
+    ARCHIVED: {
+      label: 'Setup',
+      bg: 'bg-sunken',
+      text: 'text-ink-2',
+      dot: 'bg-ink-3',
+    },
+  };
+  const c = config[status] || config.ARCHIVED;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
+        c.bg,
+        c.text
+      )}
+    >
+      <span className={cn('h-1.5 w-1.5 rounded-full', c.dot)} />
+      {c.label}
+    </span>
+  );
 }
 
 function CampaignsPage() {
- const [campaigns, setCampaigns] = useState<Campaign[]>([]);
- const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());
- const [loading, setLoading] = useState(true);
- const [search, setSearch] = useState('');
- const [page, setPage] = useState(1);
- const [totalPages, setTotalPages] = useState(1);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
- // Dialog states
- const [wizardOpen, setWizardOpen] = useState(false);
- const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
- const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
- const [deleting, setDeleting] = useState(false);
+  // Dialog states
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
- // Polling ref
- const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Polling ref
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
- const fetchCampaigns = useCallback(async () => {
- setLoading(true);
- try {
- const params = new URLSearchParams({ page: page.toString(), limit: '50' });
- const response = await apiClient.get<CampaignsResponse>(
- `/api/v1/campaigns?${params.toString()}`
- );
- if (response.data) {
- setCampaigns(response.data.data);
- setTotalPages(response.data.meta.totalPages);
- }
- } catch (error) {
- console.error('Failed to fetch campaigns:', error);
- } finally {
- setLoading(false);
- }
- }, [page]);
+  const fetchCampaigns = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: page.toString(), limit: '50' });
+      const response = await apiClient.get<CampaignsResponse>(
+        `/api/v1/campaigns?${params.toString()}`
+      );
+      if (response.data) {
+        setCampaigns(response.data.data);
+        setTotalPages(response.data.meta.totalPages);
+      }
+    } catch (error) {
+      console.error('Failed to fetch campaigns:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
 
- const fetchStats = useCallback(async () => {
- try {
- const response = await apiClient.get<StatsResponse>('/api/v1/campaigns/stats');
- if (response.data) {
- const statsMap = new Map(response.data.data.map(s => [s.campaignId, s]));
- setStats(statsMap);
- }
- } catch (error) {
- console.error('Failed to fetch campaign stats:', error);
- }
- }, []);
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await apiClient.get<StatsResponse>('/api/v1/campaigns/stats');
+      if (response.data) {
+        const statsMap = new Map(response.data.data.map(s => [s.campaignId, s]));
+        setStats(statsMap);
+      }
+    } catch (error) {
+      console.error('Failed to fetch campaign stats:', error);
+    }
+  }, []);
 
- // Initial fetch
- useEffect(() => {
- void fetchCampaigns();
- void fetchStats();
- }, [fetchCampaigns, fetchStats]);
+  // Initial fetch
+  useEffect(() => {
+    void fetchCampaigns();
+    void fetchStats();
+  }, [fetchCampaigns, fetchStats]);
 
- // Poll stats every 10 seconds for live counts
- useEffect(() => {
- pollIntervalRef.current = setInterval(() => {
- void fetchStats();
- }, 10000);
+  // Poll stats every 10 seconds for live counts
+  useEffect(() => {
+    pollIntervalRef.current = setInterval(() => {
+      void fetchStats();
+    }, 10000);
 
- return () => {
- if (pollIntervalRef.current) {
- clearInterval(pollIntervalRef.current);
- }
- };
- }, [fetchStats]);
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [fetchStats]);
 
- const handleToggleStatus = async (campaign: Campaign) => {
- // Optimistic update
- const newStatus = campaign.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
- setCampaigns(prev =>
- prev.map(c => (c.id === campaign.id ? { ...c, status: newStatus as Campaign['status'] } : c))
- );
+  const handleToggleStatus = async (campaign: Campaign) => {
+    // Optimistic update
+    const newStatus = campaign.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    setCampaigns(prev =>
+      prev.map(c => (c.id === campaign.id ? { ...c, status: newStatus as Campaign['status'] } : c))
+    );
 
- try {
- await apiClient.patch(`/api/v1/campaigns/${campaign.id}`, { status: newStatus });
- toast.success(
- 'Status Updated',
- `${campaign.name} is now ${newStatus === 'ACTIVE' ? 'active' : 'paused'}.`
- );
- } catch (error) {
- console.error('Failed to toggle campaign status:', error);
- // Revert on error
- setCampaigns(prev =>
- prev.map(c => (c.id === campaign.id ? { ...c, status: campaign.status } : c))
- );
- toast.error('Error', 'Failed to update campaign status.');
- }
- };
+    try {
+      await apiClient.patch(`/api/v1/campaigns/${campaign.id}`, { status: newStatus });
+      toast.success(
+        'Status Updated',
+        `${campaign.name} is now ${newStatus === 'ACTIVE' ? 'active' : 'paused'}.`
+      );
+    } catch (error) {
+      console.error('Failed to toggle campaign status:', error);
+      // Revert on error
+      setCampaigns(prev =>
+        prev.map(c => (c.id === campaign.id ? { ...c, status: campaign.status } : c))
+      );
+      toast.error('Error', 'Failed to update campaign status.');
+    }
+  };
 
- const handleDuplicate = async (campaign: Campaign) => {
- try {
- const response = await apiClient.post<Campaign>(`/api/v1/campaigns/${campaign.id}/duplicate`);
- if (response.data) {
- void fetchCampaigns();
- void fetchStats();
- toast.success('Campaign Duplicated', `Copy of ${campaign.name} created.`);
- } else if (response.error) {
- toast.error('Failed to Duplicate', response.error.message);
- }
- } catch (error) {
- console.error('Failed to duplicate campaign:', error);
- toast.error('Error', 'Failed to duplicate campaign.');
- }
- };
+  const handleDuplicate = async (campaign: Campaign) => {
+    try {
+      const response = await apiClient.post<Campaign>(`/api/v1/campaigns/${campaign.id}/duplicate`);
+      if (response.data) {
+        void fetchCampaigns();
+        void fetchStats();
+        toast.success('Campaign Duplicated', `Copy of ${campaign.name} created.`);
+      } else if (response.error) {
+        toast.error('Failed to Duplicate', response.error.message);
+      }
+    } catch (error) {
+      console.error('Failed to duplicate campaign:', error);
+      toast.error('Error', 'Failed to duplicate campaign.');
+    }
+  };
 
- const handleDelete = async () => {
- if (!selectedCampaign) return;
- const campaignName = selectedCampaign.name;
- setDeleting(true);
- try {
- await apiClient.delete(`/api/v1/campaigns/${selectedCampaign.id}`);
- setDeleteDialogOpen(false);
- setSelectedCampaign(null);
- void fetchCampaigns();
- void fetchStats();
- toast.success('Campaign Deleted', `${campaignName} has been removed.`);
- } catch (error) {
- console.error('Failed to delete campaign:', error);
- toast.error('Error', 'Failed to delete campaign.');
- } finally {
- setDeleting(false);
- }
- };
+  const handleDelete = async () => {
+    if (!selectedCampaign) return;
+    const campaignName = selectedCampaign.name;
+    setDeleting(true);
+    try {
+      await apiClient.delete(`/api/v1/campaigns/${selectedCampaign.id}`);
+      setDeleteDialogOpen(false);
+      setSelectedCampaign(null);
+      void fetchCampaigns();
+      void fetchStats();
+      toast.success('Campaign Deleted', `${campaignName} has been removed.`);
+    } catch (error) {
+      console.error('Failed to delete campaign:', error);
+      toast.error('Error', 'Failed to delete campaign.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
- const openDeleteDialog = (campaign: Campaign) => {
- setSelectedCampaign(campaign);
- setDeleteDialogOpen(true);
- };
+  const openDeleteDialog = (campaign: Campaign) => {
+    setSelectedCampaign(campaign);
+    setDeleteDialogOpen(true);
+  };
 
- const filteredCampaigns = campaigns.filter(
- c =>
- c.name.toLowerCase().includes(search.toLowerCase()) ||
- (c.offerName && c.offerName.toLowerCase().includes(search.toLowerCase()))
- );
+  const filteredCampaigns = campaigns.filter(
+    c =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.offerName && c.offerName.toLowerCase().includes(search.toLowerCase()))
+  );
 
- return (
+  return (
     <CompactPageShell>
       <CompactPageHeader
         title="Manage Campaigns"
@@ -251,12 +252,16 @@ function CampaignsPage() {
       </CompactPageHeader>
 
       {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
+        <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Campaigns</CardTitle>
-              <CardDescription className="text-[10px]">View and manage all campaigns</CardDescription>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Campaigns
+              </CardTitle>
+              <CardDescription className="text-[10px]">
+                View and manage all campaigns
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -265,13 +270,13 @@ function CampaignsPage() {
                   placeholder="Search campaigns..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-border/50 text-foreground"
+                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
                 />
               </div>
               <Button
                 variant="outline"
                 size="icon"
-                className="h-7 w-7 border-border/50 text-muted-foreground"
+                className="h-7 w-7 border-rule text-muted-foreground"
                 onClick={() => {
                   void fetchCampaigns();
                   void fetchStats();
@@ -285,247 +290,246 @@ function CampaignsPage() {
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
           <Table className="table-dense">
- <TableHeader className="sticky top-0 bg-background z-10">
- <TableRow className="border-b border-border">
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
- Name
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
- Status
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
- Offer Name
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
- Country
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
- Recording
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Live
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Hour
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Day
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Month
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Total
- </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
- Actions
- </TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
- {loading ? (
- <TableRow>
- <TableCell colSpan={11} className="text-center py-8">
- <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
- </TableCell>
- </TableRow>
- ) : filteredCampaigns.length === 0 ? (
- <TableRow>
- <TableCell
- colSpan={11}
- className="text-center py-8 text-muted-foreground text-sm"
- >
- No campaigns found
- </TableCell>
- </TableRow>
- ) : (
- filteredCampaigns.map(campaign => {
- const campaignStats = stats.get(campaign.id);
- return (
- <TableRow
- key={campaign.id}
- className="hover:bg-muted/50 border-b border-border"
- >
- {/* Name */}
- <TableCell className="py-2 px-3">
- <a
- href={`/campaigns/${campaign.id}`}
- className="font-medium text-emerald-400 hover:text-emerald-300 hover:underline text-sm"
- >
- {campaign.name}
- </a>
- </TableCell>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow className="border-b border-border">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
+                  Name
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
+                  Status
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
+                  Offer Name
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
+                  Country
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
+                  Recording
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Live
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Hour
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Day
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Month
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Total
+                </TableHead>
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
+                  Actions
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-8">
+                    <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
+              ) : filteredCampaigns.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={11}
+                    className="text-center py-8 text-muted-foreground text-sm"
+                  >
+                    No campaigns found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredCampaigns.map(campaign => {
+                  const campaignStats = stats.get(campaign.id);
+                  return (
+                    <TableRow
+                      key={campaign.id}
+                      className="hover:bg-sunken border-b border-border"
+                    >
+                      {/* Name */}
+                      <TableCell className="py-2 px-3">
+                        <a
+                          href={`/campaigns/${campaign.id}`}
+                          className="font-medium text-brand-ink hover:opacity-80 hover:underline text-sm"
+                        >
+                          {campaign.name}
+                        </a>
+                      </TableCell>
 
- {/* Status */}
- <TableCell className="py-2 px-3">
- <StatusBadge status={campaign.status} />
- </TableCell>
+                      {/* Status */}
+                      <TableCell className="py-2 px-3">
+                        <StatusBadge status={campaign.status} />
+                      </TableCell>
 
- {/* Offer Name */}
- <TableCell className="py-2 px-3 text-sm text-muted-foreground">
- {campaign.offerName || '—'}
- </TableCell>
+                      {/* Offer Name */}
+                      <TableCell className="py-2 px-3 text-sm text-muted-foreground">
+                        {campaign.offerName || '—'}
+                      </TableCell>
 
- {/* Country */}
- <TableCell className="py-2 px-3 text-center text-lg">
- {getCountryFlag(campaign.country)}
- </TableCell>
+                      {/* Country */}
+                      <TableCell className="py-2 px-3 text-center text-lg">
+                        {getCountryFlag(campaign.country)}
+                      </TableCell>
 
- {/* Recording */}
- <TableCell className="py-2 px-3 text-center text-sm text-muted-foreground">
- {campaign.recordingEnabled ? 'Yes' : 'No'}
- </TableCell>
+                      {/* Recording */}
+                      <TableCell className="py-2 px-3 text-center text-sm text-muted-foreground">
+                        {campaign.recordingEnabled ? 'Yes' : 'No'}
+                      </TableCell>
 
- {/* Live */}
- <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-emerald-400">
- {campaignStats?.liveCount ?? 0}
- </TableCell>
+                      {/* Live */}
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-live-ink">
+                        {campaignStats?.liveCount ?? 0}
+                      </TableCell>
 
- {/* Hour */}
- <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
- {campaignStats?.hourCount ?? 0}
- </TableCell>
+                      {/* Hour */}
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                        {campaignStats?.hourCount ?? 0}
+                      </TableCell>
 
- {/* Day */}
- <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
- {campaignStats?.dayCount ?? 0}
- </TableCell>
+                      {/* Day */}
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                        {campaignStats?.dayCount ?? 0}
+                      </TableCell>
 
- {/* Month */}
- <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
- {campaignStats?.monthCount ?? 0}
- </TableCell>
+                      {/* Month */}
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                        {campaignStats?.monthCount ?? 0}
+                      </TableCell>
 
- {/* Total */}
- <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium">
- {campaignStats?.totalCount ?? 0}
- </TableCell>
+                      {/* Total */}
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium">
+                        {campaignStats?.totalCount ?? 0}
+                      </TableCell>
 
- {/* Actions */}
- <TableCell className="py-2 px-3 text-right">
- <div className="flex justify-end gap-0.5">
- <Button
- variant="ghost"
- size="icon"
- className="h-7 w-7"
- onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
- title="Edit"
- >
- <Edit className="h-3.5 w-3.5 text-muted-foreground" />
- </Button>
- <Button
- variant="ghost"
- size="icon"
- className="h-7 w-7"
- onClick={() =>
- (window.location.href = `/dashboard?campaignId=${campaign.id}`)
- }
- title="View Reports"
- >
- <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
- </Button>
- <Button
- variant="ghost"
- size="icon"
- className="h-7 w-7"
- onClick={() => handleDuplicate(campaign)}
- title="Duplicate"
- >
- <Copy className="h-3.5 w-3.5 text-muted-foreground" />
- </Button>
- <Button
- variant="ghost"
- size="icon"
- className="h-7 w-7"
- onClick={() => handleToggleStatus(campaign)}
- title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
- >
- {campaign.status === 'ACTIVE' ? (
- <Pause className="h-3.5 w-3.5 text-orange-500" />
- ) : (
- <Play className="h-3.5 w-3.5 text-green-500" />
- )}
- </Button>
- <Button
- variant="ghost"
- size="icon"
- className="h-7 w-7"
- onClick={() => openDeleteDialog(campaign)}
- title="Delete"
- >
- <Trash2 className="h-3.5 w-3.5 text-rose-500" />
- </Button>
- </div>
- </TableCell>
- </TableRow>
- );
- })
- )}
- </TableBody>
- </Table>
+                      {/* Actions */}
+                      <TableCell className="py-2 px-3 text-right">
+                        <div className="flex justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
+                            title="Edit"
+                          >
+                            <Edit className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() =>
+                              (window.location.href = `/dashboard?campaignId=${campaign.id}`)
+                            }
+                            title="View Reports"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleDuplicate(campaign)}
+                            title="Duplicate"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleToggleStatus(campaign)}
+                            title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                          >
+                            {campaign.status === 'ACTIVE' ? (
+                              <Pause className="h-3.5 w-3.5 text-ringing-ink" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5 text-live-ink" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => openDeleteDialog(campaign)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-dropped-ink" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
 
- {/* Pagination */}
- {totalPages > 1 && (
- <div className="flex items-center justify-center gap-2 py-3 border-t">
- <Button
- variant="outline"
- size="sm"
- onClick={() => setPage(p => Math.max(1, p - 1))}
- disabled={page === 1}
- >
- Previous
- </Button>
- <span className="text-sm text-muted-foreground">
- Page {page} of {totalPages}
- </span>
- <Button
- variant="outline"
- size="sm"
- onClick={() => setPage(p => Math.min(totalPages, p + 1))}
- disabled={page === totalPages}
- >
- Next
- </Button>
- </div>
- )}
- </CardContent>
- </Card>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-3 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
- {/* Create Campaign Wizard */}
- <CreateCampaignWizard
- open={wizardOpen}
- onOpenChange={setWizardOpen}
- onSuccess={() => {
- void fetchCampaigns();
- void fetchStats();
- }}
- />
+      {/* Create Campaign Wizard */}
+      <CreateCampaignWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onSuccess={() => {
+          void fetchCampaigns();
+          void fetchStats();
+        }}
+      />
 
- {/* Delete Confirmation Dialog */}
- <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
- <DialogContent className="max-w-sm">
- <DialogHeader>
- <DialogTitle>Delete Campaign?</DialogTitle>
- <DialogDescription>
- Are you sure you want to delete <strong>{selectedCampaign?.name}</strong>? This action
- cannot be undone.
- </DialogDescription>
- </DialogHeader>
- <DialogFooter>
- <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
- Cancel
- </Button>
- <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
- {deleting ? 'Deleting...' : 'Delete'}
- </Button>
- </DialogFooter>
- </DialogContent>
- </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Campaign?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{selectedCampaign?.name}</strong>? This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </CompactPageShell>
   );
 }
 
-import { RoleGuard } from '@/components/auth/role-guard';
 
 export default function GuardedCampaignsPage() {
   return (

@@ -26,6 +26,9 @@ const DATABASE_BACKED = [
   '**/src/__tests__/platform-capability-closure.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
+  // Creates two tenants and their webhook keys, so another suite's
+  // `TRUNCATE "tenants" CASCADE` would delete them mid-test.
+  '**/src/__tests__/lead-inject-stream.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',

@@ -76,17 +76,35 @@ async function buildServer() {
   // security suite can register the real hook rather than a copy of it.
   registerApiV1Auth(server);
 
-  // Register rate limiting globally
+  /*
+   * Rate limiting, globally.
+   *
+   * `max` is configurable because a browser test that loads sixty pages in a
+   * few minutes is not abuse but does look like it — see
+   * apps/web/e2e/platform-landing.smoke.mjs, which raises it. Unset, the limit
+   * is the 100/minute it has always been.
+   */
   await server.register(import('@fastify/rate-limit'), {
-    max: 100, // Default: 100 requests per minute
-    timeWindow: '1 minute',
+    max: Number(process.env.RATE_LIMIT_MAX) || 100,
+    timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
     keyGenerator: request => {
       // Use API key ID if available, otherwise use IP
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
       return (request.user as any)?.apiKeyId || request.ip || 'unknown';
     },
+    /*
+     * `statusCode` is on this object deliberately, and it is a fix.
+     *
+     * The refusal reaches `setErrorHandler` below, which replies
+     * `error.statusCode || 500`. Without a status on it every rate-limited
+     * request came back 500 — so a client being asked to slow down was told
+     * the server had broken instead: it would not back off, and every
+     * dashboard counting 5xx counted a working limiter as an outage. Found by
+     * the browser smoke test, which loads enough pages to trip it.
+     */
     errorResponseBuilder: (_request, context) => {
       return {
+        statusCode: 429,
         error: {
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'Rate limit exceeded',

@@ -1,20 +1,21 @@
 'use client';
 
 import { AlertTriangle, Globe, Loader2, RefreshCw } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  Figure,
+  FigureRow,
+  Ledger,
+  Notice,
+  SectionRule,
+  count,
+  dollars,
+  pct,
+} from '@/components/delivery/ledger';
+import { StatusChip } from '@/components/domain/status-chip';
+import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -115,39 +116,55 @@ interface Overview {
   includingNonProduction: boolean;
 }
 
-/** A percentage, or an em dash. Never a fabricated 0%. */
-function pct(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)}%`;
-}
-
-/** Dollars to the cent, or an em dash. Under review there is no rate, not $0. */
-function dollars(value: number | null): string {
-  return value === null
-    ? '—'
-    : `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
-}
-
 /**
  * The flags that need somebody to act, worst first.
  *
  * A dispute leads, because it is money already taken back and delivery is
- * already stopped. It is its own badge rather than folded into "suspended",
+ * already stopped. It is its own flag rather than folded into "suspended",
  * even though a dispute does suspend the agency: an operator needs to know
  * which of the two they are looking at.
+ *
+ * Each flag carries the tone it is shown in. A dispute, an unpaid settlement
+ * and a missing payment method are money that is not arriving: dropped. A
+ * suspension is a deliberate stop: blocked. The ceiling and the curve minimum
+ * are the system working as designed and the agency needing to know: ringing.
+ * Never settled is information, not alarm.
  */
-function flagLabels(row: PlatformAgencyRow): string[] {
-  const labels: string[] = [];
-  if (row.flags.disputed) labels.push('disputed');
-  if (row.flags.suspended && !row.flags.disputed) labels.push('suspended');
-  if (row.flags.noValidMandate) labels.push('no payment method');
-  if (row.flags.settlementFailedOrUnpaid) labels.push('unpaid settlement');
-  if (row.flags.belowMinimumAndPaused) labels.push('below minimum');
-  if (row.flags.atCeiling) labels.push('at ceiling');
-  if (row.flags.enrolledNeverSettled) labels.push('never settled');
-  return labels;
+type FlagTone = 'dropped' | 'blocked' | 'ringing' | 'neutral';
+
+function flags(row: PlatformAgencyRow): Array<{ label: string; tone: FlagTone; rank: number }> {
+  const out: Array<{ label: string; tone: FlagTone; rank: number }> = [];
+  if (row.flags.disputed) out.push({ label: 'disputed', tone: 'dropped', rank: 0 });
+  if (row.flags.suspended && !row.flags.disputed)
+    out.push({ label: 'suspended', tone: 'blocked', rank: 1 });
+  if (row.flags.settlementFailedOrUnpaid)
+    out.push({ label: 'unpaid settlement', tone: 'dropped', rank: 2 });
+  if (row.flags.noValidMandate) out.push({ label: 'no payment method', tone: 'dropped', rank: 3 });
+  if (row.flags.atCeiling) out.push({ label: 'at ceiling', tone: 'ringing', rank: 4 });
+  if (row.flags.belowMinimumAndPaused)
+    out.push({ label: 'below minimum', tone: 'ringing', rank: 5 });
+  if (row.flags.enrolledNeverSettled)
+    out.push({ label: 'never settled', tone: 'neutral', rank: 6 });
+  return out;
+}
+
+/** How a settlement status reads, and in what tone. */
+function settlementChip(status: string): {
+  label: string;
+  tone: 'live' | 'ringing' | 'dropped' | 'neutral';
+} {
+  switch (status) {
+    case 'SETTLED':
+      return { label: 'settled', tone: 'live' };
+    case 'DRY_RUN':
+      return { label: 'dry run', tone: 'neutral' };
+    case 'NOT_YET_RUN':
+      return { label: 'not yet run', tone: 'ringing' };
+    case 'NOT_ENROLLED':
+      return { label: 'not enrolled', tone: 'neutral' };
+    default:
+      return { label: status.replace(/_/g, ' ').toLowerCase(), tone: 'dropped' };
+  }
 }
 
 export function PlatformDeliveryView(): JSX.Element {
@@ -184,10 +201,9 @@ export function PlatformDeliveryView(): JSX.Element {
    */
   const setNonProduction = useCallback(
     async (tenantId: string, next: boolean) => {
-      const response = await apiClient.put(
-        `/api/v1/platform/tenants/${tenantId}/non-production`,
-        { isNonProduction: next }
-      );
+      const response = await apiClient.put(`/api/v1/platform/tenants/${tenantId}/non-production`, {
+        isNonProduction: next,
+      });
       if (response.error) {
         setError(response.error.message);
         return;
@@ -201,10 +217,29 @@ export function PlatformDeliveryView(): JSX.Element {
   // hidden tab does no work and a returning one refreshes immediately.
   const { loading, refresh } = useLivePoll(load, { intervalMs: 30_000 });
 
+  /*
+   * Flagged agencies first, worst flag first, then by name. The screen exists
+   * so somebody can find what needs acting on, and sorting alphabetically
+   * buries it. Enrolled agencies come before unenrolled ones within each
+   * group, because an unenrolled agency has nothing on this screen to act on.
+   */
+  const rows = useMemo(() => {
+    const list = overview?.agencies ?? [];
+    return [...list]
+      .map(row => ({ row, flags: flags(row) }))
+      .sort((a, b) => {
+        const ar = a.flags.length > 0 ? Math.min(...a.flags.map(f => f.rank)) : 99;
+        const br = b.flags.length > 0 ? Math.min(...b.flags.map(f => f.rank)) : 99;
+        if (ar !== br) return ar - br;
+        if (a.row.enrolled !== b.row.enrolled) return a.row.enrolled ? -1 : 1;
+        return a.row.name.localeCompare(b.row.name);
+      });
+  }, [overview]);
+
   if (loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading every agency
         </div>
@@ -216,7 +251,7 @@ export function PlatformDeliveryView(): JSX.Element {
     return (
       <CompactPageShell>
         <CompactPageHeader title="Delivery — every agency" icon={Globe} />
-        <p className="text-sm text-muted-foreground">{error ?? 'No delivery data yet.'}</p>
+        <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
       </CompactPageShell>
     );
   }
@@ -227,16 +262,18 @@ export function PlatformDeliveryView(): JSX.Element {
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Delivery — every agency"
-        subtitle={`${overview.calendarDay} · ${totals.agencies} ${
+        subtitle={`${overview.calendarDay} · ${count(totals.agencies)} ${
           totals.agencies === 1 ? 'agency' : 'agencies'
-        }, ${totals.enrolled} enrolled`}
+        }, ${count(totals.enrolled)} enrolled`}
         icon={Globe}
       >
         <div className="flex items-center gap-2">
           {totals.flagged > 0 && (
-            <Badge variant="destructive">
-              {totals.flagged} needing attention
-            </Badge>
+            <StatusChip
+              value="FLAGGED"
+              tone="dropped"
+              label={`${count(totals.flagged)} needing attention`}
+            />
           )}
           <Button variant="outline" size="sm" onClick={refresh}>
             <RefreshCw className="mr-2 h-3 w-3" />
@@ -245,257 +282,255 @@ export function PlatformDeliveryView(): JSX.Element {
         </div>
       </CompactPageHeader>
 
-      {/*
-        The totals, across the production agencies only. `agenciesExcluded` is
-        stated beside them so a total is never quietly smaller than the table
-        underneath it.
-      */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Calls today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{totals.deliveredCalls}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">answered across the platform</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Applications today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{totals.applications}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">submitted across the platform</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Closing percentage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{pct(totals.closingPct)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              applications as a share of answered calls
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Settled today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{dollars(totals.revenue)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              margin {dollars(totals.margin)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              On the block
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">
-              {totals.applicationsRemainingOnBlock}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              paid applications remaining · {totals.overrunToday} in overrun
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       {totals.disputed > 0 && (
-        <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div>
-            <p className="font-medium">
-              {totals.disputed} {totals.disputed === 1 ? 'agency has' : 'agencies have'} a disputed
-              payment
-            </p>
-            <p className="text-muted-foreground">
-              Delivery is stopped for each of them and no overrun is being extended. Nothing has
-              been refunded or credited — a chargeback is contained, not reversed. Delivery
-              resumes only when a platform admin stands the dispute down.
-            </p>
-          </div>
-        </div>
+        <Notice
+          tone="dropped"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          title={`${count(totals.disputed)} ${
+            totals.disputed === 1 ? 'agency has' : 'agencies have'
+          } a disputed payment`}
+        >
+          Delivery is stopped for each of them and no overrun is being extended. Nothing has been
+          refunded or credited — a chargeback is contained, not reversed. Delivery resumes only when
+          a platform admin stands the dispute down.
+        </Notice>
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">
-          {totals.agenciesExcluded > 0
-            ? `${totals.agenciesExcluded} non-production ${
-                totals.agenciesExcluded === 1 ? 'tenant is' : 'tenants are'
-              } excluded from these totals.`
-            : 'Every active tenant is counted in these totals.'}
-        </p>
-        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={includeNonProduction}
-            onChange={event => setIncludeNonProduction(event.target.checked)}
+      {/*
+        The totals, across the production agencies only. What NetEnroll has
+        settled today is the one number staff open this page for, so it is the
+        hero; the rest are the support that explains it. `agenciesExcluded` is
+        stated underneath so a total is never quietly smaller than the table.
+      */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1.4fr_2fr]">
+        <Figure
+          size="hero"
+          label="Settled today"
+          value={dollars(totals.revenue)}
+          sub={`margin ${dollars(totals.margin)} after ${dollars(totals.callCost)} of call cost`}
+        />
+        <FigureRow className="md:grid-cols-4 md:border-l md:border-rule md:pl-6">
+          <Figure label="Calls answered" value={count(totals.deliveredCalls)} />
+          <Figure label="Applications" value={count(totals.applications)} />
+          <Figure
+            label="Closing"
+            value={pct(totals.closingPct)}
+            sub="applications as a share of answered calls"
           />
-          Show non-production tenants
-        </label>
+          <Figure
+            label="On the block"
+            value={count(totals.applicationsRemainingOnBlock)}
+            sub={`paid and remaining · ${count(totals.overrunToday)} in overrun`}
+          />
+        </FigureRow>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Agency</TableHead>
-                <TableHead className="text-right">Calls</TableHead>
-                <TableHead className="text-right">Applications</TableHead>
-                <TableHead className="text-right">Closing</TableHead>
-                <TableHead className="text-right">On block</TableHead>
-                <TableHead className="text-right">Overrun</TableHead>
-                <TableHead className="text-right">To ceiling</TableHead>
-                <TableHead className="text-right">Rate</TableHead>
-                <TableHead>Settlement</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {overview.agencies.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">
-                    No agencies.
-                  </TableCell>
-                </TableRow>
-              )}
-              {/*
-                Flagged agencies first. The screen exists so somebody can find
-                what needs acting on, and sorting alphabetically buries it.
-              */}
-              {[...overview.agencies]
-                .sort((a, b) => {
-                  const af = flagLabels(a).length > 0 ? 0 : 1;
-                  const bf = flagLabels(b).length > 0 ? 0 : 1;
-                  if (af !== bf) return af - bf;
-                  return a.name.localeCompare(b.name);
-                })
-                .map(row => {
-                  const flags = flagLabels(row);
-                  return (
-                    <TableRow key={row.tenantId} className={cn(flags.length > 0 && 'bg-destructive/5')}>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{row.name}</span>
-                          {row.isNonProduction && (
-                            <Badge variant="outline" className="text-[10px]">
-                              non-production
-                            </Badge>
-                          )}
-                          {!row.enrolled && (
-                            <Badge variant="outline" className="text-[10px]">
-                              not enrolled
-                            </Badge>
-                          )}
-                          {flags.map(flag => (
-                            <Badge key={flag} variant="destructive" className="text-[10px]">
-                              {flag}
-                            </Badge>
-                          ))}
-                          {/*
-                            Offered only while the toggle is on, because that is
-                            the state an operator is in when they are deciding
-                            which tenants are fixtures. It changes nothing about
-                            delivery or billing.
-                          */}
-                          {includeNonProduction && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void setNonProduction(row.tenantId, !row.isNonProduction)
-                              }
-                              className="text-[10px] text-muted-foreground underline hover:text-ink"
-                            >
-                              {row.isNonProduction ? 'mark as production' : 'mark non-production'}
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
-                      <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
-                      <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
+      <SectionRule
+        note={
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={includeNonProduction}
+              onChange={event => setIncludeNonProduction(event.target.checked)}
+              className="accent-brand-ink"
+            />
+            Show non-production tenants
+          </label>
+        }
+      >
+        Agencies
+        <span className="ml-2 t-meta font-normal text-ink-3">
+          {totals.agenciesExcluded > 0
+            ? `${count(totals.agenciesExcluded)} non-production ${
+                totals.agenciesExcluded === 1 ? 'tenant is' : 'tenants are'
+              } excluded from the totals above`
+            : 'every active tenant is counted in the totals above'}
+        </span>
+      </SectionRule>
+
+      <div className="overflow-auto rounded-card border border-rule bg-surface">
+        <Ledger>
+          <thead>
+            <tr>
+              <th scope="col">Agency</th>
+              <th scope="col">Attention</th>
+              <th scope="col" className="num">
+                Calls
+              </th>
+              <th scope="col" className="num">
+                Apps
+              </th>
+              <th scope="col" className="num">
+                Closing
+              </th>
+              <th
+                scope="col"
+                className="num"
+                title="Paid applications remaining today / daily block"
+              >
+                On block
+              </th>
+              <th scope="col" className="num">
+                Overrun
+              </th>
+              <th scope="col" className="num">
+                To ceiling
+              </th>
+              <th scope="col" className="num">
+                Rate
+              </th>
+              <th scope="col">Settlement</th>
+              <th scope="col" className="num">
+                Charged
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={11} className="text-center t-body text-ink-3">
+                  No agencies.
+                </td>
+              </tr>
+            )}
+            {rows.map(({ row, flags: rowFlags }) => {
+              const chip = settlementChip(row.settlement.status);
+              const worst = rowFlags[0]?.tone;
+              return (
+                <tr
+                  key={row.tenantId}
+                  className={cn(
+                    'hover:bg-sunken',
+                    // A 2px mark at the left edge, in the tone of the worst
+                    // flag, so a flagged row is findable from across the room
+                    // without tinting the whole row and burying its numbers.
+                    worst === 'dropped' && 'shadow-[inset_2px_0_0_var(--dropped)]',
+                    worst === 'blocked' && 'shadow-[inset_2px_0_0_var(--blocked)]',
+                    worst === 'ringing' && 'shadow-[inset_2px_0_0_var(--ringing)]',
+                    !row.enrolled && 'text-ink-3'
+                  )}
+                >
+                  <td className="max-w-[18rem]">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          'truncate',
+                          row.enrolled ? 'font-medium text-ink' : 'text-ink-3'
+                        )}
+                        title={row.slug}
+                      >
+                        {row.name}
+                      </span>
+                      {row.isNonProduction && (
+                        <span className="shrink-0 t-meta text-ink-3">non-production</span>
+                      )}
+                      {!row.enrolled && (
+                        <span className="shrink-0 t-meta text-ink-3">not enrolled</span>
+                      )}
                       {/*
-                        Every billing figure is an em dash for an agency that is
-                        not in the billing system. A zero there would read as
-                        "out of credit" rather than "not metered".
+                        Offered only while the toggle is on, because that is
+                        the state an operator is in when they are deciding
+                        which tenants are fixtures. It changes nothing about
+                        delivery or billing.
                       */}
-                      <TableCell className="text-right tabular-nums">
-                        {row.enrolled
-                          ? `${row.applicationsRemainingOnBlock} / ${row.dailyBlockApplications}`
-                          : '—'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.enrolled ? row.overrunToday : '—'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.enrolled ? row.distanceToCeiling : '—'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        <span>{dollars(row.rate)}</span>
-                        {/*
-                          The offset shown beside the rate, not added to a total
-                          somewhere else. It is part of the price: there is no
-                          fee line on this platform.
-                        */}
-                        {row.rateOffset > 0 && (
-                          <span className="ml-1 text-[10px] text-muted-foreground">
-                            (curve {dollars(row.curveRate)} + {dollars(row.rateOffset)})
+                      {includeNonProduction && (
+                        <button
+                          type="button"
+                          onClick={() => void setNonProduction(row.tenantId, !row.isNonProduction)}
+                          className="shrink-0 t-meta text-brand-ink underline-offset-2 hover:underline"
+                        >
+                          {row.isNonProduction ? 'mark as production' : 'mark non-production'}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    {rowFlags.length === 0 ? (
+                      <span className="t-meta text-ink-3">—</span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {rowFlags.map(flag => (
+                          <StatusChip
+                            key={flag.label}
+                            value={flag.label}
+                            label={flag.label}
+                            tone={flag.tone}
+                            size="sm"
+                          />
+                        ))}
+                        {row.dispute && row.dispute.count > 0 && (
+                          <span
+                            className="t-meta text-dropped-ink"
+                            title={row.dispute.latestStatus ?? undefined}
+                          >
+                            {count(row.dispute.count)} × {dollars(row.dispute.amount)}
                           </span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Badge
-                            variant={
-                              row.settlement.status === 'SETTLED'
-                                ? 'secondary'
-                                : row.settlement.status === 'DRY_RUN' ||
-                                    row.settlement.status === 'NOT_YET_RUN' ||
-                                    row.settlement.status === 'NOT_ENROLLED'
-                                  ? 'outline'
-                                  : 'destructive'
-                            }
-                            className="text-[10px]"
-                          >
-                            {row.settlement.status.replace(/_/g, ' ').toLowerCase()}
-                          </Badge>
-                          {row.settlement.totalCharged !== null && (
-                            <span className="text-[11px] tabular-nums text-muted-foreground">
-                              {dollars(row.settlement.totalCharged)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                      </div>
+                    )}
+                  </td>
+                  <td className="num">{count(row.deliveredCalls)}</td>
+                  <td className="num">{count(row.applications)}</td>
+                  <td className="num font-medium">{pct(row.closingPct)}</td>
+                  {/*
+                    Every billing figure is an em dash for an agency that is
+                    not in the billing system. A zero there would read as
+                    "out of credit" rather than "not metered".
+                  */}
+                  <td className="num">
+                    {row.enrolled
+                      ? `${count(row.applicationsRemainingOnBlock)} / ${count(row.dailyBlockApplications)}`
+                      : '—'}
+                  </td>
+                  <td className="num">{row.enrolled ? count(row.overrunToday) : '—'}</td>
+                  <td
+                    className={cn(
+                      'num',
+                      row.enrolled && row.distanceToCeiling === 0 && '!text-ringing-ink'
+                    )}
+                  >
+                    {row.enrolled ? count(row.distanceToCeiling) : '—'}
+                  </td>
+                  <td className="num">
+                    <span
+                      title={
+                        row.rateOffset > 0
+                          ? `curve ${dollars(row.curveRate)} + offset ${dollars(row.rateOffset)}`
+                          : undefined
+                      }
+                    >
+                      {dollars(row.rate)}
+                      {/*
+                        The offset is part of the price, not a fee. Marked, and
+                        explained on hover, rather than spelled out in every
+                        row: the column has to stay scannable.
+                      */}
+                      {row.rateOffset > 0 && <span className="text-ink-3">*</span>}
+                    </span>
+                  </td>
+                  <td>
+                    <StatusChip
+                      value={row.settlement.status}
+                      label={chip.label}
+                      tone={chip.tone}
+                      size="sm"
+                    />
+                  </td>
+                  <td className="num !text-ink-2">
+                    {row.settlement.totalCharged !== null
+                      ? dollars(row.settlement.totalCharged)
+                      : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Ledger>
+      </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Enter an agency in the switcher to narrow this page to it. Leaving returns here.
+      <p className="t-meta text-ink-3">
+        * rate includes an agreed offset above the curve; hover for the two halves. Enter an agency
+        in the switcher to narrow this page to it; leaving returns here.
       </p>
     </CompactPageShell>
   );

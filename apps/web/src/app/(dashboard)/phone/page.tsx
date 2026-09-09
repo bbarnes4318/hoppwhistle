@@ -1,15 +1,23 @@
 'use client';
 
-import { Activity, Clock, FileText, Phone, PhoneIncoming, PhoneOutgoing, Settings } from 'lucide-react';
+import {
+  Activity,
+  Clock,
+  FileText,
+  Phone,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Settings,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { KPICard } from '@/components/dashboard/kpi-card';
+import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { usePhone, type CallInfo } from '@/components/phone';
 import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
 import { DialPad } from '@/components/phone/dial-pad';
 import { ScreenPopSettings } from '@/components/phone/screen-pop-settings';
 import { Button } from '@/components/ui/button';
-import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -57,15 +65,17 @@ export default function PhonePage(): JSX.Element {
         icon={Phone}
       >
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground/60">Status:</span>
+          <div className="flex items-center gap-1.5 bg-surface border border-rule rounded px-2.5 py-1 text-xs">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground/60">
+              Status:
+            </span>
             <AgentStatusSelector />
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowSettings(true)}
-            className="gap-1.5 h-8 border border-border/40 text-xs hover:bg-slate-900 hover:text-white"
+            className="gap-1.5 h-8 border border-rule text-xs hover:bg-sunken hover:text-ink"
           >
             <Settings className="w-3.5 h-3.5" />
             Screen Pop Settings
@@ -91,13 +101,13 @@ export default function PhonePage(): JSX.Element {
               value={todaysCalls.length}
               icon={Activity}
               trendLabel={`${inboundCalls} IN / ${outboundCalls} OUT`}
-              className="p-3 pb-2.5 space-y-2 border-border/40"
+              className="p-3 pb-2.5 space-y-2 border-rule"
             />
             <KPICard
               title="Talk Time"
               value={formatDuration(totalDuration)}
               icon={Clock}
-              className="p-3 pb-2.5 space-y-2 border-border/40"
+              className="p-3 pb-2.5 space-y-2 border-rule"
             />
           </div>
 
@@ -106,7 +116,9 @@ export default function PhonePage(): JSX.Element {
             {callHistory.length === 0 ? (
               <div className="text-center py-8">
                 <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">No operations recorded</p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  No operations recorded
+                </p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
                   Your call history will appear here
                 </p>
@@ -115,7 +127,7 @@ export default function PhonePage(): JSX.Element {
               <div className="overflow-auto max-h-full custom-scrollbar">
                 <table className="w-full text-left table-dense">
                   <thead>
-                    <tr className="border-b border-border/10">
+                    <tr className="border-b border-rule">
                       <th className="py-1 px-2">Type</th>
                       <th className="py-1 px-2">Phone Number</th>
                       <th className="py-1 px-2">Duration</th>
@@ -123,18 +135,18 @@ export default function PhonePage(): JSX.Element {
                       <th className="py-1 px-2 text-right">State</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/5">
+                  <tbody className="divide-y divide-rule">
                     {callHistory.slice(0, 20).map((call: CallInfo, index: number) => (
                       <tr
                         key={`${call.callId}-${index}`}
-                        className="transition-colors hover:bg-white/[0.02]"
+                        className="transition-colors hover:bg-sunken"
                       >
                         <td className="py-1 px-2">
                           <div className="flex items-center gap-1">
                             {call.direction === 'inbound' ? (
-                              <PhoneIncoming className="w-3 h-3 text-cyan-400" />
+                              <PhoneIncoming className="w-3 h-3 text-ringing-ink" />
                             ) : (
-                              <PhoneOutgoing className="w-3 h-3 text-blue-400" />
+                              <PhoneOutgoing className="w-3 h-3 text-money-ink" />
                             )}
                             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                               {call.direction === 'inbound' ? 'IN' : 'OUT'}
@@ -156,7 +168,7 @@ export default function PhonePage(): JSX.Element {
                               'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded',
                               call.state === 'ended' && call.duration > 0
                                 ? 'bg-primary/10 text-primary'
-                                : 'bg-rose-500/10 text-rose-400'
+                                : 'bg-dropped-tint text-dropped-ink'
                             )}
                           >
                             {call.state === 'ended' && call.duration > 0 ? 'COMPLETED' : 'MISSED'}

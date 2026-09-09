@@ -1,6 +1,8 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,7 +25,6 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 
 export interface AvailableNumber {
   id: string;

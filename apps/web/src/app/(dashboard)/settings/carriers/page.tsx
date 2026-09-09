@@ -288,11 +288,11 @@ function WaterfallCard({
                 No carrier enabled
               </Badge>
             ) : activeCount === 1 ? (
-              <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">
+              <Badge variant="outline" className="text-[10px] border-ringing/40 text-ringing-ink">
                 No fallback
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
+              <Badge variant="outline" className="text-[10px] border-live/40 text-live-ink">
                 {activeCount} carriers
               </Badge>
             )}
@@ -302,7 +302,7 @@ function WaterfallCard({
 
       <CardContent className="space-y-3">
         {activeCount === 1 && (
-          <Alert className="border-amber-500/40 py-2">
+          <Alert className="border-ringing/40 py-2">
             <AlertTriangle className="h-3.5 w-3.5" />
             <AlertDescription className="text-xs">
               Only one carrier is enabled for this path. If it stops connecting calls, these calls
@@ -313,7 +313,7 @@ function WaterfallCard({
 
         {route.callType !== 'INBOUND' &&
           route.steps.some(s => s.enabled && s.callerIdUnattestable) && (
-            <Alert className="border-amber-500/40 py-2">
+            <Alert className="border-ringing/40 py-2">
               <AlertTriangle className="h-3.5 w-3.5" />
               <AlertDescription className="text-xs">
                 <strong>
@@ -332,7 +332,7 @@ function WaterfallCard({
             </Alert>
           )}
 
-        <div className="divide-y divide-border/40 rounded border border-border/40">
+        <div className="divide-y divide-rule rounded border border-rule">
           {route.steps.map((step, index) => {
             const enabledGateways = step.gateways.filter(g => g.enabled);
             const demoted = enabledGateways.filter(g => g.circuitOpen);
@@ -385,7 +385,7 @@ function WaterfallCard({
                     {step.callerIdUnattestable ? (
                       <Badge
                         variant="outline"
-                        className="border-amber-500/60 text-[10px] text-amber-500"
+                        className="border-ringing/40 text-[10px] text-ringing-ink"
                         title={`No DIDs are registered to ${step.carrierName}, so calls on this leg present a number it did not issue and cannot attest to. Expect low STIR/SHAKEN attestation and spam labeling. Buy or port numbers to ${step.carrierName} to fix.`}
                       >
                         no caller ID of its own
@@ -393,7 +393,7 @@ function WaterfallCard({
                     ) : step.callerIdStrategy === 'POOL' ? (
                       <Badge
                         variant="outline"
-                        className="border-emerald-500/50 text-[10px] text-emerald-500"
+                        className="border-live/40 text-[10px] text-live-ink"
                         title={`Presents one of ${step.callerIdCount} DIDs registered to ${step.carrierName}, so it can attest to the call.`}
                       >
                         {step.callerIdCount} own DIDs
@@ -424,7 +424,7 @@ function WaterfallCard({
           })}
         </div>
 
-        <div className="flex items-start gap-2 rounded bg-muted/40 px-3 py-2">
+        <div className="flex items-start gap-2 rounded bg-sunken px-3 py-2">
           <PhoneForwarded className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -434,7 +434,7 @@ function WaterfallCard({
               {route.effectiveChain.join(' → ') || '(nothing)'}
             </p>
             {route.effectiveSource === 'fallback' && (
-              <p className="mt-1 text-[10px] text-amber-500">
+              <p className="mt-1 text-[10px] text-ringing-ink">
                 This is the built-in emergency chain, not your configuration — no enabled carrier
                 with a working gateway was found for this path.
               </p>
@@ -481,16 +481,16 @@ function GatewayChip({
       className={[
         'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px]',
         !gateway.enabled
-          ? 'border-border/40 text-muted-foreground line-through'
+          ? 'border-rule text-muted-foreground line-through'
           : gateway.circuitOpen
-            ? 'border-red-500/50 text-red-400'
-            : 'border-border/60',
+            ? 'border-dropped/40 text-dropped-ink'
+            : 'border-rule',
       ].join(' ')}
     >
       {gateway.circuitOpen ? (
         <AlertTriangle className="h-2.5 w-2.5" />
       ) : gateway.lastSuccessAt ? (
-        <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+        <CheckCircle2 className="h-2.5 w-2.5 text-live-ink" />
       ) : null}
       {gateway.name}
       {gateway.circuitOpen && (

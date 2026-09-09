@@ -339,7 +339,7 @@ export function EditNumberDialog({
  />
  </div>
  {formData.rtbPoolEnabled && (
- <p className="text-xs text-muted-foreground mt-2 bg-muted/50 p-2 rounded">
+ <p className="text-xs text-muted-foreground mt-2 bg-sunken p-2 rounded">
  This number will be leased on-demand for inbound RTB calls. Campaign assignment is
  disabled.
  </p>

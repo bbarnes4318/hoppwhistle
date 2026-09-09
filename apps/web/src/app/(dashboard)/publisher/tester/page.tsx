@@ -16,14 +16,14 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
-import { toast } from '@/components/ui/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RoleGuard } from '@/components/auth/role-guard';
 
 interface ApiKeyRecord {
   id: string;
@@ -42,7 +42,7 @@ function PublisherTesterPage() {
   const [selectedApiKey, setSelectedApiKey] = useState('');
   const [manualApiKey, setManualApiKey] = useState('');
   const [useManualKey, setUseManualKey] = useState(false);
-  
+
   // Active Tab
   const [activeTab, setActiveTab] = useState<'ping' | 'post'>('ping');
 
@@ -150,7 +150,10 @@ function PublisherTesterPage() {
     setPingRequestPayload(reqStr);
 
     try {
-      const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
+      const apiBaseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/v1/ping`, {
         method: 'POST',
         headers: {
@@ -213,7 +216,10 @@ function PublisherTesterPage() {
     setPostRequestPayload(reqStr);
 
     try {
-      const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
+      const apiBaseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/v1/post`, {
         method: 'POST',
         headers: {
@@ -271,18 +277,18 @@ function PublisherTesterPage() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <Terminal className="h-8 w-8 text-cyan-400" />
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink flex items-center gap-2">
+            <Terminal className="h-8 w-8 text-brand-ink" />
             Ping/Post Tester
           </h1>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-ink-2">
             Simulate publisher integrations and verify campaign routing bidding auctions.
           </p>
         </div>
         <Button
           variant="outline"
           onClick={handleReset}
-          className="bg-white/5 border-white/10 text-white hover:bg-white/10 flex items-center gap-1.5"
+          className="bg-surface border-rule text-ink hover:bg-sunken flex items-center gap-1.5"
         >
           <RotateCcw className="h-4 w-4" />
           Reset Tester
@@ -290,9 +296,9 @@ function PublisherTesterPage() {
       </div>
 
       {/* API Key Selector */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
+      <Card className="bg-surface border-rule backdrop-blur-xl">
         <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
-          <div className="flex items-center gap-2 text-cyan-400">
+          <div className="flex items-center gap-2 text-brand-ink">
             <Key className="h-5 w-5" />
             <span className="text-sm font-semibold">Auth Configuration:</span>
           </div>
@@ -303,7 +309,7 @@ function PublisherTesterPage() {
                 <select
                   value={selectedApiKey}
                   onChange={e => setSelectedApiKey(e.target.value)}
-                  className="bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-white focus:border-cyan-500 outline-none w-full max-w-md"
+                  className="bg-surface border border-rule rounded-control p-2 text-sm text-ink focus:border-brand-ink outline-none w-full max-w-md"
                 >
                   {loadingKeys ? (
                     <option>Loading API keys...</option>
@@ -320,7 +326,7 @@ function PublisherTesterPage() {
                 <Button
                   variant="link"
                   onClick={() => setUseManualKey(true)}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 p-0"
+                  className="text-xs text-brand-ink hover:text-brand-ink p-0"
                 >
                   Enter key manually
                 </Button>
@@ -332,12 +338,12 @@ function PublisherTesterPage() {
                   placeholder="Enter raw API key (hw_pub_...)"
                   value={manualApiKey}
                   onChange={e => setManualApiKey(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white focus:border-cyan-500 max-w-md"
+                  className="bg-surface border-rule text-ink focus:border-brand-ink max-w-md"
                 />
                 <Button
                   variant="link"
                   onClick={() => setUseManualKey(false)}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 p-0"
+                  className="text-xs text-brand-ink hover:text-brand-ink p-0"
                 >
                   Use generated keys
                 </Button>
@@ -351,16 +357,16 @@ function PublisherTesterPage() {
         {/* Forms column (left) */}
         <div>
           <Tabs value={activeTab} onValueChange={val => setActiveTab(val as any)}>
-            <TabsList className="bg-white/5 border border-white/10 text-gray-400 p-1 w-full grid grid-cols-2">
+            <TabsList className="bg-sunken border border-rule text-ink-2 p-1 w-full grid grid-cols-2">
               <TabsTrigger
                 value="ping"
-                className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white font-semibold"
+                className="data-[state=active]:bg-brand data-[state=active]:text-ink font-semibold"
               >
                 Step 1: Send Lead Ping
               </TabsTrigger>
               <TabsTrigger
                 value="post"
-                className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white font-semibold"
+                className="data-[state=active]:bg-brand data-[state=active]:text-ink font-semibold"
               >
                 Step 2: Post Lead Call
               </TabsTrigger>
@@ -368,77 +374,77 @@ function PublisherTesterPage() {
 
             {/* PING TAB */}
             <TabsContent value="ping" className="mt-4">
-              <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
+              <Card className="bg-surface border-rule backdrop-blur-xl">
                 <CardHeader>
-                  <CardTitle className="text-base text-white">Ping Request Form</CardTitle>
-                  <CardDescription className="text-xs text-gray-400">
+                  <CardTitle className="text-base text-ink">Ping Request Form</CardTitle>
+                  <CardDescription className="text-xs text-ink-2">
                     Submit demographics to receive a bid from eligible routing campaigns.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-gray-400 font-medium">Vertical</label>
+                      <label className="text-xs text-ink-2 font-medium">Vertical</label>
                       <Input
                         value={vertical}
                         onChange={e => setVertical(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                        className="bg-surface border-rule text-ink focus:border-brand-ink"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-gray-400 font-medium">Traffic Source</label>
+                      <label className="text-xs text-ink-2 font-medium">Traffic Source</label>
                       <Input
                         value={source}
                         onChange={e => setSource(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                        className="bg-surface border-rule text-ink focus:border-brand-ink"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs text-gray-400 font-medium">Zip Code</label>
+                      <label className="text-xs text-ink-2 font-medium">Zip Code</label>
                       <Input
                         value={zip}
                         onChange={e => setZip(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                        className="bg-surface border-rule text-ink focus:border-brand-ink"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-gray-400 font-medium">State</label>
+                      <label className="text-xs text-ink-2 font-medium">State</label>
                       <Input
                         value={state}
                         onChange={e => setState(e.target.value)}
                         maxLength={2}
-                        className="bg-white/5 border-white/10 text-white focus:border-cyan-500 uppercase"
+                        className="bg-surface border-rule text-ink focus:border-brand-ink uppercase"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-gray-400 font-medium">Age</label>
+                      <label className="text-xs text-ink-2 font-medium">Age</label>
                       <Input
                         type="number"
                         value={age}
                         onChange={e => setAge(e.target.value)}
-                        className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                        className="bg-surface border-rule text-ink focus:border-brand-ink"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-400 font-medium">Minimum Bid Floor ($)</label>
+                    <label className="text-xs text-ink-2 font-medium">Minimum Bid Floor ($)</label>
                     <Input
                       type="number"
                       step="0.01"
                       value={minBid}
                       onChange={e => setMinBid(e.target.value)}
-                      className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                      className="bg-surface border-rule text-ink focus:border-brand-ink"
                     />
                   </div>
 
                   <Button
                     onClick={handleSendPing}
                     disabled={pingLoading}
-                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold gap-2 mt-2 shadow-lg"
+                    className="w-full bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-bold gap-2 mt-2"
                   >
                     {pingLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -452,8 +458,8 @@ function PublisherTesterPage() {
                     <div
                       className={`p-3 rounded-lg border flex items-start gap-2.5 text-xs ${
                         pingSuccess
-                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-400'
-                          : 'bg-rose-950/20 border-rose-500/30 text-rose-400'
+                          ? 'bg-live-tint border-live/40 text-live-ink'
+                          : 'bg-dropped-tint border-dropped/40 text-dropped-ink'
                       }`}
                     >
                       {pingSuccess ? (
@@ -461,13 +467,14 @@ function PublisherTesterPage() {
                           <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                           <div className="space-y-1 flex-1">
                             <p className="font-bold">Bid Received: ${bidAmount?.toFixed(2)}</p>
-                            <p className="text-gray-300">
-                              A buyer bid matches this lead profile. Copy the bid token below to test the Post lease phase.
+                            <p className="text-ink-2">
+                              A buyer bid matches this lead profile. Copy the bid token below to
+                              test the Post lease phase.
                             </p>
                             <Button
                               onClick={() => setActiveTab('post')}
                               variant="link"
-                              className="text-xs text-emerald-400 hover:text-emerald-300 p-0 font-semibold flex items-center gap-0.5 mt-1 h-auto"
+                              className="text-xs text-live-ink hover:text-live-ink p-0 font-semibold flex items-center gap-0.5 mt-1 h-auto"
                             >
                               Proceed to Post Phase
                               <ChevronRight className="h-3.5 w-3.5" />
@@ -479,8 +486,9 @@ function PublisherTesterPage() {
                           <XCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-bold">No Bid / Failed</p>
-                            <p className="text-gray-300">
-                              Auction ended without matches, or authentication was rejected. Review the JSON response on the right.
+                            <p className="text-ink-2">
+                              Auction ended without matches, or authentication was rejected. Review
+                              the JSON response on the right.
                             </p>
                           </div>
                         </>
@@ -493,37 +501,39 @@ function PublisherTesterPage() {
 
             {/* POST TAB */}
             <TabsContent value="post" className="mt-4">
-              <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
+              <Card className="bg-surface border-rule backdrop-blur-xl">
                 <CardHeader>
-                  <CardTitle className="text-base text-white">Post Call Form</CardTitle>
-                  <CardDescription className="text-xs text-gray-400">
+                  <CardTitle className="text-base text-ink">Post Call Form</CardTitle>
+                  <CardDescription className="text-xs text-ink-2">
                     Confirm lease and claim a toll-free number using your bid token.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-400 font-medium">Bid Token</label>
+                    <label className="text-xs text-ink-2 font-medium">Bid Token</label>
                     <Input
                       placeholder="Retrieve from successful ping, or enter custom token..."
                       value={postToken}
                       onChange={e => setPostToken(e.target.value)}
-                      className="bg-white/5 border-white/10 text-white focus:border-cyan-500 font-mono text-xs"
+                      className="bg-surface border-rule text-ink focus:border-brand-ink font-mono text-xs"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-400 font-medium">Caller Phone Number (E.164)</label>
+                    <label className="text-xs text-ink-2 font-medium">
+                      Caller Phone Number (E.164)
+                    </label>
                     <Input
                       value={callerNumber}
                       onChange={e => setCallerNumber(e.target.value)}
-                      className="bg-white/5 border-white/10 text-white focus:border-cyan-500 font-mono"
+                      className="bg-surface border-rule text-ink focus:border-brand-ink font-mono"
                     />
                   </div>
 
                   <Button
                     onClick={handleSendPost}
                     disabled={postLoading}
-                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold gap-2 mt-2 shadow-lg"
+                    className="w-full bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-bold gap-2 mt-2"
                   >
                     {postLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -537,8 +547,8 @@ function PublisherTesterPage() {
                     <div
                       className={`p-3 rounded-lg border flex items-start gap-2.5 text-xs ${
                         postSuccess
-                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-400'
-                          : 'bg-rose-950/20 border-rose-500/30 text-rose-400'
+                          ? 'bg-live-tint border-live/40 text-live-ink'
+                          : 'bg-dropped-tint border-dropped/40 text-dropped-ink'
                       }`}
                     >
                       {postSuccess ? (
@@ -546,10 +556,11 @@ function PublisherTesterPage() {
                           <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-bold">Post Successful: DID Leased</p>
-                            <p className="text-gray-300">
-                              Send your call traffic directly to the following number to route to the winning buyer:
+                            <p className="text-ink-2">
+                              Send your call traffic directly to the following number to route to
+                              the winning buyer:
                             </p>
-                            <p className="font-mono font-bold text-sm text-white mt-1.5 p-1 bg-white/5 border border-white/10 rounded inline-block">
+                            <p className="font-mono font-bold text-sm text-ink mt-1.5 p-1 bg-surface border border-rule rounded inline-block">
                               {leasedNumber}
                             </p>
                           </div>
@@ -559,8 +570,9 @@ function PublisherTesterPage() {
                           <XCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-bold">Post Failed</p>
-                            <p className="text-gray-300">
-                              Token may have expired (valid for 5 minutes) or call details were invalid. Review the JSON logs.
+                            <p className="text-ink-2">
+                              Token may have expired (valid for 5 minutes) or call details were
+                              invalid. Review the JSON logs.
                             </p>
                           </div>
                         </>
@@ -575,14 +587,14 @@ function PublisherTesterPage() {
 
         {/* JSON Inspector / Debugger column (right) */}
         <div className="space-y-6">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-xl h-full flex flex-col min-h-[450px]">
-            <CardHeader className="border-b border-white/5 pb-4 flex flex-row items-center justify-between">
+          <Card className="bg-surface border-rule backdrop-blur-xl h-full flex flex-col min-h-[450px]">
+            <CardHeader className="border-b border-rule pb-4 flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-base text-white flex items-center gap-1.5">
-                  <Terminal className="h-4 w-4 text-cyan-400" />
+                <CardTitle className="text-base text-ink flex items-center gap-1.5">
+                  <Terminal className="h-4 w-4 text-brand-ink" />
                   JSON Console Inspector
                 </CardTitle>
-                <CardDescription className="text-[10px] text-gray-400">
+                <CardDescription className="text-[10px] text-ink-2">
                   Inspect lead payloads sent and raw API response outputs.
                 </CardDescription>
               </div>
@@ -591,13 +603,13 @@ function PublisherTesterPage() {
               {/* Request Payload */}
               <div className="flex-1 flex flex-col overflow-hidden max-h-[220px]">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-semibold text-gray-400">Request Body</span>
+                  <span className="text-xs font-semibold text-ink-2">Request Body</span>
                   {pingRequestPayload && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleCopyText(pingRequestPayload || '', 'req')}
-                      className="h-6 text-gray-400 hover:text-cyan-400 p-1 rounded"
+                      className="h-6 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface p-1 rounded"
                     >
                       {copiedType === 'req' ? (
                         <Check className="h-3 w-3" />
@@ -607,24 +619,23 @@ function PublisherTesterPage() {
                     </Button>
                   )}
                 </div>
-                <div className="bg-slate-950 border border-white/10 rounded-lg p-2.5 font-mono text-[11px] overflow-y-auto text-cyan-300 flex-1 min-h-[80px]">
-                  {activeTab === 'ping' 
-                    ? (pingRequestPayload || '// Run a Ping to inspect payload')
-                    : (postRequestPayload || '// Run a Post to inspect payload')
-                  }
+                <div className="bg-sunken border border-rule rounded-control p-2.5 font-mono text-[11px] overflow-y-auto text-ink flex-1 min-h-[80px]">
+                  {activeTab === 'ping'
+                    ? pingRequestPayload || '// Run a Ping to inspect payload'
+                    : postRequestPayload || '// Run a Post to inspect payload'}
                 </div>
               </div>
 
               {/* Response Payload */}
               <div className="flex-1 flex flex-col overflow-hidden max-h-[220px]">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-semibold text-gray-400">Response Body</span>
+                  <span className="text-xs font-semibold text-ink-2">Response Body</span>
                   {pingResponsePayload && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleCopyText(pingResponsePayload || '', 'res')}
-                      className="h-6 text-gray-400 hover:text-cyan-400 p-1 rounded"
+                      className="h-6 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface p-1 rounded"
                     >
                       {copiedType === 'res' ? (
                         <Check className="h-3 w-3" />
@@ -634,11 +645,10 @@ function PublisherTesterPage() {
                     </Button>
                   )}
                 </div>
-                <div className="bg-slate-950 border border-white/10 rounded-lg p-2.5 font-mono text-[11px] overflow-y-auto text-cyan-300 flex-1 min-h-[80px]">
+                <div className="bg-sunken border border-rule rounded-control p-2.5 font-mono text-[11px] overflow-y-auto text-ink flex-1 min-h-[80px]">
                   {activeTab === 'ping'
-                    ? (pingResponsePayload || '// Run a Ping to inspect response')
-                    : (postResponsePayload || '// Run a Post to inspect response')
-                  }
+                    ? pingResponsePayload || '// Run a Ping to inspect response'
+                    : postResponsePayload || '// Run a Post to inspect response'}
                 </div>
               </div>
             </CardContent>
@@ -656,4 +666,3 @@ export default function GuardedPublisherTesterPage() {
     </RoleGuard>
   );
 }
-

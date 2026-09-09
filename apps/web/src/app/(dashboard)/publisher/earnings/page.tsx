@@ -12,15 +12,22 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-import { toast } from '@/components/ui/use-toast';
-import { RoleGuard } from '@/components/auth/role-guard';
 
 interface CallEarningRecord {
   id: string;
@@ -62,9 +69,7 @@ function PublisherEarningsPage() {
       }
 
       // 2. Fetch calls history for transactional log
-      const callsRes = await apiClient.get<{ data: CallEarningRecord[] }>(
-        `/api/v1/calls?limit=50`
-      );
+      const callsRes = await apiClient.get<{ data: CallEarningRecord[] }>(`/api/v1/calls?limit=50`);
       if (callsRes.data) {
         setEarnings(callsRes.data.data || []);
       }
@@ -82,7 +87,7 @@ function PublisherEarningsPage() {
 
   // Derived financials
   const lifetimeEarnings = stats?.payout || 0;
-  
+
   // Calculate paid and pending based on earnings table
   const paidEarnings = earnings
     .filter(c => c.publisherPayoutStatus === 'PAID')
@@ -96,24 +101,44 @@ function PublisherEarningsPage() {
     const s = status || 'PENDING';
     switch (s.toUpperCase()) {
       case 'PAID':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Paid</Badge>;
+        return (
+          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
+            Paid
+          </Badge>
+        );
       case 'PROCESSING':
-        return <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">Processing</Badge>;
+        return (
+          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
+            Processing
+          </Badge>
+        );
       case 'PAYABLE':
-        return <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30">Payable</Badge>;
+        return (
+          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
+            Payable
+          </Badge>
+        );
       case 'DISPUTED':
-        return <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30">Disputed</Badge>;
+        return (
+          <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
+            Disputed
+          </Badge>
+        );
       case 'PENDING':
       default:
-        return <Badge variant="outline" className="bg-slate-500/10 text-gray-400 border-slate-500/30">Pending</Badge>;
+        return (
+          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
+            Pending
+          </Badge>
+        );
     }
   };
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">Earnings & Payouts</h1>
-        <p className="text-sm text-gray-400">
+        <h1 className="text-3xl font-extrabold tracking-tight text-ink">Earnings & Payouts</h1>
+        <p className="text-sm text-ink-2">
           Review your lifetime payout stats, pending balances, and accrual transactions.
         </p>
       </div>
@@ -121,78 +146,78 @@ function PublisherEarningsPage() {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card 1: Lifetime Earnings */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-xl relative overflow-hidden group">
+        <Card className="bg-surface border-rule backdrop-blur-xl relative overflow-hidden group">
           <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <DollarSign className="w-36 h-36 text-white" />
+            <DollarSign className="w-36 h-36 text-ink" />
           </div>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <span className="text-xs font-bold text-ink-2 uppercase tracking-widest">
               Lifetime Earnings
             </span>
-            <DollarSign className="h-5 w-5 text-cyan-400" />
+            <DollarSign className="h-5 w-5 text-money-ink" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">
+            <div className="text-3xl font-extrabold text-ink tabular">
               {loading ? (
-                <Loader2 className="h-7 w-7 animate-spin text-cyan-400" />
+                <Loader2 className="h-7 w-7 animate-spin text-brand-ink" />
               ) : (
                 `$${lifetimeEarnings.toFixed(2)}`
               )}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+            <p className="text-[10px] text-ink-2 mt-2 flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5 text-live-ink" />
               Accumulated earnings from all matching billable calls.
             </p>
           </CardContent>
         </Card>
 
         {/* Card 2: Paid Out */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-xl relative overflow-hidden group">
+        <Card className="bg-surface border-rule backdrop-blur-xl relative overflow-hidden group">
           <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <CreditCard className="w-36 h-36 text-white" />
+            <CreditCard className="w-36 h-36 text-ink" />
           </div>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <span className="text-xs font-bold text-ink-2 uppercase tracking-widest">
               Total Paid Out
             </span>
-            <CreditCard className="h-5 w-5 text-emerald-400" />
+            <CreditCard className="h-5 w-5 text-live-ink" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">
+            <div className="text-3xl font-extrabold text-ink tabular">
               {loading ? (
-                <Loader2 className="h-7 w-7 animate-spin text-cyan-400" />
+                <Loader2 className="h-7 w-7 animate-spin text-brand-ink" />
               ) : (
-                `$${(lifetimeEarnings > 0 ? (lifetimeEarnings - pendingEarnings) : 0).toFixed(2)}`
+                `$${(lifetimeEarnings > 0 ? lifetimeEarnings - pendingEarnings : 0).toFixed(2)}`
               )}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+            <p className="text-[10px] text-ink-2 mt-2 flex items-center gap-1">
+              <CheckCircle className="h-3.5 w-3.5 text-live-ink" />
               Funds successfully dispersed to your billing account.
             </p>
           </CardContent>
         </Card>
 
         {/* Card 3: Pending Balance */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-xl relative overflow-hidden group">
+        <Card className="bg-surface border-rule backdrop-blur-xl relative overflow-hidden group">
           <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <Calendar className="w-36 h-36 text-white" />
+            <Calendar className="w-36 h-36 text-ink" />
           </div>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <span className="text-xs font-bold text-ink-2 uppercase tracking-widest">
               Pending Balance
             </span>
-            <Calendar className="h-5 w-5 text-amber-400" />
+            <Calendar className="h-5 w-5 text-ringing-ink" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">
+            <div className="text-3xl font-extrabold text-ink tabular">
               {loading ? (
-                <Loader2 className="h-7 w-7 animate-spin text-cyan-400" />
+                <Loader2 className="h-7 w-7 animate-spin text-brand-ink" />
               ) : (
                 `$${(lifetimeEarnings > 0 ? pendingEarnings : 0).toFixed(2)}`
               )}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
-              <HelpCircle className="h-3.5 w-3.5 text-amber-400" />
+            <p className="text-[10px] text-ink-2 mt-2 flex items-center gap-1">
+              <HelpCircle className="h-3.5 w-3.5 text-ringing-ink" />
               Outstanding payouts processing in the current billing cycle.
             </p>
           </CardContent>
@@ -200,14 +225,14 @@ function PublisherEarningsPage() {
       </div>
 
       {/* Transaction Ledger Table */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-white/5">
+      <Card className="bg-surface border-rule backdrop-blur-xl">
+        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-rule">
           <div>
-            <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-              <FileText className="h-5 w-5 text-cyan-400" />
+            <CardTitle className="text-lg font-bold text-ink flex items-center gap-2">
+              <FileText className="h-5 w-5 text-brand-ink" />
               Earnings Ledger
             </CardTitle>
-            <CardDescription className="text-xs text-gray-400">
+            <CardDescription className="text-xs text-ink-2">
               Detailed list of accrued call payouts from traffic campaigns.
             </CardDescription>
           </div>
@@ -216,36 +241,39 @@ function PublisherEarningsPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-white/10 hover:bg-transparent">
-                  <TableHead className="text-gray-400 font-medium pl-6">Date</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Connected</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Type</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Payout Status</TableHead>
-                  <TableHead className="text-gray-400 font-medium text-right pr-6">Amount</TableHead>
+                <TableRow className="border-rule hover:bg-transparent">
+                  <TableHead className="text-ink-2 font-medium pl-6">Date</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Campaign</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Caller ID</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Connected</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Type</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Payout Status</TableHead>
+                  <TableHead className="text-ink-2 font-medium text-right pr-6">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7} className="h-48 text-center text-gray-500">
+                    <TableCell colSpan={7} className="h-48 text-center text-ink-3">
                       <div className="flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                        <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
                         <span>Loading transactions...</span>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : earnings.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7} className="h-48 text-center text-gray-500">
+                    <TableCell colSpan={7} className="h-48 text-center text-ink-3">
                       <span>No payouts recorded. Send traffic to start earning.</span>
                     </TableCell>
                   </TableRow>
                 ) : (
                   earnings.map(entry => (
-                    <TableRow key={entry.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                      <TableCell className="pl-6 font-mono text-xs text-white">
+                    <TableRow
+                      key={entry.id}
+                      className="border-rule hover:bg-sunken transition-colors"
+                    >
+                      <TableCell className="pl-6 font-mono text-xs text-ink">
                         {new Date(entry.createdAt).toLocaleString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -253,13 +281,13 @@ function PublisherEarningsPage() {
                           minute: '2-digit',
                         })}
                       </TableCell>
-                      <TableCell className="font-medium text-white">
+                      <TableCell className="font-medium text-ink">
                         {entry.campaign?.name || '—'}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-gray-300">
+                      <TableCell className="font-mono text-xs text-ink-2">
                         {entry.callerId ? formatPhoneNumber(entry.callerId) : '—'}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-gray-300">
+                      <TableCell className="font-mono text-xs text-ink-2">
                         {entry.connectedDuration ? formatDuration(entry.connectedDuration) : '0:00'}
                       </TableCell>
                       <TableCell>
@@ -267,22 +295,18 @@ function PublisherEarningsPage() {
                           variant="outline"
                           className={
                             entry.billable
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                              : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              ? 'bg-live-tint text-live-ink border-live/40'
+                              : 'bg-dropped-tint text-dropped-ink border-dropped/40'
                           }
                         >
                           {entry.billable ? 'Billable Call' : 'Non-Billable'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        {getPayoutStatusBadge(entry.publisherPayoutStatus)}
-                      </TableCell>
-                      <TableCell className="text-right pr-6 font-mono font-bold text-emerald-400">
-                        {entry.payout !== undefined && entry.payout !== null ? (
-                          `$${Number(entry.payout).toFixed(2)}`
-                        ) : (
-                          '$0.00'
-                        )}
+                      <TableCell>{getPayoutStatusBadge(entry.publisherPayoutStatus)}</TableCell>
+                      <TableCell className="text-right pr-6 font-mono font-bold text-ink">
+                        {entry.payout !== undefined && entry.payout !== null
+                          ? `$${Number(entry.payout).toFixed(2)}`
+                          : '$0.00'}
                       </TableCell>
                     </TableRow>
                   ))
@@ -324,4 +348,3 @@ export default function GuardedPublisherEarningsPage() {
     </RoleGuard>
   );
 }
-

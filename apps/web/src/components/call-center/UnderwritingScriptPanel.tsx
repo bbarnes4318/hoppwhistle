@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
 import { HelpCircle, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck } from 'lucide-react';
-import { useScriptAccess } from '@/hooks/useUserRoles';
+import { useState, useCallback, useMemo } from 'react';
+
 import { Button } from '@/components/ui/button';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 import { cn } from '@/lib/utils';
 
 interface UnderwritingScriptPanelProps {
@@ -45,14 +46,15 @@ Once a representative answers, introduce yourself:
 
 If requested, verify Yazzyl's Agent Credentials:
 • Agent Number: MLSR181715`,
-    stageDirection: 'Introduce yourself professionally and wait for the representative to pull up the system.',
+    stageDirection:
+      'Introduce yourself professionally and wait for the representative to pull up the system.',
     nextStep: 'step2',
   },
   step2: {
     id: 'step2',
     phase: 2,
     title: 'Determine Policy Status',
-    subtitle: 'Ask the representative for the current status of the customer\'s policy',
+    subtitle: "Ask the representative for the current status of the customer's policy",
     script: `Ask the representative:
 "Could you please check the current status of the policy?"
 
@@ -74,7 +76,8 @@ Depending on the status they report, select the corresponding path below:`,
 2. "Can we run the payment for them?"
 3. "Does the customer need to call TransAmerica to pay?"
 4. "Does the payment need to happen same day, or can we set it for a future date again?"`,
-    stageDirection: 'Write down all the answers in the Live Call Notes text area on the left panel.',
+    stageDirection:
+      'Write down all the answers in the Live Call Notes text area on the left panel.',
     nextStep: 'wrapup',
   },
   step2b: {
@@ -84,7 +87,8 @@ Depending on the status they report, select the corresponding path below:`,
     subtitle: 'Check if a new application is required',
     script: `Ask the representative:
 "When a policy shows as 'lapsed notice', does a new application need to be signed and new payment made?"`,
-    stageDirection: 'Confirm if reinstatement requires a new application or if they can simply pay.',
+    stageDirection:
+      'Confirm if reinstatement requires a new application or if they can simply pay.',
     options: [
       { label: 'Yes - New Application Required', nextStep: 'step2b_yes', color: 'red' },
       { label: 'No - New Application NOT Required', nextStep: 'step2b_no', color: 'emerald' },
@@ -99,7 +103,8 @@ Depending on the status they report, select the corresponding path below:`,
 
 Advise the customer:
 "Since the policy has lapsed, TransAmerica requires us to sign a new application to set up a new policy and secure the coverage again."`,
-    stageDirection: 'Make a note of this requirement and prepare to assist the customer with a new application process.',
+    stageDirection:
+      'Make a note of this requirement and prepare to assist the customer with a new application process.',
     nextStep: 'wrapup',
   },
   step2b_no: {
@@ -113,7 +118,8 @@ Advise the customer:
 2. "Can we run the payment for them?"
 3. "Does the customer need to call TransAmerica to pay? If so, what phone number do they call?"
 4. "Does the payment need to happen same day, or can we set it for a future date again?"`,
-    stageDirection: 'Write down the exact phone number and payment rules in the Live Call Notes on the left panel.',
+    stageDirection:
+      'Write down the exact phone number and payment rules in the Live Call Notes on the left panel.',
     nextStep: 'wrapup',
   },
   wrapup: {
@@ -195,30 +201,32 @@ export function UnderwritingScriptPanel({
   }, [currentStep, navigateTo]);
 
   return (
-    <div className="h-full flex flex-col overflow-auto bg-background text-foreground">
+    <div className="h-full flex flex-col overflow-auto bg-surface text-ink">
       {/* Header Banner */}
-      <div className="bg-muted border-b border-[#2e2e3e] p-4 flex-shrink-0">
+      <div className="bg-sunken border-b border-rule p-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            <div className="w-10 h-10 bg-brand-tint rounded-card flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-brand-ink" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">📋 TransAmerica Underwriting Script</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="text-sm font-bold text-brand-ink uppercase tracking-wider">
+                📋 TransAmerica Underwriting Script
+              </h2>
+              <p className="text-xs text-ink-2">
                 Step-by-step carrier policy lookup and underwriting inquiries
               </p>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-1 rounded">
+          <span className="text-xs font-mono font-bold text-brand-ink bg-brand-tint border border-brand px-2 py-1 rounded">
             Phase {currentStep.phase} / 5
           </span>
         </div>
 
         {/* Progress Bar */}
-        <div className="mt-3 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div className="mt-3 h-1.5 bg-sunken rounded-full overflow-hidden">
           <div
-            className="h-full bg-cyan-400 transition-all duration-300"
+            className="h-full bg-brand transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -227,28 +235,30 @@ export function UnderwritingScriptPanel({
       {/* Script Content */}
       <div className="flex-1 p-6 overflow-auto space-y-4">
         {/* Node Card */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+        <div className="bg-surface border border-rule rounded-card p-5">
           <div className="flex items-start gap-3 mb-4">
-            <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-              <HelpCircle className="w-4 h-4 text-cyan-400" />
+            <div className="w-8 h-8 bg-brand-tint rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+              <HelpCircle className="w-4 h-4 text-brand-ink" />
             </div>
             <div>
-              <h3 className="text-white font-bold text-base">{currentStep.title}</h3>
+              <h3 className="text-ink font-bold text-base">{currentStep.title}</h3>
               {currentStep.subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
+                <p className="text-xs text-ink-2 mt-0.5">{currentStep.subtitle}</p>
               )}
             </div>
           </div>
 
           {/* Script instructions */}
-          <div className="bg-muted border border-border rounded-lg p-4 mb-4">
-            <p className="text-white whitespace-pre-line leading-relaxed text-sm">{currentStep.script}</p>
+          <div className="bg-sunken border border-rule rounded-lg p-4 mb-4">
+            <p className="text-ink whitespace-pre-line leading-relaxed text-sm">
+              {currentStep.script}
+            </p>
           </div>
 
           {/* Stage Directions */}
           {currentStep.stageDirection && (
-            <div className="flex items-start gap-2 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 mb-4">
-              <span className="text-xs text-amber-200">
+            <div className="flex items-start gap-2 p-3 bg-ringing-tint rounded-lg border border-ringing mb-4">
+              <span className="text-xs text-ringing-ink">
                 <strong>Instruction:</strong> {currentStep.stageDirection}
               </span>
             </div>
@@ -257,18 +267,20 @@ export function UnderwritingScriptPanel({
           {/* Options */}
           {currentStep.options && currentStep.options.length > 0 && (
             <div className="space-y-3 pt-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-mono">Select Response Path:</p>
+              <p className="text-xs text-ink-2 uppercase tracking-wide font-mono">
+                Select Response Path:
+              </p>
               <div className="grid gap-2">
                 {currentStep.options.map((option, index) => {
                   const colorClasses = {
-                    emerald: 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400',
-                    red: 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400',
-                    blue: 'bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400',
-                    amber: 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-400',
+                    emerald: 'bg-live-tint border-live hover:bg-brand hover:text-ink text-live-ink',
+                    red: 'bg-dropped-tint border-dropped hover:bg-dropped-tint text-dropped-ink',
+                    blue: 'bg-brand-tint border-brand hover:bg-brand-tint text-brand-ink',
+                    amber: 'bg-ringing-tint border-ringing hover:bg-ringing-tint text-ringing-ink',
                   };
                   const buttonClass = option.color
                     ? colorClasses[option.color]
-                    : 'bg-slate-700/50 border-white/10 text-white hover:bg-slate-600/50';
+                    : 'bg-sunken border-rule text-ink hover:bg-sunken';
 
                   return (
                     <Button
@@ -276,7 +288,10 @@ export function UnderwritingScriptPanel({
                       variant="outline"
                       size="default"
                       onClick={() => handleOptionSelect(option.nextStep)}
-                      className={cn('justify-start text-left w-full border font-medium text-sm transition-all', buttonClass)}
+                      className={cn(
+                        'justify-start text-left w-full border font-medium text-sm transition-all',
+                        buttonClass
+                      )}
                     >
                       {option.label}
                     </Button>
@@ -291,7 +306,7 @@ export function UnderwritingScriptPanel({
             <Button
               onClick={handleContinue}
               size="default"
-              className="w-full bg-cyan-500 text-white hover:bg-cyan-600 transition-colors"
+              className="w-full bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface transition-colors"
             >
               Continue
               <ChevronRight className="w-4 h-4 ml-1" />
@@ -300,11 +315,13 @@ export function UnderwritingScriptPanel({
 
           {/* End Node Complete Alert */}
           {currentStep.isEndNode && (
-            <div className="flex items-center gap-3 p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
-              <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+            <div className="flex items-center gap-3 p-4 bg-live-tint rounded-lg border border-live">
+              <CheckCircle2 className="w-6 h-6 text-live-ink flex-shrink-0" />
               <div>
-                <p className="text-emerald-400 font-bold text-sm">Underwriting Inquiry Complete</p>
-                <p className="text-emerald-200/70 text-xs mt-0.5">Please ensure notes are finalized and complete the call.</p>
+                <p className="text-live-ink font-bold text-sm">Underwriting Inquiry Complete</p>
+                <p className="text-live-ink text-xs mt-0.5">
+                  Please ensure notes are finalized and complete the call.
+                </p>
               </div>
             </div>
           )}
@@ -312,19 +329,19 @@ export function UnderwritingScriptPanel({
       </div>
 
       {/* Navigation Footer */}
-      <div className="flex items-center justify-between p-4 border-t border-border bg-card flex-shrink-0">
+      <div className="flex items-center justify-between p-4 border-t border-rule bg-surface flex-shrink-0">
         <Button
           variant="outline"
           size="sm"
           onClick={goBack}
           disabled={history.length === 0}
-          className="border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="border-rule text-ink-2 hover:bg-sunken hover:text-ink"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
 
-        <span className="text-xs text-muted-foreground font-mono">
+        <span className="text-xs text-ink-2 font-mono">
           {history.length} step{history.length !== 1 ? 's' : ''} navigated
         </span>
       </div>

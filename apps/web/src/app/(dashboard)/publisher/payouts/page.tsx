@@ -9,13 +9,14 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
-import { toast } from '@/components/ui/use-toast';
-import { RoleGuard } from '@/components/auth/role-guard';
 
 interface RevenueSummary {
   earnings: string;
@@ -77,16 +78,36 @@ function PublisherPayoutsPage() {
     const s = status.toUpperCase();
     switch (s) {
       case 'COMPLETED':
-        return <Badge variant="success" className="text-xs uppercase font-semibold">Completed</Badge>;
+        return (
+          <Badge variant="success" className="text-xs uppercase font-semibold">
+            Completed
+          </Badge>
+        );
       case 'PROCESSING':
       case 'PENDING':
-        return <Badge variant="warning" className="text-xs uppercase font-semibold">Processing</Badge>;
+        return (
+          <Badge variant="warning" className="text-xs uppercase font-semibold">
+            Processing
+          </Badge>
+        );
       case 'FAILED':
-        return <Badge variant="destructive" className="text-xs uppercase font-semibold">Failed</Badge>;
+        return (
+          <Badge variant="destructive" className="text-xs uppercase font-semibold">
+            Failed
+          </Badge>
+        );
       case 'CANCELLED':
-        return <Badge variant="outline" className="text-xs uppercase font-semibold">Cancelled</Badge>;
+        return (
+          <Badge variant="outline" className="text-xs uppercase font-semibold">
+            Cancelled
+          </Badge>
+        );
       default:
-        return <Badge variant="outline" className="text-xs uppercase font-semibold">{status}</Badge>;
+        return (
+          <Badge variant="outline" className="text-xs uppercase font-semibold">
+            {status}
+          </Badge>
+        );
     }
   };
 
@@ -94,8 +115,8 @@ function PublisherPayoutsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Payout Statements</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Payout Statements</h1>
+          <p className="mt-1 text-sm text-ink-2">
             Monitor your earnings settlements, payout history, and payment processing status.
           </p>
         </div>
@@ -107,57 +128,65 @@ function PublisherPayoutsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="bg-card border-border">
+        <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Earnings</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Total Earnings
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-slate-100">
+            <div className="text-2xl font-bold font-mono text-ink">
               {loading ? '...' : `$${parseFloat(summary?.earnings || '0').toFixed(2)}`}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">All-time generated earnings</p>
+            <p className="text-xs text-ink-3 mt-1">All-time generated earnings</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border">
+        <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settled Payouts</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Settled Payouts
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-emerald-400">
+            <div className="text-2xl font-bold font-mono text-live-ink">
               {loading ? '...' : `$${parseFloat(summary?.paid || '0').toFixed(2)}`}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Total successfully paid out</p>
+            <p className="text-xs text-ink-3 mt-1">Total successfully paid out</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border">
+        <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Payable</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Pending Payable
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-cyan-400">
+            <div className="text-2xl font-bold font-mono text-ringing-ink">
               {loading ? '...' : `$${parseFloat(summary?.pending || '0').toFixed(2)}`}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Accruing for next payout cycle</p>
+            <p className="text-xs text-ink-3 mt-1">Accruing for next payout cycle</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border">
+        <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Held / Disputed</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Held / Disputed
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-red-400">
+            <div className="text-2xl font-bold font-mono text-dropped-ink">
               {loading ? '...' : `$${parseFloat(summary?.held || '0').toFixed(2)}`}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Held due to disputes or reviews</p>
+            <p className="text-xs text-ink-3 mt-1">Held due to disputes or reviews</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Payout History */}
-      <Card className="bg-card border-border">
+      <Card className="bg-surface border-rule">
         <CardHeader>
           <CardTitle>Payout History</CardTitle>
           <CardDescription>Statement of settlements issued to your accounts.</CardDescription>
@@ -166,50 +195,62 @@ function PublisherPayoutsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-muted/15">
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date Issued</th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Method</th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reference / ID</th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date Settled</th>
-                  <th className="p-4 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
-                  <th className="p-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
+                <tr className="border-b border-rule bg-sunken">
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Date Issued
+                  </th>
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Method
+                  </th>
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Reference / ID
+                  </th>
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Date Settled
+                  </th>
+                  <th className="p-4 text-center text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Status
+                  </th>
+                  <th className="p-4 text-right text-xs font-semibold uppercase tracking-wider text-ink-2">
+                    Amount
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-rule">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                    <td colSpan={6} className="py-12 text-center text-sm text-ink-2">
                       <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <Loader2 className="h-4 w-4 animate-spin text-brand-ink" />
                         <span>Loading payouts history...</span>
                       </div>
                     </td>
                   </tr>
                 ) : payouts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                    <td colSpan={6} className="py-12 text-center text-sm text-ink-2">
                       No payout records available yet.
                     </td>
                   </tr>
                 ) : (
                   payouts.map(payout => (
-                    <tr key={payout.id} className="hover:bg-muted/30 transition-colors duration-150">
-                      <td className="p-4 font-mono text-xs text-muted-foreground">
+                    <tr key={payout.id} className="hover:bg-sunken transition-colors duration-150">
+                      <td className="p-4 font-mono text-xs text-ink-2">
                         {new Date(payout.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="p-4 text-xs text-slate-200 uppercase tracking-wider">
+                      <td className="p-4 text-xs text-ink-2 uppercase tracking-wider">
                         {payout.method.replace('_', ' ')}
                       </td>
-                      <td className="p-4 font-mono text-xs text-muted-foreground">
+                      <td className="p-4 font-mono text-xs text-ink-2">
                         {payout.reference || '—'}
                       </td>
-                      <td className="p-4 font-mono text-xs text-muted-foreground">
-                        {payout.processedAt ? new Date(payout.processedAt).toLocaleDateString() : '—'}
+                      <td className="p-4 font-mono text-xs text-ink-2">
+                        {payout.processedAt
+                          ? new Date(payout.processedAt).toLocaleDateString()
+                          : '—'}
                       </td>
-                      <td className="p-4 text-center">
-                        {getPayoutStatusBadge(payout.status)}
-                      </td>
-                      <td className="p-4 text-right font-mono text-xs text-emerald-400 font-semibold">
+                      <td className="p-4 text-center">{getPayoutStatusBadge(payout.status)}</td>
+                      <td className="p-4 text-right font-mono text-xs text-ink font-semibold">
                         ${Number(payout.amount).toFixed(2)}
                       </td>
                     </tr>

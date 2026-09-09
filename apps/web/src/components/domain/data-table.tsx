@@ -220,8 +220,8 @@ export function DataTable<T>({
                     // The focus ring is inset because a table row cannot carry
                     // an outline offset without being clipped by the scroller.
                     interactive &&
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-money',
-                    active ? 'bg-money-tint' : 'hover:bg-sunken'
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-ink',
+                    active ? 'bg-brand-tint' : 'hover:bg-sunken'
                   )}
                 >
                   {columns.map(col => (

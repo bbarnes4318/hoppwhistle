@@ -464,7 +464,7 @@ export function ResearchConfigForm() {
                       </p>
                     </div>
                   </div>
-                  <div className="mt-2 pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                  <div className="mt-2 pt-2 border-t border-rule text-[11px] text-muted-foreground">
                     Est. runtime: {m.expectedRuntimeMin[0]}–{m.expectedRuntimeMin[1]} min
                   </div>
                 </button>
@@ -588,7 +588,7 @@ export function ResearchConfigForm() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
+              <div className="rounded-xl border border-border bg-sunken p-3 text-xs">
                 <div className="mb-1 font-semibold">Your report will include</div>
                 <p className="text-muted-foreground leading-normal">
                   A clear GO/NO ENTER verdict, the best entry opportunity, real economics, key

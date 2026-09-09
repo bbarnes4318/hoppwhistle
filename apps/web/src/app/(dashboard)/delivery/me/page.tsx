@@ -3,12 +3,11 @@
 import { Loader2, User } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
+import { Figure, FigureRow, SectionRule, count, pct, points } from '@/components/delivery/ledger';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
-import { cn } from '@/lib/utils';
 
 /**
  * An agent's own numbers, against the agency average.
@@ -30,10 +29,6 @@ interface SelfView {
   agencyClosingPct: number | null;
   agencyCallsTaken: number;
   agencyApplications: number;
-}
-
-function pct(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)}%`;
 }
 
 function duration(seconds: number): string {
@@ -68,7 +63,7 @@ export default function MyDeliveryPage(): JSX.Element {
   if (loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading your day
         </div>
@@ -80,15 +75,15 @@ export default function MyDeliveryPage(): JSX.Element {
     return (
       <CompactPageShell>
         <CompactPageHeader title="My day" icon={User} />
-        <p className="text-sm text-muted-foreground">{error ?? 'Nothing recorded yet today.'}</p>
+        <p className="t-body text-ink-3">{error ?? 'Nothing recorded yet today.'}</p>
       </CompactPageShell>
     );
   }
 
-  const aboveAverage =
-    view.closingPct !== null &&
-    view.agencyClosingPct !== null &&
-    view.closingPct >= view.agencyClosingPct;
+  const delta =
+    view.closingPct !== null && view.agencyClosingPct !== null
+      ? view.closingPct - view.agencyClosingPct
+      : null;
 
   return (
     <CompactPageShell fullHeight={false}>
@@ -98,77 +93,51 @@ export default function MyDeliveryPage(): JSX.Element {
         icon={User}
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Calls taken
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{view.callsTaken}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              of {view.agencyCallsTaken} across the agency
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Applications
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{view.applications}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              of {view.agencyApplications} across the agency
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              My closing percentage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                'text-3xl font-bold tabular-nums',
-                view.closingPct === null
-                  ? ''
-                  : aboveAverage
-                    ? 'text-emerald-500'
-                    : 'text-amber-500'
-              )}
-            >
-              {pct(view.closingPct)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              agency average {pct(view.agencyClosingPct)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Talk time
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{duration(view.talkTimeSeconds)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              connected, today
-              {view.availableSeconds !== null && (
-                <> · {available(view.availableSeconds)} on the queue</>
-              )}
-            </p>
-          </CardContent>
-        </Card>
+      {/*
+        The one number: the agent's own closing percentage, against the
+        agency's. Below the line is coloured, above is not — below is the
+        thing to act on.
+      */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:[&>*+*]:border-l md:[&>*+*]:border-rule md:[&>*+*]:pl-6">
+        <Figure
+          size="hero"
+          label="My closing percentage"
+          value={pct(view.closingPct)}
+          tone={delta !== null && delta < 0 ? 'dropped' : 'ink'}
+          sub={
+            delta === null
+              ? 'applications as a share of the calls you answered'
+              : `${points(delta)} points against the agency's ${pct(view.agencyClosingPct)} today`
+          }
+        />
+        <Figure
+          label="Agency today"
+          value={pct(view.agencyClosingPct)}
+          sub={`${count(view.agencyApplications)} applications from ${count(
+            view.agencyCallsTaken
+          )} answered calls, across everyone`}
+        />
       </div>
+
+      <SectionRule>Today</SectionRule>
+      <FigureRow>
+        <Figure
+          label="Calls taken"
+          value={count(view.callsTaken)}
+          sub={`of ${count(view.agencyCallsTaken)} across the agency`}
+        />
+        <Figure
+          label="Applications"
+          value={count(view.applications)}
+          sub={`of ${count(view.agencyApplications)} across the agency`}
+        />
+        <Figure label="Talk time" value={duration(view.talkTimeSeconds)} sub="connected, today" />
+        <Figure
+          label="On the queue"
+          value={available(view.availableSeconds)}
+          sub="waiting for a call, today"
+        />
+      </FigureRow>
     </CompactPageShell>
   );
 }

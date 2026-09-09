@@ -4,6 +4,7 @@ import { FastifyInstance } from 'fastify';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 import { quotaService } from '../services/quota-service.js';
@@ -31,8 +32,125 @@ import { quotaService } from '../services/quota-service.js';
  * The caller's authority comes from the capability; the path says which agency
  * they are pointing it at. Those are different things, and conflating them is
  * what the old gate did.
+ *
+ * ── The agency's own reading, which had nowhere to come from ─────────────────
+ *
+ * An agency does not SET its quota, and it does very much need to READ it: the
+ * question "how close am I to my ceiling, and how much have I spent" is asked
+ * by the agency running into the ceiling, not by the operator who set it.
+ * Before `GET /api/v1/quota/summary` existed there was no answer to it that did
+ * not go through a platform-only route with a tenant in the path, so the
+ * settings page asked one anyway -- about the all-zeros tenant, because it had
+ * no id and made one up. Three 404s per load, and the page never showed a
+ * figure.
+ *
+ * So the read is its own surface, and it is scoped the way everything
+ * agency-scoped in this API is scoped: `resolveTenant`, from the authenticated
+ * principal, with no id anywhere in the path, the query or a header. It is
+ * READ-ONLY. Nothing below it writes, and the write routes stay exactly as
+ * platform-gated as they were -- an agency still cannot raise its own ceiling,
+ * which is the whole reason quotas mean anything.
+ *
+ * Two things it deliberately does not answer with:
+ *
+ *   - The budget override token. It exists to BYPASS the hard stop, so handing
+ *     it to the agency the stop is protecting the platform from would make the
+ *     stop decorative. It is minted and read on the platform routes only.
+ *   - The Slack webhook URL, which is a posting credential. The agency is told
+ *     whether one is configured, which is what the screen needs to say.
+ *
+ * A missing quota or budget row is 200 with `null`, not 404. No row means no
+ * ceiling has been set for this agency, which is a legitimate state and the
+ * common one -- answering "not found" for it is how the placeholder page came
+ * to look identical to a page asking about a tenant that does not exist.
+ *
+ * `platform-admin.test.ts` pins that an agency OWNER is refused 403 on
+ * `GET /admin/api/v1/tenants/<their own id>/quota`, "because quotas are not
+ * theirs to see". That stays true of the platform surface and is what the
+ * assertion is about: an agency may not reach the routes that administer
+ * ceilings, its own included, and may not mint the token that bypasses them.
+ * Being told the ceiling it is already being enforced against is a different
+ * question, and refusing to answer it did not keep anything secret -- the
+ * agency learns the number the moment a call is refused for concurrency or a
+ * hard stop lands. It only meant the agency had to find out by being cut off.
  */
 export async function registerQuotaRoutes(fastify: FastifyInstance) {
+  // ==========================================================================
+  // Agency-scoped, read-only
+  // ==========================================================================
+
+  /**
+   * GET /api/v1/quota/summary
+   *
+   * This agency's ceilings, its spend, and how close it is to both.
+   *
+   * The tenant comes from `resolveTenant` and from nowhere else: there is no id
+   * to pass, so there is nothing for a caller to change to ask about somebody
+   * else. A platform operator who has entered no agency gets the same
+   * `409 NO_ACTING_TENANT` every agency-scoped route answers them with, and the
+   * settings page does not ask in that state at all.
+   *
+   * Everyone authenticated inside the agency may read it. It is the same
+   * information the agency runs into anyway -- a call refused for concurrency,
+   * a hard stop at the monthly cap -- and being told the number before hitting
+   * it is the point of the screen.
+   */
+  fastify.get('/api/v1/quota/summary', { preHandler: [authenticate] }, async (request, reply) => {
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
+
+    const reading = await readQuotaAndUsage(tenantId);
+
+    /*
+     * A tenant the principal is authenticated against, which does not exist.
+     * Not reachable through the front door; answered rather than thrown so the
+     * page shows "nothing configured" instead of an error boundary.
+     */
+    if (!reading) {
+      return reply.send({ data: { quota: null, budget: null, status: null } });
+    }
+
+    const { quota, budget, status } = reading;
+
+    return reply.send({
+      data: {
+        quota: quota
+          ? {
+              maxConcurrentCalls: quota.maxConcurrentCalls,
+              maxMinutesPerDay: quota.maxMinutesPerDay,
+              maxRecordingRetentionDays: quota.maxRecordingRetentionDays,
+              maxPhoneNumbers: quota.maxPhoneNumbers,
+              maxStorageGB: quota.maxStorageGB === null ? null : Number(quota.maxStorageGB),
+              enabled: quota.enabled,
+            }
+          : null,
+        /*
+         * Named field by field rather than spread, and that is the security
+         * property rather than a style: `overrideToken` and `alertSlackWebhook`
+         * are both on this row, and spreading a Prisma row is how a credential
+         * reaches a browser. Adding a field here is a decision; spreading one
+         * in is an accident.
+         */
+        budget: budget
+          ? {
+              monthlyBudget: budget.monthlyBudget === null ? null : Number(budget.monthlyBudget),
+              dailyBudget: budget.dailyBudget === null ? null : Number(budget.dailyBudget),
+              alertThreshold: Number(budget.alertThreshold),
+              alertEmails: budget.alertEmails,
+              alertSlackWebhookConfigured: Boolean(budget.alertSlackWebhook),
+              hardStopEnabled: budget.hardStopEnabled,
+              enabled: budget.enabled,
+            }
+          : null,
+        status,
+      },
+    });
+  });
+
+  // ==========================================================================
+  // Platform-scoped: administering a named agency's quota
+  // ==========================================================================
+
   // Get tenant quota
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota',
@@ -97,14 +215,27 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         return quota;
       }
 
+      /*
+       * `keep()` and not `??`, and the difference is the whole feature.
+       *
+       * Every one of these ceilings is nullable, and null MEANS something: no
+       * limit. With `??` a null coalesced to the stored value, so clearing a
+       * ceiling was silently a no-op -- the form's "Unlimited" placeholder was
+       * a lie, and an operator who emptied a field and saved was told it had
+       * saved while the old ceiling stayed enforced. An absent field still
+       * leaves the stored value alone, which is what a partial PATCH means.
+       */
       const after = await prisma.tenantQuota.update({
         where: { tenantId },
         data: {
-          maxConcurrentCalls: body.maxConcurrentCalls ?? before.maxConcurrentCalls,
-          maxMinutesPerDay: body.maxMinutesPerDay ?? before.maxMinutesPerDay,
-          maxRecordingRetentionDays: body.maxRecordingRetentionDays ?? before.maxRecordingRetentionDays,
-          maxPhoneNumbers: body.maxPhoneNumbers ?? before.maxPhoneNumbers,
-          maxStorageGB: body.maxStorageGB ?? before.maxStorageGB,
+          maxConcurrentCalls: keep(body.maxConcurrentCalls, before.maxConcurrentCalls),
+          maxMinutesPerDay: keep(body.maxMinutesPerDay, before.maxMinutesPerDay),
+          maxRecordingRetentionDays: keep(
+            body.maxRecordingRetentionDays,
+            before.maxRecordingRetentionDays
+          ),
+          maxPhoneNumbers: keep(body.maxPhoneNumbers, before.maxPhoneNumbers),
+          maxStorageGB: keep(body.maxStorageGB, before.maxStorageGB),
           enabled: body.enabled ?? before.enabled,
         },
       });
@@ -199,10 +330,18 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       const after = await prisma.tenantBudget.update({
         where: { tenantId },
         data: {
-          monthlyBudget: body.monthlyBudget ?? before.monthlyBudget,
-          dailyBudget: body.dailyBudget ?? before.dailyBudget,
+          // Nullable and meaningful when null, as above: an emptied cap is an
+          // uncapped agency, not an unchanged one.
+          monthlyBudget: keep(body.monthlyBudget, before.monthlyBudget),
+          dailyBudget: keep(body.dailyBudget, before.dailyBudget),
           alertThreshold: body.alertThreshold ?? before.alertThreshold,
           alertEmails: body.alertEmails ?? before.alertEmails,
+          /*
+           * The one field a caller cannot clear by sending null, deliberately:
+           * the settings page never displays the webhook back (it is a posting
+           * credential), so a form that submits its own blank field must not
+           * take that as "delete it".
+           */
           alertSlackWebhook: body.alertSlackWebhook ?? before.alertSlackWebhook,
           hardStopEnabled: body.hardStopEnabled ?? before.hardStopEnabled,
           enabled: body.enabled ?? before.enabled,
@@ -322,103 +461,16 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
     '/admin/api/v1/tenants/:tenantId/quota/status',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
-      const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
 
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        include: {
-          quota: true,
-          budget: true,
-        },
-      });
+      const reading = await readQuotaAndUsage(tenantId);
 
-      if (!tenant) {
+      if (!reading) {
         reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Tenant not found' } };
       }
 
-      // Get current concurrent calls
-      const concurrentCalls = await prisma.call.count({
-        where: {
-          tenantId,
-          status: {
-            in: ['INITIATED', 'RINGING', 'ANSWERED'],
-          },
-        },
-      });
-
-      // Get today's minutes
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const todayCalls = await prisma.call.findMany({
-        where: {
-          tenantId,
-          createdAt: {
-            gte: todayStart,
-            lte: todayEnd,
-          },
-          duration: { not: null },
-        },
-        select: { duration: true },
-      });
-
-      const todayMinutes = Math.ceil(
-        todayCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / 60
-      );
-
-      // Get current phone numbers
-      const phoneNumbers = await prisma.phoneNumber.count({
-        where: {
-          tenantId,
-          status: 'ACTIVE',
-        },
-      });
-
-      return {
-        concurrentCalls: {
-          current: concurrentCalls,
-          limit: tenant.quota?.maxConcurrentCalls ?? null,
-          remaining: tenant.quota?.maxConcurrentCalls
-            ? Math.max(0, tenant.quota.maxConcurrentCalls - concurrentCalls)
-            : null,
-        },
-        dailyMinutes: {
-          current: todayMinutes,
-          limit: tenant.quota?.maxMinutesPerDay ?? null,
-          remaining: tenant.quota?.maxMinutesPerDay
-            ? Math.max(0, tenant.quota.maxMinutesPerDay - todayMinutes)
-            : null,
-        },
-        phoneNumbers: {
-          current: phoneNumbers,
-          limit: tenant.quota?.maxPhoneNumbers ?? null,
-          remaining: tenant.quota?.maxPhoneNumbers
-            ? Math.max(0, tenant.quota.maxPhoneNumbers - phoneNumbers)
-            : null,
-        },
-        budget: tenant.budget
-          ? {
-              daily: {
-                current: Number(tenant.budget.currentDaySpend),
-                limit: tenant.budget.dailyBudget ? Number(tenant.budget.dailyBudget) : null,
-                percentage: tenant.budget.dailyBudget
-                  ? (Number(tenant.budget.currentDaySpend) / Number(tenant.budget.dailyBudget)) * 100
-                  : null,
-              },
-              monthly: {
-                current: Number(tenant.budget.currentMonthSpend),
-                limit: tenant.budget.monthlyBudget ? Number(tenant.budget.monthlyBudget) : null,
-                percentage: tenant.budget.monthlyBudget
-                  ? (Number(tenant.budget.currentMonthSpend) / Number(tenant.budget.monthlyBudget)) * 100
-                  : null,
-              },
-            }
-          : null,
-      };
+      return reading.status;
     }
   );
 
@@ -531,3 +583,124 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   );
 }
 
+/**
+ * The value to write for a nullable field in a PATCH body.
+ *
+ * Absent means "not part of this update", so the stored value stands. Present
+ * and null means "no limit", and is written. `??` cannot tell the two apart,
+ * which is why clearing a ceiling used to do nothing at all.
+ */
+function keep<T>(incoming: T | null | undefined, stored: T | null): T | null {
+  return incoming === undefined ? stored : incoming;
+}
+
+/**
+ * One agency's ceilings and its usage against them.
+ *
+ * Both surfaces in this file read through here, so the figure an agency is
+ * shown and the figure an operator is shown are computed once. `null` when
+ * there is no such tenant.
+ *
+ * It takes a tenant id and asks no questions about where that id came from:
+ * the platform route passes the object named in its path, the agency route
+ * passes what `resolveTenant` derived from the session. Deciding which is
+ * legitimate is the caller's job and neither delegates it here.
+ */
+async function readQuotaAndUsage(tenantId: string) {
+  const prisma = getPrismaClient();
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    include: {
+      quota: true,
+      budget: true,
+    },
+  });
+
+  if (!tenant) return null;
+
+  // Get current concurrent calls
+  const concurrentCalls = await prisma.call.count({
+    where: {
+      tenantId,
+      status: {
+        in: ['INITIATED', 'RINGING', 'ANSWERED'],
+      },
+    },
+  });
+
+  // Get today's minutes
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const todayCalls = await prisma.call.findMany({
+    where: {
+      tenantId,
+      createdAt: {
+        gte: todayStart,
+        lte: todayEnd,
+      },
+      duration: { not: null },
+    },
+    select: { duration: true },
+  });
+
+  const todayMinutes = Math.ceil(
+    todayCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / 60
+  );
+
+  // Get current phone numbers
+  const phoneNumbers = await prisma.phoneNumber.count({
+    where: {
+      tenantId,
+      status: 'ACTIVE',
+    },
+  });
+
+  const status = {
+    concurrentCalls: {
+      current: concurrentCalls,
+      limit: tenant.quota?.maxConcurrentCalls ?? null,
+      remaining: tenant.quota?.maxConcurrentCalls
+        ? Math.max(0, tenant.quota.maxConcurrentCalls - concurrentCalls)
+        : null,
+    },
+    dailyMinutes: {
+      current: todayMinutes,
+      limit: tenant.quota?.maxMinutesPerDay ?? null,
+      remaining: tenant.quota?.maxMinutesPerDay
+        ? Math.max(0, tenant.quota.maxMinutesPerDay - todayMinutes)
+        : null,
+    },
+    phoneNumbers: {
+      current: phoneNumbers,
+      limit: tenant.quota?.maxPhoneNumbers ?? null,
+      remaining: tenant.quota?.maxPhoneNumbers
+        ? Math.max(0, tenant.quota.maxPhoneNumbers - phoneNumbers)
+        : null,
+    },
+    budget: tenant.budget
+      ? {
+          daily: {
+            current: Number(tenant.budget.currentDaySpend),
+            limit: tenant.budget.dailyBudget ? Number(tenant.budget.dailyBudget) : null,
+            percentage: tenant.budget.dailyBudget
+              ? (Number(tenant.budget.currentDaySpend) / Number(tenant.budget.dailyBudget)) * 100
+              : null,
+          },
+          monthly: {
+            current: Number(tenant.budget.currentMonthSpend),
+            limit: tenant.budget.monthlyBudget ? Number(tenant.budget.monthlyBudget) : null,
+            percentage: tenant.budget.monthlyBudget
+              ? (Number(tenant.budget.currentMonthSpend) / Number(tenant.budget.monthlyBudget)) *
+                100
+              : null,
+          },
+        }
+      : null,
+  };
+
+  return { quota: tenant.quota, budget: tenant.budget, status };
+}

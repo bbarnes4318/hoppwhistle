@@ -134,7 +134,7 @@ export function CostSummary({
                 <table className="w-full text-xs">
                   <tbody>
                     {audit.stages.map(l => (
-                      <tr key={l.stage} className="border-b border-border/60 last:border-0">
+                      <tr key={l.stage} className="border-b border-rule last:border-0">
                         <td className="px-3 py-1.5 font-medium">{l.stage.replace(/_/g, ' ')}</td>
                         <td className="px-3 py-1.5">
                           <Badge variant="outline" className="text-[10px]">

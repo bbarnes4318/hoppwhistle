@@ -6,30 +6,33 @@ import { usePhone } from '@/components/phone';
 import type { InsuranceLeadSummary } from '@/lib/api/leads';
 
 function LeadStageBadge({ stage }: { stage: string | null }) {
-  if (!stage) return <span className="text-slate-600">—</span>;
+  if (!stage) return <span className="text-ink-3">—</span>;
   const configs: Record<string, { className: string; label: string }> = {
-    NEW: { className: 'bg-slate-500/10 text-slate-400 border-slate-500/20', label: 'New' },
-    CONTACTED: { className: 'bg-blue-500/10 text-blue-400 border-blue-500/20', label: 'Contacted' },
+    NEW: { className: 'bg-ringing-tint text-ringing-ink border-transparent', label: 'New' },
+    CONTACTED: {
+      className: 'bg-ringing-tint text-ringing-ink border-transparent',
+      label: 'Contacted',
+    },
     PROPOSAL: {
-      className: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+      className: 'bg-ringing-tint text-ringing-ink border-transparent',
       label: 'Proposal',
     },
     UNDERWRITING: {
-      className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      className: 'bg-ringing-tint text-ringing-ink border-transparent',
       label: 'Underwriting',
     },
-    HOLD: { className: 'bg-orange-500/10 text-orange-400 border-orange-500/20', label: 'Hold' },
+    HOLD: { className: 'bg-ringing-tint text-ringing-ink border-transparent', label: 'Hold' },
     CLOSED_WON: {
-      className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      className: 'bg-live-tint text-live-ink border-transparent',
       label: 'Closed Won',
     },
     CLOSED_LOST: {
-      className: 'bg-red-500/10 text-red-400 border-red-500/20',
+      className: 'bg-dropped-tint text-dropped-ink border-transparent',
       label: 'Closed Lost',
     },
   };
   const config = configs[stage] || {
-    className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    className: 'bg-sunken text-ink-2 border-transparent',
     label: stage,
   };
   return (
@@ -42,7 +45,7 @@ function LeadStageBadge({ stage }: { stage: string | null }) {
 }
 
 function FollowUpBadge({ dateStr, stage }: { dateStr: string | null; stage: string | null }) {
-  if (!dateStr) return <span className="text-slate-600">—</span>;
+  if (!dateStr) return <span className="text-ink-3">—</span>;
 
   const d = new Date(dateStr);
   const now = new Date();
@@ -64,8 +67,8 @@ function FollowUpBadge({ dateStr, stage }: { dateStr: string | null; stage: stri
 
   if (isOverdue) {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+      <span className="inline-flex items-center gap-1 rounded bg-dropped-tint px-1.5 py-0.5 text-[10px] font-medium text-dropped-ink">
+        <span className="h-1.5 w-1.5 rounded-full bg-dropped animate-pulse" />
         Overdue ({dateFormatted})
       </span>
     );
@@ -73,7 +76,7 @@ function FollowUpBadge({ dateStr, stage }: { dateStr: string | null; stage: stri
 
   if (isToday) {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+      <span className="inline-flex items-center gap-1 rounded bg-ringing-tint px-1.5 py-0.5 text-[10px] font-medium text-ringing-ink">
         Today {timeFormatted}
       </span>
     );
@@ -81,14 +84,14 @@ function FollowUpBadge({ dateStr, stage }: { dateStr: string | null; stage: stri
 
   if (isTomorrow) {
     return (
-      <span className="inline-flex items-center rounded bg-slate-500/10 border border-slate-500/20 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+      <span className="inline-flex items-center rounded bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-ink-2">
         Tomorrow {timeFormatted}
       </span>
     );
   }
 
   return (
-    <span className="text-[11px] text-slate-300">
+    <span className="text-[11px] text-ink-2">
       {dateFormatted} {timeFormatted}
     </span>
   );
@@ -106,30 +109,30 @@ function StatusBadge({ status }: { status: string }) {
   const configs: Record<string, { className: string; label: string }> = {
     // Validation
     VALID: {
-      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+      className: 'bg-live-tint text-live-ink border-transparent',
       label: 'Valid',
     },
-    INVALID: { className: 'bg-red-500/15 text-red-400 border-red-500/30', label: 'Invalid' },
+    INVALID: { className: 'bg-blocked-tint text-blocked-ink border-transparent', label: 'Invalid' },
     // Post status
-    PENDING: { className: 'bg-amber-500/15 text-amber-400 border-amber-500/30', label: 'Pending' },
-    HOLD: { className: 'bg-amber-500/15 text-amber-500 border-amber-500/30', label: 'Hold' },
-    SKIPPED: { className: 'bg-slate-500/15 text-slate-400 border-slate-500/30', label: 'Skipped' },
+    PENDING: { className: 'bg-ringing-tint text-ringing-ink border-transparent', label: 'Pending' },
+    HOLD: { className: 'bg-ringing-tint text-ringing-ink border-transparent', label: 'Hold' },
+    SKIPPED: { className: 'bg-blocked-tint text-blocked-ink border-transparent', label: 'Skipped' },
     MATCHED: {
-      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+      className: 'bg-live-tint text-live-ink border-transparent',
       label: 'Matched',
     },
     UNMATCHED: {
-      className: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+      className: 'bg-dropped-tint text-dropped-ink border-transparent',
       label: 'Unmatched',
     },
-    ERROR: { className: 'bg-red-500/15 text-red-400 border-red-500/30', label: 'Error' },
+    ERROR: { className: 'bg-dropped-tint text-dropped-ink border-transparent', label: 'Error' },
     // Mode
-    TEST: { className: 'bg-blue-500/15 text-blue-400 border-blue-500/30', label: 'Test' },
-    LIVE: { className: 'bg-purple-500/15 text-purple-400 border-purple-500/30', label: 'Live' },
+    TEST: { className: 'bg-money-tint text-money-ink border-transparent', label: 'Test' },
+    LIVE: { className: 'bg-live-tint text-live-ink border-transparent', label: 'Live' },
   };
 
   const config = configs[status] || {
-    className: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
+    className: 'bg-sunken text-ink-2 border-transparent',
     label: status,
   };
 
@@ -145,20 +148,20 @@ function StatusBadge({ status }: { status: string }) {
 function VerticalBadge({ vertical }: { vertical: 'ACA' | 'FE' | 'B2B' }) {
   if (vertical === 'ACA') {
     return (
-      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-cyan-500/15 text-cyan-400">
+      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
         ACA
       </span>
     );
   }
   if (vertical === 'FE') {
     return (
-      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-violet-500/15 text-violet-400">
+      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
         FE Customers
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-amber-500/15 text-amber-400">
+    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
       B2B
     </span>
   );
@@ -218,9 +221,9 @@ export function LeadsTable({
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden">
-        <div className="p-8 text-center text-sm text-slate-500">
-          <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
+      <div className="rounded-card border border-rule bg-surface overflow-hidden">
+        <div className="p-8 text-center text-sm text-ink-3">
+          <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-brand-ink border-t-transparent" />
           <span className="ml-2">Loading leads…</span>
         </div>
       </div>
@@ -229,10 +232,10 @@ export function LeadsTable({
 
   if (!leads.length) {
     return (
-      <div className="rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden">
+      <div className="rounded-card border border-rule bg-surface overflow-hidden">
         <div className="p-12 text-center">
-          <div className="text-slate-500 text-sm">No leads found</div>
-          <div className="text-slate-600 text-xs mt-1">
+          <div className="text-ink-3 text-sm">No leads found</div>
+          <div className="text-ink-3 text-xs mt-1">
             Leads will appear here when they are received via the ingestion API.
           </div>
         </div>
@@ -241,11 +244,11 @@ export function LeadsTable({
   }
 
   return (
-    <div className="rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden">
+    <div className="rounded-card border border-rule bg-surface overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/5 bg-slate-900/80">
+            <tr className="border-b border-rule bg-sunken">
               {onSelectLeadsChange && (
                 <th className="w-10 px-4 py-3 text-left">
                   <input
@@ -255,38 +258,38 @@ export function LeadsTable({
                       if (el) el.indeterminate = someSelected;
                     }}
                     onChange={e => handleSelectAll(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-900 h-4 w-4 cursor-pointer"
+                    className="rounded border-rule bg-surface text-brand-ink focus:ring-brand-tint focus:ring-offset-surface h-4 w-4 cursor-pointer"
                     aria-label="Select all leads"
                   />
                 </th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Received
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Type
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Name
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Stage
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Follow Up
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Phone
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 State
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 ZIP
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-rule">
             {leads.map(lead => {
               const sub = lead.latestSubmission;
               const isSelected = selectedLeadIds.includes(lead.id);
@@ -294,8 +297,8 @@ export function LeadsTable({
                 <tr
                   key={lead.id}
                   onClick={() => onSelectLead(lead.id)}
-                  className={`cursor-pointer transition-colors hover:bg-white/[0.02] ${
-                    isSelected ? 'bg-white/[0.01]' : ''
+                  className={`cursor-pointer transition-colors hover:bg-sunken ${
+                    isSelected ? 'bg-brand-tint' : ''
                   }`}
                 >
                   {onSelectLeadsChange && (
@@ -304,16 +307,16 @@ export function LeadsTable({
                         type="checkbox"
                         checked={isSelected}
                         onChange={e => handleSelectOne(lead.id, e.target.checked)}
-                        className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-900 h-4 w-4 cursor-pointer"
+                        className="rounded border-rule bg-surface text-brand-ink focus:ring-brand-tint focus:ring-offset-surface h-4 w-4 cursor-pointer"
                         aria-label={`Select lead ${lead.fullName || ''}`}
                       />
                     </td>
                   )}
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-xs text-slate-300">
+                    <div className="text-xs text-ink-2">
                       {sub ? formatDate(sub.receivedAt) : formatDate(lead.createdAt)}
                     </div>
-                    <div className="text-[10px] text-slate-500">
+                    <div className="text-[10px] text-ink-3">
                       {sub ? formatTime(sub.receivedAt) : ''}
                     </div>
                   </td>
@@ -321,7 +324,7 @@ export function LeadsTable({
                     <VerticalBadge vertical={lead.vertical} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-sm text-slate-200 font-medium">
+                    <div className="text-sm text-ink font-medium">
                       {lead.fullName ||
                         `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
                         '—'}
@@ -333,7 +336,7 @@ export function LeadsTable({
                   <td className="px-4 py-3 whitespace-nowrap">
                     <FollowUpBadge dateStr={lead.nextFollowUpAt} stage={lead.leadStage} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-300 font-mono">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2 font-mono">
                     <div className="flex items-center gap-2">
                       <span>{formatPhone(lead.phone)}</span>
                       {lead.phone && (
@@ -342,7 +345,7 @@ export function LeadsTable({
                             e.stopPropagation();
                             void makeCall(lead.phone);
                           }}
-                          className="rounded bg-emerald-500/10 border border-emerald-500/20 p-1 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                          className="rounded bg-brand-tint p-1 text-brand-ink hover:opacity-80 transition-all"
                           title="Click to dial"
                           aria-label={`Dial ${lead.phone}`}
                         >
@@ -351,10 +354,10 @@ export function LeadsTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2">
                     {lead.state || '—'}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400 font-mono">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2 font-mono">
                     {lead.zipCode || '—'}
                   </td>
                 </tr>

@@ -1,28 +1,35 @@
 'use client';
 
-import { 
-  ArrowLeft, 
-  Check, 
-  Edit, 
-  Eye, 
-  Loader2, 
-  Play, 
-  Plus, 
-  RefreshCw, 
-  Save, 
-  Trash2, 
+import {
+  ArrowLeft,
+  Check,
+  Edit,
+  Eye,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
   X,
   Phone,
   UserPlus,
   ShieldAlert,
-  ArrowUpRight
+  ArrowUpRight,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -40,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -49,7 +57,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -224,13 +231,17 @@ export default function CampaignDetailPage() {
       }
 
       // Fetch Publisher assignments
-      const pubRes = await apiClient.get<{ data: CampaignPublisher[] }>(`/api/v1/campaigns/${id}/publishers`);
+      const pubRes = await apiClient.get<{ data: CampaignPublisher[] }>(
+        `/api/v1/campaigns/${id}/publishers`
+      );
       if (pubRes.data?.data) {
         setCampaignPublishers(pubRes.data.data);
       }
 
       // Fetch Buyer assignments
-      const buyerRes = await apiClient.get<{ data: CampaignBuyer[] }>(`/api/v1/campaigns/${id}/buyers`);
+      const buyerRes = await apiClient.get<{ data: CampaignBuyer[] }>(
+        `/api/v1/campaigns/${id}/buyers`
+      );
       if (buyerRes.data?.data) {
         setCampaignBuyers(buyerRes.data.data);
       }
@@ -241,7 +252,6 @@ export default function CampaignDetailPage() {
         const filtered = didRes.data.routes.filter((route: any) => route.campaignId === id);
         setDidRoutes(filtered);
       }
-
     } catch (err) {
       console.error('Failed to load campaign data:', err);
       toast({
@@ -306,7 +316,7 @@ export default function CampaignDetailPage() {
     setBuyerForm(prev => ({
       ...prev,
       buyerEndpointId: endpointId,
-      destinationNumber: ep ? ep.destination : prev.destinationNumber
+      destinationNumber: ep ? ep.destination : prev.destinationNumber,
     }));
   };
 
@@ -361,7 +371,9 @@ export default function CampaignDetailPage() {
     try {
       const res = await apiClient.post(`/api/v1/campaigns/${id}/publishers`, {
         publisherId: pubForm.publisherId,
-        payoutPerBillableCall: pubForm.payoutPerBillableCall ? Number(pubForm.payoutPerBillableCall) : null,
+        payoutPerBillableCall: pubForm.payoutPerBillableCall
+          ? Number(pubForm.payoutPerBillableCall)
+          : null,
         status: pubForm.status,
       });
 
@@ -420,7 +432,7 @@ export default function CampaignDetailPage() {
 
     // Basic E.164 regex check for PSTN
     const dest = buyerForm.destinationNumber.trim();
-    
+
     // Determine if this is a PSTN destination (requires E.164 formatting)
     let isPstn = true;
     if (buyerForm.buyerEndpointId) {
@@ -430,14 +442,18 @@ export default function CampaignDetailPage() {
       }
     }
     // Allow short internal extensions (e.g. 4 digits) or UUIDs without requiring +
-    if (/^\d{4}$/.test(dest) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(dest)) {
+    if (
+      /^\d{4}$/.test(dest) ||
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(dest)
+    ) {
       isPstn = false;
     }
 
     if (isPstn && !dest.startsWith('+')) {
       toast({
         title: 'Validation Error',
-        description: 'Destination number must be in E.164 format (starting with +). e.g., +18652637582',
+        description:
+          'Destination number must be in E.164 format (starting with +). e.g., +18652637582',
         variant: 'destructive',
       });
       return;
@@ -450,7 +466,9 @@ export default function CampaignDetailPage() {
         res = await apiClient.patch(`/api/v1/campaigns/${id}/buyers/${editingBuyerId}`, {
           buyerEndpointId: buyerForm.buyerEndpointId || null,
           destinationNumber: dest,
-          pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
+          pricePerBillableCall: buyerForm.pricePerBillableCall
+            ? Number(buyerForm.pricePerBillableCall)
+            : null,
           priority: Number(buyerForm.priority) || 0,
           weight: Number(buyerForm.weight) || 100,
           status: buyerForm.status,
@@ -460,7 +478,9 @@ export default function CampaignDetailPage() {
           buyerId: buyerForm.buyerId,
           buyerEndpointId: buyerForm.buyerEndpointId || null,
           destinationNumber: dest,
-          pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
+          pricePerBillableCall: buyerForm.pricePerBillableCall
+            ? Number(buyerForm.pricePerBillableCall)
+            : null,
           priority: Number(buyerForm.priority) || 0,
           weight: Number(buyerForm.weight) || 100,
           status: buyerForm.status,
@@ -476,8 +496,8 @@ export default function CampaignDetailPage() {
       } else {
         toast({
           title: editingBuyerId ? 'Buyer Updated' : 'Buyer Assigned',
-          description: editingBuyerId 
-            ? 'Buyer routing configuration has been updated.' 
+          description: editingBuyerId
+            ? 'Buyer routing configuration has been updated.'
             : 'Buyer destination has been assigned to this campaign.',
           variant: 'success',
         });
@@ -540,8 +560,8 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="flex flex-col items-center justify-center h-[300px] border border-dashed rounded-lg p-6 bg-muted/20">
-        <ShieldAlert className="h-10 w-10 text-rose-500 mb-4" />
+      <div className="flex flex-col items-center justify-center h-[300px] border border-dashed rounded-lg p-6 bg-sunken">
+        <ShieldAlert className="h-10 w-10 text-dropped-ink mb-4" />
         <h3 className="text-lg font-medium">Campaign Not Found</h3>
         <p className="text-sm text-muted-foreground mt-1 mb-4">
           This campaign does not exist or you do not have permission to view it.
@@ -558,7 +578,7 @@ export default function CampaignDetailPage() {
       {/* Breadcrumb Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <button 
+          <button
             onClick={() => router.push('/campaigns')}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1 group"
           >
@@ -567,11 +587,16 @@ export default function CampaignDetailPage() {
           </button>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{campaign.name}</h1>
-            <Badge className={cn(
-              campaign.status === 'ACTIVE' && 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20',
-              campaign.status === 'PAUSED' && 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/20',
-              campaign.status === 'ARCHIVED' && 'bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 border-slate-500/20',
-            )}>
+            <Badge
+              className={cn(
+                campaign.status === 'ACTIVE' &&
+                  'bg-live-tint text-live-ink hover:bg-live-tint border-transparent',
+                campaign.status === 'PAUSED' &&
+                  'bg-ringing-tint text-ringing-ink hover:bg-ringing-tint border-transparent',
+                campaign.status === 'ARCHIVED' &&
+                  'bg-sunken text-ink-2 hover:bg-sunken border-transparent'
+              )}
+            >
               {campaign.status}
             </Badge>
           </div>
@@ -581,18 +606,13 @@ export default function CampaignDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={fetchCampaignData} 
-            disabled={loading}
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+          <Button variant="outline" size="sm" onClick={fetchCampaignData} disabled={loading}>
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Refresh
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => router.push(`/dashboard?campaignId=${campaign.id}`)}
           >
             <Eye className="h-4 w-4 mr-2" />
@@ -603,7 +623,7 @@ export default function CampaignDetailPage() {
 
       {/* Tabs list */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl bg-muted/50 p-1">
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl bg-sunken p-1">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="publishers">Publishers</TabsTrigger>
           <TabsTrigger value="buyers">Buyers</TabsTrigger>
@@ -624,29 +644,29 @@ export default function CampaignDetailPage() {
               <CardContent className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="camp-name">Campaign Name</Label>
-                  <Input 
+                  <Input
                     id="camp-name"
                     value={settingsForm.name}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
+                    onChange={e => setSettingsForm({ ...settingsForm, name: e.target.value })}
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="camp-offer">Offer Name</Label>
-                  <Input 
+                  <Input
                     id="camp-offer"
                     placeholder="e.g. Health Insurance ACA"
                     value={settingsForm.offerName}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, offerName: e.target.value })}
+                    onChange={e => setSettingsForm({ ...settingsForm, offerName: e.target.value })}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="camp-country">Country Code</Label>
-                  <Select 
-                    value={settingsForm.country} 
-                    onValueChange={(val) => setSettingsForm({ ...settingsForm, country: val })}
+                  <Select
+                    value={settingsForm.country}
+                    onValueChange={val => setSettingsForm({ ...settingsForm, country: val })}
                   >
                     <SelectTrigger id="camp-country">
                       <SelectValue />
@@ -661,8 +681,8 @@ export default function CampaignDetailPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="camp-status">Campaign Status</Label>
-                  <Select 
-                    value={settingsForm.status} 
+                  <Select
+                    value={settingsForm.status}
                     onValueChange={(val: any) => setSettingsForm({ ...settingsForm, status: val })}
                   >
                     <SelectTrigger id="camp-status">
@@ -683,10 +703,12 @@ export default function CampaignDetailPage() {
                       Record all inbound calls handled by this campaign.
                     </p>
                   </div>
-                  <Switch 
+                  <Switch
                     id="camp-recording"
                     checked={settingsForm.recordingEnabled}
-                    onCheckedChange={(checked) => setSettingsForm({ ...settingsForm, recordingEnabled: checked })}
+                    onCheckedChange={checked =>
+                      setSettingsForm({ ...settingsForm, recordingEnabled: checked })
+                    }
                   />
                 </div>
               </CardContent>
@@ -696,18 +718,24 @@ export default function CampaignDetailPage() {
               <CardHeader>
                 <CardTitle>Billable Call & Payout Configuration</CardTitle>
                 <CardDescription>
-                  Define the duration rules and default pricing rates for routing and financial reporting.
+                  Define the duration rules and default pricing rates for routing and financial
+                  reporting.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-6 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="camp-threshold">Billable Threshold (Seconds)</Label>
-                  <Input 
+                  <Input
                     id="camp-threshold"
                     type="number"
                     min={0}
                     value={settingsForm.billableDurationSeconds}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, billableDurationSeconds: parseInt(e.target.value) || 0 })}
+                    onChange={e =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        billableDurationSeconds: parseInt(e.target.value) || 0,
+                      })
+                    }
                     required
                   />
                   <p className="text-[11px] text-muted-foreground">
@@ -717,13 +745,18 @@ export default function CampaignDetailPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="camp-payout">Default Publisher Payout ($)</Label>
-                  <Input 
+                  <Input
                     id="camp-payout"
                     type="number"
                     step="0.0001"
                     min={0}
                     value={settingsForm.publisherPayoutPerBillableCall}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0 })}
+                    onChange={e =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0,
+                      })
+                    }
                     required
                   />
                   <p className="text-[11px] text-muted-foreground">
@@ -733,13 +766,18 @@ export default function CampaignDetailPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="camp-price">Default Buyer Price ($)</Label>
-                  <Input 
+                  <Input
                     id="camp-price"
                     type="number"
                     step="0.0001"
                     min={0}
                     value={settingsForm.buyerPricePerBillableCall}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, buyerPricePerBillableCall: parseFloat(e.target.value) || 0 })}
+                    onChange={e =>
+                      setSettingsForm({
+                        ...settingsForm,
+                        buyerPricePerBillableCall: parseFloat(e.target.value) || 0,
+                      })
+                    }
                     required
                   />
                   <p className="text-[11px] text-muted-foreground">
@@ -773,7 +811,8 @@ export default function CampaignDetailPage() {
               <div>
                 <CardTitle>Publisher Assignments</CardTitle>
                 <CardDescription>
-                  List of publishers authorized to send traffic to this campaign. Custom payouts override campaign defaults.
+                  List of publishers authorized to send traffic to this campaign. Custom payouts
+                  override campaign defaults.
                 </CardDescription>
               </div>
               <Button size="sm" onClick={() => setPubDialogOpen(true)}>
@@ -795,35 +834,44 @@ export default function CampaignDetailPage() {
                 <TableBody>
                   {campaignPublishers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground text-sm"
+                      >
                         No publishers assigned to this campaign yet.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    campaignPublishers.map((cp) => (
+                    campaignPublishers.map(cp => (
                       <TableRow key={cp.id}>
                         <TableCell>
-                          <span className="font-semibold text-foreground">{cp.publisher?.name || 'Unknown'}</span>
+                          <span className="font-semibold text-foreground">
+                            {cp.publisher?.name || 'Unknown'}
+                          </span>
                           <span className="ml-2 text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                             {cp.publisher?.code || '—'}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={cp.status === 'ACTIVE' ? 'outline' : 'secondary'} className={cn(
-                            cp.status === 'ACTIVE' && 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5',
-                            cp.status === 'INACTIVE' && 'text-muted-foreground'
-                          )}>
+                          <Badge
+                            variant={cp.status === 'ACTIVE' ? 'outline' : 'secondary'}
+                            className={cn(
+                              cp.status === 'ACTIVE' && 'text-live-ink bg-live-tint',
+                              cp.status === 'INACTIVE' && 'text-muted-foreground'
+                            )}
+                          >
                             {cp.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono">
                           {cp.payoutPerBillableCall ? (
-                            <span className="text-amber-400 font-medium">
+                            <span className="text-ringing-ink font-medium">
                               ${Number(cp.payoutPerBillableCall).toFixed(2)} (Override)
                             </span>
                           ) : (
                             <span className="text-muted-foreground">
-                              ${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)} (Campaign Default)
+                              ${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}{' '}
+                              (Campaign Default)
                             </span>
                           )}
                         </TableCell>
@@ -831,10 +879,10 @@ export default function CampaignDetailPage() {
                           {new Date(cp.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
                             onClick={() => handleRemovePublisher(cp.id)}
                             title="Remove Publisher Assignment"
                           >
@@ -857,10 +905,17 @@ export default function CampaignDetailPage() {
               <div>
                 <CardTitle>Buyer Routing & Assignments</CardTitle>
                 <CardDescription>
-                  Configure buyer target numbers and destination routing rules. Priority controls routing order (lower = higher priority).
+                  Configure buyer target numbers and destination routing rules. Priority controls
+                  routing order (lower = higher priority).
                 </CardDescription>
               </div>
-              <Button size="sm" onClick={() => { setEditingBuyerId(null); setBuyerDialogOpen(true); }}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingBuyerId(null);
+                  setBuyerDialogOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Buyer Destination
               </Button>
@@ -881,16 +936,21 @@ export default function CampaignDetailPage() {
                 <TableBody>
                   {campaignBuyers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
+                      <TableCell
+                        colSpan={7}
+                        className="text-center py-8 text-muted-foreground text-sm"
+                      >
                         No buyers or destination numbers assigned to this campaign yet.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    campaignBuyers.map((cb) => (
+                    campaignBuyers.map(cb => (
                       <TableRow key={cb.id}>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-foreground">{cb.buyer?.name || 'Unknown'}</span>
+                            <span className="font-semibold text-foreground">
+                              {cb.buyer?.name || 'Unknown'}
+                            </span>
                             <span className="text-xs text-muted-foreground">
                               {cb.buyerEndpoint?.name || 'Ad-Hoc Endpoint'}
                             </span>
@@ -899,23 +959,22 @@ export default function CampaignDetailPage() {
                         <TableCell className="font-mono text-sm font-semibold">
                           {cb.destinationNumber}
                         </TableCell>
-                        <TableCell className="font-mono">
-                          {cb.priority}
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          {cb.weight || 100}
-                        </TableCell>
+                        <TableCell className="font-mono">{cb.priority}</TableCell>
+                        <TableCell className="font-mono">{cb.weight || 100}</TableCell>
                         <TableCell>
-                          <Badge variant={cb.status === 'ACTIVE' ? 'outline' : 'secondary'} className={cn(
-                            cb.status === 'ACTIVE' && 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5',
-                            cb.status === 'INACTIVE' && 'text-muted-foreground'
-                          )}>
+                          <Badge
+                            variant={cb.status === 'ACTIVE' ? 'outline' : 'secondary'}
+                            className={cn(
+                              cb.status === 'ACTIVE' && 'text-live-ink bg-live-tint',
+                              cb.status === 'INACTIVE' && 'text-muted-foreground'
+                            )}
+                          >
                             {cb.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono">
                           {cb.pricePerBillableCall ? (
-                            <span className="text-amber-400 font-medium">
+                            <span className="text-ringing-ink font-medium">
                               ${Number(cb.pricePerBillableCall).toFixed(2)} (Override)
                             </span>
                           ) : cb.buyerEndpoint?.basePrice ? (
@@ -924,24 +983,25 @@ export default function CampaignDetailPage() {
                             </span>
                           ) : (
                             <span className="text-muted-foreground">
-                              ${Number(campaign.buyerPricePerBillableCall).toFixed(2)} (Campaign Default)
+                              ${Number(campaign.buyerPricePerBillableCall).toFixed(2)} (Campaign
+                              Default)
                             </span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted mr-1"
                             onClick={() => handleEditBuyerClick(cb)}
                             title="Edit Buyer Assignment"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
                             onClick={() => handleRemoveBuyer(cb.id)}
                             title="Remove Buyer Assignment"
                           >
@@ -963,7 +1023,8 @@ export default function CampaignDetailPage() {
             <CardHeader>
               <CardTitle>Inbound Tracking Numbers</CardTitle>
               <CardDescription>
-                Phone numbers (DIDs) configured to route calls to this campaign. Manage routes in the Inbound Numbers section.
+                Phone numbers (DIDs) configured to route calls to this campaign. Manage routes in
+                the Inbound Numbers section.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -980,12 +1041,15 @@ export default function CampaignDetailPage() {
                 <TableBody>
                   {didRoutes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground text-sm"
+                      >
                         No phone numbers currently routed to this campaign.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    didRoutes.map((route) => (
+                    didRoutes.map(route => (
                       <TableRow key={route.id}>
                         <TableCell className="font-mono font-semibold text-primary">
                           {route.phoneNumber?.number || route.did}
@@ -993,18 +1057,12 @@ export default function CampaignDetailPage() {
                         <TableCell className="font-mono text-sm text-muted-foreground">
                           {route.destination}
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {route.label || '—'}
-                        </TableCell>
+                        <TableCell className="text-sm">{route.label || '—'}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(route.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => router.push('/numbers')}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => router.push('/numbers')}>
                             Manage Routes
                             <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
                           </Button>
@@ -1026,7 +1084,7 @@ export default function CampaignDetailPage() {
               <CardDescription>Drag and drop nodes to build your call flow routing</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[500px] border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/30">
+              <div className="h-[500px] border-2 border-dashed rounded-lg flex items-center justify-center bg-sunken">
                 <div className="text-center">
                   <p className="text-lg font-semibold mb-2">Flow Canvas Placeholder</p>
                   <p className="text-sm text-muted-foreground">
@@ -1053,7 +1111,8 @@ export default function CampaignDetailPage() {
             <DialogHeader>
               <DialogTitle>Assign Publisher to Campaign</DialogTitle>
               <DialogDescription>
-                Assign a publisher to this campaign. You may optionally specify a payout rate override.
+                Assign a publisher to this campaign. You may optionally specify a payout rate
+                override.
               </DialogDescription>
             </DialogHeader>
 
@@ -1062,14 +1121,14 @@ export default function CampaignDetailPage() {
                 <Label htmlFor="pub-select">Select Publisher *</Label>
                 <Select
                   value={pubForm.publisherId}
-                  onValueChange={(val) => setPubForm({ ...pubForm, publisherId: val })}
+                  onValueChange={val => setPubForm({ ...pubForm, publisherId: val })}
                   required
                 >
                   <SelectTrigger id="pub-select">
                     <SelectValue placeholder="Choose a publisher" />
                   </SelectTrigger>
                   <SelectContent>
-                    {allPublishers.map((pub) => (
+                    {allPublishers.map(pub => (
                       <SelectItem key={pub.id} value={pub.id}>
                         {pub.name} ({pub.code})
                       </SelectItem>
@@ -1087,7 +1146,7 @@ export default function CampaignDetailPage() {
                   min={0}
                   placeholder={`Default: $${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}`}
                   value={pubForm.payoutPerBillableCall}
-                  onChange={(e) => setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })}
+                  onChange={e => setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })}
                 />
                 <p className="text-[10px] text-muted-foreground">
                   Leave blank to use the campaign default publisher payout rate.
@@ -1129,10 +1188,12 @@ export default function CampaignDetailPage() {
         <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleAssignBuyer} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>{editingBuyerId ? 'Edit Buyer Routing Assignment' : 'Add Buyer Routing Assignment'}</DialogTitle>
+              <DialogTitle>
+                {editingBuyerId ? 'Edit Buyer Routing Assignment' : 'Add Buyer Routing Assignment'}
+              </DialogTitle>
               <DialogDescription>
-                {editingBuyerId 
-                  ? 'Modify destination phone number and routing rules for this buyer.' 
+                {editingBuyerId
+                  ? 'Modify destination phone number and routing rules for this buyer.'
                   : 'Configure a destination phone number and routing rules for a buyer.'}
               </DialogDescription>
             </DialogHeader>
@@ -1143,7 +1204,9 @@ export default function CampaignDetailPage() {
                   <Label htmlFor="buyer-select">Select Buyer *</Label>
                   <Select
                     value={buyerForm.buyerId}
-                    onValueChange={(val) => setBuyerForm({ ...buyerForm, buyerId: val, buyerEndpointId: '' })}
+                    onValueChange={val =>
+                      setBuyerForm({ ...buyerForm, buyerId: val, buyerEndpointId: '' })
+                    }
                     required
                     disabled={editingBuyerId !== null}
                   >
@@ -1151,7 +1214,7 @@ export default function CampaignDetailPage() {
                       <SelectValue placeholder="Choose buyer" />
                     </SelectTrigger>
                     <SelectContent>
-                      {allBuyers.map((b) => (
+                      {allBuyers.map(b => (
                         <SelectItem key={b.id} value={b.id}>
                           {b.name} ({b.code})
                         </SelectItem>
@@ -1168,10 +1231,12 @@ export default function CampaignDetailPage() {
                     disabled={(!buyerForm.buyerId && !editingBuyerId) || loadingEndpoints}
                   >
                     <SelectTrigger id="endpoint-select">
-                      <SelectValue placeholder={loadingEndpoints ? "Loading..." : "Choose endpoint"} />
+                      <SelectValue
+                        placeholder={loadingEndpoints ? 'Loading...' : 'Choose endpoint'}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {buyerEndpoints.map((ep) => (
+                      {buyerEndpoints.map(ep => (
                         <SelectItem key={ep.id} value={ep.id}>
                           {ep.name} (${Number(ep.basePrice).toFixed(2)})
                         </SelectItem>
@@ -1187,7 +1252,7 @@ export default function CampaignDetailPage() {
                   id="buyer-dest"
                   placeholder="e.g., +18652637582"
                   value={buyerForm.destinationNumber}
-                  onChange={(e) => setBuyerForm({ ...buyerForm, destinationNumber: e.target.value })}
+                  onChange={e => setBuyerForm({ ...buyerForm, destinationNumber: e.target.value })}
                   required
                 />
                 <p className="text-[10px] text-muted-foreground">
@@ -1203,7 +1268,9 @@ export default function CampaignDetailPage() {
                     type="number"
                     min={0}
                     value={buyerForm.priority}
-                    onChange={(e) => setBuyerForm({ ...buyerForm, priority: parseInt(e.target.value) || 0 })}
+                    onChange={e =>
+                      setBuyerForm({ ...buyerForm, priority: parseInt(e.target.value) || 0 })
+                    }
                     required
                   />
                 </div>
@@ -1217,7 +1284,9 @@ export default function CampaignDetailPage() {
                     min={0}
                     placeholder="Campaign Default"
                     value={buyerForm.pricePerBillableCall}
-                    onChange={(e) => setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })}
+                    onChange={e =>
+                      setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -1230,7 +1299,9 @@ export default function CampaignDetailPage() {
                     type="number"
                     min={1}
                     value={buyerForm.weight}
-                    onChange={(e) => setBuyerForm({ ...buyerForm, weight: parseInt(e.target.value) || 100 })}
+                    onChange={e =>
+                      setBuyerForm({ ...buyerForm, weight: parseInt(e.target.value) || 100 })
+                    }
                     required
                   />
                 </div>
@@ -1257,7 +1328,10 @@ export default function CampaignDetailPage() {
               <Button type="button" variant="outline" onClick={() => handleOpenBuyerDialog(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={submittingBuyer || !buyerForm.buyerId || !buyerForm.destinationNumber}>
+              <Button
+                type="submit"
+                disabled={submittingBuyer || !buyerForm.buyerId || !buyerForm.destinationNumber}
+              >
                 {submittingBuyer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editingBuyerId ? 'Save Changes' : 'Add Assignment'}
               </Button>

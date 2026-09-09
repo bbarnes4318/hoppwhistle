@@ -1,25 +1,18 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Download, Loader2, Receipt } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Loader2, Printer, Receipt } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
+import { Ledger, SectionRule, count, pct } from '@/components/delivery/ledger';
+import { StatusChip } from '@/components/domain/status-chip';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { PlatformSettlementsView } from '@/components/platform/platform-settlements-view';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 /**
  * Settlement history: one row per settled Delivery Day.
@@ -114,10 +107,6 @@ interface Derivation {
   curveFound: boolean;
 }
 
-function pct(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)}%`;
-}
-
 /**
  * Dollars, to a fixed number of places.
  *
@@ -147,10 +136,11 @@ function money(value: number | null, digits = 2): string {
  * the total breached the maximum daily debit or the mandate was gone. It needs
  * attention, so it is not quiet, but it is not a failure of payment.
  */
-function statusVariant(status: string): 'secondary' | 'destructive' | 'outline' {
-  if (status === 'SUCCEEDED' || status === 'NOT_CHARGED') return 'secondary';
-  if (status === 'PENDING' || status === 'DRY_RUN') return 'outline';
-  return 'destructive';
+function statusTone(status: string): 'live' | 'ringing' | 'dropped' | 'neutral' {
+  if (status === 'SUCCEEDED') return 'live';
+  if (status === 'NOT_CHARGED' || status === 'DRY_RUN') return 'neutral';
+  if (status === 'PENDING') return 'ringing';
+  return 'dropped';
 }
 
 /**
@@ -207,7 +197,7 @@ export default function SettlementsPage(): JSX.Element {
   if (platform.loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
@@ -233,8 +223,7 @@ function AgencySettlementsPanel(): JSX.Element {
   const [derivationLoading, setDerivationLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const response =
-      await apiClient.get<Envelope<SettlementRow[]>>('/api/v1/delivery/settlements');
+    const response = await apiClient.get<Envelope<SettlementRow[]>>('/api/v1/delivery/settlements');
     setError(response.error ? response.error.message : null);
     const settlements = payload(response);
     setRows(Array.isArray(settlements) ? settlements : []);
@@ -298,10 +287,7 @@ function AgencySettlementsPanel(): JSX.Element {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute(
-        'download',
-        `settlements-${from || 'start'}-to-${to || 'today'}.csv`
-      );
+      link.setAttribute('download', `settlements-${from || 'start'}-to-${to || 'today'}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -315,7 +301,7 @@ function AgencySettlementsPanel(): JSX.Element {
   if (loading) {
     return (
       <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
@@ -324,14 +310,14 @@ function AgencySettlementsPanel(): JSX.Element {
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
+    <CompactPageShell fullHeight={false} data-print="page">
       <CompactPageHeader
         title="Settlements"
         subtitle="One row per settled Delivery Day, exactly as it was recorded"
         icon={Receipt}
       >
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-end gap-2" data-print="hide">
+          <label className="t-meta text-ink-3">
             From
             <Input
               type="date"
@@ -340,7 +326,7 @@ function AgencySettlementsPanel(): JSX.Element {
               className="mt-1 h-8 w-36"
             />
           </label>
-          <label className="text-xs text-muted-foreground">
+          <label className="t-meta text-ink-3">
             To
             <Input
               type="date"
@@ -357,134 +343,151 @@ function AgencySettlementsPanel(): JSX.Element {
             )}
             CSV
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            title="Prints the ledger with the open row's derivation, without the navigation"
+          >
+            <Printer className="mr-2 h-3 w-3" />
+            Print
+          </Button>
         </div>
       </CompactPageHeader>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="t-body text-dropped-ink">{error}</p>}
 
-      <Card>
-        <CardContent className="pt-4">
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No settlements yet. One is written after the close of each Delivery Day.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8" />
-                    <TableHead>Delivery day</TableHead>
-                    <TableHead className="text-right">Calls</TableHead>
-                    <TableHead className="text-right">Applications</TableHead>
-                    <TableHead className="text-right">Window closing</TableHead>
-                    <TableHead className="text-right">Rate</TableHead>
-                    <TableHead className="text-right">Overrun</TableHead>
-                    <TableHead className="text-right">Overrun $</TableHead>
-                    <TableHead className="text-right">Next block</TableHead>
-                    <TableHead className="text-right">Block $</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Max debit</TableHead>
-                    <TableHead>Outcome</TableHead>
-                    <TableHead>Payment</TableHead>
-                    <TableHead>Window days</TableHead>
-                    <TableHead>Curve</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map(row => (
-                    <Fragment key={row.id}>
-                    <TableRow
-                      className="cursor-pointer"
+      {rows.length === 0 ? (
+        <p className="t-body text-ink-3">
+          No settlements yet. One is written after the close of each Delivery Day.
+        </p>
+      ) : (
+        <div className="overflow-auto rounded-card border border-rule bg-surface">
+          <Ledger>
+            <thead>
+              <tr>
+                <th scope="col" className="w-8" data-print="hide" />
+                <th scope="col">Delivery day</th>
+                <th scope="col" className="num">
+                  Calls
+                </th>
+                <th scope="col" className="num">
+                  Apps
+                </th>
+                <th
+                  scope="col"
+                  className="num"
+                  title="The trailing-window closing percentage that set this day's rate"
+                >
+                  Window
+                </th>
+                <th scope="col" className="num">
+                  Rate
+                </th>
+                <th scope="col" className="num">
+                  Overrun
+                </th>
+                <th scope="col" className="num">
+                  Overrun $
+                </th>
+                <th scope="col" className="num">
+                  Next block
+                </th>
+                <th scope="col" className="num">
+                  Block $
+                </th>
+                <th scope="col" className="num">
+                  Total
+                </th>
+                <th
+                  scope="col"
+                  className="num"
+                  title="The maximum daily debit on the Insertion Order at the time"
+                >
+                  Max debit
+                </th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Payment</th>
+                <th scope="col">Curve</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => {
+                const open = openRow === row.id;
+                const mode = settlementMode(row.paymentStatus);
+                return (
+                  <Fragment key={row.id}>
+                    <tr
+                      className={cn('cursor-pointer hover:bg-sunken', open && 'bg-sunken')}
                       onClick={() => void toggleRow(row.id)}
                     >
-                      <TableCell className="align-middle">
+                      <td data-print="hide">
                         <button
                           type="button"
-                          aria-expanded={openRow === row.id}
+                          aria-expanded={open}
                           aria-label={`How the rate on ${row.deliveryDay} was derived`}
-                          className="text-muted-foreground"
+                          className="flex h-6 w-6 items-center justify-center rounded-control text-ink-3 hover:bg-rule hover:text-ink"
                           onClick={event => {
                             event.stopPropagation();
                             void toggleRow(row.id);
                           }}
                         >
-                          {openRow === row.id ? (
+                          {open ? (
                             <ChevronDown className="h-4 w-4" />
                           ) : (
                             <ChevronRight className="h-4 w-4" />
                           )}
                         </button>
-                      </TableCell>
-                      <TableCell className="font-medium tabular-nums">{row.deliveryDay}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.deliveredCalls}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.submittedApplications}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {pct(row.windowClosingPct)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {money(row.rate)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.overrunQuantity}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {money(row.overrunAmount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.nextBlockQuantity}
+                      </td>
+                      <td className="t-data whitespace-nowrap font-medium text-ink">
+                        {row.deliveryDay}
+                      </td>
+                      <td className="num">{count(row.deliveredCalls)}</td>
+                      <td className="num">{count(row.submittedApplications)}</td>
+                      <td className="num">{pct(row.windowClosingPct)}</td>
+                      <td className="num">{money(row.rate)}</td>
+                      <td className="num">{count(row.overrunQuantity)}</td>
+                      <td className="num">{money(row.overrunAmount)}</td>
+                      <td className="num">
+                        {count(row.nextBlockQuantity)}
                         {row.unusedPaidApplications > 0 && (
                           <span
-                            className="ml-1 text-[11px] text-muted-foreground"
+                            className="ml-1 text-ink-3"
                             title={`Reduced by ${row.unusedPaidApplications} unused paid applications from a configured block of ${row.configuredBlockQuantity}`}
                           >
                             ({row.configuredBlockQuantity}−{row.unusedPaidApplications})
                           </span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {money(row.nextBlockAmount)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {money(row.totalCharged)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {money(row.maxDailyDebit)}
-                      </TableCell>
+                      </td>
+                      <td className="num">{money(row.nextBlockAmount)}</td>
+                      {/* The one figure per row: what was charged. */}
+                      <td className="num font-medium">{money(row.totalCharged)}</td>
+                      <td className="num !text-ink-3">{money(row.maxDailyDebit)}</td>
                       {/*
                         The shorter question, answered first: were we charged
                         for this day. The payment status beside it is the same
                         fact in the vocabulary of a payment attempt.
                       */}
-                      <TableCell>
-                        <span
-                          className="text-xs font-medium"
-                          title={settlementMode(row.paymentStatus).detail}
-                        >
-                          {settlementMode(row.paymentStatus).label}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(row.paymentStatus)}>
-                          {row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
-                        </Badge>
+                      <td
+                        className="whitespace-nowrap t-body font-medium text-ink"
+                        title={mode.detail}
+                      >
+                        {mode.label}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <StatusChip
+                          value={row.paymentStatus}
+                          label={row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
+                          tone={statusTone(row.paymentStatus)}
+                          size="sm"
+                        />
                         {row.gracePeriodEndsOn && row.paymentStatus !== 'SUCCEEDED' && (
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          <span className="ml-1.5 t-meta text-ink-3">
                             grace ends {row.gracePeriodEndsOn}
-                          </p>
+                          </span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground">
-                        {row.windowDayKeys.join(', ') || '—'}
-                        {row.windowDaysFound < row.windowDeliveryDays
-                          ? ` (${row.windowDaysFound}/${row.windowDeliveryDays})`
-                          : ''}
-                      </TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground">
+                      </td>
+                      <td className="t-data whitespace-nowrap text-ink-3">
                         {row.curveVersion === null ? (
                           <span title="The window closed below the curve minimum, so no rate was derived from the curve. The overrun was billed at the rate in force on the Delivery Day.">
                             —
@@ -492,38 +495,42 @@ function AgencySettlementsPanel(): JSX.Element {
                         ) : (
                           `v${row.curveVersion}`
                         )}
-                      </TableCell>
-                    </TableRow>
+                        {row.windowDaysFound < row.windowDeliveryDays && (
+                          <span
+                            className="ml-1"
+                            title={`Only ${row.windowDaysFound} of ${row.windowDeliveryDays} Delivery Days were found for the window`}
+                          >
+                            ({row.windowDaysFound}/{row.windowDeliveryDays})
+                          </span>
+                        )}
+                      </td>
+                    </tr>
 
-                    {openRow === row.id && (
-                      <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={16} className="p-4">
+                    {open && (
+                      <tr className="bg-paper">
+                        <td colSpan={15} className="!h-auto px-4 py-4">
                           {derivationLoading === row.id ? (
-                            <p className="flex items-center text-sm text-muted-foreground">
+                            <p className="flex items-center t-body text-ink-3">
                               <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                               Working out how this rate was reached
                             </p>
                           ) : derivations[row.id] ? (
-                            <Derivation
-                              settlement={row}
-                              derivation={derivations[row.id]}
-                            />
+                            <Derivation settlement={row} derivation={derivations[row.id]} />
                           ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="t-body text-ink-3">
                               This breakdown could not be loaded. Please try again.
                             </p>
                           )}
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     )}
-                    </Fragment>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </Ledger>
+        </div>
+      )}
     </CompactPageShell>
   );
 }
@@ -559,140 +566,118 @@ function Derivation({
 }): JSX.Element {
   const { stored, window: days, recomputed } = derivation;
 
+  const line = (label: React.ReactNode, value: React.ReactNode, strong = false) => (
+    <div
+      className={cn(
+        'flex items-baseline justify-between gap-4 py-1',
+        strong && 'border-t border-rule pt-2 font-medium'
+      )}
+    >
+      <dt className={strong ? 'text-ink' : 'text-ink-2'}>{label}</dt>
+      <dd className="t-data text-ink">{value}</dd>
+    </div>
+  );
+
   return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <p className="font-medium">
+    <div className="grid max-w-5xl grid-cols-1 gap-x-8 gap-y-4 t-body lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="lg:col-span-2">
+        <p className="t-section text-ink">
           How the {money(stored.rate)} rate on {settlement.deliveryDay} was reached
         </p>
-        <p className="mt-1 text-muted-foreground">
-          The rate comes from the trailing window of {stored.windowDeliveryDays} Delivery
-          Days, not from {settlement.deliveryDay} alone. These are the days it covered.
+        <p className="mt-1 text-ink-2">
+          The rate comes from the trailing window of {stored.windowDeliveryDays} Delivery Days, not
+          from {settlement.deliveryDay} alone. These are the days it covered.
         </p>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Delivery day</TableHead>
-              <TableHead className="text-right">Calls answered</TableHead>
-              <TableHead className="text-right">Applications</TableHead>
-              <TableHead className="text-right">Closing</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      <div>
+        <Ledger className="[&_thead_th]:static [&_thead_th]:bg-transparent">
+          <thead>
+            <tr>
+              <th scope="col">Delivery day</th>
+              <th scope="col" className="num">
+                Calls answered
+              </th>
+              <th scope="col" className="num">
+                Apps
+              </th>
+              <th scope="col" className="num">
+                Closing
+              </th>
+            </tr>
+          </thead>
+          <tbody>
             {days.map(day => (
-              <TableRow key={day.deliveryDay}>
-                <TableCell className="tabular-nums">{day.deliveryDay}</TableCell>
-                <TableCell className="text-right tabular-nums">{day.deliveredCalls}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {day.submittedApplications}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {pct(day.closingPct)}
-                </TableCell>
-              </TableRow>
+              <tr key={day.deliveryDay}>
+                <td className="t-data text-ink">{day.deliveryDay}</td>
+                <td className="num">{count(day.deliveredCalls)}</td>
+                <td className="num">{count(day.submittedApplications)}</td>
+                <td className="num !text-ink-3">{pct(day.closingPct)}</td>
+              </tr>
             ))}
-            <TableRow className="border-t-2 font-medium">
-              <TableCell>Window total</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {recomputed.deliveredCalls}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {recomputed.submittedApplications}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {pct(recomputed.closingPct)}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+            <tr className="font-medium [&_td]:!border-t [&_td]:!border-rule-strong">
+              <td className="text-ink">Window total</td>
+              <td className="num">{count(recomputed.deliveredCalls)}</td>
+              <td className="num">{count(recomputed.submittedApplications)}</td>
+              <td className="num">{pct(recomputed.closingPct)}</td>
+            </tr>
+          </tbody>
+        </Ledger>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded border p-3">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Recorded on this settlement
-          </p>
-          <dl className="mt-2 space-y-1">
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Window closing percentage</dt>
-              <dd className="tabular-nums">{pct(stored.windowClosingPct)}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Delivery days found</dt>
-              <dd className="tabular-nums">
-                {stored.windowDaysFound} of {stored.windowDeliveryDays}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Curve version</dt>
-              <dd className="tabular-nums">
-                {stored.curveVersion === null ? '—' : `v${stored.curveVersion}`}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4 font-medium">
-              <dt>Rate charged</dt>
-              <dd className="tabular-nums">{money(stored.rate)}</dd>
-            </div>
+      <div className="space-y-4">
+        <div>
+          <SectionRule className="border-t-0 pt-0">Recorded on this settlement</SectionRule>
+          <dl className="mt-1">
+            {line('Window closing percentage', pct(stored.windowClosingPct))}
+            {line(
+              'Delivery days found',
+              `${stored.windowDaysFound} of ${stored.windowDeliveryDays}`
+            )}
+            {line('Curve version', stored.curveVersion === null ? '—' : `v${stored.curveVersion}`)}
+            {line('Rate charged', money(stored.rate), true)}
           </dl>
         </div>
 
-        <div className="rounded border p-3">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Worked through again from the same days
-          </p>
-
+        <div>
+          <SectionRule>Worked through again from the same days</SectionRule>
           {!derivation.curveFound ? (
-            <p className="mt-2 text-muted-foreground">
-              The curve version this settlement was priced with is no longer on file, so the
-              rate cannot be worked through again here. The figures recorded on the left are
-              what was charged.
+            <p className="mt-2 text-ink-2">
+              The curve version this settlement was priced with is no longer on file, so the rate
+              cannot be worked through again here. The figures recorded above are what was charged.
             </p>
           ) : recomputed.belowMinimum ? (
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-2 text-ink-2">
               The window closed at {pct(recomputed.closingPct)}, below the curve minimum of{' '}
-              {pct(recomputed.minimumClosingPct)}. Below that there is no rate on the curve,
-              and the overrun is billed at the rate that was already in force.
+              {pct(recomputed.minimumClosingPct)}. Below that there is no rate on the curve, and the
+              overrun is billed at the rate that was already in force.
             </p>
           ) : (
             <>
-              <dl className="mt-2 space-y-1">
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Window closing percentage</dt>
-                  <dd className="tabular-nums">{pct(recomputed.closingPct)}</dd>
-                </div>
-                {recomputed.anchors && (
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">
-                      {recomputed.anchors.left.closingPct === recomputed.anchors.right.closingPct
-                        ? 'Curve point'
-                        : 'Between curve points'}
-                    </dt>
-                    <dd className="tabular-nums">
-                      {recomputed.anchors.left.closingPct === recomputed.anchors.right.closingPct
-                        ? `${recomputed.anchors.left.closingPct}% → ${money(recomputed.anchors.left.rate)}`
-                        : `${recomputed.anchors.left.closingPct}% → ${money(recomputed.anchors.left.rate)} and ${recomputed.anchors.right.closingPct}% → ${money(recomputed.anchors.right.rate)}`}
-                    </dd>
-                  </div>
-                )}
-                <div className="flex justify-between gap-4 font-medium">
-                  <dt>Rate this gives</dt>
-                  <dd className="tabular-nums">{money(recomputed.rate)}</dd>
-                </div>
+              <dl className="mt-1">
+                {line('Window closing percentage', pct(recomputed.closingPct))}
+                {recomputed.anchors &&
+                  line(
+                    recomputed.anchors.left.closingPct === recomputed.anchors.right.closingPct
+                      ? 'Curve point'
+                      : 'Between curve points',
+                    recomputed.anchors.left.closingPct === recomputed.anchors.right.closingPct
+                      ? `${recomputed.anchors.left.closingPct}% → ${money(recomputed.anchors.left.rate)}`
+                      : `${recomputed.anchors.left.closingPct}% → ${money(recomputed.anchors.left.rate)} and ${recomputed.anchors.right.closingPct}% → ${money(recomputed.anchors.right.rate)}`
+                  )}
+                {line('Rate this gives', money(recomputed.rate), true)}
               </dl>
 
               {derivation.matchesStoredRate ? (
-                <p className="mt-2 text-[11px] text-muted-foreground">
+                <p className="mt-2 t-meta text-ink-3">
                   This matches the rate recorded on the settlement.
                 </p>
               ) : (
-                <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                <p className="mt-2 t-meta text-ringing-ink">
                   This does not match the {money(stored.rate)} recorded on the settlement. The
-                  recorded figures are what was charged and they do not change; a difference
-                  here means the underlying calls or applications for those days have moved
-                  since. Please contact NetEnroll and we will go through it with you.
+                  recorded figures are what was charged and they do not change; a difference here
+                  means the underlying calls or applications for those days have moved since. Please
+                  contact NetEnroll and we will go through it with you.
                 </p>
               )}
             </>
@@ -701,7 +686,7 @@ function Derivation({
       </div>
 
       {recomputed.flatFromClosingPct !== null && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="t-meta text-ink-3 lg:col-span-2">
           On this curve the rate is flat at and above {pct(recomputed.flatFromClosingPct)}, and
           there is no rate below {pct(recomputed.minimumClosingPct)}.
         </p>
