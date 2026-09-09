@@ -74,6 +74,11 @@ export function Footer() {
                   Who it is for
                 </button>
               </li>
+              <li>
+                <Link href="/state-value" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+                  State value tool
+                </Link>
+              </li>
             </ul>
           </div>
 
