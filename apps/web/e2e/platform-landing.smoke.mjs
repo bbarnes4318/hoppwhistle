@@ -36,6 +36,14 @@
  *      stops climbing. A loop that retries a terminal refusal forever is its
  *      own defect regardless of what is on screen.
  *
+ * Then it signs out and drives the one page that runs before any of that: the
+ * login screen, at desktop width and at 360px. It signs in with a keyboard and
+ * nothing else, follows an invitation and sets a password, and gets each
+ * refusal a person actually meets -- a wrong password, a suspended account, an
+ * expired invitation, one already used -- asserting each arrives as a sentence
+ * on a panel that is still legible. See "The front door" below for what that
+ * blind spot had already cost.
+ *
  * ── Running it ───────────────────────────────────────────────────────────────
  *
  *   SMOKE_DATABASE_URL=postgresql://user:pass@localhost:5432/hopwhistle_test \
@@ -51,6 +59,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { dirname, resolve } from 'node:path';
@@ -225,6 +234,101 @@ const SWEEP = [
  * around it stays light.
  */
 const DARK_SCOPE_ROUTE = '/design-preview';
+
+/**
+ * ── The front door ───────────────────────────────────────────────────────────
+ *
+ * /login is the one page that runs before there is a session, and since
+ * agents.netenroll.com redirects its root here (infra/nginx/agents.netenroll.com)
+ * it is the first thing an agency ever sees. The sweep above cannot reach it:
+ * every session there is signed in before the page loads, so the whole
+ * signed-out surface -- and every way it can refuse someone -- was the one part
+ * of the product this file rendered for nobody.
+ *
+ * That blind spot had already cost something. Signing in stored a token and
+ * pushed to /dashboard, whose layout read the session provider's `user` -- still
+ * null, because the provider asks `/api/auth/me` once when it mounts and it
+ * mounted before the token existed -- and replaced the route straight back to
+ * /login. Correct credentials, and the sign-in page again. Nothing here saw it,
+ * because `openAsOperator` writes the token BEFORE the first page load, which
+ * is the one state a person signing in is never in.
+ *
+ * So these checks drive the page the way a person does, at a desk and on a
+ * phone: sign in and arrive somewhere, get a password wrong and be told,
+ * follow an invitation and set a password, follow a spent one and be told. The
+ * same legibility audit the rest of the product is held to runs on each,
+ * including the error states -- a redesign that turns a clear refusal into a
+ * blank panel is exactly the failure this file exists to catch.
+ */
+const LOGIN_ROUTE = '/login';
+
+/** A desk and a phone. Agents check things on phones. */
+const LOGIN_VIEWPORTS = [
+  { label: 'desktop', width: 1280, height: 900 },
+  { label: '360px', width: 360, height: 780 },
+];
+
+/** The login page settles in one render; it polls nothing and fetches nothing. */
+const LOGIN_SETTLE_MS = Number(process.env.SMOKE_LOGIN_SETTLE_MS ?? 2500);
+
+/**
+ * The Google client id the page must carry with no environment variable set.
+ *
+ * Kept as a literal rather than read from the source, so that deleting the
+ * default and reintroducing NEXT_PUBLIC_GOOGLE_CLIENT_ID as a requirement
+ * fails here as well as in
+ * apps/web/src/app/login/__tests__/google-client-id.test.ts. Production does
+ * not set that variable; when it was the only source, a rebuild inlined an
+ * empty string and the buttons silently stopped existing.
+ */
+const GOOGLE_CLIENT_ID = '196207148120-2navmspp2renu5cnvr06679jvhm5h12h.apps.googleusercontent.com';
+
+const GSI_SCRIPT = 'https://accounts.google.com/gsi/client';
+
+/**
+ * accounts.google.com, stood in for.
+ *
+ * The real script cannot be part of an assertion: a CI runner may not reach
+ * Google, and a credential minted by Google cannot be forged here anyway --
+ * the API verifies every one against its own client id. What IS ours to assert
+ * is the arrangement around it: that the page initialises the client with the
+ * id it ships with rather than one an environment supplies, and that it hands
+ * Google a slot the button fits inside at 360px. This stub records both.
+ */
+const GSI_STUB = `
+  window.__gsi = { initialize: [], renderButton: [] };
+  window.google = { accounts: { id: {
+    initialize: config => window.__gsi.initialize.push(config),
+    renderButton: (el, config) => {
+      window.__gsi.renderButton.push({ id: el.id, width: config.width, text: config.text });
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Sign in with Google';
+      button.style.cssText =
+        'width:' + config.width + 'px;height:40px;border:1px solid #747775;' +
+        'background:#fff;color:#1f1f1f;border-radius:4px;font:500 14px system-ui';
+      el.appendChild(button);
+    },
+  } } };
+`;
+
+/**
+ * What must not be on this page.
+ *
+ * Onboarding is internal: an account exists because an administrator issued an
+ * activation grant, and `POST /api/auth/register` refuses without one. A
+ * "create an account" control is therefore a door onto a corridor with no
+ * rooms, and a "forgot password" link is a promise to a route that does not
+ * exist. Both are worse than their absence.
+ */
+const ABSENT_FROM_LOGIN = [
+  /sign\s*up/i,
+  /create an account/i,
+  /create account/i,
+  /\bregister\b/i,
+  /forgot (your )?password/i,
+  /reset (your )?password/i,
+];
 
 /**
  * Refusals this sweep knows about, and will not fail on.
@@ -661,6 +765,166 @@ async function signIn() {
   const body = await res.json();
   if (!body?.token) throw new Error(`sign-in failed: ${res.status} ${JSON.stringify(body)}`);
   return body;
+}
+
+/** The addresses the fixture writes, and the password all of them share. */
+const LOGIN_FIXTURE = {
+  password: 'front-Door1!',
+  activeEmail: 'login-agent@netenroll.invalid',
+  suspendedEmail: 'login-suspended@netenroll.invalid',
+  expiredEmail: 'login-expired@netenroll.invalid',
+  redeemedEmail: 'login-redeemed@netenroll.invalid',
+};
+
+/**
+ * The people the front door is checked against, and the links they arrive with.
+ *
+ * An agency of its own, so nothing here disturbs the sessions the sweep seeds:
+ * one agent who can sign in, one whose account has been suspended, and three
+ * activation grants -- one usable, one expired, one already redeemed. The
+ * grants are written the way the service writes them, as a sha256 of the token
+ * (see apps/api/src/services/tenant-activation.ts), because the plaintext is
+ * returned once and never stored; a test that could read one back out of the
+ * database would be testing a system this is not.
+ */
+const LOGIN_SEED = `
+import { createHash } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+const hashToken = token => createHash('sha256').update(token).digest('hex');
+
+const tenant = await prisma.tenant.upsert({
+  where: { slug: 'login-smoke' },
+  update: {},
+  create: { name: 'Ridgeline Insurance', slug: 'login-smoke', status: 'ACTIVE' },
+});
+
+const role = await prisma.role.upsert({
+  where: { name: 'AGENT' },
+  update: {},
+  create: { name: 'AGENT', permissions: [] },
+});
+
+const passwordHash = await bcrypt.hash(process.env.LOGIN_PASSWORD, 10);
+
+const agent = await prisma.user.upsert({
+  where: { email: process.env.LOGIN_ACTIVE_EMAIL },
+  update: { passwordHash, status: 'ACTIVE', tenantId: tenant.id },
+  create: {
+    email: process.env.LOGIN_ACTIVE_EMAIL,
+    passwordHash,
+    firstName: 'Ada',
+    lastName: 'Agent',
+    status: 'ACTIVE',
+    tenantId: tenant.id,
+  },
+});
+await prisma.userRole.deleteMany({ where: { userId: agent.id } });
+await prisma.userRole.create({ data: { userId: agent.id, roleId: role.id } });
+
+// A suspended account: the credentials are right and the answer is still no.
+await prisma.user.upsert({
+  where: { email: process.env.LOGIN_SUSPENDED_EMAIL },
+  update: { passwordHash, status: 'SUSPENDED', tenantId: tenant.id },
+  create: {
+    email: process.env.LOGIN_SUSPENDED_EMAIL,
+    passwordHash,
+    firstName: 'Sam',
+    lastName: 'Suspended',
+    status: 'SUSPENDED',
+    tenantId: tenant.id,
+  },
+});
+
+/*
+ * The usable grant creates a real account when it is redeemed, so its invitee
+ * is unique per run and the accounts previous runs made are cleared out first.
+ * Grants before roles before users: redeemedByUserId and userRoles both point
+ * at the row being removed.
+ */
+const previous = await prisma.user.findMany({
+  where: { email: { startsWith: 'login-invitee-' } },
+  select: { id: true },
+});
+const previousIds = previous.map(u => u.id);
+await prisma.tenantActivationGrant.deleteMany({
+  where: {
+    OR: [
+      { email: { startsWith: 'login-invitee-' } },
+      { redeemedByUserId: { in: previousIds } },
+    ],
+  },
+});
+await prisma.userRole.deleteMany({ where: { userId: { in: previousIds } } });
+await prisma.user.deleteMany({ where: { id: { in: previousIds } } });
+
+// The two spent grants are keyed on a fixed address, so a re-run would stack
+// another row against it rather than replace one.
+await prisma.tenantActivationGrant.deleteMany({
+  where: { email: { in: [process.env.LOGIN_EXPIRED_EMAIL, process.env.LOGIN_REDEEMED_EMAIL] } },
+});
+
+const grant = async (email, token, overrides) =>
+  prisma.tenantActivationGrant.create({
+    data: {
+      tenantId: tenant.id,
+      tokenHash: hashToken(token),
+      email,
+      roleName: 'AGENT',
+      source: 'ADMIN_INVITE',
+      expiresAt: new Date(Date.now() + 3600_000),
+      ...overrides,
+    },
+  });
+
+const invitee = \`login-invitee-\${Date.now()}@netenroll.invalid\`;
+await grant(invitee, process.env.LOGIN_GRANT_USABLE, {});
+await grant(process.env.LOGIN_EXPIRED_EMAIL, process.env.LOGIN_GRANT_EXPIRED, {
+  expiresAt: new Date(Date.now() - 3600_000),
+});
+await grant(process.env.LOGIN_REDEEMED_EMAIL, process.env.LOGIN_GRANT_REDEEMED, {
+  redeemedAt: new Date(),
+});
+
+process.stdout.write(JSON.stringify({ invitee }));
+await prisma.$disconnect();
+`;
+
+/** The fixture, and the tokens the browser will arrive holding. */
+async function seedLogin(services) {
+  const tokens = {
+    usable: randomBytes(32).toString('base64url'),
+    expired: randomBytes(32).toString('base64url'),
+    redeemed: randomBytes(32).toString('base64url'),
+  };
+
+  const invitee = await new Promise((ok, stop) => {
+    const child = spawn('node', ['--input-type=module', '--eval', LOGIN_SEED], {
+      cwd: API_DIR,
+      stdio: ['ignore', 'pipe', 'inherit'],
+      env: {
+        ...process.env,
+        DATABASE_URL: services.database,
+        LOGIN_PASSWORD: LOGIN_FIXTURE.password,
+        LOGIN_ACTIVE_EMAIL: LOGIN_FIXTURE.activeEmail,
+        LOGIN_SUSPENDED_EMAIL: LOGIN_FIXTURE.suspendedEmail,
+        LOGIN_EXPIRED_EMAIL: LOGIN_FIXTURE.expiredEmail,
+        LOGIN_REDEEMED_EMAIL: LOGIN_FIXTURE.redeemedEmail,
+        LOGIN_GRANT_USABLE: tokens.usable,
+        LOGIN_GRANT_EXPIRED: tokens.expired,
+        LOGIN_GRANT_REDEEMED: tokens.redeemed,
+      },
+    });
+    let out = '';
+    child.stdout.on('data', d => (out += String(d)));
+    child.on('exit', code =>
+      code === 0 ? ok(JSON.parse(out).invitee) : stop(new Error(`login seed exited ${code}`))
+    );
+  });
+
+  return { ...LOGIN_FIXTURE, invitee, tokens };
 }
 
 // ─── The assertions ──────────────────────────────────────────────────────────
@@ -1152,6 +1416,427 @@ async function inspectRoute(browser, session, entry, path, fail) {
   };
 }
 
+// ─── The front door ──────────────────────────────────────────────────────────
+
+/**
+ * A browser with no session at all, which is the state every one of these
+ * checks needs and the one `openAsOperator` cannot produce.
+ *
+ * Google's script is stubbed for every load. Nothing about the assertions
+ * depends on reaching accounts.google.com, and nothing should: a runner
+ * without egress would otherwise report the sign-in button as missing, and a
+ * runner with it would be testing Google's uptime.
+ */
+async function openSignedOut(browser, path, viewport) {
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
+  const page = await context.newPage();
+
+  const responses = [];
+  page.on('response', r => {
+    const url = new URL(r.url());
+    if (url.origin === FRONT) responses.push({ path: url.pathname, status: r.status() });
+  });
+
+  await page.route(GSI_SCRIPT, route =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: GSI_STUB })
+  );
+
+  await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.waitForTimeout(LOGIN_SETTLE_MS);
+  return { context, page, responses };
+}
+
+/** The page is no wider than the window it is in. */
+async function checkFits(page, who) {
+  const fit = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  // One pixel of slack for sub-pixel layout; anything real is tens of pixels.
+  if (fit.scrollWidth > fit.clientWidth + 1) {
+    fail(
+      `${who}: the page is ${fit.scrollWidth}px wide in a ${fit.clientWidth}px window, so it ` +
+        'scrolls sideways.'
+    );
+  }
+}
+
+/**
+ * The signed-out page itself: who it says it is, what it must not offer, and
+ * whether it can be read.
+ */
+async function checkLoginPage(browser, viewport) {
+  const who = `/login at ${viewport.label}`;
+  const { context, page, responses } = await openSignedOut(browser, LOGIN_ROUTE, viewport);
+
+  const state = await page.evaluate(() => ({
+    title: document.title,
+    body: document.body.innerText,
+    main: (document.querySelector('main') ?? document.body).innerText.trim(),
+    wordmark: document.querySelector('[data-testid="wordmark"]')?.textContent ?? null,
+    // Every control a person could follow away from signing in.
+    controls: Array.from(document.querySelectorAll('main a, main button')).map(el =>
+      (el.textContent || '').trim()
+    ),
+  }));
+
+  // 1. It rendered.
+  if (state.main.length === 0) {
+    fail(`${who}: the page is empty after ${LOGIN_SETTLE_MS}ms.`);
+  }
+
+  // 2. It is NetEnroll's, in the mark the rebrand established.
+  if (state.wordmark !== 'netEnroll') {
+    fail(
+      `${who}: the wordmark reads ${JSON.stringify(state.wordmark)} rather than "netEnroll". ` +
+        'The front door has to carry the same mark as the rest of the product.'
+    );
+  }
+  if (!state.title.includes('NetEnroll')) {
+    fail(
+      `${who}: the tab is titled ${JSON.stringify(state.title)}, which does not name the product.`
+    );
+  }
+
+  // 3. It says what it is, so someone who arrived by mistake can tell.
+  if (!/agent portal for licensed insurance agencies/i.test(state.body)) {
+    fail(
+      `${who}: nothing on the page says what this is. Someone landing on the root of the domain ` +
+        'has to be able to tell within a couple of seconds whether it is for them.\n' +
+        `  saw: ${JSON.stringify(state.body.slice(0, 300))}`
+    );
+  }
+
+  // 4. No door onto a corridor with no rooms.
+  for (const forbidden of ABSENT_FROM_LOGIN) {
+    const offender = state.controls.find(label => forbidden.test(label));
+    if (offender) {
+      fail(
+        `${who}: offers ${JSON.stringify(offender)}. There is no self-serve registration and no ` +
+          'password-reset route — accounts exist because an administrator issued an activation ' +
+          'grant, and POST /api/auth/register refuses without one.'
+      );
+    }
+  }
+
+  // 5. It fits the window, and it is legible on the light ground.
+  await checkFits(page, who);
+  await checkLegibility(page, who);
+  reportRefusals(who, responses, 'A signed-out page load must not be refused anything');
+
+  await context.close();
+}
+
+/**
+ * Sign in with a keyboard and nothing else, and arrive somewhere.
+ *
+ * Tab, type, tab, type, Enter — no click anywhere. The landing assertion is
+ * the one that matters: a token in localStorage is not a session, and the
+ * defect this replaces stored one and returned the person to this page.
+ */
+async function checkLoginByKeyboard(browser, fixture, viewport) {
+  const who = `keyboard sign-in at ${viewport.label}`;
+  const { context, page, responses } = await openSignedOut(browser, LOGIN_ROUTE, viewport);
+
+  await page.keyboard.press('Tab');
+  let reached = false;
+  for (let hop = 0; hop < 15 && !reached; hop++) {
+    reached = (await page.evaluate(() => document.activeElement?.id)) === 'signin-email';
+    if (!reached) await page.keyboard.press('Tab');
+  }
+  if (!reached) {
+    fail(`${who}: tabbing from the top of the document never reaches the email field.`);
+    await context.close();
+    return;
+  }
+
+  // The field a keyboard has landed on must show it. Either treatment counts:
+  // globals.css draws an outline, the primitives draw a ring as a box-shadow.
+  const focus = await page.evaluate(() => {
+    const style = getComputedStyle(document.activeElement);
+    return { outlineWidth: parseFloat(style.outlineWidth) || 0, boxShadow: style.boxShadow };
+  });
+  if (focus.outlineWidth < 1 && (focus.boxShadow === 'none' || !focus.boxShadow)) {
+    fail(`${who}: the focused email field draws no visible focus indicator.`);
+  }
+
+  await page.keyboard.type(fixture.activeEmail);
+  await page.keyboard.press('Tab');
+  if ((await page.evaluate(() => document.activeElement?.id)) !== 'signin-password') {
+    fail(`${who}: Tab from the email field does not reach the password field.`);
+  }
+  await page.keyboard.type(fixture.password);
+  await page.keyboard.press('Enter');
+
+  const landed = await settleOnPath(page, LOGIN_ROUTE);
+  if (landed === LOGIN_ROUTE) {
+    const alert = await page.evaluate(
+      () => document.querySelector('main [role="alert"]')?.innerText ?? null
+    );
+    fail(
+      `${who}: correct credentials, and still on the sign-in page.` +
+        (alert ? ` It is showing ${JSON.stringify(alert)}.` : '') +
+        '\n  A token that is stored but never becomes a session is the whole defect: the layout ' +
+        'the redirect lands on reads the session provider, not localStorage.'
+    );
+  }
+  if (!(await page.evaluate(() => Boolean(localStorage.getItem('token'))))) {
+    fail(`${who}: no session token was stored.`);
+  }
+  reportRefusals(
+    who,
+    responses.filter(r => !r.path.startsWith('/api/v1/')),
+    'Signing in must not be refused anything'
+  );
+
+  await context.close();
+}
+
+/** Wait for a client-side redirect off `from`, up to twenty seconds. */
+async function settleOnPath(page, from) {
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(500);
+    const at = await page.evaluate(() => window.location.pathname);
+    if (at !== from) {
+      // A guard further in can bounce the navigation straight back, which is
+      // the failure being watched for; give it a moment to do so.
+      await page.waitForTimeout(2000);
+      return page.evaluate(() => window.location.pathname);
+    }
+  }
+  return from;
+}
+
+/**
+ * A refusal, rendered.
+ *
+ * Every one of these is a page a person actually reaches — the password was
+ * wrong, the account is suspended, the invitation has been used — and each has
+ * to arrive as a sentence they can read, on a panel that is still legible. A
+ * redesign that turns a clear refusal into a blank panel passes every other
+ * check in this file.
+ */
+async function checkLoginRefusal(browser, viewport, { who, path, fill, expect, allow }) {
+  const label = `${who} at ${viewport.label}`;
+  const { context, page, responses } = await openSignedOut(browser, path, viewport);
+
+  await fill(page);
+
+  let alert = null;
+  try {
+    await page.waitForSelector('main [role="alert"]', { timeout: 15_000 });
+    alert = (await page.innerText('main [role="alert"]')).trim();
+  } catch {
+    const body = await page.evaluate(() => document.body.innerText);
+    fail(
+      `${label}: nothing was said. The page shows no alert at all.\n` +
+        `  saw: ${JSON.stringify(body.slice(0, 300))}`
+    );
+    await context.close();
+    return;
+  }
+
+  if (!alert) {
+    fail(`${label}: the alert panel rendered with no text in it — a blank refusal.`);
+  } else if (!expect.test(alert)) {
+    fail(
+      `${label}: the refusal reads ${JSON.stringify(alert)}, which does not match ${expect}. ` +
+        'The message a person is shown is part of the contract, not a detail of the panel.'
+    );
+  }
+
+  // The person is still here, and can try again.
+  const at = await page.evaluate(() => window.location.pathname);
+  if (at !== LOGIN_ROUTE) {
+    fail(`${label}: a refused attempt moved the browser to ${at}.`);
+  }
+
+  await checkFits(page, label);
+  await checkLegibility(page, label);
+  reportRefusals(
+    label,
+    responses.filter(r => !(r.path === allow?.path && r.status === allow?.status)),
+    'Only the refusal under test should come back 4xx'
+  );
+
+  await context.close();
+}
+
+/** Follow an invitation and set a password, which is the only way in. */
+async function checkActivation(browser, fixture, viewport) {
+  const who = `activation at ${viewport.label}`;
+  const path =
+    `${LOGIN_ROUTE}?activation=${encodeURIComponent(fixture.tokens.usable)}` +
+    `&email=${encodeURIComponent(fixture.invitee)}`;
+  const { context, page, responses } = await openSignedOut(browser, path, viewport);
+
+  const body = await page.evaluate(() => document.body.innerText);
+  // The agency the link names, read back from the preview. An agent following
+  // a link has to be able to see they are joining the right agency.
+  if (!body.includes('Ridgeline Insurance')) {
+    fail(
+      `${who}: the page does not name the agency the invitation is for.\n` +
+        `  saw: ${JSON.stringify(body.slice(0, 400))}`
+    );
+  }
+
+  await checkFits(page, who);
+  await checkLegibility(page, who);
+
+  await page.fill('#activate-firstname', 'Nia');
+  await page.fill('#activate-lastname', 'Newagent');
+  await page.selectOption('#activate-position', 'Licensed Agent');
+  await page.fill('#activate-password', 'Ridgeline1');
+  await page.click('main form button[type="submit"]');
+
+  const landed = await settleOnPath(page, LOGIN_ROUTE);
+  if (landed === LOGIN_ROUTE) {
+    const alert = await page.evaluate(
+      () => document.querySelector('main [role="alert"]')?.innerText ?? null
+    );
+    fail(
+      `${who}: a valid invitation did not produce a session.` +
+        (alert ? ` The page is showing ${JSON.stringify(alert)}.` : '')
+    );
+  }
+  reportRefusals(
+    who,
+    responses.filter(r => !r.path.startsWith('/api/v1/')),
+    'Redeeming a valid invitation must not be refused anything'
+  );
+
+  await context.close();
+}
+
+/**
+ * The client id, with nothing in the environment supplying it.
+ *
+ * The page must initialise Google with the id it ships with. When that value
+ * came only from NEXT_PUBLIC_GOOGLE_CLIENT_ID -- which production does not set
+ * -- a rebuild inlined an empty string and the buttons vanished with no error
+ * anywhere. The width assertion is the other half: Google draws to a fixed
+ * pixel width, and a button wider than the card is how a 360px phone gets a
+ * sideways scrollbar.
+ */
+async function checkGoogleButton(browser, viewport) {
+  const who = `Google sign-in at ${viewport.label}`;
+  const { context, page } = await openSignedOut(browser, LOGIN_ROUTE, viewport);
+
+  /*
+   * `next/script` with strategy="lazyOnload" runs the tag after the window
+   * load event, so the stub has not necessarily executed by the time the
+   * settle above is over. Waited for rather than slept on: a fixed pause long
+   * enough for a loaded CI runner is a pause on every run.
+   */
+  await page
+    .waitForFunction(() => Boolean(window.__gsi?.renderButton?.length), null, { timeout: 20_000 })
+    .catch(() => {});
+
+  const gsi = await page.evaluate(() => window.__gsi ?? null);
+  if (!gsi) {
+    fail(`${who}: the page never loaded Google's script, so no button can exist.`);
+    await context.close();
+    return;
+  }
+
+  const ids = gsi.initialize.map(config => config.client_id);
+  if (!ids.includes(GOOGLE_CLIENT_ID)) {
+    fail(
+      `${who}: initialised with ${JSON.stringify(ids)} rather than the id the page ships with.\n` +
+        '  NEXT_PUBLIC_GOOGLE_CLIENT_ID is deliberately not required — the API hardcodes the same ' +
+        'id, production does not set the variable, and treating it as environment-specific is ' +
+        'what removed sign-in once already.'
+    );
+  }
+
+  const drawn = gsi.renderButton.find(call => call.id === 'google-signin-button');
+  if (!drawn) {
+    fail(`${who}: Google was never asked to draw a button into the sign-in slot.`);
+  } else {
+    const slot = await page.evaluate(() => {
+      const el = document.getElementById('google-signin-button');
+      return el ? Math.round(el.getBoundingClientRect().width) : null;
+    });
+    if (slot !== null && drawn.width > slot + 1) {
+      fail(
+        `${who}: the button was drawn ${drawn.width}px wide into a ${slot}px slot, which overflows ` +
+          'the card.'
+      );
+    }
+    if (!(await page.isVisible('#google-signin-button button'))) {
+      fail(`${who}: the slot exists but no button is visible in it.`);
+    }
+  }
+
+  await checkFits(page, who);
+  await context.close();
+}
+
+/** Everything the front door has to do, at a desk and on a phone. */
+async function checkFrontDoor(browser, services) {
+  if (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
+    fail(
+      'NEXT_PUBLIC_GOOGLE_CLIENT_ID is set in this run, so the check that the page works without ' +
+        'it proves nothing. Unset it.'
+    );
+  }
+
+  for (const viewport of LOGIN_VIEWPORTS) {
+    // Each of these redeems or spends state, so the fixture is rebuilt per
+    // viewport: the usable grant is single-use by design.
+    const fixture = await seedLogin(services);
+
+    await checkLoginPage(browser, viewport);
+    await checkGoogleButton(browser, viewport);
+    await checkLoginByKeyboard(browser, fixture, viewport);
+
+    await checkLoginRefusal(browser, viewport, {
+      who: 'a wrong password',
+      path: LOGIN_ROUTE,
+      fill: async page => {
+        await page.fill('#signin-email', fixture.activeEmail);
+        await page.fill('#signin-password', 'not-the-password');
+        await page.click('main form button[type="submit"]');
+      },
+      expect: /invalid email or password/i,
+      allow: { path: '/api/auth/login', status: 401 },
+    });
+
+    await checkLoginRefusal(browser, viewport, {
+      who: 'a suspended account',
+      path: LOGIN_ROUTE,
+      fill: async page => {
+        await page.fill('#signin-email', fixture.suspendedEmail);
+        await page.fill('#signin-password', fixture.password);
+        await page.click('main form button[type="submit"]');
+      },
+      expect: /not active/i,
+      allow: { path: '/api/auth/login', status: 403 },
+    });
+
+    for (const [label, token, email] of [
+      ['an expired invitation', fixture.tokens.expired, fixture.expiredEmail],
+      ['an already-redeemed invitation', fixture.tokens.redeemed, fixture.redeemedEmail],
+    ]) {
+      const path = `${LOGIN_ROUTE}?activation=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+      // The preview answers before a password is typed, which is the point:
+      // being refused after filling the form in is a worse refusal than being
+      // refused on arrival.
+      await checkLoginRefusal(browser, viewport, {
+        who: label,
+        path,
+        fill: async () => {},
+        expect: /not valid for this email address/i,
+        allow: { path: '/api/auth/activation/preview', status: 400 },
+      });
+    }
+
+    await checkActivation(browser, fixture, viewport);
+  }
+}
+
 /** The dark scope: light document, dark pane. */
 async function checkDarkScope(browser, session) {
   const who = `dark scope on ${DARK_SCOPE_ROUTE}`;
@@ -1335,6 +2020,7 @@ async function main() {
     ...ROUTES.map(r => r.path),
     ...SWEEP.flatMap(entry => entry.routes),
     DARK_SCOPE_ROUTE,
+    LOGIN_ROUTE,
   ]);
   for (const path of everyRoute) {
     await fetch(`${FRONT}${path}`, { redirect: 'manual' }).catch(() => null);
@@ -1365,6 +2051,10 @@ async function main() {
       sweptRoutes++;
     }
   }
+
+  // The front door, signed out. Last, because it seeds its own agency and
+  // redeems an invitation, and nothing above should inherit either.
+  if (!ONLY) await checkFrontDoor(browser, services);
 
   await seed(services, ['ADMIN']);
   const staff = await signIn();
@@ -1414,7 +2104,8 @@ async function main() {
   console.log(
     `browser smoke test passed: ${ROLE_SETS.length} role set(s) x ${ROUTES.length} landing route(s), ` +
       `${sweptRoutes} route load(s) across ${SWEEP.length} sessions, light and legible, ` +
-      'no prompt, nothing refused, dark scope dark, polling settles.'
+      'no prompt, nothing refused, dark scope dark, polling settles, and the front door signs ' +
+      `people in at ${LOGIN_VIEWPORTS.map(v => v.label).join(' and ')}.`
   );
 }
 
