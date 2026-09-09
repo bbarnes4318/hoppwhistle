@@ -29,6 +29,11 @@ const DATABASE_BACKED = [
   // Creates two tenants and their webhook keys, so another suite's
   // `TRUNCATE "tenants" CASCADE` would delete them mid-test.
   '**/src/__tests__/lead-inject-stream.test.ts',
+  // Same: it seeds two agencies and truncates `roles`, and beside
+  // settlement.test.ts on the default pool the two delete each other's
+  // fixtures -- eleven failures whose text points at Prisma rather than at the
+  // race that caused them.
+  '**/src/__tests__/quota-summary.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',
