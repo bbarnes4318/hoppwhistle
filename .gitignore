@@ -91,6 +91,11 @@ deep.md
 !**/tsconfig*.json
 !**/vitest.config.json
 
+# Same rule, same trap: this is source data the app imports at build time, not
+# a generated artefact. Ignored, it builds locally off an untracked file and
+# fails CI on a missing module.
+!apps/web/src/app/state-value/licensing-fees.json
+
 # Redis snapshot written into the working directory by a local redis-server,
 # which is how the TEST_REDIS_URL-gated suites are run. Never source.
 dump.rdb
