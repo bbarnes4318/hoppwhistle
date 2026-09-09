@@ -62,7 +62,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Live',
     items: [
-      // Built in prompt 6. Shown disabled so the group reads correctly now.
+      // Not built yet. Shown disabled so the group reads correctly now.
       { name: 'Live board', href: '/admin/live', icon: MonitorPlay, pending: true },
       { name: 'Call center', href: '/call-center', icon: Headphones },
       { name: 'Calls', href: '/calls', icon: AudioLines },

@@ -529,7 +529,7 @@ export function CustomerIntakeForm(): JSX.Element {
  </CardDescription>
  </CardHeader>
  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
- <div className="flex items-center space-x-4 p-4 rounded-lg bg-muted/50">
+ <div className="flex items-center space-x-4 p-4 rounded-lg bg-sunken">
  <Switch
  id="ssBilling"
  checked={formData.ssBilling}
@@ -552,7 +552,7 @@ export function CustomerIntakeForm(): JSX.Element {
  <SelectTrigger
  className={cn(
  'transition-all',
- formData.ssBilling && 'border-amber-500/50 bg-amber-500/5'
+ formData.ssBilling && 'border-ringing bg-ringing-tint'
  )}
  >
  <SelectValue
@@ -570,7 +570,7 @@ export function CustomerIntakeForm(): JSX.Element {
  </SelectContent>
  </Select>
  {formData.ssBilling && (
- <p className="text-xs text-amber-500">
+ <p className="text-xs text-ringing-ink">
  Customer receives Social Security payments - using SS payment schedule
  </p>
  )}

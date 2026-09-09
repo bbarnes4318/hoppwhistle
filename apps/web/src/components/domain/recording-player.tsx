@@ -137,7 +137,7 @@ export function RecordingPlayer({
           onClick={() => void toggle()}
           disabled={Boolean(error)}
           aria-label={playing ? 'Pause recording' : 'Play recording'}
-          className="h-9 w-9 shrink-0 rounded-full bg-money p-0 text-white hover:bg-money/90 disabled:opacity-40"
+          className="h-9 w-9 shrink-0 rounded-full bg-brand p-0 text-ink hover:bg-brand-ink hover:text-surface disabled:opacity-40"
         >
           {loading ? (
             <Loader2 aria-hidden className="h-4 w-4 animate-spin" />

@@ -9,8 +9,8 @@ const DynamicCampaignGeoIntelligenceMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-slate-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500 mb-2" />
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-paper text-ink-3">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-ink mb-2" />
         <span>Loading WebGL Canvas Component...</span>
       </div>
     ),

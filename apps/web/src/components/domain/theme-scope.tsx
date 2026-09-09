@@ -13,10 +13,9 @@ import { cn } from '@/lib/utils';
  * popovers, the command palette. A portal is a DOM sibling of the scope, not a
  * descendant, so it inherits from <html> instead.
  *
- * Today that shows up as a dark drawer opening over a light page. After prompt 3
- * removes <html class="dark"> it inverts and gets worse: on the admin live
- * board — the one dark screen, themed with data-theme="dark" — every dropdown
- * and drawer would render light over it.
+ * The document is light, so on the admin live board — the one dark screen,
+ * themed with data-theme="dark" — every dropdown, drawer and select menu would
+ * otherwise render light over it.
  *
  * So the theme is carried in context as well as in the attribute, and portalled
  * components stamp `data-theme` on their own content. Any new component that

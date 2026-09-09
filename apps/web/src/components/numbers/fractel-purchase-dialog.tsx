@@ -159,7 +159,7 @@ export function FractelPurchaseDialog({
         return (
           <div className="space-y-4">
             {/* Local / Toll-Free toggle */}
-            <div className="inline-flex rounded-lg border border-border p-1 bg-muted/40">
+            <div className="inline-flex rounded-lg border border-border p-1 bg-sunken">
               {(['local', 'tollfree'] as NumberType[]).map(t => (
                 <button
                   key={t}
@@ -280,7 +280,7 @@ export function FractelPurchaseDialog({
                 </div>
               </div>
 
-              <div className="bg-muted/50 p-3 rounded-md text-sm text-muted-foreground">
+              <div className="bg-sunken p-3 rounded-md text-sm text-muted-foreground">
                 <CheckCircle className="h-4 w-4 inline mr-1" />
                 Your number will be immediately provisioned and routed to your account.
               </div>
@@ -309,8 +309,8 @@ export function FractelPurchaseDialog({
         return (
           <div className="space-y-6 text-center py-6">
             <div className="flex justify-center">
-              <div className="h-16 w-16 rounded-full bg-green-500/20 flex items-center justify-center">
-                <CheckCircle className="h-10 w-10 text-green-500" />
+              <div className="h-16 w-16 rounded-full bg-live-tint flex items-center justify-center">
+                <CheckCircle className="h-10 w-10 text-live-ink" />
               </div>
             </div>
             <div>

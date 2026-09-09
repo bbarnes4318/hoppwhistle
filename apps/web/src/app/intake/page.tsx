@@ -56,7 +56,7 @@ export default function IntakePage(): JSX.Element {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-paper">
       <Script
         id="trustedform-script"
         strategy="afterInteractive"
@@ -69,33 +69,31 @@ export default function IntakePage(): JSX.Element {
         className="pointer-events-none absolute -left-[9999px] h-px w-px overflow-hidden"
       />
 
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-rule bg-surface/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-6 py-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
               <Link
                 href="/insurance-leads"
-                className="mt-1 rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                className="mt-1 rounded-md p-2 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
                 aria-label="Back to CRM"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-white">Add Customer</h1>
-                <p className="text-sm text-slate-400">
+                <h1 className="text-2xl font-bold text-ink">Add Customer</h1>
+                <p className="text-sm text-ink-3">
                   Save a lead to the CRM, send it to the buyer, or complete a full application.
                 </p>
               </div>
             </div>
 
-            <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-1">
+            <div className="flex rounded-lg border border-rule bg-sunken p-1">
               <button
                 type="button"
                 onClick={() => setMode('lead')}
                 className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                  mode === 'lead'
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  mode === 'lead' ? 'bg-brand text-brand-fg' : 'text-ink-3 hover:bg-rule hover:text-ink'
                 }`}
               >
                 <ClipboardPlus className="h-4 w-4" />
@@ -106,8 +104,8 @@ export default function IntakePage(): JSX.Element {
                 onClick={() => setMode('application')}
                 className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                   mode === 'application'
-                    ? 'bg-cyan-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-brand text-brand-fg'
+                    : 'text-ink-3 hover:bg-rule hover:text-ink'
                 }`}
               >
                 <FileText className="h-4 w-4" />
@@ -123,18 +121,18 @@ export default function IntakePage(): JSX.Element {
           <ManualLeadEntryFormV2 />
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-3">
+            <div className="flex items-center justify-between rounded-lg border border-rule bg-sunken px-4 py-3">
               <div>
-                <p className="font-medium text-white">Full Final Expense Application</p>
-                <p className="text-sm text-slate-400">
+                <p className="font-medium text-ink">Full Final Expense Application</p>
+                <p className="text-sm text-ink-3">
                   Use this section for policy and banking information after the lead is ready.
                 </p>
               </div>
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-medium ${
                   certUrl
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300'
+                    ? 'border-live/40 bg-live-tint text-live-ink'
+                    : 'border-ringing/40 bg-ringing-tint text-ringing-ink'
                 }`}
               >
                 {certUrl ? 'TrustedForm Active' : 'TrustedForm Loading'}

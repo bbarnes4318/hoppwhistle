@@ -45,7 +45,7 @@ export function EmptyState({
   ) => {
     const classes =
       kind === 'primary'
-        ? 'bg-money text-white hover:bg-money/90'
+        ? 'bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface'
         : 'border border-rule bg-transparent text-ink hover:bg-sunken';
     if (a.href) {
       return (

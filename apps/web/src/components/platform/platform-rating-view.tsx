@@ -190,7 +190,7 @@ export function PlatformRatingView(): JSX.Element {
                   return a.name.localeCompare(b.name);
                 })
                 .map(row => (
-                  <TableRow key={row.tenantId} className={cn(row.underReview && 'bg-amber-500/5')}>
+                  <TableRow key={row.tenantId} className={cn(row.underReview && 'bg-ringing-tint')}>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium">{row.name}</span>
@@ -242,7 +242,7 @@ export function PlatformRatingView(): JSX.Element {
                     */}
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {row.trackingBelowMinimum ? (
-                        <span className="text-amber-500">review</span>
+                        <span className="text-ringing-ink">review</span>
                       ) : (
                         dollars(row.trackingRate)
                       )}

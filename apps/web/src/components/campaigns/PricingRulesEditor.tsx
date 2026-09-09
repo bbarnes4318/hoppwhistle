@@ -128,7 +128,7 @@ export function PricingRulesEditor({
  {rules.map((rule, index) => (
  <div
  key={index}
- className="flex items-center gap-2 rounded-lg border p-3 bg-muted/30"
+ className="flex items-center gap-2 rounded-lg border p-3 bg-sunken"
  >
  {/* Field */}
  <Select
@@ -228,7 +228,7 @@ export function PricingRulesEditor({
 
  {/* Preview */}
  {rules.length > 0 && (
- <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
+ <div className="text-sm text-muted-foreground bg-sunken rounded-lg p-3">
  <p className="font-medium mb-1">Example Calculation:</p>
  <p>
  Base: ${basePrice.toFixed(2)}

@@ -88,11 +88,11 @@ function Stat({
 }) {
   const toneClass =
     tone === 'good'
-      ? 'text-emerald-600 dark:text-emerald-400'
+      ? 'text-live-ink'
       : tone === 'warn'
-        ? 'text-amber-600 dark:text-amber-400'
+        ? 'text-ringing-ink'
         : tone === 'bad'
-          ? 'text-red-600 dark:text-red-400'
+          ? 'text-dropped-ink'
           : 'text-foreground';
 
   return (
@@ -227,7 +227,7 @@ export default function DialerV2ShadowPage() {
       {/* Required label. Rendered unconditionally, above every metric. */}
       <div
         role="status"
-        className="rounded-lg border-2 border-amber-500/50 bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold tracking-wide"
+        className="rounded-lg border-2 border-ringing/50 bg-ringing-tint px-4 py-3 text-center text-sm font-semibold tracking-wide"
       >
         {SHADOW_BANNER}
       </div>
@@ -238,7 +238,7 @@ export default function DialerV2ShadowPage() {
           beneath it, rather than leaving the correction to a tile further down
           the page that an operator may never scroll to. */}
       {status?.originationImplemented ? (
-        <div className="flex items-start gap-3 rounded-lg border-2 border-red-500/60 bg-red-500/10 p-4 text-sm">
+        <div className="flex items-start gap-3 rounded-lg border-2 border-dropped/60 bg-dropped-tint p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div>
             <strong>The service reports an origination code path in this build.</strong>
@@ -251,7 +251,7 @@ export default function DialerV2ShadowPage() {
       ) : null}
 
       {error ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <div className="flex items-start gap-3 rounded-lg border border-ringing/40 bg-ringing-tint p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div>{error}</div>
         </div>
@@ -260,7 +260,7 @@ export default function DialerV2ShadowPage() {
       {loading && !status ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
       {status && !status.serviceReachable ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <div className="flex items-start gap-3 rounded-lg border border-ringing/40 bg-ringing-tint p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div>
             <strong>The Dialer V2 service is not reachable.</strong>
@@ -272,7 +272,7 @@ export default function DialerV2ShadowPage() {
       ) : null}
 
       {status?.emergencyStop ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm">
+        <div className="rounded-lg border border-dropped/40 bg-dropped-tint p-4 text-sm">
           <strong>Emergency stop is engaged.</strong> No new calls would be placed.
         </div>
       ) : null}
@@ -416,7 +416,7 @@ export default function DialerV2ShadowPage() {
           </h2>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
-              <thead className="border-b bg-muted/50 text-left">
+              <thead className="border-b bg-sunken text-left">
                 <tr>
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Agent</th>
@@ -460,7 +460,7 @@ export default function DialerV2ShadowPage() {
         {rows.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
-              <thead className="border-b bg-muted/50 text-left">
+              <thead className="border-b bg-sunken text-left">
                 <tr>
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Campaign</th>
@@ -498,7 +498,7 @@ export default function DialerV2ShadowPage() {
         ) : null}
       </section>
 
-      <footer className="rounded-lg border bg-muted/30 p-4 text-xs text-muted-foreground">
+      <footer className="rounded-lg border bg-sunken p-4 text-xs text-muted-foreground">
         <strong className="text-foreground">Shadow mode.</strong> Every row above is a decision the
         pacing controller would have made against observed state.{' '}
         {status === null

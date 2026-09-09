@@ -477,22 +477,22 @@ export default function CampaignGeoIntelligenceMap() {
   const getRecommendationBadge = (rec: 'scale' | 'watch' | 'pause' | 'investigate') => {
     const config = {
       scale: {
-        bg: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+        bg: 'bg-live-tint border-live/40 text-live-ink',
         icon: CheckCircle2,
         label: 'Scale Market',
       },
       watch: {
-        bg: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
+        bg: 'bg-money-tint border-money/40 text-money-ink',
         icon: HelpCircle,
         label: 'Pace & Watch',
       },
       pause: {
-        bg: 'bg-red-500/10 border-red-500/30 text-red-400',
+        bg: 'bg-blocked-tint border-blocked/40 text-blocked-ink',
         icon: PauseCircle,
         label: 'Mute / Pause',
       },
       investigate: {
-        bg: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+        bg: 'bg-ringing-tint border-ringing/40 text-ringing-ink',
         icon: AlertTriangle,
         label: 'Investigate',
       },
@@ -522,10 +522,10 @@ export default function CampaignGeoIntelligenceMap() {
 
   const confidenceBadge = (conf: 'high' | 'medium' | 'low' | 'unknown') => {
     const config = {
-      high: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-      medium: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
-      low: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-      unknown: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/20',
+      high: 'bg-live-tint text-live-ink border-live/40',
+      medium: 'bg-ringing-tint text-ringing-ink border-ringing/40',
+      low: 'bg-dropped-tint text-dropped-ink border-dropped/40',
+      unknown: 'bg-sunken text-ink-3 border-rule',
     };
     const labels = {
       high: 'CRM Verified',
@@ -543,19 +543,19 @@ export default function CampaignGeoIntelligenceMap() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-slate-950 text-slate-100 overflow-hidden select-none relative font-sans">
+    <div className="flex flex-col h-full w-full bg-paper text-ink overflow-hidden select-none relative font-sans">
       {/* 1. TOP CONTROL ROW (Command Center Panel) */}
-      <div className="min-h-16 h-auto py-3 shrink-0 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 px-6 z-20 backdrop-blur-md">
+      <div className="min-h-16 h-auto py-3 shrink-0 bg-surface border-b border-rule flex flex-wrap items-center justify-between gap-4 px-6 z-20 backdrop-blur-md">
         {/* Left Side Header */}
         <div className="flex items-center gap-4">
-          <div className="p-2 bg-sky-500/10 rounded-lg border border-sky-500/20">
-            <Globe className="h-5 w-5 text-sky-400" />
+          <div className="p-2 bg-brand-tint rounded-lg border border-rule">
+            <Globe className="h-5 w-5 text-brand-ink" />
           </div>
           <div>
-            <h1 className="text-sm font-black uppercase tracking-wider text-slate-100">
+            <h1 className="text-sm font-black uppercase tracking-wider text-ink">
               Campaign Geography
             </h1>
-            <p className="text-[10px] text-slate-400 font-medium">
+            <p className="text-[10px] text-ink-3 font-medium">
               See where answers, listens, transfers, and revenue are moving live.
             </p>
           </div>
@@ -565,13 +565,13 @@ export default function CampaignGeoIntelligenceMap() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Campaign Selector */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Select Campaign
             </span>
             <select
               value={selectedCampaign}
               onChange={e => setSelectedCampaign(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-semibold text-slate-200 outline-none focus:border-sky-500 cursor-pointer h-7"
+              className="bg-surface border border-rule rounded px-2.5 py-1 text-xs font-semibold text-ink-2 outline-none focus:border-brand-ink cursor-pointer h-7"
             >
               <option value="all">All Campaigns</option>
               {mockCampaigns.map(c => (
@@ -584,15 +584,15 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Preset Date Selector */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Date Preset
             </span>
-            <div className="bg-slate-950 border border-slate-800 rounded p-0.5 flex h-7">
+            <div className="bg-surface border border-rule rounded p-0.5 flex h-7">
               {['day', 'week', 'month'].map(p => (
                 <button
                   key={p}
                   onClick={() => setSelectedPreset(p)}
-                  className={`px-2 text-[10px] font-bold rounded uppercase transition-colors ${selectedPreset === p ? 'bg-slate-800 text-sky-400' : 'text-slate-500 hover:text-slate-300'}`}
+                  className={`px-2 text-[10px] font-bold rounded uppercase transition-colors ${selectedPreset === p ? 'bg-brand-tint text-brand-ink' : 'text-ink-3 hover:text-ink-2'}`}
                 >
                   {p}
                 </button>
@@ -602,13 +602,13 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Metric Selector */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Visual Layer Metric
             </span>
             <select
               value={selectedMetric}
               onChange={e => setSelectedMetric(e.target.value as MetricType)}
-              className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-semibold text-slate-200 outline-none focus:border-sky-500 cursor-pointer h-7"
+              className="bg-surface border border-rule rounded px-2.5 py-1 text-xs font-semibold text-ink-2 outline-none focus:border-brand-ink cursor-pointer h-7"
             >
               <option value="contacted">Outbound Dials</option>
               <option value="answered">Answers / Connects</option>
@@ -625,13 +625,13 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Granularity Selector */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Granularity
             </span>
             <select
               value={selectedGranularity}
               onChange={e => setSelectedGranularity(e.target.value as GranularityType)}
-              className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-semibold text-slate-200 outline-none focus:border-sky-500 cursor-pointer h-7"
+              className="bg-surface border border-rule rounded px-2.5 py-1 text-xs font-semibold text-ink-2 outline-none focus:border-brand-ink cursor-pointer h-7"
             >
               <option value="state">U.S. State</option>
               <option value="area_code">Area Code (NPA)</option>
@@ -642,13 +642,13 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Location Confidence Filter */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Georef Confidence
             </span>
             <select
               value={confidenceFilter}
               onChange={e => setConfidenceFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-semibold text-slate-200 outline-none focus:border-sky-500 cursor-pointer h-7"
+              className="bg-surface border border-rule rounded px-2.5 py-1 text-xs font-semibold text-ink-2 outline-none focus:border-brand-ink cursor-pointer h-7"
             >
               <option value="all">All Confidence</option>
               <option value="high">CRM Verified Only</option>
@@ -659,19 +659,19 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Live Radar Toggle */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Live Pulse
             </span>
             <button
               onClick={() => setLiveMode(!liveMode)}
               className={`h-7 px-3 rounded text-xs font-bold border transition-all flex items-center gap-1.5 ${
                 liveMode
-                  ? 'bg-sky-500/10 border-sky-400 text-sky-400 shadow-[0_0_10px_rgba(14,165,233,0.15)]'
-                  : 'bg-slate-950 border-slate-800 text-slate-500'
+                  ? 'bg-brand-tint border-brand-ink text-brand-ink'
+                  : 'bg-surface border-rule text-ink-3'
               }`}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${liveMode ? 'bg-sky-400 animate-pulse' : 'bg-slate-600'}`}
+                className={`h-1.5 w-1.5 rounded-full ${liveMode ? 'bg-live animate-pulse' : 'bg-ink-3'}`}
               />
               Radar {liveMode ? 'On' : 'Off'}
             </button>
@@ -679,17 +679,17 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Search bar */}
           <div className="flex flex-col gap-0.5 relative">
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
               Search Market
             </span>
             <div className="relative">
-              <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-slate-500" />
+              <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-ink-3" />
               <input
                 type="text"
                 placeholder="State, City, NPA..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded pl-7 pr-2.5 py-1 text-xs font-semibold text-slate-200 outline-none focus:border-sky-500 h-7 w-40 placeholder-slate-600"
+                className="bg-surface border border-rule rounded pl-7 pr-2.5 py-1 text-xs font-semibold text-ink-2 outline-none focus:border-brand-ink h-7 w-40 placeholder-ink-3"
               />
             </div>
           </div>
@@ -699,7 +699,7 @@ export default function CampaignGeoIntelligenceMap() {
       {/* 2. MAP AREA + FLOATING CONTROLS + SIDE PANEL */}
       <div className="flex-1 min-h-0 flex relative z-10">
         {/* Map Container */}
-        <div className="flex-1 h-full w-full relative bg-slate-900">
+        <div className="flex-1 h-full w-full relative bg-surface">
           {DeckGL ? (
             <div className="relative w-full h-full">
               {/* MapLibre container rendering the dark matter vector base map underneath */}
@@ -716,23 +716,23 @@ export default function CampaignGeoIntelligenceMap() {
               />
             </div>
           ) : (
-            <div className="h-full w-full flex flex-col items-center justify-center text-slate-400">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500 mb-2" />
+            <div className="h-full w-full flex flex-col items-center justify-center text-ink-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-ink mb-2" />
               <span>Initializing WebGL Canvas...</span>
             </div>
           )}
 
           {/* Map Controls (Zoom / Camera Reset Overlay) */}
-          <div className="absolute right-4 top-4 flex flex-col gap-2 bg-slate-900/90 border border-slate-800 p-1.5 rounded-lg backdrop-blur z-20">
+          <div className="absolute right-4 top-4 flex flex-col gap-2 bg-surface border border-rule p-1.5 rounded-lg backdrop-blur z-20">
             <button
               onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.8, 16) }))}
-              className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 rounded flex items-center justify-center transition-colors"
+              className="w-7 h-7 text-xs font-bold text-ink-2 hover:text-ink bg-surface border border-rule rounded flex items-center justify-center transition-colors"
             >
               +
             </button>
             <button
               onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.8, 1) }))}
-              className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 rounded flex items-center justify-center transition-colors"
+              className="w-7 h-7 text-xs font-bold text-ink-2 hover:text-ink bg-surface border border-rule rounded flex items-center justify-center transition-colors"
             >
               -
             </button>
@@ -746,7 +746,7 @@ export default function CampaignGeoIntelligenceMap() {
                   bearing: -10,
                 })
               }
-              className="w-7 h-7 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-950 border border-slate-800 rounded flex items-center justify-center transition-colors"
+              className="w-7 h-7 text-[10px] font-bold text-ink-2 hover:text-ink bg-surface border border-rule rounded flex items-center justify-center transition-colors"
               title="Reset View"
             >
               RST
@@ -755,34 +755,34 @@ export default function CampaignGeoIntelligenceMap() {
 
           {/* Disclaimer Legend Overlay */}
           {showLegend ? (
-            <div className="absolute left-4 bottom-4 bg-slate-950/95 border border-slate-800/80 p-3.5 rounded-xl backdrop-blur-md max-w-sm shadow-[0_4px_24px_rgba(0,0,0,0.5)] z-20">
+            <div className="absolute left-4 bottom-4 bg-surface border border-rule p-3.5 rounded-card backdrop-blur-md max-w-sm shadow-lg z-20">
               <div className="flex items-center justify-between gap-4 mb-1.5">
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-200">
+                  <div className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" />
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-ink-2">
                     Radar Metrics Legend
                   </h3>
                 </div>
                 <button
                   onClick={() => setShowLegend(false)}
-                  className="text-slate-400 hover:text-white p-0.5 hover:bg-slate-800 rounded transition-colors text-[10px] font-bold h-5 w-5 flex items-center justify-center border border-slate-800"
+                  className="text-ink-3 hover:text-ink p-0.5 hover:bg-sunken rounded transition-colors text-[10px] font-bold h-5 w-5 flex items-center justify-center border border-rule"
                   title="Close Legend"
                 >
                   &times;
                 </button>
               </div>
-              <div className="space-y-1.5 text-[9px] text-slate-400">
+              <div className="space-y-1.5 text-[9px] text-ink-3">
                 <p>
                   Node sizes indicate total contacted call volume. Color scaling indicates intensity
                   of selected metric:{' '}
-                  <span className="font-semibold text-slate-200">{selectedMetric}</span>.
+                  <span className="font-semibold text-ink-2">{selectedMetric}</span>.
                 </p>
-                <div className="h-2 w-full bg-gradient-to-r from-slate-900 to-sky-500 rounded my-1 border border-slate-800" />
-                <div className="flex justify-between text-[8px] font-mono text-slate-500">
+                <div className="h-2 w-full bg-gradient-to-r from-sunken to-brand rounded my-1 border border-rule" />
+                <div className="flex justify-between text-[8px] font-mono text-ink-3">
                   <span>MIN</span>
                   <span>MAX ({formatMetricValue(maxVal)})</span>
                 </div>
-                <p className="border-t border-slate-800/50 pt-1.5 text-[8px] leading-relaxed text-slate-500 italic">
+                <p className="border-t border-rule pt-1.5 text-[8px] leading-relaxed text-ink-3 italic">
                   Disclaimer: Locations are derived from lead metadata and phone-number market data.
                   Area-code and prefix locations are directional, not exact physical locations.
                 </p>
@@ -791,7 +791,7 @@ export default function CampaignGeoIntelligenceMap() {
           ) : (
             <button
               onClick={() => setShowLegend(true)}
-              className="absolute left-4 bottom-4 bg-slate-950/95 border border-slate-800 p-2 rounded-xl hover:bg-slate-900 text-[10px] text-sky-400 font-bold flex items-center gap-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.5)] z-20 transition-all hover:scale-105"
+              className="absolute left-4 bottom-4 bg-surface border border-rule p-2 rounded-card hover:bg-sunken text-[10px] text-brand-ink font-bold flex items-center gap-1.5 shadow-lg z-20 transition-all hover:scale-105"
             >
               <HelpCircle className="h-3.5 w-3.5" />
               <span>Show Legend</span>
@@ -801,49 +801,49 @@ export default function CampaignGeoIntelligenceMap() {
           {/* Tooltip Overlay */}
           {hoveredPoint && hoverInfo && (
             <div
-              className="absolute pointer-events-none bg-slate-950/95 border border-slate-800 p-3 rounded-lg shadow-xl backdrop-blur-md z-30 w-52"
+              className="absolute pointer-events-none bg-surface border border-rule p-3 rounded-lg shadow-lg backdrop-blur-md z-30 w-52"
               style={{ left: hoverInfo.x + 15, top: hoverInfo.y - 40 }}
             >
               <div className="flex justify-between items-start gap-2 mb-1">
-                <span className="text-xs font-black text-slate-100">{hoveredPoint.label}</span>
+                <span className="text-xs font-black text-ink">{hoveredPoint.label}</span>
                 {confidenceBadge(hoveredPoint.locationConfidence)}
               </div>
-              <div className="space-y-1 font-mono text-[9px] text-slate-400">
+              <div className="space-y-1 font-mono text-[9px] text-ink-3">
                 <div className="flex justify-between">
                   <span>Dials:</span>
-                  <span className="text-slate-200 font-bold">{hoveredPoint.contacted}</span>
+                  <span className="text-ink-2 font-bold">{hoveredPoint.contacted}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Answers:</span>
-                  <span className="text-slate-200">
+                  <span className="text-ink-2">
                     {hoveredPoint.answered} ({hoveredPoint.answerRate || 0}%)
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Listens:</span>
-                  <span className="text-slate-200">
+                  <span className="text-ink-2">
                     {hoveredPoint.verifiedListens} ({hoveredPoint.listenRate || 0}%)
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Transfers:</span>
-                  <span className="text-emerald-400 font-bold">
+                  <span className="text-live-ink font-bold">
                     {hoveredPoint.transfers} ({hoveredPoint.transferRate || 0}%)
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Conversions:</span>
-                  <span className="text-emerald-400 font-bold">{hoveredPoint.conversions}</span>
+                  <span className="text-live-ink font-bold">{hoveredPoint.conversions}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Revenue:</span>
-                  <span className="text-yellow-400 font-bold">
+                  <span className="text-money-ink font-bold">
                     ${Math.round(hoveredPoint.revenueMovement || 0)}
                   </span>
                 </div>
-                <div className="border-t border-slate-800 pt-1 flex justify-between text-[8px] uppercase tracking-wider text-slate-500 font-bold">
+                <div className="border-t border-rule pt-1 flex justify-between text-[8px] uppercase tracking-wider text-ink-3 font-bold">
                   <span>Performance:</span>
-                  <span className="text-sky-400">{calculateMarketScore(hoveredPoint)}/100</span>
+                  <span className="text-brand-ink">{calculateMarketScore(hoveredPoint)}/100</span>
                 </div>
               </div>
             </div>
@@ -852,22 +852,22 @@ export default function CampaignGeoIntelligenceMap() {
 
         {/* Side Inspector Intelligence Panel */}
         <div
-          className={`w-80 shrink-0 border-l border-slate-800 bg-slate-900/95 flex flex-col h-full z-20 backdrop-blur transition-all duration-300 ${inspectedPoint ? 'translate-x-0' : 'translate-x-full absolute right-0 w-0 border-l-0 overflow-hidden'}`}
+          className={`w-80 shrink-0 border-l border-rule bg-surface flex flex-col h-full z-20 backdrop-blur transition-all duration-300 ${inspectedPoint ? 'translate-x-0' : 'translate-x-full absolute right-0 w-0 border-l-0 overflow-hidden'}`}
         >
           {inspectedPoint && (
             <div className="flex flex-col h-full overflow-y-auto p-5 space-y-5">
               {/* Panel Header */}
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-1 text-[8px] font-bold text-sky-400 tracking-[0.2em] uppercase mb-1">
+                  <div className="flex items-center gap-1 text-[8px] font-bold text-brand-ink tracking-[0.2em] uppercase mb-1">
                     <MapPin className="h-3 w-3" /> Market Diagnostics
                   </div>
-                  <h2 className="text-sm font-black text-slate-100 leading-tight mb-1">
+                  <h2 className="text-sm font-black text-ink leading-tight mb-1">
                     {inspectedPoint.label}
                   </h2>
                   <div className="flex items-center gap-2">
                     {confidenceBadge(inspectedPoint.locationConfidence)}
-                    <span className="text-[9px] font-mono text-slate-500">
+                    <span className="text-[9px] font-mono text-ink-3">
                       AC: {inspectedPoint.areaCode || 'N/A'}{' '}
                       {inspectedPoint.nxx ? `-${inspectedPoint.nxx}` : ''}
                     </span>
@@ -875,127 +875,127 @@ export default function CampaignGeoIntelligenceMap() {
                 </div>
                 <button
                   onClick={() => setInspectedPoint(null)}
-                  className="text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 p-1.5 rounded transition-colors"
+                  className="text-ink-3 hover:text-ink bg-surface hover:bg-sunken p-1.5 rounded transition-colors"
                 >
                   &times;
                 </button>
               </div>
 
               {/* Recommendation Badge Section */}
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-2">
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+              <div className="bg-sunken border border-rule rounded-card p-4 space-y-2">
+                <span className="text-[8px] font-bold text-ink-3 uppercase tracking-widest">
                   Geo-Recommendation
                 </span>
                 {getRecommendationBadge(calculateRecommendation(inspectedPoint))}
-                <p className="text-[10px] leading-relaxed text-slate-300 pt-1.5 border-t border-slate-800/50">
+                <p className="text-[10px] leading-relaxed text-ink-2 pt-1.5 border-t border-rule">
                   {getRecommendationText(inspectedPoint)}
                 </p>
               </div>
 
               {/* KPI Funnel Block */}
               <div className="space-y-2">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                <span className="text-[8px] font-black text-ink-3 uppercase tracking-wider">
                   Outbound Call Funnel
                 </span>
-                <div className="space-y-1.5 font-mono text-[10px] text-slate-400 bg-slate-950/40 p-3 rounded-lg border border-slate-800/60">
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                <div className="space-y-1.5 font-mono text-[10px] text-ink-3 bg-sunken p-3 rounded-lg border border-rule">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Outbound Dials
                     </span>
-                    <span className="text-slate-200 font-bold">{inspectedPoint.contacted}</span>
+                    <span className="text-ink-2 font-bold">{inspectedPoint.contacted}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Answers
                     </span>
-                    <span className="text-slate-200">
+                    <span className="text-ink-2">
                       {inspectedPoint.answered}{' '}
-                      <span className="text-slate-500 text-[8px]">
+                      <span className="text-ink-3 text-[8px]">
                         ({inspectedPoint.answerRate || 0}%)
                       </span>
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Verified Listens
                     </span>
-                    <span className="text-sky-400 font-bold">
+                    <span className="text-brand-ink font-bold">
                       {inspectedPoint.verifiedListens}{' '}
-                      <span className="text-slate-500 text-[8px]">
+                      <span className="text-ink-3 text-[8px]">
                         ({inspectedPoint.listenRate || 0}%)
                       </span>
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Engagements
                     </span>
-                    <span className="text-indigo-400">
+                    <span className="text-brand-ink">
                       {inspectedPoint.engagements}{' '}
-                      <span className="text-slate-500 text-[8px]">
+                      <span className="text-ink-3 text-[8px]">
                         ({inspectedPoint.engagementRate || 0}%)
                       </span>
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Opt-Ins / CBs
                     </span>
-                    <span className="text-amber-400 font-bold">{inspectedPoint.optIns || 0}</span>
+                    <span className="text-ringing-ink font-bold">{inspectedPoint.optIns || 0}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Transferred Calls
                     </span>
-                    <span className="text-emerald-400 font-bold">
+                    <span className="text-live-ink font-bold">
                       {inspectedPoint.transfers}{' '}
-                      <span className="text-slate-500 text-[8px]">
+                      <span className="text-ink-3 text-[8px]">
                         ({inspectedPoint.transferRate || 0}%)
                       </span>
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center py-0.5 border-b border-slate-800/30">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                  <div className="flex justify-between items-center py-0.5 border-b border-rule">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       Conversions
                     </span>
-                    <span className="text-emerald-400 font-bold">{inspectedPoint.conversions}</span>
+                    <span className="text-live-ink font-bold">{inspectedPoint.conversions}</span>
                   </div>
 
                   <div className="flex justify-between items-center py-0.5">
-                    <span className="text-slate-500 font-sans text-[9px] uppercase tracking-wider">
+                    <span className="text-ink-3 font-sans text-[9px] uppercase tracking-wider">
                       DNC Requests
                     </span>
-                    <span className="text-red-400 font-bold">{inspectedPoint.dnc || 0}</span>
+                    <span className="text-blocked-ink font-bold">{inspectedPoint.dnc || 0}</span>
                   </div>
                 </div>
               </div>
 
               {/* Financial attribution */}
               <div className="space-y-2">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                <span className="text-[8px] font-black text-ink-3 uppercase tracking-wider">
                   Financial Diagnostics
                 </span>
                 <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono font-bold">
-                  <div className="bg-slate-950/40 border border-slate-800 rounded p-2">
-                    <div className="text-[8px] text-slate-500 uppercase font-bold tracking-wider font-sans mb-0.5">
+                  <div className="bg-sunken border border-rule rounded p-2">
+                    <div className="text-[8px] text-ink-3 uppercase font-bold tracking-wider font-sans mb-0.5">
                       Spent
                     </div>
-                    <div className="text-slate-300 font-semibold">
+                    <div className="text-ink-2 font-semibold">
                       ${Math.round(inspectedPoint.spend || 0)}
                     </div>
                   </div>
-                  <div className="bg-slate-950/40 border border-slate-800 rounded p-2">
-                    <div className="text-[8px] text-slate-500 uppercase font-bold tracking-wider font-sans mb-0.5">
+                  <div className="bg-sunken border border-rule rounded p-2">
+                    <div className="text-[8px] text-ink-3 uppercase font-bold tracking-wider font-sans mb-0.5">
                       Revenue
                     </div>
                     <div
-                      className={`font-semibold ${inspectedPoint.revenueMovement >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                      className={`font-semibold ${inspectedPoint.revenueMovement >= 0 ? 'text-live-ink' : 'text-dropped-ink'}`}
                     >
                       ${Math.round(inspectedPoint.revenueMovement || 0)}
                     </div>
@@ -1005,31 +1005,31 @@ export default function CampaignGeoIntelligenceMap() {
 
               {/* Telemetry Cost metrics */}
               <div className="space-y-2">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                <span className="text-[8px] font-black text-ink-3 uppercase tracking-wider">
                   Efficiency Ratios
                 </span>
-                <div className="space-y-1.5 font-mono text-[9px] text-slate-400 bg-slate-950/20 p-3 rounded-lg border border-slate-800/60">
+                <div className="space-y-1.5 font-mono text-[9px] text-ink-3 bg-sunken p-3 rounded-lg border border-rule">
                   <div className="flex justify-between">
                     <span>Cost Per Connect (CPC):</span>
-                    <span className="text-slate-300">
+                    <span className="text-ink-2">
                       ${inspectedPoint.costPerAnswer?.toFixed(2) || '0.00'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Cost Per Verified Listen:</span>
-                    <span className="text-slate-300">
+                    <span className="text-ink-2">
                       ${inspectedPoint.costPerVerifiedListen?.toFixed(2) || '0.00'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Cost Per Agent Transfer:</span>
-                    <span className="text-slate-300 font-bold">
+                    <span className="text-ink-2 font-bold">
                       ${inspectedPoint.costPerTransfer?.toFixed(2) || '0.00'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Cost Per Conversion:</span>
-                    <span className="text-emerald-400 font-bold">
+                    <span className="text-live-ink font-bold">
                       ${inspectedPoint.costPerConversion?.toFixed(2) || '0.00'}
                     </span>
                   </div>
@@ -1037,7 +1037,7 @@ export default function CampaignGeoIntelligenceMap() {
               </div>
 
               {/* Geographic Coordinates metadata */}
-              <div className="flex justify-between text-[8px] text-slate-500 uppercase tracking-wider font-mono border-t border-slate-800 pt-3">
+              <div className="flex justify-between text-[8px] text-ink-3 uppercase tracking-wider font-mono border-t border-rule pt-3">
                 <span>Lat: {inspectedPoint.latitude.toFixed(4)}</span>
                 <span>Lng: {inspectedPoint.longitude.toFixed(4)}</span>
               </div>
@@ -1047,12 +1047,12 @@ export default function CampaignGeoIntelligenceMap() {
       </div>
 
       {/* 3. BOTTOM INTEL STRIP (Horizontal list grids) */}
-      <div className="h-32 shrink-0 bg-slate-900 border-t border-slate-800 grid grid-cols-5 divide-x divide-slate-800/60 z-20">
+      <div className="h-32 shrink-0 bg-surface border-t border-rule grid grid-cols-5 divide-x divide-rule z-20">
         {/* Panel 1: Top Connect Rates */}
         <div className="p-3.5 flex flex-col justify-between min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            <Zap className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
+            <Zap className="h-3.5 w-3.5 text-money-ink" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-ink-2">
               Answer Rate
             </span>
           </div>
@@ -1060,13 +1060,13 @@ export default function CampaignGeoIntelligenceMap() {
             {bottomAnalysis.topAnswers.map((p, idx) => (
               <div
                 key={p.id}
-                className="flex justify-between text-[10px] items-center text-slate-300 hover:text-white cursor-pointer"
+                className="flex justify-between text-[10px] items-center text-ink-2 hover:text-ink cursor-pointer"
                 onClick={() => setInspectedPoint(p)}
               >
                 <span className="truncate pr-2 font-medium">
                   {idx + 1}. {p.label}
                 </span>
-                <span className="font-mono font-bold text-sky-400 shrink-0">{p.answerRate}%</span>
+                <span className="font-mono font-bold text-brand-ink shrink-0">{p.answerRate}%</span>
               </div>
             ))}
           </div>
@@ -1075,8 +1075,8 @@ export default function CampaignGeoIntelligenceMap() {
         {/* Panel 2: Listen Quality Volumes */}
         <div className="p-3.5 flex flex-col justify-between min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            <Volume2 className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
+            <Volume2 className="h-3.5 w-3.5 text-brand-ink" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-ink-2">
               Listen Volumes
             </span>
           </div>
@@ -1084,13 +1084,13 @@ export default function CampaignGeoIntelligenceMap() {
             {bottomAnalysis.topListens.map((p, idx) => (
               <div
                 key={p.id}
-                className="flex justify-between text-[10px] items-center text-slate-300 hover:text-white cursor-pointer"
+                className="flex justify-between text-[10px] items-center text-ink-2 hover:text-ink cursor-pointer"
                 onClick={() => setInspectedPoint(p)}
               >
                 <span className="truncate pr-2 font-medium">
                   {idx + 1}. {p.label}
                 </span>
-                <span className="font-mono font-bold text-sky-300 shrink-0">
+                <span className="font-mono font-bold text-brand-ink shrink-0">
                   {p.verifiedListens}
                 </span>
               </div>
@@ -1101,8 +1101,8 @@ export default function CampaignGeoIntelligenceMap() {
         {/* Panel 3: Direct Transfer Rates */}
         <div className="p-3.5 flex flex-col justify-between min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
+            <TrendingUp className="h-3.5 w-3.5 text-live-ink" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-ink-2">
               Transfer Rates
             </span>
           </div>
@@ -1110,13 +1110,13 @@ export default function CampaignGeoIntelligenceMap() {
             {bottomAnalysis.topTransfers.map((p, idx) => (
               <div
                 key={p.id}
-                className="flex justify-between text-[10px] items-center text-slate-300 hover:text-white cursor-pointer"
+                className="flex justify-between text-[10px] items-center text-ink-2 hover:text-ink cursor-pointer"
                 onClick={() => setInspectedPoint(p)}
               >
                 <span className="truncate pr-2 font-medium">
                   {idx + 1}. {p.label}
                 </span>
-                <span className="font-mono font-bold text-emerald-400 shrink-0">
+                <span className="font-mono font-bold text-live-ink shrink-0">
                   {p.transferRate}%
                 </span>
               </div>
@@ -1127,8 +1127,8 @@ export default function CampaignGeoIntelligenceMap() {
         {/* Panel 4: Revenue Movement */}
         <div className="p-3.5 flex flex-col justify-between min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            <DollarSign className="h-3.5 w-3.5 text-yellow-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
+            <DollarSign className="h-3.5 w-3.5 text-money-ink" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-ink-2">
               Revenue Yield
             </span>
           </div>
@@ -1136,13 +1136,13 @@ export default function CampaignGeoIntelligenceMap() {
             {bottomAnalysis.topRevenue.map((p, idx) => (
               <div
                 key={p.id}
-                className="flex justify-between text-[10px] items-center text-slate-300 hover:text-white cursor-pointer"
+                className="flex justify-between text-[10px] items-center text-ink-2 hover:text-ink cursor-pointer"
                 onClick={() => setInspectedPoint(p)}
               >
                 <span className="truncate pr-2 font-medium">
                   {idx + 1}. {p.label}
                 </span>
-                <span className="font-mono font-bold text-yellow-400 shrink-0">
+                <span className="font-mono font-bold text-money-ink shrink-0">
                   ${Math.round(p.revenueMovement)}
                 </span>
               </div>
@@ -1153,8 +1153,8 @@ export default function CampaignGeoIntelligenceMap() {
         {/* Panel 5: Underperforming Wasted Spend */}
         <div className="p-3.5 flex flex-col justify-between min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
+            <TrendingDown className="h-3.5 w-3.5 text-dropped-ink" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-ink-2">
               Wasted Spend
             </span>
           </div>
@@ -1162,13 +1162,13 @@ export default function CampaignGeoIntelligenceMap() {
             {bottomAnalysis.wastedSpend.map((p, idx) => (
               <div
                 key={p.id}
-                className="flex justify-between text-[10px] items-center text-slate-300 hover:text-white cursor-pointer"
+                className="flex justify-between text-[10px] items-center text-ink-2 hover:text-ink cursor-pointer"
                 onClick={() => setInspectedPoint(p)}
               >
                 <span className="truncate pr-2 font-medium">
                   {idx + 1}. {p.label}
                 </span>
-                <span className="font-mono font-bold text-red-400 shrink-0">
+                <span className="font-mono font-bold text-dropped-ink shrink-0">
                   ${Math.round(p.spend)}
                 </span>
               </div>

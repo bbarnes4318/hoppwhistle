@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-import { VerticalBadge } from './leads-table';
 
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadDetail, UserSummary } from '@/lib/api/leads';
@@ -28,6 +27,8 @@ import {
   completeInsuranceLeadTask,
   cancelInsuranceLeadTask,
 } from '@/lib/api/leads';
+
+import { VerticalBadge } from './leads-table';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -56,10 +57,10 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-white/5">
+    <div className="border-b border-rule">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-3 text-xs font-semibold uppercase tracking-widest text-slate-500 hover:bg-white/[0.02] transition-colors"
+        className="flex w-full items-center justify-between px-5 py-3 text-xs font-semibold uppercase tracking-widest text-ink-3 hover:bg-sunken transition-colors"
       >
         {title}
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -106,7 +107,7 @@ function EditField({
 
   return (
     <div className="space-y-1">
-      <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+      <label className="block text-[10px] font-medium uppercase tracking-wider text-ink-3">
         {label}
       </label>
       <input
@@ -114,11 +115,11 @@ function EditField({
         value={String(currentValue)}
         onChange={e => onEdit(fieldKey, e.target.value)}
         className={`w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors
-        bg-slate-900/50 text-slate-200 placeholder-slate-600
+        bg-surface text-ink placeholder:text-ink-3
         ${
           isModified
-            ? 'border-amber-500/50 ring-1 ring-amber-500/20'
-            : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
+            ? 'border-ringing ring-1 ring-ringing-tint'
+            : 'border-rule focus:border-brand-ink focus:ring-1 focus:ring-brand-tint'
         }
         outline-none`}
       />
@@ -146,18 +147,18 @@ function SelectField({
 
   return (
     <div className="space-y-1">
-      <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+      <label className="block text-[10px] font-medium uppercase tracking-wider text-ink-3">
         {label}
       </label>
       <select
         value={currentValue}
         onChange={e => onEdit(fieldKey, e.target.value)}
         className={`w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors
-        bg-slate-900/50 text-slate-200 outline-none
+        bg-surface text-ink outline-none
         ${
           isModified
-            ? 'border-amber-500/50 ring-1 ring-amber-500/20'
-            : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
+            ? 'border-ringing ring-1 ring-ringing-tint'
+            : 'border-rule focus:border-brand-ink focus:ring-1 focus:ring-brand-tint'
         }`}
       >
         <option value="">Select...</option>
@@ -193,11 +194,11 @@ function CheckboxField({
         id={fieldKey}
         checked={currentValue}
         onChange={e => onEdit(fieldKey, e.target.checked ? 'true' : 'false')}
-        className="h-4 w-4 rounded border-white/10 bg-slate-900/50 text-emerald-500 focus:ring-emerald-500/20 focus:ring-opacity-50"
+        className="h-4 w-4 rounded border-rule bg-surface text-brand-ink focus:ring-brand-tint focus:ring-opacity-50"
       />
       <label
         htmlFor={fieldKey}
-        className="text-xs font-semibold uppercase tracking-widest text-slate-500 cursor-pointer select-none"
+        className="text-xs font-semibold uppercase tracking-widest text-ink-3 cursor-pointer select-none"
       >
         {label}
       </label>
@@ -356,15 +357,16 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
       <div className="fixed inset-0 z-40 bg-black/40 " onClick={onClose} />
 
       {/* Sheet */}
-      <div className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-2xl flex-col border-l border-white/10 bg-slate-900/95 shadow-sm animate-in slide-in-from-right duration-250">
+      <div className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-2xl flex-col border-l border-rule bg-surface shadow-sm animate-in slide-in-from-right duration-250">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-rule px-5 py-4">
           <div className="flex items-center gap-3">
             {lead && <VerticalBadge vertical={lead.vertical} />}
-            <h2 className="text-sm font-semibold text-slate-200">
+            <h2 className="text-sm font-semibold text-ink">
               {lead
                 ? lead.vertical === 'B2B'
-                  ? `${lead.company || ''}${lead.repName ? ` (${lead.repName})` : ''}` || 'Unnamed B2B Lead'
+                  ? `${lead.company || ''}${lead.repName ? ` (${lead.repName})` : ''}` ||
+                    'Unnamed B2B Lead'
                   : lead.fullName ||
                     `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
                     'Unnamed Lead'
@@ -377,8 +379,8 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 onClick={handleSave}
                 disabled={saving}
                 className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium
-                bg-emerald-500/15 text-emerald-400 border border-emerald-500/30
-                hover:bg-emerald-500/25 disabled:opacity-50 transition-colors"
+                bg-brand-tint text-brand-ink
+                hover:opacity-80 disabled:opacity-50 transition-colors"
               >
                 <Save className="h-3.5 w-3.5" />
                 {saving ? 'Saving…' : 'Save Changes'}
@@ -386,14 +388,14 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
             )}
             {saveMsg && (
               <span
-                className={`text-xs ${saveMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}
+                className={`text-xs ${saveMsg === 'Saved' ? 'text-live-ink' : 'text-dropped-ink'}`}
               >
                 {saveMsg}
               </span>
             )}
             <button
               onClick={onClose}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
+              className="rounded-md p-1.5 text-ink-3 hover:bg-sunken hover:text-ink transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -403,7 +405,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {loading || !lead ? (
-            <div className="flex items-center justify-center h-full text-sm text-slate-500">
+            <div className="flex items-center justify-center h-full text-sm text-ink-3">
               Loading lead details…
             </div>
           ) : (
@@ -430,7 +432,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     </>
                   )}
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                    <label className="block text-[10px] font-medium uppercase tracking-wider text-ink-3">
                       Phone
                     </label>
                     <div className="flex gap-2">
@@ -439,13 +441,13 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           type="text"
                           value={edits.phone !== undefined ? edits.phone : (lead.phone ?? '')}
                           onChange={e => handleEdit('phone', e.target.value)}
-                          className="w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors bg-slate-900/50 text-slate-200 placeholder-slate-600 border-white/10 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+                          className="w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors bg-surface text-ink placeholder:text-ink-3 border-rule outline-none focus:border-brand-ink focus:ring-1 focus:ring-brand-tint"
                         />
                       </div>
                       {lead.phone && (
                         <button
                           onClick={() => void makeCall(lead.phone)}
-                          className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white shadow-lg transition-colors border border-emerald-500/30"
+                          className="flex items-center justify-center gap-1.5 rounded-md bg-brand hover:bg-brand-ink px-3 text-xs font-semibold text-ink transition-colors"
                           title="Click to dial"
                         >
                           <PhoneCall className="h-4 w-4" />
@@ -983,9 +985,9 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     onSubmit={e => {
                       void handleAddTask(e);
                     }}
-                    className="rounded-lg border border-white/5 bg-slate-950/20 p-3 space-y-3"
+                    className="rounded-lg border border-rule bg-sunken p-3 space-y-3"
                   >
-                    <div className="text-xs font-semibold text-slate-300">Create New Task</div>
+                    <div className="text-xs font-semibold text-ink-2">Create New Task</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <input
@@ -993,7 +995,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           placeholder="Task Title..."
                           value={taskTitle}
                           onChange={e => setTaskTitle(e.target.value)}
-                          className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
+                          className="w-full rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand-ink"
                           required
                         />
                       </div>
@@ -1003,7 +1005,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           placeholder="Description (optional)..."
                           value={taskDesc}
                           onChange={e => setTaskDesc(e.target.value)}
-                          className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
+                          className="w-full rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand-ink"
                         />
                       </div>
                       <div>
@@ -1012,7 +1014,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           onChange={e =>
                             setTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')
                           }
-                          className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
+                          className="w-full rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand-ink"
                         >
                           <option value="LOW">Low Priority</option>
                           <option value="NORMAL">Normal Priority</option>
@@ -1025,7 +1027,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           type="date"
                           value={taskDueAt}
                           onChange={e => setTaskDueAt(e.target.value)}
-                          className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
+                          className="w-full rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand-ink"
                         />
                       </div>
                     </div>
@@ -1033,7 +1035,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                       <button
                         type="submit"
                         disabled={taskLoading || !taskTitle.trim()}
-                        className="flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold bg-brand-tint text-brand-ink hover:opacity-80 disabled:opacity-50 transition-colors"
                       >
                         <Plus className="h-3 w-3" />
                         Add Task
@@ -1044,7 +1046,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                   {/* Task List */}
                   <div className="space-y-2">
                     {!lead.tasks || lead.tasks.length === 0 ? (
-                      <div className="text-xs text-slate-500 italic">No tasks created yet</div>
+                      <div className="text-xs text-ink-3 italic">No tasks created yet</div>
                     ) : (
                       lead.tasks.map(task => {
                         const isOverdue =
@@ -1052,47 +1054,47 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                         return (
                           <div
                             key={task.id}
-                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-slate-950/30"
+                            className="flex items-center justify-between p-3 rounded-lg border border-rule bg-sunken"
                           >
                             <div className="min-w-0 flex-1 pr-2">
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold ${task.status !== 'OPEN' ? 'line-through text-slate-500' : 'text-slate-200'}`}
+                                  className={`text-xs font-semibold ${task.status !== 'OPEN' ? 'line-through text-ink-3' : 'text-ink'}`}
                                 >
                                   {task.title}
                                 </span>
                                 <span
                                   className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                                     task.priority === 'URGENT'
-                                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                      ? 'bg-dropped-tint text-dropped-ink'
                                       : task.priority === 'HIGH'
-                                        ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                                        ? 'bg-ringing-tint text-ringing-ink'
                                         : task.priority === 'LOW'
-                                          ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                          ? 'bg-sunken text-ink-2'
+                                          : 'bg-money-tint text-money-ink'
                                   }`}
                                 >
                                   {task.priority}
                                 </span>
                                 {task.status !== 'OPEN' && (
-                                  <span className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">
+                                  <span className="text-[9px] uppercase tracking-wider text-ink-3 font-medium">
                                     ({task.status})
                                   </span>
                                 )}
                               </div>
                               {task.description && (
                                 <p
-                                  className={`text-xs mt-0.5 ${task.status !== 'OPEN' ? 'line-through text-slate-600' : 'text-slate-400'}`}
+                                  className={`text-xs mt-0.5 ${task.status !== 'OPEN' ? 'line-through text-ink-3' : 'text-ink-2'}`}
                                 >
                                   {task.description}
                                 </p>
                               )}
                               {task.dueAt && (
                                 <div className="flex items-center gap-1 mt-1 text-[10px]">
-                                  <Calendar className="h-3 w-3 text-slate-500" />
+                                  <Calendar className="h-3 w-3 text-ink-3" />
                                   <span
                                     className={
-                                      isOverdue ? 'text-red-400 font-medium' : 'text-slate-500'
+                                      isOverdue ? 'text-dropped-ink font-medium' : 'text-ink-3'
                                     }
                                   >
                                     Due: {new Date(task.dueAt).toLocaleDateString()}
@@ -1101,7 +1103,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                                 </div>
                               )}
                               {task.completedAt && (
-                                <div className="text-[10px] text-slate-500 mt-1">
+                                <div className="text-[10px] text-ink-3 mt-1">
                                   Completed: {new Date(task.completedAt).toLocaleString()}
                                 </div>
                               )}
@@ -1113,7 +1115,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                                   onClick={() => {
                                     void handleCompleteTask(task.id);
                                   }}
-                                  className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                                  className="p-1 rounded bg-live-tint text-live-ink hover:opacity-80"
                                   title="Complete Task"
                                 >
                                   <Check className="h-3.5 w-3.5" />
@@ -1122,7 +1124,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                                   onClick={() => {
                                     void handleCancelTask(task.id);
                                   }}
-                                  className="p-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                                  className="p-1 rounded bg-dropped-tint text-dropped-ink hover:opacity-80"
                                   title="Cancel Task"
                                 >
                                   <Ban className="h-3.5 w-3.5" />
@@ -1144,9 +1146,9 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                   onChange={e => handleEdit('notes', e.target.value)}
                   rows={3}
                   placeholder="Add notes…"
-                  className="w-full rounded-md border border-white/10 bg-slate-900/50 text-sm text-slate-200
-                  placeholder-slate-600 px-3 py-2 outline-none focus:border-emerald-500/50
-                  focus:ring-1 focus:ring-emerald-500/20 transition-colors resize-none"
+                  className="w-full rounded-md border border-rule bg-surface text-sm text-ink
+                  placeholder:text-ink-3 px-3 py-2 outline-none focus:border-brand-ink
+                  focus:ring-1 focus:ring-brand-tint transition-colors resize-none"
                 />
               </Section>
 
@@ -1158,21 +1160,21 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 <div className="flow-root">
                   <ul className="-mb-8">
                     {!lead.activities || lead.activities.length === 0 ? (
-                      <div className="text-xs text-slate-500 italic">No activity recorded</div>
+                      <div className="text-xs text-ink-3 italic">No activity recorded</div>
                     ) : (
                       lead.activities.map((act, actIdx) => {
                         const iconColor =
                           act.type === 'NOTE'
-                            ? 'bg-amber-500/15 text-amber-400'
+                            ? 'bg-ringing-tint text-ringing-ink'
                             : act.type === 'CALL'
-                              ? 'bg-cyan-500/15 text-cyan-400'
+                              ? 'bg-brand-tint text-brand-ink'
                               : act.type === 'STATUS_CHANGE'
-                                ? 'bg-indigo-500/15 text-indigo-400'
+                                ? 'bg-money-tint text-money-ink'
                                 : act.type === 'VALIDATION'
-                                  ? 'bg-red-500/15 text-red-400'
+                                  ? 'bg-dropped-tint text-dropped-ink'
                                   : act.type === 'SUBMISSION'
-                                    ? 'bg-emerald-500/15 text-emerald-400'
-                                    : 'bg-slate-500/15 text-slate-400';
+                                    ? 'bg-live-tint text-live-ink'
+                                    : 'bg-sunken text-ink-2';
 
                         const Icon =
                           act.type === 'NOTE'
@@ -1192,30 +1194,28 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                             <div className="relative pb-8">
                               {actIdx !== lead.activities.length - 1 ? (
                                 <span
-                                  className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-white/5"
+                                  className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-rule"
                                   aria-hidden="true"
                                 />
                               ) : null}
                               <div className="relative flex space-x-3">
                                 <div>
                                   <span
-                                    className={`flex h-8 w-8 items-center justify-center rounded-full border border-white/5 ${iconColor}`}
+                                    className={`flex h-8 w-8 items-center justify-center rounded-full border border-rule ${iconColor}`}
                                   >
                                     <Icon className="h-4 w-4" aria-hidden="true" />
                                   </span>
                                 </div>
                                 <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                                   <div>
-                                    <p className="text-xs font-semibold text-slate-300">
-                                      {act.title}
-                                    </p>
+                                    <p className="text-xs font-semibold text-ink-2">{act.title}</p>
                                     {act.description && (
-                                      <p className="text-xs text-slate-400 mt-0.5 whitespace-pre-wrap leading-relaxed">
+                                      <p className="text-xs text-ink-2 mt-0.5 whitespace-pre-wrap leading-relaxed">
                                         {act.description}
                                       </p>
                                     )}
                                   </div>
-                                  <div className="whitespace-nowrap text-right text-[10px] text-slate-500">
+                                  <div className="whitespace-nowrap text-right text-[10px] text-ink-3">
                                     <time dateTime={act.createdAt}>
                                       {new Date(act.createdAt).toLocaleString()}
                                     </time>
@@ -1236,14 +1236,11 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 <Section title="Captured Script Data">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs max-h-[400px] overflow-y-auto pr-1">
                     {Object.entries(lead.customFields).map(([key, val]) => (
-                      <div key={key} className="space-y-0.5 border-b border-white/5 pb-1">
-                        <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500 block">
+                      <div key={key} className="space-y-0.5 border-b border-rule pb-1">
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-ink-3 block">
                           {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                         </span>
-                        <span
-                          className="font-mono text-slate-300 block truncate"
-                          title={String(val)}
-                        >
+                        <span className="font-mono text-ink-2 block truncate" title={String(val)}>
                           {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val ?? '—')}
                         </span>
                       </div>
@@ -1254,10 +1251,10 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
 
               {/* Metadata */}
               <Section title="Metadata">
-                <div className="space-y-2 text-xs text-slate-500">
+                <div className="space-y-2 text-xs text-ink-3">
                   <div className="flex justify-between">
                     <span>Lead ID</span>
-                    <span className="font-mono text-slate-400">{lead.id}</span>
+                    <span className="font-mono text-ink-2">{lead.id}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Vertical</span>

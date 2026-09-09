@@ -183,7 +183,16 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         id: buyer.id,
         name: buyer.name,
         code: buyer.code,
-        publisherName: buyer.publisher.name,
+        /*
+         * A buyer need not belong to a publisher.
+         *
+         * `publisherId` is optional on Buyer, and the include above selects
+         * the relation without asserting it exists — so for a directly-held
+         * buyer this read threw, and the buyer's own billing page answered 500
+         * rather than showing them their balance. Found by the browser smoke
+         * test, which loads this page as a buyer with no publisher.
+         */
+        publisherName: buyer.publisher?.name ?? null,
         billingType: buyer.billingType,
         leadsRemaining: buyer.leadsRemaining,
         walletBalance: Number(buyer.walletBalance),

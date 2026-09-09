@@ -1,8 +1,6 @@
 'use client';
 
-import {
-  CALL_SOURCE_LABELS,
-} from '@hopwhistle/shared';
+import { CALL_SOURCE_LABELS } from '@hopwhistle/shared';
 import {
   Calendar,
   Download,
@@ -16,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,12 +26,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-import { toast } from '@/components/ui/use-toast';
-import { RoleGuard } from '@/components/auth/role-guard';
 
 interface CallRecord {
   id: string;
@@ -68,7 +73,7 @@ function PublisherCallsPage() {
   const [search, setSearch] = useState('');
   const [billableFilter, setBillableFilter] = useState<'all' | 'billable' | 'non-billable'>('all');
   const [datePreset, setDatePreset] = useState<DatePreset>('last-30');
-  
+
   // Custom Date range
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -133,7 +138,17 @@ function PublisherCallsPage() {
     } finally {
       setLoading(false);
     }
-  }, [publisherId, page, search, billableFilter, datePreset, startDate, endDate, today, thirtyDaysAgo]);
+  }, [
+    publisherId,
+    page,
+    search,
+    billableFilter,
+    datePreset,
+    startDate,
+    endDate,
+    today,
+    thirtyDaysAgo,
+  ]);
 
   useEffect(() => {
     void fetchCalls();
@@ -159,10 +174,10 @@ function PublisherCallsPage() {
 
       const token = localStorage.getItem('token');
       const url = `/api/v1/calls/export.csv?startDate=${start}&endDate=${end}&token=${token || ''}`;
-      
+
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to generate export.');
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -198,16 +213,21 @@ function PublisherCallsPage() {
 
     setAudioLoading(true);
     try {
-      const response = await apiClient.get<{ url: string }>(`/api/v1/recordings/${recordingId}/url`);
+      const response = await apiClient.get<{ url: string }>(
+        `/api/v1/recordings/${recordingId}/url`
+      );
       if (response.data?.url) {
         let playableUrl = response.data.url;
         if (playableUrl.startsWith('/')) {
-          const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
+          const apiBaseUrl =
+            typeof window !== 'undefined'
+              ? window.location.origin
+              : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
           playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
         }
         setAudioUrl(playableUrl);
         setPlayingCallId(call.id);
-        
+
         // Wait for next tick so audioRef is bound
         setTimeout(() => {
           if (audioRef.current) {
@@ -233,15 +253,15 @@ function PublisherCallsPage() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Call Logs</h1>
-          <p className="text-sm text-gray-400">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Call Logs</h1>
+          <p className="text-sm text-ink-2">
             Monitor incoming calls, track conversion details, and listen to recordings.
           </p>
         </div>
         <Button
           onClick={handleExportCSV}
           disabled={exporting || calls.length === 0}
-          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 self-start md:self-auto shadow-lg shadow-cyan-900/20"
+          className="bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium gap-2 self-start md:self-auto"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -253,12 +273,12 @@ function PublisherCallsPage() {
       </div>
 
       {/* Filter Bar */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
+      <Card className="bg-surface border-rule backdrop-blur-xl">
         <CardContent className="p-4 flex flex-col lg:flex-row items-end lg:items-center gap-4 justify-between">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full lg:w-auto flex-1">
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-2" />
               <Input
                 placeholder="Search Caller/Campaign..."
                 value={search}
@@ -266,7 +286,7 @@ function PublisherCallsPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="pl-9 bg-white/5 border-white/10 text-white focus:border-cyan-500 placeholder-gray-500"
+                className="pl-9 bg-surface border-rule text-ink focus:border-brand-ink placeholder:text-ink-3"
               />
             </div>
 
@@ -279,10 +299,10 @@ function PublisherCallsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white focus:border-cyan-500">
+                <SelectTrigger className="bg-surface border-rule text-ink focus:border-brand-ink">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                <SelectContent className="bg-surface border-rule text-ink">
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="billable">Billable</SelectItem>
                   <SelectItem value="non-billable">Non-Billable</SelectItem>
@@ -299,10 +319,10 @@ function PublisherCallsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white focus:border-cyan-500">
+                <SelectTrigger className="bg-surface border-rule text-ink focus:border-brand-ink">
                   <SelectValue placeholder="Date Range" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-white/10 text-white">
+                <SelectContent className="bg-surface border-rule text-ink">
                   <SelectItem value="last-7">Last 7 Days</SelectItem>
                   <SelectItem value="last-30">Last 30 Days</SelectItem>
                   <SelectItem value="last-90">Last 90 Days</SelectItem>
@@ -321,9 +341,9 @@ function PublisherCallsPage() {
                     setStartDate(e.target.value);
                     setPage(1);
                   }}
-                  className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                  className="bg-surface border-rule text-ink focus:border-brand-ink"
                 />
-                <span className="text-gray-500 text-xs">to</span>
+                <span className="text-ink-3 text-xs">to</span>
                 <Input
                   type="date"
                   value={endDate}
@@ -331,7 +351,7 @@ function PublisherCallsPage() {
                     setEndDate(e.target.value);
                     setPage(1);
                   }}
-                  className="bg-white/5 border-white/10 text-white focus:border-cyan-500"
+                  className="bg-surface border-rule text-ink focus:border-brand-ink"
                 />
               </div>
             )}
@@ -340,38 +360,38 @@ function PublisherCallsPage() {
       </Card>
 
       {/* Calls Log Table */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
+      <Card className="bg-surface border-rule backdrop-blur-xl">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-white/10 hover:bg-transparent">
-                  <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Source/SubID</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Buyer/Dest</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Duration</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Connected</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Status</TableHead>
-                  <TableHead className="text-gray-400 font-medium text-right pr-6">Payout</TableHead>
+                <TableRow className="border-rule hover:bg-transparent">
+                  <TableHead className="text-ink-2 font-medium pl-6">Time</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Caller ID</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Campaign</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Source/SubID</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Buyer/Dest</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Duration</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Connected</TableHead>
+                  <TableHead className="text-ink-2 font-medium">Status</TableHead>
+                  <TableHead className="text-ink-2 font-medium text-right pr-6">Payout</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={9} className="h-48 text-center text-gray-500">
+                    <TableCell colSpan={9} className="h-48 text-center text-ink-3">
                       <div className="flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                        <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
                         <span>Loading call records...</span>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : calls.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={9} className="h-48 text-center text-gray-500">
+                    <TableCell colSpan={9} className="h-48 text-center text-ink-3">
                       <div className="flex flex-col items-center justify-center gap-2">
-                        <AlertCircle className="h-8 w-8 text-gray-600" />
+                        <AlertCircle className="h-8 w-8 text-ink-3" />
                         <span>No call records found matching criteria</span>
                       </div>
                     </TableCell>
@@ -384,8 +404,11 @@ function PublisherCallsPage() {
 
                     return (
                       <>
-                        <TableRow key={call.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                          <TableCell className="pl-6 font-mono text-xs text-white">
+                        <TableRow
+                          key={call.id}
+                          className="border-rule hover:bg-sunken transition-colors"
+                        >
+                          <TableCell className="pl-6 font-mono text-xs text-ink">
                             {new Date(call.createdAt).toLocaleString('en-US', {
                               month: 'short',
                               day: 'numeric',
@@ -394,29 +417,35 @@ function PublisherCallsPage() {
                               second: '2-digit',
                             })}
                           </TableCell>
-                          <TableCell className="font-semibold text-white">
+                          <TableCell className="font-semibold text-ink">
                             {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
                           </TableCell>
-                          <TableCell className="text-gray-300 font-medium">
+                          <TableCell className="text-ink-2 font-medium">
                             {call.campaign?.name || '—'}
                           </TableCell>
-                          <TableCell className="text-gray-400 font-mono text-xs uppercase tracking-wider">
+                          <TableCell className="text-ink-2 font-mono text-xs uppercase tracking-wider">
                             {call.callSource || '—'}
                           </TableCell>
-                          <TableCell className="text-xs text-gray-300">
+                          <TableCell className="text-xs text-ink-2">
                             {showBuyer || showDest ? (
                               <div className="flex flex-col">
-                                {showBuyer && <span className="font-medium text-white">{call.buyerName}</span>}
-                                {showDest && <span className="text-gray-400 font-mono">{formatPhoneNumber(call.toNumber || '')}</span>}
+                                {showBuyer && (
+                                  <span className="font-medium text-ink">{call.buyerName}</span>
+                                )}
+                                {showDest && (
+                                  <span className="text-ink-2 font-mono">
+                                    {formatPhoneNumber(call.toNumber || '')}
+                                  </span>
+                                )}
                               </div>
                             ) : (
-                              <span className="text-gray-600 italic">Masked</span>
+                              <span className="text-ink-3 italic">Masked</span>
                             )}
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-gray-300">
+                          <TableCell className="font-mono text-xs text-ink-2">
                             {call.duration ? formatDuration(call.duration) : '—'}
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-gray-300">
+                          <TableCell className="font-mono text-xs text-ink-2">
                             {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
                           </TableCell>
                           <TableCell>
@@ -425,39 +454,43 @@ function PublisherCallsPage() {
                                 variant="outline"
                                 className={
                                   call.billable
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                    ? 'bg-live-tint text-live-ink border-live/40'
+                                    : 'bg-dropped-tint text-dropped-ink border-dropped/40'
                                 }
                               >
                                 {call.billable ? 'Billable' : 'Non-Billable'}
                               </Badge>
                               {!call.billable && call.nonBillableReason && (
-                                <span className="text-[10px] text-gray-500 max-w-[120px] truncate" title={call.nonBillableReason}>
+                                <span
+                                  className="text-[10px] text-ink-3 max-w-[120px] truncate"
+                                  title={call.nonBillableReason}
+                                >
                                   {call.nonBillableReason}
                                 </span>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right pr-6 font-mono font-bold text-emerald-400">
-                            {call.payout !== undefined && call.payout !== null ? (
-                              `$${Number(call.payout).toFixed(2)}`
-                            ) : (
-                              '—'
-                            )}
+                          <TableCell className="text-right pr-6 font-mono font-bold text-ink">
+                            {call.payout !== undefined && call.payout !== null
+                              ? `$${Number(call.payout).toFixed(2)}`
+                              : '—'}
                           </TableCell>
                         </TableRow>
 
                         {/* Inline Audio Player if recording available */}
                         {call.recordingUrl && (
-                          <TableRow key={`${call.id}-player`} className="bg-cyan-950/10 border-white/5 hover:bg-transparent">
+                          <TableRow
+                            key={`${call.id}-player`}
+                            className="bg-sunken border-rule hover:bg-transparent"
+                          >
                             <TableCell colSpan={9} className="py-2 px-6">
-                              <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-2.5 max-w-2xl">
+                              <div className="flex items-center gap-3 bg-sunken border border-rule rounded-lg p-2.5 max-w-2xl">
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => void handlePlayRecording(call)}
                                   disabled={audioLoading && isPlaying}
-                                  className="h-8 w-8 p-0 rounded-full text-cyan-400 hover:text-cyan-300 hover:bg-white/10 flex-shrink-0"
+                                  className="h-8 w-8 p-0 rounded-full text-brand-ink hover:text-brand-ink hover:bg-sunken flex-shrink-0"
                                 >
                                   {audioLoading && isPlaying ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -467,8 +500,8 @@ function PublisherCallsPage() {
                                     <Play className="h-4 w-4" />
                                   )}
                                 </Button>
-                                <Volume2 className="h-4 w-4 text-cyan-400 flex-shrink-0" />
-                                <span className="text-xs text-gray-300 font-medium">
+                                <Volume2 className="h-4 w-4 text-brand-ink flex-shrink-0" />
+                                <span className="text-xs text-ink-2 font-medium">
                                   Call Recording
                                 </span>
                                 {isPlaying && audioUrl && (
@@ -476,13 +509,11 @@ function PublisherCallsPage() {
                                     ref={audioRef}
                                     src={audioUrl}
                                     controls
-                                    className="h-7 flex-1 accent-cyan-400"
+                                    className="h-7 flex-1 accent-brand-ink"
                                     onEnded={() => setPlayingCallId(null)}
                                   />
                                 )}
-                                {!isPlaying && (
-                                  <div className="h-1 bg-white/10 rounded-full flex-1" />
-                                )}
+                                {!isPlaying && <div className="h-1 bg-rule rounded-full flex-1" />}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -497,8 +528,8 @@ function PublisherCallsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-white/10 pr-24">
-              <span className="text-xs text-gray-400">
+            <div className="flex items-center justify-between p-4 border-t border-rule pr-24">
+              <span className="text-xs text-ink-2">
                 Page {page} of {totalPages}
               </span>
               <div className="flex gap-2">
@@ -507,7 +538,7 @@ function PublisherCallsPage() {
                   size="sm"
                   disabled={page === 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
-                  className="bg-white/5 border-white/10 text-white hover:bg-white/10"
+                  className="bg-surface border-rule text-ink hover:bg-sunken"
                 >
                   Previous
                 </Button>
@@ -516,7 +547,7 @@ function PublisherCallsPage() {
                   size="sm"
                   disabled={page === totalPages}
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  className="bg-white/5 border-white/10 text-white hover:bg-white/10"
+                  className="bg-surface border-rule text-ink hover:bg-sunken"
                 >
                   Next
                 </Button>
@@ -536,4 +567,3 @@ export default function GuardedPublisherCallsPage() {
     </RoleGuard>
   );
 }
-

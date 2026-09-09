@@ -86,10 +86,10 @@ export function PendingApprovals({ users, onDecided }: PendingApprovalsProps): J
   };
 
   return (
-    <Card className="mb-4 border-amber-500/40">
+    <Card className="mb-4 border-ringing">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-amber-500" />
+          <Clock className="h-5 w-5 text-ringing-ink" />
           Waiting for approval
           <Badge variant="warning">{users.length}</Badge>
         </CardTitle>

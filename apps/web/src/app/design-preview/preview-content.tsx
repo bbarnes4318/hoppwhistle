@@ -8,6 +8,7 @@ import {
   DERIVED_TOKENS,
   DURATION_CASES,
   INK_TOKENS,
+  BRAND_TOKENS,
   RULE_TOKENS,
   SIGNAL_TOKENS,
   SURFACE_TOKENS,
@@ -46,7 +47,15 @@ function SwatchRow({ token, theme }: { token: TokenRow; theme: Theme }) {
   const ratio = token.onPaper?.[theme];
   return (
     <div className="flex items-center gap-3 py-1.5">
+      {/*
+        A swatch paints the raw token, so its hairline sits on whatever colour
+        the token happens to be — including on --rule itself, where the two are
+        the same value by definition. That is what a swatch is for, so it is
+        exempt from the contrast audit rather than being given a border it
+        would then be lying about.
+      */}
       <div
+        data-contrast-exempt="colour swatch"
         className="h-8 w-8 shrink-0 rounded-control border border-rule"
         style={{ backgroundColor: `var(${token.name})` }}
       />
@@ -271,6 +280,7 @@ export function ThemePane({ theme }: { theme: Theme }) {
 
         <Panel>
           <ColourGroup title="Rules" tokens={RULE_TOKENS} theme={theme} />
+          <ColourGroup title="Brand" tokens={BRAND_TOKENS} theme={theme} />
         </Panel>
 
         <Panel>

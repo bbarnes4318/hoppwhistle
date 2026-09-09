@@ -26,16 +26,16 @@ import {
   YAxis,
 } from 'recharts';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { KPICard } from '@/components/dashboard/kpi-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-import { toast } from '@/components/ui/use-toast';
-import { RoleGuard } from '@/components/auth/role-guard';
 
 interface Stats {
   totalCalls: number;
@@ -78,7 +78,7 @@ function PublisherDashboard() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>('last-30');
-  
+
   // Custom Date range
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -143,10 +143,10 @@ function PublisherDashboard() {
       // Download CSV
       const token = localStorage.getItem('token');
       const url = `/api/v1/calls/export.csv?startDate=${start}&endDate=${end}&token=${token || ''}`;
-      
+
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to generate export file.');
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -179,10 +179,11 @@ function PublisherDashboard() {
       } else {
         date.setDate(date.getDate() - i);
       }
-      
-      const label = datePreset === 'last-90' 
-        ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-        : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+      const label =
+        datePreset === 'last-90'
+          ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
       // Add slight randomness
       const randSeed = Math.sin(i) * 0.4 + 1.0;
@@ -201,7 +202,7 @@ function PublisherDashboard() {
   if (loading && !stats) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
       </div>
     );
   }
@@ -211,17 +212,17 @@ function PublisherDashboard() {
       {/* Header section */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Publisher Overview</h1>
-          <p className="text-gray-400 text-sm mt-1">Real-time performance metrics and call details.</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Publisher Overview</h1>
+          <p className="text-ink-2 text-sm mt-1">Real-time performance metrics and call details.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-lg bg-white/5 border border-white/10 p-1">
+          <div className="flex items-center rounded-lg bg-sunken border border-rule p-1">
             <Button
               variant={datePreset === 'last-7' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => setDatePreset('last-7')}
-              className="text-xs rounded-md text-white hover:text-white"
+              className="text-xs rounded-md"
             >
               7 Days
             </Button>
@@ -229,7 +230,7 @@ function PublisherDashboard() {
               variant={datePreset === 'last-30' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => setDatePreset('last-30')}
-              className="text-xs rounded-md text-white hover:text-white"
+              className="text-xs rounded-md"
             >
               30 Days
             </Button>
@@ -237,7 +238,7 @@ function PublisherDashboard() {
               variant={datePreset === 'last-90' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => setDatePreset('last-90')}
-              className="text-xs rounded-md text-white hover:text-white"
+              className="text-xs rounded-md"
             >
               90 Days
             </Button>
@@ -245,26 +246,26 @@ function PublisherDashboard() {
               variant={datePreset === 'custom' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => setDatePreset('custom')}
-              className="text-xs rounded-md text-white hover:text-white"
+              className="text-xs rounded-md"
             >
               Custom
             </Button>
           </div>
 
           {datePreset === 'custom' && (
-            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg p-1">
+            <div className="flex items-center gap-2 bg-sunken border border-rule rounded-lg p-1">
               <Input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="h-8 w-32 bg-transparent border-0 text-xs text-white focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              <span className="text-gray-500 text-xs">to</span>
+              <span className="text-ink-3 text-xs">to</span>
               <Input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="h-8 w-32 bg-transparent border-0 text-xs text-white focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               <Button size="sm" onClick={fetchStats} className="h-7 px-2 text-xs">
                 Apply
@@ -275,7 +276,7 @@ function PublisherDashboard() {
           <Button
             onClick={handleExportCSV}
             disabled={exporting || !stats?.totalCalls}
-            className="gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-medium"
+            className="gap-2 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium"
           >
             {exporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -289,53 +290,73 @@ function PublisherDashboard() {
 
       {/* KPI Cards Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-white/5 border-white/10 text-white">
+        <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-gray-400">Total Calls</CardTitle>
-            <Phone className="h-4 w-4 text-cyan-400" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Total Calls
+            </CardTitle>
+            <Phone className="h-4 w-4 text-ink-3" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">{stats?.totalCalls.toLocaleString()}</div>
-            <p className="text-xs text-gray-500 mt-1">
-              {stats?.pingCount ? `${stats.pingCount.toLocaleString()} lead pings received` : 'Calls routed through campaigns'}
+            <div className="text-3xl font-extrabold text-ink tabular">
+              {stats?.totalCalls.toLocaleString()}
+            </div>
+            <p className="text-xs text-ink-3 mt-1">
+              {stats?.pingCount
+                ? `${stats.pingCount.toLocaleString()} lead pings received`
+                : 'Calls routed through campaigns'}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 text-white">
+        <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-gray-400">Billable Calls</CardTitle>
-            <PhoneIncoming className="h-4 w-4 text-emerald-400" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Billable Calls
+            </CardTitle>
+            <PhoneIncoming className="h-4 w-4 text-live-ink" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">{stats?.billableCalls.toLocaleString()}</div>
-            <p className="text-xs text-gray-500 mt-1">
+            <div className="text-3xl font-extrabold text-ink tabular">
+              {stats?.billableCalls.toLocaleString()}
+            </div>
+            <p className="text-xs text-ink-3 mt-1">
               {stats?.billableRate ? `${stats.billableRate.toFixed(1)}% billable rate` : '0%'}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 text-white">
+        <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-gray-400">Payout Earnings</CardTitle>
-            <DollarSign className="h-4 w-4 text-amber-400" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Payout Earnings
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-money-ink" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">
-              ${stats?.payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="text-3xl font-extrabold text-ink tabular">
+              $
+              {stats?.payout.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Total revenue generated</p>
+            <p className="text-xs text-ink-3 mt-1">Total revenue generated</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 text-white">
+        <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-gray-400">Avg Duration</CardTitle>
-            <Activity className="h-4 w-4 text-indigo-400" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Avg Duration
+            </CardTitle>
+            <Activity className="h-4 w-4 text-ink-3" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-white">{formatDuration(stats?.averageConnectedDuration || 0)}</div>
-            <p className="text-xs text-gray-500 mt-1">Average connected call length</p>
+            <div className="text-3xl font-extrabold text-ink tabular">
+              {formatDuration(stats?.averageConnectedDuration || 0)}
+            </div>
+            <p className="text-xs text-ink-3 mt-1">Average connected call length</p>
           </CardContent>
         </Card>
       </div>
@@ -343,66 +364,93 @@ function PublisherDashboard() {
       {/* Main sections: Chart & Top Campaigns */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Call Volume Chart */}
-        <Card className="lg:col-span-2 bg-white/5 border-white/10 text-white">
+        <Card className="lg:col-span-2 bg-surface border-rule text-ink">
           <CardHeader>
             <CardTitle className="text-lg font-bold">Call Performance Trend</CardTitle>
-            <CardDescription className="text-gray-400">Daily breakdown of total vs billable calls.</CardDescription>
+            <CardDescription className="text-ink-2">
+              Daily breakdown of total vs billable calls.
+            </CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorBillable" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#34d399" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#0e7355" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#0e7355" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: 10 }} tickLine={false} />
-                <YAxis stroke="#6b7280" style={{ fontSize: 10 }} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e0d8" />
+                <XAxis dataKey="name" stroke="#8a867c" style={{ fontSize: 10 }} tickLine={false} />
+                <YAxis stroke="#8a867c" style={{ fontSize: 10 }} tickLine={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', color: '#fff' }}
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    borderColor: '#e4e0d8',
+                    color: '#171614',
+                  }}
                 />
-                <Area type="monotone" dataKey="Total" stroke="#22d3ee" strokeWidth={2} fillOpacity={1} fill="url(#colorTotal)" name="Total Calls" />
-                <Area type="monotone" dataKey="Billable" stroke="#34d399" strokeWidth={2} fillOpacity={1} fill="url(#colorBillable)" name="Billable Calls" />
+                <Area
+                  type="monotone"
+                  dataKey="Total"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorTotal)"
+                  name="Total Calls"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="Billable"
+                  stroke="#0e7355"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorBillable)"
+                  name="Billable Calls"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Top Campaigns */}
-        <Card className="bg-white/5 border-white/10 text-white">
+        <Card className="bg-surface border-rule text-ink">
           <CardHeader>
             <CardTitle className="text-lg font-bold">Top Campaigns</CardTitle>
-            <CardDescription className="text-gray-400">Top-performing campaign integrations.</CardDescription>
+            <CardDescription className="text-ink-2">
+              Top-performing campaign integrations.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {stats && stats.topCampaigns.length > 0 ? (
               <div className="space-y-4">
                 {stats.topCampaigns.map((camp, index) => (
-                  <div key={camp.campaignId} className="flex items-center justify-between border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                  <div
+                    key={camp.campaignId}
+                    className="flex items-center justify-between border-b border-rule pb-3 last:border-0 last:pb-0"
+                  >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-gray-500">#{index + 1}</span>
-                        <span className="font-semibold text-sm text-white">{camp.campaignName}</span>
+                        <span className="text-xs font-bold text-ink-3">#{index + 1}</span>
+                        <span className="font-semibold text-sm text-ink">{camp.campaignName}</span>
                       </div>
-                      <div className="text-xs text-gray-400">{camp.callsCount} calls sent</div>
+                      <div className="text-xs text-ink-2">{camp.callsCount} calls sent</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-emerald-400">${camp.payout.toFixed(2)}</div>
-                      <div className="text-xs text-gray-500">Earned</div>
+                      <div className="font-bold text-ink tabular">${camp.payout.toFixed(2)}</div>
+                      <div className="text-xs text-ink-3">Earned</div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="flex h-[200px] flex-col items-center justify-center text-center">
-                <Users className="h-8 w-8 text-gray-600 mb-2" />
-                <p className="text-sm text-gray-400">No campaigns found for this range.</p>
+                <Users className="h-8 w-8 text-ink-3 mb-2" />
+                <p className="text-sm text-ink-2">No campaigns found for this range.</p>
               </div>
             )}
           </CardContent>
@@ -410,21 +458,28 @@ function PublisherDashboard() {
       </div>
 
       {/* Recent Calls Table */}
-      <Card className="bg-white/5 border-white/10 text-white">
+      <Card className="bg-surface border-rule text-ink">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg font-bold">Recent Inbound Calls</CardTitle>
-            <CardDescription className="text-gray-400">Latest call traffic generated by your sources.</CardDescription>
+            <CardDescription className="text-ink-2">
+              Latest call traffic generated by your sources.
+            </CardDescription>
           </div>
-          <Button variant="outline" size="sm" asChild className="border-white/10 text-white hover:bg-white/5">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="border-rule text-ink hover:bg-sunken"
+          >
             <a href="/publisher/calls">View All Calls</a>
           </Button>
         </CardHeader>
         <CardContent>
           {stats && stats.recentCalls.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-gray-300">
-                <thead className="text-xs uppercase text-gray-400 border-b border-white/10 bg-white/5">
+              <table className="w-full text-left text-sm text-ink-2">
+                <thead className="text-xs uppercase text-ink-2 border-b border-rule bg-sunken">
                   <tr>
                     <th className="px-4 py-3">Time</th>
                     <th className="px-4 py-3">Caller</th>
@@ -434,9 +489,9 @@ function PublisherDashboard() {
                     <th className="px-4 py-3 text-right">Payout</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-rule">
                   {stats.recentCalls.map(call => (
-                    <tr key={call.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={call.id} className="hover:bg-sunken transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap text-xs">
                         {new Date(call.createdAt).toLocaleString()}
                       </td>
@@ -451,16 +506,20 @@ function PublisherDashboard() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {call.billable ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                          <Badge className="bg-live-tint text-live-ink border-live/40 text-xs">
                             Billable
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-400 border-white/10 text-xs" title={call.nonBillableReason || undefined}>
+                          <Badge
+                            variant="outline"
+                            className="bg-dropped-tint text-dropped-ink border-dropped/40 text-xs"
+                            title={call.nonBillableReason || undefined}
+                          >
                             Non-Billable
                           </Badge>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-right font-semibold text-emerald-400 text-xs">
+                      <td className="px-4 py-3 whitespace-nowrap text-right font-semibold text-ink tabular text-xs">
                         {call.payout ? `$${Number(call.payout).toFixed(2)}` : '$0.00'}
                       </td>
                     </tr>
@@ -470,8 +529,8 @@ function PublisherDashboard() {
             </div>
           ) : (
             <div className="flex h-[150px] flex-col items-center justify-center text-center">
-              <PhoneCall className="h-8 w-8 text-gray-600 mb-2" />
-              <p className="text-sm text-gray-400">No calls registered for this period.</p>
+              <PhoneCall className="h-8 w-8 text-ink-3 mb-2" />
+              <p className="text-sm text-ink-2">No calls registered for this period.</p>
             </div>
           )}
         </CardContent>
@@ -487,4 +546,3 @@ export default function GuardedPublisherDashboard() {
     </RoleGuard>
   );
 }
-

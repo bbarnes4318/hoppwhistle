@@ -305,7 +305,7 @@ export default function VoiceStudioPage() {
     (snippet: string) => {
       const textarea = scriptRef.current;
       if (!textarea) {
-        setScript((prev) => `${prev}${snippet}`);
+        setScript(prev => `${prev}${snippet}`);
         return;
       }
       const start = textarea.selectionStart ?? script.length;
@@ -388,7 +388,7 @@ export default function VoiceStudioPage() {
         </div>
         <div className="flex items-center gap-2">
           {model === 's2.1-pro-free' && (
-            <Badge variant="outline" className="border-amber-500/40 text-amber-600">
+            <Badge variant="outline" className="border-ringing/40 text-ringing-ink">
               Free tier — no latency guarantee
             </Badge>
           )}
@@ -423,7 +423,7 @@ export default function VoiceStudioPage() {
             <Textarea
               ref={scriptRef}
               value={script}
-              onChange={(event) => setScript(event.target.value)}
+              onChange={event => setScript(event.target.value)}
               rows={7}
               className="font-mono text-sm"
               placeholder="Type what the agent should say. Click markers below to shape delivery."
@@ -477,7 +477,7 @@ export default function VoiceStudioPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(status.models || []).map((value) => (
+                  {(status.models || []).map(value => (
                     <SelectItem key={value} value={value}>
                       {MODEL_LABELS[value] || value}
                     </SelectItem>
@@ -510,7 +510,7 @@ export default function VoiceStudioPage() {
                     : ' S2 uses [brackets] and accepts free-form descriptions like [slightly sad].'}
                 </p>
 
-                {EMOTION_GROUPS.map((group) => (
+                {EMOTION_GROUPS.map(group => (
                   <div key={group.label} className="space-y-2">
                     <div>
                       <p className="text-sm font-medium">{group.label}</p>
@@ -559,7 +559,7 @@ export default function VoiceStudioPage() {
                   </div>
                 </div>
 
-                <div className="rounded-md border border-border bg-muted/40 p-3">
+                <div className="rounded-md border border-border bg-sunken p-3">
                   <p className="text-xs text-muted-foreground">
                     Keep <span className="font-medium">Normalize</span> on. Phoneme tags survive
                     normalization, and switching it off makes Fish read prices, dates and phone
@@ -576,7 +576,7 @@ export default function VoiceStudioPage() {
                     min={0.5}
                     max={2}
                     step={0.05}
-                    format={(v) => `${v.toFixed(2)}×`}
+                    format={v => `${v.toFixed(2)}×`}
                     onChange={setSpeed}
                   />
                   <SliderField
@@ -585,7 +585,7 @@ export default function VoiceStudioPage() {
                     min={-20}
                     max={20}
                     step={1}
-                    format={(v) => `${v > 0 ? '+' : ''}${v} dB`}
+                    format={v => `${v > 0 ? '+' : ''}${v} dB`}
                     onChange={setVolume}
                   />
                   <SliderField
@@ -594,7 +594,7 @@ export default function VoiceStudioPage() {
                     min={100}
                     max={300}
                     step={10}
-                    format={(v) => `${v} tokens`}
+                    format={v => `${v} tokens`}
                     hint="Smaller starts audio sooner; larger gives smoother prosody."
                     onChange={setChunkLength}
                   />
@@ -673,8 +673,8 @@ export default function VoiceStudioPage() {
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     value={searchTitle}
-                    onChange={(event) => setSearchTitle(event.target.value)}
-                    onKeyDown={(event) => event.key === 'Enter' && void loadVoices()}
+                    onChange={event => setSearchTitle(event.target.value)}
+                    onKeyDown={event => event.key === 'Enter' && void loadVoices()}
                     placeholder="Search by name"
                     className="pl-8"
                   />
@@ -682,7 +682,7 @@ export default function VoiceStudioPage() {
                 <Button
                   variant={searchOwn ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setSearchOwn((prev) => !prev)}
+                  onClick={() => setSearchOwn(prev => !prev)}
                   title="Toggle between your own voices and Fish's public library"
                 >
                   {searchOwn ? 'Mine' : 'Library'}
@@ -701,7 +701,7 @@ export default function VoiceStudioPage() {
                 </p>
               ) : (
                 <ul className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
-                  {voices.map((voice) => {
+                  {voices.map(voice => {
                     const id = voiceId(voice);
                     const active = selectedVoice ? voiceId(selectedVoice) === id : false;
                     return (
@@ -818,8 +818,7 @@ function PhonemeBuilder({ onInsert }: { onInsert: (snippet: string) => void }) {
       <div>
         <p className="text-sm font-medium">Pronunciation (phoneme control)</p>
         <p className="text-xs text-muted-foreground">
-          Replaces one English word with CMU Arpabet. Stress digits: 1 primary, 2 secondary, 0
-          none.{' '}
+          Replaces one English word with CMU Arpabet. Stress digits: 1 primary, 2 secondary, 0 none.{' '}
           <a
             href={ARPABET_REFERENCE_URL}
             target="_blank"
@@ -834,7 +833,7 @@ function PhonemeBuilder({ onInsert }: { onInsert: (snippet: string) => void }) {
       <div className="flex gap-2">
         <Input
           value={arpabet}
-          onChange={(event) => setArpabet(event.target.value)}
+          onChange={event => setArpabet(event.target.value)}
           placeholder="EH1 N JH AH0 N IH1 R"
           className="font-mono text-xs"
         />
@@ -852,7 +851,7 @@ function PhonemeBuilder({ onInsert }: { onInsert: (snippet: string) => void }) {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {ARPABET_PRESETS.map((preset) => (
+        {ARPABET_PRESETS.map(preset => (
           <button
             key={preset.word}
             type="button"
@@ -891,7 +890,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
     // sales voice published to Fish's public library is not recoverable.
     form.set('visibility', 'private');
     form.set('enhance_audio_quality', enhance ? 'true' : 'false');
-    files.forEach((file) => form.append('voices', file, file.name));
+    files.forEach(file => form.append('voices', file, file.name));
     if (transcript.trim()) form.append('texts', transcript.trim());
 
     try {
@@ -932,7 +931,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
           <Label className="text-sm">Name</Label>
           <Input
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={event => setTitle(event.target.value)}
             placeholder="Alex — outbound"
           />
         </div>
@@ -941,7 +940,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
           <Label className="text-sm">Description</Label>
           <Input
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={event => setDescription(event.target.value)}
             placeholder="Optional"
           />
         </div>
@@ -956,7 +955,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
               multiple
               accept=".wav,.mp3,.m4a,.opus,audio/*"
               className="hidden"
-              onChange={(event) => setFiles(Array.from(event.target.files || []))}
+              onChange={event => setFiles(Array.from(event.target.files || []))}
             />
           </label>
         </div>
@@ -965,7 +964,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
           <Label className="text-sm">Transcript (optional)</Label>
           <Textarea
             value={transcript}
-            onChange={(event) => setTranscript(event.target.value)}
+            onChange={event => setTranscript(event.target.value)}
             rows={2}
             placeholder="The exact words spoken in the sample — sharpens pronunciation."
             className="text-xs"
@@ -984,7 +983,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
 
         {error && <p className="text-xs text-destructive">{error}</p>}
         {created && (
-          <p className="text-xs text-emerald-600">
+          <p className="text-xs text-live-ink">
             Cloned. New voice id: <code className="font-mono">{created}</code>
           </p>
         )}

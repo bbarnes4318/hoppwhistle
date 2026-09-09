@@ -222,7 +222,7 @@ export default function AdminPayrollPage() {
  </CardHeader>
  <CardContent>
  <div className="text-2xl font-bold flex items-center gap-2">
- <Clock className="h-5 w-5 text-blue-500" />
+ <Clock className="h-5 w-5 text-money-ink" />
  {report?.summary.totalHours?.toFixed(1) || '0'}
  </div>
  </CardContent>
@@ -234,7 +234,7 @@ export default function AdminPayrollPage() {
  </CardTitle>
  </CardHeader>
  <CardContent>
- <div className="text-2xl font-bold text-amber-500 flex items-center gap-2">
+ <div className="text-2xl font-bold text-ringing-ink flex items-center gap-2">
  <DollarSign className="h-5 w-5" />
  {report?.summary.totalLiability?.toFixed(2) || '0.00'}
  </div>
@@ -437,8 +437,8 @@ export default function AdminPayrollPage() {
  <div
  className={`p-4 rounded-lg ${
  validation.valid
- ? 'bg-green-500/10 text-green-600'
- : 'bg-red-500/10 text-red-600'
+ ? 'bg-live-tint text-live-ink'
+ : 'bg-dropped-tint text-dropped-ink'
  }`}
  >
  {validation.valid ? (

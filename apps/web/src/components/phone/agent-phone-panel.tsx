@@ -169,17 +169,17 @@ export function AgentPhonePanel(): JSX.Element | null {
   const getStatusColor = (status: AgentStatus): string => {
     switch (status) {
       case 'available':
-        return 'bg-emerald-500';
+        return 'bg-live';
       case 'on-call':
-        return 'bg-amber-500';
+        return 'bg-ringing';
       case 'away':
-        return 'bg-red-500';
+        return 'bg-dropped';
       case 'dnd':
-        return 'bg-purple-500';
+        return 'bg-blocked';
       case 'offline':
-        return 'bg-gray-500';
+        return 'bg-ink-3';
       default:
-        return 'bg-gray-500';
+        return 'bg-ink-3';
     }
   };
 
@@ -211,13 +211,11 @@ export function AgentPhonePanel(): JSX.Element | null {
         className={cn(
           'fixed bottom-6 right-6 z-50',
           'flex items-center gap-3 px-5 py-3 rounded-full',
-          'bg-red-600 text-white font-medium shadow-sm',
-          'border border-white/10 transition-all duration-300 ease-out hover:scale-105'
+          'bg-dropped text-white font-medium shadow-sm',
+          'border border-rule transition-all duration-300 ease-out hover:scale-105'
         )}
         aria-label={
-          phoneStatus === 'failed'
-            ? 'Phone disconnected. Try again.'
-            : 'Phone reconnecting'
+          phoneStatus === 'failed' ? 'Phone disconnected. Try again.' : 'Phone reconnecting'
         }
       >
         <PhoneOff className="w-5 h-5" />
@@ -226,7 +224,7 @@ export function AgentPhonePanel(): JSX.Element | null {
             ? 'Phone disconnected — try again'
             : `Phone reconnecting (${phoneAttempts})`}
         </span>
-        <span className="w-2.5 h-2.5 rounded-full bg-white/80" />
+        <span className="w-2.5 h-2.5 rounded-full bg-surface/80" />
       </button>
     );
   }
@@ -238,12 +236,11 @@ export function AgentPhonePanel(): JSX.Element | null {
         className={cn(
           'fixed bottom-6 right-6 z-50',
           'flex items-center gap-3 px-5 py-3 rounded-full',
-          'bg-primary',
-          'hover: hover:',
-          'text-white font-medium shadow-sm',
+          'bg-brand',
+          'text-ink font-medium shadow-sm',
           'transition-all duration-300 ease-out',
-          'hover:scale-105 hover:',
-          'border border-white/10',
+          'hover:scale-105 hover:bg-brand-ink hover:text-surface',
+          'border border-rule',
           currentCall?.state === 'ringing' && 'animate-pulse'
         )}
         aria-label="Open phone"
@@ -251,7 +248,7 @@ export function AgentPhonePanel(): JSX.Element | null {
         <div className="relative">
           <Phone className="w-5 h-5" />
           {currentCall?.state === 'ringing' && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-ringing rounded-full animate-ping" />
           )}
         </div>
         <span className="capitalize">{agentStatus === 'on-call' ? 'On Call' : agentStatus}</span>
@@ -279,14 +276,14 @@ export function AgentPhonePanel(): JSX.Element | null {
         className={cn(
           'fixed bottom-4 right-4 z-40',
           'w-[340px] overflow-hidden flex flex-col',
-          'bg-slate-950 border border-slate-800',
-          'shadow-2xl shadow-black/85',
+          'bg-surface border border-rule',
+          'shadow-lg',
           'transition-all duration-300 ease-out',
           isExpanded ? 'h-[500px] max-h-[calc(100vh-32px)]' : 'h-[44px]'
         )}
       >
         {/* Header */}
-        <CardHeader className="p-2 flex flex-row items-center justify-between border-b border-slate-800 space-y-0 flex-shrink-0 bg-slate-900/40">
+        <CardHeader className="p-2 flex flex-row items-center justify-between border-b border-rule space-y-0 flex-shrink-0 bg-sunken">
           <div className="flex items-center gap-2">
             <div
               className={cn(
@@ -296,7 +293,7 @@ export function AgentPhonePanel(): JSX.Element | null {
               <Phone className="w-3.5 h-3.5 text-primary flex-shrink-0" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-xs leading-none">Softphone</h3>
+              <h3 className="font-bold text-ink text-xs leading-none">Softphone</h3>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <AgentStatusSelector />
               </div>
@@ -305,9 +302,9 @@ export function AgentPhonePanel(): JSX.Element | null {
 
           <div className="flex items-center gap-1">
             {currentCall?.state === 'active' && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 rounded mr-1">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-emerald-400 text-[10px] font-mono leading-none">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-live-tint rounded mr-1">
+                <span className="w-1.5 h-1.5 bg-live rounded-full animate-pulse" />
+                <span className="text-live-ink text-[10px] font-mono leading-none">
                   {formatDuration(currentCall.duration)}
                 </span>
               </div>
@@ -316,7 +313,7 @@ export function AgentPhonePanel(): JSX.Element | null {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-ink-3 hover:text-ink"
               onClick={() => setShowSettings(true)}
             >
               <Settings className="w-3.5 h-3.5" />
@@ -325,16 +322,20 @@ export function AgentPhonePanel(): JSX.Element | null {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-ink-3 hover:text-ink"
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronUp className="w-3.5 h-3.5" />
+              )}
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-ink-3 hover:text-ink"
               onClick={closePhonePanel}
             >
               <X className="w-3.5 h-3.5" />
@@ -344,9 +345,9 @@ export function AgentPhonePanel(): JSX.Element | null {
 
         {/* Connection state, and the way back from a failed one. */}
         {(phoneStatus === 'retrying' || phoneStatus === 'failed') && (
-          <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
+          <div className="px-4 py-2 bg-dropped-tint border-b border-dropped/40">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-red-400 text-xs">
+              <span className="text-dropped-ink text-xs">
                 {phoneStatus === 'failed'
                   ? 'The phone is not connected. Calls will not reach you.'
                   : `Reconnecting the phone (attempt ${phoneAttempts})…`}
@@ -354,7 +355,7 @@ export function AgentPhonePanel(): JSX.Element | null {
               {phoneStatus === 'failed' && (
                 <button
                   onClick={reconnectPhone}
-                  className="shrink-0 rounded border border-red-400/40 px-2 py-0.5 text-xs text-red-300 hover:text-red-200"
+                  className="shrink-0 rounded border border-dropped/40 px-2 py-0.5 text-xs text-dropped-ink hover:opacity-80"
                 >
                   Try again
                 </button>
@@ -365,10 +366,10 @@ export function AgentPhonePanel(): JSX.Element | null {
 
         {/* Error Banner */}
         {error && phoneStatus !== 'retrying' && phoneStatus !== 'failed' && (
-          <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
+          <div className="px-4 py-2 bg-dropped-tint border-b border-dropped/40">
             <div className="flex items-center justify-between">
-              <span className="text-red-400 text-xs">{error}</span>
-              <button onClick={clearError} className="text-red-400 hover:text-red-300">
+              <span className="text-dropped-ink text-xs">{error}</span>
+              <button onClick={clearError} className="text-dropped-ink hover:opacity-80">
                 <X className="w-3 h-3" />
               </button>
             </div>
@@ -377,14 +378,14 @@ export function AgentPhonePanel(): JSX.Element | null {
 
         {/* Intake Match Badge */}
         {intakeMatchDetected && (
-          <div className="px-4 py-2 bg-emerald-500/10 border-b border-emerald-500/20">
+          <div className="px-4 py-2 bg-live-tint border-b border-live/40">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span className="text-emerald-400 text-xs font-medium">
+              <CheckCircle2 className="w-4 h-4 text-live-ink" />
+              <span className="text-live-ink text-xs font-medium">
                 {matchedProspect ? 'Matched to Database Record' : 'Matched to Intake Form'}
               </span>
               {matchedProspect && (
-                <span className="text-emerald-400/70 text-xs">
+                <span className="text-live-ink/70 text-xs">
                   ({matchedProspect.firstName} {matchedProspect.lastName})
                 </span>
               )}
@@ -458,23 +459,23 @@ export function AgentPhonePanel(): JSX.Element | null {
 
                   {/* Caller Info */}
                   <div className="text-center py-4">
-                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary flex items-center justify-center border border-cyan-500/30">
-                      <User className="w-8 h-8 text-cyan-400" />
+                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary flex items-center justify-center border border-brand/30">
+                      <User className="w-8 h-8 text-ink" />
                     </div>
-                    <h4 className="text-white font-semibold text-lg">
+                    <h4 className="text-ink font-semibold text-lg">
                       {currentCall.callerName || 'Unknown Caller'}
                     </h4>
-                    <p className="text-gray-400 text-sm">{currentCall.phoneNumber}</p>
+                    <p className="text-ink-3 text-sm">{currentCall.phoneNumber}</p>
                     {currentCall.queueName && (
-                      <p className="text-cyan-400 text-xs mt-1">From: {currentCall.queueName}</p>
+                      <p className="text-brand-ink text-xs mt-1">From: {currentCall.queueName}</p>
                     )}
                   </div>
 
                   {/* Call Status Indicator */}
                   {currentCall.isOnHold && (
-                    <div className="flex items-center justify-center gap-2 py-2 bg-amber-500/10 rounded-lg">
-                      <Pause className="w-4 h-4 text-amber-400" />
-                      <span className="text-amber-400 text-sm">Call On Hold</span>
+                    <div className="flex items-center justify-center gap-2 py-2 bg-ringing-tint rounded-lg">
+                      <Pause className="w-4 h-4 text-ringing-ink" />
+                      <span className="text-ringing-ink text-sm">Call On Hold</span>
                     </div>
                   )}
 
@@ -487,7 +488,7 @@ export function AgentPhonePanel(): JSX.Element | null {
               {(!currentCall || currentCall.state === 'ended') && (
                 <div className="p-4 space-y-4">
                   {/* Tab Navigation */}
-                  <div className="flex gap-1 p-1 bg-white/5 rounded-lg">
+                  <div className="flex gap-1 p-1 bg-sunken rounded-lg">
                     {(['dialpad', 'history', 'settings'] as const).map(tab => (
                       <button
                         key={tab}
@@ -495,8 +496,8 @@ export function AgentPhonePanel(): JSX.Element | null {
                         className={cn(
                           'flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all',
                           activeTab === tab
-                            ? 'bg-primary text-white shadow-lg'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-brand text-brand-fg'
+                            : 'text-ink-3 hover:text-ink hover:bg-sunken'
                         )}
                       >
                         {tab === 'dialpad' && <Keyboard className="w-3.5 h-3.5 inline mr-1.5" />}
@@ -598,8 +599,8 @@ function CallHistory(): JSX.Element {
   if (loading) {
     return (
       <div className="text-center py-8">
-        <Clock className="w-10 h-10 mx-auto mb-3 text-gray-600 animate-pulse" />
-        <p className="text-gray-500 text-sm">Loading calls...</p>
+        <Clock className="w-10 h-10 mx-auto mb-3 text-ink-3 animate-pulse" />
+        <p className="text-ink-3 text-sm">Loading calls...</p>
       </div>
     );
   }
@@ -607,8 +608,8 @@ function CallHistory(): JSX.Element {
   if (apiCalls.length === 0 && sessionCalls.length === 0) {
     return (
       <div className="text-center py-8">
-        <Clock className="w-10 h-10 mx-auto mb-3 text-gray-600" />
-        <p className="text-gray-500 text-sm">No recent calls</p>
+        <Clock className="w-10 h-10 mx-auto mb-3 text-ink-3" />
+        <p className="text-ink-3 text-sm">No recent calls</p>
       </div>
     );
   }
@@ -624,7 +625,7 @@ function CallHistory(): JSX.Element {
             onClick={() => handleCallClick(call.phoneNumber)}
             className={cn(
               'w-full p-3 rounded-lg text-left transition-all',
-              'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'
+              'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
             )}
           >
             <div className="flex items-center justify-between">
@@ -632,7 +633,7 @@ function CallHistory(): JSX.Element {
                 <div
                   className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center',
-                    isInbound ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400'
+                    isInbound ? 'bg-ringing-tint text-ringing-ink' : 'bg-money-tint text-money-ink'
                   )}
                 >
                   {isInbound ? (
@@ -642,17 +643,17 @@ function CallHistory(): JSX.Element {
                   )}
                 </div>
                 <div>
-                  <p className="text-white text-sm font-medium">
+                  <p className="text-ink text-sm font-medium">
                     {call.callerName || call.phoneNumber}
                   </p>
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-ink-3 text-xs">
                     {isInbound ? 'Incoming' : 'Outgoing'}
                     {call.duration > 0 &&
                       ` • ${Math.floor(call.duration / 60)}m ${call.duration % 60}s`}
                   </p>
                 </div>
               </div>
-              <span className="text-gray-500 text-xs">{formatTime(call.startTime)}</span>
+              <span className="text-ink-3 text-xs">{formatTime(call.startTime)}</span>
             </div>
           </button>
         );
@@ -670,7 +671,7 @@ function CallHistory(): JSX.Element {
             onClick={() => handleCallClick(phone)}
             className={cn(
               'w-full p-3 rounded-lg text-left transition-all',
-              'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'
+              'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
             )}
           >
             <div className="flex items-center justify-between">
@@ -678,7 +679,7 @@ function CallHistory(): JSX.Element {
                 <div
                   className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center',
-                    isInbound ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400'
+                    isInbound ? 'bg-ringing-tint text-ringing-ink' : 'bg-money-tint text-money-ink'
                   )}
                 >
                   {isInbound ? (
@@ -688,14 +689,14 @@ function CallHistory(): JSX.Element {
                   )}
                 </div>
                 <div>
-                  <p className="text-white text-sm font-medium">{phone || 'Unknown'}</p>
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-ink text-sm font-medium">{phone || 'Unknown'}</p>
+                  <p className="text-ink-3 text-xs">
                     {isInbound ? 'Incoming' : 'Outgoing'}
                     {dur > 0 && ` • ${Math.floor(dur / 60)}m ${dur % 60}s`}
                   </p>
                 </div>
               </div>
-              <span className="text-gray-500 text-xs">
+              <span className="text-ink-3 text-xs">
                 {formatTime(call.startedAt || call.createdAt)}
               </span>
             </div>
@@ -721,14 +722,14 @@ function PhoneSettings(): JSX.Element {
     <div className="space-y-4">
       {/* Microphone Selection */}
       <div>
-        <label className="block text-xs text-gray-400 mb-2">Microphone</label>
+        <label className="block text-xs text-ink-3 mb-2">Microphone</label>
         <select
           value={selectedAudioInput ?? ''}
           onChange={e => setAudioInput(e.target.value)}
           className={cn(
             'w-full px-3 py-2 rounded-lg text-sm',
-            'bg-white/5 border border-white/10',
-            'text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500',
+            'bg-surface border border-rule',
+            'text-ink focus:border-brand-ink focus:ring-1 focus:ring-brand-ink',
             'outline-none transition-all'
           )}
         >
@@ -742,14 +743,14 @@ function PhoneSettings(): JSX.Element {
 
       {/* Speaker Selection */}
       <div>
-        <label className="block text-xs text-gray-400 mb-2">Speaker</label>
+        <label className="block text-xs text-ink-3 mb-2">Speaker</label>
         <select
           value={selectedAudioOutput ?? ''}
           onChange={e => setAudioOutput(e.target.value)}
           className={cn(
             'w-full px-3 py-2 rounded-lg text-sm',
-            'bg-white/5 border border-white/10',
-            'text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500',
+            'bg-surface border border-rule',
+            'text-ink focus:border-brand-ink focus:ring-1 focus:ring-brand-ink',
             'outline-none transition-all'
           )}
         >
@@ -762,14 +763,14 @@ function PhoneSettings(): JSX.Element {
       </div>
 
       {/* Screen Pop Configuration Link */}
-      <div className="pt-2 border-t border-white/5">
-        <p className="text-gray-400 text-xs mb-2">
+      <div className="pt-2 border-t border-rule">
+        <p className="text-ink-3 text-xs mb-2">
           Configure which prospect fields appear during incoming calls.
         </p>
         <Button
           variant="outline"
           size="sm"
-          className="w-full border-white/10 text-gray-300 hover:bg-white/5"
+          className="w-full border-rule text-ink-2 hover:bg-sunken"
         >
           <Settings className="w-4 h-4 mr-2" />
           Configure Screen Pop Fields
@@ -800,7 +801,7 @@ function CallerIdSelector(): JSX.Element | null {
 
   return (
     <div className="mb-1.5">
-      <label className="flex items-center gap-1.5 text-[10px] text-gray-400 mb-1">
+      <label className="flex items-center gap-1.5 text-[10px] text-ink-3 mb-1">
         <Phone className="w-2.5 h-2.5 text-primary" />
         Calling from:
       </label>
@@ -809,13 +810,13 @@ function CallerIdSelector(): JSX.Element | null {
         onChange={e => setSelectedCallerId(e.target.value)}
         className={cn(
           'w-full px-2 py-1 rounded text-xs',
-          'bg-white/5 border border-white/10',
-          'text-white focus:border-primary focus:ring-1 focus:ring-primary',
+          'bg-surface border border-rule',
+          'text-ink focus:border-primary focus:ring-1 focus:ring-primary',
           'outline-none transition-all cursor-pointer'
         )}
       >
         {userNumbers.map(num => (
-          <option key={num.id} value={num.number} className="bg-slate-950 text-white">
+          <option key={num.id} value={num.number}>
             {formatPhone(num.number)}
           </option>
         ))}
