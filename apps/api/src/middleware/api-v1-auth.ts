@@ -152,8 +152,12 @@ export function registerApiV1Auth(server: FastifyInstance): void {
 }
 
 /**
- * Overlay NetEnroll staff state onto a principal this hook just built from a
- * JWT.
+ * Overlay NetEnroll staff state onto a principal built from a JWT.
+ *
+ * Exported so the session-cookie authenticator can apply the identical overlay
+ * — see middleware/session-cookie-auth.ts. Two implementations of "which agency
+ * is this operator inside" is precisely how a stale tenant gets served, so
+ * there is one.
  *
  * `request.jwtVerify()` populates `request.user` straight from the token, which
  * carries the tenant the operator had at login and knows nothing about the
@@ -164,7 +168,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
  *
  * For everyone else this is a no-op beyond one indexed lookup that misses.
  */
-async function applyPlatformContext(request: FastifyRequest): Promise<void> {
+export async function applyPlatformContext(request: FastifyRequest): Promise<void> {
   const principal = request.user as
     | {
         userId?: string;

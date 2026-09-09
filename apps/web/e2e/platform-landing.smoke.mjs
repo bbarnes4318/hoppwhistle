@@ -221,33 +221,28 @@ const DARK_SCOPE_ROUTE = '/design-preview';
  *
  * ── Read this before adding to it ────────────────────────────────────────────
  *
- * Four entries, every one a defect this sweep FOUND on its first run, every one
- * older than the work that added the sweep, and every one needing a change this
- * rebrand has no business making. They are listed here rather than quietly
- * tolerated so that the list is the record: anything not on it still fails, and
- * each of these fails again the moment its path or status changes.
+ * Three entries, every one a defect this sweep FOUND on its first run, every
+ * one older than the work that added the sweep. They are listed here rather
+ * than quietly tolerated so that the list is the record: anything not on it
+ * still fails, and each of these fails again the moment its path or status
+ * changes.
  *
  * An entry is not permission to leave something broken. Fix the cause and
  * delete the entry. Do not add one without the same standard of evidence: the
  * exact path and status, and a diagnosis of the cause rather than a note that
  * it came out red.
  *
- * The count above is part of the record. It said "two" while the list held
- * four, because two were appended without touching the sentence that counted
- * them — so if you change the list, change the number with it.
+ * There were four. The lead-injection stream is gone from this list because it
+ * was fixed rather than tolerated: `EventSource` cannot send an Authorization
+ * header, so that read-only GET now authenticates from the session cookie the
+ * app already maintains. See apps/api/src/middleware/session-cookie-auth.ts.
+ * That is what an entry leaving this list is supposed to look like.
+ *
+ * The count above is part of the record. It once said "two" while the list held
+ * four, because entries were appended without touching the sentence that
+ * counted them — so if you change the list, change the number with it.
  */
 const KNOWN_REFUSALS = [
-  {
-    path: '/api/v1/lead-inject/stream',
-    status: 401,
-    where: '/call-center',
-    why:
-      'The lead stream is an EventSource, and EventSource cannot send an ' +
-      'Authorization header — so this endpoint has answered 401 to every ' +
-      'browser that ever opened it, then reconnected and been refused again. ' +
-      'Fixing it means letting the read-only GET authenticate from the ' +
-      'hw_session cookie, which is an auth change and not a rebrand change.',
-  },
   {
     path: '/api/v1/reports/profitability',
     status: 404,

@@ -61,6 +61,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 import { resolveTenant } from '../lib/tenant-context.js';
 import { authenticateAPIKey } from '../middleware/auth.js';
+import { authenticateFromSessionCookie } from '../middleware/session-cookie-auth.js';
 
 // Global event emitter for lead data broadcasts.
 //
@@ -225,59 +226,75 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
    *
    * SSE endpoint for agents to receive real-time lead data for their own
    * agency. The frontend connects here to listen for incoming leads.
+   *
+   * ── Why this one route authenticates from a cookie ─────────────────────────
+   *
+   * The browser opens this with `EventSource`, which cannot set headers, so no
+   * `Authorization` reaches here and every connection was refused 401 — for as
+   * long as the endpoint has existed. The session cookie the web app already
+   * maintains rides along on a same-origin request instead. It is accepted only
+   * because this is a read-only GET; see middleware/session-cookie-auth.ts for
+   * why that is safe and why it must not spread.
+   *
+   * A Bearer token still wins where a caller can send one: the preHandler only
+   * fills a gap, it does not replace anything.
    */
-  fastify.get('/api/v1/lead-inject/stream', async (request, reply) => {
-    const tenantId = resolveTenant(request, reply);
-    if (!tenantId) return;
+  fastify.get(
+    '/api/v1/lead-inject/stream',
+    { preHandler: [authenticateFromSessionCookie] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
-    // Set SSE headers.
-    //
-    // No `Access-Control-Allow-Origin: *` here any more: this stream carries
-    // one agency's leads, and a wildcard let any page on any origin open it
-    // with the viewer's credentials and read them.
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
+      // Set SSE headers.
+      //
+      // No `Access-Control-Allow-Origin: *` here any more: this stream carries
+      // one agency's leads, and a wildcard let any page on any origin open it
+      // with the viewer's credentials and read them.
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
 
-    // Send initial connection message
-    reply.raw.write(
-      `data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`
-    );
+      // Send initial connection message
+      reply.raw.write(
+        `data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`
+      );
 
-    // Handler for new leads
-    const leadHandler = (lead: LeadInjectPayload) => {
-      try {
-        reply.raw.write(`data: ${JSON.stringify({ type: 'lead', data: lead })}\n\n`);
-      } catch (err) {
-        request.log.error({ err }, '[LeadInject] Error sending SSE message');
-      }
-    };
+      // Handler for new leads
+      const leadHandler = (lead: LeadInjectPayload) => {
+        try {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'lead', data: lead })}\n\n`);
+        } catch (err) {
+          request.log.error({ err }, '[LeadInject] Error sending SSE message');
+        }
+      };
 
-    // Subscribe to this tenant's lead events
-    const channel = leadChannel(tenantId);
-    leadEventEmitter.on(channel, leadHandler);
+      // Subscribe to this tenant's lead events
+      const channel = leadChannel(tenantId);
+      leadEventEmitter.on(channel, leadHandler);
 
-    // Keep-alive ping every 30 seconds
-    const keepAliveInterval = setInterval(() => {
-      try {
-        reply.raw.write(`: keepalive\n\n`);
-      } catch {
-        // Connection closed
+      // Keep-alive ping every 30 seconds
+      const keepAliveInterval = setInterval(() => {
+        try {
+          reply.raw.write(`: keepalive\n\n`);
+        } catch {
+          // Connection closed
+          clearInterval(keepAliveInterval);
+        }
+      }, 30000);
+
+      // Cleanup on connection close
+      request.raw.on('close', () => {
+        leadEventEmitter.off(channel, leadHandler);
         clearInterval(keepAliveInterval);
-      }
-    }, 30000);
+      });
 
-    // Cleanup on connection close
-    request.raw.on('close', () => {
-      leadEventEmitter.off(channel, leadHandler);
-      clearInterval(keepAliveInterval);
-    });
-
-    // Don't end the response - keep it open for SSE
-    return reply;
-  });
+      // Don't end the response - keep it open for SSE
+      return reply;
+    }
+  );
 
   /**
    * GET /api/v1/lead-inject/recent
