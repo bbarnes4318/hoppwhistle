@@ -36,6 +36,19 @@
  *      stops climbing. A loop that retries a terminal refusal forever is its
  *      own defect regardless of what is on screen.
  *
+ * ── The publisher portal ─────────────────────────────────────────────────────
+ *
+ * The same five assertions then run again over the four publisher pages, signed
+ * in as an ordinary PUBLISHER linked to a publisher record -- no platform
+ * capability, no agency to enter, exactly the account the portal is for.
+ *
+ * That sweep exists because of what it caught. `requirePublisherAccess()` read
+ * `user.roles` and `user.publisherId` from a JWT that carries neither, so it
+ * returned false for every caller: the dashboard, earnings and API-credentials
+ * pages each answered 403, for every publisher, always. `apps/api` had tests
+ * over those endpoints and they all passed, because they asked as an
+ * administrator. Loading the page as the person it belongs to is what shows it.
+ *
  * ── Running it ───────────────────────────────────────────────────────────────
  *
  *   SMOKE_DATABASE_URL=postgresql://user:pass@localhost:5432/hopwhistle_test \
@@ -69,6 +82,7 @@ const FRONT_PORT = Number(process.env.SMOKE_FRONT_PORT ?? 3402);
 const FRONT = `http://127.0.0.1:${FRONT_PORT}`;
 
 const OPERATOR = { email: 'platform-smoke@netenroll.invalid', password: 'smoke-Passw0rd!' };
+const PUBLISHER = { email: 'publisher-smoke@netenroll.invalid', password: 'smoke-Passw0rd!' };
 
 /**
  * The routes that must render platform-wide, and the heading that proves each
@@ -92,6 +106,22 @@ const ROUTES = [
  * only ADMIN in this list the bug reproduces on nobody.
  */
 const ROLE_SETS = [['ADMIN'], ['PUBLISHER'], ['BUYER'], ['AGENT']];
+
+/**
+ * The publisher portal, and the heading that proves each page rendered.
+ *
+ * Three of the four ask the API for `/api/v1/publishers/:id/stats`, `/keys` or
+ * `/docs` on load, and every one of those answered 403 to the publisher who
+ * owns them. `/publisher/docs` is static and asks for nothing -- it is here
+ * because it is one of the four pages the portal is made of, and a page that
+ * stops rendering is a failure whether or not it fetches.
+ */
+const PUBLISHER_ROUTES = [
+  { path: '/publisher/dashboard', heading: 'Publisher Overview' },
+  { path: '/publisher/earnings', heading: 'Earnings & Payouts' },
+  { path: '/publisher/api-setup', heading: 'API Credentials' },
+  { path: '/publisher/docs', heading: 'Support & Documentation' },
+];
 
 /**
  * Latency added to `/api/v1/platform/context`, and why there has to be any.
@@ -328,27 +358,93 @@ await prisma.$disconnect();
 `;
 
 async function seed(services, roles) {
-  await new Promise((ok, fail) => {
-    const child = spawn('node', ['--input-type=module', '--eval', SEED], {
+  await runSeed(SEED, services, {
+    SMOKE_EMAIL: OPERATOR.email,
+    SMOKE_PASSWORD: OPERATOR.password,
+    SMOKE_ROLES: roles.join(','),
+  });
+}
+
+async function seedPublisher(services) {
+  await runSeed(PUBLISHER_SEED, services, {
+    SMOKE_EMAIL: PUBLISHER.email,
+    SMOKE_PASSWORD: PUBLISHER.password,
+  });
+}
+
+/**
+ * An ordinary publisher: the PUBLISHER role, linked to a Publisher row, in an
+ * agency, with no platform capability.
+ *
+ * The link is the part that matters. `User.publisherId` is what decides which
+ * publisher's data this account may reach, and a publisher user without one
+ * must reach nothing -- so seeding it is what makes a passing sweep mean the
+ * portal works, rather than meaning the checks were skipped.
+ */
+const PUBLISHER_SEED = `
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+const tenant = await prisma.tenant.upsert({
+  where: { slug: 'publisher-smoke' },
+  update: {},
+  create: { name: 'Publisher Smoke Agency', slug: 'publisher-smoke', status: 'ACTIVE' },
+});
+
+const publisher = await prisma.publisher.upsert({
+  where: { tenantId_code: { tenantId: tenant.id, code: 'SMOKEPUB' } },
+  update: { status: 'ACTIVE' },
+  create: { tenantId: tenant.id, name: 'Publisher Smoke Source', code: 'SMOKEPUB' },
+});
+
+const role = await prisma.role.upsert({
+  where: { name: 'PUBLISHER' },
+  update: {},
+  create: { name: 'PUBLISHER', permissions: [] },
+});
+
+const passwordHash = await bcrypt.hash(process.env.SMOKE_PASSWORD, 10);
+const user = await prisma.user.upsert({
+  where: { email: process.env.SMOKE_EMAIL },
+  update: { passwordHash, status: 'ACTIVE', tenantId: tenant.id, publisherId: publisher.id },
+  create: {
+    email: process.env.SMOKE_EMAIL,
+    passwordHash,
+    firstName: 'Publisher',
+    lastName: 'Smoke',
+    status: 'ACTIVE',
+    tenantId: tenant.id,
+    publisherId: publisher.id,
+  },
+});
+
+// No platform capability, and only the PUBLISHER role: the account the portal
+// is built for, and the one every check refused.
+await prisma.platformAdmin.deleteMany({ where: { userId: user.id } });
+await prisma.userRole.deleteMany({ where: { userId: user.id } });
+await prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
+
+await prisma.$disconnect();
+`;
+
+function runSeed(script, services, env) {
+  return new Promise((ok, fail) => {
+    const child = spawn('node', ['--input-type=module', '--eval', script], {
       cwd: API_DIR,
       stdio: ['ignore', 'inherit', 'inherit'],
-      env: {
-        ...process.env,
-        DATABASE_URL: services.database,
-        SMOKE_EMAIL: OPERATOR.email,
-        SMOKE_PASSWORD: OPERATOR.password,
-        SMOKE_ROLES: roles.join(','),
-      },
+      env: { ...process.env, DATABASE_URL: services.database, ...env },
     });
     child.on('exit', code => (code === 0 ? ok() : fail(new Error(`seed exited ${code}`))));
   });
 }
 
-async function signIn() {
+async function signIn(who = OPERATOR) {
   const res = await fetch(`${FRONT}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(OPERATOR),
+    body: JSON.stringify(who),
   });
   const body = await res.json();
   if (!body?.token) throw new Error(`sign-in failed: ${res.status} ${JSON.stringify(body)}`);
@@ -362,6 +458,22 @@ const fail = message => failures.push(message);
 
 async function openAsOperator(browser, session, path) {
   const context = await browser.newContext();
+
+  /*
+   * Both halves of a signed-in browser, because the app uses both.
+   *
+   * `login` writes the token to localStorage AND to the `hw_session` cookie,
+   * and the server components read the cookie: the layout under /publisher
+   * resolves the session server-side and redirects to /login without it. Seeding
+   * only localStorage produced a browser that client components considered
+   * signed in and every server guard considered signed out -- which is not a
+   * state any real session is ever in, and would have reported the entire
+   * publisher portal as broken no matter what the API answered.
+   */
+  await context.addCookies([
+    { name: 'hw_session', value: session.token, url: FRONT, sameSite: 'Lax' },
+  ]);
+
   await context.addInitScript(
     ([token, user]) => {
       localStorage.setItem('token', token);
@@ -389,8 +501,14 @@ async function openAsOperator(browser, session, path) {
   return { context, page, responses };
 }
 
-async function checkRoute(browser, session, roles, route) {
-  const who = `${roles.join('+')} on ${route.path}`;
+/**
+ * The five assertions, over one route, for whoever `session` belongs to.
+ *
+ * Shared by the platform sweep and the publisher sweep on purpose: "the page
+ * rendered, the URL did not move, no prompt, nothing refused" is the same claim
+ * for both, and a second copy of it would be a second thing to let drift.
+ */
+async function checkRoute(browser, session, who, route) {
   const { context, page, responses } = await openAsOperator(browser, session, route.path);
 
   const text = await page.evaluate(() => document.body.innerText);
@@ -422,8 +540,10 @@ async function checkRoute(browser, session, roles, route) {
     for (const r of refused)
       counted[`${r.path} ${r.status}`] = (counted[`${r.path} ${r.status}`] ?? 0) + 1;
     fail(
-      `${who}: made ${refused.length} request(s) the server refused. An agency-scoped\n` +
-        `  endpoint must not be asked while there is no acting tenant:\n` +
+      `${who}: made ${refused.length} request(s) the server refused. A page must not ask\n` +
+        `  for something the caller cannot have -- an agency-scoped endpoint while there\n` +
+        `  is no acting tenant, or its own publisher's data while the check that guards\n` +
+        `  it cannot see the caller's role:\n` +
         Object.entries(counted)
           .map(([k, n]) => `    ${k} x${n}`)
           .join('\n')
@@ -576,7 +696,7 @@ async function main() {
    * the idle window that counts requests. The response is not checked -- these
    * are unauthenticated hits whose only job is to make the compiler run.
    */
-  for (const route of ROUTES) {
+  for (const route of [...ROUTES, ...PUBLISHER_ROUTES]) {
     await fetch(`${FRONT}${route.path}`, { redirect: 'manual' }).catch(() => null);
   }
 
@@ -587,7 +707,18 @@ async function main() {
   for (const roles of ROLE_SETS) {
     await seed(services, roles);
     const session = await signIn();
-    for (const route of ROUTES) await checkRoute(browser, session, roles, route);
+    for (const route of ROUTES) {
+      await checkRoute(browser, session, `${roles.join('+')} on ${route.path}`, route);
+    }
+  }
+
+  // The publisher portal, as a publisher. Nothing here is cross-agency: the
+  // account has one agency and one publisher, and the only question is whether
+  // it is allowed to see its own.
+  await seedPublisher(services);
+  const publisherSession = await signIn(PUBLISHER);
+  for (const route of PUBLISHER_ROUTES) {
+    await checkRoute(browser, publisherSession, `PUBLISHER on ${route.path}`, route);
   }
 
   await seed(services, ['ADMIN']);
@@ -602,6 +733,7 @@ async function main() {
   }
   console.log(
     `platform landing smoke test passed: ${ROLE_SETS.length} role set(s) x ${ROUTES.length} route(s), ` +
+      `plus the ${PUBLISHER_ROUTES.length} publisher portal page(s) as a publisher -- ` +
       'no prompt, nothing refused, polling settles.'
   );
 }

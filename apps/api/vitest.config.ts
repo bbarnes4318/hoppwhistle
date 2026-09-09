@@ -24,6 +24,7 @@ const DATABASE_BACKED = [
   '**/src/__tests__/api-response-contract.test.ts',
   '**/src/__tests__/no-acting-tenant-audit.test.ts',
   '**/src/__tests__/platform-capability-closure.test.ts',
+  '**/src/__tests__/publisher-portal-access.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',

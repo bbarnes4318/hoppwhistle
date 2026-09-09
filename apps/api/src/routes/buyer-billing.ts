@@ -226,9 +226,15 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       return sendTenantRefusal(request, reply);
     }
 
-    // Require admin role for adding credits
-    const isAdmin =
-      user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER' || r === 'AGENT') ?? false;
+    // Require admin role for adding credits.
+    //
+    // AGENT used to be in this list. It never actually admitted anyone, because
+    // `user.roles` was empty on every request until the principal started being
+    // resolved from the database -- so the drift sat here unnoticed behind a
+    // check that denied everybody. Resolving roles would have turned it on, and
+    // an agent moving credit onto a buyer's account is not what "Admin access
+    // required" two lines below means.
+    const isAdmin = user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER') ?? false;
     if (!isAdmin) {
       void reply.code(403);
       return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
