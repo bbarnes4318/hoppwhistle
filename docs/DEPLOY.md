@@ -287,6 +287,45 @@ proxy is wrong, registration fails and the dashboard still shows the agent as
 available — the worst possible failure, because nothing looks broken until a
 call is routed to them.
 
+Run the check from the repo checkout on the box. It performs a real WebSocket
+handshake against the live host and exits non-zero if anything is wrong, so it
+can be put in front of the softphone test without anyone having to read it
+carefully:
+
+```bash
+node scripts/check-ws-proxy.mjs
+```
+
+**Expected output** — exit status `0` and exactly this line:
+
+```
+ok  wss://agents.netenroll.com/ws completed a WebSocket handshake and negotiated `sip`
+```
+
+Anything else is a failed cutover. **Do not continue to Step 2.6 until this
+passes**; a softphone tested against a broken proxy fails in a way that looks
+like a FreeSWITCH or credentials problem and sends you looking in the wrong
+place.
+
+The script checks five things, and names the one that failed:
+
+| Failure | What it means |
+| --- | --- |
+| `did not upgrade: … 400` | nginx is not forwarding `Upgrade`/`Connection` to `127.0.0.1:8083`. |
+| `fell through to the web app` | `location /ws` is missing or misspelled, so `location /` served the request. |
+| `did not upgrade: … 404` | no `/ws` block matched — check `server_name` and the path. |
+| `Sec-WebSocket-Accept does not match` | something answered `101` that is not the FreeSWITCH ws binding. |
+| ``did not negotiate the `sip` subprotocol`` | `proxy_set_header Sec-WebSocket-Protocol sip;` is missing. FreeSWITCH drops the socket right after a handshake that looks healthy. |
+
+It takes an optional URL, so the same check covers the old host while it is
+still serving (Step 2.8):
+
+```bash
+node scripts/check-ws-proxy.mjs wss://hopwhistle.com/ws
+```
+
+If it fails and the table above does not settle it, read the raw response:
+
 ```bash
 curl -sS -i -N \
   -H 'Connection: Upgrade' \
@@ -297,21 +336,27 @@ curl -sS -i -N \
   https://agents.netenroll.com/ws | head -5
 ```
 
-**Expected output:**
+Useful for eyeballing, but note it is **not** the check: `curl` exits 0 on a
+`400`, on the web app's HTML and on a `101` with no subprotocol, and `head`
+closing the pipe hides its status anyway. That is what
+`scripts/check-ws-proxy.mjs` exists to fix.
 
-```
-HTTP/1.1 101 Switching Protocols
-Upgrade: websocket
-Connection: upgrade
-Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
-Sec-WebSocket-Protocol: sip
-```
+The committed server block is asserted against the hopwhistle one by
+`apps/api/src/__tests__/ws-proxy.test.ts`, so the two cannot drift in CI. That
+test covers what is *in the repo*; this step covers what is *on the box*.
 
-A `400` means the Upgrade/Connection headers are not being forwarded. A `200`
-with HTML means the request fell through to the web app — the `/ws` location is
-missing or misspelled. A `101` **without** the `Sec-WebSocket-Protocol: sip`
-line means the subprotocol header is not being set and FreeSWITCH will drop the
-socket after the handshake.
+**On the URL the softphone actually dials.** It is derived, not configured:
+`phone-provider.tsx` reads `window.location.hostname` and builds
+`wss://<that host>/ws`, which is why the same build serves both hosts correctly
+during the transition — a browser on `agents.netenroll.com` dials
+`wss://agents.netenroll.com/ws`, and one still on the old host dials its own.
+The single thing that can override it is `NEXT_PUBLIC_SIP_WS_URL`. That variable
+is **not set anywhere in this repo** — not in any compose file, not as a build
+arg, not in the web Dockerfile — and `ws-proxy.test.ts` fails if anyone adds it.
+Because Next.js inlines `NEXT_PUBLIC_*` at build time, setting it would outrank
+the derived URL inside the shipped bundle and pin every softphone, on both
+hosts, to whichever host it named. Check `.env` on the box for a stray value
+before blaming nginx.
 
 **Reversal:** restore the previous
 `/etc/nginx/sites-available/agents.netenroll.com`, `nginx -t`, reload.
@@ -447,6 +492,35 @@ again.
 
 ---
 
+## Known limitation — /voice-agents is not single-signed-on on the new host
+
+Expect this; it is not a regression introduced by the cutover, and there is
+nothing to fix on the box. Opened from `agents.netenroll.com`, the AI Voice page
+loads its iframe and Dograh presents its own login instead of the signed-in
+workspace. Nothing errors and no log line is emitted.
+
+The AI Voice app is deployed at `aivoice.hopwhistle.com`, outside this
+repository (`/opt/dograh` plus its own vhost). The SSO handoff is a cookie, and
+two browser rules stop it once the portal is on a different registrable domain:
+a response from `agents.netenroll.com` cannot set a cookie on `.hopwhistle.com`
+at all, and the frame is now cross-site, so a `SameSite=Lax` cookie would not be
+sent even if it existed. Neither is reachable from this repo — changing the
+cookie domain, in either direction, cannot fix it. The full reasoning is in the
+comment above `AIVOICE_URL` in `apps/api/src/routes/aivoice.ts`.
+
+**Until the AI Voice app is served from the netenroll.com domain, send agents to
+`https://hopwhistle.com/voice-agents`.** The old host still serves the app in
+full (Step 2.8 redirects browsers, so they will need the direct link), and SSO
+works there exactly as before. Nothing else on the new host is affected.
+
+Clearing it needs, in order: DNS for `aivoice.netenroll.com`, a certificate, an
+nginx vhost on the Dograh box that permits `https://agents.netenroll.com` as a
+frame-ancestor, and Dograh's own public-URL config. Only then set `AIVOICE_URL`
+and `AIVOICE_COOKIE_DOMAIN` together in `.env` here — they must always name the
+same registrable domain — and redeploy the API. No code change is required.
+
+---
+
 ## If the softphone fails to register after cutover
 
 Work down this list in order. Each step tells you which of the four things is
@@ -461,9 +535,10 @@ wrong: the socket, the credentials, the realm, or the browser.
   it and redeploy.
 - The line never appears → the browser never got credentials. Go to 4.
 
-**2. Does the socket open at all?** Re-run Step 2.5's curl. A non-`101` is an
-nginx problem and the response code says which — see the failure notes under
-that step. Nothing else on this list will help until it returns `101`.
+**2. Does the socket open at all?** Re-run Step 2.5's
+`node scripts/check-ws-proxy.mjs`. A non-zero exit is an nginx problem and the
+message names which one — see the failure table under that step. Nothing else
+on this list will help until it prints `ok`.
 
 **3. Does FreeSWITCH see a REGISTER?**
 
