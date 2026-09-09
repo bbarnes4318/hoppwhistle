@@ -90,6 +90,8 @@ describe.skipIf(!gate.available)('the API response contract, through the real we
     await instance.register(registerPlatformRoutes);
     const { registerDeliveryBillingRoutes } = await import('../routes/delivery-billing.js');
     await instance.register(registerDeliveryBillingRoutes);
+    const { registerQuotaRoutes } = await import('../routes/quotas.js');
+    await instance.register(registerQuotaRoutes);
 
     await instance.listen({ port: 0, host: '127.0.0.1' });
     return instance;
@@ -334,6 +336,14 @@ describe.skipIf(!gate.available)('the API response contract, through the real we
       '/api/v1/delivery/settlements',
       '/api/v1/delivery/ledger',
       '/api/v1/delivery/mandate',
+      /*
+       * The settings page reads this one through `payload()`. It replaced three
+       * requests naming a hardcoded placeholder tenant, so the envelope is the
+       * whole contract: read as a bare body it would be `undefined` on every
+       * field and the page would render "no limits set" for an agency that has
+       * them -- the silent version of the bug it was built to fix.
+       */
+      '/api/v1/quota/summary',
     ];
 
     for (const path of PATHS) {
