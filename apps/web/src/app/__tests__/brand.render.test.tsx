@@ -1,27 +1,34 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { Logo } from '@/components/brand/logo';
 import { Wordmark } from '@/components/brand/wordmark';
 import { ThemeScope } from '@/components/domain/theme-scope';
 
 /**
- * The wordmark is two colours, literally, and the dark scope is an attribute.
+ * The brand marks are the supplied artwork, and the dark scope is an attribute.
  *
- * Both are the kind of thing a token rename or a "helpful" refactor breaks
- * silently: "netEnroll" set in one colour is still a word, and a ThemeScope
- * that forgot its attribute still renders. These pin the contract the
- * stylesheet and the smoke test rely on.
+ * Both are the kind of thing a "helpful" refactor breaks silently: a mark set
+ * in live text is a near-miss of the logo rather than the logo, and a
+ * ThemeScope that forgot its attribute still renders. These pin the contract
+ * the stylesheet and the smoke test rely on.
  */
 describe('the wordmark', () => {
-  it('reads netEnroll, with "net" in black and "Enroll" in the brand green', () => {
+  it('renders the netEnroll artwork, not text set in a font', () => {
     const { container } = render(<Wordmark />);
     const mark = container.querySelector('[data-testid="wordmark"]');
-    expect(mark?.textContent).toBe('netEnroll');
-    const [net, enroll] = Array.from(mark?.querySelectorAll('span') ?? []);
-    expect(net.textContent).toBe('net');
-    expect(net.style.color).toBe('rgb(0, 0, 0)');
-    expect(enroll.textContent).toBe('Enroll');
-    expect(enroll.style.color).toBe('rgb(16, 185, 129)');
+    const img = mark?.querySelector('img');
+    expect(img?.getAttribute('src')).toBe('/netenroll-wordmark.svg');
+    expect(img?.getAttribute('alt')).toBe('netEnroll');
+  });
+});
+
+describe('the full lockup', () => {
+  it('renders the wordmark-over-tagline artwork', () => {
+    const { container } = render(<Logo />);
+    const img = container.querySelector('[data-testid="logo"] img');
+    expect(img?.getAttribute('src')).toBe('/netenroll-logo.svg');
+    expect(img?.getAttribute('alt')).toBe('netEnroll \u2014 Pay-Per-Application');
   });
 });
 

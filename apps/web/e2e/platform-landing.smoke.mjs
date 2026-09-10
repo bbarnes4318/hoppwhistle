@@ -1776,7 +1776,8 @@ async function checkLoginPage(browser, viewport) {
     title: document.title,
     body: document.body.innerText,
     main: (document.querySelector('main') ?? document.body).innerText.trim(),
-    wordmark: document.querySelector('[data-testid="wordmark"]')?.textContent ?? null,
+    // The brand mark is artwork now, so its identity is the file it points at.
+    logo: document.querySelector('[data-testid="logo"] img')?.getAttribute('src') ?? null,
     // Every control a person could follow away from signing in.
     controls: Array.from(document.querySelectorAll('main a, main button')).map(el =>
       (el.textContent || '').trim()
@@ -1792,10 +1793,11 @@ async function checkLoginPage(browser, viewport) {
   }
 
   // 2. It is NetEnroll's, in the mark the rebrand established.
-  if (state.wordmark !== 'netEnroll') {
+  if (state.logo !== '/netenroll-logo.svg') {
     fail(
-      `${who}: the wordmark reads ${JSON.stringify(state.wordmark)} rather than "netEnroll". ` +
-        'The front door has to carry the same mark as the rest of the product.'
+      `${who}: the brand mark loads ${JSON.stringify(state.logo)} rather than ` +
+        '"/netenroll-logo.svg". The front door has to carry the supplied lockup, not a ' +
+        'wordmark reconstructed from whatever font happens to load.'
     );
   }
   if (!state.title.includes('NetEnroll')) {

@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { Wordmark } from '@/components/brand/wordmark';
+import { Logo } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -547,8 +547,8 @@ export default function AuthPage() {
       {/*
         The one screen that runs before there is a session, and — since the
         root of agents.netenroll.com redirects here — the front door of the
-        domain. One centred card on --paper, the wordmark above it, and the
-        line under the wordmark that tells someone who arrived by mistake
+        domain. One centred card on --paper, the full lockup above it, and
+        the line under the logo that tells someone who arrived by mistake
         whether this is for them. Nothing decorative: no gradient, no hero, no
         marketing copy. Brand green appears on the primary action and the focus
         ring, and nowhere else.
@@ -557,7 +557,7 @@ export default function AuthPage() {
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center">
           <header className="text-center">
             <h1>
-              <Wordmark size="lg" />
+              <Logo width={272} />
             </h1>
             <p className="t-body mt-3 text-ink-2">
               The agent portal for licensed insurance agencies.
