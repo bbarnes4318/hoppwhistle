@@ -1,7 +1,8 @@
 # The missing call history
 
 **Status:** the live database does not contain the platform's call history, and
-never did. The rows were not deleted from it — they were never copied into it.
+never did. The rows were not deleted from it — it was created empty, beside the
+data directory that already held them.
 
 **Reported:** the admin portal shows 3,949 calls for Test Organization against
 an expected 70,000+.
@@ -20,7 +21,10 @@ The stack moved from AWS to Hetzner. The migration playbook
 migration**", and its steps 2.2 and 2.5 are a `pg_dump` of that database and a
 `pg_restore` of it onto the new host.
 
-Those two steps do not appear to have been carried out.
+Those two steps do not appear to have been carried out. That is the origin of
+the empty database, but it is **not** where to go looking: the owner confirms
+nothing remains on the AWS side. The surviving copy is on the Hetzner host —
+see "Where the history is" below, and start with step 1 of the recovery.
 
 **The final cutover checklist is unchecked.**
 `HETZNER_DEPLOYMENT_VALIDATION.md` § 20:
@@ -77,78 +81,103 @@ old data was left where it was.
 
 ## Where the history is
 
-| What | Where | Per |
-| --- | --- | --- |
-| Calls, CDRs, legs, transcripts | AWS EC2, container `hopwhistle-postgres-dev`, database `callfabric`, user `callfabric` | `HETZNER_MIGRATION_FROM_AWS.md` § 1 |
-| Recordings | AWS S3 bucket `hopwhistle-recordings-prod` | `HETZNER_MIGRATION_FROM_AWS.md` § 2.3 |
-| Analytics CDRs | the pre-cutover ClickHouse (the `.env` scrub replaced its URL) | `walkthrough.md` § 8 |
+**On this host, in a different PostgreSQL data directory.** The owner confirms
+nothing is left on AWS, and the evidence on the Hetzner side points the same
+way: the application is reading one database while another one, with the
+history in it, sits beside it.
 
-The Vultr host is explicitly **not** a source — the playbook says to treat it as
-historical and to migrate nothing from it.
+**Two different database hostnames are documented for the same host.**
+
+| Source | `DATABASE_URL` |
+| --- | --- |
+| `.agent/workflows/deploy.md` § Database | `…@hopwhistle-postgres-dev:5432/callfabric` |
+| `hetzner_validation_report.md`, `walkthrough.md` § 8 | `…@postgres:5432/callfabric` |
+
+`postgres` is the compose *service* name; `hopwhistle-postgres-dev` is the
+`container_name` that `docker-compose.dev.yml` gives it. They resolve to the
+same container only while that container is attached to `docker_default` with
+that alias — which is exactly why the deploy runbook has to keep running
+`docker network connect docker_default hopwhistle-postgres-dev`, and why its
+troubleshooting section has an entry for `ENOTFOUND postgres`.
+
+**`docker-compose.yml` — the file the documented deploy uses — has no
+`postgres` service and no `postgres_data` volume at all.** Only
+`docker-compose.dev.yml` defines them. A `docker compose up` from a different
+directory or under a different project name therefore creates a *new* volume
+(`<project>_postgres_data`) with an empty database, and the old volume keeps
+every row.
+
+**And `scripts/deploy.sh` already guards against precisely this:**
+
+```sh
+VOL="$(docker inspect hopwhistle-postgres-dev --format "{{range .Mounts}}{{.Name}}{{end}}")"
+if [ "$VOL" != "docker_postgres_data" ]; then
+  RED "DATABASE DRIFT: postgres is on volume \"$VOL\", expected docker_postgres_data"; exit 3
+fi
+```
+
+That check was written because the container has come up on the wrong volume
+before. A container on the wrong volume presents exactly as "all the data is
+gone".
 
 ## Recovering it
 
-### 0. Before anything else
-
-**Do not terminate, stop, resize or reimage the AWS instance, and do not delete
-the S3 bucket.** Take a snapshot of the EBS volume now. Until the restore is
-verified, that instance is the only copy of the history.
-
-### 1. Confirm it is there
+### 1. Find which data directory holds it
 
 ```bash
-pnpm --filter @hopwhistle/api calls:inventory -- \
-  --url "postgresql://callfabric:PASSWORD@AWS_HOST:5432/callfabric"
+sudo ./scripts/find-call-history.sh
 ```
 
-Reads only. Prints row counts for calls, CDRs, legs, recordings and
-transcriptions, and calls per tenant with first and last dates. This is the
-number that either confirms 70,000 or tells you the AWS database is not the
-right source either. **Run it before planning anything else.**
+Run it on the Hetzner host. It inspects **every** PostgreSQL data directory on
+the machine — running containers and detached volumes alike — and prints the
+call count, recording count and date range in each, ranked. The top row is the
+one holding the history.
 
-Run it against the live database too, for the before-side of the comparison:
+It does not modify your data. Running containers are queried in place with
+`SELECT count(*)`. A detached volume cannot be read without a server, and
+starting PostgreSQL on a data directory writes to it, so the script never does
+that: it mounts the volume **read-only**, copies it to a scratch volume, starts
+a throwaway server on the *copy* (with trust auth patched into the copy, since
+the old cluster's password is not knowable), reads it, and deletes the copy.
 
-```bash
-pnpm --filter @hopwhistle/api calls:inventory
-```
+That copy-then-read procedure was verified against a real PostgreSQL 16 cluster
+holding 70,000 calls and 40,000 recordings, with md5 auth and an unknown
+password: the counts and date range came back, and the original data directory
+was byte-for-byte identical afterwards.
 
-### 2. Restore the old database into its OWN database
+### 2. Do not repoint the application at it
 
-```bash
-# On AWS
-docker exec -t hopwhistle-postgres-dev \
-  pg_dump -U callfabric -d callfabric -F c -b -v -f /tmp/callfabric_backup.dump
-docker cp hopwhistle-postgres-dev:/tmp/callfabric_backup.dump ./callfabric_backup.dump
+It is tempting to change `DATABASE_URL` to the volume that has the history. Do
+not. The database the application reads now holds **every call since it was put
+into service**, and those rows exist nowhere else. Switching to the other volume
+trades one set of missing calls for another.
 
-# On Hetzner — note the database name. NOT callfabric.
-createdb -U callfabric callfabric_legacy
-pg_restore -U callfabric -d callfabric_legacy -v callfabric_backup.dump
-```
+Copy the history into the live database instead, and keep both.
 
-**Never restore the dump over the live `callfabric` database.** The live one
-holds every call since the cutover, and those exist nowhere else. Restoring on
-top of it would destroy the only records this procedure cannot recover.
-
-### 3. Copy the history into the live database
+### 3. Copy the history across
 
 ```bash
-# Which agency should own it? The live database's agencies:
+# What does the live database hold, and what agencies are in it?
 pnpm --filter @hopwhistle/api calls:inventory
 
-# Dry run. Writes nothing.
+# What does the other one hold?
+pnpm --filter @hopwhistle/api calls:inventory -- --url "postgresql://…other…"
+
+# Dry run — writes nothing.
 pnpm --filter @hopwhistle/api calls:restore -- \
-  --from "postgresql://callfabric:PASSWORD@localhost:5432/callfabric_legacy" \
-  --into-tenant <the agency id>
+  --from "postgresql://…other…" --into-tenant <the agency id>
 
 # Then, once the dry run's numbers look right:
 pnpm --filter @hopwhistle/api calls:restore -- \
-  --from "postgresql://callfabric:PASSWORD@localhost:5432/callfabric_legacy" \
-  --into-tenant <the agency id> --commit
+  --from "postgresql://…other…" --into-tenant <the agency id> --commit
 ```
 
-The command inserts and never updates or deletes; every insert carries `ON
+To reach a detached volume with `calls:inventory`, start a container on a copy
+of it — the same way `find-call-history.sh` does — and point the URL at that.
+
+`calls:restore` inserts and never updates or deletes; every insert carries `ON
 CONFLICT DO NOTHING`, so it is safe to re-run and safe to interrupt. It copies
-the columns the two schemas share, so the older source schema is not a problem.
+the columns the two schemas share, so an older source schema is not a problem.
 A call whose campaign, publisher, buyer, number or creating user does not exist
 in the live database keeps the call and nulls the reference — the record is
 worth more than the link. See the header of
@@ -165,12 +194,13 @@ the source. Then open the portal.
 
 ### 5. The recordings themselves
 
-The rows restored in step 3 carry storage keys pointing at
-`hopwhistle-recordings-prod`. The audio still has to be copied, per
-`HETZNER_MIGRATION_FROM_AWS.md` § 2.3 — and note that the MinIO bucket created
-during the cutover is named `hopwhistle-recordings`, not
-`hopwhistle-recordings-prod`, so check which name the running configuration
-expects before syncing.
+Recording rows carry a storage key, not the audio. Once the rows are back,
+check that the object store the application is configured for actually holds
+the files those keys name — the cutover created a MinIO bucket called
+`hopwhistle-recordings`, while `HETZNER_MIGRATION_FROM_AWS.md` § 2.3 names the
+source bucket `hopwhistle-recordings-prod`. If the audio is in a different
+bucket or a different volume on this host, the same principle applies: find it
+before changing any configuration that points at it.
 
 ## What made this possible, and what should change
 
