@@ -28,6 +28,8 @@
     "db:push": "prisma db push",
     "audit:accounts": "tsx src/cli/audit-account-provenance.ts",
     "calls:diagnose": "tsx src/cli/diagnose-missing-calls.ts",
+    "calls:inventory": "tsx src/cli/call-history-inventory.ts",
+    "calls:restore": "tsx src/cli/restore-call-history.ts",
     "platform:admins": "tsx src/cli/platform-admins.ts",
     "rating:run": "tsx src/cli/run-daily-rating.ts",
     "settlement:run": "tsx src/cli/run-daily-settlement.ts",
