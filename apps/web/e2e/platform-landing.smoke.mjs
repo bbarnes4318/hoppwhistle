@@ -141,6 +141,10 @@ const SWEEP = [
       '/dashboard',
       '/call-center',
       '/calls',
+      // The business the agency wrote, both the automation's rows and the ones
+      // its agents logged. The screen an owner reconciles carrier statements
+      // against.
+      '/applications',
       '/insurance-leads',
       '/insurance-leads/reports',
       '/campaigns',
@@ -175,6 +179,9 @@ const SWEEP = [
       '/dashboard',
       '/call-center',
       '/calls',
+      // The same page an administrator opens. An agent sees only their own
+      // rows, and that narrowing is server-side.
+      '/applications',
       '/insurance-leads',
       '/delivery/me',
       '/payroll',
