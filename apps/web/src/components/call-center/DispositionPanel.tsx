@@ -6,6 +6,9 @@ import {
 } from '@hopwhistle/shared';
 import React from 'react';
 
+import { ApplicationLogForm } from './ApplicationLogForm';
+import type { ApplicationLogPayload, ApplicationLogPrefill } from './ApplicationLogForm';
+
 // Build button list from shared constants
 const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
   value,
@@ -27,6 +30,20 @@ interface DispositionPanelProps {
   handleSaveDisposition: () => void;
   handleSkipDisposition: () => void;
   onDispositionSelect: (d: string) => void;
+  /** What the quote and the call already know, to prefill the application. */
+  applicationPrefill?: ApplicationLogPrefill;
+  /** The current application body, or null while the form is incomplete. */
+  onApplicationChange: (payload: ApplicationLogPayload | null) => void;
+  /**
+   * Whether the application form is complete enough to send: carrier, face
+   * amount, premium and last name. The owning screen holds the payload, so it
+   * holds this too -- one fact rather than two that can disagree.
+   */
+  applicationReady?: boolean;
+  /** Set when the last submit failed. The form stays filled; Save reads Retry. */
+  applicationError?: string | null;
+  /** True while the two posts are in flight. */
+  savingApplication?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -44,6 +61,11 @@ export function DispositionPanel({
   handleSaveDisposition,
   handleSkipDisposition,
   onDispositionSelect,
+  applicationPrefill,
+  onApplicationChange,
+  applicationReady = false,
+  applicationError,
+  savingApplication = false,
 }: DispositionPanelProps) {
   // If disposition is saved, show confirmation
   if (dispositionSaved) {
@@ -63,10 +85,23 @@ export function DispositionPanel({
   const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
   const isFollowUpRequired =
     selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
+  const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
 
-  // Validate save: disposition required, follow-up date required for callback/follow-up
+  /*
+   * Validate save: disposition required, follow-up date required for
+   * callback/follow-up, and a complete application when the agent says they
+   * submitted one.
+   *
+   * The last condition is the point of this panel's change. "Application
+   * submitted" with nothing recorded is the failure this whole feature exists
+   * to remove: an agent who believes they logged business, an agency whose
+   * closing percentage never counted it, and a higher price for both.
+   */
   const canSave =
-    !!selectedDisposition && (!isFollowUpRequired || (!!followUpDate && !!followUpTime));
+    !!selectedDisposition &&
+    (!isFollowUpRequired || (!!followUpDate && !!followUpTime)) &&
+    (!wroteApplication || applicationReady) &&
+    !savingApplication;
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-surface p-4">
@@ -154,6 +189,18 @@ export function DispositionPanel({
         </div>
       )}
 
+      {/* The application the agent wrote, on any carrier. */}
+      {wroteApplication && (
+        <div className="mb-4">
+          <ApplicationLogForm
+            prefill={applicationPrefill}
+            onChange={onApplicationChange}
+            error={applicationError}
+            disabled={savingApplication}
+          />
+        </div>
+      )}
+
       {/* Actions */}
       <div className="mt-auto space-y-2">
         <button
@@ -161,10 +208,11 @@ export function DispositionPanel({
           disabled={!canSave}
           className="w-full py-3 bg-brand hover:bg-brand-ink hover:text-surface disabled:bg-sunken disabled:text-ink-3 disabled:cursor-not-allowed text-ink font-mono uppercase tracking-widest text-xs rounded transition-colors"
         >
-          Save & Exit
+          {savingApplication ? 'Saving…' : applicationError ? 'Retry save' : 'Save & Exit'}
         </button>
         <button
           onClick={handleSkipDisposition}
+          disabled={savingApplication}
           className="w-full py-3 bg-surface hover:bg-sunken border border-rule text-ink-2 font-mono uppercase tracking-widest text-xs rounded transition-colors"
         >
           Skip Entry

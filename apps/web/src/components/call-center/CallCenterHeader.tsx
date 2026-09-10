@@ -1,4 +1,4 @@
-import { Headphones, Settings } from 'lucide-react';
+import { FilePlus2, Headphones, Settings } from 'lucide-react';
 import React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -19,6 +19,12 @@ interface CallCenterHeaderProps {
   callTimer: number;
   formatTime: (seconds: number) => string;
   setShowSettings: (show: boolean) => void;
+  /**
+   * Open the application form with no call attached, for business written on a
+   * callback outside a softphone session. Without it that business is written
+   * and never counted, which understates the agency's closing percentage.
+   */
+  onLogApplication: () => void;
   onExit: () => void;
 }
 
@@ -92,6 +98,7 @@ export function CallCenterHeader({
   callTimer,
   formatTime,
   setShowSettings,
+  onLogApplication,
   onExit,
 }: CallCenterHeaderProps) {
   const state = callState(isIncomingCall, isCallActive, agentStatus);
@@ -166,6 +173,15 @@ export function CallCenterHeader({
           <Headphones aria-hidden className="h-3.5 w-3.5" />
           {rolesLoading ? '…' : derivedJobTitle}
         </span>
+        <button
+          type="button"
+          onClick={onLogApplication}
+          className="flex items-center gap-1.5 rounded-control border border-rule px-2.5 py-1.5 t-meta font-medium text-ink-2 hover:border-rule-strong hover:bg-sunken hover:text-ink focus-visible:outline-none"
+          title="Record business written on a callback, with no call attached"
+        >
+          <FilePlus2 aria-hidden className="h-3.5 w-3.5" />
+          Log an application
+        </button>
         <button
           type="button"
           onClick={() => setShowSettings(true)}

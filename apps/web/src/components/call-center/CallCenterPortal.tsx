@@ -20,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
@@ -38,6 +38,7 @@ import {
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
 import { ActiveCallControls } from './ActiveCallControls';
+import type { ApplicationLogPayload } from './ApplicationLogForm';
 import { ApplicationQueue } from './ApplicationQueue';
 import { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
 import { CallCenterHeader } from './CallCenterHeader';
@@ -50,6 +51,7 @@ import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import { PreClosedStatsCard } from './PreClosedStatsCard';
 import RetentionScriptPanel from './RetentionScriptPanel';
+import { StandaloneApplicationModal } from './StandaloneApplicationModal';
 import { StatsStrip } from './StatsStrip';
 import type {
   ActiveCallView,
@@ -241,6 +243,56 @@ export function CallCenterPortal(): JSX.Element {
   const [selectedDisposition, setSelectedDisposition] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpTime, setFollowUpTime] = useState('');
+
+  /*
+   * The application the agent wrote, when the disposition says they wrote one.
+   *
+   * Held here rather than in the form because the two posts are chained here:
+   * the disposition first (which hands back the call id), then the application
+   * carrying it. `applicationError` is what keeps the form on screen when the
+   * second post fails -- the disposition is NOT marked saved and nothing is
+   * cleared, so the agent's Retry reuses the same `clientRequestId` and the
+   * server answers a duplicate with the row it already wrote.
+   */
+  const [applicationPayload, setApplicationPayload] = useState<ApplicationLogPayload | null>(null);
+  const [applicationError, setApplicationError] = useState<string | null>(null);
+  const [savingApplication, setSavingApplication] = useState(false);
+  /** Set when a callback's business is logged from the header, with no call. */
+  const [showStandaloneApplication, setShowStandaloneApplication] = useState(false);
+  /*
+   * The `Call` row the disposition post resolved to, remembered across retries.
+   *
+   * `callSessionIdRef` is a browser-generated session id. When it names no row
+   * the disposition endpoint CREATES one, so a retry that sent the session id
+   * again would create a second call record for the same call. Sending the id
+   * the server came back with instead updates the row the first attempt made.
+   */
+  const dispositionCallIdRef = useRef<string | null>(null);
+
+  /*
+   * What the quote and the call already know, so the agent retypes none of it.
+   *
+   * `activeCallData` is a bag with an `unknown` index signature -- the script
+   * panels write whatever they capture into it -- so every value is coerced
+   * here rather than passed through. A blank field is better than a "[object
+   * Object]" in the premium box on the screen that decides the agency's price.
+   */
+  const applicationPrefill = useMemo(() => {
+    const text = (value: unknown): string | null =>
+      typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+
+    return {
+      carrier: text(activeCallData?.selectedCarrier),
+      planType: text(activeCallData?.selectedPlanType),
+      faceAmount: text(activeCallData?.selectedCoverage),
+      premium: text(activeCallData?.selectedPremium),
+      firstName: text(activeCallData?.firstName ?? activeCallData?.first_name),
+      lastName: text(activeCallData?.lastName ?? activeCallData?.last_name),
+      dob: text(activeCallData?.dob),
+      state: text(activeCallData?.state),
+      phone: text(activeCallData?.phone ?? activeCallData?.caller_id),
+    };
+  }, [activeCallData]);
 
   // Leads & Records
   const [applications, setApplications] = useState<ApplicationData[]>([]);
@@ -754,6 +806,26 @@ export function CallCenterPortal(): JSX.Element {
 
     const notes = autoNotes || callNotes;
 
+    /*
+     * An "application submitted" disposition now records the application.
+     *
+     * Until it did, this branch incremented a counter in the browser and wrote
+     * nothing: the agency's closing percentage never saw the business, and its
+     * price was set from a numerator that was missing every carrier the RPA
+     * does not drive. An agent who believes they logged an application that was
+     * never recorded is the failure this whole path exists to remove, so
+     * nothing below is marked saved until the application lands.
+     *
+     * `autoDisp` is the automatic disposition written when a call ends without
+     * the agent choosing one. It has no form behind it and never carries an
+     * application.
+     */
+    const wroteApplication = disp === 'APPLICATION_SUBMITTED' && !autoDisp;
+    if (wroteApplication && !applicationPayload) {
+      setApplicationError('Record the carrier, face amount, premium and last name first.');
+      return;
+    }
+
     const callRecord: CallRecord = {
       id: 'record-' + Date.now(),
       notificationId: 'pop-' + Date.now(),
@@ -766,6 +838,79 @@ export function CallCenterPortal(): JSX.Element {
       callSource: 'CALL_CENTER',
       followUpAt,
     };
+
+    /*
+     * The disposition first, then the application carrying the call id it hands
+     * back.
+     *
+     * That order, and not the other way round: `callSessionIdRef` is a
+     * browser-generated session id, not a `Call` row, and the disposition
+     * endpoint is what resolves it to one (creating the row when the call was
+     * never tracked). Posting the application first would attach it to an id
+     * the server does not have, and an application with no call on it is one an
+     * agency cannot reconcile against the call that produced it.
+     */
+    setSavingApplication(wroteApplication);
+    setApplicationError(null);
+
+    let savedCallId: string | null = null;
+    try {
+      const response = await apiClient.post<{ id?: string }>('/api/v1/calls/disposition', {
+        callId: dispositionCallIdRef.current ?? callSessionIdRef.current,
+        disposition: disp,
+        notes,
+        duration: callTimer,
+        callerNumber: activeCallData?.caller_id || activeCallData?.phone,
+        direction: 'OUTBOUND',
+        callSource: 'CALL_CENTER',
+        followUpAt,
+      });
+      if (response.error) {
+        console.error('[CallCenter] Disposition save failed:', response.error.message);
+      } else if (response.data?.id) {
+        savedCallId = response.data.id;
+        dispositionCallIdRef.current = savedCallId;
+      }
+    } catch (err) {
+      console.error('[CallCenter] Disposition save error:', err);
+    }
+
+    if (wroteApplication && applicationPayload) {
+      try {
+        /*
+         * `callId` is omitted rather than guessed when the disposition post did
+         * not come back with one. The application is the thing that must not be
+         * lost; an unattached one still counts, and the server refuses a call id
+         * that is not this agency's.
+         */
+        const response = await apiClient.post('/api/v1/applications', {
+          ...applicationPayload,
+          ...(savedCallId ? { callId: savedCallId } : {}),
+        });
+        if (response.error) {
+          throw new Error(response.error.message || 'The application could not be saved.');
+        }
+      } catch (err) {
+        /*
+         * The form stays exactly as the agent filled it, the disposition is NOT
+         * marked saved, and nothing is cleared. Retry reuses the same
+         * `clientRequestId`, so a submit that actually landed before the network
+         * gave up comes back as the row it wrote rather than as a second
+         * application.
+         */
+        setApplicationError(
+          err instanceof Error
+            ? `${err.message} The application has not been recorded — try again.`
+            : 'The application has not been recorded — try again.'
+        );
+        setSavingApplication(false);
+        return;
+      }
+    }
+
+    setSavingApplication(false);
+
+    // Only now is the call worked: the application is on the server.
     setCallRecords(prev => [...prev, callRecord]);
     if (disp === 'APPLICATION_SUBMITTED') {
       setSalesCount(prev => prev + 1);
@@ -889,24 +1034,6 @@ export function CallCenterPortal(): JSX.Element {
       }
     }
 
-    try {
-      const response = await apiClient.post('/api/v1/calls/disposition', {
-        callId: callSessionIdRef.current,
-        disposition: disp,
-        notes,
-        duration: callTimer,
-        callerNumber: activeCallData?.caller_id || activeCallData?.phone,
-        direction: 'OUTBOUND',
-        callSource: 'CALL_CENTER',
-        followUpAt,
-      });
-      if (response.error) {
-        console.error('[CallCenter] Disposition save failed:', response.error.message);
-      }
-    } catch (err) {
-      console.error('[CallCenter] Disposition save error:', err);
-    }
-
     // Save updated CRM data if lead exists
     const resolvedLeadId = activeCallData?.id || crmData?.customer?.id;
     if (resolvedLeadId && activeCallData) {
@@ -1019,6 +1146,10 @@ export function CallCenterPortal(): JSX.Element {
       setFollowUpDate('');
       setFollowUpTime('');
       setCallNotes('');
+      setApplicationPayload(null);
+      setApplicationError(null);
+      setSavingApplication(false);
+      dispositionCallIdRef.current = null;
       setCallTimer(0);
       setActiveCallData(null);
       callSessionIdRef.current = null;
@@ -1372,8 +1503,25 @@ export function CallCenterPortal(): JSX.Element {
         callTimer={callTimer}
         formatTime={formatTime}
         setShowSettings={setShowSettings}
+        onLogApplication={() => setShowStandaloneApplication(true)}
         onExit={() => router.push('/dashboard')}
       />
+
+      {/*
+        Business written on a callback, outside a softphone session.
+        No call to attach, so the application carries no `callId` -- which the
+        server allows deliberately: refusing it would put the agent back to
+        business that is written and never counted.
+      */}
+      {showStandaloneApplication && (
+        <StandaloneApplicationModal
+          onClose={() => setShowStandaloneApplication(false)}
+          onLogged={() => {
+            setShowStandaloneApplication(false);
+            setSalesCount(prev => prev + 1);
+          }}
+        />
+      )}
 
       {/* Settings Modal */}
       {showSettings && (
@@ -1646,6 +1794,11 @@ export function CallCenterPortal(): JSX.Element {
                 void handleSaveDisposition();
               }}
               onDispositionSelect={() => {}}
+              applicationPrefill={applicationPrefill}
+              onApplicationChange={setApplicationPayload}
+              applicationReady={!!applicationPayload}
+              applicationError={applicationError}
+              savingApplication={savingApplication}
               handleSkipDisposition={() => {
                 const leadId = activeCallData?.id || crmData?.customer?.id;
                 if (leadId) {

@@ -3214,16 +3214,47 @@ model InsuranceCarrierApplication {
   /// at 9am the next day belongs to the next day.
   submittedAt DateTime?
 
+  /// How this application entered the system. AUTOMATION means the carrier
+  /// RPA submitted it. AGENT_ENTRY means an agent logged it after writing
+  /// the business themselves, on any carrier. Both count identically in
+  /// services/rating/measurement.ts.
+  source String @default("AUTOMATION")
+
+  /// Premium mode as written. MONTHLY | QUARTERLY | SEMI_ANNUAL | ANNUAL.
+  paymentMode String @default("MONTHLY")
+
+  /// modalPremium annualised, computed on write and stored, so agency
+  /// production reporting does not have to re-derive it per row.
+  annualizedPremium Decimal? @db.Decimal(10, 2)
+
+  /// The premium as written, in the mode named by `paymentMode`.
+  modalPremium Decimal? @db.Decimal(10, 2)
+
+  /// Set by the agent's client per form instance. Makes a double-submitted
+  /// form one application rather than two, without assuming one call
+  /// produces at most one application (a couple insuring together produces
+  /// two, from one call).
+  clientRequestId String?
+
+  /// Removed from measurement. Platform staff only. Never reverses a credit.
+  voidedAt   DateTime?
+  voidedById String?
+  voidReason String?
+
   // Audit
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdById String?
 
+  @@unique([tenantId, clientRequestId])
   @@index([tenantId])
   @@index([tenantId, phone])
   @@index([tenantId, createdAt])
   /// The measurement query: submitted applications for one agency in one window.
   @@index([tenantId, submittedAt])
+  /// One agent's own applications, newest first: the agent reading of
+  /// GET /api/v1/applications and the per-agent production breakdown.
+  @@index([tenantId, createdById, submittedAt])
   @@index([prospectIntakeId])
   @@index([insuranceLeadId])
   @@index([callId])

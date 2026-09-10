@@ -66,6 +66,10 @@ export const ADMIN_NAV: NavGroup[] = [
       { name: 'Live board', href: '/admin/live', icon: MonitorPlay, pending: true },
       { name: 'Call center', href: '/call-center', icon: Headphones },
       { name: 'Calls', href: '/calls', icon: AudioLines },
+      // The business the agency wrote, both the automation's rows and the ones
+      // agents logged. Under LIVE beside Calls because it is the other half of
+      // the closing percentage, read the same day it is written.
+      { name: 'Applications', href: '/applications', icon: FileText },
       // Judgement call: CRM sits here rather than in MARKET because it is
       // worked in real time by the same agents who live in the call center.
       { name: 'CRM', href: '/insurance-leads', icon: Users },
@@ -234,6 +238,9 @@ export const AGENT_NAV: NavGroup[] = [
       { name: 'Call center', href: '/call-center', icon: Headphones },
       { name: 'My calls', href: '/calls/my', icon: AudioLines },
       { name: 'Calls', href: '/calls', icon: AudioLines },
+      // An agent's own applications. The narrowing is server-side, so this is
+      // the same page an administrator opens, showing only their rows.
+      { name: 'Applications', href: '/applications', icon: FileText },
       { name: 'CRM', href: '/insurance-leads', icon: Users },
       {
         name: 'CRM reports',
