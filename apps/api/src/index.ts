@@ -207,6 +207,12 @@ async function buildServer() {
   const { registerDeliveryBillingRoutes } = await import('./routes/delivery-billing.js');
   await server.register(registerDeliveryBillingRoutes);
 
+  // Agent-entered applications: the carrier-agnostic path into the closing
+  // percentage, beside the American Amicable RPA rather than through it, plus
+  // the agency's reconciliation reads and the platform-only void.
+  const { registerApplicationRoutes } = await import('./routes/applications.js');
+  await server.register(registerApplicationRoutes);
+
   // Internal onboarding: one platform-admin screen from nothing to enrolled.
   const { registerOnboardingRoutes } = await import('./routes/onboarding.js');
   await server.register(registerOnboardingRoutes);

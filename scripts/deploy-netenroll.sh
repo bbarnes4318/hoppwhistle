@@ -93,6 +93,7 @@ REQUIRED_MIGRATIONS="
 20260907000000_add_platform_admin
 20260907010000_audit_log_nullable_tenant
 20260908000000_add_rating_engine
+20260914000000_agent_entered_applications
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -216,6 +217,16 @@ migration_applied() {
                 AND column_name = 'tenantId'), false)" ;;
     *_add_rating_engine)
       echo "SELECT to_regclass('public.rate_curve_versions') IS NOT NULL" ;;
+    *_agent_entered_applications)
+      # Adds columns to an existing table, so table presence proves nothing --
+      # `insurance_carrier_applications` has been there since the RPA shipped.
+      # `source` is the column the change turns on: it marks a row as
+      # agent-entered rather than automation-written, and the closing percentage
+      # reads `voidedAt` from the same file. If `source` is there, the file ran.
+      echo "SELECT COALESCE((SELECT true FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'insurance_carrier_applications'
+                AND column_name = 'source'), false)" ;;
     *)
       echo "" ;;
   esac

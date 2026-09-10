@@ -52,6 +52,28 @@
  * produced it. An application from a 4pm call submitted at 9am the next day
  * belongs to the next day.
  *
+ * How the application REACHED submitted state is not part of this either. The
+ * carrier RPA writes some of them and an agent logs the rest by hand, on any
+ * carrier, and the query below does not branch on `source`: an agency is
+ * measured on the business it submitted, not on which of our paths recorded
+ * it. Counting only the automated carrier understated the numerator and
+ * overcharged every agency writing with the other ten.
+ *
+ * ── A voided application is not one ──────────────────────────────────────────
+ *
+ * `voidedAt` removes an application from the numerator. It is the correction
+ * for a row that should never have counted -- a test entry, a duplicate the
+ * client-request key did not catch, an application logged against the wrong
+ * agency -- and it is PLATFORM STAFF ONLY: an agency cannot void its own
+ * applications, because the numerator is what its price is measured from and
+ * editing it is setting its own rate.
+ *
+ * Voiding NEVER reverses a credit that was already consumed. The ledger refuses
+ * UPDATE and DELETE by trigger and has no reversal entry type by design, so a
+ * credit spent on an application stays spent. Voiding narrows what the agency
+ * is measured on going forward; it does not undo what it has already been
+ * charged, and nothing here should be read as a refund path.
+ *
  * ── Per agency, always ───────────────────────────────────────────────────────
  *
  * Every function here takes a `tenantId` and every query carries it. Two
@@ -112,6 +134,8 @@ export function submittedApplicationWhere(
   return {
     tenantId,
     submittedAt: { gte: range.start, lt: range.endExclusive },
+    // A voided application was never a submitted application. See the header.
+    voidedAt: null,
   };
 }
 

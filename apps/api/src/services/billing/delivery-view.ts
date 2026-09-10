@@ -39,7 +39,11 @@ import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { calendarDayBounds, currentCalendarDay } from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
-import { deliveredCallWhere, measureCalendarDay } from '../rating/measurement.js';
+import {
+  deliveredCallWhere,
+  measureCalendarDay,
+  submittedApplicationWhere,
+} from '../rating/measurement.js';
 import { effectiveRate, rateFor, toNumber, toRateCurve } from '../rating/rate-curve.js';
 import type { CurveAnchor, RateCurve } from '../rating/rate-curve.js';
 import { getRatingSummary } from '../rating/rating-summary.js';
@@ -365,6 +369,15 @@ export interface AgentRow {
   email: string | null;
   callsTaken: number;
   applications: number;
+  /**
+   * Total annualised premium on those applications, in dollars.
+   *
+   * The counts drive the price; this is what says whether the production is
+   * worth what it costs. Zero for an agent who submitted nothing, and zero for
+   * one whose applications all came from the RPA path (which writes no
+   * `annualizedPremium`) -- a sum over no premiums, not an absent measurement.
+   */
+  annualizedPremium: number;
   /** Null when the agent took no calls -- never 0%. */
   closingPct: number | null;
   /** Seconds connected, summed over the day's answered calls. */
@@ -468,6 +481,8 @@ export interface AgentBreakdown {
   agencyClosingPct: number | null;
   agencyCallsTaken: number;
   agencyApplications: number;
+  /** The day's total annualised premium across every agent. */
+  agencyAnnualizedPremium: number;
   agents: AgentRow[];
 }
 
@@ -511,8 +526,12 @@ export async function getAgentBreakdown(
     }),
     prisma.insuranceCarrierApplication.groupBy({
       by: ['createdById'],
-      where: { tenantId, submittedAt: { gte: bounds.start, lt: bounds.endExclusive } },
+      // The Phase 2 submitted-application predicate, used verbatim, so a voided
+      // application leaves the per-agent table on the same terms it leaves the
+      // agency's numerator.
+      where: submittedApplicationWhere(tenantId, bounds),
       _count: { _all: true },
+      _sum: { annualizedPremium: true },
     }),
     prisma.user.findMany({
       where: { tenantId },
@@ -550,6 +569,12 @@ export async function getAgentBreakdown(
   const applicationsByUser = new Map(
     applicationRows.map(row => [row.createdById, row._count._all])
   );
+  const premiumByUser = new Map(
+    applicationRows.map(row => [
+      row.createdById,
+      row._sum.annualizedPremium === null ? 0 : toNumber(row._sum.annualizedPremium),
+    ])
+  );
 
   const byUser = new Map(users.map(u => [u.id, u]));
 
@@ -572,6 +597,9 @@ export async function getAgentBreakdown(
       email: user?.email ?? null,
       callsTaken: calls,
       applications,
+      annualizedPremium: row.answeredByUserId
+        ? (premiumByUser.get(row.answeredByUserId) ?? 0)
+        : 0,
       closingPct: calls > 0 ? (applications / calls) * 100 : null,
       talkTimeSeconds,
       availableSeconds: row.answeredByUserId
@@ -603,6 +631,7 @@ export async function getAgentBreakdown(
       email: user?.email ?? null,
       callsTaken: 0,
       applications,
+      annualizedPremium: premiumByUser.get(userId) ?? 0,
       closingPct: null,
       talkTimeSeconds: 0,
       availableSeconds: availableByUser.get(userId) ?? null,
@@ -645,6 +674,15 @@ export async function getAgentBreakdown(
     agencyClosingPct: agencyToday.closingPct,
     agencyCallsTaken: agencyToday.deliveredCalls,
     agencyApplications: agencyToday.submittedApplications,
+    /*
+     * Summed from the rows rather than queried again: unlike the closing
+     * percentage -- whose agency figure includes calls no agent is attributed
+     * on -- every application carries a `createdById` or falls into the
+     * unattributed row, so the rows and the total cover exactly the same set.
+     */
+    agencyAnnualizedPremium: Number(
+      rows.reduce((total, agent) => total + agent.annualizedPremium, 0).toFixed(2)
+    ),
     agents: rows,
   };
 }

@@ -9,6 +9,8 @@ import {
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ApplicationLogForm } from '@/components/call-center/ApplicationLogForm';
+import type { ApplicationLogPayload } from '@/components/call-center/ApplicationLogForm';
 import { apiClient } from '@/lib/api';
 
 import { usePhone } from './phone-provider';
@@ -45,9 +47,28 @@ export function GlobalDispositionModal() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /*
+   * The application the agent wrote, when the disposition says they wrote one.
+   *
+   * The same two posts as the Call Center Portal, in the same order and with
+   * the same failure handling: an agent who dispositions a call from anywhere
+   * else in the app must be able to record the business, or it is written and
+   * never counted -- which understates the agency's closing percentage and
+   * raises its price.
+   */
+  const [application, setApplication] = useState<ApplicationLogPayload | null>(null);
+  const [applicationError, setApplicationError] = useState<string | null>(null);
 
   // Track the last handled call to prevent duplicate prompts
   const handledCallIdsRef = useRef<Set<string>>(new Set());
+  /*
+   * The `Call` row the disposition post resolved to, remembered across retries.
+   *
+   * The softphone's own call id may name no row, in which case the disposition
+   * endpoint creates one; a retry sending the softphone id again would create a
+   * second record for the same call.
+   */
+  const dispositionCallIdRef = useRef<string | null>(null);
 
   const resetAndClose = useCallback(() => {
     setOpen(false);
@@ -58,6 +79,9 @@ export function GlobalDispositionModal() {
     setSaved(false);
     setSaving(false);
     setSaveError(null);
+    setApplication(null);
+    setApplicationError(null);
+    dispositionCallIdRef.current = null;
     clearPendingDispositionCall();
   }, [clearPendingDispositionCall]);
 
@@ -76,8 +100,15 @@ export function GlobalDispositionModal() {
   const handleSave = useCallback(async () => {
     if (!selectedDisposition || !pendingDispositionCall) return;
 
+    const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
+    if (wroteApplication && !application) {
+      setApplicationError('Record the carrier, face amount, premium and last name first.');
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
+    setApplicationError(null);
 
     let followUpAt: string | undefined;
     if (followUpDate && followUpTime) {
@@ -86,9 +117,15 @@ export function GlobalDispositionModal() {
       followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
     }
 
+    /*
+     * The disposition first, then the application carrying the call id it hands
+     * back. `pendingDispositionCall.callId` is the softphone's own session id,
+     * not a `Call` row; the disposition endpoint is what resolves it to one.
+     */
+    let savedCallId: string | null = null;
     try {
-      const response = await apiClient.post('/api/v1/calls/disposition', {
-        callId: pendingDispositionCall.callId,
+      const response = await apiClient.post<{ id?: string }>('/api/v1/calls/disposition', {
+        callId: dispositionCallIdRef.current ?? pendingDispositionCall.callId,
         disposition: selectedDisposition,
         notes,
         duration: pendingDispositionCall.duration || 0,
@@ -101,25 +138,56 @@ export function GlobalDispositionModal() {
       if (response.error) {
         throw new Error(response.error.message || 'Save failed');
       }
-
-      // Mark as handled so it doesn't re-prompt
-      handledCallIdsRef.current.add(pendingDispositionCall.callId);
-
-      setSaved(true);
-      setTimeout(() => {
-        resetAndClose();
-      }, 1500);
+      savedCallId = response.data?.id ?? null;
+      if (savedCallId) dispositionCallIdRef.current = savedCallId;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save disposition');
-    } finally {
       setSaving(false);
+      return;
     }
+
+    if (wroteApplication && application) {
+      try {
+        const response = await apiClient.post('/api/v1/applications', {
+          ...application,
+          ...(savedCallId ? { callId: savedCallId } : {}),
+        });
+        if (response.error) {
+          throw new Error(response.error.message || 'The application could not be saved.');
+        }
+      } catch (err) {
+        /*
+         * Nothing is cleared and the modal stays open: the disposition is not
+         * marked saved and the form keeps what the agent typed. Retry reuses
+         * the same `clientRequestId`, so a submit that landed before the
+         * network gave up comes back as the row it wrote rather than as a
+         * second application.
+         */
+        setApplicationError(
+          err instanceof Error
+            ? `${err.message} The application has not been recorded — try again.`
+            : 'The application has not been recorded — try again.'
+        );
+        setSaving(false);
+        return;
+      }
+    }
+
+    // Mark as handled so it doesn't re-prompt
+    handledCallIdsRef.current.add(pendingDispositionCall.callId);
+
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => {
+      resetAndClose();
+    }, 1500);
   }, [
     selectedDisposition,
     notes,
     followUpDate,
     followUpTime,
     pendingDispositionCall,
+    application,
     resetAndClose,
   ]);
 
@@ -134,7 +202,11 @@ export function GlobalDispositionModal() {
 
   const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
   const isRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
-  const canSave = !!selectedDisposition && (!isRequired || (!!followUpDate && !!followUpTime));
+  const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
+  const canSave =
+    !!selectedDisposition &&
+    (!isRequired || (!!followUpDate && !!followUpTime)) &&
+    (!wroteApplication || !!application);
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -246,6 +318,16 @@ export function GlobalDispositionModal() {
                   />
                 </div>
               )}
+
+              {/* The application the agent wrote, on any carrier. */}
+              {wroteApplication && (
+                <ApplicationLogForm
+                  prefill={{ phone: pendingDispositionCall.phoneNumber }}
+                  onChange={setApplication}
+                  error={applicationError}
+                  disabled={saving}
+                />
+              )}
             </div>
 
             <div className="px-6 py-4 border-t border-border space-y-2">
@@ -256,7 +338,7 @@ export function GlobalDispositionModal() {
                 disabled={!canSave || saving}
                 className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
               >
-                {saving ? 'Saving...' : 'Save Disposition'}
+                {saving ? 'Saving...' : applicationError ? 'Retry save' : 'Save Disposition'}
               </button>
               <button
                 onClick={handleSkip}

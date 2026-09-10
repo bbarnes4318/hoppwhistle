@@ -127,6 +127,15 @@ interface AgentRow {
   email: string | null;
   callsTaken: number;
   applications: number;
+  /**
+   * Total annualized premium on those applications.
+   *
+   * The counts drive the price; this is what says whether the production is
+   * worth what it costs. Zero for an agent who submitted nothing, and zero for
+   * one whose applications all came from the carrier automation, which records
+   * no premium of its own.
+   */
+  annualizedPremium: number;
   closingPct: number | null;
   talkTimeSeconds: number;
   /** Seconds on the queue today. Null when nothing was recorded for the day. */
@@ -139,6 +148,8 @@ interface AgentRow {
 
 interface AgentBreakdown {
   agencyClosingPct: number | null;
+  /** The day's total annualized premium across every agent. */
+  agencyAnnualizedPremium: number;
   agents: AgentRow[];
 }
 
@@ -146,6 +157,7 @@ type SortKey =
   | 'closingPct'
   | 'callsTaken'
   | 'applications'
+  | 'annualizedPremium'
   | 'talkTimeSeconds'
   | 'availableSeconds'
   | 'name';
@@ -199,6 +211,8 @@ function AgencyDeliveryPanel(): JSX.Element {
   const [today, setToday] = useState<DeliveryToday | null>(null);
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agencyClosingPct, setAgencyClosingPct] = useState<number | null>(null);
+  /** The day's total annualized premium across the agency, served with the rows. */
+  const [agencyPremium, setAgencyPremium] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('closingPct');
   /*
@@ -229,6 +243,7 @@ function AgencyDeliveryPanel(): JSX.Element {
     // includes calls no agent is attributed on, so a client-side sum would give
     // a different number from the one the agency is priced on.
     setAgencyClosingPct(breakdown?.agencyClosingPct ?? null);
+    setAgencyPremium(breakdown?.agencyAnnualizedPremium ?? 0);
   }, []);
 
   /*
@@ -546,6 +561,7 @@ function AgencyDeliveryPanel(): JSX.Element {
       <AgentTable
         agents={sortedAgents}
         agencyClosingPct={agencyClosingPct}
+        agencyPremium={agencyPremium}
         sortKey={sortKey}
         sortAsc={sortAsc}
         onSort={toggleSort}
@@ -586,6 +602,7 @@ function agentStatusTone(status: string): 'live' | 'ringing' | 'blocked' | 'neut
 function AgentTable({
   agents,
   agencyClosingPct,
+  agencyPremium,
   sortKey,
   sortAsc,
   onSort,
@@ -593,6 +610,7 @@ function AgentTable({
 }: {
   agents: AgentRow[];
   agencyClosingPct: number | null;
+  agencyPremium: number;
   sortKey: SortKey;
   sortAsc: boolean;
   onSort: (key: SortKey) => void;
@@ -636,7 +654,7 @@ function AgentTable({
 
   const agencyLine = (
     <tr aria-hidden className="bg-sunken">
-      <td colSpan={9} className="!h-6 !border-b-0 !py-0">
+      <td colSpan={10} className="!h-6 !border-b-0 !py-0">
         <span className="flex items-center gap-2 t-meta text-ink-2">
           <span className="h-px flex-1 border-t border-dashed border-ink-3" />
           agency {pct(agencyClosingPct)}
@@ -652,7 +670,8 @@ function AgentTable({
         note={
           <>
             Agency today <span className="t-data text-ink">{pct(agencyClosingPct)}</span> — the line
-            each agent is read against
+            each agent is read against ·{' '}
+            <span className="t-data text-ink">{dollars(agencyPremium)}</span> annualized premium
           </>
         }
       >
@@ -677,6 +696,12 @@ function AgentTable({
                 </th>
                 {header('callsTaken', 'Calls', { numeric: true })}
                 {header('applications', 'Apps', { numeric: true })}
+                {header('annualizedPremium', 'Premium', {
+                  numeric: true,
+                  title:
+                    "Total annualized premium on the day's applications. The count is what " +
+                    'the agency is charged on; this is what it bought.',
+                })}
                 {header('talkTimeSeconds', 'Talk', { numeric: true })}
                 {header('availableSeconds', 'On queue', {
                   numeric: true,
@@ -738,6 +763,7 @@ function AgentTable({
                       </td>
                       <td className="num">{count(agent.callsTaken)}</td>
                       <td className="num">{count(agent.applications)}</td>
+                      <td className="num">{dollars(agent.annualizedPremium)}</td>
                       <td className="num !text-ink-2">{duration(agent.talkTimeSeconds)}</td>
                       <td className="num !text-ink-2">
                         {agent.availableSeconds === null ? (
