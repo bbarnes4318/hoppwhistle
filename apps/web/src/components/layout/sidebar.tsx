@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
-import { Wordmark } from '@/components/brand/wordmark';
+import { Logo } from '@/components/brand/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
@@ -139,7 +139,12 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       {drawer ? null : (
         <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
           <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
-            <Wordmark />
+            {/* The whole lockup, tagline included: at 128px the
+                PAY-PER-APPLICATION line still reads. h-12 matches the topbar
+                beside it (topbar.tsx), so the two bottom rules meet in a
+                single line across the top of the page -- the lockup is sized
+                to fit that, not the other way round. */}
+            <Logo width={128} />
           </Link>
         </div>
       )}

@@ -15,10 +15,16 @@ export const metadata: Metadata = {
   },
   description: 'Agency portal for pay-per-application call delivery',
   applicationName: 'NetEnroll',
+  /*
+   * The supplied square mark, `public/net-enroll-favicon.png`, resized. PNG
+   * only: the artwork arrived as pixels, so there is no vector favicon to
+   * offer and a stale favicon.svg would win over these on every browser that
+   * prefers SVG.
+   */
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
       { url: '/favicon-32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
     apple: '/apple-touch-icon.png',
   },
