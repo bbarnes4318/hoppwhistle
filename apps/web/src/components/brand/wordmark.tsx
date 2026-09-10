@@ -5,49 +5,56 @@ import { cn } from '@/lib/utils';
 /**
  * The NetEnroll wordmark: "net" in black, "Enroll" in brand green.
  *
- * Rendered as text rather than as an image so it is crisp at every size, sets
- * in the display face the rest of the product uses, and reads to a screen
- * reader as the one word it is. The two colours are literal on purpose — the
- * mark is #000000 and #10B981 wherever it appears, on a light ground, and does
- * not follow the theme tokens. It is never placed on a dark ground; the one
- * dark screen does not render the sidebar.
+ * This is the supplied artwork, not a reconstruction. It used to be two
+ * coloured <span>s set in whatever display face the product happened to load,
+ * which meant the mark changed shape with the font stack and never matched the
+ * files the business actually uses. It is now `public/netenroll-wordmark.svg`
+ * — outlined paths, so it is crisp at every size, identical in every browser,
+ * and needs no font to be present.
  *
- * `public/netenroll-wordmark.svg` and `.png` are the same mark for contexts
- * that need a file: email, the favicon source, anything outside React.
+ * The two colours are literal on purpose: the mark is #000000 and #10B981
+ * wherever it appears, on a light ground, and does not follow the theme
+ * tokens. It is never placed on a dark ground; the one dark screen does not
+ * render the sidebar.
+ *
+ * `Logo` (./logo.tsx) is the full lockup — this mark over the
+ * PAY-PER-APPLICATION line — for the places that get the whole thing.
  */
+
+/** Rendered height of the mark, in px, per size. */
+const HEIGHTS = { sm: 12, md: 15, lg: 26 } as const;
+
+/** 743.2 / 118.72, from the artwork's viewBox. */
+const ASPECT = 6.2601;
+
 export function Wordmark({
   className,
   size = 'md',
   ...props
 }: React.HTMLAttributes<HTMLSpanElement> & { size?: 'sm' | 'md' | 'lg' }) {
+  const height = HEIGHTS[size];
+
   return (
     <span
-      className={cn(
-        'inline-flex select-none items-baseline font-display font-medium leading-none tracking-[-0.02em]',
-        size === 'sm' && 'text-[16px]',
-        size === 'md' && 'text-[20px]',
-        size === 'lg' && 'text-[34px]',
-        className
-      )}
+      className={cn('inline-flex select-none items-center leading-none', className)}
       translate="no"
       data-testid="wordmark"
-      /*
-       * Exempt from the contrast audit in e2e/platform-landing.smoke.mjs, and
-       * this is the one thing in the product that gets to be.
-       *
-       * "Enroll" is #10B981 on white, which is 2.54:1 — nowhere near the 4.5:1
-       * every other piece of text here clears. It stays that way because a
-       * LOGOTYPE is not text: WCAG 1.4.3 exempts it by name, the mark is
-       * specified as these two hexes, and a NetEnroll wordmark in a darker
-       * green is a different company's wordmark. Brand green as actual text is
-       * --brand-ink, which clears 5.48:1; nothing else in the product is
-       * allowed to borrow this exemption.
-       */
-      data-contrast-exempt="logotype"
       {...props}
     >
-      <span style={{ color: '#000000' }}>net</span>
-      <span style={{ color: '#10B981' }}>Enroll</span>
+      {/*
+        A plain <img> rather than next/image: `images.unoptimized` is on
+        repo-wide, so next/image would add a wrapper and no optimisation.
+      */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/netenroll-wordmark.svg"
+        alt="netEnroll"
+        width={Math.round(height * ASPECT)}
+        height={height}
+        style={{ height, width: 'auto' }}
+        className="max-w-full"
+        draggable={false}
+      />
     </span>
   );
 }
