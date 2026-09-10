@@ -2913,17 +2913,26 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       }
     }
 
-    try {
-      const { reconcileStaleRecordingsForTenant } = await import(
-        '../services/recording-reconciler.js'
-      );
-      await reconcileStaleRecordingsForTenant(tenantId);
-    } catch (err) {
-      request.log.error(
-        { err, tenantId },
-        'Recording reconciliation failed before call list fetch'
-      );
-    }
+    /*
+     * Recording reconciliation, off the read path.
+     *
+     * This used to be awaited before the list query ran: up to fifty stale
+     * recordings reconciled one page load, each of which can read a file off
+     * disk and push it to S3. Every one of those seconds is a second the call
+     * ledger has not answered, and past the gateway timeout the browser gets a
+     * 504 for a query that would have returned in milliseconds. Housekeeping
+     * for recordings is not a precondition for showing an agency its calls, and
+     * it must never be the reason they cannot see them.
+     *
+     * Fire and forget. The reconciler is idempotent and re-runs on the next
+     * request, so a page that races it shows PROCESSING for one reload rather
+     * than nothing at all.
+     */
+    void import('../services/recording-reconciler.js')
+      .then(({ reconcileStaleRecordingsForTenant }) => reconcileStaleRecordingsForTenant(tenantId))
+      .catch((err: unknown) => {
+        request.log.error({ err, tenantId }, 'Recording reconciliation failed (background)');
+      });
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
     const page = parseInt(request.query.page || '1');
