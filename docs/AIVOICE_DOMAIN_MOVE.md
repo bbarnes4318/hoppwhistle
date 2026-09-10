@@ -73,8 +73,18 @@ fails against a name that does not resolve yet.
 ```bash
 cd /opt/hopwhistle
 git pull
-
 cp infra/nginx/aivoice.netenroll.com /etc/nginx/sites-available/aivoice.netenroll.com
+```
+
+`cp: cannot stat` there means the change is not on `main` yet — `git pull` on
+this box only ever brings `main`, and the vhost is still on its branch. Either
+merge it first, or take the one file straight off the branch without touching
+the checkout:
+
+```bash
+git fetch origin claude/ecstatic-wozniak-9aihy8
+git show origin/claude/ecstatic-wozniak-9aihy8:infra/nginx/aivoice.netenroll.com \
+  > /etc/nginx/sites-available/aivoice.netenroll.com
 ```
 
 **Before enabling it, diff it against the one that already works.** The AI Voice
