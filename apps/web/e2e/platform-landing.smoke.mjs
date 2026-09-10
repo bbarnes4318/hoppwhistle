@@ -1793,10 +1793,10 @@ async function checkLoginPage(browser, viewport) {
   }
 
   // 2. It is NetEnroll's, in the mark the rebrand established.
-  if (state.logo !== '/netenroll-logo.svg') {
+  if (state.logo !== '/netenroll-logo.png') {
     fail(
       `${who}: the brand mark loads ${JSON.stringify(state.logo)} rather than ` +
-        '"/netenroll-logo.svg". The front door has to carry the supplied lockup, not a ' +
+        '"/netenroll-logo.png". The front door has to carry the supplied lockup, not a ' +
         'wordmark reconstructed from whatever font happens to load.'
     );
   }
