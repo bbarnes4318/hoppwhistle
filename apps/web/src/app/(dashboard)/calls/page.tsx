@@ -49,7 +49,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { apiClient } from '@/lib/api';
+import { apiClient, isNoActingTenant } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
@@ -170,6 +170,28 @@ export default function OperationsCallLogsPage() {
   // State Management
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  /*
+   * Why an empty ledger is not allowed to be the default answer.
+   *
+   * `apiClient.get()` NEVER THROWS. It returns `{ data }` or `{ error }` -- see
+   * lib/api.ts. This page was written as
+   *
+   *     try { const r = await apiClient.get(...); if (r.data) setCalls(...) }
+   *     catch { toast.error('Failed to fetch call logs') }
+   *
+   * and that catch has therefore never once fired. Every failure of
+   * /api/v1/calls -- 409 NO_ACTING_TENANT from the cross-agency view, a 500, a
+   * gateway timeout while the route reconciles stale recordings, a dropped
+   * connection -- fell through the `if (r.data)` and left `calls` at its
+   * initial []. The table then rendered "No call events found": a confident,
+   * silent, WRONG statement that an agency with months of traffic has no calls,
+   * with no error, no toast and nothing in the UI to distinguish it from an
+   * empty ledger.
+   *
+   * So the response envelope is kept. Nothing here may claim there are no calls
+   * unless the server actually said so.
+   */
+  const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -416,13 +438,24 @@ export default function OperationsCallLogsPage() {
       const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
         `/api/v1/calls?${queryParams.toString()}`
       );
-      if (response.data) {
-        setCalls(response.data.data || []);
-        setTotalPages(response.data.meta?.totalPages || 1);
+
+      if (response.error) {
+        // The request was refused or failed. Say so, and keep whatever rows are
+        // on screen rather than replacing them with an empty table that reads
+        // as "these calls do not exist".
+        setLoadError(response.error);
+        return;
       }
+
+      setLoadError(null);
+      setCalls(response.data?.data || []);
+      setTotalPages(response.data?.meta?.totalPages || 1);
     } catch (err) {
       console.error('Failed to fetch call logs', err);
-      toast.error('Failed to fetch call logs');
+      setLoadError({
+        code: 'CLIENT_ERROR',
+        message: err instanceof Error ? err.message : 'Failed to fetch call logs',
+      });
     } finally {
       setLoading(false);
     }
@@ -514,6 +547,13 @@ export default function OperationsCallLogsPage() {
     setDetailCall(null);
     try {
       const res = await apiClient.get<CallDetail>(`/api/v1/calls/${callId}`);
+      // Same envelope, same rule as fetchCalls: apiClient never throws, so a
+      // refusal has to be read off the response or the drawer sits on a
+      // spinner-turned-blank with nothing said.
+      if (res.error) {
+        toast.error(res.error.message || 'Failed to retrieve call details');
+        return;
+      }
       if (res.data) {
         setDetailCall(res.data);
       }
@@ -543,24 +583,26 @@ export default function OperationsCallLogsPage() {
       const response = await apiClient.get<{ url: string }>(
         `/api/v1/recordings/${recordingId}/url`
       );
-      if (response.data?.url) {
-        let playableUrl = response.data.url;
-        if (playableUrl.startsWith('/')) {
-          const apiBaseUrl =
-            typeof window !== 'undefined'
-              ? window.location.origin
-              : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-          playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
-        }
-        setAudioUrl(playableUrl);
-        setPlayingId(recordingId);
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.load();
-            void audioRef.current.play();
-          }
-        }, 50);
+      if (response.error || !response.data?.url) {
+        toast.error(response.error?.message || 'Playback failed');
+        return;
       }
+      let playableUrl = response.data.url;
+      if (playableUrl.startsWith('/')) {
+        const apiBaseUrl =
+          typeof window !== 'undefined'
+            ? window.location.origin
+            : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
+      }
+      setAudioUrl(playableUrl);
+      setPlayingId(recordingId);
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.load();
+          void audioRef.current.play();
+        }
+      }, 50);
     } catch (err) {
       console.error(err);
       toast.error('Playback failed');
@@ -574,23 +616,25 @@ export default function OperationsCallLogsPage() {
       const response = await apiClient.get<{ url: string }>(
         `/api/v1/recordings/${recordingId}/url`
       );
-      if (response.data?.url) {
-        let downloadUrl = response.data.url;
-        if (downloadUrl.startsWith('/')) {
-          const apiBaseUrl =
-            typeof window !== 'undefined'
-              ? window.location.origin
-              : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-          downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}${downloadUrl}`;
-        }
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.setAttribute('download', filename || `recording-${recordingId}.wav`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        toast.success('Download started');
+      if (response.error || !response.data?.url) {
+        toast.error(response.error?.message || 'Download failed');
+        return;
       }
+      let downloadUrl = response.data.url;
+      if (downloadUrl.startsWith('/')) {
+        const apiBaseUrl =
+          typeof window !== 'undefined'
+            ? window.location.origin
+            : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}${downloadUrl}`;
+      }
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', filename || `recording-${recordingId}.wav`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Download started');
     } catch (err) {
       console.error(err);
       toast.error('Download failed');
@@ -1006,6 +1050,53 @@ export default function OperationsCallLogsPage() {
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
                       <span>Loading pay-per-call ledger...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : loadError ? (
+                /*
+                 * The ledger could not be read. This is NOT "no calls" and must
+                 * never be shown as if it were: the rows are in the database and
+                 * something between this table and them said no.
+                 */
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={activeColumnsCount} className="h-64 text-center">
+                    <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-2">
+                      <AlertCircle className="h-8 w-8 text-destructive" />
+                      {isNoActingTenant({ error: loadError }) ? (
+                        <>
+                          <span className="t-body font-medium text-ink">
+                            Choose an agency to see its calls
+                          </span>
+                          <span className="t-body text-ink-2">
+                            You are in the cross-agency view, which is not scoped to one
+                            agency&rsquo;s ledger. Your calls are not lost &mdash; pick an agency in
+                            the topbar switcher and they are here. You are still signed in.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="t-body font-medium text-ink">
+                            Could not load the call ledger
+                          </span>
+                          <span className="t-body text-ink-2">
+                            {loadError.message}
+                            {loadError.code ? ` (${loadError.code})` : ''}
+                          </span>
+                          <span className="t-meta text-ink-3">
+                            This does not mean the calls are gone &mdash; the request for them
+                            failed.
+                          </span>
+                        </>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => void fetchCalls()}
+                      >
+                        Try again
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
