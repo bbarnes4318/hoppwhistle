@@ -94,6 +94,7 @@ REQUIRED_MIGRATIONS="
 20260907010000_audit_log_nullable_tenant
 20260908000000_add_rating_engine
 20260914000000_agent_entered_applications
+20260915000000_role_preview
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -227,6 +228,15 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'insurance_carrier_applications'
                 AND column_name = 'source'), false)" ;;
+    *_role_preview)
+      # Adds one column to an existing table, so table presence proves nothing --
+      # platform_acting_tenants has existed since the acting-tenant switch shipped.
+      # previewRole is the column the change turns on, and loadPlatformContext
+      # selects it on every authenticated request.
+      echo "SELECT COALESCE((SELECT true FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'platform_acting_tenants'
+                AND column_name = 'previewRole'), false)" ;;
     *)
       echo "" ;;
   esac
