@@ -85,8 +85,10 @@ REQUIRED_MIGRATIONS="
 A migration in `prisma/migrations` and not in that list is applied nowhere. The
 deploy runs to completion, reports success, and starts an API whose queries
 name columns that do not exist. `prisma/migrations` holds 31 dated migrations;
-six were listed. Three consequences found the hard way, each when something
-broke rather than when it was introduced:
+six were listed, and eleven are after #113 added the five billing ones. Twenty
+are still unlisted, and which of those matter is not known — that is the gap
+`scripts/schema-drift.sh` below exists to close. Three consequences found the
+hard way, each when something broke rather than when it was introduced:
 
 | found as | actually |
 | --- | --- |
