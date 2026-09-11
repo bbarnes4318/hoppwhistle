@@ -1,229 +1,135 @@
-# The missing call history
+# "All the calls are gone" — what it actually was
 
-**Status:** the live database does not contain the platform's call history, and
-never did. The rows were not deleted from it — it was created empty, beside the
-data directory that already held them.
+**Reported:** the admin portal showed 3,949 calls for Test Organization against
+an expected 70,000+, and the AI voice calls and recordings that used to appear
+were not there.
 
-**Reported:** the admin portal shows 3,949 calls for Test Organization against
-an expected 70,000+.
+**Resolved:** nothing was lost. The calls being looked for are **Dograh AI voice
+calls**, they are in Dograh's own database — 110,723 runs as of 2026-09-10,
+still recording — and they stopped being visible because the portal moved
+domains and the embedded app's sign-in broke. See
+[`AIVOICE_DOMAIN_MOVE.md`](AIVOICE_DOMAIN_MOVE.md) for the cause and the fix.
 
-**What this document is:** where the history is, the evidence that it is there,
-and how to put it back. It is written to be checked rather than believed —
-every claim below names the file or the command that establishes it.
+This document is kept for the two things the investigation turned up that are
+true and worth acting on regardless, and for an honest record of a wrong turn.
 
 ---
 
-## What happened
+## The wrong turn, recorded
 
-The stack moved from AWS to Hetzner. The migration playbook
-(`HETZNER_MIGRATION_FROM_AWS.md`) is explicit that the AWS PostgreSQL database
-`callfabric` is "**the single source of truth for database and media
-migration**", and its steps 2.2 and 2.5 are a `pg_dump` of that database and a
-`pg_restore` of it onto the new host.
-
-Those two steps do not appear to have been carried out. That is the origin of
-the empty database, but it is **not** where to go looking: the owner confirms
-nothing remains on the AWS side. The surviving copy is on the Hetzner host —
-see "Where the history is" below, and start with step 1 of the recovery.
-
-**The final cutover checklist is unchecked.**
-`HETZNER_DEPLOYMENT_VALIDATION.md` § 20:
+The first two versions of this document said the missing calls were Hopwhistle
+calls that had been left behind — first on the AWS host, then in a second
+PostgreSQL data directory on the Hetzner host. **Both were wrong**, and the
+second was disproved in one command:
 
 ```
-- [ ] Confirm AWS database dump completed successfully.
-- [ ] Confirm AWS recordings sync completed successfully.
-- [ ] Confirm Hetzner database restore completed successfully.
+$ docker volume ls | grep -i postgres
+local     docker_postgres_data      # the portal's — the volume deploy.sh expects
+local     dograh_postgres_data      # Dograh's
 ```
 
-**The validation report records a seed where a restore should be.**
-`hetzner_validation_report.md` reports the migration as fully verified, and its
-database line is:
+Two volumes, no stranded twin, no drift. The reasoning that produced that theory
+was sound about the portal's database and simply answering a question nobody had
+asked: the calls the owner meant were never in that database at all.
 
-> **F. Database Seed** | Populate validation data | **PASSED** | Database
-> seeding (`tsx prisma/seed.ts`) completed successfully. Generated Tenant,
-> Roles, Carrier, Trunk, Flow/IVR, Webhook, and Feature Flags
+The lesson worth keeping: **"my calls are missing" does not identify a system.**
+This platform has two call stores, and the portal shows one of them. Ask which
+kind of call before reasoning about where rows went.
 
-Tenants, roles and feature flags. No calls, no recordings, no CDRs.
+## Finding 1 — the AI voice calls were never in the Hopwhistle database
 
-**The new database was force-reset and seeded.** `walkthrough.md` § 8:
+Dograh is a separate application at `/opt/dograh`, with its own PostgreSQL and
+its own recording storage. From `deploy/dograh/export_recordings.py`:
 
-> Aligned database schemas on the fresh PostgreSQL container using
-> `npx prisma db push --force-reset --skip-generate` to synchronize schema
-> models. Successfully seeded the database using `npx prisma db seed` …
+> Dograh owns its own database and recording storage; nothing about these calls
+> lands in the Hopwhistle DB.
 
-`--force-reset` drops the database and recreates it empty. Anything restored
-before it ran would not have survived it.
+The portal displayed them by **embedding** the Dograh app in an iframe at
+`/voice-agents`, signed in with a cookie minted by
+`apps/api/src/routes/aivoice.ts`. When the portal moved from `hopwhistle.com` to
+`agents.netenroll.com`, that cookie stopped reaching the frame — the two are no
+longer on one registrable domain — so the iframe started showing Dograh's own
+login instead of the calls, silently. `AIVOICE_DOMAIN_MOVE.md` has the browser
+rules, the fix, and the runbook.
 
-**And the validation line says so outright.** From the same section, under service
-health:
+To get the calls and audio out today, independent of any of that:
 
-> **PostgreSQL**: Succeeded (database table count check `calls` = 1).
+```bash
+cd /opt/hopwhistle
+./get-dograh-recordings.sh 2025-09-10 2026-09-10
+```
 
-The stack was signed off as healthy with **one** call row in it.
+## Finding 2 — the portal's own database was seeded, not restored
 
-**Which is why the tenant is called Test Organization.** `prisma/seed.ts` line
-12 creates a tenant named `Test Organization` with slug `test-org`. That is a
-seed fixture, and it is the agency the portal has been showing. The 3,949 calls
-in it are the traffic that has arrived since the cutover — real calls, correctly
+Unrelated to the report, still true, and worth knowing.
+
+The stack moved from AWS to Hetzner. `HETZNER_MIGRATION_FROM_AWS.md` names the
+AWS `callfabric` database "the single source of truth" and has a `pg_dump` step
+(2.2) and a `pg_restore` step (2.5). Neither appears to have run:
+
+- **`HETZNER_DEPLOYMENT_VALIDATION.md` § 20** — the final cutover checklist is
+  still unchecked: "Confirm AWS database dump completed successfully", "Confirm
+  AWS recordings sync completed successfully", "Confirm Hetzner database restore
+  completed successfully".
+- **`hetzner_validation_report.md`** signs the migration off as fully verified,
+  and its one database line is a **seed**: "Generated Tenant, Roles, Carrier,
+  Trunk, Flow/IVR, Webhook, and Feature Flags." No calls, no recordings, no CDRs.
+- **`walkthrough.md` § 8** records `prisma db push --force-reset` against the
+  fresh container, then `prisma db seed`, then the health check that read:
+  **"PostgreSQL: Succeeded (database table count check `calls` = 1)."**
+
+`prisma/seed.ts:12` creates a tenant named `Test Organization`, slug `test-org` —
+which is why that is the agency the portal shows. Its 3,949 calls are the
+platform's own pay-per-call traffic since the cutover: real calls, correctly
 recorded, in a database that started empty.
 
-The host `.env` was repointed at the same time (`walkthrough.md` § 8), from the
-AWS endpoints to local Hetzner containers:
+Whether any pre-cutover Hopwhistle call history existed and is worth recovering
+is a question for the owner. If it is, the tooling below reads and moves it
+safely. If it is not, nothing here needs doing.
 
-```
-DATABASE_URL -> postgresql://callfabric:callfabric_dev@postgres:5432/callfabric
-S3_ENDPOINT  -> http://minio:9000
-```
+## The tooling, and what it is good for
 
-So the application stopped reading the database that holds the history, and
-started reading a new, empty one beside it. Nothing deleted the old data. The
-old data was left where it was.
+Built during this investigation. All of it works; none of it was needed in the
+end, and it is here for the next time a database question comes up.
 
-## Where the history is
-
-**On this host, in a different PostgreSQL data directory.** The owner confirms
-nothing is left on AWS, and the evidence on the Hetzner side points the same
-way: the application is reading one database while another one, with the
-history in it, sits beside it.
-
-**Two different database hostnames are documented for the same host.**
-
-| Source | `DATABASE_URL` |
+| Command | What it does |
 | --- | --- |
-| `.agent/workflows/deploy.md` § Database | `…@hopwhistle-postgres-dev:5432/callfabric` |
-| `hetzner_validation_report.md`, `walkthrough.md` § 8 | `…@postgres:5432/callfabric` |
+| `calls:diagnose --email <you>` | Why is *my* portal empty? Resolves the acting tenant, roles and links the way the API does, replays the portal's own query, and names which of five causes it is. Read-only. |
+| `calls:inventory [--url …]` | What call history does *this* database hold? Works against any database, including one older than the current schema — it reads `information_schema` rather than using the Prisma client. Read-only. |
+| `calls:restore --from … --into-tenant …` | Copies calls, recordings, CDRs, legs and transcripts from another database into the live one. Dry run until `--commit`; inserts only, always `ON CONFLICT DO NOTHING`. |
+| `scripts/find-call-history.sh` | Which PostgreSQL data directory on this host holds call history? Covers detached volumes by copying them and reading the copy — never starts a server on your volume. |
 
-`postgres` is the compose *service* name; `hopwhistle-postgres-dev` is the
-`container_name` that `docker-compose.dev.yml` gives it. They resolve to the
-same container only while that container is attached to `docker_default` with
-that alias — which is exactly why the deploy runbook has to keep running
-`docker network connect docker_default hopwhistle-postgres-dev`, and why its
-troubleshooting section has an entry for `ENOTFOUND postgres`.
+Verified against real PostgreSQL 16: the restore moved 250,000 rows in 30
+seconds preserving ids, numbers, durations and dates; the detached-volume read
+returned correct counts from a cluster behind an unknown password and left the
+original byte-for-byte identical.
 
-**`docker-compose.yml` — the file the documented deploy uses — has no
-`postgres` service and no `postgres_data` volume at all.** Only
-`docker-compose.dev.yml` defines them. A `docker compose up` from a different
-directory or under a different project name therefore creates a *new* volume
-(`<project>_postgres_data`) with an empty database, and the old volume keeps
-every row.
+## What should change either way
 
-**And `scripts/deploy.sh` already guards against precisely this:**
-
-```sh
-VOL="$(docker inspect hopwhistle-postgres-dev --format "{{range .Mounts}}{{.Name}}{{end}}")"
-if [ "$VOL" != "docker_postgres_data" ]; then
-  RED "DATABASE DRIFT: postgres is on volume \"$VOL\", expected docker_postgres_data"; exit 3
-fi
-```
-
-That check was written because the container has come up on the wrong volume
-before. A container on the wrong volume presents exactly as "all the data is
-gone".
-
-## Recovering it
-
-### 1. Find which data directory holds it
-
-```bash
-sudo ./scripts/find-call-history.sh
-```
-
-Run it on the Hetzner host. It inspects **every** PostgreSQL data directory on
-the machine — running containers and detached volumes alike — and prints the
-call count, recording count and date range in each, ranked. The top row is the
-one holding the history.
-
-It does not modify your data. Running containers are queried in place with
-`SELECT count(*)`. A detached volume cannot be read without a server, and
-starting PostgreSQL on a data directory writes to it, so the script never does
-that: it mounts the volume **read-only**, copies it to a scratch volume, starts
-a throwaway server on the *copy* (with trust auth patched into the copy, since
-the old cluster's password is not knowable), reads it, and deletes the copy.
-
-That copy-then-read procedure was verified against a real PostgreSQL 16 cluster
-holding 70,000 calls and 40,000 recordings, with md5 auth and an unknown
-password: the counts and date range came back, and the original data directory
-was byte-for-byte identical afterwards.
-
-### 2. Do not repoint the application at it
-
-It is tempting to change `DATABASE_URL` to the volume that has the history. Do
-not. The database the application reads now holds **every call since it was put
-into service**, and those rows exist nowhere else. Switching to the other volume
-trades one set of missing calls for another.
-
-Copy the history into the live database instead, and keep both.
-
-### 3. Copy the history across
-
-```bash
-# What does the live database hold, and what agencies are in it?
-pnpm --filter @hopwhistle/api calls:inventory
-
-# What does the other one hold?
-pnpm --filter @hopwhistle/api calls:inventory -- --url "postgresql://…other…"
-
-# Dry run — writes nothing.
-pnpm --filter @hopwhistle/api calls:restore -- \
-  --from "postgresql://…other…" --into-tenant <the agency id>
-
-# Then, once the dry run's numbers look right:
-pnpm --filter @hopwhistle/api calls:restore -- \
-  --from "postgresql://…other…" --into-tenant <the agency id> --commit
-```
-
-To reach a detached volume with `calls:inventory`, start a container on a copy
-of it — the same way `find-call-history.sh` does — and point the URL at that.
-
-`calls:restore` inserts and never updates or deletes; every insert carries `ON
-CONFLICT DO NOTHING`, so it is safe to re-run and safe to interrupt. It copies
-the columns the two schemas share, so an older source schema is not a problem.
-A call whose campaign, publisher, buyer, number or creating user does not exist
-in the live database keeps the call and nulls the reference — the record is
-worth more than the link. See the header of
-`apps/api/src/cli/restore-call-history.ts`.
-
-### 4. Verify
-
-```bash
-pnpm --filter @hopwhistle/api calls:inventory
-```
-
-Calls, recordings, CDRs and legs should have risen by what step 1 reported on
-the source. Then open the portal.
-
-### 5. The recordings themselves
-
-Recording rows carry a storage key, not the audio. Once the rows are back,
-check that the object store the application is configured for actually holds
-the files those keys name — the cutover created a MinIO bucket called
-`hopwhistle-recordings`, while `HETZNER_MIGRATION_FROM_AWS.md` § 2.3 names the
-source bucket `hopwhistle-recordings-prod`. If the audio is in a different
-bucket or a different volume on this host, the same principle applies: find it
-before changing any configuration that points at it.
-
-## What made this possible, and what should change
-
-1. **The cutover was signed off against health checks, not against data.** Every
-   check in the validation report is a liveness check: the API answers, Redis
-   returns PONG, ClickHouse says Ok. The one line that touched the data —
-   `calls = 1` — was recorded as a success. A cutover checklist needs a row
-   count from the old host and the same row count on the new one, and it needs
-   to be the check that blocks.
+1. **A cutover was signed off against liveness, not data.** Every check in the
+   validation report is "the service answers". The one line that touched data —
+   `calls = 1` — was recorded as a success. A cutover checklist needs a row count
+   from the old host and the same row count on the new one, as a blocking check.
 
 2. **`--force-reset` and `--accept-data-loss` are in the documented deploy
    path.** `docs/QUICK_REFERENCE.md`, `docs/AI_CONTEXT_PROMPT.md`,
    `.agent/workflows/deploy.md` and `docs/COMPLETE_DISCLOSURE.md` all end their
    deploy sequence with `prisma db push --accept-data-loss` against production.
-   `deploy.ps1` already refuses to do this and explains why; the other four
-   still tell a reader to. They should be changed to match.
+   `deploy.ps1` already refuses and explains why; the other four still tell a
+   reader to do it. They should be changed to match.
 
-3. **`reset-migrations.sh` runs `prisma migrate reset --force` against whatever
-   `.env` points at**, under a comment that says it will delete all data. On the
-   production host that is the production database. It should refuse to run
-   without an explicit confirmation naming the database.
+3. **`reset-migrations.sh` runs `prisma migrate reset --force`** against whatever
+   `.env` points at, under a comment saying it will delete all data. On the
+   production host that is the production database. It should refuse without an
+   explicit confirmation naming the database.
 
 4. **There are no verified backups.** `docs/BACKUP_RESTORE.md` describes a
-   six-hourly schedule with 30-day retention; nothing in the repository
-   installs, runs or monitors it. If it had been running, this would have been
-   an hour's work rather than an investigation.
+   six-hourly schedule with 30-day retention; nothing in the repository installs,
+   runs or monitors it.
+
+5. **The portal cannot show two kinds of call.** The AI voice calls live in
+   another system and are visible only through an embedded app, which is why one
+   domain change made them vanish with no error anywhere. Syncing Dograh's
+   `workflow_runs` into `Call` and `Recording` rows would put both kinds in one
+   ledger, filterable and exportable together, and would survive the next move.
+   Not done; worth doing.

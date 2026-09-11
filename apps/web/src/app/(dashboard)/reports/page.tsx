@@ -306,21 +306,39 @@ function ReportsPage() {
         query.append('campaignId', campaignId);
       }
 
-      let endpoint = '';
-      let filename = 'report.csv';
+      // Each tab exports from its own route. A chain of ifs left `endpoint`
+      // empty for any tab not in the list, and the export then asked the
+      // portal itself for `/?startDate=…` — a 404 reported as "an error
+      // occurred". A table cannot be half-assigned, and an unknown tab now
+      // says so instead of requesting nothing.
+      const EXPORTS: Record<string, { endpoint: string; prefix: string }> = {
+        'campaign-profitability': {
+          endpoint: '/api/v1/reports/profitability',
+          prefix: 'profitability-report',
+        },
+        'publisher-revenue': {
+          endpoint: '/api/v1/reports/publisher-revenue',
+          prefix: 'publisher-revenue',
+        },
+        'buyer-costs': {
+          endpoint: '/api/v1/reports/buyer-costs',
+          prefix: 'buyer-costs',
+        },
+      };
 
-      if (activeTab === 'campaign-profitability') {
-        endpoint = '/api/v1/reports/profitability';
-        filename = `profitability-report-${startDate}-to-${endDate}.csv`;
-      } else if (activeTab === 'publisher-revenue') {
-        endpoint = '/api/v1/reports/publisher-revenue';
-        filename = `publisher-revenue-${startDate}-to-${endDate}.csv`;
-      } else if (activeTab === 'buyer-costs') {
-        endpoint = '/api/v1/reports/buyer-costs';
-        filename = `buyer-costs-${startDate}-to-${endDate}.csv`;
+      const target = EXPORTS[activeTab];
+      if (!target) {
+        toast({
+          title: 'Nothing to export',
+          description: 'This report has no CSV export.',
+          variant: 'destructive',
+        });
+        return;
       }
 
-      const response = await apiClient.get<string>(`${endpoint}?${query.toString()}`, {
+      const filename = `${target.prefix}-${startDate}-to-${endDate}.csv`;
+
+      const response = await apiClient.get<string>(`${target.endpoint}?${query.toString()}`, {
         responseType: 'text',
       });
 
