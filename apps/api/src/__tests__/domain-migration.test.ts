@@ -72,11 +72,14 @@ const DELIBERATE = new Map<string, string>([
       'comment above AIVOICE_URL.',
   ],
   ['apps/api/src/lib/aivoice-jwt.ts', 'Comment describing the AI Voice deployment above.'],
-  [
-    'apps/web/src/app/(dashboard)/voice-agents/page.tsx',
-    'Comment describing the AI Voice deployment above.',
-  ],
 ]);
+
+// `apps/web/src/app/(dashboard)/voice-agents/page.tsx` was here, for a comment
+// naming aivoice.hopwhistle.com. It is not any more: once the AI Voice app also
+// had to be served at aivoice.netenroll.com, naming one host in that comment was
+// simply wrong, and it now says the host comes from AIVOICE_URL. So the page is
+// scanned like everything else -- which is how the honesty check above is meant
+// to end, with an entry removed rather than kept as precedent.
 
 /**
  * This file, repo-relative. It names the retired host on nearly every line --

@@ -208,6 +208,142 @@ const NO_SESSION: AuthSession = {
   refetch: async () => {},
 };
 
+/**
+ * Per-account recording grants, which are not carried by a role.
+ *
+ * A publisher or buyer only reads recordings if their own account row says so,
+ * so the two flags have to travel alongside the role list rather than be
+ * derived from it.
+ */
+export interface RecordingAccess {
+  publisher?: boolean;
+  buyer?: boolean;
+}
+
+/**
+ * The permissions a role list carries, derived client-side.
+ *
+ * ── Why this is module scope and exported ────────────────────────────────────
+ *
+ * This list is one half of a rule; `RoleGuard`'s `allowedPermissions` is the
+ * other, and `role-guard.tsx` requires BOTH (`hasRole && hasPermission`). A role
+ * named in a page's `allowedRoles` that is not granted that page's permission
+ * here is refused by the guard while the page's own source reads as if it were
+ * welcome. READONLY on `/reports` was exactly that for as long as both existed,
+ * and nothing compared the two files.
+ *
+ * `readonly-reports-access.test.ts` now does, by CALLING this rather than
+ * reading it out of the hook with a regex -- which is why it lives here instead
+ * of inside `useAuth`.
+ */
+export function getPermissions(roles: string[], recordingAccess: RecordingAccess = {}): string[] {
+  const list: string[] = [];
+  if (roles.includes('OWNER')) {
+    list.push('admin:*');
+  }
+  if (roles.includes('ADMIN')) {
+    list.push(
+      'users:read',
+      'users:write',
+      'users:delete',
+      'roles:read',
+      'roles:write',
+      'api_keys:read',
+      'api_keys:write',
+      'api_keys:delete',
+      'numbers:read',
+      'numbers:write',
+      'numbers:delete',
+      'campaigns:read',
+      'campaigns:write',
+      'campaigns:delete',
+      'flows:read',
+      'flows:write',
+      'flows:delete',
+      'flows:publish',
+      'calls:read',
+      'calls:write',
+      'calls:delete',
+      'recordings:read',
+      'recordings:write',
+      'recordings:delete',
+      'webhooks:read',
+      'webhooks:write',
+      'webhooks:delete',
+      'billing:read',
+      'billing:write',
+      'reports:read',
+      'payroll:read',
+      'payroll:write',
+      'payroll:admin'
+    );
+  }
+  if (roles.includes('ANALYST')) {
+    list.push(
+      'calls:read',
+      'recordings:read',
+      'reports:read',
+      'campaigns:read',
+      'flows:read',
+      'numbers:read'
+    );
+  }
+  if (roles.includes('PUBLISHER')) {
+    list.push(
+      'flows:read',
+      'flows:write',
+      'flows:publish',
+      'campaigns:read',
+      'campaigns:write',
+      'calls:read'
+    );
+    if (recordingAccess.publisher) {
+      list.push('recordings:read');
+    }
+  }
+  if (roles.includes('BUYER')) {
+    list.push('calls:read', 'calls:write', 'campaigns:read');
+    if (recordingAccess.buyer) {
+      list.push('recordings:read');
+    }
+  }
+  if (roles.includes('AGENT')) {
+    list.push('calls:read');
+  }
+  /*
+   * READONLY gets NEITHER `reports:read` NOR `recordings:read`, and both
+   * omissions are deliberate.
+   *
+   * `apps/api/src/middleware/rbac.ts` does list both for READONLY, and
+   * `docs/SECURITY.md` repeats that table -- but no route on the API reads
+   * either permission. Grep `reports:read` across `apps/api/src` and the only
+   * hits are the table declaring it. What actually guards the three endpoints
+   * `/reports` fetches is a role test, in `apps/api/src/routes/index.ts`:
+   *
+   *   publisher-revenue      ADMIN/OWNER, or PUBLISHER for their own rows
+   *   buyer-costs            ADMIN/OWNER, or BUYER for their own rows
+   *   campaign-profitability ADMIN/OWNER only
+   *
+   * Each answers 403 to anyone else, the `/export.csv` pair alongside them too.
+   * The proof that `reports:read` was never the gate for money data is ANALYST:
+   * it holds `reports:read` in BOTH tables and is still refused by all three.
+   * So granting it here would not hand READONLY revenue and cost figures -- it
+   * would hand them a page that 403s on every tab.
+   *
+   * `recordings:read` is withheld for a nearer reason. A user holding READONLY
+   * alongside BUYER or PUBLISHER is `isBuyerOnly`/`isPublisherOnly` in
+   * `sidebar.tsx`, so granting it by role would show them recordings with their
+   * account's `buyerAccessToRecordings` flag switched off -- straight past the
+   * per-account toggle. `lib/server/session.ts` computes the same capability
+   * server-side as `isAdminOrOwner || buyerAccessToRecordings`, with no role
+   * clause at all, and this stays equal to it.
+   */
+  if (roles.includes('READONLY')) {
+    list.push('calls:read', 'campaigns:read', 'flows:read', 'numbers:read');
+  }
+  return list;
+}
+
 export function useAuth(): UseAuthReturn {
   const { user, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
 
@@ -254,101 +390,32 @@ export function useAuth(): UseAuthReturn {
   const publisherId = user?.publisherId || null;
   const tenantId = user?.tenantId || null;
 
-  // Deriving permissions client-side
-  const getPermissions = (roles: string[]): string[] => {
-    const list: string[] = [];
-    if (roles.includes('OWNER')) {
-      list.push('admin:*');
-    }
-    if (roles.includes('ADMIN')) {
-      list.push(
-        'users:read',
-        'users:write',
-        'users:delete',
-        'roles:read',
-        'roles:write',
-        'api_keys:read',
-        'api_keys:write',
-        'api_keys:delete',
-        'numbers:read',
-        'numbers:write',
-        'numbers:delete',
-        'campaigns:read',
-        'campaigns:write',
-        'campaigns:delete',
-        'flows:read',
-        'flows:write',
-        'flows:delete',
-        'flows:publish',
-        'calls:read',
-        'calls:write',
-        'calls:delete',
-        'recordings:read',
-        'recordings:write',
-        'recordings:delete',
-        'webhooks:read',
-        'webhooks:write',
-        'webhooks:delete',
-        'billing:read',
-        'billing:write',
-        'reports:read',
-        'payroll:read',
-        'payroll:write',
-        'payroll:admin'
-      );
-    }
-    if (roles.includes('ANALYST')) {
-      list.push(
-        'calls:read',
-        'recordings:read',
-        'reports:read',
-        'campaigns:read',
-        'flows:read',
-        'numbers:read'
-      );
-    }
-    if (roles.includes('PUBLISHER')) {
-      list.push(
-        'flows:read',
-        'flows:write',
-        'flows:publish',
-        'campaigns:read',
-        'campaigns:write',
-        'calls:read'
-      );
-      if (user?.publisherAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('BUYER')) {
-      list.push('calls:read', 'calls:write', 'campaigns:read');
-      if (user?.buyerAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('AGENT')) {
-      list.push('calls:read');
-    }
-    if (roles.includes('READONLY')) {
-      list.push('calls:read', 'campaigns:read', 'flows:read', 'numbers:read');
-    }
-    return list;
-  };
-
-  const permissions = getPermissions(userRoles);
+  const permissions = getPermissions(userRoles, {
+    publisher: user?.publisherAccessToRecordings,
+    buyer: user?.buyerAccessToRecordings,
+  });
 
   const canViewRecordings =
     hasFullAccess ||
     userRoles.includes('ANALYST') ||
     (userRoles.includes('PUBLISHER') && !!user?.publisherAccessToRecordings) ||
     (userRoles.includes('BUYER') && !!user?.buyerAccessToRecordings) ||
-    userRoles.includes('AGENT') ||
-    (userRoles.includes('READONLY') && permissions.includes('recordings:read'));
+    userRoles.includes('AGENT');
 
-  const canViewReports =
-    hasFullAccess ||
-    userRoles.includes('ANALYST') ||
-    (userRoles.includes('READONLY') && permissions.includes('reports:read'));
+  /*
+   * Read at ONE call site: the READONLY-only branch of `sidebar.tsx`, which is
+   * the only nav that consults it -- every other role returns from an earlier
+   * branch. So this decides exactly one thing, whether a READONLY user is shown
+   * the Reports link, and the answer is no, for the reasons recorded against
+   * READONLY in `getPermissions` above.
+   *
+   * It used to end in `(READONLY && permissions.includes('reports:read'))`,
+   * which read as though it granted something. It never could: READONLY is not
+   * granted `reports:read`, so the clause was false in every session that ever
+   * evaluated it. `/reports` and this expression are pinned equal by
+   * `app/__tests__/readonly-reports-access.test.ts`.
+   */
+  const canViewReports = hasFullAccess || userRoles.includes('ANALYST');
   const canViewBilling = hasFullAccess;
   const canViewPayouts = hasFullAccess || userRoles.includes('PUBLISHER');
   const canManageBuyers = hasFullAccess;

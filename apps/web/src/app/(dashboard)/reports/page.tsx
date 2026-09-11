@@ -1160,13 +1160,20 @@ function ReportsPage() {
   );
 }
 
-
 export default function GuardedReportsPage() {
   return (
-    <RoleGuard
-      allowedRoles={['ADMIN', 'OWNER', 'READONLY', 'ANALYST']}
-      allowedPermissions={['reports:read']}
-    >
+    /*
+     * READONLY is deliberately NOT here.
+     *
+     * It was, and it granted nothing: `RoleGuard` requires `hasRole &&
+     * hasPermission`, and READONLY is not granted `reports:read`, so the guard
+     * already turned them away. The name in this list was the only thing saying
+     * otherwise. The three endpoints below this component fetch refuse READONLY
+     * with a 403 of their own -- see the note against READONLY in
+     * `hooks/use-auth.tsx` -- so removing it changes no behaviour and stops the
+     * page claiming an access that does not exist.
+     */
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER', 'ANALYST']} allowedPermissions={['reports:read']}>
       <ReportsPage />
     </RoleGuard>
   );
