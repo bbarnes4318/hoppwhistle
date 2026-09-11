@@ -36,6 +36,7 @@ import {
  TableRow,
 } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
+import { useReadOnlyPreview } from '@/hooks/use-read-only-preview';
 import { apiClient } from '@/lib/api';
 
 interface PayrollEntry {
@@ -70,6 +71,8 @@ export default function AdminPayrollPage() {
  const [report, setReport] = useState<PayrollReport | null>(null);
  const [loading, setLoading] = useState(true);
  const [saving, setSaving] = useState(false);
+ // A read-only role preview cannot set a pay rate or create a payout.
+ const { readOnly, disabledProps: readOnlyProps } = useReadOnlyPreview();
 
  // Date range filters (default to current month)
  const now = new Date();
@@ -320,7 +323,8 @@ export default function AdminPayrollPage() {
  <Button
  size="sm"
  onClick={() => void handleSavePayRate(entry.userId)}
- disabled={saving}
+ disabled={saving || readOnly}
+ title={readOnlyProps.title}
  >
  {saving ? (
  <Loader2 className="h-4 w-4 animate-spin" />
@@ -470,7 +474,8 @@ export default function AdminPayrollPage() {
  </Button>
  <Button
  onClick={() => void handleCreatePayout()}
- disabled={creating || !validation?.valid}
+ disabled={creating || !validation?.valid || readOnly}
+ title={readOnlyProps.title}
  >
  {creating ? (
  <Loader2 className="mr-2 h-4 w-4 animate-spin" />

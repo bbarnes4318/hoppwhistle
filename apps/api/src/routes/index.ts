@@ -210,7 +210,22 @@ export async function getUserProfile(request: any, prisma: any) {
     publisherId = user.publisherId;
   }
 
-  if (user?.roles && Array.isArray(user.roles)) {
+  /*
+   * The principal's roles, merged onto the row's -- except under a read-only
+   * role preview, where they REPLACE them.
+   *
+   * The merge is right for a platform operator acting inside an agency: they
+   * hold no `UserRole` row there, and `ACTING_TENANT_ROLES` is what makes the
+   * agency visible to them at all. It is wrong for a preview. The principal
+   * already carries exactly the previewed role, and merging the row's roles back
+   * in would restore whatever the operator holds in their own right -- which, for
+   * the staff who use this, is ADMIN and OWNER. Every narrowing the preview
+   * exists to show would be undone here, in the helper every scoped endpoint
+   * resolves access through.
+   */
+  if (user?.isReadOnlyPreview === true && Array.isArray(user?.roles)) {
+    userRoles = [...(user.roles as string[])];
+  } else if (user?.roles && Array.isArray(user.roles)) {
     for (const r of user.roles) {
       if (!userRoles.includes(r)) userRoles.push(r);
     }
@@ -225,9 +240,12 @@ export async function getUserProfile(request: any, prisma: any) {
     publisherMetadata = pub?.metadata ?? null;
   }
 
+  // Under a preview `userRoles` IS the principal's role list, so the second
+  // clause would be a second chance for the same answer and nothing more.
   const isAdminOrOwner =
     userRoles.some(role => role === 'ADMIN' || role === 'OWNER') ||
-    (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+    (user?.isReadOnlyPreview !== true &&
+      (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false));
 
   return {
     isAdminOrOwner,

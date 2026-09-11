@@ -9,9 +9,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
 import {
-  ADMIN_NAV,
+  AGENCY_OWNER_NAV,
   AGENT_NAV,
   buyerNav,
+  PLATFORM_NAV,
   publisherNav,
   type NavGroup,
   type NavItem,
@@ -24,6 +25,23 @@ import {
  * are labels and nothing else — not buttons, not disclosure triangles. A new
  * person should be able to read the product's shape off this list in one look,
  * and a section they have to open first cannot do that.
+ *
+ * ── Which nav, and in which order ────────────────────────────────────────────
+ *
+ * `isPlatformAdmin` is checked BEFORE `hasFullAccess`, and the order is the fix.
+ * `hasFullAccess` is ADMIN-or-OWNER, and NetEnroll staff inside an agency carry
+ * both (see ACTING_TENANT_ROLES on the API side) — so testing it first gave the
+ * agency nav to the operators who need the platform one. Testing the capability
+ * first gives each of the three full-access readings exactly one nav:
+ *
+ *   isPlatformAdmin → PLATFORM_NAV      NetEnroll staff
+ *   hasFullAccess   → AGENCY_OWNER_NAV  an agency principal
+ *
+ * A platform operator PREVIEWING an agency as OWNER or AGENT lands correctly
+ * here without a branch of its own: the API replaces their roles with exactly
+ * the previewed one, `/api/auth/me` answers with it, so `isPlatformAdmin` is
+ * still true for the banner but the nav they get is the one under preview. That
+ * is the whole reason the preview replaces rather than merges.
  */
 
 function isItemActive(pathname: string | null, href: string): boolean {
@@ -89,6 +107,7 @@ function PortalBadge({ label }: { label: string }) {
 export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   const pathname = usePathname();
   const {
+    isPlatformAdmin,
     hasFullAccess,
     isBuyerOnly,
     isPublisherOnly,
@@ -99,14 +118,15 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   } = useAuth();
 
   const groups: NavGroup[] = React.useMemo(() => {
-    if (hasFullAccess) return ADMIN_NAV;
+    if (isPlatformAdmin) return PLATFORM_NAV;
+    if (hasFullAccess) return AGENCY_OWNER_NAV;
     if (isPublisherOnly) return publisherNav(canViewRecordings);
     if (isBuyerOnly) return buyerNav(canViewRecordings);
     if (isAgentOnly) return AGENT_NAV;
     if (isReadonlyOnly) {
-      const items: NavItem[] = [ADMIN_NAV[0].items[0]];
+      const items: NavItem[] = [PLATFORM_NAV[0].items[0]];
       if (canViewReports) {
-        const reports = ADMIN_NAV.find(g => g.label === 'Money')?.items.find(
+        const reports = PLATFORM_NAV.find(g => g.label === 'Money')?.items.find(
           i => i.href === '/reports'
         );
         if (reports) items.push(reports);
@@ -114,8 +134,9 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       return [{ items }];
     }
     // New user with no role yet, and the catch-all: one safe destination.
-    return [{ items: [ADMIN_NAV[0].items[0]] }];
+    return [{ items: [PLATFORM_NAV[0].items[0]] }];
   }, [
+    isPlatformAdmin,
     hasFullAccess,
     isPublisherOnly,
     isBuyerOnly,
@@ -150,6 +171,10 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       )}
 
       <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
+        {/* Whose product this is, said at the top of the column. An agency
+            principal gets one for the same reason a publisher does: the screen
+            they are on is an agency's, not NetEnroll's. */}
+        {!isPlatformAdmin && hasFullAccess ? <PortalBadge label="Agency portal" /> : null}
         {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
         {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
         {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}

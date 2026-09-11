@@ -185,7 +185,8 @@ export function registerApiV1Auth(server: FastifyInstance): void {
  *
  * Order matters: the database grants land first, then the acting-tenant roles
  * are merged on top of them, so a platform operator inside an agency keeps both
- * their own roles and the agency's.
+ * their own roles and the agency's -- unless a role PREVIEW is active, in which
+ * case the previewed role replaces them outright.
  *
  * Exported for the same reason `applyPlatformContext` is: the session-cookie
  * authenticator builds a principal the same way, and a second answer to "what
@@ -221,6 +222,8 @@ export async function applyPlatformContext(request: FastifyRequest): Promise<voi
         isPlatformAdmin?: boolean;
         actingTenantId?: string | null;
         actingTenantName?: string | null;
+        previewRole?: string | null;
+        isReadOnlyPreview?: boolean;
       }
     | undefined;
 
@@ -233,9 +236,21 @@ export async function applyPlatformContext(request: FastifyRequest): Promise<voi
   principal.actingTenantId = platform.actingTenantId;
   principal.actingTenantName = platform.actingTenantName;
   principal.tenantId = platform.actingTenantId ?? undefined;
+  principal.previewRole = platform.previewRole;
+  principal.isReadOnlyPreview = !!platform.previewRole;
 
-  // Inside an agency, carry that agency's administrator roles; in the
-  // cross-agency view, carry none. See ACTING_TENANT_ROLES.
+  /*
+   * Inside an agency, carry that agency's administrator roles; in the
+   * cross-agency view, carry none. See ACTING_TENANT_ROLES.
+   *
+   * While PREVIEWING a role the acting roles REPLACE the operator's own rather
+   * than merging. This is the same rule `middleware/auth.ts` applies, and it is
+   * the feature: merging would leave the operator's ADMIN/OWNER in place, every
+   * role check would still pass, and the preview would show them the screen
+   * they already had.
+   */
   const existing = principal.roles ?? [];
-  principal.roles = [...existing, ...platform.actingRoles.filter(r => !existing.includes(r))];
+  principal.roles = platform.previewRole
+    ? [platform.previewRole]
+    : [...existing, ...platform.actingRoles.filter(r => !existing.includes(r))];
 }

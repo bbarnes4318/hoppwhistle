@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { AddWebhookDialog } from '@/components/webhooks/add-webhook-dialog';
 import { usePlatformContext } from '@/hooks/use-platform-context';
+import { useReadOnlyPreview } from '@/hooks/use-read-only-preview';
 import { apiClient } from '@/lib/api';
 
 interface Webhook {
@@ -34,6 +35,8 @@ export default function SettingsPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [addWebhookOpen, setAddWebhookOpen] = useState(false);
+  // A read-only role preview cannot add or delete a webhook.
+  const { readOnly, disabledProps: readOnlyProps } = useReadOnlyPreview();
   /*
    * Webhooks belong to one agency, and this page is reachable without one.
    *
@@ -151,6 +154,8 @@ export default function SettingsPage() {
                 size="sm"
                 className="h-7 text-xs px-2.5"
                 onClick={() => setAddWebhookOpen(true)}
+                disabled={readOnly}
+                title={readOnlyProps.title}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Add Webhook
@@ -224,6 +229,8 @@ export default function SettingsPage() {
                             size="sm"
                             className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => handleDeleteWebhook(webhook.id)}
+                            disabled={readOnly}
+                            title={readOnlyProps.title}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>

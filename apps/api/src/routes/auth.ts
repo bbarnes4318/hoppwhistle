@@ -912,7 +912,40 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       preHandler: [authenticate],
     },
     async (request, reply) => {
-      const { userId } = request.user as { userId: string; tenantId?: string };
+      /*
+       * ── This reads the PRINCIPAL, not just the row ────────────────────────
+       *
+       * The whole frontend -- the sidebar, the command palette, every RoleGuard
+       * -- is built from this response. It used to answer with `user.roles` and
+       * `user.tenantId` straight off the database row and ignore `request.user`
+       * entirely, which had two consequences:
+       *
+       *   1. A platform operator inside an agency got their OWN tenantId back
+       *      (for NetEnroll staff, null), not the agency they had entered. The
+       *      client then held a different tenant from every request it made.
+       *   2. A role preview changed nothing the operator could see. The
+       *      principal carried exactly the previewed role and this endpoint
+       *      kept answering with the row, so the nav, the guards and the
+       *      palette all stayed as they were. The preview only became visible
+       *      when a write was refused, which is the opposite of the point.
+       *
+       * So for a platform principal the effective roles and tenant come from
+       * `request.user`, which `middleware/auth.ts` has already resolved --
+       * including the preview replacement. For everyone else it is the row, as
+       * it always was: an agency user's principal is derived from that row
+       * anyway, and preferring the row keeps this endpoint unchanged for them.
+       */
+      const principal = request.user as {
+        userId?: string;
+        tenantId?: string;
+        roles?: string[];
+        isPlatformAdmin?: boolean;
+        actingTenantId?: string | null;
+        actingTenantName?: string | null;
+        previewRole?: string | null;
+        isReadOnlyPreview?: boolean;
+      };
+      const userId = principal?.userId as string;
 
       if (!userId) {
         return reply.code(401).send({
@@ -965,13 +998,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
       const userMetadata = user.metadata as Record<string, unknown> | null;
 
+      const rowRoles = user.roles.map((ur: UserRole) => ur.role.name);
+      const isPlatformPrincipal = principal?.isPlatformAdmin === true;
+
       return reply.send({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        roles: user.roles.map((ur: UserRole) => ur.role.name),
-        tenantId: user.tenantId,
+        roles: isPlatformPrincipal ? (principal.roles ?? rowRoles) : rowRoles,
+        tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,
@@ -979,6 +1015,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         position: userMetadata?.position || null,
         defaultScript: userMetadata?.defaultScript || null,
         customScripts: userMetadata?.customScripts || null,
+        // Platform state, so the client does not have to infer who it is talking
+        // to from the shape of a refusal. All false/null for an agency user.
+        isPlatformAdmin: isPlatformPrincipal,
+        actingTenantId: principal?.actingTenantId ?? null,
+        actingTenantName: principal?.actingTenantName ?? null,
+        previewRole: principal?.previewRole ?? null,
+        isReadOnlyPreview: principal?.isReadOnlyPreview === true,
       });
     }
   );

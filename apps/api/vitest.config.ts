@@ -31,6 +31,10 @@ const DATABASE_BACKED = [
   '**/src/__tests__/api-response-contract.test.ts',
   '**/src/__tests__/no-acting-tenant-audit.test.ts',
   '**/src/__tests__/platform-capability-closure.test.ts',
+  // Truncates `tenants`, `roles`, `calls` and `audit_logs` to seed one agency,
+  // its owner and agent, and a platform operator. Beside any other suite on the
+  // default pool the two would delete each other's fixtures.
+  '**/src/__tests__/role-preview.test.ts',
   '**/src/__tests__/publisher-portal-access.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
