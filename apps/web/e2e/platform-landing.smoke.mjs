@@ -175,8 +175,15 @@ const SWEEP = [
     platform: false,
     // Their own day. No money, no rate, and no other agent.
     strip: 'agent',
+    // Exactly AGENT_NAV, and /dashboard is deliberately not on it.
+    //
+    // /dashboard is the TENANT-WIDE admin dashboard: every call the agency took
+    // and every application it wrote. An agent used to land on it because the
+    // page destructured `isAgentOnly`, listed it in the effect's dependency
+    // array, and never branched on it. It now redirects them to /call-center,
+    // so asking for /dashboard here would fail assertion 2 ("still on the page
+    // asked for") — correctly. /call-center below is where they land.
     routes: [
-      '/dashboard',
       '/call-center',
       '/calls',
       // The same page an administrator opens. An agent sees only their own
@@ -187,6 +194,11 @@ const SWEEP = [
       '/payroll',
       '/settings',
     ],
+    // Asked for, and sent somewhere else. Asserted rather than merely omitted:
+    // dropping /dashboard from the list above would leave the redirect itself
+    // untested, and "an agent cannot reach the tenant-wide dashboard" is the
+    // property, not "this file does not ask for it".
+    redirects: [{ from: '/dashboard', to: '/call-center' }],
   },
   {
     who: 'publisher (PUBLISHER, inside one agency)',
@@ -1603,6 +1615,32 @@ async function sweepRoute(browser, session, entry, path) {
   }
 }
 
+/**
+ * A route this session must NOT be able to stay on.
+ *
+ * The sweep above asserts that a page asked for is the page rendered. This is
+ * the other half: a route whose guard is supposed to move the session, and
+ * where it has to land. Without it, "an agent is not shown the tenant-wide
+ * dashboard" would be enforced only by this file declining to ask.
+ */
+async function checkRedirect(browser, session, entry, { from, to }) {
+  const who = `${entry.who} asking for ${from}`;
+  const { context, page } = await openAsOperator(browser, session, from, SWEEP_SETTLE_MS);
+
+  const landed = await page.evaluate(() => window.location.pathname);
+  const settled = landed === from ? await settleOnPath(page, from) : landed;
+
+  if (settled !== to) {
+    fail(
+      settled === from
+        ? `${who}: was left on ${from}, which is the tenant-wide dashboard. It must move them to ${to}.`
+        : `${who}: was moved to ${settled} rather than ${to}.`
+    );
+  }
+
+  await context.close();
+}
+
 /** One load, collecting its failures rather than committing them. */
 async function sweepRouteOnce(browser, session, entry, path) {
   const failures = [];
@@ -2397,6 +2435,10 @@ async function main() {
   const everyRoute = new Set([
     ...ROUTES.map(r => r.path),
     ...SWEEP.flatMap(entry => entry.routes),
+    // The routes a guard is expected to move a session OFF still have to be
+    // compiled: an uncompiled one takes long enough that the redirect looks
+    // like a hang.
+    ...SWEEP.flatMap(entry => (entry.redirects ?? []).flatMap(r => [r.from, r.to])),
     DARK_SCOPE_ROUTE,
     LOGIN_ROUTE,
   ]);
@@ -2427,6 +2469,9 @@ async function main() {
     for (const path of entry.routes) {
       await sweepRoute(browser, session, entry, path);
       sweptRoutes++;
+    }
+    for (const redirect of entry.redirects ?? []) {
+      await checkRedirect(browser, session, entry, redirect);
     }
   }
 

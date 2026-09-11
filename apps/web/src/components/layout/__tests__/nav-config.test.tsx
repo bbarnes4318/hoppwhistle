@@ -124,15 +124,12 @@ describe.each(NAVS)('%s: every href resolves to a page', (name, groups) => {
     expect(items.length, `${name} is empty`).toBeGreaterThan(0);
   });
 
-  it.each(items.map(item => [item.name, item.href] as const))(
-    '%s → %s',
-    (_itemName, href) => {
-      expect(
-        ROUTES.has(pathOf(href)),
-        `${name} links to ${href}, which has no page under src/app`
-      ).toBe(true);
-    }
-  );
+  it.each(items.map(item => [item.name, item.href] as const))('%s → %s', (_itemName, href) => {
+    expect(
+      ROUTES.has(pathOf(href)),
+      `${name} links to ${href}, which has no page under src/app`
+    ).toBe(true);
+  });
 });
 
 describe('the seven dead agent links, named', () => {
