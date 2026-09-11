@@ -723,13 +723,33 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       const agent = await seedAgent(big.id, 'Frey');
       await seedDeliveredCalls(big.id, TODAY, 3, agent.id);
 
-      // Went available mid-yesterday; the only other row is an hour into today.
+      /*
+       * Went available mid-yesterday; the only other row closes it inside today.
+       *
+       * The closing row is clipped into the part of today that has ACTUALLY
+       * elapsed, for the same reason `pastSpanToday` and `openSpanToday` clip
+       * theirs: `availableSecondsByUser` runs an open span to `min(midnight
+       * tomorrow, now)`, so a row a flat hour into the day is in the FUTURE for
+       * the first hour of every day, the span clips to this instant, and the
+       * read returns however much of the day has passed rather than the hour.
+       *
+       * It failed exactly that way in CI at 00:10 Eastern -- `expected 323 to be
+       * 3600` -- and passed on the same code at 23:41 the evening before. That
+       * is the third time this file has been wrong about the clock; the other
+       * two are written up on the helpers above.
+       *
+       * `elapsed` is what these two rows describe, and the read has to arrive at
+       * the same number from the rows themselves. On any ordinary run it is the
+       * full hour. Either way not a second of yesterday is counted, which is the
+       * property under test.
+       */
+      const dayStart = calendarDayBounds(TODAY).start.getTime();
+      const elapsed = Math.min(3600_000, Date.now() - dayStart);
       await prisma.agentStateEvent.create({
         data: { userId: agent.id, status: 'available', occurredAt: middayOf(YESTERDAY) },
       });
-      const oneHourIn = new Date(calendarDayBounds(TODAY).start.getTime() + 3600_000);
       await prisma.agentStateEvent.create({
-        data: { userId: agent.id, status: 'away', occurredAt: oneHourIn },
+        data: { userId: agent.id, status: 'away', occurredAt: new Date(dayStart + elapsed) },
       });
 
       const data = (
@@ -741,8 +761,8 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       ).json().data;
 
       const row = data.agents.find((r: any) => r.userId === agent.id);
-      // The first hour of today, and not a second of yesterday.
-      expect(row.availableSeconds).toBe(3600);
+      // Today's availability, counted from midnight and not a second before it.
+      expect(row.availableSeconds).toBe(Math.round(elapsed / 1000));
     });
 
     it('never runs an open availability past this instant', async () => {
