@@ -1160,7 +1160,6 @@ function ReportsPage() {
   );
 }
 
-
 export default function GuardedReportsPage() {
   return (
     /*

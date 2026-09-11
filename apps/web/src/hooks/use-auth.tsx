@@ -236,10 +236,7 @@ export interface RecordingAccess {
  * reading it out of the hook with a regex -- which is why it lives here instead
  * of inside `useAuth`.
  */
-export function getPermissions(
-  roles: string[],
-  recordingAccess: RecordingAccess = {}
-): string[] {
+export function getPermissions(roles: string[], recordingAccess: RecordingAccess = {}): string[] {
   const list: string[] = [];
   if (roles.includes('OWNER')) {
     list.push('admin:*');
@@ -392,7 +389,6 @@ export function useAuth(): UseAuthReturn {
   const buyerId = user?.buyerId || null;
   const publisherId = user?.publisherId || null;
   const tenantId = user?.tenantId || null;
-
 
   const permissions = getPermissions(userRoles, {
     publisher: user?.publisherAccessToRecordings,
