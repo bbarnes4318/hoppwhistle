@@ -3626,6 +3626,13 @@ model PlatformActingTenant {
   /// moment. The row is the state; the audit log is the history.
   enteredAt DateTime @default(now())
 
+  /// The role a platform operator is previewing this agency as. Null means
+  /// they are acting normally, with ACTING_TENANT_ROLES and write access.
+  /// 'OWNER' or 'AGENT' means the principal carries EXACTLY that role and
+  /// every non-GET request is refused. Preview only exists inside an agency,
+  /// which is why it lives on this row and not on platform_admins.
+  previewRole String?
+
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

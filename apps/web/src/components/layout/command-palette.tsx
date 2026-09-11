@@ -20,7 +20,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-import { ADMIN_NAV, AGENT_NAV, allNavItems, buyerNav, publisherNav } from './nav-config';
+import {
+  AGENCY_OWNER_NAV,
+  AGENT_NAV,
+  allNavItems,
+  buyerNav,
+  PLATFORM_NAV,
+  publisherNav,
+} from './nav-config';
 
 /**
  * Global command palette, cmd-K / ctrl-K.
@@ -91,11 +98,15 @@ export function CommandPalette({
   const [loading, setLoading] = React.useState(false);
 
   const pages = React.useMemo(() => {
-    if (auth.hasFullAccess) return allNavItems(ADMIN_NAV);
+    // Same order as the sidebar, for the same reason: staff inside an agency
+    // hold ADMIN and OWNER, so `hasFullAccess` tested first would offer them the
+    // agency's pages instead of the platform's. See sidebar.tsx.
+    if (auth.isPlatformAdmin) return allNavItems(PLATFORM_NAV);
+    if (auth.hasFullAccess) return allNavItems(AGENCY_OWNER_NAV);
     if (auth.isPublisherOnly) return allNavItems(publisherNav(auth.canViewRecordings));
     if (auth.isBuyerOnly) return allNavItems(buyerNav(auth.canViewRecordings));
     if (auth.isAgentOnly) return allNavItems(AGENT_NAV);
-    return allNavItems(ADMIN_NAV).filter(i => i.href === '/dashboard');
+    return allNavItems(PLATFORM_NAV).filter(i => i.href === '/dashboard');
   }, [auth]);
 
   // Remote search: debounced, and only for queries long enough to be meaningful.

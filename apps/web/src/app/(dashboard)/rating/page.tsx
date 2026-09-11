@@ -3,6 +3,7 @@
 import { AlertTriangle, Gauge, Loader2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { PlatformRatingView } from '@/components/platform/platform-rating-view';
 import { Badge } from '@/components/ui/badge';
@@ -143,7 +144,7 @@ function dollars(value: number | null): string {
  * means the agency panel never mounts for an operator with no agency, so it
  * never fires the agency-scoped requests that would be refused 409.
  */
-export default function RatingPage(): JSX.Element {
+function RatingPage(): JSX.Element {
   const platform = usePlatformContext();
 
   if (platform.loading) {
@@ -428,5 +429,24 @@ function AgencyRatingPanel(): JSX.Element {
         </CardContent>
       </Card>
     </CompactPageShell>
+  );
+}
+
+/**
+ * ADMIN and OWNER only.
+ *
+ * What this agency is paid per submitted application. A price, and therefore
+ * the principal's business: `/api/v1/rating/*` now refuses an AGENT outright
+ * (see `requireAgencyPrincipal`), and this guard is so an agent who reaches the
+ * URL is sent somewhere useful instead of watching a page fill with 403s.
+ *
+ * A platform operator inside an agency carries both roles and is unaffected --
+ * except while previewing as AGENT, where being turned away is the point.
+ */
+export default function GuardedRatingPage(): JSX.Element {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <RatingPage />
+    </RoleGuard>
   );
 }

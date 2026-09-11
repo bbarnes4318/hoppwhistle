@@ -1,4 +1,4 @@
-import { ADMIN_NAV, AGENT_NAV, buyerNav, publisherNav } from './nav-config';
+import { AGENCY_OWNER_NAV, AGENT_NAV, buyerNav, PLATFORM_NAV, publisherNav } from './nav-config';
 
 /**
  * The page title shown in the topbar, in the display face.
@@ -21,7 +21,13 @@ const EXPLICIT: Record<string, string> = {
   '/admin/payroll': 'Payroll admin',
 };
 
-const ALL_ITEMS = [...ADMIN_NAV, ...AGENT_NAV, ...publisherNav(true), ...buyerNav(true)].flatMap(
+const ALL_ITEMS = [
+  ...PLATFORM_NAV,
+  ...AGENCY_OWNER_NAV,
+  ...AGENT_NAV,
+  ...publisherNav(true),
+  ...buyerNav(true),
+].flatMap(
   g => g.items
 );
 

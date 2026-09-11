@@ -27,6 +27,11 @@ import type { Envelope } from '@/lib/api';
  * read — so both reload the page rather than pretending the current one has
  * moved.
  *
+ * The role preview works the same way and for the same reason. `setPreviewRole`
+ * posts the role, the server writes it onto the acting-tenant row, and the page
+ * reloads: the principal for the request that asked was built before the row
+ * changed, so there is no honest way to re-render in place.
+ *
  * ── Every read here goes through `payload()` ─────────────────────────────────
  *
  * `apiClient`'s `data` is the response BODY, not the payload inside it, and
@@ -66,9 +71,24 @@ export interface PlatformTenant {
   status: string;
 }
 
+/** The roles a platform operator may preview an agency as. */
+export type PreviewRole = 'OWNER' | 'AGENT';
+
 export interface PlatformContextState {
   isPlatformAdmin: boolean;
   actingTenant: ActingTenant | null;
+  /**
+   * The agency role this operator is previewing, or null for "as NetEnroll
+   * staff". Reported by the server rather than chosen here: the principal, the
+   * nav and the refusals all come from the same row.
+   */
+  previewRole: PreviewRole | null;
+  /**
+   * True while a preview is active: the server refuses every non-GET request.
+   * Taken from the server's answer rather than derived from `previewRole`, so
+   * the client cannot disagree with it about what a preview costs.
+   */
+  readOnly: boolean;
   /** True until the first fetch settles. Render nothing rather than "All agencies". */
   loading: boolean;
   /**
@@ -82,12 +102,16 @@ export interface PlatformContextState {
   loadTenants: () => Promise<void>;
   enterTenant: (tenantId: string) => Promise<void>;
   leaveTenant: () => Promise<void>;
+  /** Start previewing as a role, or pass null to stop. Reloads on success. */
+  setPreviewRole: (role: PreviewRole | null) => Promise<void>;
   error: string | null;
 }
 
 function usePlatformContextState(): PlatformContextState {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [actingTenant, setActingTenant] = useState<ActingTenant | null>(null);
+  const [previewRole, setPreviewRoleState] = useState<PreviewRole | null>(null);
+  const [readOnly, setReadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<PlatformTenant[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState(false);
@@ -126,7 +150,12 @@ function usePlatformContextState(): PlatformContextState {
         if (cancelled) return;
 
         const response = await apiClient.get<
-          Envelope<{ isPlatformAdmin: boolean; actingTenant: ActingTenant | null }>
+          Envelope<{
+            isPlatformAdmin: boolean;
+            actingTenant: ActingTenant | null;
+            previewRole: PreviewRole | null;
+            readOnly: boolean;
+          }>
         >('/api/v1/platform/context');
 
         if (cancelled) return;
@@ -135,6 +164,8 @@ function usePlatformContextState(): PlatformContextState {
         if (context) {
           setIsPlatformAdmin(context.isPlatformAdmin === true);
           setActingTenant(context.actingTenant ?? null);
+          setPreviewRoleState(context.previewRole ?? null);
+          setReadOnly(context.readOnly === true);
           break;
         }
 
@@ -194,10 +225,29 @@ function usePlatformContextState(): PlatformContextState {
     if (typeof window !== 'undefined') window.location.reload();
   }, []);
 
+  const setPreviewRole = useCallback(async (role: PreviewRole | null) => {
+    setError(null);
+    const response = await apiClient.post('/api/v1/platform/acting-tenant/preview', {
+      previewRole: role,
+    });
+
+    if (response.error) {
+      setError(response.error.message);
+      return;
+    }
+
+    // Same reason enter and leave reload: the preview applies from the next
+    // request, and the nav, the guards and every disabled control are built from
+    // a principal this page has already been rendered with.
+    if (typeof window !== 'undefined') window.location.reload();
+  }, []);
+
   return useMemo(
     () => ({
       isPlatformAdmin,
       actingTenant,
+      previewRole,
+      readOnly,
       loading,
       needsAgency: isPlatformAdmin && actingTenant === null,
       tenants,
@@ -205,17 +255,21 @@ function usePlatformContextState(): PlatformContextState {
       loadTenants,
       enterTenant,
       leaveTenant,
+      setPreviewRole,
       error,
     }),
     [
       isPlatformAdmin,
       actingTenant,
+      previewRole,
+      readOnly,
       loading,
       tenants,
       tenantsLoading,
       loadTenants,
       enterTenant,
       leaveTenant,
+      setPreviewRole,
       error,
     ]
   );
@@ -245,6 +299,11 @@ export function usePlatformContext(): PlatformContextState {
 const OUTSIDE_PROVIDER: PlatformContextState = {
   isPlatformAdmin: false,
   actingTenant: null,
+  previewRole: null,
+  // `false` is the right default outside the provider: a component that cannot
+  // read the context must not disable its Save button on a guess. The server
+  // hook is the guarantee either way.
+  readOnly: false,
   loading: false,
   needsAgency: false,
   tenants: [],
@@ -252,5 +311,6 @@ const OUTSIDE_PROVIDER: PlatformContextState = {
   loadTenants: async () => {},
   enterTenant: async () => {},
   leaveTenant: async () => {},
+  setPreviewRole: async () => {},
   error: null,
 };

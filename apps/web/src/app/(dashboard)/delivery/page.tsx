@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import {
   Figure,
   FigureRow,
@@ -189,7 +190,7 @@ function available(seconds: number | null): string {
  * and guessing "agency" for a platform admin is exactly the flash of a broken
  * page this is meant to remove.
  */
-export default function DeliveryPage(): JSX.Element {
+function DeliveryPage(): JSX.Element {
   const platform = usePlatformContext();
 
   if (platform.loading) {
@@ -803,5 +804,25 @@ function AgentTable({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * ADMIN and OWNER only.
+ *
+ * Today's block, the overrun, the ceiling and tonight's charge. Money, and
+ * therefore the principal's: `/api/v1/delivery/*` refuses an AGENT everywhere
+ * except `/me` (see `requireAgencyPrincipal`), and this guard is so an agent who
+ * reaches the URL is sent somewhere useful instead of watching a page fill with
+ * 403s. An agent's own numbers are at /delivery/me, which has no money on it.
+ *
+ * A platform operator inside an agency carries both roles and is unaffected --
+ * except while previewing as AGENT, where being turned away is the point.
+ */
+export default function GuardedDeliveryPage(): JSX.Element {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <DeliveryPage />
+    </RoleGuard>
   );
 }

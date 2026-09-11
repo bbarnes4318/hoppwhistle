@@ -21,11 +21,18 @@
  * than outputs of it: the anchor points of a new curve version, and an opening
  * rate that was commercially agreed. Every rate an agency is actually paid is
  * derived server-side from counts the server made itself.
+ *
+ * ── The agency surface is the principal's, not every agent's ─────────────────
+ *
+ * Every route on `/api/v1/rating/*` carries `requireAgencyPrincipal`. They were
+ * `[authenticate]` and nothing else, which made what the agency is paid per
+ * application -- and every change to it -- readable by any AGENT holding a token
+ * in the tenant. An agency's price is the principal's business.
  */
 
 import { FastifyInstance } from 'fastify';
 
-import { requirePlatformAdmin } from '../lib/platform-context.js';
+import { requireAgencyPrincipal, requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
@@ -60,7 +67,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    * trailing window percentage that actually sets the rate, the current rate,
    * and the rate today is tracking toward for tomorrow.
    */
-  fastify.get('/api/v1/rating/summary', { preHandler: [authenticate] }, async (request, reply) => {
+  fastify.get('/api/v1/rating/summary', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 
@@ -76,7 +83,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    */
   fastify.get<{ Querystring: { limit?: string } }>(
     '/api/v1/rating/history',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -130,7 +137,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    */
   fastify.get<{ Params: { id: string } }>(
     '/api/v1/rating/history/:id/recompute',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -159,7 +166,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    * being able to check your own price against the published schedule is the
    * point; it names no other agency and carries no per-agency figure.
    */
-  fastify.get('/api/v1/rating/curve', { preHandler: [authenticate] }, async (request, reply) => {
+  fastify.get('/api/v1/rating/curve', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 

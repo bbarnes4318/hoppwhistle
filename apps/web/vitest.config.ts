@@ -84,6 +84,12 @@ export default defineConfig({
       // agency not enrolled in billing is shown no money at all, and that the
       // rate in force and the rate tomorrow is tracking toward stay apart.
       'src/components/layout/__tests__/**/*.test.ts',
+      // Every href in every nav resolves to a page that exists, and the
+      // platform/agency/agent split holds. Seven of AGENT_NAV's twelve items
+      // were dead links; this is what stops them coming back. `.tsx` needs its
+      // own entry — the `.ts` glob above does not match it, and a file that is
+      // not listed here does not run and nothing says so.
+      'src/components/layout/__tests__/**/*.test.tsx',
       // Every page under the dashboard offers the cross-agency prompt rather
       // than rendering broken for an operator with no agency selected.
       'src/app/__tests__/**/*.test.ts',
