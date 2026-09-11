@@ -202,13 +202,52 @@ pins a cookie domain.
 
 ## 6. Verify
 
-Open `https://agents.netenroll.com/voice-agents`. The AI Voice app should load
-already signed in, showing your calls — no second login.
+Open `https://agents.netenroll.com/voice-agents`.
+
+**Why that address and not `aivoice.netenroll.com` directly.** Both work, and
+they are not the same thing. `aivoice.netenroll.com` is the AI Voice app on its
+own — it will ask you to log in, because nothing has signed you in. The portal
+page at `/voice-agents` is the one that *mints the session* and then shows the
+same app in a frame, already signed in. So `/voice-agents` is the thing this
+whole document is about, and the thing to test. Going straight to
+`aivoice.netenroll.com` and being asked for a password is not a failure.
+
+It should load already signed in, showing your calls — no second login.
 
 If it still shows Dograh's login screen, open the browser's developer tools,
 Application → Cookies, and check for `dograh_auth_token` on `.netenroll.com`.
 Its absence means step 4 was not picked up; its presence with a login screen
 still showing means step 5 — most likely the secret.
+
+### If the page says "AI Voice is not available right now"
+
+That is a different failure from a login screen, and it was a bug in this
+repository — **fixed**, so it is here only to say what it was and to keep the
+diagnosis for next time.
+
+The page asked the API for `/v1/aivoice/session`. The route is registered at
+`/api/v1/aivoice/session`. The web client builds its URL as
+`window.location.origin + path`, so the request went to
+`https://agents.netenroll.com/v1/aivoice/session` — **which Next.js serves, and
+404s.** The API never saw it, so nothing appeared in the API log and the API
+itself answered correctly the whole time:
+
+```bash
+docker exec hopwhistle-api-dev sh -c \
+  'wget -qS -O /dev/null http://127.0.0.1:3001/api/v1/aivoice/session 2>&1 | head -3'
+# 401 — the route exists and is working. A browser 404 is therefore NOT the API.
+```
+
+The 404 was then invisible because `apiClient.get()` **never throws** — it
+resolves with `{ error }` — so the page's `catch` could not fire and it showed
+its generic message instead of the status code. The same mistake the call
+ledger had. Both halves are fixed, and
+`apps/web/src/app/__tests__/api-paths.test.ts` now checks every `apiClient`
+path in the app against the prefixes the server actually serves, so a missing
+`/api` cannot ship again.
+
+**A 404 on `v1/…` in the browser console means a path bug in the portal, not a
+server problem.** Look at the path before looking at the server.
 
 ## Getting the recordings out, today
 
