@@ -150,14 +150,60 @@ app's own repository is the right home for it; this file points there.
 
 ## 4. Point the portal at the new host — this repo's half
 
-In `/opt/hopwhistle/.env`, set both. They must always name the same host:
+Three settings in `/opt/hopwhistle/.env`. The first two must always name the
+same host; the third has to equal Dograh's `OSS_JWT_SECRET`, or the portal
+mints a token Dograh rejects without saying why.
+
+```bash
+sudo bash <<'DONE'
+cd /opt/hopwhistle
+
+# Keep the backup OUTSIDE the repository. See the note below.
+mkdir -p /root/env-backups
+cp .env "/root/env-backups/.env.backup-$(date +%s)"
+
+sed -i '/^AIVOICE_URL=/d;/^AIVOICE_COOKIE_DOMAIN=/d' .env
+printf 'AIVOICE_URL=https://aivoice.netenroll.com\nAIVOICE_COOKIE_DOMAIN=.netenroll.com\n' >> .env
+
+# Read Dograh's own signing key rather than retyping it.
+SECRET="$(grep -m1 '^OSS_JWT_SECRET=' /opt/dograh/.env | cut -d= -f2-)"
+if [ -n "$SECRET" ]; then
+  sed -i '/^AIVOICE_JWT_SECRET=/d' .env
+  printf 'AIVOICE_JWT_SECRET=%s\n' "$SECRET" >> .env
+  echo "OK - signing key copied from Dograh"
+else
+  echo "PROBLEM - no OSS_JWT_SECRET in /opt/dograh/.env"
+fi
+
+grep '^AIVOICE_' .env | sed 's/\(AIVOICE_JWT_SECRET=\).*/\1<set>/'
+DONE
+```
+
+**Why the backup goes in `/root/env-backups` and not next to `.env`.**
+`scripts/deploy-netenroll.sh` refuses to deploy a dirty working tree — the
+right call, and it counts an untracked `.env.backup-…` as dirty. So a backup
+taken in `/opt/hopwhistle` blocks the very deploy it was taken for, naming
+itself as the reason:
 
 ```
-AIVOICE_URL=https://aivoice.netenroll.com
-AIVOICE_COOKIE_DOMAIN=.netenroll.com
+REFUSED: working tree is dirty. Deploy a known commit, not a surprise.
+?? .env.backup-1789146682
 ```
 
-Then restart the API so it picks them up:
+`.gitignore` now covers `.env.backup*`, `.env.bak`, `.env.save` and
+`.env.orig` so an existing one no longer blocks a deploy. Keeping them out of
+the repository is still the better habit: they hold every secret `.env` does.
+
+Then deploy, which rebuilds both images and applies any migration the database
+is missing:
+
+```bash
+cd /opt/hopwhistle
+sudo ./scripts/deploy-netenroll.sh
+```
+
+To restart only the API without a full deploy — enough if `.env` is all that
+changed and the image is already current:
 
 ```bash
 cd /opt/hopwhistle

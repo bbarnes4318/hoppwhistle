@@ -110,6 +110,28 @@ command -v psql >/dev/null 2>&1 || {
   RED "there is no Prisma CLI fallback, deliberately \u2014 see step 2."
   exit 1; }
 
+# Step 3's provisioning is a Node CLI, so it needs node_modules on the host --
+# which a host running the API from an image does not have. Checked HERE rather
+# than at step 3, because step 3 is after the migrations: discovering it there
+# stops the deploy half done, with the database moved and nothing shipped. That
+# is exactly how one run ended, at `sh: 1: prisma: not found`.
+if [ "$SKIP_ADMINS" = "0" ] && [ ! -d "$ROOT/apps/api/node_modules" ]; then
+  RED "REFUSED: apps/api/node_modules is missing, so step 3 could not run."
+  RED "Caught now, before the database is touched."
+  RED ""
+  RED "This host runs the API from an image and has no dependencies installed."
+  RED "Two ways forward:"
+  RED ""
+  RED "  1. If platform admins already exist, re-run with --skip-admins."
+  RED "     Check first, and require a count of 1 or more:"
+  RED ""
+  RED "       set -a; . apps/api/.env; set +a"
+  RED "       psql \"\$DATABASE_URL\" -tAc 'select count(*) from platform_admins'"
+  RED ""
+  RED "  2. To provision from this host, install dependencies: pnpm install"
+  exit 1
+fi
+
 # DATABASE_URL comes from apps/api/.env, which Prisma also reads. Sourced rather
 # than parsed so a quoted value or an inline comment behaves the same way it
 # does for every other consumer of that file.
@@ -299,10 +321,79 @@ done
 # one-active-reservation-per-lead guarantee lives in SQL. Without it concurrent
 # workers each claim the same lead and several agents dial the same person.
 #
-# This one is `prisma db execute`, which is a file-runner rather than a
-# migration engine: it reads no history and applies exactly the file it is
-# given. It is not the thing this step exists to avoid.
-run $API db:constraints
+# Applied with psql, like every other piece of SQL in this step.
+#
+# It used to be `pnpm … db:constraints`, i.e. `prisma db execute --file`, which
+# is a plain file-runner -- it reads no history and applies exactly the file it
+# is given, so it was never the thing this step exists to avoid. But it needs
+# the Prisma CLI, which means node_modules on the host, and the production host
+# deliberately has none: the API runs from an image that carries its own. So the
+# deploy died here with `sh: 1: prisma: not found` AFTER both migrations had
+# been applied -- the worst place to stop, half done and with nothing said
+# about it.
+#
+# psql has no such dependency, this script already refuses to start without it,
+# and the file is idempotent by contract ("Every statement must be idempotent"),
+# so re-running is safe.
+CONSTRAINTS="$ROOT/apps/api/prisma/sql/db-push-constraints.sql"
+[ -f "$CONSTRAINTS" ] || {
+  RED "REFUSED: $CONSTRAINTS is not in this checkout."; exit 1; }
+
+# ── Why this is conditional, and not simply applied ─────────────────────────
+#
+# That file's own header says where it belongs: "Run this immediately after db
+# push, wherever a schema is created." It is written for a database built from
+# schema.prisma in one shot -- CI, a developer's box -- which therefore has
+# every table in the schema.
+#
+# THIS database was not built that way, and does not. Applying the file to
+# production fails on its first statement:
+#
+#     ERROR: relation "lead_dial_reservations" does not exist
+#
+# because `20260803000000_add_lead_dial_reservations` is in the repository and
+# is not in REQUIRED_MIGRATIONS above, so no deploy has ever applied it. The
+# same is true of most of the 31 migrations in `prisma/migrations`: six are
+# registered here. That gap is the real defect -- it is what produced the
+# `insurance_carrier_applications.voidedAt` P2022 in production -- and it is
+# not this step's to fix.
+#
+# So: apply the file when its tables are all present, and when they are not,
+# name what is missing and carry on. A constraint cannot protect a table that
+# does not exist, and refusing here would block every deploy on this host over
+# a file that was never applicable to it.
+CONSTRAINT_TABLES="lead_dial_reservations application_credit_ledger daily_settlements settlement_payment_attempts"
+MISSING_TABLES=""
+for t in $CONSTRAINT_TABLES; do
+  if [ "$(probe "SELECT to_regclass('public.$t') IS NOT NULL")" != "t" ]; then
+    MISSING_TABLES="$MISSING_TABLES $t"
+  fi
+done
+
+if [ -n "$MISSING_TABLES" ]; then
+  YEL "  skipping prisma/sql/db-push-constraints.sql - tables absent:$MISSING_TABLES"
+  YEL "  Their migrations are in prisma/migrations and not in this script's"
+  YEL "  REQUIRED_MIGRATIONS, so no deploy has applied them. Register them"
+  YEL "  there (with an applied-state probe each) to create these tables; the"
+  YEL "  constraints then apply on the next run."
+elif [ "$DRY_RUN" = "1" ]; then
+  printf "  would apply: %s\n" "prisma/sql/db-push-constraints.sql"
+else
+  if ! OUT="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$CONSTRAINTS" 2>&1)"; then
+    RED "REFUSED: db-push-constraints.sql failed."
+    RED "$OUT"
+    exit 1
+  fi
+
+  # Verify rather than trust, the same way each migration above is verified: a
+  # file that silently did nothing exits zero and looks identical from here.
+  if [ "$(probe "SELECT to_regclass('public.lead_dial_reservations_active_lead_key') IS NOT NULL")" != "t" ]; then
+    RED "REFUSED: the constraints file reported success but its index is absent."
+    RED "$OUT"
+    exit 1
+  fi
+  GRN "  applied prisma/sql/db-push-constraints.sql"
+fi
 
 GRN "migrations applied and verified"
 
@@ -321,7 +412,7 @@ STEP "3/5  Platform administrators"
 if [ "$SKIP_ADMINS" = "1" ]; then
   YEL "  --skip-admins: skipping provisioning AND the lockout check."
   YEL "  Only correct if platform admins already exist. Verify with:"
-  YEL "    $API platform:admins"
+  YEL "    psql \"\$DATABASE_URL\" -tAc 'select count(*) from platform_admins'"
 else
   if [ -z "${PLATFORM_ADMIN_EMAILS:-}" ]; then
     YEL "  PLATFORM_ADMIN_EMAILS is unset, so only joel.vasquez@outlook.com is in"
