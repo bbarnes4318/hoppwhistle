@@ -7,6 +7,8 @@ import { authorizationFromUser } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
+import { enforceReadOnlyPreview } from './read-only-preview.js';
+
 export interface AuthenticatedUser {
   /**
    * The agency this request acts as.
@@ -33,6 +35,17 @@ export interface AuthenticatedUser {
    */
   actingTenantId?: string | null;
   actingTenantName?: string | null;
+  /**
+   * The agency role this operator is previewing, or null. When set, `roles` is
+   * exactly `[previewRole]` -- the operator's own ADMIN/OWNER is REPLACED, not
+   * merged, or the preview would show them nothing new.
+   */
+  previewRole?: string | null;
+  /**
+   * True while a preview is active. Every non-GET request is then refused by the
+   * global hook in `middleware/read-only-preview.ts`.
+   */
+  isReadOnlyPreview?: boolean;
 }
 
 /**
@@ -133,16 +146,39 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
           : decoded.tenantId,
         userId: decoded.userId,
         email: decoded.email,
-        // Inside an agency, a platform operator carries that agency's
-        // administrator roles; in the cross-agency view they carry none. See
-        // ACTING_TENANT_ROLES for why.
-        roles: [...roles, ...platform.actingRoles.filter(r => !roles.includes(r))],
+        /*
+         * Inside an agency, a platform operator carries that agency's
+         * administrator roles; in the cross-agency view they carry none. See
+         * ACTING_TENANT_ROLES for why.
+         *
+         * While PREVIEWING a role the acting roles REPLACE the operator's own
+         * rather than merging with them. A merge is the bug that makes the
+         * whole feature pointless: the operator keeps their ADMIN/OWNER, every
+         * role check still passes, and the preview shows them exactly the
+         * screen they already had.
+         */
+        roles: platform.previewRole
+          ? [platform.previewRole]
+          : [...roles, ...platform.actingRoles.filter(r => !roles.includes(r))],
         buyerId,
         publisherId,
         isPlatformAdmin: platform.isPlatformAdmin,
         actingTenantId: platform.actingTenantId,
         actingTenantName: platform.actingTenantName,
+        previewRole: platform.previewRole,
+        isReadOnlyPreview: !!platform.previewRole,
       };
+
+      /*
+       * The read-only refusal, for the routes this middleware authenticates.
+       *
+       * The global hook in `read-only-preview.ts` covers /api/v1, where the
+       * principal is built at `onRequest`. Everything authenticated HERE --
+       * /api/auth/*, the admin aliases -- reaches a `preHandler`, which runs
+       * after every instance-level hook, so the hook saw no principal. One
+       * shared implementation, invoked the moment there is something to check.
+       */
+      if (enforceReadOnlyPreview(request, reply)) return;
     } else {
       // API-only token without userId
       request.user = {

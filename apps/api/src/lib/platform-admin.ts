@@ -59,6 +59,20 @@ import { getPrismaClient } from './prisma.js';
  */
 export const ACTING_TENANT_ROLES = ['ADMIN', 'OWNER'] as const;
 
+/**
+ * The roles a platform operator may PREVIEW an agency as.
+ *
+ * Narrow on purpose. A preview exists to answer "what does this person actually
+ * see?", and the two answers anybody asks for are the agency's principal and
+ * one of its agents. Anything wider would be a second role system.
+ */
+export const PREVIEW_ROLES = ['OWNER', 'AGENT'] as const;
+export type PreviewRole = (typeof PREVIEW_ROLES)[number];
+
+export function isPreviewRole(value: unknown): value is PreviewRole {
+  return typeof value === 'string' && (PREVIEW_ROLES as readonly string[]).includes(value);
+}
+
 /** What the authentication middleware needs to know about a principal. */
 export interface PlatformContext {
   isPlatformAdmin: boolean;
@@ -72,11 +86,26 @@ export interface PlatformContext {
   actingTenantName: string | null;
   enteredAt: Date | null;
   /**
-   * Roles to merge onto the principal: `ACTING_TENANT_ROLES` while inside an
-   * agency, empty otherwise. Empty in the cross-agency view is deliberate --
+   * Roles for the principal: `ACTING_TENANT_ROLES` while inside an agency,
+   * empty otherwise. Empty in the cross-agency view is deliberate --
    * "administrator of every agency at once" is not a state this system has.
+   *
+   * Normally these are MERGED onto the operator's own roles. While a preview is
+   * active they are exactly `[previewRole]` and the caller must REPLACE instead
+   * -- see `previewRole` below.
    */
   actingRoles: readonly string[];
+  /**
+   * The role this operator is previewing the agency as, or null.
+   *
+   * When set, `actingRoles` is exactly `[previewRole]` and every caller
+   * building a principal must REPLACE the operator's roles with it rather than
+   * merging. A merge leaves their own ADMIN/OWNER in place and the preview then
+   * shows them nothing they could not already see, which is the whole feature.
+   *
+   * It also makes the request read-only: see `middleware/read-only-preview.ts`.
+   */
+  previewRole: string | null;
 }
 
 export const NO_PLATFORM_CONTEXT: PlatformContext = {
@@ -85,6 +114,7 @@ export const NO_PLATFORM_CONTEXT: PlatformContext = {
   actingTenantName: null,
   enteredAt: null,
   actingRoles: [],
+  previewRole: null,
 };
 
 /**
@@ -106,6 +136,7 @@ export async function loadPlatformContext(userId: string): Promise<PlatformConte
             select: {
               tenantId: true,
               enteredAt: true,
+              previewRole: true,
               tenant: { select: { name: true, status: true } },
             },
           },
@@ -128,15 +159,22 @@ export async function loadPlatformContext(userId: string): Promise<PlatformConte
       actingTenantName: null,
       enteredAt: null,
       actingRoles: [],
+      previewRole: null,
     };
   }
+
+  // A preview narrows the principal to exactly one role. Only the two roles a
+  // preview is for are honoured -- a value that is neither is treated as no
+  // preview rather than as an unknown grant, so a bad row cannot widen access.
+  const previewRole = isPreviewRole(selection.previewRole) ? selection.previewRole : null;
 
   return {
     isPlatformAdmin: true,
     actingTenantId: selection.tenantId,
     actingTenantName: selection.tenant.name,
     enteredAt: selection.enteredAt,
-    actingRoles: ACTING_TENANT_ROLES,
+    actingRoles: previewRole ? [previewRole] : ACTING_TENANT_ROLES,
+    previewRole,
   };
 }
 
@@ -213,10 +251,13 @@ export async function enterActingTenant(
   }
 
   const enteredAt = new Date();
+  // `previewRole: null` on both paths. Entering an agency is the start of a
+  // visit, and a preview carried over from the last one would leave the
+  // operator read-only in a place they did not ask to preview.
   await prisma.platformActingTenant.upsert({
     where: { userId },
-    create: { userId, tenantId, enteredAt },
-    update: { tenantId, enteredAt },
+    create: { userId, tenantId, enteredAt, previewRole: null },
+    update: { tenantId, enteredAt, previewRole: null },
   });
 
   await writePlatformAudit({
@@ -236,6 +277,11 @@ export async function enterActingTenant(
  * Writes exactly one `platform.tenant.left` AuditLog entry, and only when there
  * was something to leave: calling this twice does not produce two rows, because
  * a second "left" with no matching "entered" is a lie about what happened.
+ *
+ * Deleting the row also clears any active `previewRole`, which is required
+ * rather than incidental: an operator left previewing an agent while outside
+ * every agency would be read-only across the whole platform view, with no
+ * control on screen to undo it.
  */
 export async function leaveActingTenant(
   userId: string,
@@ -257,6 +303,98 @@ export async function leaveActingTenant(
   });
 
   return { leftTenantId: existing.tenantId };
+}
+
+/**
+ * Preview the entered agency as one of its own roles, or stop previewing.
+ *
+ * Writes `previewRole` onto the existing selection row and one AuditLog entry:
+ * `platform.preview.entered` with the role, or `platform.preview.left` when
+ * clearing. Like the acting-tenant switch it takes effect on the NEXT request --
+ * the principal for THIS one was built before the row changed -- so the caller
+ * has to reload rather than pretend the current page has moved.
+ *
+ * Refused with 409 when no agency is selected. A role preview outside an agency
+ * is meaningless: there is no nav to narrow and no data to narrow it to, and a
+ * row to hang the preview on does not exist.
+ */
+export async function setPreviewRole(
+  userId: string,
+  previewRole: PreviewRole | null,
+  context: OperatorContext = {}
+): Promise<{ previewRole: string | null; tenantId: string; tenantName: string | null }> {
+  const prisma = getPrismaClient();
+
+  if (!(await isPlatformAdmin(userId))) {
+    throw new PlatformSwitchError(
+      'FORBIDDEN',
+      'Only NetEnroll platform staff can preview an agency role',
+      403
+    );
+  }
+
+  const selection = await prisma.platformActingTenant.findUnique({
+    where: { userId },
+    select: { tenantId: true, previewRole: true, tenant: { select: { name: true } } },
+  });
+
+  if (!selection) {
+    throw new PlatformSwitchError(
+      'NO_ACTING_TENANT',
+      'Enter an agency before previewing one of its roles — a role preview outside an agency has nothing to narrow',
+      409
+    );
+  }
+
+  await prisma.platformActingTenant.update({
+    where: { userId },
+    data: { previewRole },
+  });
+
+  await writePreviewAudit({
+    tenantId: selection.tenantId,
+    userId,
+    previewRole,
+    context,
+  });
+
+  return {
+    previewRole,
+    tenantId: selection.tenantId,
+    tenantName: selection.tenant.name,
+  };
+}
+
+/**
+ * The audit row for entering or leaving a preview.
+ *
+ * Separate from `writePlatformAudit` because it names a different resource and
+ * carries the role in its metadata. Same guarantee: `auditLog()` no longer
+ * swallows, so a preview that could not be recorded is a preview that does not
+ * happen.
+ */
+async function writePreviewAudit(params: {
+  tenantId: string;
+  userId: string;
+  previewRole: string | null;
+  context: OperatorContext;
+}): Promise<void> {
+  await auditLog({
+    tenantId: params.tenantId,
+    userId: params.userId,
+    action: params.previewRole ? 'platform.preview.entered' : 'platform.preview.left',
+    entityType: 'Tenant',
+    entityId: params.tenantId,
+    resource: '/api/v1/platform/acting-tenant/preview',
+    method: 'POST',
+    // `changes` is this table's free-form column; the role previewed is the one
+    // thing about the event that is not already in the action or the tenant.
+    changes: { previewRole: params.previewRole },
+    ipAddress: params.context.ipAddress,
+    userAgent: params.context.userAgent,
+    requestId: params.context.requestId,
+    success: true,
+  });
 }
 
 /**

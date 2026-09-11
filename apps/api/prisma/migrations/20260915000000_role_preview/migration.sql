@@ -1,0 +1,15 @@
+-- Read-only role preview, for NetEnroll staff inside an agency.
+--
+-- A platform operator entering an agency carries ACTING_TENANT_ROLES (ADMIN and
+-- OWNER) and can write. That is the right default for support work and the wrong
+-- one for answering "what does an agency owner actually see?", because the
+-- operator's own administrator roles stay on the principal and the nav they are
+-- shown is the nav they already had.
+--
+-- `previewRole` narrows the principal to EXACTLY that one role for the duration,
+-- and every non-GET request is refused while it is set. It lives on this row
+-- rather than on `platform_admins` because previewing a role outside an agency
+-- is meaningless: clearing the acting tenant deletes the row and the preview
+-- with it, which is what stops an operator being left read-only across the
+-- platform view with no control on screen to fix it.
+ALTER TABLE "platform_acting_tenants" ADD COLUMN IF NOT EXISTS "previewRole" TEXT;

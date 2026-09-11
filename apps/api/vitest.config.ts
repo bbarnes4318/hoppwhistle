@@ -17,6 +17,13 @@ const DATABASE_BACKED = [
   '**/src/__tests__/platform-admin.test.ts',
   '**/src/__tests__/rating-engine.test.ts',
   '**/src/__tests__/settlement.test.ts',
+  // Truncates `tenants`, `roles` and `insurance_carrier_applications` to seed
+  // an agency, two agents and a platform operator. Left off this list it ran
+  // on the default pool beside settlement.test.ts and the two deleted each
+  // other's fixtures: nine failures reported as `users_tenantId_fkey` and
+  // `user_roles_roleId_fkey` violations, which name Prisma rather than the
+  // race that caused them.
+  '**/src/__tests__/agent-entry.test.ts',
   '**/src/__tests__/delivery-gating-paths.test.ts',
   '**/src/__tests__/settlement-cli-flags.test.ts',
   '**/src/__tests__/portal.test.ts',
@@ -24,6 +31,10 @@ const DATABASE_BACKED = [
   '**/src/__tests__/api-response-contract.test.ts',
   '**/src/__tests__/no-acting-tenant-audit.test.ts',
   '**/src/__tests__/platform-capability-closure.test.ts',
+  // Truncates `tenants`, `roles`, `calls` and `audit_logs` to seed one agency,
+  // its owner and agent, and a platform operator. Beside any other suite on the
+  // default pool the two would delete each other's fixtures.
+  '**/src/__tests__/role-preview.test.ts',
   '**/src/__tests__/publisher-portal-access.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',

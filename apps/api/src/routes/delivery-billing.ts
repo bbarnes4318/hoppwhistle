@@ -45,6 +45,16 @@
  * `GET /api/v1/delivery/me` returns an agent's calls, applications and closing
  * percentage against the agency average, and loads no rate, balance, overrun or
  * charge at all. That is a property of the query, not of the rendering.
+ *
+ * ── And every other agency route here is the principal's ─────────────────────
+ *
+ * Everything on `/api/v1/delivery/*` except `/me` now carries
+ * `requireAgencyPrincipal`. These routes were `[authenticate]` and nothing else,
+ * which made an agency's rate, balance, overrun, projected charge and full
+ * settlement history readable by any AGENT holding a token in the tenant -- and
+ * made the mandate endpoints writable by one, so an agent could attach the bank
+ * account the nightly ACH debit comes from. `/me` is the one exception because
+ * it is the agent's own view and has no money on it.
  */
 
 import {
@@ -55,7 +65,7 @@ import {
 } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
-import { requirePlatformAdmin } from '../lib/platform-context.js';
+import { requireAgencyPrincipal, requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
@@ -113,7 +123,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * what is left on the block, the overrun and what it will cost tonight, the
    * distance to the ceiling, and the projected charge at settlement.
    */
-  fastify.get('/api/v1/delivery/today', { preHandler: [authenticate] }, async (request, reply) => {
+  fastify.get('/api/v1/delivery/today', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 
@@ -128,7 +138,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.get<{ Querystring: { day?: string } }>(
     '/api/v1/delivery/agents',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -183,7 +193,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.get<{ Querystring: { limit?: string } }>(
     '/api/v1/delivery/settlements',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -219,7 +229,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.get<{ Params: { settlementId: string } }>(
     '/api/v1/delivery/settlements/:settlementId/derivation',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -253,7 +263,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.get<{ Querystring: { from?: string; to?: string } }>(
     '/api/v1/delivery/settlements.csv',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -301,7 +311,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.get<{ Querystring: { limit?: string } }>(
     '/api/v1/delivery/ledger',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -344,7 +354,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * Whether this agency has a usable ACH mandate. No mandate, no delivery, so
    * an agency has to be able to see the state of its own.
    */
-  fastify.get('/api/v1/delivery/mandate', { preHandler: [authenticate] }, async (request, reply) => {
+  fastify.get('/api/v1/delivery/mandate', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 
@@ -393,7 +403,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.post(
     '/api/v1/delivery/card/setup-intent',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -440,7 +450,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
 
   fastify.post<{ Body: { setupIntentId?: string } }>(
     '/api/v1/delivery/card/confirm',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -525,7 +535,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.post(
     '/api/v1/delivery/mandate/setup-intent',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -583,7 +593,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    */
   fastify.post<{ Body: { setupIntentId?: string } }>(
     '/api/v1/delivery/mandate/confirm',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;

@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 
 import { clearSessionToken } from '@/lib/session-token';
 
+import { usePlatformContext } from './use-platform-context';
+
 /**
  * The signed-in user, fetched once for the whole tree.
  *
@@ -49,6 +51,20 @@ interface UserData {
   position?: string | null;
   defaultScript?: string | null;
   customScripts?: Record<string, string> | null;
+  /**
+   * Platform state, from `/api/auth/me`.
+   *
+   * `roles` above are the EFFECTIVE roles: for NetEnroll staff inside an agency
+   * that is the agency's administrator roles, and under a role preview it is
+   * exactly the previewed role. Which is why `isPlatformAdmin` has to travel
+   * beside them — it cannot be read off the role list any more, and the nav
+   * choice depends on it.
+   */
+  isPlatformAdmin?: boolean;
+  actingTenantId?: string | null;
+  actingTenantName?: string | null;
+  previewRole?: string | null;
+  isReadOnlyPreview?: boolean;
 }
 
 interface UseAuthReturn {
@@ -66,6 +82,23 @@ interface UseAuthReturn {
   isAgentOnly: boolean;
   isReadonlyOnly: boolean;
   hasFullAccess: boolean;
+  /**
+   * NetEnroll staff. Checked BEFORE `hasFullAccess` wherever the two could both
+   * be true — staff inside an agency carry its ADMIN and OWNER, so an order that
+   * tested `hasFullAccess` first would hand them the agency's nav. See
+   * `components/layout/sidebar.tsx`.
+   */
+  isPlatformAdmin: boolean;
+  /**
+   * This session is a platform operator previewing an agency as one of its own
+   * roles, and the server refuses every write. Save, submit and delete controls
+   * render disabled and say so, which is how the operator learns it from the UI
+   * rather than from a 403.
+   *
+   * Advisory ONLY. The server's global hook is the guarantee; this is so the
+   * screen does not lie about what will happen.
+   */
+  isReadOnlyPreview: boolean;
   isNewUser: boolean;
   buyerId: string | null;
   publisherId: string | null;
@@ -136,6 +169,11 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         position: rawUser.position,
         defaultScript: rawUser.defaultScript,
         customScripts: rawUser.customScripts,
+        isPlatformAdmin: rawUser.isPlatformAdmin === true,
+        actingTenantId: rawUser.actingTenantId ?? null,
+        actingTenantName: rawUser.actingTenantName ?? null,
+        previewRole: rawUser.previewRole ?? null,
+        isReadOnlyPreview: rawUser.isReadOnlyPreview === true,
       });
       setError(null);
     } catch (err) {
@@ -173,6 +211,20 @@ const NO_SESSION: AuthSession = {
 export function useAuth(): UseAuthReturn {
   const { user, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
 
+  /*
+   * The platform half of the answer, from the one fetch that already asks for it.
+   *
+   * `/api/auth/me` reports both flags too, and either source is correct. The
+   * platform context is preferred for the read-only flag because it is the state
+   * the preview switcher and the banner render from, and a Save button disabled
+   * from one source while the banner above it is drawn from another is exactly
+   * the kind of skew this codebase has paid for before.
+   *
+   * Outside the provider it degrades to "not staff, not previewing", which is
+   * what an agency user's context looks like anyway.
+   */
+  const platform = usePlatformContext();
+
   const userRoles = user?.roles || [];
 
   // Role checks
@@ -185,6 +237,11 @@ export function useAuth(): UseAuthReturn {
 
   const isAdminOrOwner = isAdmin || isOwner;
   const hasFullAccess = isAdminOrOwner;
+
+  // Either source answers; `/api/auth/me` is preferred for the capability
+  // because it arrives with the role list it has to be read alongside.
+  const isPlatformAdmin = user?.isPlatformAdmin === true || platform.isPlatformAdmin;
+  const isReadOnlyPreview = platform.readOnly || user?.isReadOnlyPreview === true;
 
   const isBuyerOnly = isBuyer && !hasFullAccess;
   const isPublisherOnly = isPublisher && !hasFullAccess;
@@ -329,6 +386,8 @@ export function useAuth(): UseAuthReturn {
     isAgentOnly,
     isReadonlyOnly,
     hasFullAccess,
+    isPlatformAdmin,
+    isReadOnlyPreview,
     isNewUser,
     buyerId,
     publisherId,

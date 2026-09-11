@@ -13,6 +13,7 @@ import { initTracing, shutdownTracing } from './lib/tracing.js';
 import { registerApiV1Auth } from './middleware/api-v1-auth.js';
 import { registerAuth } from './middleware/auth.js';
 import { registerLoggingMiddleware } from './middleware/logging.js';
+import { registerReadOnlyPreview } from './middleware/read-only-preview.js';
 import { registerAdminBillingRoutes } from './routes/admin-billing.js';
 import { registerDemoEventRoutes } from './routes/demo-events.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -76,6 +77,18 @@ async function buildServer() {
   // Authentication for every /api/v1/* route. Lives in its own module so the
   // security suite can register the real hook rather than a copy of it.
   registerApiV1Auth(server);
+
+  /*
+   * The read-only guarantee for a role preview, registered immediately after
+   * authentication and ahead of every route plugin below.
+   *
+   * It refuses every non-GET request while a platform operator is previewing an
+   * agency as one of its own roles, with three exemptions for the controls that
+   * end the preview. It is global on purpose: a per-route guard is a promise
+   * about the handlers somebody remembered, and this surface gains handlers
+   * every phase. See middleware/read-only-preview.ts.
+   */
+  registerReadOnlyPreview(server);
 
   /*
    * Rate limiting, globally.
@@ -206,6 +219,12 @@ async function buildServer() {
   // opening purchase and settlement run.
   const { registerDeliveryBillingRoutes } = await import('./routes/delivery-billing.js');
   await server.register(registerDeliveryBillingRoutes);
+
+  // Agent-entered applications: the carrier-agnostic path into the closing
+  // percentage, beside the American Amicable RPA rather than through it, plus
+  // the agency's reconciliation reads and the platform-only void.
+  const { registerApplicationRoutes } = await import('./routes/applications.js');
+  await server.register(registerApplicationRoutes);
 
   // Internal onboarding: one platform-admin screen from nothing to enrolled.
   const { registerOnboardingRoutes } = await import('./routes/onboarding.js');

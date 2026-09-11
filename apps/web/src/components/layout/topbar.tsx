@@ -6,6 +6,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import { ErrorBoundary } from '@/components/error-boundary';
+import {
+  RolePreviewBanner,
+  RolePreviewSwitcher,
+} from '@/components/platform/role-preview-switcher';
 import { TenantSwitcher } from '@/components/platform/tenant-switcher';
 import {
   DropdownMenu,
@@ -98,6 +102,26 @@ export function Topbar() {
           <TenantSwitcher />
         </ErrorBoundary>
 
+        {/* Beside the agency switcher, and only for staff who are inside an
+            agency: which ROLE this agency is being looked at as. Same boundary
+            treatment and the same reason — this control sits in the layout, so
+            an uncaught error in it would unmount the whole app. */}
+        <ErrorBoundary
+          label="The role preview"
+          fallback={() => (
+            <span
+              role="alert"
+              title="The role preview could not be loaded. Everything else on this page still works."
+              className="flex items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Role preview unavailable
+            </span>
+          )}
+        >
+          <RolePreviewSwitcher />
+        </ErrorBoundary>
+
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -169,6 +193,16 @@ export function Topbar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      {/* Immediately below the top bar, full width, on every page, for as long as
+          a preview lasts. Outside the <header> so it is a strip across the page
+          rather than another chip in a crowded row — an operator must not be
+          able to mistake a preview for the real thing, and must not have to hunt
+          for the way out. Rendered inside a boundary for the same reason as the
+          controls above. */}
+      <ErrorBoundary label="The role-preview banner" fallback={() => null}>
+        <RolePreviewBanner />
+      </ErrorBoundary>
 
       <CommandPalette open={open} onOpenChange={setOpen} />
     </>

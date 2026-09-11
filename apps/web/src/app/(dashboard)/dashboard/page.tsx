@@ -175,6 +175,20 @@ export default function DashboardPage() {
       router.replace('/publisher/dashboard');
     } else if (isBuyerOnly) {
       router.replace('/buyer/dashboard');
+    } else if (isAgentOnly) {
+      /*
+       * An agent does not belong here.
+       *
+       * `isAgentOnly` was destructured and listed in this array and then never
+       * branched on, so publishers and buyers were sent to their own portals and
+       * an agent landed on the tenant-wide admin dashboard: every call the
+       * agency took, every application it wrote, the whole floor's numbers. The
+       * omission read as deliberate because the dependency was there.
+       *
+       * /call-center is where an agent works, and it is the same destination
+       * `defaultDashboardPath` already names for them.
+       */
+      router.replace('/call-center');
     }
   }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, router]);
 

@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
+import { useReadOnlyPreview } from '@/hooks/use-read-only-preview';
 import { apiClient } from '@/lib/api';
 
 interface TimeEntry {
@@ -67,6 +68,9 @@ function PayrollPage() {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // A read-only role preview cannot clock hours or save bank details. Disabled
+  // with a reason, so the operator is not told by a 403. See the hook.
+  const { readOnly, disabledProps: readOnlyProps } = useReadOnlyPreview();
 
   // New entry form
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
@@ -291,7 +295,12 @@ function PayrollPage() {
                   />
                 </div>
               </div>
-              <Button onClick={() => void handleLogHours()} disabled={saving} className="mt-4">
+              <Button
+                onClick={() => void handleLogHours()}
+                disabled={saving || readOnly}
+                title={readOnlyProps.title}
+                className="mt-4"
+              >
                 {saving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -428,7 +437,12 @@ function PayrollPage() {
                   </CardDescription>
                 </div>
                 {!editingBanking && (
-                  <Button variant="outline" onClick={() => setEditingBanking(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingBanking(true)}
+                    disabled={readOnly}
+                    title={readOnlyProps.title}
+                  >
                     <Edit2 className="mr-2 h-4 w-4" />
                     {banking?.hasBankingInfo ? 'Update' : 'Add'} Banking Info
                   </Button>
@@ -469,7 +483,11 @@ function PayrollPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={() => void handleSaveBanking()} disabled={saving}>
+                    <Button
+                      onClick={() => void handleSaveBanking()}
+                      disabled={saving || readOnly}
+                      title={readOnlyProps.title}
+                    >
                       {saving ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (

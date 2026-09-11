@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight, Download, Loader2, Printer, Receipt } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Ledger, SectionRule, count, pct } from '@/components/delivery/ledger';
 import { StatusChip } from '@/components/domain/status-chip';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
@@ -191,7 +192,7 @@ function settlementMode(status: string): { label: string; detail: string } {
  * the agency panel never mounts for an operator with no agency, so it never
  * fires the agency-scoped request that would be refused 409.
  */
-export default function SettlementsPage(): JSX.Element {
+function SettlementsPage(): JSX.Element {
   const platform = usePlatformContext();
 
   if (platform.loading) {
@@ -692,5 +693,24 @@ function Derivation({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * ADMIN and OWNER only.
+ *
+ * Every settled Delivery Day and what each one cost. Money, and therefore the
+ * principal's: `/api/v1/delivery/settlements*` refuses an AGENT (see
+ * `requireAgencyPrincipal`), and this guard is so an agent who reaches the URL is
+ * sent somewhere useful instead of watching a page fill with 403s.
+ *
+ * A platform operator inside an agency carries both roles and is unaffected --
+ * except while previewing as AGENT, where being turned away is the point.
+ */
+export default function GuardedSettlementsPage(): JSX.Element {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <SettlementsPage />
+    </RoleGuard>
   );
 }
