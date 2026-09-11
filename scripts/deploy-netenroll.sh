@@ -93,6 +93,11 @@ REQUIRED_MIGRATIONS="
 20260907000000_add_platform_admin
 20260907010000_audit_log_nullable_tenant
 20260908000000_add_rating_engine
+20260909000000_platform_activation_grants
+20260910000000_add_billing_ledger_and_settlement
+20260911000000_add_billing_enrolment
+20260912000000_add_agent_state_events
+20260913000000_add_rate_offset_disputes_and_onboarding
 20260914000000_agent_entered_applications
 20260915000000_role_preview
 "
@@ -240,6 +245,41 @@ migration_applied() {
                 AND column_name = 'tenantId'), false)" ;;
     *_add_rating_engine)
       echo "SELECT to_regclass('public.rate_curve_versions') IS NOT NULL" ;;
+    *_platform_activation_grants)
+      # Last effect: tenant_activation_grants."tenantId" loses NOT NULL. The enum
+      # value added earlier in the file is not the probe -- it lands first, so it
+      # would answer true for a file that stopped halfway.
+      echo "SELECT COALESCE((SELECT is_nullable = 'YES' FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'tenant_activation_grants'
+                AND column_name = 'tenantId'), false)" ;;
+    *_add_billing_ledger_and_settlement)
+      # Last effect: the append-only trigger on settlement_payment_attempts. Probing
+      # a table would answer true for a file that created six tables and no triggers,
+      # and the triggers are what make the ledger append-only in the database rather
+      # than by convention.
+      echo "SELECT COALESCE((SELECT true FROM pg_trigger t
+              JOIN pg_class c ON c.oid = t.tgrelid
+              WHERE c.relname = 'settlement_payment_attempts'
+                AND t.tgname = 'settlement_payment_attempts_append_only'
+                AND NOT t.tgisinternal), false)" ;;
+    *_add_billing_enrolment)
+      # Last effect: DRY_RUN_CLOSEOUT on CreditLedgerEntryType. The ALTER TYPE
+      # statements sit outside the transaction at the end of the file by design.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type ty ON ty.oid = e.enumtypid
+              WHERE ty.typname = 'CreditLedgerEntryType'
+                AND e.enumlabel = 'DRY_RUN_CLOSEOUT'), false)" ;;
+    *_add_agent_state_events)
+      # Last effect: the userId foreign key, added in a guarded DO block after the
+      # table and both indexes.
+      echo "SELECT COALESCE((SELECT true FROM pg_constraint
+              WHERE conname = 'agent_state_events_userId_fkey'), false)" ;;
+    *_add_rate_offset_disputes_and_onboarding)
+      # Last effect: the settlementId foreign key on settlement_disputes, the second
+      # of the two FKs in the file's final DO block.
+      echo "SELECT COALESCE((SELECT true FROM pg_constraint
+              WHERE conname = 'settlement_disputes_settlementId_fkey'), false)" ;;
     *_agent_entered_applications)
       # Adds columns to an existing table, so table presence proves nothing --
       # `insurance_carrier_applications` has been there since the RPA shipped.
