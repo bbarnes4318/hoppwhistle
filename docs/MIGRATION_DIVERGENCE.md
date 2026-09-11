@@ -65,7 +65,83 @@ January largely arrived through `db push` instead of a migration.
   `db push` today, which means no reviewable DDL and no rollback.
 - **Nothing verifies migrations.** Since CI uses `db push`, a broken migration
   can be merged and will not be noticed until someone provisions a database.
-- Production and CI are unaffected right now.
+- ~~Production and CI are unaffected right now.~~ **Not true any more.** See
+  below.
+
+## Production IS affected, and here is the command that says how much
+
+Measured 2026-09-11. The line above has been overtaken.
+
+`scripts/deploy-netenroll.sh` is now the only path by which a migration reaches
+the production database, and it applies the files named in a **hand-maintained
+list**:
+
+```sh
+REQUIRED_MIGRATIONS="
+20260906000000_add_tenant_activation_grants
+...
+```
+
+A migration in `prisma/migrations` and not in that list is applied nowhere. The
+deploy runs to completion, reports success, and starts an API whose queries
+name columns that do not exist. `prisma/migrations` holds 31 dated migrations;
+six were listed. Three consequences found the hard way, each when something
+broke rather than when it was introduced:
+
+| found as | actually |
+| --- | --- |
+| `/api/v1/live/strip` 500, `P2022` | `insurance_carrier_applications.voidedAt` absent |
+| `relation "lead_dial_reservations" does not exist`, mid-deploy | the whole table absent |
+| read by eye, in a second pass over the script | five billing migrations unlisted |
+
+So the drift is no longer only a new-environment problem. It is a live one, and
+until now the only way to enumerate it was to wait for the next 500.
+
+### `scripts/schema-drift.sh`
+
+Answers it in one run, read-only, against any database:
+
+```bash
+./scripts/schema-drift.sh                    # DATABASE_URL from apps/api/.env
+./scripts/schema-drift.sh --url "postgresql://…"
+./scripts/schema-drift.sh --extras           # also: in the database, not in the schema
+```
+
+It parses `schema.prisma` and reports what the database is missing — tables,
+columns, enum types, and **enum values**, which is the case that looks like
+nothing: the column and the type both exist and the insert still fails on an
+unknown label. For each finding it names the migration file that creates it and
+whether that file is registered with the deploy, because that is the fix:
+
+```
+  MISSING TABLES
+
+    lead_dial_reservations        created by 20260803000000_add_lead_dial_reservations  NOT REGISTERED
+
+  MISSING COLUMNS
+
+    insurance_carrier_applications.voidedAt   added by 20260914000000_agent_entered_applications  (registered)
+```
+
+Exit status is 0 in sync, 1 drift, 2 could not tell — so it can gate a deploy
+later rather than being run only when something is already wrong.
+
+**It uses psql and awk, not the Prisma CLI.** Deliberately: the production host
+has no `node_modules` — the API runs from an image carrying its own — and a
+deploy has already died at `sh: 1: prisma: not found` with the migrations
+applied and nothing shipped.
+
+**It writes nothing.** Every statement is a SELECT and it creates no table, not
+even a temporary one; expected names travel in as `VALUES` lists. Verified by
+running it against a database with `default_transaction_read_only = on`, where
+`CREATE TABLE` is refused: the script completes and reports correctly.
+
+Validated against a database built by `prisma db push` from this schema — which
+by construction has everything — where it reports **in sync** across 103 tables,
+1,420 columns, 82 enums and 332 enum values. A parser that over-reports would
+fail that immediately. Then, against a copy with a table, two columns, an enum
+type and five enum values removed, it found each one, attributed each to the
+right migration, and got the registered/unregistered status right in every case.
 
 ## Remediation sketch
 
