@@ -429,6 +429,20 @@ export function useAuth(): UseAuthReturn {
     (!isPublisherOnly || !!user?.publisherAccessToRecordings) &&
     (!isBuyerOnly || !!user?.buyerAccessToRecordings);
 
+  /*
+   * Read at ONE call site: the READONLY-only branch of `sidebar.tsx`, which is
+   * the only nav that consults it -- every other role returns from an earlier
+   * branch. So it decides exactly one thing: whether a READONLY user is offered
+   * the Reports link. The answer has to be no -- `/reports` guards on
+   * ADMIN/OWNER/ANALYST and would bounce them, and all three endpoints the page
+   * fetches answer READONLY 403.
+   *
+   * That agreement is not maintained here any more. It is maintained by the
+   * server's table, which no longer grants READONLY `reports:read` -- see the
+   * note against READONLY in `apps/api/src/middleware/rbac.ts`. This line
+   * renders the server's answer; `app/__tests__/readonly-reports-access.test.ts`
+   * pins that the answer and the page guard still say the same thing.
+   */
   const canViewReports = can('reports:read');
   const canViewBilling = can('billing:read');
   const canViewPayouts = can('billing:read') || isPublisher;

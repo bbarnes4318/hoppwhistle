@@ -150,14 +150,29 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'recordings:read',
   ],
   BUYER: ['calls:read', 'calls:write', 'recordings:read', 'campaigns:read'],
-  READONLY: [
-    'calls:read',
-    'recordings:read',
-    'campaigns:read',
-    'flows:read',
-    'numbers:read',
-    'reports:read',
-  ],
+  /**
+   * A read-only observer. No `reports:read`, deliberately.
+   *
+   * It was listed here, and no route has ever read it: grep `reports:read`
+   * across `apps/api/src` and every hit is this file declaring it. What guards
+   * the three endpoints `/reports` fetches is a role test, in `routes/index.ts`:
+   *
+   *   publisher-revenue      ADMIN/OWNER, or PUBLISHER for their own rows
+   *   buyer-costs            ADMIN/OWNER, or BUYER for their own rows
+   *   campaign-profitability ADMIN/OWNER only
+   *
+   * Each answers 403 to anyone else, the `/export.csv` pair alongside them too.
+   * The proof that `reports:read` was never the gate on revenue and cost data
+   * is ANALYST: it holds the permission and is refused by all three anyway.
+   *
+   * So the entry granted READONLY nothing while it was only a declaration. It
+   * stopped being only a declaration when `/api/auth/me` began sending this
+   * table to the browser and `use-auth` began rendering from it: a stale grant
+   * here now puts a Reports link in a READONLY user's sidebar, pointing at a
+   * page whose own guard refuses them. Removing it makes the table say what
+   * the routes have always done.
+   */
+  READONLY: ['calls:read', 'recordings:read', 'campaigns:read', 'flows:read', 'numbers:read'],
   /**
    * One agent on a call floor. Derived from the work, not from ADMIN.
    *
