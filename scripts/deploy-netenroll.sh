@@ -455,8 +455,9 @@ if [ "$SKIP_ADMINS" = "1" ]; then
   YEL "    psql \"\$DATABASE_URL\" -tAc 'select count(*) from platform_admins'"
 else
   if [ -z "${PLATFORM_ADMIN_EMAILS:-}" ]; then
-    YEL "  PLATFORM_ADMIN_EMAILS is unset, so only joel.vasquez@outlook.com is in"
-    YEL "  the launch set. Set it to your own address and re-run to include it."
+    YEL "  PLATFORM_ADMIN_EMAILS is unset, so the launch set is only the addresses"
+    YEL "  named in apps/api/src/cli/platform-admins.ts (joel.vasquez@outlook.com,"
+    YEL "  hallken9@gmail.com). Set it to your own address and re-run to include it."
   fi
   run $API platform:admins -- --sync
 
