@@ -632,7 +632,7 @@ repository*; they have nothing to do with reaching your server.
 
 | Name | Value |
 | --- | --- |
-| `PLATFORM_ADMIN_EMAILS` | comma-separated NetEnroll staff addresses. Without it only `joel.vasquez@outlook.com` is provisioned. |
+| `PLATFORM_ADMIN_EMAILS` | comma-separated NetEnroll staff addresses. Without it only the addresses named in `platform-admins.ts` (`joel.vasquez@outlook.com`, `hallken9@gmail.com`) are provisioned. |
 | `DEPLOY_PATH` | only if the checkout is not at `/opt/hopwhistle` |
 
 Generate the keypair on a machine you trust, never in CI:
