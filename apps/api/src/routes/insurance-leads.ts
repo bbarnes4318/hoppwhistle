@@ -11,6 +11,12 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import {
+  permits,
+  resolveStateAuthority,
+  sendStateRefusal,
+  type StateAuthority,
+} from '../lib/licensed-states.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 
@@ -25,6 +31,18 @@ import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
  */
 function getTenantId(request: FastifyRequest): string | null {
   return getActingTenantId(request);
+}
+
+/**
+ * May this authority read or write this lead?
+ *
+ * Reads the lead's own `state` column, which is the only authoritative answer
+ * -- not a state the request supplied, and not the state of the list the lead
+ * arrived in. A lead whose state is null or unreadable is refused to a
+ * restricted agent, because nothing shows it is inside their licence.
+ */
+function permitsLead(authority: StateAuthority, lead: unknown): boolean {
+  return permits(authority, (lead as { state?: unknown } | null)?.state);
 }
 
 interface DeliverySelector {
@@ -476,6 +494,17 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const q = request.query;
     const wantsCsv = q.format?.toLowerCase() === 'csv';
 
+    // Licensed-state narrowing for an AGENT, resolved once and applied to both
+    // reads below. `undefined` for everybody else leaves the query byte-for-byte
+    // what it was, so no existing caller changes behaviour.
+    //
+    // An agent with no licence gets `[]`, which matches no rows, rather than an
+    // early refusal: this is a grid, the honest rendering of "you may work
+    // nothing here" is an empty grid, and a 403 on page load would strand them
+    // on a screen with no way to see why.
+    const stateAuthority = await resolveStateAuthority(request, tenantId);
+    const licensedStates = stateAuthority.restricted ? [...stateAuthority.licensed] : undefined;
+
     // An export reads the FULL record, not the grid's narrow projection. The
     // grid selects the dozen columns it renders; exporting from that read is
     // what dropped the TrustedForm certificate and the rejection reason.
@@ -496,6 +525,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         leadStage: q.leadStage,
         followUp: q.followUp,
         listId: q.listId,
+        licensedStates,
       });
 
       return reply
@@ -523,6 +553,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leadStage: q.leadStage,
       followUp: q.followUp,
       listId: q.listId,
+      licensedStates,
     });
 
     return result;
@@ -699,6 +730,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
     }
 
+    // The lead is already known to be this tenant's -- `getLeadById` scopes by
+    // tenantId -- so the only question left is the licence, and 403 is the
+    // honest answer. A cross-tenant id never reaches this line; it left as the
+    // 404 above.
+    const stateAuthority = await resolveStateAuthority(request, tenantId);
+    if (!permitsLead(stateAuthority, lead)) {
+      sendStateRefusal(reply);
+      return;
+    }
+
     return lead;
   });
 
@@ -712,6 +753,40 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const tenantId = getTenantId(request);
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
+    }
+
+    // Two checks, and both are required.
+    //
+    // The lead's CURRENT state decides whether this agent may touch the record
+    // at all. The state in the BODY, when there is one, decides whether they may
+    // leave it somewhere they are licensed -- without that second check,
+    // `PATCH { state: 'TN' }` on a Florida lead is a one-request way for a
+    // Tennessee-only agent to pull any of the agency's leads into their own
+    // licence and work it.
+    const stateAuthority = await resolveStateAuthority(request, tenantId);
+
+    if (stateAuthority.restricted) {
+      const { getLeadById } = await import('../services/insurance-lead-service.js');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const existing = await getLeadById(tenantId, request.params.id);
+
+      if (!existing) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+      }
+
+      if (!permitsLead(stateAuthority, existing)) {
+        sendStateRefusal(reply);
+        return;
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(request.body, 'state') &&
+        !permits(stateAuthority, request.body.state)
+      ) {
+        sendStateRefusal(reply);
+        return;
+      }
     }
 
     const { updateLead } = await import('../services/insurance-lead-service.js');

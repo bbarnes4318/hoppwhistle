@@ -54,6 +54,19 @@ export interface LeadFilters {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  /**
+   * Narrow the page to these states. SERVER-DERIVED ONLY.
+   *
+   * Set from `lib/licensed-states.ts` when the caller is a state-restricted
+   * AGENT, and from nowhere else -- there is no `state` query parameter on
+   * `GET /api/v1/insurance-leads`, and adding one that landed here would let a
+   * browser widen its own page. The route builds this object field by field,
+   * never by spreading `request.query`, which is what keeps that true.
+   *
+   * An empty array is a real value meaning "no states", not "unset": an agent
+   * with no licence sees nothing.
+   */
+  licensedStates?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +465,12 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   const where: Prisma.InsuranceLeadWhereInput = { tenantId };
 
   if (filters.vertical) where.vertical = filters.vertical;
+
+  // Licensed-state narrowing. `!== undefined` rather than a truthiness test:
+  // `[]` must reach Prisma as `state: { in: [] }` and match nothing.
+  if (filters.licensedStates !== undefined) {
+    where.state = { in: filters.licensedStates };
+  }
 
   // Search across name, phone, email, zip, city, state
   if (filters.search) {

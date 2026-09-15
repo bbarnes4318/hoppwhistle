@@ -9,6 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { enforceLicensedState } from '../lib/licensed-states.js';
 import { getActingTenantId } from '../lib/tenant-context.js';
 
 const prisma = new PrismaClient();
@@ -275,6 +276,22 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         });
       }
       const normalizedPhone = rawPhone.slice(-10);
+
+      // `body.state` is the browser's word for where this prospect lives, and
+      // this endpoint writes it to `ProspectIntake` and -- for a manual CRM
+      // entry -- on into `InsuranceLead` via `ingestLead`. It is the one place
+      // in this change where the state under test comes from the request, so it
+      // is validated against the agent's licence rather than trusted: an agent
+      // cannot create a record in a state they may not work, then read it back
+      // through the CRM because the record now says so.
+      //
+      // An absent or unreadable state is refused for a restricted agent. That
+      // is the default-deny rule and not an oversight: an intake with no state
+      // is a record no licence can cover, and letting it through would make
+      // "leave the dropdown alone" the way past this check.
+      if (!(await enforceLicensedState(request, reply, tenantId, body.state))) {
+        return;
+      }
 
       try {
         const forwardedFor = request.headers['x-forwarded-for'];

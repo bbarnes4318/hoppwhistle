@@ -3,6 +3,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
+import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import {
   getActingTenantId,
@@ -4597,6 +4598,10 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
             status: true,
             createdAt: true,
             lastLoginAt: true,
+            // The licence list lives here. Without it on this read there is no
+            // way to see what was granted -- only the PATCH response echoed it,
+            // which means the screen that sets it could not show it.
+            metadata: true,
             buyerId: true,
             buyer: {
               select: {
@@ -4632,6 +4637,11 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           buyerCode: u.buyer?.code || null,
           invitedAt: u.createdAt.toISOString(),
           lastLoginAt: u.lastLoginAt?.toISOString() || null,
+          // Normalised on the way out so the screen shows what would actually
+          // be enforced, not what happens to be stored.
+          licensedStates: normalizeLicensedStates(
+            (u.metadata as { licensedStates?: unknown } | null)?.licensedStates
+          ),
         })),
         meta: {
           page,
@@ -4987,6 +4997,49 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           ...currentMetadata,
           ...body.metadata,
         };
+
+        // `metadata.licensedStates` is the AGENT licence list that
+        // `lib/licensed-states.ts` enforces against, and this endpoint -- admin
+        // and owner only -- is the only way to set it. The column is untyped, so
+        // this is where the type is checked.
+        //
+        // Rejecting beats normalising away the bad entries: an administrator who
+        // pastes "Tennesee" and is told nothing has granted a licence they think
+        // they granted, and the agent finds out by being refused a call. The
+        // read side in `licensed-states.ts` still drops anything it cannot
+        // resolve, because a row written before this check existed may hold one.
+        if (mergedMetadata.licensedStates !== undefined) {
+          if (!Array.isArray(mergedMetadata.licensedStates)) {
+            void reply.code(400);
+            return {
+              error: {
+                code: 'INVALID_LICENSED_STATES',
+                message: 'licensedStates must be an array of US state codes',
+              },
+            };
+          }
+
+          const rejected = (mergedMetadata.licensedStates as unknown[]).filter(
+            entry => normalizeStateCode(entry) === null
+          );
+
+          if (rejected.length > 0) {
+            void reply.code(400);
+            return {
+              error: {
+                code: 'INVALID_LICENSED_STATES',
+                message: `Not US states: ${rejected.map(entry => String(entry)).join(', ')}`,
+              },
+            };
+          }
+
+          mergedMetadata.licensedStates = [
+            ...new Set(
+              (mergedMetadata.licensedStates as unknown[]).map(entry => normalizeStateCode(entry)!)
+            ),
+          ].sort();
+        }
+
         updateData.metadata = mergedMetadata;
 
         oldExtension = currentMetadata.extension || null;

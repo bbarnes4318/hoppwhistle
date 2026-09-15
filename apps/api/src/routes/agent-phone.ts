@@ -1,6 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import {
+  permits,
+  resolveStateAuthority,
+  resolveStateForPhone,
+  sendStateRefusal,
+} from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
@@ -348,6 +354,40 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       if (!phoneNumber) {
         void reply.code(400);
         return { error: { code: 'MISSING_PHONE', message: 'Phone number is required' } };
+      }
+
+      // Licensed-state enforcement, before a trunk is touched.
+      //
+      // The state comes from `resolveStateForPhone` -- the agency's own CRM
+      // record for this number, or the number's area code -- and NEVER from the
+      // request. There is no state field in this body to trust, and adding one
+      // would be the bypass: the number is what decides who is reached.
+      //
+      // `kind: 'none'` is dialled through deliberately. A toll-free, 900 or
+      // otherwise non-geographic number that matches no CRM record has no
+      // jurisdiction to hold a licence in, and refusing it would stop agents
+      // calling carriers, their own office and each other -- while granting
+      // nothing, because such a number cannot reach a prospect in a state the
+      // agent is barred from. A record that names an unreadable state is the
+      // opposite case and is refused.
+      const stateAuthority = await resolveStateAuthority(request, tenantId);
+      if (stateAuthority.restricted) {
+        const resolution = await resolveStateForPhone(tenantId, phoneNumber);
+        const licensed =
+          resolution.kind === 'none'
+            ? true
+            : resolution.kind === 'state' && permits(stateAuthority, resolution.state);
+
+        if (!licensed) {
+          request.log.warn({
+            msg: 'agent/call/originate: refused, agent not licensed for the dialled state',
+            userId,
+            tenantId,
+            resolution: resolution.kind,
+          });
+          sendStateRefusal(reply);
+          return;
+        }
       }
 
       // Generate unique call SID
@@ -1506,6 +1546,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         return reply.status(404).send({
           error: { code: 'LEAD_NOT_FOUND', message: 'No lead found for this phone number' },
         });
+      }
+
+      // The screen pop is the lead's record: name, address, state, notes. An
+      // agent who may not work this state may not read it either, so the
+      // licence is checked against the STORED state rather than the queried
+      // number -- the record is the authority, and it is the record being
+      // served.
+      const authority = await resolveStateAuthority(request, tenantId);
+      if (authority.restricted && !permits(authority, screenPopData.state)) {
+        sendStateRefusal(reply);
+        return;
       }
 
       return { lead: screenPopData };
