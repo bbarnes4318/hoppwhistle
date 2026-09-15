@@ -6,6 +6,7 @@ import { RoleName } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { createSession, generateCsrfToken } from '../middleware/session.js';
@@ -17,6 +18,19 @@ import {
   peekActivationGrant,
   redeemActivationGrant,
 } from '../services/tenant-activation.js';
+
+/**
+ * Whether a string is one of this schema's roles.
+ *
+ * The effective role list on a principal is `string[]`, because a platform
+ * operator's roles are attached by `applyPlatformContext` rather than read from
+ * `UserRole`. A value that is not a role resolves to no capabilities rather
+ * than to an unchecked lookup -- the same default-deny `effectivePermissionsFor`
+ * applies to the permissions column.
+ */
+function isRoleName(value: string): value is RoleName {
+  return Object.prototype.hasOwnProperty.call(RoleName, value);
+}
 
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -976,6 +990,23 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
+      /*
+       * The `permissions` JSON on each role row, so the capability list below
+       * is computed the same way `getUserPermissions()` computes it -- map
+       * first, then the row's additions, filtered default-deny.
+       *
+       * A platform operator's effective roles are ADMIN and OWNER of the agency
+       * they entered, and they hold no `UserRole` row there, so their rows are
+       * not among `user.roles`. Every role is read rather than only the user's
+       * own; it is one query on a table with seven rows.
+       */
+      const rolePermissionsByName = new Map<RoleName, unknown>(
+        (await prisma.role.findMany({ select: { name: true, permissions: true } })).map(role => [
+          role.name,
+          role.permissions,
+        ])
+      );
+
       let publisherAccessToRecordings = false;
       let buyerAccessToRecordings = false;
 
@@ -1000,13 +1031,50 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
       const rowRoles = user.roles.map((ur: UserRole) => ur.role.name);
       const isPlatformPrincipal = principal?.isPlatformAdmin === true;
+      const effectiveRoles = isPlatformPrincipal ? (principal.roles ?? rowRoles) : rowRoles;
+
+      /*
+       * What this principal may do, decided by the server.
+       *
+       * ── Why the client is told rather than left to work it out ────────────
+       *
+       * `apps/web/src/hooks/use-auth.tsx` carried its own copy of the
+       * permission table and rebuilt it in the browser from the role list. It
+       * had drifted: the server gives AGENT nine capabilities and that copy
+       * gave it one (`calls:read`), so `/reports` turned an agent away from a
+       * page the API would have served them. `useUserRoles.ts` carried a third
+       * model whose `RoleName` union did not contain AGENT at all.
+       *
+       * Three answers to "what may this person do" is two too many, and the
+       * two in the browser are the ones that cannot be authoritative anyway.
+       * So the server sends its own answer, from `effectivePermissionsFor` --
+       * the exact function `checkPermission()` gates on -- and the client
+       * renders from it instead of deriving.
+       *
+       * This is navigation state, not enforcement. The API still authorises
+       * every request on its own; sending the list only stops the screen
+       * lying about what the next click will do.
+       *
+       * Computed from the EFFECTIVE roles, so a platform operator inside an
+       * agency gets that agency's administrator capabilities and an operator
+       * previewing a role gets exactly that role's -- the same list the
+       * requests they are about to make will be judged against.
+       */
+      const permissions = Array.from(
+        new Set(
+          effectiveRoles.flatMap(role =>
+            isRoleName(role) ? effectivePermissionsFor(role, rolePermissionsByName.get(role)) : []
+          )
+        )
+      );
 
       return reply.send({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        roles: isPlatformPrincipal ? (principal.roles ?? rowRoles) : rowRoles,
+        roles: effectiveRoles,
+        permissions,
         tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,

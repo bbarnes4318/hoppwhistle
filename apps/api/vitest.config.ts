@@ -42,6 +42,8 @@ const DATABASE_BACKED = [
   // fixtures -- which surfaced as the recording suite failing to seed at all,
   // not as anything to do with recordings.
   '**/src/__tests__/recording-access.test.ts',
+  // Truncates `tenants`, `roles` and `users` to seed one account per role.
+  '**/src/__tests__/me-capabilities.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's

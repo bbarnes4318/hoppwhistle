@@ -3,9 +3,10 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
-import { clearSessionToken } from '@/lib/session-token';
-
 import { usePlatformContext } from './use-platform-context';
+
+import { homePathForRoles } from '@/lib/roles';
+import { clearSessionToken } from '@/lib/session-token';
 
 /**
  * The signed-in user, fetched once for the whole tree.
@@ -43,6 +44,11 @@ interface UserData {
   firstName?: string;
   lastName?: string;
   roles: string[];
+  /**
+   * The capabilities the server will actually honour, sent by `/api/auth/me`.
+   * Advisory: it decides what the screen offers, never what the API allows.
+   */
+  permissions: string[];
   buyerId?: string;
   publisherId?: string;
   tenantId: string;
@@ -161,6 +167,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         firstName: rawUser.firstName,
         lastName: rawUser.lastName,
         roles,
+        permissions: Array.isArray(rawUser?.permissions) ? rawUser.permissions : [],
         buyerId: rawUser.buyerId,
         publisherId: rawUser.publisherId,
         tenantId: rawUser.tenantId,
@@ -254,122 +261,71 @@ export function useAuth(): UseAuthReturn {
   const publisherId = user?.publisherId || null;
   const tenantId = user?.tenantId || null;
 
-  // Deriving permissions client-side
-  const getPermissions = (roles: string[]): string[] => {
-    const list: string[] = [];
-    if (roles.includes('OWNER')) {
-      list.push('admin:*');
-    }
-    if (roles.includes('ADMIN')) {
-      list.push(
-        'users:read',
-        'users:write',
-        'users:delete',
-        'roles:read',
-        'roles:write',
-        'api_keys:read',
-        'api_keys:write',
-        'api_keys:delete',
-        'numbers:read',
-        'numbers:write',
-        'numbers:delete',
-        'campaigns:read',
-        'campaigns:write',
-        'campaigns:delete',
-        'flows:read',
-        'flows:write',
-        'flows:delete',
-        'flows:publish',
-        'calls:read',
-        'calls:write',
-        'calls:delete',
-        'recordings:read',
-        'recordings:write',
-        'recordings:delete',
-        'webhooks:read',
-        'webhooks:write',
-        'webhooks:delete',
-        'billing:read',
-        'billing:write',
-        'reports:read',
-        'payroll:read',
-        'payroll:write',
-        'payroll:admin'
-      );
-    }
-    if (roles.includes('ANALYST')) {
-      list.push(
-        'calls:read',
-        'recordings:read',
-        'reports:read',
-        'campaigns:read',
-        'flows:read',
-        'numbers:read'
-      );
-    }
-    if (roles.includes('PUBLISHER')) {
-      list.push(
-        'flows:read',
-        'flows:write',
-        'flows:publish',
-        'campaigns:read',
-        'campaigns:write',
-        'calls:read'
-      );
-      if (user?.publisherAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('BUYER')) {
-      list.push('calls:read', 'calls:write', 'campaigns:read');
-      if (user?.buyerAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('AGENT')) {
-      list.push('calls:read');
-    }
-    if (roles.includes('READONLY')) {
-      list.push('calls:read', 'campaigns:read', 'flows:read', 'numbers:read');
-    }
-    return list;
-  };
+  /*
+   * What the server says this principal may do.
+   *
+   * ── Why this is no longer derived here ──────────────────────────────────
+   *
+   * This hook used to carry its own copy of the permission table and rebuild
+   * it in the browser from the role list. It drifted, as a second copy of an
+   * authorization rule always does: the server gives AGENT nine capabilities
+   * and this copy gave it exactly one, `calls:read`. `/reports` is guarded on
+   * `reports:read`, which the server grants an agent -- so the page turned
+   * agents away from something the API would have served them, and nothing
+   * anywhere said the two disagreed.
+   *
+   * `/api/auth/me` now sends the list, computed by `effectivePermissionsFor`,
+   * which is the same function `checkPermission()` gates on. There is one
+   * table, on the server, and the browser renders from its answer.
+   *
+   * `?? []` is for a response that predates the field -- a client left open
+   * across a deploy. Empty means "no capabilities", which every check below
+   * reads as denied; it never means "assume the old table".
+   */
+  const permissions = user?.permissions ?? [];
 
-  const permissions = getPermissions(userRoles);
+  const can = (permission: string): boolean =>
+    permissions.includes('admin:*') || permissions.includes(permission);
 
+  /*
+   * Display capabilities, derived from the server's permission list rather than
+   * from role names.
+   *
+   * These were a ladder of role checks -- `hasFullAccess || ANALYST || (BUYER
+   * && flag) || AGENT || ...` -- rebuilt in the browser beside the permission
+   * table that has now moved to the server. A role ladder is the same drift in
+   * a different shape: it has to be edited every time a role's capabilities
+   * change, and nothing fails when somebody forgets.
+   *
+   * The two per-account recording flags stay as role checks because they are
+   * not capabilities: `publisherAccessToRecordings` is a toggle on one
+   * publisher's row, so it narrows a capability the role already has rather
+   * than granting one. The server's `checkRecordingAccess` applies the same
+   * narrowing, and this only keeps the screen honest about it.
+   */
   const canViewRecordings =
-    hasFullAccess ||
-    userRoles.includes('ANALYST') ||
-    (userRoles.includes('PUBLISHER') && !!user?.publisherAccessToRecordings) ||
-    (userRoles.includes('BUYER') && !!user?.buyerAccessToRecordings) ||
-    userRoles.includes('AGENT') ||
-    (userRoles.includes('READONLY') && permissions.includes('recordings:read'));
+    can('recordings:read') &&
+    (!isPublisherOnly || !!user?.publisherAccessToRecordings) &&
+    (!isBuyerOnly || !!user?.buyerAccessToRecordings);
 
-  const canViewReports =
-    hasFullAccess ||
-    userRoles.includes('ANALYST') ||
-    (userRoles.includes('READONLY') && permissions.includes('reports:read'));
-  const canViewBilling = hasFullAccess;
-  const canViewPayouts = hasFullAccess || userRoles.includes('PUBLISHER');
-  const canManageBuyers = hasFullAccess;
-  const canManagePublishers = hasFullAccess;
-  const canManageCampaigns = hasFullAccess;
-  const canManageNumbers = hasFullAccess;
-  const canDisputeConversions = hasFullAccess || userRoles.includes('BUYER');
+  const canViewReports = can('reports:read');
+  const canViewBilling = can('billing:read');
+  const canViewPayouts = can('billing:read') || isPublisher;
+  const canManageBuyers = can('campaigns:write') && hasFullAccess;
+  const canManagePublishers = can('campaigns:write') && hasFullAccess;
+  const canManageCampaigns = can('campaigns:write');
+  const canManageNumbers = can('numbers:write');
+  const canDisputeConversions = hasFullAccess || isBuyer;
 
-  // Default dashboard paths
-  let defaultDashboardPath = '/dashboard';
-  if (hasFullAccess) {
-    defaultDashboardPath = '/dashboard';
-  } else if (userRoles.includes('PUBLISHER')) {
-    defaultDashboardPath = '/publisher/dashboard';
-  } else if (userRoles.includes('BUYER')) {
-    defaultDashboardPath = '/buyer/dashboard';
-  } else if (userRoles.includes('AGENT')) {
-    defaultDashboardPath = '/call-center';
-  } else if (userRoles.includes('READONLY')) {
-    defaultDashboardPath = '/dashboard';
-  }
+  /**
+   * Where this principal lands after signing in.
+   *
+   * One definition, shared with the login page and the dashboard layout. There
+   * used to be two: `lib/roles.ts#getRedirectPath` sent an agent to /dashboard
+   * and this sent them to /call-center, so every agent login was a redirect
+   * immediately followed by a second one.
+   */
+  const defaultDashboardPath = homePathForRoles(userRoles);
 
   return {
     user,
