@@ -3,9 +3,10 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
-import { clearSessionToken } from '@/lib/session-token';
-
 import { usePlatformContext } from './use-platform-context';
+
+import { homePathForRoles } from '@/lib/roles';
+import { clearSessionToken, persistSessionToken } from '@/lib/session-token';
 
 /**
  * The signed-in user, fetched once for the whole tree.
@@ -28,8 +29,39 @@ import { usePlatformContext } from './use-platform-context';
  * roles and permissions from it -- those are pure functions of the user, so
  * every call site keeps its own cheap copy and nothing else changed.
  */
+/**
+ * What is known about the session right now.
+ *
+ * ── Why three outcomes and not a boolean ─────────────────────────────────────
+ *
+ * `user === null` used to mean all of: still asking, nobody is signed in, and
+ * the request failed. The sidebar dispatches on role flags derived from `user`,
+ * so all three rendered the same thing -- the catch-all, a single Dashboard
+ * entry. That is indistinguishable, to the person looking at it, from an
+ * account whose roles were taken away, and it is the state the reported
+ * incident ended in.
+ *
+ * A 429 was enough to produce it. The rate limiter keys on `request.ip`, which
+ * is nginx for every request because Fastify runs without `trustProxy`, so the
+ * whole platform shares one 100-per-minute budget; when it trips,
+ * `/api/auth/me` answers 429, and an agent who was working a moment ago is
+ * looking at a one-item nav.
+ *
+ * So the states are named, and the chrome renders differently for each:
+ *
+ *   resolving       nothing is known yet. Render no navigation at all -- not
+ *                   an administrator's, not a fallback.
+ *   authenticated   the server answered. `user.roles` is the truth, including
+ *                   when it is empty.
+ *   anonymous       no credential. The layout sends them to /login.
+ *   failed          the server did not answer. NOT "signed out" and NOT "no
+ *                   roles": say so and offer a retry.
+ */
+export type SessionStatus = 'resolving' | 'authenticated' | 'anonymous' | 'failed';
+
 interface AuthSession {
   user: UserData | null;
+  status: SessionStatus;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -37,12 +69,23 @@ interface AuthSession {
 
 const AuthSessionContext = createContext<AuthSession | null>(null);
 
+/** Renew once the session has less than this left. Matches REFRESH_WINDOW_MS on the API. */
+const RENEW_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+/** How often an open tab re-checks. The window is a day wide; hourly is ample. */
+const RENEW_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
 interface UserData {
   id: string;
   email: string;
   firstName?: string;
   lastName?: string;
   roles: string[];
+  /**
+   * The capabilities the server will actually honour, sent by `/api/auth/me`.
+   * Advisory: it decides what the screen offers, never what the API allows.
+   */
+  permissions: string[];
   buyerId?: string;
   publisherId?: string;
   tenantId: string;
@@ -65,6 +108,8 @@ interface UserData {
   actingTenantName?: string | null;
   previewRole?: string | null;
   isReadOnlyPreview?: boolean;
+  /** ISO timestamp from `/api/auth/me`, or null for a token minted before expiry existed. */
+  sessionExpiresAt?: string | null;
 }
 
 interface UseAuthReturn {
@@ -114,7 +159,20 @@ interface UseAuthReturn {
   canManageNumbers: boolean;
   canDisputeConversions: boolean;
   defaultDashboardPath: string;
+  /** See `SessionStatus`. The chrome renders a different thing for each. */
+  status: SessionStatus;
+  /**
+   * True until the first answer. While this is true NOTHING may render a
+   * navigation: not an administrator's, and not a fallback that looks like an
+   * account with no roles.
+   */
   loading: boolean;
+  /**
+   * The server answered and this account genuinely holds no role. Distinct
+   * from `loading` and from `status === 'failed'`, both of which used to look
+   * identical to it on screen.
+   */
+  hasResolvedNoRole: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
@@ -122,14 +180,15 @@ interface UseAuthReturn {
 /** Mounted once, at the root, above everything that calls `useAuth`. */
 export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<SessionStatus>('resolving');
   const [error, setError] = useState<string | null>(null);
 
   const fetchUser = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        setLoading(false);
+        setUser(null);
+        setStatus('anonymous');
         return;
       }
 
@@ -140,12 +199,25 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Clear both stores: a dead token left in the cookie would keep the
-          // server render trying to authenticate with it on every navigation.
+          // The credential is genuinely dead. Clear both stores: a dead token
+          // left in the cookie would keep the server render trying to
+          // authenticate with it on every navigation.
           clearSessionToken();
+          setUser(null);
+          setStatus('anonymous');
+          setError(null);
+          return;
         }
-        setError('Failed to fetch user data');
-        setLoading(false);
+
+        /*
+         * Anything else -- 429, 500, a proxy error page -- is the server
+         * failing to answer, not the person failing to be someone. Leaving the
+         * previous `user` in place means a transient failure does not take the
+         * navigation away from somebody mid-task; `failed` is what the chrome
+         * renders its retry from.
+         */
+        setError(`Could not load your account (HTTP ${res.status}).`);
+        setStatus('failed');
         return;
       }
 
@@ -161,6 +233,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         firstName: rawUser.firstName,
         lastName: rawUser.lastName,
         roles,
+        permissions: Array.isArray(rawUser?.permissions) ? rawUser.permissions : [],
         buyerId: rawUser.buyerId,
         publisherId: rawUser.publisherId,
         tenantId: rawUser.tenantId,
@@ -174,13 +247,16 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         actingTenantName: rawUser.actingTenantName ?? null,
         previewRole: rawUser.previewRole ?? null,
         isReadOnlyPreview: rawUser.isReadOnlyPreview === true,
+        sessionExpiresAt: rawUser.sessionExpiresAt ?? null,
       });
+      setStatus('authenticated');
       setError(null);
     } catch (err) {
+      // The network, not the server. Same reasoning as a 5xx: the person is
+      // not signed out, we simply do not know anything right now.
       console.error('Auth fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Could not reach the server.');
+      setStatus('failed');
     }
   }, []);
 
@@ -188,8 +264,58 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
     void fetchUser();
   }, [fetchUser]);
 
+  /*
+   * Renew the session before it lapses.
+   *
+   * The API issues seven-day tokens and `/api/auth/me` reports when this one
+   * stops being accepted. Inside the last day, exchange it for a fresh one --
+   * `POST /api/auth/refresh` re-signs the same three claims from the
+   * authenticated principal, so this cannot change who the session belongs to.
+   *
+   * Checked when the session resolves and once an hour after, which is enough:
+   * the window is a day wide, and a tab left open for a week gets its chance.
+   * A failure is silent by design -- the token is still valid for up to another
+   * day, and the next check or the next page load tries again. What must not
+   * happen is a renewal failure reading as a sign-out.
+   */
+  useEffect(() => {
+    if (!user?.sessionExpiresAt) return;
+
+    const renewIfDue = async () => {
+      const expiresAt = Date.parse(user.sessionExpiresAt as string);
+      if (!Number.isFinite(expiresAt)) return;
+      if (expiresAt - Date.now() > RENEW_WITHIN_MS) return;
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+
+        const body = await res.json();
+        if (typeof body?.token !== 'string') return;
+
+        persistSessionToken(body.token);
+        await fetchUser();
+      } catch {
+        // Still valid for up to another day; the next check tries again.
+      }
+    };
+
+    void renewIfDue();
+    const timer = setInterval(() => void renewIfDue(), RENEW_CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [user?.sessionExpiresAt, fetchUser]);
+
   return (
-    <AuthSessionContext.Provider value={{ user, loading, error, refetch: fetchUser }}>
+    <AuthSessionContext.Provider
+      value={{ user, status, loading: status === 'resolving', error, refetch: fetchUser }}
+    >
       {children}
     </AuthSessionContext.Provider>
   );
@@ -203,13 +329,14 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
  */
 const NO_SESSION: AuthSession = {
   user: null,
+  status: 'anonymous',
   loading: false,
   error: null,
   refetch: async () => {},
 };
 
 export function useAuth(): UseAuthReturn {
-  const { user, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
+  const { user, status, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
 
   /*
    * The platform half of the answer, from the one fetch that already asks for it.
@@ -249,127 +376,77 @@ export function useAuth(): UseAuthReturn {
   const isReadonlyOnly = isReadonly && !hasFullAccess;
 
   const isNewUser = !!user && userRoles.length === 0;
+  const hasResolvedNoRole = status === 'authenticated' && userRoles.length === 0;
 
   const buyerId = user?.buyerId || null;
   const publisherId = user?.publisherId || null;
   const tenantId = user?.tenantId || null;
 
-  // Deriving permissions client-side
-  const getPermissions = (roles: string[]): string[] => {
-    const list: string[] = [];
-    if (roles.includes('OWNER')) {
-      list.push('admin:*');
-    }
-    if (roles.includes('ADMIN')) {
-      list.push(
-        'users:read',
-        'users:write',
-        'users:delete',
-        'roles:read',
-        'roles:write',
-        'api_keys:read',
-        'api_keys:write',
-        'api_keys:delete',
-        'numbers:read',
-        'numbers:write',
-        'numbers:delete',
-        'campaigns:read',
-        'campaigns:write',
-        'campaigns:delete',
-        'flows:read',
-        'flows:write',
-        'flows:delete',
-        'flows:publish',
-        'calls:read',
-        'calls:write',
-        'calls:delete',
-        'recordings:read',
-        'recordings:write',
-        'recordings:delete',
-        'webhooks:read',
-        'webhooks:write',
-        'webhooks:delete',
-        'billing:read',
-        'billing:write',
-        'reports:read',
-        'payroll:read',
-        'payroll:write',
-        'payroll:admin'
-      );
-    }
-    if (roles.includes('ANALYST')) {
-      list.push(
-        'calls:read',
-        'recordings:read',
-        'reports:read',
-        'campaigns:read',
-        'flows:read',
-        'numbers:read'
-      );
-    }
-    if (roles.includes('PUBLISHER')) {
-      list.push(
-        'flows:read',
-        'flows:write',
-        'flows:publish',
-        'campaigns:read',
-        'campaigns:write',
-        'calls:read'
-      );
-      if (user?.publisherAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('BUYER')) {
-      list.push('calls:read', 'calls:write', 'campaigns:read');
-      if (user?.buyerAccessToRecordings) {
-        list.push('recordings:read');
-      }
-    }
-    if (roles.includes('AGENT')) {
-      list.push('calls:read');
-    }
-    if (roles.includes('READONLY')) {
-      list.push('calls:read', 'campaigns:read', 'flows:read', 'numbers:read');
-    }
-    return list;
-  };
+  /*
+   * What the server says this principal may do.
+   *
+   * ── Why this is no longer derived here ──────────────────────────────────
+   *
+   * This hook used to carry its own copy of the permission table and rebuild
+   * it in the browser from the role list. It drifted, as a second copy of an
+   * authorization rule always does: the server gives AGENT nine capabilities
+   * and this copy gave it exactly one, `calls:read`. `/reports` is guarded on
+   * `reports:read`, which the server grants an agent -- so the page turned
+   * agents away from something the API would have served them, and nothing
+   * anywhere said the two disagreed.
+   *
+   * `/api/auth/me` now sends the list, computed by `effectivePermissionsFor`,
+   * which is the same function `checkPermission()` gates on. There is one
+   * table, on the server, and the browser renders from its answer.
+   *
+   * `?? []` is for a response that predates the field -- a client left open
+   * across a deploy. Empty means "no capabilities", which every check below
+   * reads as denied; it never means "assume the old table".
+   */
+  const permissions = user?.permissions ?? [];
 
-  const permissions = getPermissions(userRoles);
+  const can = (permission: string): boolean =>
+    permissions.includes('admin:*') || permissions.includes(permission);
 
+  /*
+   * Display capabilities, derived from the server's permission list rather than
+   * from role names.
+   *
+   * These were a ladder of role checks -- `hasFullAccess || ANALYST || (BUYER
+   * && flag) || AGENT || ...` -- rebuilt in the browser beside the permission
+   * table that has now moved to the server. A role ladder is the same drift in
+   * a different shape: it has to be edited every time a role's capabilities
+   * change, and nothing fails when somebody forgets.
+   *
+   * The two per-account recording flags stay as role checks because they are
+   * not capabilities: `publisherAccessToRecordings` is a toggle on one
+   * publisher's row, so it narrows a capability the role already has rather
+   * than granting one. The server's `checkRecordingAccess` applies the same
+   * narrowing, and this only keeps the screen honest about it.
+   */
   const canViewRecordings =
-    hasFullAccess ||
-    userRoles.includes('ANALYST') ||
-    (userRoles.includes('PUBLISHER') && !!user?.publisherAccessToRecordings) ||
-    (userRoles.includes('BUYER') && !!user?.buyerAccessToRecordings) ||
-    userRoles.includes('AGENT') ||
-    (userRoles.includes('READONLY') && permissions.includes('recordings:read'));
+    can('recordings:read') &&
+    (!isPublisherOnly || !!user?.publisherAccessToRecordings) &&
+    (!isBuyerOnly || !!user?.buyerAccessToRecordings);
 
-  const canViewReports =
-    hasFullAccess ||
-    userRoles.includes('ANALYST') ||
-    (userRoles.includes('READONLY') && permissions.includes('reports:read'));
-  const canViewBilling = hasFullAccess;
-  const canViewPayouts = hasFullAccess || userRoles.includes('PUBLISHER');
-  const canManageBuyers = hasFullAccess;
-  const canManagePublishers = hasFullAccess;
-  const canManageCampaigns = hasFullAccess;
-  const canManageNumbers = hasFullAccess;
-  const canDisputeConversions = hasFullAccess || userRoles.includes('BUYER');
+  const canViewReports = can('reports:read');
+  const canViewBilling = can('billing:read');
+  const canViewPayouts = can('billing:read') || isPublisher;
+  const canManageBuyers = can('campaigns:write') && hasFullAccess;
+  const canManagePublishers = can('campaigns:write') && hasFullAccess;
+  const canManageCampaigns = can('campaigns:write');
+  const canManageNumbers = can('numbers:write');
+  const canDisputeConversions = hasFullAccess || isBuyer;
 
-  // Default dashboard paths
-  let defaultDashboardPath = '/dashboard';
-  if (hasFullAccess) {
-    defaultDashboardPath = '/dashboard';
-  } else if (userRoles.includes('PUBLISHER')) {
-    defaultDashboardPath = '/publisher/dashboard';
-  } else if (userRoles.includes('BUYER')) {
-    defaultDashboardPath = '/buyer/dashboard';
-  } else if (userRoles.includes('AGENT')) {
-    defaultDashboardPath = '/call-center';
-  } else if (userRoles.includes('READONLY')) {
-    defaultDashboardPath = '/dashboard';
-  }
+  /**
+   * Where this principal lands after signing in.
+   *
+   * One definition, shared with the login page and the dashboard layout. There
+   * used to be two: `lib/roles.ts#getRedirectPath` sent an agent to /dashboard
+   * and this sent them to /call-center, so every agent login was a redirect
+   * immediately followed by a second one.
+   */
+  const defaultDashboardPath = homePathForRoles(userRoles);
 
   return {
     user,
@@ -403,7 +480,9 @@ export function useAuth(): UseAuthReturn {
     canManageNumbers,
     canDisputeConversions,
     defaultDashboardPath,
+    status,
     loading,
+    hasResolvedNoRole,
     error,
     refetch,
   };

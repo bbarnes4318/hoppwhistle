@@ -5,63 +5,85 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.js';
 import { auditLog } from '../services/audit.js';
 
-export type Permission =
+/**
+ * Every permission this system recognises, as data.
+ *
+ * A `type` union vanishes at compile time, so the runtime had no way to ask
+ * "is this string a permission?" -- and `getUserPermissions()` merges
+ * `roles.permissions`, a free-form JSON column, straight into a user's
+ * effective set. `KNOWN_PERMISSIONS` derived from the ROLE_PERMISSIONS map
+ * instead, which looked equivalent and was not: `settings:read` and
+ * `settings:write` are declared here and carried by the ADMIN database row, but
+ * no entry in that map names them, so deriving from the map silently dropped
+ * them and took carrier routing away from every agency administrator.
+ *
+ * So the list is the source and the union is derived from it. They cannot
+ * drift, and the runtime can answer the question.
+ */
+export const ALL_PERMISSIONS = [
   // Users & Roles
-  | 'users:read'
-  | 'users:write'
-  | 'users:delete'
-  | 'roles:read'
-  | 'roles:write'
-  | 'roles:delete'
+  'users:read',
+  'users:write',
+  'users:delete',
+  'roles:read',
+  'roles:write',
+  'roles:delete',
   // API Keys
-  | 'api_keys:read'
-  | 'api_keys:write'
-  | 'api_keys:delete'
+  'api_keys:read',
+  'api_keys:write',
+  'api_keys:delete',
   // Numbers
-  | 'numbers:read'
-  | 'numbers:write'
-  | 'numbers:delete'
+  'numbers:read',
+  'numbers:write',
+  'numbers:delete',
   // Campaigns
-  | 'campaigns:read'
-  | 'campaigns:write'
-  | 'campaigns:delete'
+  'campaigns:read',
+  'campaigns:write',
+  'campaigns:delete',
   // Flows
-  | 'flows:read'
-  | 'flows:write'
-  | 'flows:delete'
-  | 'flows:publish'
+  'flows:read',
+  'flows:write',
+  'flows:delete',
+  'flows:publish',
   // Calls
-  | 'calls:read'
-  | 'calls:write'
-  | 'calls:delete'
+  'calls:read',
+  'calls:write',
+  'calls:delete',
   // Recordings
-  | 'recordings:read'
-  | 'recordings:write'
-  | 'recordings:delete'
+  'recordings:read',
+  'recordings:write',
+  'recordings:delete',
   // Webhooks
-  | 'webhooks:read'
-  | 'webhooks:write'
-  | 'webhooks:delete'
+  'webhooks:read',
+  'webhooks:write',
+  'webhooks:delete',
   // Billing
-  | 'billing:read'
-  | 'billing:write'
+  'billing:read',
+  'billing:write',
   // Reports
-  | 'reports:read'
+  'reports:read',
   // Payroll
-  | 'payroll:read'
-  | 'payroll:write'
-  | 'payroll:admin'
+  'payroll:read',
+  'payroll:write',
+  'payroll:admin',
   // Tenant settings. The ADMIN rows already in the `roles` table grant these
   // two in their permissions JSON, and getUserPermissions() merges that JSON
   // into a user's effective set — but the union never declared them, so no
   // route could name them without a cast.
-  | 'settings:read'
-  | 'settings:write'
+  'settings:read',
+  'settings:write',
   // Admin
-  | 'admin:*';
+  'admin:*',
+] as const;
+
+export type Permission = (typeof ALL_PERMISSIONS)[number];
 
 // Role-based permission mappings
-const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
+/**
+ * Exported so the capability matrix can be asserted by READING it rather than
+ * by driving a route for every cell. `agent-capabilities.test.ts` is the reader.
+ */
+export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
   OWNER: ['admin:*'], // Owner has all permissions
   ADMIN: [
     'users:read',
@@ -97,6 +119,18 @@ const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'payroll:read',
     'payroll:write',
     'payroll:admin',
+    /*
+     * Tenant settings, including carrier routing.
+     *
+     * These were declared in ALL_PERMISSIONS and granted only by the ADMIN row's
+     * `permissions` JSON, never by this map -- so whether an agency
+     * administrator could reach carrier routing depended on a column that a
+     * migration, a seed or a person had to have written correctly. It is a
+     * capability ADMIN is meant to have; it belongs in the definition, not in
+     * data that can be absent.
+     */
+    'settings:read',
+    'settings:write',
   ],
   ANALYST: [
     'calls:read',
@@ -124,29 +158,113 @@ const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'numbers:read',
     'reports:read',
   ],
+  /**
+   * One agent on a call floor. Derived from the work, not from ADMIN.
+   *
+   * ── What this used to be ─────────────────────────────────────────────────
+   *
+   * Twenty of ADMIN's thirty-four permissions, including `users:write`,
+   * `billing:write`, `payroll:write` and four delete verbs. It read as ADMIN
+   * with a few entries struck out, which is how it came to include the one
+   * that was live: `numbers:write` gates `PUT
+   * /api/v1/carrier-routing/routes/:callType` (see `canWrite` in
+   * routes/carrier-routing.ts), so every agent on the platform could
+   * reconfigure where their agency's calls were routed. The comment above that
+   * gate reads "no lesser role gets it". A lesser role did.
+   *
+   * ── How this list was built ──────────────────────────────────────────────
+   *
+   * From the sixteen pages an agent is entitled to, one capability at a time,
+   * asking what the agent DOES rather than what an administrator has. Every
+   * entry below names the work it exists for. An entry with no such sentence
+   * does not belong here.
+   *
+   * ── Reading a capability ─────────────────────────────────────────────────
+   *
+   * A capability says which verb on which resource. It does NOT say whose rows:
+   * that is the handler's job, from the principal, and it is the only place it
+   * can be done correctly -- `buildCallWhere` narrows /calls to the agent's own
+   * calls while an ADMIN with the identical `calls:read` sees the agency's.
+   *
+   * So `billing:read` here means "may open a billing view", not "may see the
+   * agency's money". What an agent is shown is decided by the handler, and the
+   * agent-scoped money endpoints are where that is enforced. Page visibility
+   * has never been mutation authority, and it is not scope either.
+   */
   AGENT: [
-    'users:read',
-    'users:write',
-    'roles:read',
-    'numbers:read',
-    'numbers:write',
-    'numbers:delete',
-    'campaigns:read',
-    'campaigns:write',
-    'campaigns:delete',
+    // The call floor. Read their own calls; write a disposition and notes on a
+    // call they took. No delete: it destroys the billing and compliance record.
     'calls:read',
     'calls:write',
-    'calls:delete',
+    // Play back a call they took. `checkRecordingAccess` narrows an AGENT to
+    // recordings of calls they created or took on one of their own numbers.
+    // No write, no delete: same compliance record.
     'recordings:read',
-    'recordings:write',
-    'recordings:delete',
-    'billing:read',
-    'billing:write',
+    // The campaigns they are assigned to, and the numbers they dial from.
+    // READ only -- an agent does not author campaigns or provision DIDs, and
+    // `numbers:write` is what let them rewrite carrier routing.
+    'campaigns:read',
+    'numbers:read',
+    // Reports and CRM reports, narrowed to their own production by the handler.
     'reports:read',
+    // Their own payroll: hours logged, earnings summary, payout history. The
+    // self-service time-entry routes key on `userId`, and the admin payroll
+    // surface is gated on requireRole('ADMIN','OWNER') rather than on this.
     'payroll:read',
-    'payroll:write',
+    // Rate, Delivery, Settlements, Billing and Quotas & Budget -- the five
+    // money pages an agent is entitled to, READ only, narrowed to their own
+    // production. Every mutation on that surface (company payment methods,
+    // invoices, settlement approval, company-wide budgets, global rate tables)
+    // needs `billing:write`, which is deliberately absent.
+    'billing:read',
+    // Colleague names, for the rosters that render beside calls and
+    // applications. `users:write` is absent: an agent administers nobody.
+    'users:read',
   ],
 };
+
+/**
+ * Capabilities no agent may hold, whatever a database row says.
+ *
+ * `getUserPermissions()` merges `role.permissions` -- a JSON column -- on top
+ * of the map above, and the quarantined bulk-grant SQL wrote
+ * `'["calls:*","contacts:*"]'` into the AGENT row on at least one database.
+ * `calls:*` matches `calls:delete` under `permissionMatches`, so the column can
+ * widen a role past its definition here, silently, with no code change.
+ *
+ * This is the floor under that. It is enforced in `getUserPermissions()` rather
+ * than asserted in a test, because the row it guards against already exists
+ * somewhere and a test would only prove the map is clean.
+ */
+const NEVER_FOR_AGENT: readonly Permission[] = [
+  'admin:*',
+  'users:write',
+  'users:delete',
+  'roles:write',
+  'roles:delete',
+  'api_keys:read',
+  'api_keys:write',
+  'api_keys:delete',
+  'numbers:write',
+  'numbers:delete',
+  'campaigns:write',
+  'campaigns:delete',
+  'calls:delete',
+  'recordings:write',
+  'recordings:delete',
+  'flows:write',
+  'flows:delete',
+  'flows:publish',
+  'webhooks:write',
+  'webhooks:delete',
+  'billing:write',
+  'payroll:write',
+  'payroll:admin',
+  'settings:write',
+];
+
+/** The same list, as a set, for the default-deny filter below. */
+const KNOWN_PERMISSIONS: ReadonlySet<string> = new Set<string>(ALL_PERMISSIONS);
 
 /**
  * Check if a permission matches a required permission
@@ -180,6 +298,54 @@ function permissionMatches(required: Permission, userPermission: Permission): bo
 }
 
 /**
+ * A role's effective permissions: the map above, plus whatever its database row
+ * adds, minus anything that is not a permission and anything an agent may never
+ * hold.
+ *
+ * ── Why the JSON column is filtered rather than trusted ──────────────────────
+ *
+ * `roles.permissions` is a free-form JSON array, written by migrations, by
+ * seeds, and -- on at least one production database -- by hand. The quarantined
+ * bulk-grant SQL put `'["calls:*","contacts:*"]'` on the AGENT row. `calls:*`
+ * matches `calls:delete` under `permissionMatches`, so that column silently
+ * granted a capability the code does not, and would survive any amount of
+ * tightening of the map above.
+ *
+ * Two rules close that:
+ *
+ *   1. DEFAULT-DENY. A string that is not a permission this system declares
+ *      grants nothing. `contacts:*` is not a typo to be honoured; it is a
+ *      string in a JSON column that no route has ever read.
+ *   2. AGENT has a floor. `NEVER_FOR_AGENT` is subtracted last, so no row --
+ *      present, future, or hand-written -- can give an agent the capabilities
+ *      the brief says an agent must never have.
+ *
+ * Wildcards from the column are held to the same rule: `calls:*` is not a
+ * declared permission, so it is dropped. A role that genuinely needs every
+ * `calls:` verb lists them, which is also the only spelling a reader can audit.
+ */
+export function effectivePermissionsFor(
+  roleName: RoleName,
+  rowPermissions: unknown
+): Permission[] {
+  const granted = new Set<Permission>(ROLE_PERMISSIONS[roleName] ?? []);
+
+  if (Array.isArray(rowPermissions)) {
+    for (const entry of rowPermissions) {
+      if (typeof entry === 'string' && KNOWN_PERMISSIONS.has(entry)) {
+        granted.add(entry as Permission);
+      }
+    }
+  }
+
+  if (roleName === 'AGENT') {
+    for (const forbidden of NEVER_FOR_AGENT) granted.delete(forbidden);
+  }
+
+  return Array.from(granted);
+}
+
+/**
  * Get user permissions from roles
  */
 async function getUserPermissions(tenantId: string, userId: string): Promise<Permission[]> {
@@ -202,14 +368,18 @@ async function getUserPermissions(tenantId: string, userId: string): Promise<Per
 
   const permissions = new Set<Permission>();
 
+  /*
+   * The union across every role this user holds, each one filtered by
+   * `effectivePermissionsFor`. A user holding AGENT *and* ADMIN gets ADMIN's
+   * capabilities: the AGENT floor removes what the AGENT role grants, not what
+   * another role does, because an account genuinely holding both is an
+   * administrator who also takes calls. Which accounts hold both is a data
+   * question, and `scripts/authz-report.sh` section 4b is what answers it.
+   */
   for (const userRole of user.roles) {
     const roleName = userRole.role.name as RoleName;
-    const rolePerms = ROLE_PERMISSIONS[roleName] || [];
-    rolePerms.forEach(perm => permissions.add(perm));
-
-    // Also check custom permissions from role.permissions JSON
-    if (userRole.role.permissions && Array.isArray(userRole.role.permissions)) {
-      (userRole.role.permissions as Permission[]).forEach(perm => permissions.add(perm));
+    for (const perm of effectivePermissionsFor(roleName, userRole.role.permissions)) {
+      permissions.add(perm);
     }
   }
 

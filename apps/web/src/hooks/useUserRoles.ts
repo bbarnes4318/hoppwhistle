@@ -1,10 +1,38 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 
-import { apiClient } from '@/lib/api';
+import { useAuth } from './use-auth';
 
-export type RoleName = 'OWNER' | 'ADMIN' | 'ANALYST' | 'PUBLISHER' | 'BUYER' | 'READONLY';
+/**
+ * The call centre's view of the signed-in user.
+ *
+ * ── This used to be a third model of who you are ─────────────────────────────
+ *
+ * It held its own `useState`, ran its own `GET /api/auth/me`, and declared its
+ * own `RoleName` union -- which did not contain AGENT. Every `hasRole` and
+ * `hasAnyRole` call through this hook was therefore untypeable for the one role
+ * that uses the call centre, and `useScriptAccess` worked an agent's job title
+ * out by elimination ("not an admin, so an agent") rather than by asking.
+ *
+ * Meanwhile `use-auth.tsx` held a second model with a second permission table,
+ * and `lib/roles.ts` a third opinion about where an agent belongs. Three
+ * answers to "who is this and what may they do", none of them authoritative,
+ * all of them able to drift from the server and from each other.
+ *
+ * So this is now a view over `useAuth()`, which reads the one fetch the root
+ * provider makes and the capability list the server sends with it. Every call
+ * site keeps its signature; what changed is that they all describe the same
+ * user now, and there is one request instead of one per component.
+ */
+
+/**
+ * Every role this schema has, AGENT included.
+ *
+ * Kept in step with `RoleName` in apps/api/prisma/schema.prisma. AGENT's
+ * absence here was not cosmetic: it is the role the call centre exists for.
+ */
+export type RoleName = 'OWNER' | 'ADMIN' | 'AGENT' | 'ANALYST' | 'PUBLISHER' | 'BUYER' | 'READONLY';
 
 interface UserProfile {
   id: string;
@@ -28,45 +56,19 @@ interface UseUserRolesReturn {
   isOwner: boolean;
   isAdmin: boolean;
   isAdminOrOwner: boolean;
+  isAgent: boolean;
   hasRole: (role: RoleName) => boolean;
   hasAnyRole: (...roles: RoleName[]) => boolean;
 }
 
 /**
- * Hook to fetch and manage the current user's roles from the database.
- * Provides role-checking helpers for authorization decisions.
+ * The current user's roles, from the one session the whole tree shares.
  */
 export function useUserRoles(): UseUserRolesReturn {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, userRoles, loading, error, refetch, isOwner, isAdmin, isAdminOrOwner, isAgent } =
+    useAuth();
 
-  const fetchUser = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await apiClient.get<UserProfile>('/api/auth/me');
-
-      if (response.error) {
-        setError(response.error.message);
-        setUser(null);
-      } else if (response.data) {
-        setUser(response.data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch user');
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchUser();
-  }, [fetchUser]);
-
-  const roles = user?.roles ?? [];
+  const roles = userRoles as RoleName[];
 
   const hasRole = useCallback((role: RoleName) => roles.includes(role), [roles]);
 
@@ -75,19 +77,30 @@ export function useUserRoles(): UseUserRolesReturn {
     [roles]
   );
 
-  const isOwner = roles.includes('OWNER');
-  const isAdmin = roles.includes('ADMIN');
-  const isAdminOrOwner = isOwner || isAdmin;
+  const profile: UserProfile | null = user
+    ? {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName ?? null,
+        lastName: user.lastName ?? null,
+        roles,
+        tenantId: user.tenantId ?? null,
+        position: user.position ?? null,
+        defaultScript: user.defaultScript ?? null,
+        customScripts: user.customScripts ?? null,
+      }
+    : null;
 
   return {
-    user,
+    user: profile,
     roles,
     loading,
     error,
-    refetch: fetchUser,
+    refetch,
     isOwner,
     isAdmin,
     isAdminOrOwner,
+    isAgent,
     hasRole,
     hasAnyRole,
   };
@@ -95,11 +108,9 @@ export function useUserRoles(): UseUserRolesReturn {
 
 /**
  * Maps database roles to Call Center script access levels.
- * - OWNER/ADMIN: Full access to all scripts (Sales + Retention)
- * - Other roles: Access to Sales script only
  */
 export function useScriptAccess() {
-  const { user, roles, loading, error, isAdminOrOwner, refetch } = useUserRoles();
+  const { user, roles, loading, error, isAdminOrOwner, isAgent, refetch } = useUserRoles();
 
   // Script access logic:
   // - Sales Script: Everyone has access
@@ -107,8 +118,17 @@ export function useScriptAccess() {
   const canAccessSalesScript = true;
   const canAccessRetentionScript = true;
 
-  // Derive job title from role or position for display purposes
-  const derivedJobTitle = user?.position || (isAdminOrOwner ? 'Admin' : 'Agent');
+  /*
+   * The job title shown on screen.
+   *
+   * `position` is what the person chose at registration and wins when set.
+   * Failing that this used to read "Admin if isAdminOrOwner, otherwise Agent",
+   * which called a publisher, a buyer and an analyst an agent -- the only
+   * answer available to a hook whose role union had no AGENT in it. It now
+   * names the role it actually found.
+   */
+  const derivedJobTitle =
+    user?.position || (isAdminOrOwner ? 'Admin' : isAgent ? 'Agent' : (roles[0] ?? 'User'));
 
   return {
     user,

@@ -90,6 +90,63 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+/**
+ * While the session is still resolving.
+ *
+ * Deliberately not a spinner and deliberately not a nav: anything that looks
+ * like navigation here is a guess about who the person is, and the guess that
+ * was being made was "administrator or nobody".
+ */
+function ResolvingNotice() {
+  return <div className="px-2 py-1.5 t-body text-ink-3" aria-busy="true" aria-live="polite" />;
+}
+
+/**
+ * The server did not answer.
+ *
+ * Distinct from being signed out and distinct from holding no role. Those were
+ * the same screen, so a rate-limited request read to the person as "my access
+ * was revoked" -- and to anyone they reported it to as an authorization bug.
+ */
+function UnreachableNotice() {
+  const { refetch, error } = useAuth();
+  return (
+    <div className="rounded-control border border-rule bg-sunken p-2 t-body text-ink-2">
+      <p className="font-medium text-ink">Your menu could not load</p>
+      <p className="mt-1 t-meta text-ink-3">
+        {error ?? 'The server did not answer.'} You are still signed in.
+      </p>
+      <button
+        type="button"
+        onClick={() => void refetch()}
+        className="mt-2 rounded-control border border-rule px-2 py-1 t-meta text-ink hover:bg-surface"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The server answered, and this account holds no role.
+ *
+ * A real state with a real cause -- an invitation whose role row was missing,
+ * or a demotion that removed one grant without adding another -- and it needs
+ * an answer a person can act on, not a one-item menu that looks like the
+ * product.
+ */
+function NoRoleNotice() {
+  return (
+    <div className="rounded-control border border-rule bg-sunken p-2 t-body text-ink-2">
+      <p className="font-medium text-ink">No role assigned</p>
+      <p className="mt-1 t-meta text-ink-3">
+        Your account is active but has not been given a role yet. Ask your agency administrator to
+        assign one.
+      </p>
+    </div>
+  );
+}
+
 /** Role banner. Publishers and buyers should never be unsure whose data this is. */
 function PortalBadge({ label }: { label: string }) {
   return (
@@ -115,8 +172,25 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     isReadonlyOnly,
     canViewRecordings,
     canViewReports,
+    status,
+    hasResolvedNoRole,
   } = useAuth();
 
+  /*
+   * Three states that used to look identical, and one of them was the incident.
+   *
+   * The dispatch below reads flags derived from `user`, and `user` was null
+   * while the session was still resolving, when nobody was signed in, AND when
+   * the request failed. All three fell through to the catch-all: a single
+   * Dashboard entry, indistinguishable from an account whose roles had been
+   * taken away. A 429 from the shared rate-limit bucket was enough to produce
+   * it for somebody who had been working a second earlier.
+   *
+   * So: while resolving, render NO navigation -- an administrator's least of
+   * all. When the server could not be reached, say that. Only when the server
+   * has actually answered does the role dispatch run, and "answered with no
+   * roles" gets its own message rather than a nav that implies one page.
+   */
   const groups: NavGroup[] = React.useMemo(() => {
     if (isPlatformAdmin) return PLATFORM_NAV;
     if (hasFullAccess) return AGENCY_OWNER_NAV;
@@ -133,8 +207,10 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       }
       return [{ items }];
     }
-    // New user with no role yet, and the catch-all: one safe destination.
-    return [{ items: [PLATFORM_NAV[0].items[0]] }];
+    // Reached only once the server has answered and named no role we render a
+    // nav for. `NoRoleNotice` is what the person sees; an empty list here keeps
+    // a stale Dashboard link from sitting under it.
+    return [];
   }, [
     isPlatformAdmin,
     hasFullAccess,
@@ -171,6 +247,9 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       )}
 
       <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
+        {status === 'resolving' ? <ResolvingNotice /> : null}
+        {status === 'failed' ? <UnreachableNotice /> : null}
+        {hasResolvedNoRole ? <NoRoleNotice /> : null}
         {/* Whose product this is, said at the top of the column. An agency
             principal gets one for the same reason a publisher does: the screen
             they are on is an agency's, not NetEnroll's. */}

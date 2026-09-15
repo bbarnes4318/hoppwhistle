@@ -67,6 +67,14 @@ export interface LeadFilters {
    * with no licence sees nothing.
    */
   licensedStates?: string[];
+  /**
+   * Narrow to one agent's leads.
+   *
+   * Set by the route from the authenticated principal, never from the request.
+   * `undefined` means the caller sees the agency's book -- which is what an
+   * ADMIN or OWNER sees, and what every caller saw before agent scope existed.
+   */
+  assignedToId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +472,10 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
 
   const where: Prisma.InsuranceLeadWhereInput = { tenantId };
 
+  // Agent scope, on top of the tenant filter and never instead of it. See
+  // lib/agent-scope.ts for why the route decides this rather than the caller.
+  if (filters.assignedToId) where.assignedToId = filters.assignedToId;
+
   if (filters.vertical) where.vertical = filters.vertical;
 
   // Licensed-state narrowing. `!== undefined` rather than a truthiness test:
@@ -630,11 +642,20 @@ export interface ActivityReturn {
   createdById?: string | null;
 }
 
-export async function getLeadById(tenantId: string, id: string) {
+export async function getLeadById(tenantId: string, id: string, assignedToId?: string) {
   const prisma = getPrismaClient();
 
+  /*
+   * Both dimensions in the query.
+   *
+   * `assignedToId` is undefined for an agency principal, and the clause
+   * disappears -- they see the agency's leads, as they always have. For an
+   * agent it is their own user id, so a lead they do not hold is not found
+   * rather than found-and-refused: an agent probing ids learns nothing about
+   * which of them are real.
+   */
   const lead = await prisma.insuranceLead.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, ...(assignedToId ? { assignedToId } : {}) },
     include: {
       submissions: {
         orderBy: { receivedAt: 'desc' },
@@ -929,8 +950,31 @@ export async function retrySubmission(tenantId: string, leadId: string, submissi
 // Stats
 // ---------------------------------------------------------------------------
 
-export async function getStats(tenantId: string) {
+/**
+ * The CRM's headline counts.
+ *
+ * `assignedToId` narrows every figure to one agent's leads, and to the
+ * submissions of those leads. Undefined leaves them tenant-wide, which is what
+ * an agency principal sees and what every caller saw before agent scope
+ * existed.
+ *
+ * The submission counts are narrowed through the lead rather than by a column
+ * of their own: a submission has no assignee, it belongs to whoever holds the
+ * lead it came from. Filtering on `insuranceLead: { assignedToId }` says that
+ * in the query instead of leaving the two figures to disagree -- a total of 40
+ * leads beside 900 submissions is a screen nobody can read.
+ */
+export async function getStats(tenantId: string, assignedToId?: string) {
   const prisma = getPrismaClient();
+
+  const leadWhere: Prisma.InsuranceLeadWhereInput = {
+    tenantId,
+    ...(assignedToId ? { assignedToId } : {}),
+  };
+  const submissionWhere: Prisma.InsuranceLeadSubmissionWhereInput = {
+    tenantId,
+    ...(assignedToId ? { insuranceLead: { assignedToId } } : {}),
+  };
 
   const [
     totalLeads,
@@ -945,17 +989,21 @@ export async function getStats(tenantId: string) {
     testSubmissions,
     liveSubmissions,
   ] = await Promise.all([
-    prisma.insuranceLead.count({ where: { tenantId } }),
-    prisma.insuranceLead.count({ where: { tenantId, vertical: 'ACA' } }),
-    prisma.insuranceLead.count({ where: { tenantId, vertical: 'FE' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, validationStatus: 'VALID' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, validationStatus: 'INVALID' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, postStatus: 'MATCHED' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, postStatus: 'UNMATCHED' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, postStatus: 'ERROR' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, postMode: 'TEST' } }),
-    prisma.insuranceLeadSubmission.count({ where: { tenantId, postMode: 'LIVE' } }),
+    prisma.insuranceLead.count({ where: leadWhere }),
+    prisma.insuranceLead.count({ where: { ...leadWhere, vertical: 'ACA' } }),
+    prisma.insuranceLead.count({ where: { ...leadWhere, vertical: 'FE' } }),
+    prisma.insuranceLeadSubmission.count({ where: submissionWhere }),
+    prisma.insuranceLeadSubmission.count({
+      where: { ...submissionWhere, validationStatus: 'VALID' },
+    }),
+    prisma.insuranceLeadSubmission.count({
+      where: { ...submissionWhere, validationStatus: 'INVALID' },
+    }),
+    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'MATCHED' } }),
+    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'UNMATCHED' } }),
+    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'ERROR' } }),
+    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postMode: 'TEST' } }),
+    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postMode: 'LIVE' } }),
   ]);
 
   return {

@@ -11,10 +11,12 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { agentScopeFor, mayReachOwnedRow } from '../lib/agent-scope.js';
 import {
   permits,
   resolveStateAuthority,
   sendStateRefusal,
+  STATE_NOT_LICENSED,
   type StateAuthority,
 } from '../lib/licensed-states.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
@@ -43,6 +45,63 @@ function getTenantId(request: FastifyRequest): string | null {
  */
 function permitsLead(authority: StateAuthority, lead: unknown): boolean {
   return permits(authority, (lead as { state?: unknown } | null)?.state);
+}
+
+/** What the `:id` gate answers: the lead to act on, or the refusal to return. */
+type LeadGate =
+  | { ok: true; leadId: string }
+  | { ok: false; body: { error: { code: string; message: string } } };
+
+/**
+ * Refuse a request for a lead the caller does not hold, or is not licensed for.
+ *
+ * Returns the lead id when the caller may act on it, and the refusal body once
+ * it has set the status. Every `:id` route in this file goes through it, so both
+ * rules have one implementation rather than one per handler.
+ *
+ * ── Two questions, both of which must answer yes ─────────────────────────────
+ *
+ * Ownership ("is this lead mine?") and licence ("may I work this state?") are
+ * independent, and neither implies the other. An agent may hold a lead in a
+ * state they are not licensed for -- an import or a reassignment can produce
+ * exactly that -- and being licensed in a state has never made the agency's
+ * other agents' leads theirs to open. So the gate is the intersection.
+ *
+ * ── Two refusals, deliberately different ─────────────────────────────────────
+ *
+ * A lead the caller does not hold is a 404, indistinguishable from one that
+ * does not exist: the lookup is scoped by tenant AND resolves the owner in the
+ * same query, so an agent walking ids learns neither which are real nor which
+ * belong to their agency.
+ *
+ * A lead the caller DOES hold but is not licensed for is a 403. Its existence
+ * is no secret from the person it is assigned to, and answering 404 would send
+ * their administrator hunting a missing row instead of a missing licence.
+ */
+async function requireReachableLead(
+  request: FastifyRequest,
+  reply: { code: (n: number) => unknown },
+  tenantId: string,
+  leadId: string
+): Promise<LeadGate> {
+  const { getPrismaClient } = await import('../lib/prisma.js');
+  const lead = await getPrismaClient().insuranceLead.findFirst({
+    where: { id: leadId, tenantId },
+    select: { id: true, assignedToId: true, state: true },
+  });
+
+  if (!lead || !mayReachOwnedRow(request, lead.assignedToId)) {
+    void reply.code(404);
+    return { ok: false, body: { error: { code: 'NOT_FOUND', message: 'Lead not found' } } };
+  }
+
+  const authority = await resolveStateAuthority(request, tenantId);
+  if (!permitsLead(authority, lead)) {
+    void reply.code(403);
+    return { ok: false, body: { error: { ...STATE_NOT_LICENSED } } };
+  }
+
+  return { ok: true, leadId: lead.id };
 }
 
 interface DeliverySelector {
@@ -352,7 +411,24 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         }
         targetListId = listRecord.id;
       } else if (targetListId) {
-        listRecord = await prisma.leadList.findUnique({ where: { id: targetListId } });
+        /*
+         * Scoped by tenant, because `targetListId` came from the request body.
+         *
+         * This was `findUnique({ where: { id } })`: a list id from one agency
+         * resolved against another agency's row, and `targetListId` then flows
+         * into every lead created below -- so an import could file a batch of
+         * leads into a list belonging to a different customer. The sibling
+         * lookup four lines above was already tenant-scoped; this one was
+         * missed because it reads a list rather than searching for one.
+         */
+        listRecord = await prisma.leadList.findFirst({
+          where: { id: targetListId, tenantId },
+        });
+
+        if (!listRecord) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Lead list not found' } };
+        }
       }
 
       const isPreClosed = listRecord && listRecord.name.toLowerCase() === 'preclosed';
@@ -494,14 +570,28 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const q = request.query;
     const wantsCsv = q.format?.toLowerCase() === 'csv';
 
-    // Licensed-state narrowing for an AGENT, resolved once and applied to both
-    // reads below. `undefined` for everybody else leaves the query byte-for-byte
-    // what it was, so no existing caller changes behaviour.
-    //
-    // An agent with no licence gets `[]`, which matches no rows, rather than an
-    // early refusal: this is a grid, the honest rendering of "you may work
-    // nothing here" is an empty grid, and a 403 on page load would strand them
-    // on a screen with no way to see why.
+    /*
+     * Whose leads. Null for an agency principal, their own user id for an
+     * agent -- derived from the principal and never from the query string, so
+     * there is no value a caller can send that widens the result.
+     *
+     * The export gets the SAME narrowing as the grid, deliberately and in the
+     * same breath. An export that ignored it would be the whole agency's book
+     * in a CSV, reached from a page that only ever showed the agent forty rows.
+     */
+    const assignedToId = agentScopeFor(request) ?? undefined;
+
+    /*
+     * And which states. The second narrowing is ANDed with the first, not an
+     * alternative to it: owning a lead does not license its state, and being
+     * licensed in a state does not make another agent's lead yours.
+     *
+     * `undefined` for everybody else leaves the query byte-for-byte what it
+     * was. An agent with no licence gets `[]`, which matches no rows, rather
+     * than an early refusal: this is a grid, the honest rendering of "you may
+     * work nothing here" is an empty grid, and a 403 on page load would strand
+     * them on a screen with no way to see why.
+     */
     const stateAuthority = await resolveStateAuthority(request, tenantId);
     const licensedStates = stateAuthority.restricted ? [...stateAuthority.licensed] : undefined;
 
@@ -525,6 +615,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         leadStage: q.leadStage,
         followUp: q.followUp,
         listId: q.listId,
+        assignedToId,
         licensedStates,
       });
 
@@ -553,6 +644,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leadStage: q.leadStage,
       followUp: q.followUp,
       listId: q.listId,
+      assignedToId,
       licensedStates,
     });
 
@@ -709,7 +801,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     const { getStats } = await import('../services/insurance-lead-service.js');
-    return await getStats(tenantId);
+    // CRM Reports is one of the sixteen pages an agent is entitled to. What it
+    // counts is their own book, not the agency's.
+    return await getStats(tenantId, agentScopeFor(request) ?? undefined);
   });
 
   // -----------------------------------------------------------------------
@@ -723,7 +817,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { getLeadById } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const lead = await getLeadById(tenantId, request.params.id);
+    const lead = await getLeadById(tenantId, request.params.id, agentScopeFor(request) ?? undefined);
 
     if (!lead) {
       void reply.code(404);
@@ -755,38 +849,22 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return sendTenantRefusal(request, reply);
     }
 
-    // Two checks, and both are required.
-    //
-    // The lead's CURRENT state decides whether this agent may touch the record
-    // at all. The state in the BODY, when there is one, decides whether they may
-    // leave it somewhere they are licensed -- without that second check,
-    // `PATCH { state: 'TN' }` on a Florida lead is a one-request way for a
-    // Tennessee-only agent to pull any of the agency's leads into their own
-    // licence and work it.
+    // The gate covers both standing questions: is this lead mine, and may I
+    // work the state it is in.
+    const gate = await requireReachableLead(request, reply, tenantId, request.params.id);
+    if (!gate.ok) return gate.body;
+
+    // A third question only a write can raise: where is the agent trying to
+    // leave it? Without this, `PATCH { state: 'TN' }` on a lead a
+    // Tennessee-only agent holds in Florida is a one-request way to move it
+    // inside their own licence and then work it.
     const stateAuthority = await resolveStateAuthority(request, tenantId);
-
-    if (stateAuthority.restricted) {
-      const { getLeadById } = await import('../services/insurance-lead-service.js');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const existing = await getLeadById(tenantId, request.params.id);
-
-      if (!existing) {
-        void reply.code(404);
-        return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
-      }
-
-      if (!permitsLead(stateAuthority, existing)) {
-        sendStateRefusal(reply);
-        return;
-      }
-
-      if (
-        Object.prototype.hasOwnProperty.call(request.body, 'state') &&
-        !permits(stateAuthority, request.body.state)
-      ) {
-        sendStateRefusal(reply);
-        return;
-      }
+    if (
+      Object.prototype.hasOwnProperty.call(request.body, 'state') &&
+      !permits(stateAuthority, request.body.state)
+    ) {
+      sendStateRefusal(reply);
+      return;
     }
 
     const { updateLead } = await import('../services/insurance-lead-service.js');
@@ -812,6 +890,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
     }
+
+    const gate = await requireReachableLead(request, reply, tenantId, request.params.id);
+    if (!gate.ok) return gate.body;
 
     const { retrySubmission } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -931,10 +1012,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify lead belongs to tenant
+    // Verify the lead belongs to this tenant AND is one this caller holds.
+    // Tasks hang off a lead, so reaching them is reaching the lead.
     const lead = await prisma.insuranceLead.findFirst({
       where: { id: request.params.id, tenantId },
+      // `assignedToId` is what the ownership check below reads.
     });
+    if (lead && !mayReachOwnedRow(request, lead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
     if (!lead) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
@@ -966,10 +1053,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify lead belongs to tenant
+    // Verify the lead belongs to this tenant AND is one this caller holds.
+    // Tasks hang off a lead, so reaching them is reaching the lead.
     const lead = await prisma.insuranceLead.findFirst({
       where: { id: request.params.id, tenantId },
+      // `assignedToId` is what the ownership check below reads.
     });
+    if (lead && !mayReachOwnedRow(request, lead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
     if (!lead) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
@@ -1024,10 +1117,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify task belongs to lead and tenant
+    // Verify task belongs to lead and tenant, and that the caller holds the
+    // lead. A task is reachable exactly when the lead it hangs off is.
     const task = await prisma.insuranceTask.findFirst({
       where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+      include: { insuranceLead: { select: { assignedToId: true } } },
     });
+    if (task && !mayReachOwnedRow(request, task.insuranceLead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
 
     if (!task) {
       void reply.code(404);
@@ -1073,10 +1172,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify task belongs to lead and tenant
+    // Verify task belongs to lead and tenant, and that the caller holds the
+    // lead. A task is reachable exactly when the lead it hangs off is.
     const task = await prisma.insuranceTask.findFirst({
       where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+      include: { insuranceLead: { select: { assignedToId: true } } },
     });
+    if (task && !mayReachOwnedRow(request, task.insuranceLead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
 
     if (!task) {
       void reply.code(404);

@@ -36,6 +36,23 @@ const DATABASE_BACKED = [
   // default pool the two would delete each other's fixtures.
   '**/src/__tests__/role-preview.test.ts',
   '**/src/__tests__/publisher-portal-access.test.ts',
+  // Seeds two agencies with users, calls, recordings and analyzer uploads, and
+  // truncates `tenants`, `roles` and `recordings` to do it. Left off this list
+  // it ran beside tenant-isolation.test.ts and the two deleted each other's
+  // fixtures -- which surfaced as the recording suite failing to seed at all,
+  // not as anything to do with recordings.
+  '**/src/__tests__/recording-access.test.ts',
+  // Truncates `tenants`, `roles` and `users` to seed one account per role.
+  '**/src/__tests__/me-capabilities.test.ts',
+  // Truncates `tenants`, `roles`, `users` and `audit_logs`, and suspends its
+  // own agent mid-suite.
+  '**/src/__tests__/session-expiry.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `insurance_leads` and `lead_lists`
+  // to seed two agencies with two agents each.
+  '**/src/__tests__/crm-agent-scope.test.ts',
+  // Seeds two agencies, their owners and three agents each, and truncates
+  // `tenants`, `roles` and the insurance tables to do it.
+  '**/src/__tests__/agent-licensed-states.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
