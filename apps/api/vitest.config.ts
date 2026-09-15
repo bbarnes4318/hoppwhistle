@@ -50,6 +50,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles`, `users`, `insurance_leads` and `lead_lists`
   // to seed two agencies with two agents each.
   '**/src/__tests__/crm-agent-scope.test.ts',
+  // Seeds two agencies, their owners and three agents each, and truncates
+  // `tenants`, `roles` and the insurance tables to do it.
+  '**/src/__tests__/agent-licensed-states.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's

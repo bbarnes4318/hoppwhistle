@@ -7,6 +7,7 @@
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { permits, resolveStateAuthority, sendStateRefusal } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
@@ -94,13 +95,56 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
         take: 10,
       });
 
+      // Licensed-state scoping, applied to the RECORDS rather than to the
+      // response shape.
+      //
+      // Filtering here, before `primaryRecordType` is chosen, is what makes this
+      // complete: the primary customer, the duplicate list, the activities, the
+      // tasks and the submissions are all derived from these three arrays, so
+      // one filter covers every projection below -- including ones added later.
+      // Checking the rendered payload instead would have to be repeated five
+      // times and would miss the sixth.
+      //
+      // `recentCalls` is deliberately not filtered. A `Call` carries no state
+      // and is not a record of a person; it is this agency's own telephony log
+      // for a number the caller already has in hand, and it was already scoped
+      // to the tenant.
+      const stateAuthority = await resolveStateAuthority(request, tenantId);
+      const matchedBeforeLicence =
+        insuranceLeads.length + genericLeads.length + prospectIntakes.length;
+
+      const licensedOnly = <T extends { state: string | null }>(records: T[]): T[] =>
+        stateAuthority.restricted
+          ? records.filter(record => permits(stateAuthority, record.state))
+          : records;
+
+      const licensedInsuranceLeads = licensedOnly(insuranceLeads);
+      const licensedGenericLeads = licensedOnly(genericLeads);
+      const licensedProspectIntakes = licensedOnly(prospectIntakes);
+
+      // Someone matched, and this agent may work none of them. Refusing beats
+      // an empty `customer`: the agent is looking at a person who exists in
+      // their agency, and "no record found" would send them to create a
+      // duplicate of a lead they are barred from.
+      if (
+        stateAuthority.restricted &&
+        matchedBeforeLicence > 0 &&
+        licensedInsuranceLeads.length +
+          licensedGenericLeads.length +
+          licensedProspectIntakes.length ===
+          0
+      ) {
+        sendStateRefusal(reply);
+        return;
+      }
+
       // Determine primary match
       let primaryRecordType: 'InsuranceLead' | 'Lead' | 'ProspectIntake' | null = null;
-      if (insuranceLeads.length > 0) {
+      if (licensedInsuranceLeads.length > 0) {
         primaryRecordType = 'InsuranceLead';
-      } else if (genericLeads.length > 0) {
+      } else if (licensedGenericLeads.length > 0) {
         primaryRecordType = 'Lead';
-      } else if (prospectIntakes.length > 0) {
+      } else if (licensedProspectIntakes.length > 0) {
         primaryRecordType = 'ProspectIntake';
       }
 
@@ -127,8 +171,8 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
       let tasksList: any[] = [];
       let submissionsList: any[] = [];
 
-      if (primaryRecordType === 'InsuranceLead' && insuranceLeads[0]) {
-        const lead = insuranceLeads[0];
+      if (primaryRecordType === 'InsuranceLead' && licensedInsuranceLeads[0]) {
+        const lead = licensedInsuranceLeads[0];
         customer = {
           id: lead.id,
           recordType: 'InsuranceLead',
@@ -208,8 +252,8 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           ameriquoteErrorMessage: s.ameriquoteErrorMessage || null,
           createdAt: s.createdAt.toISOString(),
         }));
-      } else if (primaryRecordType === 'Lead' && genericLeads[0]) {
-        const lead = genericLeads[0];
+      } else if (primaryRecordType === 'Lead' && licensedGenericLeads[0]) {
+        const lead = licensedGenericLeads[0];
         customer = {
           id: lead.id,
           recordType: 'Lead',
@@ -237,8 +281,8 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           insurance: null,
           compliance: null,
         };
-      } else if (primaryRecordType === 'ProspectIntake' && prospectIntakes[0]) {
-        const lead = prospectIntakes[0];
+      } else if (primaryRecordType === 'ProspectIntake' && licensedProspectIntakes[0]) {
+        const lead = licensedProspectIntakes[0];
         customer = {
           id: lead.id,
           recordType: 'ProspectIntake',
@@ -301,18 +345,26 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
         });
       };
 
-      for (let i = primaryRecordType === 'InsuranceLead' ? 1 : 0; i < insuranceLeads.length; i++) {
-        pushDuplicate(insuranceLeads[i], 'InsuranceLead', insuranceLeads[i].phone);
+      for (
+        let i = primaryRecordType === 'InsuranceLead' ? 1 : 0;
+        i < licensedInsuranceLeads.length;
+        i++
+      ) {
+        pushDuplicate(licensedInsuranceLeads[i], 'InsuranceLead', licensedInsuranceLeads[i].phone);
       }
-      for (let i = primaryRecordType === 'Lead' ? 1 : 0; i < genericLeads.length; i++) {
-        pushDuplicate(genericLeads[i], 'Lead', genericLeads[i].phoneNumber);
+      for (let i = primaryRecordType === 'Lead' ? 1 : 0; i < licensedGenericLeads.length; i++) {
+        pushDuplicate(licensedGenericLeads[i], 'Lead', licensedGenericLeads[i].phoneNumber);
       }
       for (
         let i = primaryRecordType === 'ProspectIntake' ? 1 : 0;
-        i < prospectIntakes.length;
+        i < licensedProspectIntakes.length;
         i++
       ) {
-        pushDuplicate(prospectIntakes[i], 'ProspectIntake', prospectIntakes[i].phone);
+        pushDuplicate(
+          licensedProspectIntakes[i],
+          'ProspectIntake',
+          licensedProspectIntakes[i].phone
+        );
       }
 
       return {

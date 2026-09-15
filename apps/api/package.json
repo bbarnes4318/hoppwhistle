@@ -31,6 +31,7 @@
     "calls:inventory": "tsx src/cli/call-history-inventory.ts",
     "calls:restore": "tsx src/cli/restore-call-history.ts",
     "platform:admins": "tsx src/cli/platform-admins.ts",
+    "agents:licenses": "tsx src/cli/agent-licenses.ts",
     "rating:run": "tsx src/cli/run-daily-rating.ts",
     "settlement:run": "tsx src/cli/run-daily-settlement.ts",
     "recordings:backfill": "tsx src/cli/backfill-recordings.ts",

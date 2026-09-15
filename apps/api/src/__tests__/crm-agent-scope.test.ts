@@ -97,19 +97,31 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
       data: { name: `${label} Insurance`, slug, status: 'ACTIVE' },
     });
 
-    const mkUser = async (name: string, roleId: string) =>
+    /*
+     * The agents are licensed in TN, and the leads below are TN leads.
+     *
+     * Ownership and licensed state are separate gates and this suite is about
+     * the first one, so the second is satisfied for every case here rather than
+     * exercised: an agent with no licence is refused every lead in the agency,
+     * which would make each assertion below pass for the wrong reason.
+     * `lib/__tests__/licensed-states.test.ts` is where the licence itself is
+     * tested. No assertion in this file was changed to accommodate it -- the
+     * refusals it checks are still ownership refusals, and still 404.
+     */
+    const mkUser = async (name: string, roleId: string, licensedStates?: string[]) =>
       prisma.user.create({
         data: {
           tenantId: tenant.id,
           email: `${name}@${slug}.local`,
           status: 'ACTIVE',
+          metadata: licensedStates ? { licensedStates } : undefined,
           roles: { create: { roleId } },
         },
       });
 
     const owner = await mkUser('owner', roleIds.OWNER);
-    const agent = await mkUser('agent', roleIds.AGENT);
-    const otherAgent = await mkUser('other', roleIds.AGENT);
+    const agent = await mkUser('agent', roleIds.AGENT, ['TN']);
+    const otherAgent = await mkUser('other', roleIds.AGENT, ['TN']);
 
     const list = await prisma.leadList.create({
       data: { tenantId: tenant.id, name: `${label} List`, vertical: 'FE' },
@@ -123,6 +135,7 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
           firstName: first,
           lastName: label,
           phone: `555${Math.floor(1000000 + Math.random() * 8999999)}`,
+          state: 'TN',
           assignedToId: who,
           listId: list.id,
         },

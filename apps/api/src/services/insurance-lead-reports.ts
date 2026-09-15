@@ -641,6 +641,15 @@ export interface LeadCsvFilters {
   followUp?: string;
   listId?: string;
   /**
+   * Narrow the export to these states. SERVER-DERIVED ONLY -- see the same
+   * field on `LeadFilters` in `services/insurance-lead-service.ts`.
+   *
+   * The export is the same read as the grid with a different projection, so it
+   * needs the same narrowing. Leaving it off here would have made `?format=csv`
+   * the way around the grid's.
+   */
+  licensedStates?: string[];
+  /**
    * Narrow to one agent's leads.
    *
    * Set by the route from the authenticated principal, never from the query
@@ -852,6 +861,8 @@ function buildLeadWhere(tenantId: string, filters: LeadCsvFilters): Prisma.Insur
   if (filters.assignedToId) where.assignedToId = filters.assignedToId;
 
   if (filters.vertical) where.vertical = filters.vertical;
+  // `!== undefined`: `[]` means "licensed nowhere" and must match nothing.
+  if (filters.licensedStates !== undefined) where.state = { in: filters.licensedStates };
   if (filters.status) where.status = filters.status as Prisma.InsuranceLeadWhereInput['status'];
   if (filters.leadStage) where.leadStage = filters.leadStage;
   if (filters.listId) where.listId = filters.listId;
