@@ -35,20 +35,37 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { issueActivationGrant } from '../services/tenant-activation.js';
 
 /**
- * The two operators the platform launches with.
- *
- * The repo owner is identified by `PLATFORM_ADMIN_EMAILS` (comma-separated) so
- * the value is not hardcoded to one person's address in a public repository;
- * Joel is named here because the brief names him and because a launch set of
- * one is a single point of failure.
+ * Addresses supplied by the environment, kept separate from the named ones
+ * below so `--sync` can still tell whether anything was supplied at all. The
+ * repo owner is identified this way so the value is not hardcoded to one
+ * person's address in a public repository.
  */
-const LAUNCH_SET: string[] = [
-  ...(process.env.PLATFORM_ADMIN_EMAILS ?? '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean),
-  'joel.vasquez@outlook.com',
-];
+const ENV_EMAILS: string[] = (process.env.PLATFORM_ADMIN_EMAILS ?? '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);
+
+/**
+ * The operators named in the repository itself.
+ *
+ * Joel is here because the brief names him and because a launch set of one is
+ * a single point of failure. Ken is here for the same reason: the capability is
+ * granted to him on purpose, and the launch set is the readable, re-runnable
+ * record of who holds it -- which is the whole reason this is a command and not
+ * an `INSERT` somebody once typed into psql.
+ *
+ * Naming an address here publishes it. That is the trade this file already
+ * makes for Joel; an operator who would rather not be named belongs in
+ * `PLATFORM_ADMIN_EMAILS` instead, which reaches `--sync` by exactly the same
+ * path.
+ */
+const NAMED_OPERATORS: string[] = ['joel.vasquez@outlook.com', 'hallken9@gmail.com'];
+
+/**
+ * The launch set: the environment's addresses plus the named ones, deduplicated
+ * so an address in both is granted once and reported once.
+ */
+const LAUNCH_SET: string[] = [...new Set([...ENV_EMAILS, ...NAMED_OPERATORS])];
 
 async function findUser(email: string) {
   const prisma = getPrismaClient();
@@ -180,10 +197,11 @@ async function main(): Promise<void> {
 
   if (args.includes('--sync')) {
     console.log('Provisioning the platform admin launch set...\n');
-    if (LAUNCH_SET.length === 1) {
+    if (ENV_EMAILS.length === 0) {
       console.warn(
-        'PLATFORM_ADMIN_EMAILS is unset, so only Joel is in the launch set. ' +
-          'Set it to the repo owner\'s address and re-run.\n'
+        'PLATFORM_ADMIN_EMAILS is unset, so the launch set is only the ' +
+          `addresses named in this command (${NAMED_OPERATORS.join(', ')}). ` +
+          "Set it to the repo owner's address and re-run to include it.\n"
       );
     }
 

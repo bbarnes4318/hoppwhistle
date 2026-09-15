@@ -3,65 +3,84 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { getPermissions } from '@/hooks/use-auth';
-
 /**
- * A page's `allowedRoles` and the client permission list say one rule between
- * them, and neither file can see the other.
+ * A page's `allowedRoles` and the permission list say one rule between them,
+ * and neither file can see the other.
  *
  * ── The defect this exists for ───────────────────────────────────────────────
  *
  * `/reports` guarded itself with `allowedRoles={['ADMIN', 'OWNER', 'READONLY',
- * 'ANALYST']}` and `allowedPermissions={['reports:read']}`. `getPermissions`
- * never granted READONLY `reports:read`. `RoleGuard` requires BOTH -- it
- * computes `isStaffBypass || hasFullAccess || (hasRole && hasPermission)` -- so
- * a READONLY user was redirected away from a page whose own source named them
- * as welcome.
- *
- * `canViewReports` carried the matching half of the confusion:
- *
- *   (userRoles.includes('READONLY') && permissions.includes('reports:read'))
- *
- * a clause that could not be true in any session, because the permission it
- * tests is never in the list. `canViewRecordings` had the identical dead clause
- * against `recordings:read`. Both read as though they granted something.
+ * 'ANALYST']}` and `allowedPermissions={['reports:read']}`. READONLY was never
+ * granted `reports:read`. `RoleGuard` requires BOTH -- it computes
+ * `isStaffBypass || hasFullAccess || (hasRole && hasPermission)` -- so a
+ * READONLY user was redirected away from a page whose own source named them as
+ * welcome. `canViewReports` carried the matching half, a clause reading
+ * `(READONLY && permissions.includes('reports:read'))` that could not be true
+ * in any session.
  *
  * ── Which way it was resolved, and on what evidence ─────────────────────────
  *
  * READONLY does not see financial reports.
  *
- * `apps/api/src/middleware/rbac.ts` does grant READONLY `reports:read` in its
- * table, and `docs/SECURITY.md` restates that table -- but NO route on the API
- * reads that permission: its only occurrences under `apps/api/src` are the
- * declaration itself. The three endpoints `/reports` actually fetches are
- * guarded by role, in `apps/api/src/routes/index.ts`:
+ * NO route on the API reads `reports:read`: grep it across `apps/api/src` and
+ * every hit is `middleware/rbac.ts` declaring it. The three endpoints the page
+ * fetches are guarded by role, in `apps/api/src/routes/index.ts`:
  *
  *   /api/v1/reports/publisher-revenue        ADMIN/OWNER, or PUBLISHER's own
  *   /api/v1/reports/buyer-costs              ADMIN/OWNER, or BUYER's own
  *   /api/v1/reports/campaign-profitability   ADMIN/OWNER only
  *
  * each answering 403 to everyone else, their `/export.csv` twins likewise. The
- * decisive case is ANALYST: it holds `reports:read` in both tables and is
- * refused by all three anyway. `reports:read` was therefore never the gate on
- * revenue and cost data, and granting it to READONLY would have bought them a
- * page that 403s on every tab rather than any access at all.
+ * decisive case is ANALYST: it holds `reports:read` and is refused by all three
+ * anyway. `reports:read` was therefore never the gate on revenue and cost data,
+ * and granting it to READONLY buys them a page that 403s on every tab.
  *
- * ── Why assert it here rather than by rendering ─────────────────────────────
+ * ── Why the assertions point at the server ──────────────────────────────────
  *
- * Rendering `/reports` as a READONLY user proves that one page. The rule is not
- * about one page: it is that a role named in ANY guard's `allowedRoles` must be
- * granted that guard's `allowedPermissions`, or the guard's two halves disagree
- * and the source lies about which way. That property is asserted below by
- * CALLING `getPermissions`, which is why it was lifted to module scope -- the
- * same move `platform-routes.ts` made for the cross-agency exemption list, and
- * for the same reason: a list asserted by calling it beats one matched with a
- * regex.
+ * They used to point at a permission table in `use-auth.tsx`. That table is
+ * gone: `/api/auth/me` now sends the list and the browser renders from it, so
+ * `ROLE_PERMISSIONS` on the server is the one place the rule is written. That
+ * move is what made a stale grant load-bearing -- while the READONLY row's
+ * `reports:read` was only a declaration it changed nothing, and the moment the
+ * browser started reading the table it put a Reports link in a READONLY
+ * sidebar aimed at a page that refuses them. So the row is what this pins.
+ *
+ * Reading the server's source rather than importing it is deliberate:
+ * `rbac.ts` pulls in Fastify and the Prisma client, neither of which belongs in
+ * a web test process. `__tests__/one-role-model.test.ts` reads its subject
+ * files the same way for the same reason.
  */
 
 const WEB_SRC = join(__dirname, '..', '..');
 const REPORTS_PAGE = join(WEB_SRC, 'app', '(dashboard)', 'reports', 'page.tsx');
 const USE_AUTH = join(WEB_SRC, 'hooks', 'use-auth.tsx');
 const ROLE_GUARD = join(WEB_SRC, 'components', 'auth', 'role-guard.tsx');
+const RBAC = join(WEB_SRC, '..', '..', 'api', 'src', 'middleware', 'rbac.ts');
+
+/** Comments carry permission literals too, and they are not grants. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+/** `ROLE_PERMISSIONS` from the server, as a map this file can actually query. */
+function serverRolePermissions(): Record<string, string[]> {
+  const source = readFileSync(RBAC, 'utf8');
+  const start = source.indexOf('export const ROLE_PERMISSIONS');
+  if (start === -1) throw new Error('ROLE_PERMISSIONS not found — has rbac.ts been restructured?');
+
+  const body = stripComments(source.slice(start, source.indexOf('\n};', start)));
+  const table: Record<string, string[]> = {};
+
+  for (const [, role, list] of body.matchAll(/\b([A-Z][A-Z_]*)\s*:\s*\[([^\]]*)\]/g)) {
+    table[role] = Array.from(list.matchAll(/'([^']+)'/g)).map(m => m[1]);
+  }
+
+  // A parse that silently returned {} would make every assertion below vacuous.
+  for (const role of ['OWNER', 'ADMIN', 'ANALYST', 'PUBLISHER', 'BUYER', 'READONLY', 'AGENT']) {
+    expect(table[role], `${role} missing from the parsed ROLE_PERMISSIONS`).toBeDefined();
+  }
+  return table;
+}
 
 /** `RoleGuard`'s own matching, including the `admin:*` wildcard it honours. */
 function grants(permissions: string[], required: string): boolean {
@@ -75,10 +94,11 @@ function jsxStringArray(source: string, prop: string): string[] {
   return Array.from(match[1].matchAll(/'([^']+)'/g)).map(m => m[1]);
 }
 
-describe('the reports guard and the client permission list', () => {
+describe('the reports guard and the permission table', () => {
   const reportsSource = readFileSync(REPORTS_PAGE, 'utf8');
   const useAuthSource = readFileSync(USE_AUTH, 'utf8');
   const roleGuardSource = readFileSync(ROLE_GUARD, 'utf8');
+  const rolePermissions = serverRolePermissions();
 
   it('still requires a role AND a permission, which is what ties the two files', () => {
     /*
@@ -93,6 +113,24 @@ describe('the reports guard and the client permission list', () => {
     ).toMatch(/hasRole && hasPermission/);
   });
 
+  it('renders the capability from the server list rather than from role names', () => {
+    /*
+     * The other premise: `canViewReports` has to be the server's answer for the
+     * ROLE_PERMISSIONS assertions to describe what a user actually sees. A role
+     * ladder here would be a second copy of the rule -- the thing
+     * `one-role-model.test.ts` exists to keep out.
+     */
+    const canViewReports = useAuthSource.slice(
+      useAuthSource.indexOf('const canViewReports ='),
+      useAuthSource.indexOf('const canViewBilling')
+    );
+    expect(canViewReports).toContain("can('reports:read')");
+    expect(
+      canViewReports,
+      'canViewReports tests role names again; it should render the server list'
+    ).not.toContain('userRoles.includes');
+  });
+
   it('grants every role named on /reports the permission that page demands', () => {
     const allowedRoles = jsxStringArray(reportsSource, 'allowedRoles');
     const allowedPermissions = jsxStringArray(reportsSource, 'allowedPermissions');
@@ -101,11 +139,11 @@ describe('the reports guard and the client permission list', () => {
     expect(allowedPermissions).toContain('reports:read');
 
     for (const role of allowedRoles) {
-      const permissions = getPermissions([role]);
+      const permissions = rolePermissions[role] ?? [];
       for (const required of allowedPermissions) {
         expect(
           grants(permissions, required),
-          `/reports lists ${role} in allowedRoles but getPermissions() never grants it ` +
+          `/reports lists ${role} in allowedRoles but ROLE_PERMISSIONS never grants it ` +
             `${required}, so RoleGuard refuses them. Either grant the permission or ` +
             `drop the role — listing it alone only makes the page read as if it let ` +
             `${role} in.`
@@ -118,8 +156,8 @@ describe('the reports guard and the client permission list', () => {
     /*
      * The direction, pinned in one place. The API refuses READONLY on all three
      * report endpoints (see the header), so putting the role back in either
-     * expression alone would produce a page full of 403s, and putting it back
-     * in both would be a policy change the API has not made.
+     * expression alone produces a page full of 403s, and putting it back in
+     * both would be a policy change the routes have not made.
      */
     expect(
       jsxStringArray(reportsSource, 'allowedRoles'),
@@ -127,18 +165,11 @@ describe('the reports guard and the client permission list', () => {
     ).not.toContain('READONLY');
 
     expect(
-      getPermissions(['READONLY']),
-      'READONLY is granted reports:read client-side; no API route honours it'
+      rolePermissions.READONLY,
+      'READONLY is granted reports:read again — no API route honours it, and the ' +
+        'browser now renders this table, so it puts a Reports link in their sidebar ' +
+        'pointing at a page whose guard refuses them'
     ).not.toContain('reports:read');
-
-    const canViewReports = useAuthSource.slice(
-      useAuthSource.indexOf('const canViewReports ='),
-      useAuthSource.indexOf('const canViewBilling')
-    );
-    expect(
-      canViewReports.includes('READONLY'),
-      'canViewReports names READONLY again — the sidebar would offer a link to a page the guard refuses'
-    ).toBe(false);
   });
 
   it('leaves no capability testing a permission its own role never receives', () => {
@@ -148,9 +179,7 @@ describe('the reports guard and the client permission list', () => {
      *
      *   userRoles.includes('X') && permissions.includes('y:z')
      *
-     * is dead unless `getPermissions(['X'])` can actually produce `y:z`. Both
-     * per-account recording flags are passed as granted, so a clause that is
-     * live for some publisher or buyer counts as live.
+     * is dead unless the server actually grants `y:z` to `X`.
      */
     const clauses = Array.from(
       useAuthSource.matchAll(
@@ -159,10 +188,9 @@ describe('the reports guard and the client permission list', () => {
     );
 
     for (const [, role, required] of clauses) {
-      const permissions = getPermissions([role], { publisher: true, buyer: true });
       expect(
-        grants(permissions, required),
-        `a capability in use-auth.tsx tests (${role} && ${required}), but getPermissions() ` +
+        grants(rolePermissions[role] ?? [], required),
+        `a capability in use-auth.tsx tests (${role} && ${required}), but the server ` +
           `never grants ${required} to ${role}. The clause is always false: either grant ` +
           `the permission or delete the clause, which currently reads as though it allowed something.`
       ).toBe(true);

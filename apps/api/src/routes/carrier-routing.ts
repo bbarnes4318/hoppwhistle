@@ -60,13 +60,27 @@ interface UpdateGatewayBody {
   techPrefix?: string | null;
 }
 
-// An OWNER carries `admin:*`. An ADMIN reaches these two different ways —
-// `numbers:*` from the ROLE_PERMISSIONS map in rbac.ts and `settings:*` from
-// the permissions JSON on the ADMIN row in the `roles` table — and the two
-// sources do not agree, so both are accepted. Changing where a tenant's calls
-// are routed is an administrative act; no lesser role gets it.
-const canRead = requireAnyPermission('admin:*', 'settings:read', 'numbers:read');
-const canWrite = requireAnyPermission('admin:*', 'settings:write', 'numbers:write');
+/*
+ * Changing where a tenant's calls are routed is an administrative act.
+ *
+ * ── Why `numbers:*` is no longer accepted here ───────────────────────────────
+ *
+ * These gates used to include `numbers:read` and `numbers:write`, on the
+ * reasoning that an ADMIN reaches them that way when the `settings:*` entries
+ * on the ADMIN row are missing. The cost was that the gate stopped meaning
+ * "administrator": AGENT, ANALYST and READONLY all hold `numbers:read` because
+ * they all have a Numbers page, and AGENT held `numbers:write` -- so every
+ * agent on the platform could rewrite their agency's carrier routing, past a
+ * comment saying no lesser role gets it. `platform-admin.test.ts` records
+ * noticing the read half and testing around it.
+ *
+ * One permission cannot gate two unrelated resources. The Numbers page keeps
+ * `numbers:*`; this keeps `settings:*`, which ADMIN now holds from
+ * ROLE_PERMISSIONS itself rather than from a JSON column that may or may not
+ * have been populated. An OWNER carries `admin:*` and reaches both.
+ */
+const canRead = requireAnyPermission('admin:*', 'settings:read');
+const canWrite = requireAnyPermission('admin:*', 'settings:write');
 
 /**
  * The tenant this request may act as.

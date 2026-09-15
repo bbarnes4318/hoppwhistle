@@ -6,6 +6,7 @@ import { RoleName } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { createSession, generateCsrfToken } from '../middleware/session.js';
@@ -17,6 +18,52 @@ import {
   peekActivationGrant,
   redeemActivationGrant,
 } from '../services/tenant-activation.js';
+
+/**
+ * How long a session token is good for.
+ *
+ * ── It used to be forever ────────────────────────────────────────────────────
+ *
+ * `registerAuth()` registers @fastify/jwt with a secret and no `sign` options,
+ * and none of the three sign sites below passed `expiresIn`. Login tokens
+ * carried no `exp` claim at all, so a token that leaked -- out of a browser, a
+ * log, a shared machine -- authenticated forever, and revoking a session meant
+ * changing JWT_SECRET for everybody.
+ *
+ * Seven days is not a new policy, it is the one the rest of the system already
+ * assumed: `apps/web/src/lib/session-token.ts` sets the mirror cookie's
+ * Max-Age to exactly this and its comment reads "matches the JWT lifetime the
+ * API issues". It did not. Now it does.
+ *
+ * Authorization is unaffected by the length: `lib/principal.ts` resolves roles
+ * from the database on every request, so a role revoked at 10am is gone at
+ * 10am whatever the token says. The expiry bounds AUTHENTICATION -- who may
+ * ask -- which is the part a long-lived bearer token was leaving unbounded.
+ */
+export const SESSION_TOKEN_TTL = '7d';
+
+/**
+ * A token is refreshable for this long before it expires.
+ *
+ * Short enough that a stolen token is not indefinitely renewable by an
+ * attacker who is not actively using it; long enough that anybody who opens
+ * the app in a normal week renews without noticing. Outside the window a
+ * still-valid token is served as normal and simply not renewed yet.
+ */
+export const REFRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a string is one of this schema's roles.
+ *
+ * The effective role list on a principal is `string[]`, because a platform
+ * operator's roles are attached by `applyPlatformContext` rather than read from
+ * `UserRole`. A value that is not a role resolves to no capabilities rather
+ * than to an unchecked lookup -- the same default-deny `effectivePermissionsFor`
+ * applies to the permissions column.
+ */
+function isRoleName(value: string): value is RoleName {
+  return Object.prototype.hasOwnProperty.call(RoleName, value);
+}
 
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -185,11 +232,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       .catch(() => {});
 
     // Create JWT token
-    const token = await reply.jwtSign({
-      tenantId: user.tenantId,
-      userId: user.id,
-      email: user.email,
-    });
+    const token = await reply.jwtSign(
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        email: user.email,
+      },
+      { expiresIn: SESSION_TOKEN_TTL }
+    );
 
     // Create session
     const sessionId = await createSession(reply, {
@@ -458,11 +508,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       success: true,
     });
 
-    const token = await reply.jwtSign({
-      tenantId: user.tenantId,
-      userId: user.id,
-      email: user.email,
-    });
+    const token = await reply.jwtSign(
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        email: user.email,
+      },
+      { expiresIn: SESSION_TOKEN_TTL }
+    );
 
     const sessionId = await createSession(reply, {
       userId: user.id,
@@ -836,11 +889,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     // Create JWT token
-    const token = await reply.jwtSign({
-      tenantId: user.tenantId,
-      userId: user.id,
-      email: user.email,
-    });
+    const token = await reply.jwtSign(
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        email: user.email,
+      },
+      { expiresIn: SESSION_TOKEN_TTL }
+    );
 
     // Create session
     const sessionId = await createSession(reply, {
@@ -904,6 +960,83 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   );
 
   // ============================================================================
+  // Refresh the session token
+  // ============================================================================
+  /**
+   * Exchange a valid, near-expiry token for a fresh one.
+   *
+   * ── Why this is not a second authentication system ───────────────────────
+   *
+   * There is no refresh token, no second secret and no new table. The caller
+   * presents the session token they already hold; `authenticate` verifies it
+   * the same way every other route does -- including the checks that the user
+   * still exists, is still ACTIVE and still belongs to the tenant the token
+   * names -- and this re-signs the same three claims with a new expiry.
+   *
+   * A separate long-lived refresh credential would be a second thing to steal
+   * and a second thing to revoke, for a product whose sessions are already
+   * bounded at seven days. Sliding the existing one costs nothing and keeps
+   * one credential in the system.
+   *
+   * ── What it deliberately cannot do ───────────────────────────────────────
+   *
+   * Resurrect an expired session. `jwtVerify` rejects an expired token before
+   * this handler runs, so the answer there is 401 and the fix is to sign in --
+   * which is the honest outcome, and the one the brief asks for.
+   *
+   * It also cannot change who you are. The claims are re-read from the
+   * authenticated principal, never from the request body, so a refresh cannot
+   * move an account to another tenant or another user.
+   */
+  fastify.post('/api/auth/refresh', { preHandler: [authenticate] }, async (request, reply) => {
+    const principal = request.user as { userId?: string; tenantId?: string; email?: string };
+
+    if (!principal?.userId) {
+      return reply.code(401).send({
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+      });
+    }
+
+    /*
+     * The row, not the token. A token still inside its seven days says nothing
+     * about whether the account behind it is still active -- `authenticate`
+     * already refuses a suspended user, and reading the row here keeps the
+     * tenant on the new token in step with the row rather than copying forward
+     * whatever the old one claimed.
+     */
+    const user = await prisma.user.findUnique({
+      where: { id: principal.userId },
+      select: { id: true, email: true, tenantId: true, status: true },
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      return reply.code(401).send({
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+      });
+    }
+
+    const token = await reply.jwtSign(
+      { tenantId: user.tenantId, userId: user.id, email: user.email },
+      { expiresIn: SESSION_TOKEN_TTL }
+    );
+
+    await auditLog({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.token.refreshed',
+      entityType: 'User',
+      resource: '/api/auth/refresh',
+      method: 'POST',
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      requestId: request.id,
+      success: true,
+    });
+
+    return reply.send({ token });
+  });
+
+  // ============================================================================
   // Get Current User (Me)
   // ============================================================================
   fastify.get(
@@ -939,6 +1072,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         userId?: string;
         tenantId?: string;
         roles?: string[];
+        /** Seconds since the epoch, from the verified token. */
+        exp?: number;
         isPlatformAdmin?: boolean;
         actingTenantId?: string | null;
         actingTenantName?: string | null;
@@ -976,6 +1111,23 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
+      /*
+       * The `permissions` JSON on each role row, so the capability list below
+       * is computed the same way `getUserPermissions()` computes it -- map
+       * first, then the row's additions, filtered default-deny.
+       *
+       * A platform operator's effective roles are ADMIN and OWNER of the agency
+       * they entered, and they hold no `UserRole` row there, so their rows are
+       * not among `user.roles`. Every role is read rather than only the user's
+       * own; it is one query on a table with seven rows.
+       */
+      const rolePermissionsByName = new Map<RoleName, unknown>(
+        (await prisma.role.findMany({ select: { name: true, permissions: true } })).map(role => [
+          role.name,
+          role.permissions,
+        ])
+      );
+
       let publisherAccessToRecordings = false;
       let buyerAccessToRecordings = false;
 
@@ -1000,13 +1152,50 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
       const rowRoles = user.roles.map((ur: UserRole) => ur.role.name);
       const isPlatformPrincipal = principal?.isPlatformAdmin === true;
+      const effectiveRoles = isPlatformPrincipal ? (principal.roles ?? rowRoles) : rowRoles;
+
+      /*
+       * What this principal may do, decided by the server.
+       *
+       * ── Why the client is told rather than left to work it out ────────────
+       *
+       * `apps/web/src/hooks/use-auth.tsx` carried its own copy of the
+       * permission table and rebuilt it in the browser from the role list. It
+       * had drifted: the server gives AGENT nine capabilities and that copy
+       * gave it one (`calls:read`), so `/reports` turned an agent away from a
+       * page the API would have served them. `useUserRoles.ts` carried a third
+       * model whose `RoleName` union did not contain AGENT at all.
+       *
+       * Three answers to "what may this person do" is two too many, and the
+       * two in the browser are the ones that cannot be authoritative anyway.
+       * So the server sends its own answer, from `effectivePermissionsFor` --
+       * the exact function `checkPermission()` gates on -- and the client
+       * renders from it instead of deriving.
+       *
+       * This is navigation state, not enforcement. The API still authorises
+       * every request on its own; sending the list only stops the screen
+       * lying about what the next click will do.
+       *
+       * Computed from the EFFECTIVE roles, so a platform operator inside an
+       * agency gets that agency's administrator capabilities and an operator
+       * previewing a role gets exactly that role's -- the same list the
+       * requests they are about to make will be judged against.
+       */
+      const permissions = Array.from(
+        new Set(
+          effectiveRoles.flatMap(role =>
+            isRoleName(role) ? effectivePermissionsFor(role, rolePermissionsByName.get(role)) : []
+          )
+        )
+      );
 
       return reply.send({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        roles: isPlatformPrincipal ? (principal.roles ?? rowRoles) : rowRoles,
+        roles: effectiveRoles,
+        permissions,
         tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
@@ -1022,6 +1211,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         actingTenantName: principal?.actingTenantName ?? null,
         previewRole: principal?.previewRole ?? null,
         isReadOnlyPreview: principal?.isReadOnlyPreview === true,
+        /*
+         * When this session stops being accepted, so the client can renew
+         * before it lapses rather than discovering it through a 401 on some
+         * unrelated page. Null for a principal whose token carries no `exp` --
+         * one issued before tokens had one, which stays valid until it is
+         * exchanged.
+         */
+        sessionExpiresAt:
+          typeof principal?.exp === 'number' ? new Date(principal.exp * 1000).toISOString() : null,
       });
     }
   );

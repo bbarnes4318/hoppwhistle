@@ -36,6 +36,17 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 
+# A backup taken before editing .env on a server. Ignored because
+# scripts/deploy-netenroll.sh refuses to deploy a dirty working tree -- the
+# right call, but it means the sensible habit of copying .env aside first
+# blocks the deploy that follows it, with the operator's own backup named as
+# the reason. These carry the same secrets as .env and must never be
+# committed either.
+.env.backup*
+.env.bak
+.env.save
+.env.orig
+
 # Vercel
 .vercel
 

@@ -11,6 +11,7 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { agentScopeFor, mayReachOwnedRow } from '../lib/agent-scope.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 
@@ -25,6 +26,41 @@ import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
  */
 function getTenantId(request: FastifyRequest): string | null {
   return getActingTenantId(request);
+}
+
+/**
+ * Refuse a request for a lead the caller does not hold.
+ *
+ * Returns the lead id when the caller may act on it, and null once it has
+ * answered the request. Every `:id` route in this file goes through it, so the
+ * ownership rule has one implementation rather than one per handler.
+ *
+ * The lookup is scoped by tenant AND resolves the owner in the same query, so
+ * a cross-tenant id and an unheld id are indistinguishable from the outside:
+ * both 404. An agent walking ids learns neither which of them are real nor
+ * which belong to their agency.
+ *
+ * An unassigned lead belongs to the agency, not to nobody -- see
+ * `mayReachOwnedRow`. It is reachable by a principal and by no agent.
+ */
+async function requireReachableLead(
+  request: FastifyRequest,
+  reply: { code: (n: number) => unknown },
+  tenantId: string,
+  leadId: string
+): Promise<string | null> {
+  const { getPrismaClient } = await import('../lib/prisma.js');
+  const lead = await getPrismaClient().insuranceLead.findFirst({
+    where: { id: leadId, tenantId },
+    select: { id: true, assignedToId: true },
+  });
+
+  if (!lead || !mayReachOwnedRow(request, lead.assignedToId)) {
+    void reply.code(404);
+    return null;
+  }
+
+  return lead.id;
 }
 
 interface DeliverySelector {
@@ -334,7 +370,24 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         }
         targetListId = listRecord.id;
       } else if (targetListId) {
-        listRecord = await prisma.leadList.findUnique({ where: { id: targetListId } });
+        /*
+         * Scoped by tenant, because `targetListId` came from the request body.
+         *
+         * This was `findUnique({ where: { id } })`: a list id from one agency
+         * resolved against another agency's row, and `targetListId` then flows
+         * into every lead created below -- so an import could file a batch of
+         * leads into a list belonging to a different customer. The sibling
+         * lookup four lines above was already tenant-scoped; this one was
+         * missed because it reads a list rather than searching for one.
+         */
+        listRecord = await prisma.leadList.findFirst({
+          where: { id: targetListId, tenantId },
+        });
+
+        if (!listRecord) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Lead list not found' } };
+        }
       }
 
       const isPreClosed = listRecord && listRecord.name.toLowerCase() === 'preclosed';
@@ -476,6 +529,17 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const q = request.query;
     const wantsCsv = q.format?.toLowerCase() === 'csv';
 
+    /*
+     * Whose leads. Null for an agency principal, their own user id for an
+     * agent -- derived from the principal and never from the query string, so
+     * there is no value a caller can send that widens the result.
+     *
+     * The export gets the SAME narrowing as the grid, deliberately and in the
+     * same breath. An export that ignored it would be the whole agency's book
+     * in a CSV, reached from a page that only ever showed the agent forty rows.
+     */
+    const assignedToId = agentScopeFor(request) ?? undefined;
+
     // An export reads the FULL record, not the grid's narrow projection. The
     // grid selects the dozen columns it renders; exporting from that read is
     // what dropped the TrustedForm certificate and the rejection reason.
@@ -496,6 +560,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         leadStage: q.leadStage,
         followUp: q.followUp,
         listId: q.listId,
+        assignedToId,
       });
 
       return reply
@@ -523,6 +588,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leadStage: q.leadStage,
       followUp: q.followUp,
       listId: q.listId,
+      assignedToId,
     });
 
     return result;
@@ -678,7 +744,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     const { getStats } = await import('../services/insurance-lead-service.js');
-    return await getStats(tenantId);
+    // CRM Reports is one of the sixteen pages an agent is entitled to. What it
+    // counts is their own book, not the agency's.
+    return await getStats(tenantId, agentScopeFor(request) ?? undefined);
   });
 
   // -----------------------------------------------------------------------
@@ -692,7 +760,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { getLeadById } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const lead = await getLeadById(tenantId, request.params.id);
+    const lead = await getLeadById(tenantId, request.params.id, agentScopeFor(request) ?? undefined);
 
     if (!lead) {
       void reply.code(404);
@@ -712,6 +780,10 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const tenantId = getTenantId(request);
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
+    }
+
+    if (!(await requireReachableLead(request, reply, tenantId, request.params.id))) {
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
     }
 
     const { updateLead } = await import('../services/insurance-lead-service.js');
@@ -736,6 +808,10 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const tenantId = getTenantId(request);
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
+    }
+
+    if (!(await requireReachableLead(request, reply, tenantId, request.params.id))) {
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
     }
 
     const { retrySubmission } = await import('../services/insurance-lead-service.js');
@@ -856,10 +932,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify lead belongs to tenant
+    // Verify the lead belongs to this tenant AND is one this caller holds.
+    // Tasks hang off a lead, so reaching them is reaching the lead.
     const lead = await prisma.insuranceLead.findFirst({
       where: { id: request.params.id, tenantId },
+      // `assignedToId` is what the ownership check below reads.
     });
+    if (lead && !mayReachOwnedRow(request, lead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
     if (!lead) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
@@ -891,10 +973,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify lead belongs to tenant
+    // Verify the lead belongs to this tenant AND is one this caller holds.
+    // Tasks hang off a lead, so reaching them is reaching the lead.
     const lead = await prisma.insuranceLead.findFirst({
       where: { id: request.params.id, tenantId },
+      // `assignedToId` is what the ownership check below reads.
     });
+    if (lead && !mayReachOwnedRow(request, lead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
     if (!lead) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
@@ -949,10 +1037,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify task belongs to lead and tenant
+    // Verify task belongs to lead and tenant, and that the caller holds the
+    // lead. A task is reachable exactly when the lead it hangs off is.
     const task = await prisma.insuranceTask.findFirst({
       where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+      include: { insuranceLead: { select: { assignedToId: true } } },
     });
+    if (task && !mayReachOwnedRow(request, task.insuranceLead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
 
     if (!task) {
       void reply.code(404);
@@ -998,10 +1092,16 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
-    // Verify task belongs to lead and tenant
+    // Verify task belongs to lead and tenant, and that the caller holds the
+    // lead. A task is reachable exactly when the lead it hangs off is.
     const task = await prisma.insuranceTask.findFirst({
       where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+      include: { insuranceLead: { select: { assignedToId: true } } },
     });
+    if (task && !mayReachOwnedRow(request, task.insuranceLead.assignedToId)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
 
     if (!task) {
       void reply.code(404);

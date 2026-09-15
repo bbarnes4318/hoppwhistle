@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  BarChart3,
   Calendar,
   Download,
   Loader2,
@@ -14,12 +13,11 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -167,7 +165,6 @@ function ReportsPage() {
     user?.roles.includes('BUYER') &&
     !user?.roles.includes('ADMIN') &&
     !user?.roles.includes('OWNER');
-  const isReadOnly = user?.roles.includes('READONLY');
   const isAgent = user?.roles.includes('AGENT');
 
   const showProfitability = !isPublisher && !isBuyer && !isAgent;
@@ -285,10 +282,11 @@ function ReportsPage() {
       case 'last-30':
         start = getPastDateStr(30);
         break;
-      case 'this-month':
+      case 'this-month': {
         const now = new Date();
         start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
         break;
+      }
     }
     setStartDate(start);
     setEndDate(end);
@@ -387,7 +385,7 @@ function ReportsPage() {
         subtitle="Analyze publisher revenue, buyer costs, and campaign profit margins."
       >
         <Button
-          onClick={handleCsvExport}
+          onClick={() => void handleCsvExport()}
           disabled={exporting || loading}
           size="sm"
           className="h-8 text-xs bg-brand hover:bg-brand-ink text-ink"
@@ -493,7 +491,7 @@ function ReportsPage() {
             variant="outline"
             size="icon"
             className="h-7 w-7 border-rule text-muted-foreground"
-            onClick={fetchReport}
+            onClick={() => void fetchReport()}
             disabled={loading}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
@@ -1170,8 +1168,8 @@ export default function GuardedReportsPage() {
      * already turned them away. The name in this list was the only thing saying
      * otherwise. The three endpoints below this component fetch refuse READONLY
      * with a 403 of their own -- see the note against READONLY in
-     * `hooks/use-auth.tsx` -- so removing it changes no behaviour and stops the
-     * page claiming an access that does not exist.
+     * `apps/api/src/middleware/rbac.ts` -- so removing it changes no behaviour
+     * and stops the page claiming an access that does not exist.
      */
     <RoleGuard allowedRoles={['ADMIN', 'OWNER', 'ANALYST']} allowedPermissions={['reports:read']}>
       <ReportsPage />

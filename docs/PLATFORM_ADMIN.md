@@ -683,7 +683,10 @@ pnpm --filter @hopwhistle/api platform:admins -- --revoke someone@example.com
 `--sync` is idempotent: it grants to whichever of the launch set have accounts,
 reports the ones that do not, and never revokes. The launch set is
 `PLATFORM_ADMIN_EMAILS` (comma-separated, so the repo owner's address is not
-hardcoded in a public repository) plus `joel.vasquez@outlook.com`.
+hardcoded in a public repository) plus the addresses named in
+`platform-admins.ts`: `joel.vasquez@outlook.com` and `hallken9@gmail.com`.
+Naming an address there publishes it; an operator who would rather not be named
+goes in `PLATFORM_ADMIN_EMAILS` instead and reaches `--sync` the same way.
 
 It deliberately **does not create user accounts**. A login is created through the
 normal activation-grant invitation path; a provisioning script that mints
@@ -766,6 +769,42 @@ than an ordinary grant: an ordinary one puts an AGENT or OWNER inside a paying
 agency, this one produces an account with nothing. Minting it needs shell access
 to the host and `DATABASE_URL` — the same bar as granting the capability
 directly, which the same command already does.
+
+### 4.2 `hallken9@gmail.com`
+
+Ken is in the launch set, so a deploy provisions him: `deploy-netenroll.sh` runs
+`platform:admins --sync` before it swaps the code in, and `--sync` grants to
+whichever of the set have accounts. Nothing else is needed if he already has a
+login.
+
+To grant it now, without waiting for a deploy — on the host, with
+`DATABASE_URL` set:
+
+```
+cd /opt/hopwhistle
+pnpm --filter @hopwhistle/api platform:admins -- --grant hallken9@gmail.com
+pnpm --filter @hopwhistle/api platform:admins          # expect his row, ACTIVE, cross-agency view
+```
+
+If that prints `no account`, he has never registered. Invite him first and have
+him register with the token, exactly as in §4.1, then re-run the `--grant`:
+
+```
+pnpm --filter @hopwhistle/api platform:admins -- --invite hallken9@gmail.com
+```
+
+**What this gives him, and what it does not.** The capability is cross-agency,
+so he lands in the cross-agency view with no tenant. That is not a wildcard: the
+agency-scoped routes refuse him until he enters an agency from the switcher,
+which grants ADMIN and OWNER *inside that one agency only*, for as long as the
+selection row exists, with an audit row for every entry and exit (§1, §2b).
+"Access everything" is one agency at a time, on the record — there is no state
+in this system that is administrator of every agency at once.
+
+A tenant `ADMIN` role is a different thing and is not granted here: it would
+make him an administrator of one agency, which is narrower, and the two are not
+substitutes. `--revoke` takes the capability back and drops him out of any
+agency he was inside.
 
 ---
 
