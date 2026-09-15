@@ -23,6 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isPublisherOnly,
     isBuyerOnly,
     isAgentOnly,
+    status: authStatus,
     loading: authLoading,
   } = useAuth();
 
@@ -58,10 +59,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (authLoading) return;
 
-    if (!user) {
+    /*
+     * Only a credential the server actually rejected sends anybody to /login.
+     *
+     * This used to be `if (!user)`, and `user` was null for three different
+     * reasons -- still resolving, nobody signed in, and the request failed.
+     * The third is not a signed-out session: a 429 from the shared rate-limit
+     * bucket would evict somebody mid-shift and land them on a login page for
+     * a session that was still perfectly valid. `status` separates them.
+     */
+    if (authStatus === 'anonymous') {
       router.replace('/login');
       return;
     }
+
+    if (!user) return;
 
     /*
      * A platform operator holds no agency roles in the cross-agency view, so
@@ -117,6 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isPublisherOnly,
     isBuyerOnly,
     isAgentOnly,
+    authStatus,
     authLoading,
     pathname,
     router,

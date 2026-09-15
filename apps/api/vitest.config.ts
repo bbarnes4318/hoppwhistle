@@ -44,6 +44,9 @@ const DATABASE_BACKED = [
   '**/src/__tests__/recording-access.test.ts',
   // Truncates `tenants`, `roles` and `users` to seed one account per role.
   '**/src/__tests__/me-capabilities.test.ts',
+  // Truncates `tenants`, `roles`, `users` and `audit_logs`, and suspends its
+  // own agent mid-suite.
+  '**/src/__tests__/session-expiry.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's

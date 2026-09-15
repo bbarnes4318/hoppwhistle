@@ -46,6 +46,14 @@ export interface AuthenticatedUser {
    * global hook in `middleware/read-only-preview.ts`.
    */
   isReadOnlyPreview?: boolean;
+
+  /**
+   * When the presenting credential stops being accepted, in seconds since the
+   * epoch, straight from the token's `exp`. Reporting only: no check anywhere
+   * reads it, because the token's own verification has already enforced it by
+   * the time a handler runs.
+   */
+  exp?: number;
 }
 
 /**
@@ -74,6 +82,8 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       tenantId: string;
       userId?: string;
       email?: string;
+      /** Seconds since the epoch. Absent on a token minted before expiry existed. */
+      exp?: number;
     };
 
     // Validate user exists and is active
@@ -167,6 +177,14 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         actingTenantName: platform.actingTenantName,
         previewRole: platform.previewRole,
         isReadOnlyPreview: !!platform.previewRole,
+        /*
+         * Carried through from the verified token so a handler can say when
+         * this session lapses -- `/api/auth/me` reports it, and the client
+         * renews before that rather than discovering it as a 401 on some
+         * unrelated page. It is a fact about the credential, not a grant, and
+         * nothing authorises off it.
+         */
+        exp: decoded.exp,
       };
 
       /*
@@ -184,6 +202,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       request.user = {
         tenantId: decoded.tenantId,
         email: decoded.email,
+        exp: decoded.exp,
       };
     }
   } catch (err) {

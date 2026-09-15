@@ -25,15 +25,14 @@ export function RoleGuard({
     hasFullAccess,
     isPlatformAdmin,
     isReadOnlyPreview,
+    status,
     loading,
     defaultDashboardPath,
   } = useAuth();
   const router = useRouter();
 
   // OWNER/ADMIN always bypasses guards
-  const hasRole = allowedRoles
-    ? userRoles.some(role => allowedRoles.includes(role))
-    : true;
+  const hasRole = allowedRoles ? userRoles.some(role => allowedRoles.includes(role)) : true;
 
   const hasPermission = allowedPermissions
     ? allowedPermissions.some(perm => {
@@ -67,15 +66,24 @@ export function RoleGuard({
   const isAuthorized = isStaffBypass || hasFullAccess || (hasRole && hasPermission);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+
+    /*
+     * A failed request is not a signed-out session.
+     *
+     * This was `!loading && !user`, which sent somebody to /login whenever
+     * /api/auth/me did not answer -- a 429, a 500, a proxy error page. The
+     * server has to have actually rejected the credential.
+     */
+    if (status === 'anonymous') {
       router.push('/login');
       return;
     }
 
-    if (!loading && user && !isAuthorized) {
+    if (user && !isAuthorized) {
       router.push(fallbackPath || defaultDashboardPath);
     }
-  }, [loading, user, isAuthorized, router, fallbackPath, defaultDashboardPath]);
+  }, [loading, status, user, isAuthorized, router, fallbackPath, defaultDashboardPath]);
 
   if (loading) {
     return (
@@ -83,6 +91,24 @@ export function RoleGuard({
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
           <p className="mt-2 text-sm text-muted-foreground">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * The server could not be reached. Say so rather than spinning on
+   * "Redirecting..." forever -- nothing is being redirected to, and the person
+   * is still signed in.
+   */
+  if (status === 'failed' && !user) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="max-w-sm text-center">
+          <p className="text-sm font-medium">This page could not check your access</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The server did not answer. You are still signed in.
+          </p>
         </div>
       </div>
     );

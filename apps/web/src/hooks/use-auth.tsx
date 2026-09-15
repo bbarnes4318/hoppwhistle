@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { usePlatformContext } from './use-platform-context';
 
 import { homePathForRoles } from '@/lib/roles';
-import { clearSessionToken } from '@/lib/session-token';
+import { clearSessionToken, persistSessionToken } from '@/lib/session-token';
 
 /**
  * The signed-in user, fetched once for the whole tree.
@@ -29,14 +29,51 @@ import { clearSessionToken } from '@/lib/session-token';
  * roles and permissions from it -- those are pure functions of the user, so
  * every call site keeps its own cheap copy and nothing else changed.
  */
+/**
+ * What is known about the session right now.
+ *
+ * ── Why three outcomes and not a boolean ─────────────────────────────────────
+ *
+ * `user === null` used to mean all of: still asking, nobody is signed in, and
+ * the request failed. The sidebar dispatches on role flags derived from `user`,
+ * so all three rendered the same thing -- the catch-all, a single Dashboard
+ * entry. That is indistinguishable, to the person looking at it, from an
+ * account whose roles were taken away, and it is the state the reported
+ * incident ended in.
+ *
+ * A 429 was enough to produce it. The rate limiter keys on `request.ip`, which
+ * is nginx for every request because Fastify runs without `trustProxy`, so the
+ * whole platform shares one 100-per-minute budget; when it trips,
+ * `/api/auth/me` answers 429, and an agent who was working a moment ago is
+ * looking at a one-item nav.
+ *
+ * So the states are named, and the chrome renders differently for each:
+ *
+ *   resolving       nothing is known yet. Render no navigation at all -- not
+ *                   an administrator's, not a fallback.
+ *   authenticated   the server answered. `user.roles` is the truth, including
+ *                   when it is empty.
+ *   anonymous       no credential. The layout sends them to /login.
+ *   failed          the server did not answer. NOT "signed out" and NOT "no
+ *                   roles": say so and offer a retry.
+ */
+export type SessionStatus = 'resolving' | 'authenticated' | 'anonymous' | 'failed';
+
 interface AuthSession {
   user: UserData | null;
+  status: SessionStatus;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
 
 const AuthSessionContext = createContext<AuthSession | null>(null);
+
+/** Renew once the session has less than this left. Matches REFRESH_WINDOW_MS on the API. */
+const RENEW_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+/** How often an open tab re-checks. The window is a day wide; hourly is ample. */
+const RENEW_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 interface UserData {
   id: string;
@@ -71,6 +108,8 @@ interface UserData {
   actingTenantName?: string | null;
   previewRole?: string | null;
   isReadOnlyPreview?: boolean;
+  /** ISO timestamp from `/api/auth/me`, or null for a token minted before expiry existed. */
+  sessionExpiresAt?: string | null;
 }
 
 interface UseAuthReturn {
@@ -120,7 +159,20 @@ interface UseAuthReturn {
   canManageNumbers: boolean;
   canDisputeConversions: boolean;
   defaultDashboardPath: string;
+  /** See `SessionStatus`. The chrome renders a different thing for each. */
+  status: SessionStatus;
+  /**
+   * True until the first answer. While this is true NOTHING may render a
+   * navigation: not an administrator's, and not a fallback that looks like an
+   * account with no roles.
+   */
   loading: boolean;
+  /**
+   * The server answered and this account genuinely holds no role. Distinct
+   * from `loading` and from `status === 'failed'`, both of which used to look
+   * identical to it on screen.
+   */
+  hasResolvedNoRole: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
@@ -128,14 +180,15 @@ interface UseAuthReturn {
 /** Mounted once, at the root, above everything that calls `useAuth`. */
 export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<SessionStatus>('resolving');
   const [error, setError] = useState<string | null>(null);
 
   const fetchUser = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        setLoading(false);
+        setUser(null);
+        setStatus('anonymous');
         return;
       }
 
@@ -146,12 +199,25 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Clear both stores: a dead token left in the cookie would keep the
-          // server render trying to authenticate with it on every navigation.
+          // The credential is genuinely dead. Clear both stores: a dead token
+          // left in the cookie would keep the server render trying to
+          // authenticate with it on every navigation.
           clearSessionToken();
+          setUser(null);
+          setStatus('anonymous');
+          setError(null);
+          return;
         }
-        setError('Failed to fetch user data');
-        setLoading(false);
+
+        /*
+         * Anything else -- 429, 500, a proxy error page -- is the server
+         * failing to answer, not the person failing to be someone. Leaving the
+         * previous `user` in place means a transient failure does not take the
+         * navigation away from somebody mid-task; `failed` is what the chrome
+         * renders its retry from.
+         */
+        setError(`Could not load your account (HTTP ${res.status}).`);
+        setStatus('failed');
         return;
       }
 
@@ -181,13 +247,16 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         actingTenantName: rawUser.actingTenantName ?? null,
         previewRole: rawUser.previewRole ?? null,
         isReadOnlyPreview: rawUser.isReadOnlyPreview === true,
+        sessionExpiresAt: rawUser.sessionExpiresAt ?? null,
       });
+      setStatus('authenticated');
       setError(null);
     } catch (err) {
+      // The network, not the server. Same reasoning as a 5xx: the person is
+      // not signed out, we simply do not know anything right now.
       console.error('Auth fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Could not reach the server.');
+      setStatus('failed');
     }
   }, []);
 
@@ -195,8 +264,58 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
     void fetchUser();
   }, [fetchUser]);
 
+  /*
+   * Renew the session before it lapses.
+   *
+   * The API issues seven-day tokens and `/api/auth/me` reports when this one
+   * stops being accepted. Inside the last day, exchange it for a fresh one --
+   * `POST /api/auth/refresh` re-signs the same three claims from the
+   * authenticated principal, so this cannot change who the session belongs to.
+   *
+   * Checked when the session resolves and once an hour after, which is enough:
+   * the window is a day wide, and a tab left open for a week gets its chance.
+   * A failure is silent by design -- the token is still valid for up to another
+   * day, and the next check or the next page load tries again. What must not
+   * happen is a renewal failure reading as a sign-out.
+   */
+  useEffect(() => {
+    if (!user?.sessionExpiresAt) return;
+
+    const renewIfDue = async () => {
+      const expiresAt = Date.parse(user.sessionExpiresAt as string);
+      if (!Number.isFinite(expiresAt)) return;
+      if (expiresAt - Date.now() > RENEW_WITHIN_MS) return;
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+
+        const body = await res.json();
+        if (typeof body?.token !== 'string') return;
+
+        persistSessionToken(body.token);
+        await fetchUser();
+      } catch {
+        // Still valid for up to another day; the next check tries again.
+      }
+    };
+
+    void renewIfDue();
+    const timer = setInterval(() => void renewIfDue(), RENEW_CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [user?.sessionExpiresAt, fetchUser]);
+
   return (
-    <AuthSessionContext.Provider value={{ user, loading, error, refetch: fetchUser }}>
+    <AuthSessionContext.Provider
+      value={{ user, status, loading: status === 'resolving', error, refetch: fetchUser }}
+    >
       {children}
     </AuthSessionContext.Provider>
   );
@@ -210,13 +329,14 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
  */
 const NO_SESSION: AuthSession = {
   user: null,
+  status: 'anonymous',
   loading: false,
   error: null,
   refetch: async () => {},
 };
 
 export function useAuth(): UseAuthReturn {
-  const { user, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
+  const { user, status, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
 
   /*
    * The platform half of the answer, from the one fetch that already asks for it.
@@ -256,6 +376,7 @@ export function useAuth(): UseAuthReturn {
   const isReadonlyOnly = isReadonly && !hasFullAccess;
 
   const isNewUser = !!user && userRoles.length === 0;
+  const hasResolvedNoRole = status === 'authenticated' && userRoles.length === 0;
 
   const buyerId = user?.buyerId || null;
   const publisherId = user?.publisherId || null;
@@ -359,7 +480,9 @@ export function useAuth(): UseAuthReturn {
     canManageNumbers,
     canDisputeConversions,
     defaultDashboardPath,
+    status,
     loading,
+    hasResolvedNoRole,
     error,
     refetch,
   };
