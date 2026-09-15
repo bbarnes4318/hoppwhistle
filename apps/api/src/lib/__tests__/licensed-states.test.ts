@@ -26,6 +26,7 @@ const {
   loadLicensedStates,
   normalizeLicensedStates,
   normalizeStateCode,
+  partitionLicensedStates,
   permits,
   resolveStateAuthority,
   resolveStateForPhone,
@@ -75,6 +76,42 @@ describe('normalizeStateCode', () => {
     expect(normalizeLicensedStates(['tn', 'Florida', 'XX', 'TN', 77])).toEqual(['FL', 'TN']);
     expect(normalizeLicensedStates('TN')).toEqual([]);
     expect(normalizeLicensedStates(undefined)).toEqual([]);
+  });
+});
+
+describe('reporting a stored licence back to an operator', () => {
+  // What `cli/agent-licenses.ts` and scripts/licensed-states-report.sh show.
+  // A blocked agent needs to see WHY, so the entries enforcement drops are kept
+  // rather than thrown away -- and they come from the same function that decides
+  // what is enforced, so the report cannot disagree with the code.
+  it('keeps the entries it drops, so a blocked agent has a visible cause', () => {
+    expect(partitionLicensedStates(['Tennesee', 'XX'])).toEqual({
+      licensed: [],
+      rejected: ['Tennesee', 'XX'],
+    });
+  });
+
+  it('reports a partly-rotten licence as the narrower list it really is', () => {
+    expect(partitionLicensedStates(['TN', 'Atlantis'])).toEqual({
+      licensed: ['TN'],
+      rejected: ['Atlantis'],
+    });
+  });
+
+  it('rejects a non-array outright rather than reporting it as absent', () => {
+    // `licensedStates: "TN"` is a wrong type, not a missing licence, and saying
+    // "no licence" would send somebody hunting a row that is already there.
+    expect(partitionLicensedStates('TN')).toEqual({ licensed: [], rejected: ['TN'] });
+  });
+
+  it('separates absent from empty, and grants nothing for either', () => {
+    expect(partitionLicensedStates(undefined)).toEqual({ licensed: [], rejected: [] });
+    expect(partitionLicensedStates([])).toEqual({ licensed: [], rejected: [] });
+  });
+
+  it('agrees with what enforcement will honour', () => {
+    const stored = ['fl', 'Tennessee', 'XX', 'TN'];
+    expect(partitionLicensedStates(stored).licensed).toEqual(normalizeLicensedStates(stored));
   });
 });
 

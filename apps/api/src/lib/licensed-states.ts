@@ -262,21 +262,53 @@ export function isLicensableState(code: string): boolean {
 }
 
 /**
+ * A stored licence list, split into what enforcement will honour and what it
+ * will silently drop.
+ *
+ * The `rejected` half exists for the operator, not for the enforcement: a list
+ * reading `["Tennesee", "XX"]` grants nothing, and an administrator looking at
+ * a blocked agent needs to see WHY rather than an empty column. It is what
+ * `cli/agent-licenses.ts` and `scripts/licensed-states-report.sh` report on, and
+ * keeping it here rather than in the CLI is what stops the tool that reports
+ * readiness from disagreeing with the code that enforces it.
+ */
+export interface LicencePartition {
+  /** Canonical codes, sorted and de-duplicated. What `permits()` will match. */
+  licensed: string[];
+  /** Entries that resolve to no jurisdiction. They grant nothing. */
+  rejected: unknown[];
+}
+
+/**
+ * Split a stored licence list. Anything that is not an array is wholly
+ * rejected rather than treated as absent -- `licensedStates: "TN"` is a
+ * configuration mistake with a visible cause, and reporting it as "no licence"
+ * would send somebody looking for a missing row instead of a wrong type.
+ */
+export function partitionLicensedStates(raw: unknown): LicencePartition {
+  if (raw === undefined || raw === null) return { licensed: [], rejected: [] };
+  if (!Array.isArray(raw)) return { licensed: [], rejected: [raw] };
+
+  const codes = new Set<string>();
+  const rejected: unknown[] = [];
+
+  for (const entry of raw) {
+    const code = normalizeStateCode(entry);
+    if (code) codes.add(code);
+    else rejected.push(entry);
+  }
+
+  return { licensed: [...codes].sort(), rejected };
+}
+
+/**
  * Normalize a whole licence list, dropping everything unrecognisable.
  *
  * Used on the read side here and on the admin write side in `routes/index.ts`,
  * so what an administrator is told they saved is exactly what will be enforced.
  */
 export function normalizeLicensedStates(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-
-  const codes = new Set<string>();
-  for (const entry of raw) {
-    const code = normalizeStateCode(entry);
-    if (code) codes.add(code);
-  }
-
-  return [...codes].sort();
+  return partitionLicensedStates(raw).licensed;
 }
 
 /** The fields of `request.user` this module reads. Nothing else is consulted. */
