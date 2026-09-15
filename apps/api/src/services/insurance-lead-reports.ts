@@ -640,6 +640,15 @@ export interface LeadCsvFilters {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  /**
+   * Narrow to one agent's leads.
+   *
+   * Set by the route from the authenticated principal, never from the query
+   * string. The export and the grid it is exported from take the same value in
+   * the same breath -- an export that ignored it would hand an agent the whole
+   * agency's book from a page that only ever showed them their own.
+   */
+  assignedToId?: string;
 }
 
 export const LEADS_CSV_HEADERS = [
@@ -838,6 +847,9 @@ export async function getLeadExportRows(
 
 function buildLeadWhere(tenantId: string, filters: LeadCsvFilters): Prisma.InsuranceLeadWhereInput {
   const where: Prisma.InsuranceLeadWhereInput = { tenantId };
+
+  // Agent scope, on top of the tenant filter and never instead of it.
+  if (filters.assignedToId) where.assignedToId = filters.assignedToId;
 
   if (filters.vertical) where.vertical = filters.vertical;
   if (filters.status) where.status = filters.status as Prisma.InsuranceLeadWhereInput['status'];

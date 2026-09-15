@@ -47,6 +47,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles`, `users` and `audit_logs`, and suspends its
   // own agent mid-suite.
   '**/src/__tests__/session-expiry.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `insurance_leads` and `lead_lists`
+  // to seed two agencies with two agents each.
+  '**/src/__tests__/crm-agent-scope.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
