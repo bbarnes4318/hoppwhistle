@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { RecordingService } from '../services/recording-service.js';
 
 const recordingService = new RecordingService();
@@ -561,10 +561,36 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
   );
 
-  // Backfill metadata for a recording
+  /**
+   * Backfill size and checksum for a recording, from object storage.
+   *
+   * This took a recording id from the request and passed it straight to the
+   * service, which looks it up by primary key. No tenant, no role: any
+   * authenticated caller could name any recording on the platform and write to
+   * its row. A small write -- size and checksum -- but a write across the agency
+   * boundary, reached by naming a uuid the recordings list hands out.
+   *
+   * The ownership check is the query, not a comparison after it, and it runs
+   * before the service is called at all.
+   */
   fastify.post<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId/backfill',
     async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const owned = await prisma.recording.findFirst({
+        where: { id: request.params.recordingId, deletedAt: null, call: { tenantId } },
+        select: { id: true },
+      });
+
+      if (!owned) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
+      }
+
       try {
         await recordingService.backfillMetadata(request.params.recordingId);
         return {
@@ -583,45 +609,134 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
   );
 
-  // Local stream for development / when S3 is disabled
-  fastify.get(
-    '/api/v1/recordings/local-stream/*',
-    async (request, reply) => {
-      const params = request.params as Record<string, string>;
-      let storageKey = params['*'];
-      if (!storageKey) {
-        reply.code(400);
-        return { error: { code: 'BAD_REQUEST', message: 'Missing storage key' } };
-      }
-
-      // Ensure storage key is fully URL-decoded (handling %2F, %20, etc.)
-      try {
-        storageKey = decodeURIComponent(storageKey);
-      } catch {
-        // ignore decoding errors
-      }
-
-      const fs = await import('fs');
-      const path = await import('path');
-      const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
-      const localFilePath = path.join(localDir, storageKey);
-
-      // Verify directory traversal protection
-      const resolvedPath = path.resolve(localFilePath);
-      const resolvedDir = path.resolve(localDir);
-      if (!resolvedPath.startsWith(resolvedDir)) {
-        reply.code(403);
-        return { error: { code: 'FORBIDDEN', message: 'Access forbidden: invalid storage key' } };
-      }
-
-      if (!fs.existsSync(resolvedPath)) {
-        reply.code(404);
-        return { error: { code: 'NOT_FOUND', message: 'Local recording file not found' } };
-      }
-
-      const stream = fs.createReadStream(resolvedPath);
-      void reply.type('audio/wav');
-      return reply.send(stream);
+  /**
+   * Stream a locally-stored recording by its storage key.
+   *
+   * ── What this used to be ─────────────────────────────────────────────────
+   *
+   * A route with no `preHandler`, on a plugin with no auth hook, whose handler
+   * never read `request.user`, never called `getActingTenantId()` and never
+   * touched the `recordings` table. It resolved the wildcard against
+   * `LOCAL_STORAGE_DIR` and streamed the file. Directory traversal was handled;
+   * authentication was absent entirely.
+   *
+   * The keys are not secret. `services/storage.ts` returns
+   * `/api/v1/recordings/local-stream/<storageKey>` from `getSignedUrl()`
+   * whenever the file is on local disk or S3 credentials are unset, so the key
+   * travels in API responses and in `recording.url`, and from there into access
+   * logs, browser history and anywhere a link is pasted. The format is
+   * `recordings/YYYY/MM/DD/<callId>.<ext>` and carries NO tenant segment. Any
+   * key that ever left the building was a permanent, credential-free download
+   * of one agency's call audio, by anybody, from any tenant.
+   *
+   * ── What authorises it now ───────────────────────────────────────────────
+   *
+   * The same decision the `:recordingId` routes make, reached the same way: the
+   * acting tenant from the authenticated principal, the row looked up WITH that
+   * tenant in the query rather than checked afterwards, and then
+   * `checkRecordingAccess`, which narrows an AGENT to recordings of calls they
+   * created or took on one of their own numbers.
+   *
+   * The storage key is an identifier, never a credential. Holding one proves
+   * nothing and grants nothing; it only names the row whose ownership is then
+   * checked.
+   *
+   * ── Two kinds of file live under the same prefix ─────────────────────────
+   *
+   * `Recording` (owned by a tenant through its `Call`) and `RecordingAnalysis`
+   * (owned by a tenant and a user directly -- the Recording Analyzer's
+   * uploads). Both are served from local storage by the same helper, so both
+   * are resolved here. A key matching neither is a 404: not "no such file",
+   * which would confirm the key's shape to someone probing, but "no such
+   * recording", which is the same answer an unauthorised key gets.
+   */
+  fastify.get('/api/v1/recordings/local-stream/*', async (request, reply) => {
+    const tenantId = getActingTenantId(request);
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
     }
-  );
+
+    const params = request.params as Record<string, string>;
+    let storageKey = params['*'];
+    if (!storageKey) {
+      void reply.code(400);
+      return { error: { code: 'BAD_REQUEST', message: 'Missing storage key' } };
+    }
+
+    // Ensure storage key is fully URL-decoded (handling %2F, %20, etc.)
+    try {
+      storageKey = decodeURIComponent(storageKey);
+    } catch {
+      // ignore decoding errors
+    }
+
+    const userId = getActingUserId(request) ?? undefined;
+
+    /*
+     * Tenant scoping is IN the query, not a comparison after it. A
+     * `findFirst({ where: { storageKey } })` followed by
+     * `if (row.tenantId !== tenantId)` is one early return away from being a
+     * cross-tenant read, and this route is where that mistake costs the most.
+     */
+    const recording = await prisma.recording.findFirst({
+      where: { storageKey, deletedAt: null, call: { tenantId } },
+      include: { call: true },
+    });
+
+    let authorized = false;
+
+    if (recording) {
+      const profile = await getUserProfile(request);
+      authorized = await checkRecordingAccess(recording, profile, tenantId, userId);
+    } else {
+      /*
+       * A Recording Analyzer upload. Owned by the user who uploaded it, inside
+       * one tenant -- there is no call, so no publisher, buyer or agent-number
+       * dimension to narrow by. An agency administrator sees the agency's;
+       * everyone else sees their own.
+       */
+      const analysis = await prisma.recordingAnalysis.findFirst({
+        where: { storageKey, tenantId },
+        select: { userId: true },
+      });
+
+      if (analysis) {
+        const profile = await getUserProfile(request);
+        authorized = Boolean(profile.isAdminOrOwner) || (!!userId && analysis.userId === userId);
+      }
+    }
+
+    if (!authorized) {
+      /*
+       * 404, not 403. A 403 tells a caller holding a guessed or leaked key that
+       * the key is real and names a recording in this tenant, which is most of
+       * what they wanted to know. An unauthorised key and an unknown key are
+       * answered identically.
+       */
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
+    }
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+    const localFilePath = path.join(localDir, storageKey);
+
+    // Verify directory traversal protection
+    const resolvedPath = path.resolve(localFilePath);
+    const resolvedDir = path.resolve(localDir);
+    if (!resolvedPath.startsWith(resolvedDir)) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access forbidden: invalid storage key' } };
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Local recording file not found' } };
+    }
+
+    const stream = fs.createReadStream(resolvedPath);
+    void reply.type('audio/wav');
+    return reply.send(stream);
+  });
 }

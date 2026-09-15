@@ -36,6 +36,12 @@ const DATABASE_BACKED = [
   // default pool the two would delete each other's fixtures.
   '**/src/__tests__/role-preview.test.ts',
   '**/src/__tests__/publisher-portal-access.test.ts',
+  // Seeds two agencies with users, calls, recordings and analyzer uploads, and
+  // truncates `tenants`, `roles` and `recordings` to do it. Left off this list
+  // it ran beside tenant-isolation.test.ts and the two deleted each other's
+  // fixtures -- which surfaced as the recording suite failing to seed at all,
+  // not as anything to do with recordings.
+  '**/src/__tests__/recording-access.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
