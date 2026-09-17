@@ -32,6 +32,20 @@ cd "$(dirname "$0")/.."
 # The compose project the deploy uses, so this reaches the same database the
 # API is talking to rather than a stray container.
 COMPOSE="docker compose --env-file .env -f infra/docker/docker-compose.dev.yml"
+
+# The same .env compose reads, so an installation that overrode the database
+# user or name is reached rather than the defaults. Only these two are taken
+# from it, and only when the surrounding shell has not already set them.
+if [ -f .env ]; then
+  for var in POSTGRES_USER POSTGRES_DB; do
+    eval "current=\${$var:-}"
+    if [ -z "$current" ]; then
+      value="$(grep -E "^${var}=" .env | tail -n 1 | cut -d= -f2- || true)"
+      [ -n "$value" ] && eval "$var=\$value"
+    fi
+  done
+fi
+
 PGUSER_NAME="${POSTGRES_USER:-callfabric}"
 PGDB_NAME="${POSTGRES_DB:-callfabric}"
 
