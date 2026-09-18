@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
 import { hasLeftConsole } from '@/lib/console-exit';
 import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
@@ -168,9 +169,29 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
 
+  /*
+   * A platform operator is not one of the roles below, whatever the role list
+   * says.
+   *
+   * `app/(dashboard)/layout.tsx` already returns early on this, with the
+   * reasoning in full: an operator holds no agency roles of their own, so the
+   * role redirects have nothing to say about them, and `platform.loading` is
+   * read rather than `isPlatformAdmin` alone because this effect settles first
+   * and a value still loading is not an answer.
+   *
+   * This page did not, and that asymmetry is what closed a loop on somebody. A
+   * role PREVIEW replaces an operator's ADMIN/OWNER with exactly the previewed
+   * role, so an operator previewing an agency as AGENT arrives here reading as
+   * `isAgentOnly` -- and got sent to /call-center, the one page with no topbar
+   * and therefore no "Leave preview" button. The layout let them stay; this
+   * effect pushed them out. Two files disagreeing about the same principal.
+   */
+  const platform = usePlatformContext();
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
+    if (platform.loading || platform.isPlatformAdmin) return;
 
     if (isPublisherOnly) {
       router.replace('/publisher/dashboard');
@@ -203,7 +224,16 @@ export default function DashboardPage() {
        */
       router.replace('/call-center');
     }
-  }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, router]);
+  }, [
+    user,
+    isPublisherOnly,
+    isBuyerOnly,
+    isAgentOnly,
+    authLoading,
+    router,
+    platform.loading,
+    platform.isPlatformAdmin,
+  ]);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [calls, setCalls] = useState<CallRecord[]>([]);

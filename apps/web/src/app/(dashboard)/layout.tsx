@@ -9,6 +9,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
+import { RolePreviewBanner } from '@/components/platform/role-preview-switcher';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
@@ -188,7 +189,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Same gate. The call centre is where an agent works, but a platform
       // operator can open the page too, and they should not start a phone.
       <PhoneProvider enabled={canTakeCalls}>
-        <div className="h-screen w-screen overflow-hidden bg-paper text-ink">
+        <div className="flex h-screen w-screen flex-col overflow-hidden bg-paper text-ink">
+          {/*
+            The way out of a preview, on the one page that had no way out.
+
+            ── The lockout this reached production as ────────────────────────
+
+            `RolePreviewBanner` carries the only "Leave preview" control in the
+            application, and it is rendered by the topbar. This branch renders
+            no topbar. A preview also REPLACES the operator's roles with
+            exactly the previewed one (`middleware/auth.ts`), so previewing an
+            agency as AGENT makes `homePathForRoles` route them here -- to the
+            single page where the control that ends the preview does not exist.
+            The preview sent them somewhere the preview could not be left.
+
+            An owner sat inside this for a working day. Every route they typed
+            came back here, the roles on their account said OWNER the whole
+            time, and no page they could reach had the button.
+
+            So the banner renders here as well. It is the same component and
+            the same one request; `flex-col` above and `min-h-0` below are what
+            let the strip take its height and leave the rest to the console,
+            which still fills the viewport.
+          */}
+          <ErrorBoundary label="The role-preview banner" fallback={() => null}>
+            <RolePreviewBanner />
+          </ErrorBoundary>
+
           {/*
             The cross-agency prompt applies here too.
 
@@ -204,7 +231,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             it, with no chrome left to navigate away from.
           */}
           <ErrorBoundary label="This page" resetKey={pathname ?? ''}>
-            {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
+            </div>
           </ErrorBoundary>
         </div>
       </PhoneProvider>
