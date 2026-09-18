@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
+import { hasLeftConsole } from '@/lib/console-exit';
 import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
 
 /* ─── Types ────────────────────────────────────────────────────── */
@@ -175,9 +176,9 @@ export default function DashboardPage() {
       router.replace('/publisher/dashboard');
     } else if (isBuyerOnly) {
       router.replace('/buyer/dashboard');
-    } else if (isAgentOnly) {
+    } else if (isAgentOnly && !hasLeftConsole()) {
       /*
-       * An agent does not belong here.
+       * An agent does not belong here by default.
        *
        * `isAgentOnly` was destructured and listed in this array and then never
        * branched on, so publishers and buyers were sent to their own portals and
@@ -187,6 +188,18 @@ export default function DashboardPage() {
        *
        * /call-center is where an agent works, and it is the same destination
        * `defaultDashboardPath` already names for them.
+       *
+       * ── Why a default must not be enforced against an explicit request ────
+       *
+       * The console is fullscreen: no sidebar, no topbar, one "Exit console"
+       * button, and that button comes here. So this line and that button were
+       * pointed at each other, and anybody holding AGENT and nothing else was
+       * sealed inside the call centre -- every route they asked for bounced
+       * back to it. The account that found it belonged to the owner, who had
+       * been given an AGENT role and could not reach a single admin page.
+       *
+       * `hasLeftConsole()` is that button having been pressed. Signing in still
+       * puts an agent in the console; asking to leave it now works.
        */
       router.replace('/call-center');
     }

@@ -34,6 +34,7 @@ import {
   deleteLeadList,
   deleteInsuranceLeads,
 } from '@/lib/api/leads';
+import { markConsoleExit } from '@/lib/console-exit';
 
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
@@ -1504,7 +1505,13 @@ export function CallCenterPortal(): JSX.Element {
         formatTime={formatTime}
         setShowSettings={setShowSettings}
         onLogApplication={() => setShowStandaloneApplication(true)}
-        onExit={() => router.push('/dashboard')}
+        onExit={() => {
+          // Say so before navigating: /dashboard sends an agent-only account
+          // straight back here unless this has been recorded, which is how the
+          // console became a room with no door.
+          markConsoleExit();
+          router.push('/dashboard');
+        }}
       />
 
       {/*

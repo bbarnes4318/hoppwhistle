@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
+import { clearConsoleExit } from '@/lib/console-exit';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
@@ -248,6 +249,9 @@ export default function AuthPage() {
   const enter = useCallback(
     async (auth: AuthResponse) => {
       persistSessionToken(auth.token);
+      // A fresh sign-in is a fresh start: an agent lands in the console again
+      // even if the previous session on this tab had stepped out of it.
+      clearConsoleExit();
       await refreshSession();
       router.push(getRedirectPath(auth.user.roles));
     },

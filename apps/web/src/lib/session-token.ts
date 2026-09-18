@@ -22,6 +22,8 @@
  * HTTPS.
  */
 
+import { clearConsoleExit } from './console-exit';
+
 export const SESSION_COOKIE = 'hw_session';
 
 /** Matches the JWT lifetime the API issues; the token is re-set on every login. */
@@ -66,6 +68,10 @@ export function persistSessionToken(token: string): void {
 
 export function clearSessionToken(): void {
   if (typeof window === 'undefined') return;
+  // The next person to sign in on this tab starts at their own home page, so
+  // the "I asked to leave the call centre" marker does not outlive the session
+  // that set it.
+  clearConsoleExit();
   window.localStorage.removeItem('token');
   document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
