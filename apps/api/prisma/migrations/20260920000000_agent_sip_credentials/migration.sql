@@ -84,7 +84,12 @@ CREATE TABLE IF NOT EXISTS "agent_sip_credentials" (
     "status"            "AgentSipCredentialStatus" NOT NULL DEFAULT 'ACTIVE',
     "rotatedAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- No DEFAULT, matching `@updatedAt`, which Prisma sets from the client
+    -- rather than from the database. A default here would be invisible drift:
+    -- `prisma db push` (how CI builds its database) would produce a column
+    -- without one while a migrated production had one. The backfill below
+    -- writes the value explicitly instead.
+    "updatedAt"         TIMESTAMP(3) NOT NULL,
     CONSTRAINT "agent_sip_credentials_pkey" PRIMARY KEY ("id")
 );
 
@@ -139,13 +144,16 @@ $$;
 --
 -- `ON CONFLICT DO NOTHING` twice over (userId and extension are both unique),
 -- so re-running this file claims nothing a second time.
-INSERT INTO "agent_sip_credentials" ("id", "tenantId", "userId", "extension", "passwordEncrypted")
+INSERT INTO "agent_sip_credentials"
+    ("id", "tenantId", "userId", "extension", "passwordEncrypted", "createdAt", "updatedAt")
 SELECT DISTINCT ON (claimed.extension)
        gen_random_uuid()::TEXT,
        claimed."tenantId",
        claimed.id,
        claimed.extension,
-       NULL
+       NULL,
+       NOW(),
+       NOW()
 FROM (
     SELECT u.id,
            u."tenantId",
