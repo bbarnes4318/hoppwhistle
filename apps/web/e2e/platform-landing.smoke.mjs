@@ -147,26 +147,53 @@ const SWEEP = [
       '/applications',
       '/insurance-leads',
       '/insurance-leads/reports',
-      '/campaigns',
-      '/publishers',
-      '/buyers',
-      '/numbers',
       '/rating',
       '/delivery',
       '/delivery/settlements',
       '/billing',
       '/reports',
-      '/flows',
-      '/voice-studio',
       '/settings',
       '/settings/users',
       '/settings/webhooks',
       '/settings/dnc',
-      '/settings/carriers',
       '/settings/quotas',
       '/admin/payroll',
-      '/tools/recording-analyzer',
-      '/tools/campaign-map',
+    ],
+    /*
+     * NetEnroll's own screens, asked for by an agency principal.
+     *
+     * Every one of these used to be in the list above, because the agency nav
+     * was PLATFORM_NAV with two hrefs filtered out. They are not an agency's:
+     * the call marketplace it buys from, the routing and voice-AI authoring
+     * that configures the platform, and the Tools group. `STAFF_ONLY_ROUTES`
+     * in src/lib/staff-only-routes.ts is the list, and it is what the sidebar,
+     * this redirect and the palette all read.
+     *
+     * Asserted here rather than merely deleted, for the reason the agent's
+     * /dashboard entry gives below: dropping a route from the sweep leaves the
+     * guard that took it away untested, and "an agency principal cannot reach
+     * the marketplace" is the property, not "this file does not ask for it".
+     * A nav filter hides a link and does not stop a URL, which is the whole
+     * defect these redirects exist to catch.
+     *
+     * The last two are the ones worth having a browser for. Industry Research
+     * and the Music Console each render their own shell OUTSIDE the
+     * `(dashboard)` route group, so neither meets that layout's redirect --
+     * they are guarded by `components/auth/staff-only-guard.tsx` instead, and
+     * these two rows are the only coverage that component has.
+     */
+    redirects: [
+      { from: '/campaigns', to: '/dashboard' },
+      { from: '/publishers', to: '/dashboard' },
+      { from: '/buyers', to: '/dashboard' },
+      { from: '/numbers', to: '/dashboard' },
+      { from: '/flows', to: '/dashboard' },
+      { from: '/voice-studio', to: '/dashboard' },
+      { from: '/settings/carriers', to: '/dashboard' },
+      { from: '/tools/recording-analyzer', to: '/dashboard' },
+      { from: '/tools/campaign-map', to: '/dashboard' },
+      { from: '/tools/industry-research', to: '/dashboard' },
+      { from: '/music-console', to: '/dashboard' },
     ],
   },
   {
@@ -1633,7 +1660,7 @@ async function checkRedirect(browser, session, entry, { from, to }) {
   if (settled !== to) {
     fail(
       settled === from
-        ? `${who}: was left on ${from}, which is the tenant-wide dashboard. It must move them to ${to}.`
+        ? `${who}: was left on ${from}, which is not theirs to reach. It must move them to ${to}.`
         : `${who}: was moved to ${settled} rather than ${to}.`
     );
   }
