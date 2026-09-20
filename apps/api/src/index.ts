@@ -14,6 +14,7 @@ import { registerApiV1Auth } from './middleware/api-v1-auth.js';
 import { registerAuth } from './middleware/auth.js';
 import { registerLoggingMiddleware } from './middleware/logging.js';
 import { registerReadOnlyPreview } from './middleware/read-only-preview.js';
+import { registerStaffOnly } from './middleware/staff-only.js';
 import { registerAdminBillingRoutes } from './routes/admin-billing.js';
 import { registerDemoEventRoutes } from './routes/demo-events.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -89,6 +90,18 @@ async function buildServer() {
    * every phase. See middleware/read-only-preview.ts.
    */
   registerReadOnlyPreview(server);
+
+  /*
+   * NetEnroll's own API surface, closed to agencies.
+   *
+   * The twin of `apps/web/src/lib/staff-only-routes.ts`, which took twelve
+   * screens out of the agency portal and was explicit that it removed the
+   * screens and not the endpoints behind them. Registered here, after
+   * authentication, for the same reasons the read-only hook above is: the
+   * principal exists by now, and a refusal at `onRequest` happens before a body
+   * is read. See middleware/staff-only.ts.
+   */
+  registerStaffOnly(server);
 
   /*
    * Rate limiting, globally.

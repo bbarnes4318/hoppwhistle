@@ -194,10 +194,64 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
     }
   });
 
-  it('drops the Market and Tools groups entirely', () => {
+  /*
+   * Market, Tools and Build all empty out for an agency principal: the
+   * marketplace, the four Tools entries, and Build's flow builder and two voice
+   * screens are all NetEnroll's. Build only survives for staff, who keep those
+   * three.
+   */
+  it('drops the Market, Tools and Build groups entirely', () => {
     const labels = AGENCY_OWNER_NAV.map(group => group.label);
     expect(labels).not.toContain('Market');
     expect(labels).not.toContain('Tools');
+    expect(labels).not.toContain('Build');
+  });
+
+  it('leaves the agency four groups and no more', () => {
+    expect(AGENCY_OWNER_NAV.map(group => group.label)).toEqual([
+      undefined,
+      'Live',
+      'Money',
+      'Admin',
+    ]);
+  });
+
+  /*
+   * Settings sits with its own sub-pages.
+   *
+   * It used to be in Build, and /settings/users, /settings/webhooks,
+   * /settings/dnc and /settings/quotas -- the pages reached FROM it -- have
+   * always been in Admin. Nothing noticed while Build had three other items;
+   * removing them left an agency principal a group labelled "Build" holding
+   * only Settings, with its own children under a different heading.
+   */
+  it('puts Settings with its sub-pages, in Admin', () => {
+    const admin = AGENCY_OWNER_NAV.find(group => group.label === 'Admin');
+    expect(admin, 'there is no Admin group').toBeDefined();
+
+    const hrefs = admin!.items.map(item => pathOf(item.href));
+    expect(hrefs).toContain('/settings');
+    for (const child of [
+      '/settings/users',
+      '/settings/webhooks',
+      '/settings/dnc',
+      '/settings/quotas',
+    ]) {
+      expect(hrefs, `${child} is not beside its parent`).toContain(child);
+    }
+
+    // First, before the pages it leads to.
+    expect(hrefs[0]).toBe('/settings');
+  });
+
+  it('leaves Build to staff, who still have its three screens', () => {
+    const build = PLATFORM_NAV.find(group => group.label === 'Build');
+    expect(build, 'PLATFORM_NAV lost its Build group').toBeDefined();
+    expect(build!.items.map(item => pathOf(item.href))).toEqual([
+      '/flows',
+      '/voice-agents',
+      '/voice-studio',
+    ]);
   });
 });
 
