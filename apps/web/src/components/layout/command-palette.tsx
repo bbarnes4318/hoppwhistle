@@ -109,6 +109,29 @@ export function CommandPalette({
     return allNavItems(PLATFORM_NAV).filter(i => i.href === '/dashboard');
   }, [auth]);
 
+  /**
+   * Whether this viewer's own navigation has a given destination in it.
+   *
+   * The palette searches campaigns, publishers and buyers remotely and links
+   * the hits to `/campaigns/:id`, `/publishers?id=` and `/buyers?id=`. Those
+   * are three of the screens an agency principal no longer has, and the
+   * searches were gated on whether the viewer's TOKEN could list the records --
+   * which it still can, because the endpoints back screens that are staying
+   * (the Calls ledger builds its filters from both lists). So an owner who
+   * typed two characters got a tidy list of links into pages that now redirect
+   * them straight back out.
+   *
+   * Asking the nav instead of naming the roles keeps this answer attached to
+   * the one list in `lib/staff-only-routes.ts`: a destination that leaves
+   * somebody's sidebar leaves their search results in the same edit. It also
+   * retires a quiet oddity -- `canListParties` included agents, who have never
+   * had a publishers or buyers page to be sent to.
+   */
+  const canReach = React.useCallback(
+    (href: string) => pages.some(item => item.href.split('?')[0] === href),
+    [pages]
+  );
+
   // Remote search: debounced, and only for queries long enough to be meaningful.
   React.useEffect(() => {
     const q = query.trim();
@@ -127,17 +150,18 @@ export function CommandPalette({
         ? `phone=${encodeURIComponent(q.replace(/\D/g, ''))}`
         : `search=${encodeURIComponent(q)}`;
 
-      // Only admins and agents can list publishers and buyers; asking as a
-      // publisher would just collect 403s in the console.
-      const canListParties = auth.hasFullAccess || auth.isAgentOnly;
-
+      // A search is worth running only if its hits lead somewhere this viewer
+      // can go. Not running it also stops the 403s a publisher used to collect
+      // in the console, which is what the old role test was reaching for.
       void Promise.allSettled([
         apiClient.get(`/api/v1/calls?${callQuery}&limit=5`),
-        apiClient.get(`/api/v1/campaigns?limit=5&search=${encodeURIComponent(q)}`),
-        canListParties
+        canReach('/campaigns')
+          ? apiClient.get(`/api/v1/campaigns?limit=5&search=${encodeURIComponent(q)}`)
+          : Promise.resolve(null),
+        canReach('/publishers')
           ? apiClient.get(`/api/v1/publishers?limit=5&search=${encodeURIComponent(q)}`)
           : Promise.resolve(null),
-        canListParties
+        canReach('/buyers')
           ? apiClient.get(`/api/v1/buyers?limit=5&search=${encodeURIComponent(q)}`)
           : Promise.resolve(null),
       ]).then(settled => {
@@ -157,7 +181,23 @@ export function CommandPalette({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, open, auth]);
+  }, [query, open, canReach]);
+
+  /**
+   * What the box says it searches.
+   *
+   * It used to name campaigns, publishers and buyers unconditionally, which for
+   * an agency principal is now three things it does not search and a publisher
+   * could never search either. The prompt is assembled from what will actually
+   * run.
+   */
+  const searchPlaceholder = React.useMemo(() => {
+    const parts = ['calls'];
+    if (canReach('/campaigns')) parts.push('campaigns');
+    if (canReach('/publishers')) parts.push('publishers');
+    if (canReach('/buyers')) parts.push('buyers');
+    return `Search ${parts.join(', ')} — or jump to a page`;
+  }, [canReach]);
 
   const go = React.useCallback(
     (href: string) => {
@@ -194,11 +234,7 @@ export function CommandPalette({
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <Command className="bg-surface [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:t-label [&_[cmdk-group-heading]]:text-ink-3 [&_[cmdk-input]]:h-11 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2">
-          <CommandInput
-            placeholder="Search calls, campaigns, publishers, buyers — or jump to a page"
-            value={query}
-            onValueChange={setQuery}
-          />
+          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList>
             {loading && !hasRemote ? (
               <div className="flex items-center gap-2 px-3 py-4 t-meta text-ink-3">
