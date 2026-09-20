@@ -16,6 +16,10 @@ import { freeswitchService } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
+import {
+  ExtensionRangeExhaustedError,
+  issueCredential,
+} from '../services/telephony/agent-sip-credential.js';
 
 // ============================================================================
 // Recording Helpers
@@ -1124,7 +1128,38 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
   /**
    * GET /api/v1/agent/webrtc/credentials
-   * Get Verto/WebRTC credentials for browser-based calling
+   *
+   * The agent's own SIP identity, for the browser softphone to register with.
+   *
+   * ── What this used to do, and why it could not stay ──────────────────────
+   *
+   * It allocated inline: read every user row in the agency, collect
+   * `metadata.extension`, take the first free number in 1000..1019, write it
+   * back, and return the ONE global `SIP_AGENT_PASSWORD` that matched
+   * `$${default_password}` in every static directory file. That produced three
+   * defects, recorded in full on the `AgentSipCredential` model:
+   *
+   *   * a twenty-agent ceiling, with a silent fallback to extension '1000' once
+   *     the range was spent -- so an agency's twenty-first agent took over the
+   *     first agent's registration;
+   *
+   *   * a per-AGENCY scan against a FreeSWITCH directory that has no tenant
+   *     dimension, so two agencies were handed the same SIP username and the
+   *     second browser to register received both agencies' calls;
+   *
+   *   * one password that authenticated every extension on the platform, held
+   *     by every agent.
+   *
+   * Allocation now belongs to `services/telephony/agent-sip-credential.ts`,
+   * which allocates globally and generates a secret per agent. This route reads
+   * it and hands it over.
+   *
+   * ── It is a read, not a rotation ─────────────────────────────────────────
+   *
+   * An agent who already holds a credential gets the same extension and the
+   * same password back on every call. The softphone re-fetches on every page
+   * load and on every reconnect; rotating here would invalidate the
+   * registration the agent is holding open, mid-shift.
    */
   fastify.get(
     '/api/v1/agent/webrtc/credentials',
@@ -1134,123 +1169,92 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = agent;
 
       const prisma = getPrismaClient();
-      let user = await prisma.user.findFirst({ where: { id: userId, tenantId } });
-      let extension: string | null = null;
-      if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
-        const meta = user.metadata as Record<string, unknown>;
-        if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
-          extension = String(meta.extension);
-        }
-      }
 
-      // If user has no extension, dynamically assign a free one from 1000-1019
-      if (!extension && user) {
-        // Scoped to the agency. Unscoped, this read every user row on the
-        // platform to decide which extensions were free -- so one agency's
-        // agents shrank the extension pool of every other agency, and the
-        // metadata of every user on the platform was loaded to do it.
-        const allUsers = await prisma.user.findMany({
-          where: { tenantId },
-          select: { metadata: true },
-        });
-        const usedExtensions = new Set<string>();
-        for (const u of allUsers) {
-          if (u.metadata && typeof u.metadata === 'object' && !Array.isArray(u.metadata)) {
-            const meta = u.metadata as Record<string, unknown>;
-            if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
-              usedExtensions.add(String(meta.extension).trim());
-            }
-          }
-        }
-
-        let availableExtension: string | null = null;
-        for (let extNum = 1000; extNum <= 1019; extNum++) {
-          const extStr = extNum.toString();
-          if (!usedExtensions.has(extStr)) {
-            availableExtension = extStr;
-            break;
-          }
-        }
-
-        if (availableExtension) {
-          const currentMetadata = (user.metadata as Record<string, unknown>) || {};
-          const updatedMetadata = {
-            ...currentMetadata,
-            extension: availableExtension,
+      let credential;
+      try {
+        credential = await issueCredential(tenantId, userId, { prisma });
+      } catch (error) {
+        /*
+         * Refuse rather than hand out something that cannot work. The old code
+         * fell back to extension '1000' with the shared password, which
+         * registered successfully as somebody else -- a failure that presents
+         * as another agent's calls arriving, not as an error.
+         */
+        if (error instanceof ExtensionRangeExhaustedError) {
+          request.log.error(
+            { event: 'sip_extension_range_exhausted', userId, tenantId },
+            error.message
+          );
+          void reply.code(503);
+          return {
+            error: {
+              code: 'SIP_EXTENSION_UNAVAILABLE',
+              message:
+                'No SIP extension is available to assign. Every extension in the platform ' +
+                'range is allocated.',
+            },
           };
-
-          user = await prisma.user.update({
-            where: { id: userId },
-            data: { metadata: updatedMetadata },
-          });
-          extension = availableExtension;
-
-          request.log.info({
-            msg: 'webrtc/credentials: Automatically assigned free extension to user',
-            userId,
-            extension: extension || '',
-          });
-
-          // Sync DidRoute for any active phone numbers assigned to the user
-          try {
-            const { didRouteService } = await import('../services/did-route-service.js');
-            const phoneNumbers = await prisma.phoneNumber.findMany({
-              where: { userId, tenantId, status: 'ACTIVE' },
-            });
-            for (const phoneNum of phoneNumbers) {
-              await didRouteService.syncDidRouteForNumber(phoneNum.id, tenantId);
-            }
-          } catch (syncErr) {
-            request.log.error({
-              msg: 'webrtc/credentials: Failed to sync DID routes during auto-extension assignment',
-              err: syncErr,
-            });
-          }
         }
-      }
 
-      const activeExt = extension || '1000';
-      const username = activeExt;
-
-      // The browser registers to FreeSWITCH with this, so it MUST match what
-      // FreeSWITCH's directory expects for the extension. The directory entries
-      // use `$${default_password}`, which is set from SIP_AGENT_PASSWORD.
-      //
-      // This was hardcoded to '1234'. Once the internal profile was hardened to
-      // require a real password, every agent registration was rejected — so no
-      // softphone was ever registered, and every inbound call to an agent died
-      // instantly with USER_NOT_REGISTERED while the dashboard still showed the
-      // agent as available.
-      //
-      // Refuse rather than hand out a credential that cannot work: a 503 with a
-      // reason is debuggable, a silently-wrong password is not.
-      const password = process.env.SIP_AGENT_PASSWORD;
-      if (!password) {
-        request.log.error({
-          msg: 'webrtc/credentials: SIP_AGENT_PASSWORD is not set — refusing to issue an unusable credential',
-          userId,
-          extension: activeExt,
-        });
+        request.log.error(
+          { event: 'sip_credential_provisioning_failed', userId, tenantId, err: error },
+          'Could not provision a SIP credential for this agent'
+        );
         void reply.code(503);
         return {
           error: {
             code: 'SIP_CREDENTIALS_UNAVAILABLE',
-            message:
-              'Softphone credentials are not configured on the server (SIP_AGENT_PASSWORD is unset).',
+            message: 'Softphone credentials could not be provisioned for this account.',
           },
         };
       }
 
-      const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const { extension, password, provisioned } = credential;
 
-      // Build Verto WebSocket URL
-      // Priority: VERTO_WS_URL env var > PUBLIC_IP:8082 > localhost fallback
+      if (provisioned) {
+        request.log.info(
+          { event: 'sip_credential_provisioned', userId, tenantId, extension },
+          'Issued a SIP credential to an agent'
+        );
+
+        /*
+         * An agent's DID has to point at wherever their softphone now answers.
+         * Kept from the previous implementation, which synced routes whenever it
+         * assigned an extension; it runs only on the call that provisions, so a
+         * routine credential fetch is still a single read.
+         *
+         * Best-effort: a failed sync is a DID that routes the old way, which is
+         * worth a log and not worth refusing the agent their phone.
+         */
+        try {
+          const { didRouteService } = await import('../services/did-route-service.js');
+          const phoneNumbers = await prisma.phoneNumber.findMany({
+            where: { userId, tenantId, status: 'ACTIVE' },
+          });
+          for (const phoneNum of phoneNumbers) {
+            await didRouteService.syncDidRouteForNumber(phoneNum.id, tenantId);
+          }
+        } catch (syncErr) {
+          request.log.error(
+            { event: 'sip_credential_did_sync_failed', userId, tenantId, err: syncErr },
+            'Failed to sync DID routes after provisioning a SIP credential'
+          );
+        }
+      }
+
+      /*
+       * `expiresAt` describes this RESPONSE, not the credential. The browser
+       * re-fetches when it expires; the underlying credential does not rotate on
+       * a schedule and outlives any number of fetches.
+       */
+      const expiry = new Date(Date.now() + 5 * 60 * 1000);
+
       const publicIp = process.env.PUBLIC_IP;
       const vertoUrl =
         process.env.VERTO_WS_URL || (publicIp ? `wss://${publicIp}:8082` : 'wss://localhost:8082');
 
       return {
-        username,
+        username: extension,
         password,
         realm: process.env.FREESWITCH_REALM ?? process.env.PUBLIC_IP ?? 'freeswitch',
         wsUrl: vertoUrl,

@@ -223,8 +223,64 @@ export class RoutingService {
         select: { id: true, metadata: true },
       });
 
+      /*
+       * Each agent's SIP extension, from `agent_sip_credentials`.
+       *
+       * This is the authoritative map. `users.metadata.extension` is still read
+       * below and still populates these maps, but only for an agent who has no
+       * credential row yet -- and a credential row always wins over metadata
+       * for an agent who has both.
+       *
+       * The two can legitimately disagree. The migration claimed each agent's
+       * pre-existing extension where it was free, and where two agencies held
+       * the SAME extension -- which the old per-agency allocator guaranteed for
+       * every agency past the first -- only the oldest agent kept it. Everyone
+       * else is allocated a fresh extension on their next credential fetch,
+       * while their stale `metadata.extension` still names the number that now
+       * belongs to somebody in another agency. Preferring metadata there would
+       * route this agency's call to that other agency's agent, which is the
+       * exact defect the credential table exists to close.
+       *
+       * REVOKED credentials are excluded: a revoked identity keeps its
+       * extension reserved so it is not reissued, but nothing should be rung
+       * on it.
+       */
       const extensionToUserMap = new Map<string, string>();
       const userIdToExtensionMap = new Map<string, string>();
+
+      /*
+       * Its OWN try/catch, and not the enclosing one, deliberately.
+       *
+       * The enclosing block fails open: a throw anywhere in it is logged and
+       * skips the WHOLE agent filter -- the licence gate and the concurrency
+       * gate with it. That is a defensible default for a status lookup, and a
+       * dangerous one for this read, because this read can fail for a reason
+       * the others cannot: code deployed ahead of the migration, where
+       * `agent_sip_credentials` does not exist yet. Letting that bubble would
+       * take the LICENCE GATE down platform-wide -- an agent rung for a state
+       * they cannot write -- as a side effect of a table being absent.
+       *
+       * So a failure here degrades to exactly one thing: no credential-backed
+       * mappings, and `metadata.extension` below supplies them instead, which
+       * is precisely the behaviour before this table existed.
+       */
+      try {
+        const credentials = await this.prisma.agentSipCredential.findMany({
+          where: { tenantId, status: 'ACTIVE' },
+          select: { userId: true, extension: true },
+        });
+
+        for (const credential of credentials) {
+          extensionToUserMap.set(credential.extension, credential.userId);
+          userIdToExtensionMap.set(credential.userId, credential.extension);
+        }
+      } catch (credentialErr) {
+        logger.warn({
+          msg: 'Agent-routing: could not read SIP credentials; falling back to users.metadata.extension',
+          tenantId,
+          error: (credentialErr as Error).message,
+        });
+      }
       const agentMaxConcurrent = new Map<string, number>();
       /**
        * Each agent's licensed jurisdictions, from the same `metadata` this loop
@@ -253,11 +309,28 @@ export class RoutingService {
         const licensed = normalizeLicensedStates(meta.licensedStates);
         if (licensed.length > 0) agentLicensedStates.set(user.id, new Set(licensed));
 
+        /*
+         * The legacy source, kept as a FALLBACK for an agent who has not yet
+         * been provisioned a credential -- an agent who has never opened the
+         * softphone since this shipped still has to be reachable.
+         *
+         * Skipped entirely for an agent who HAS a credential: see the note on
+         * the credential read above for why metadata must not win there.
+         */
+        if (userIdToExtensionMap.has(user.id)) continue;
+
         const extension = meta.extension;
         if (typeof extension !== 'string' && typeof extension !== 'number') continue;
 
         const normalizedExtension = extension.toString().trim();
         if (!normalizedExtension) continue;
+
+        /*
+         * And never let a metadata value claim an extension that a credential
+         * has already mapped to a different agent. That is the stale-collision
+         * case above; the credential holder owns the number.
+         */
+        if (extensionToUserMap.has(normalizedExtension)) continue;
 
         extensionToUserMap.set(normalizedExtension, user.id);
         userIdToExtensionMap.set(user.id, normalizedExtension);

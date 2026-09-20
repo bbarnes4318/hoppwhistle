@@ -8,6 +8,14 @@ const { prismaMock, redisGet } = vi.hoisted(() => ({
     phoneNumber: { findMany: vi.fn() },
     campaign: { findFirst: vi.fn() },
     call: { count: vi.fn() },
+    /*
+     * These suites model the LEGACY mapping, where an agent's extension lives
+     * in `users.metadata.extension`. Routing now prefers
+     * `agent_sip_credentials` and falls back to metadata for an agent who has
+     * no credential row, so every agent here is an agent without one -- which
+     * is what an empty result means.
+     */
+    agentSipCredential: { findMany: vi.fn() },
   },
   redisGet: vi.fn(),
 }));
@@ -57,6 +65,7 @@ describe('RoutingService agent-DID → extension translation', () => {
       { number: '+18656000039', userId: 'user-a' },
     ]);
     prismaMock.campaign.findFirst.mockResolvedValue({ metadata: {} });
+    prismaMock.agentSipCredential.findMany.mockResolvedValue([]);
     prismaMock.call.count.mockResolvedValue(0);
   });
 

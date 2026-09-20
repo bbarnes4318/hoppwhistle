@@ -98,6 +98,7 @@ model Tenant {
   billingNotifications     BillingNotification[]
   agencyProfile            AgencyProfile?
   settlementDisputes       SettlementDispute[]
+  agentSipCredentials      AgentSipCredential[]
 
   @@index([slug])
   @@index([status])
@@ -348,6 +349,9 @@ model User {
 
   /// Softphone status transitions. Append-only; see `AgentStateEvent`.
   stateEvents    AgentStateEvent[]
+
+  /// This agent's own SIP identity. See `AgentSipCredential`.
+  sipCredential  AgentSipCredential?
 
   // Payroll relations
   timeEntries    TimeEntry[]
@@ -2353,6 +2357,99 @@ model RetentionNote {
 ///
 /// There is no backfill: nothing recorded these transitions before the table
 /// existed, so a day with no rows reports an em dash rather than zero.
+/// One agent's own SIP identity: the extension their softphone registers as,
+/// and the password only they hold.
+///
+/// ── The three defects this replaces ──────────────────────────────────────────
+///
+/// Until this table, an agent's SIP identity was `users.metadata.extension` --
+/// an untyped key, allocated by `GET /api/v1/agent/webrtc/credentials` from the
+/// fixed range 1000..1019, scoped to the agency. The password was
+/// `SIP_AGENT_PASSWORD`: ONE value, the same for every agent on the platform,
+/// matching the `$${default_password}` in every static directory file.
+///
+///   1. TWENTY AGENTS. The pool was 1000..1019 and the allocator fell back to
+///      extension '1000' when it was exhausted, silently, so the twenty-first
+///      agent of an agency took over the first agent's registration.
+///
+///   2. TWO AGENCIES SHARED EVERY EXTENSION. The pool was scoped per tenant but
+///      FreeSWITCH's directory has no tenant dimension at all -- one flat
+///      `default` domain. Agency A's 1000 and agency B's 1000 were the SAME SIP
+///      user, so whichever browser registered last received BOTH agencies'
+///      calls. That is the reason `extension` is unique across the whole table
+///      and not per `tenantId`: the constraint has to hold where FreeSWITCH
+///      resolves it, and FreeSWITCH resolves it globally.
+///
+///   3. EVERY AGENT HELD EVERY AGENT'S CREDENTIAL. One shared password means an
+///      agent could register as any extension on the platform, including
+///      another agency's, and take their calls. Each row now carries its own
+///      secret, so a credential authenticates exactly one agent.
+///
+/// ── Why the extension is still four digits ───────────────────────────────────
+///
+/// `apps/freeswitch/conf/dialplan/default.xml` matches local extensions with
+/// `^(1[0-9]{3})$` and tests `${local_ext}` against `^\d{4}$` in two more
+/// places. The range 1000..1999 is what that dialplan can already route, so
+/// this widens the platform from 20 identities to 1000 without touching call
+/// routing. Going beyond it is a dialplan change, not a schema change.
+///
+/// ── The password is never stored in the clear ────────────────────────────────
+///
+/// `passwordEncrypted` is AES-256-GCM via `lib/field-encryption.ts`, the same
+/// envelope the carrier application's SSN and bank fields use. It is decrypted
+/// on exactly two paths: handing the agent their own credential, and answering
+/// FreeSWITCH's directory lookup for that one extension.
+model AgentSipCredential {
+  id       String @id @default(uuid())
+  tenantId String
+
+  /// One identity per agent. An agent with two registrations is an agent whose
+  /// calls go to whichever browser answered last.
+  userId String @unique
+
+  /// The SIP username, `1000`..`1999`. Unique across the PLATFORM, not the
+  /// agency -- see defect 2 above.
+  extension String @unique
+
+  /// AES-256-GCM, `lib/field-encryption.ts`. Generated per agent, never shown
+  /// to anyone but that agent, and replaced wholesale on a rotation.
+  ///
+  /// NULL means the row is a RESERVATION and not yet a credential: the
+  /// migration claimed this agent's existing extension so the allocator could
+  /// not hand it to somebody else, but there was no per-agent secret to carry
+  /// over -- the old one was global. The secret is generated the first time the
+  /// agent fetches their credential. The directory refuses to authenticate a
+  /// reservation, which is the only honest answer: there is no password to
+  /// check against.
+  passwordEncrypted String?
+
+  /// A revoked credential keeps its row so the extension is not handed to
+  /// somebody else while a stale softphone is still registered with it. The
+  /// directory refuses to authenticate anything that is not ACTIVE.
+  status AgentSipCredentialStatus @default(ACTIVE)
+
+  /// When the secret was last replaced. An operator answering "has this agent
+  /// had a new password since the shared one was withdrawn" reads this column.
+  rotatedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The directory lookup's read: FreeSWITCH presents an extension and asks who
+  /// it is. It is already covered by the unique index on `extension`; this pair
+  /// is for the agency-scoped roster read.
+  @@index([tenantId, status])
+  @@map("agent_sip_credentials")
+}
+
+enum AgentSipCredentialStatus {
+  ACTIVE
+  REVOKED
+}
+
 model AgentStateEvent {
   id     String @id @default(uuid())
   userId String
