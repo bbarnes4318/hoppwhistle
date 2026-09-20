@@ -90,6 +90,17 @@ export const PLATFORM_NAV: NavGroup[] = [
     ],
   },
   {
+    /*
+     * Authoring: the flow engine and the voice-AI tooling.
+     *
+     * `Settings` used to sit here, and it is the parent of four entries in
+     * Admin below -- /settings/users, /settings/webhooks, /settings/dnc and
+     * /settings/quotas. Nothing noticed while Build had three other items, but
+     * an agency principal reaches none of those three, so the filter in
+     * AGENCY_OWNER_NAV left them a group labelled "Build" containing only
+     * Settings, with its own children under a different heading. It belongs
+     * with them.
+     */
     label: 'Build',
     items: [
       { name: 'Flows', href: '/flows', icon: GitBranch },
@@ -100,7 +111,6 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: AudioLines,
         title: 'Clone Fish Audio voices, preview scripts, tune delivery',
       },
-      { name: 'Settings', href: '/settings', icon: Settings },
     ],
   },
   {
@@ -125,6 +135,9 @@ export const PLATFORM_NAV: NavGroup[] = [
   {
     label: 'Admin',
     items: [
+      // First, and before its own sub-pages: /settings is the page the four
+      // /settings/* entries below are reached from.
+      { name: 'Settings', href: '/settings', icon: Settings },
       { name: 'Users', href: '/settings/users', icon: Users },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
       { name: 'DNC lists', href: '/settings/dnc', icon: Shield },
