@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
+import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   const pathname = usePathname();
@@ -123,6 +124,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         path.startsWith('/publisher'))
     ) {
       router.replace('/dashboard');
+    } else if (isStaffOnlyRoute(path)) {
+      /*
+       * NetEnroll's own screens, reached by URL.
+       *
+       * `AGENCY_OWNER_NAV` stops linking to the marketplace, the flow builder,
+       * the voice tools, carrier routing and the Tools group -- but a nav
+       * filter has never stopped a path being typed, and these were all live
+       * routes for anybody whose session got this far. An agency principal with
+       * yesterday's bookmark landed on a working /campaigns.
+       *
+       * Everything above this branch has already claimed the roles it handles,
+       * so what arrives here is a principal, an analyst or a read-only account.
+       * Staff never do: the `platform.isPlatformAdmin` early return above sends
+       * them back before the dispatch starts, which also means an operator
+       * PREVIEWING an agency still reaches these pages. That is deliberate --
+       * the preview exists to look at an agency, and a redirect out of it is
+       * one more way to be stuck somewhere the preview cannot be left.
+       *
+       * `home` and not a literal `/dashboard`: this branch is reachable by a
+       * read-only account too, and `homePathForRoles` already knows where each
+       * role belongs. Every destination it returns renders the topbar, so there
+       * is no repeat of the call-centre lockout.
+       */
+      router.replace(home);
     }
   }, [
     user,
