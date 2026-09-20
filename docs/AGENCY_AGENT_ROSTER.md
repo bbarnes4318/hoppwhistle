@@ -119,18 +119,85 @@ ring them.
 
 ---
 
-## 5. What this does NOT do
+## 5. Calls are no longer sent to phones that are not there
+
+Routing gated an agent on their live call count and nothing else. The comment
+in `routing.ts` explains why, and it was right:
+
+> We deliberately do NOT exclude an agent merely for being offline or DND — the
+> availability flag is often stale and over-blocks transfers.
+
+That flag is written by the browser and goes stale when a tab closes or a
+laptop sleeps, so excluding agents on it silenced people who were sitting there
+ready. But the cost of ignoring it is recorded in `routes/agent-phone.ts`: an
+agent on a network that blocked 7443 fetched credentials fine, never opened the
+WebSocket, never sent a REGISTER, *"and every call to them died with
+USER_NOT_REGISTERED while the dashboard still showed them available."* Those
+calls reached nobody **and** were not offered to an agent who could have taken
+them.
+
+Both failures come from asking the wrong thing. FreeSWITCH's registration table
+is the right one — it is the same fact the dialplan consults with
+`sofia_contact` before it bridges, and it cannot go stale in the direction that
+matters, because an expired registration is removed.
+
+`services/telephony/sip-registrations.ts` reads it **once per routing decision**
+and caches the parsed set in Redis for a few seconds, so a burst of calls shares
+one ESL lookup rather than one per agent per call.
+
+**"Cannot tell" is never "nobody is registered."** Every failure path — ESL
+unreachable, a parse that finds nothing, a wrong profile name — returns `null`,
+and `null` means *do not filter*. Excluding every agent on the strength of an
+ESL blip would be an outage dressed up as a safety feature. The gate only ever
+excludes an extension FreeSWITCH positively says it does not have.
+
+Tunable with `FREESWITCH_INTERNAL_PROFILE` (default `internal`) and
+`SIP_REGISTRATION_CACHE_TTL_SECONDS` (default `5`).
+
+---
+
+## 6. The team view takes a date range
+
+`GET /api/v1/delivery/agents/range?from=YYYY-MM-DD&to=YYYY-MM-DD`, and
+`&format=csv` to take it away.
+
+`getAgentBreakdown` takes one calendar day, so "how did my team do this week"
+had no answer. (`/api/v1/applications/summary` does take a range and breaks
+down by agent, but carries no call counts — so it cannot produce a closing
+percentage, which is the figure the business is measured on.)
+
+This is a **separate function**, not a parameter on the day view. The day view
+sits on the screen an agency's price is explained from and carries live
+presence and seconds-available, neither of which means anything across a week;
+widening it in place would put every figure on that screen at risk to answer a
+different question.
+
+It uses the Phase 2 predicates verbatim, so a week's figures sum the days that
+compose it. It sorts by applications **descending** — the opposite of the day
+view, which is a work list leading with who needs coaching; this is a period
+report and the question is what the team produced. Nulls stay null: a closing
+percentage with no delivered calls behind it is an absent measurement, and the
+CSV writes an empty cell rather than a fabricated `0` that a spreadsheet would
+average.
+
+A reversed range is refused rather than silently swapped — on a report somebody
+may be paying people from, quietly returning days they did not ask for hides
+the bug.
+
+---
+
+## 7. What this does NOT do
 
 - **It does not let an agency create campaigns.** Campaigns stay NetEnroll's;
   the agency chooses which of its own agents work the ones it has. An agency
   with no active campaign sees a notice saying so.
 - **There is still no per-agent schedule.** `AgencyProfile` carries delivery
-  days and hours for the whole agency; routing knows only licence and
-  concurrency, so an agency running two shifts cannot express it.
-- **Routing still does not check softphone registration.** It gates on
-  concurrency and deliberately ignores the stale presence flag, so a call can
-  still be sent to an agent whose browser never registered. The roster screen
-  now makes the "never opened the softphone" case visible, which is the
-  reporting half of that problem, not the routing half.
-- **Team KPIs are still single-day.** `getAgentBreakdown` takes one calendar
-  day; there is no week, month or trend.
+  days and hours for the whole agency; routing knows only licence, registration
+  and concurrency, so an agency running two shifts cannot express it.
+- **Applications are still not joined to calls.** `callId` is optional on
+  submit, and the closing percentage correlates `Call.answeredByUserId` with
+  `InsuranceCarrierApplication.createdById` by agent and day rather than by
+  call — so a disputed figure cannot be drilled to "which call became this
+  application".
+- **The range view has no screen yet.** It is an endpoint and a CSV; the
+  `/delivery` page still shows one day.

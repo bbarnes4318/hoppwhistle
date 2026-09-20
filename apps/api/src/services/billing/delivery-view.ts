@@ -582,10 +582,12 @@ export async function getAgentBreakdown(
     const user = row.answeredByUserId ? byUser.get(row.answeredByUserId) : undefined;
     const calls = row._count._all;
     const applications = row.answeredByUserId
-      ? applicationsByUser.get(row.answeredByUserId) ?? 0
+      ? (applicationsByUser.get(row.answeredByUserId) ?? 0)
       : 0;
     const talkTimeSeconds = row._sum.connectedDuration ?? 0;
-    const hoursWorked = row.answeredByUserId ? hoursByUser.get(row.answeredByUserId) ?? null : null;
+    const hoursWorked = row.answeredByUserId
+      ? (hoursByUser.get(row.answeredByUserId) ?? null)
+      : null;
 
     return {
       userId: row.answeredByUserId,
@@ -597,20 +599,18 @@ export async function getAgentBreakdown(
       email: user?.email ?? null,
       callsTaken: calls,
       applications,
-      annualizedPremium: row.answeredByUserId
-        ? (premiumByUser.get(row.answeredByUserId) ?? 0)
-        : 0,
+      annualizedPremium: row.answeredByUserId ? (premiumByUser.get(row.answeredByUserId) ?? 0) : 0,
       closingPct: calls > 0 ? (applications / calls) * 100 : null,
       talkTimeSeconds,
       availableSeconds: row.answeredByUserId
-        ? availableByUser.get(row.answeredByUserId) ?? null
+        ? (availableByUser.get(row.answeredByUserId) ?? null)
         : null,
-      statusSince: row.answeredByUserId ? statusSince.get(row.answeredByUserId) ?? null : null,
+      statusSince: row.answeredByUserId ? (statusSince.get(row.answeredByUserId) ?? null) : null,
       hoursWorked,
       occupancyPct:
         hoursWorked && hoursWorked > 0 ? (talkTimeSeconds / (hoursWorked * 3600)) * 100 : null,
       currentStatus: row.answeredByUserId
-        ? statuses.get(row.answeredByUserId) ?? 'offline'
+        ? (statuses.get(row.answeredByUserId) ?? 'offline')
         : 'n/a',
     };
   });
@@ -1006,238 +1006,241 @@ export async function getPlatformOverview(
    */
   const agencies: PlatformAgencyRow[] = await Promise.all(
     tenants.map(async (tenant): Promise<PlatformAgencyRow> => {
-    const [
-      measurement,
-      state,
-      flag,
-      settlement,
-      profile,
-      ledger,
-      cost,
-      unpaid,
-      settlementsEver,
-      balance,
-      disputes,
-      trackingChange,
-      cleanSettlements,
-    ] = await Promise.all([
-      measureCalendarDay(
-        { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
-        tenant.id,
-        day
-      ),
-      prisma.agencyRatingState.findUnique({ where: { tenantId: tenant.id } }),
-      prisma.ratingReviewFlag.findFirst({
-        where: { tenantId: tenant.id, clearedAt: null },
-        select: { id: true },
-      }),
-      prisma.dailySettlement.findUnique({
-        where: { tenantId_deliveryDay: { tenantId: tenant.id, deliveryDay: day } },
-      }),
-      prisma.agencyBillingProfile.findUnique({ where: { tenantId: tenant.id } }),
-      ledgerCountsForDay(prisma, tenant.id, day),
-      // What the day's delivered calls cost NetEnroll to buy. `cost` is the
-      // carrier/media cost already recorded per call by the billing pipeline;
-      // it is summed, never estimated, and is null when no call carried one.
-      prisma.call.aggregate({
-        where: deliveredCallWhere(tenant.id, bounds),
-        _sum: { cost: true },
-      }),
-      prisma.dailySettlement.count({
-        where: {
-          tenantId: tenant.id,
-          paymentStatus: {
-            in: [
-              SettlementPaymentStatus.FAILED,
-              SettlementPaymentStatus.HALTED_MAX_DEBIT,
-              SettlementPaymentStatus.HALTED_NO_MANDATE,
-            ],
-          },
-        },
-      }),
-      // Any settlement ever, not just this day's: an agency enrolled a week ago
-      // with none at all is a nightly run that is not reaching it.
-      prisma.dailySettlement.count({ where: { tenantId: tenant.id } }),
-      // What is left on the block right now, from the ledger. The same figure
-      // the agency's own /delivery panel shows it, from the same function.
-      creditBalance(prisma, tenant.id),
-      /*
-       * Disputes nobody has stood down from -- not "disputes that are open".
-       * A dispute Stripe closed is still one an operator has not looked at, and
-       * `deliveryResumedAt` is the only thing that says somebody has.
-       */
-      prisma.settlementDispute.findMany({
-        where: { tenantId: tenant.id, deliveryResumedAt: null },
-        orderBy: { openedAt: 'desc' },
-        select: { amount: true, status: true, openedAt: true },
-      }),
-      /*
-       * The rate change that set the rate in force, for its two halves.
-       *
-       * The agency's `currentRate` is the effective rate and is what it pays;
-       * this is read so the platform view can also show the curve rate and the
-       * offset that make it up, without recomputing either.
-       */
-      prisma.agencyRatingState
-        .findUnique({ where: { tenantId: tenant.id }, select: { currentRateCalendarDay: true } })
-        .then(async row =>
-          row?.currentRateCalendarDay
-            ? prisma.rateChange.findUnique({
-                where: {
-                  tenantId_effectiveCalendarDay: {
-                    tenantId: tenant.id,
-                    effectiveCalendarDay: row.currentRateCalendarDay,
-                  },
-                },
-                select: { curveRate: true, rateOffset: true },
-              })
-            : null
+      const [
+        measurement,
+        state,
+        flag,
+        settlement,
+        profile,
+        ledger,
+        cost,
+        unpaid,
+        settlementsEver,
+        balance,
+        disputes,
+        trackingChange,
+        cleanSettlements,
+      ] = await Promise.all([
+        measureCalendarDay(
+          { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+          tenant.id,
+          day
         ),
-      /*
-       * How much credit this agency has earned. Read rather than assumed,
-       * because the ACH ceiling schedule doubles at the threshold and a screen
-       * that showed the lower figure would report a distance to the ceiling
-       * half of what the gate will actually allow.
-       */
-      consecutiveCleanSettlements(prisma, tenant.id),
-    ]);
-
-    const revenue = settlement === null ? null : toNumber(settlement.totalCharged);
-    const callCost = cost._sum.cost === null ? null : toNumber(cost._sum.cost);
-    const calls = measurement.deliveredCalls;
-
-    const terms = profile;
-    /*
-     * The ceiling in force, from the same rule the gate uses: a platform
-     * override first, then the flat card percentage, then the ACH schedule.
-     * `ceilingFor` is that rule, and it lives with the terms so this screen and
-     * the gate cannot arrive at different numbers.
-     */
-    const { ceilingPct } = ceilingFor(terms, cleanSettlements);
-    const ceilingApplications =
-      terms === null ? 0 : overrunCeilingApplications(terms.dailyBlockApplications, ceilingPct);
-
-    /*
-     * A dispute nobody has stood down from withdraws Overrun entirely, so the
-     * distance to the ceiling for such an agency is zero rather than whatever
-     * the schedule would allow. The gate decides the same way; this screen says
-     * what the gate will say.
-     */
-    const disputed = disputes.length > 0;
-    const effectiveCeiling = disputed || unpaid > 0 ? 0 : ceilingApplications;
-
-    const rate = state?.currentRate == null ? null : toNumber(state.currentRate);
-    const rateOffset = trackingChange?.rateOffset == null ? 0 : toNumber(trackingChange.rateOffset);
-
-    return {
-      tenantId: tenant.id,
-      name: tenant.name,
-      slug: tenant.slug,
-      isNonProduction: tenant.isNonProduction,
-      enrolled: profile?.billingEnrolledAt != null,
-      chargesEnabled: profile?.chargesEnabled === true,
-      deliveredCalls: calls,
-      applications: measurement.submittedApplications,
-      closingPct: measurement.closingPct,
-      /*
-       * The EFFECTIVE rate: what the agency is actually priced at, which is the
-       * curve rate plus its offset. The two halves are beside it so the screen
-       * can show what makes it up, and so an operator can see at a glance which
-       * agencies carry an offset at all.
-       */
-      rate,
-      rateOffset,
-      curveRate:
-        trackingChange?.curveRate == null
-          ? // No rate change has priced this agency yet -- it is on an agreed
-            // opening rate, or has never been rated. The opening rate is a
-            // negotiated number rather than a curve answer, so there is no
-            // curve half to report and this is null rather than the rate.
-            null
-          : toNumber(trackingChange.curveRate),
-      paymentMethod: profile?.paymentMethod ?? 'ACH',
-      applicationsRemainingOnBlock: Math.max(0, balance),
-      dailyBlockApplications: terms?.dailyBlockApplications ?? 0,
-      overrunToday: ledger.overrun,
-      overrunCeiling: effectiveCeiling,
-      distanceToCeiling: Math.max(0, effectiveCeiling - ledger.overrun),
-      revenue,
-      callCost,
-      margin: revenue === null || callCost === null ? null : Number((revenue - callCost).toFixed(2)),
-      revenuePerCall:
-        revenue === null || calls === 0 ? null : Number((revenue / calls).toFixed(4)),
-      costPerCall: callCost === null || calls === 0 ? null : Number((callCost / calls).toFixed(4)),
-      /*
-       * Flags are conditions that need somebody to act, so they are only raised
-       * for an agency that is actually in the billing system. An unenrolled
-       * agency has no mandate and no rate by definition; flagging it would put
-       * five red badges on every tenant that has not been onboarded yet and
-       * bury the one that genuinely needs attention.
-       */
-      flags:
-        profile?.billingEnrolledAt == null
-          ? {
-              belowMinimumAndPaused: false,
-              atCeiling: false,
-              settlementFailedOrUnpaid: false,
-              noValidMandate: false,
-              suspended: false,
-              enrolledNeverSettled: false,
-              // A dispute is a payment event, and an unenrolled agency has no
-              // payments to dispute. Nothing this platform charged can be
-              // charged back for one.
-              disputed: false,
-            }
-          : {
-              belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
-              atCeiling: ledger.overrun >= effectiveCeiling && effectiveCeiling > 0,
-              settlementFailedOrUnpaid: unpaid > 0,
-              noValidMandate:
-                profile.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
-              suspended: profile.suspendedAt != null,
-              enrolledNeverSettled: settlementsEver === 0,
-              disputed,
+        prisma.agencyRatingState.findUnique({ where: { tenantId: tenant.id } }),
+        prisma.ratingReviewFlag.findFirst({
+          where: { tenantId: tenant.id, clearedAt: null },
+          select: { id: true },
+        }),
+        prisma.dailySettlement.findUnique({
+          where: { tenantId_deliveryDay: { tenantId: tenant.id, deliveryDay: day } },
+        }),
+        prisma.agencyBillingProfile.findUnique({ where: { tenantId: tenant.id } }),
+        ledgerCountsForDay(prisma, tenant.id, day),
+        // What the day's delivered calls cost NetEnroll to buy. `cost` is the
+        // carrier/media cost already recorded per call by the billing pipeline;
+        // it is summed, never estimated, and is null when no call carried one.
+        prisma.call.aggregate({
+          where: deliveredCallWhere(tenant.id, bounds),
+          _sum: { cost: true },
+        }),
+        prisma.dailySettlement.count({
+          where: {
+            tenantId: tenant.id,
+            paymentStatus: {
+              in: [
+                SettlementPaymentStatus.FAILED,
+                SettlementPaymentStatus.HALTED_MAX_DEBIT,
+                SettlementPaymentStatus.HALTED_NO_MANDATE,
+              ],
             },
-      dispute:
-        disputes.length === 0
-          ? null
-          : {
-              count: disputes.length,
-              amount: Number(
-                disputes.reduce((sum, row) => sum + toNumber(row.amount), 0).toFixed(2)
-              ),
-              latestStatus: disputes[0]?.status ?? null,
-              openedAt: disputes[0]?.openedAt ?? null,
-            },
-      settlement: {
-        status:
+          },
+        }),
+        // Any settlement ever, not just this day's: an agency enrolled a week ago
+        // with none at all is a nightly run that is not reaching it.
+        prisma.dailySettlement.count({ where: { tenantId: tenant.id } }),
+        // What is left on the block right now, from the ledger. The same figure
+        // the agency's own /delivery panel shows it, from the same function.
+        creditBalance(prisma, tenant.id),
+        /*
+         * Disputes nobody has stood down from -- not "disputes that are open".
+         * A dispute Stripe closed is still one an operator has not looked at, and
+         * `deliveryResumedAt` is the only thing that says somebody has.
+         */
+        prisma.settlementDispute.findMany({
+          where: { tenantId: tenant.id, deliveryResumedAt: null },
+          orderBy: { openedAt: 'desc' },
+          select: { amount: true, status: true, openedAt: true },
+        }),
+        /*
+         * The rate change that set the rate in force, for its two halves.
+         *
+         * The agency's `currentRate` is the effective rate and is what it pays;
+         * this is read so the platform view can also show the curve rate and the
+         * offset that make it up, without recomputing either.
+         */
+        prisma.agencyRatingState
+          .findUnique({ where: { tenantId: tenant.id }, select: { currentRateCalendarDay: true } })
+          .then(async row =>
+            row?.currentRateCalendarDay
+              ? prisma.rateChange.findUnique({
+                  where: {
+                    tenantId_effectiveCalendarDay: {
+                      tenantId: tenant.id,
+                      effectiveCalendarDay: row.currentRateCalendarDay,
+                    },
+                  },
+                  select: { curveRate: true, rateOffset: true },
+                })
+              : null
+          ),
+        /*
+         * How much credit this agency has earned. Read rather than assumed,
+         * because the ACH ceiling schedule doubles at the threshold and a screen
+         * that showed the lower figure would report a distance to the ceiling
+         * half of what the gate will actually allow.
+         */
+        consecutiveCleanSettlements(prisma, tenant.id),
+      ]);
+
+      const revenue = settlement === null ? null : toNumber(settlement.totalCharged);
+      const callCost = cost._sum.cost === null ? null : toNumber(cost._sum.cost);
+      const calls = measurement.deliveredCalls;
+
+      const terms = profile;
+      /*
+       * The ceiling in force, from the same rule the gate uses: a platform
+       * override first, then the flat card percentage, then the ACH schedule.
+       * `ceilingFor` is that rule, and it lives with the terms so this screen and
+       * the gate cannot arrive at different numbers.
+       */
+      const { ceilingPct } = ceilingFor(terms, cleanSettlements);
+      const ceilingApplications =
+        terms === null ? 0 : overrunCeilingApplications(terms.dailyBlockApplications, ceilingPct);
+
+      /*
+       * A dispute nobody has stood down from withdraws Overrun entirely, so the
+       * distance to the ceiling for such an agency is zero rather than whatever
+       * the schedule would allow. The gate decides the same way; this screen says
+       * what the gate will say.
+       */
+      const disputed = disputes.length > 0;
+      const effectiveCeiling = disputed || unpaid > 0 ? 0 : ceilingApplications;
+
+      const rate = state?.currentRate == null ? null : toNumber(state.currentRate);
+      const rateOffset =
+        trackingChange?.rateOffset == null ? 0 : toNumber(trackingChange.rateOffset);
+
+      return {
+        tenantId: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        isNonProduction: tenant.isNonProduction,
+        enrolled: profile?.billingEnrolledAt != null,
+        chargesEnabled: profile?.chargesEnabled === true,
+        deliveredCalls: calls,
+        applications: measurement.submittedApplications,
+        closingPct: measurement.closingPct,
+        /*
+         * The EFFECTIVE rate: what the agency is actually priced at, which is the
+         * curve rate plus its offset. The two halves are beside it so the screen
+         * can show what makes it up, and so an operator can see at a glance which
+         * agencies carry an offset at all.
+         */
+        rate,
+        rateOffset,
+        curveRate:
+          trackingChange?.curveRate == null
+            ? // No rate change has priced this agency yet -- it is on an agreed
+              // opening rate, or has never been rated. The opening rate is a
+              // negotiated number rather than a curve answer, so there is no
+              // curve half to report and this is null rather than the rate.
+              null
+            : toNumber(trackingChange.curveRate),
+        paymentMethod: profile?.paymentMethod ?? 'ACH',
+        applicationsRemainingOnBlock: Math.max(0, balance),
+        dailyBlockApplications: terms?.dailyBlockApplications ?? 0,
+        overrunToday: ledger.overrun,
+        overrunCeiling: effectiveCeiling,
+        distanceToCeiling: Math.max(0, effectiveCeiling - ledger.overrun),
+        revenue,
+        callCost,
+        margin:
+          revenue === null || callCost === null ? null : Number((revenue - callCost).toFixed(2)),
+        revenuePerCall:
+          revenue === null || calls === 0 ? null : Number((revenue / calls).toFixed(4)),
+        costPerCall:
+          callCost === null || calls === 0 ? null : Number((callCost / calls).toFixed(4)),
+        /*
+         * Flags are conditions that need somebody to act, so they are only raised
+         * for an agency that is actually in the billing system. An unenrolled
+         * agency has no mandate and no rate by definition; flagging it would put
+         * five red badges on every tenant that has not been onboarded yet and
+         * bury the one that genuinely needs attention.
+         */
+        flags:
           profile?.billingEnrolledAt == null
-            ? 'NOT_ENROLLED'
-            : settlement === null
-            ? 'NOT_YET_RUN'
-            : settlement.paymentStatus === SettlementPaymentStatus.SUCCEEDED ||
-                settlement.paymentStatus === SettlementPaymentStatus.NOT_CHARGED
-              ? 'SETTLED'
-              : // A dry run is neither settled nor failed: it computed
-                // correctly and deliberately took no money. Calling it FAILED
-                // would put a red flag on the one state an operator has
-                // chosen, on every agency being watched before go-live.
-                settlement.paymentStatus === SettlementPaymentStatus.DRY_RUN
-                ? 'DRY_RUN'
-                : // A halt is not a decline either. The run worked and
-                  // deliberately placed no debit -- the total breached the
-                  // maximum daily debit, or the mandate was gone -- and the
-                  // response to it is to explain the day, not to retry a card.
-                  settlement.paymentStatus === SettlementPaymentStatus.HALTED_MAX_DEBIT ||
-                    settlement.paymentStatus === SettlementPaymentStatus.HALTED_NO_MANDATE
-                  ? 'HALTED'
-                  : 'FAILED',
-        paymentStatus: settlement?.paymentStatus ?? null,
-        totalCharged: settlement === null ? null : toNumber(settlement.totalCharged),
-        overrunQuantity: settlement?.overrunQuantity ?? null,
-        nextBlockQuantity: settlement?.nextBlockQuantity ?? null,
-      },
-    };
+            ? {
+                belowMinimumAndPaused: false,
+                atCeiling: false,
+                settlementFailedOrUnpaid: false,
+                noValidMandate: false,
+                suspended: false,
+                enrolledNeverSettled: false,
+                // A dispute is a payment event, and an unenrolled agency has no
+                // payments to dispute. Nothing this platform charged can be
+                // charged back for one.
+                disputed: false,
+              }
+            : {
+                belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
+                atCeiling: ledger.overrun >= effectiveCeiling && effectiveCeiling > 0,
+                settlementFailedOrUnpaid: unpaid > 0,
+                noValidMandate:
+                  profile.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
+                suspended: profile.suspendedAt != null,
+                enrolledNeverSettled: settlementsEver === 0,
+                disputed,
+              },
+        dispute:
+          disputes.length === 0
+            ? null
+            : {
+                count: disputes.length,
+                amount: Number(
+                  disputes.reduce((sum, row) => sum + toNumber(row.amount), 0).toFixed(2)
+                ),
+                latestStatus: disputes[0]?.status ?? null,
+                openedAt: disputes[0]?.openedAt ?? null,
+              },
+        settlement: {
+          status:
+            profile?.billingEnrolledAt == null
+              ? 'NOT_ENROLLED'
+              : settlement === null
+                ? 'NOT_YET_RUN'
+                : settlement.paymentStatus === SettlementPaymentStatus.SUCCEEDED ||
+                    settlement.paymentStatus === SettlementPaymentStatus.NOT_CHARGED
+                  ? 'SETTLED'
+                  : // A dry run is neither settled nor failed: it computed
+                    // correctly and deliberately took no money. Calling it FAILED
+                    // would put a red flag on the one state an operator has
+                    // chosen, on every agency being watched before go-live.
+                    settlement.paymentStatus === SettlementPaymentStatus.DRY_RUN
+                    ? 'DRY_RUN'
+                    : // A halt is not a decline either. The run worked and
+                      // deliberately placed no debit -- the total breached the
+                      // maximum daily debit, or the mandate was gone -- and the
+                      // response to it is to explain the day, not to retry a card.
+                      settlement.paymentStatus === SettlementPaymentStatus.HALTED_MAX_DEBIT ||
+                        settlement.paymentStatus === SettlementPaymentStatus.HALTED_NO_MANDATE
+                      ? 'HALTED'
+                      : 'FAILED',
+          paymentStatus: settlement?.paymentStatus ?? null,
+          totalCharged: settlement === null ? null : toNumber(settlement.totalCharged),
+          overrunQuantity: settlement?.overrunQuantity ?? null,
+          nextBlockQuantity: settlement?.nextBlockQuantity ?? null,
+        },
+      };
     })
   );
 
@@ -1277,7 +1280,8 @@ export async function getPlatformOverview(
      * day, and a fabricated zero on the screen platform staff read every
      * morning is worse than an absent number.
      */
-    closingPct: totalCalls === 0 ? null : Number(((totalApplications / totalCalls) * 100).toFixed(4)),
+    closingPct:
+      totalCalls === 0 ? null : Number(((totalApplications / totalCalls) * 100).toFixed(4)),
     revenue,
     callCost,
     margin: revenue === null || callCost === null ? null : Number((revenue - callCost).toFixed(2)),
@@ -1433,12 +1437,8 @@ export async function getSettlementDerivation(
   );
 
   const deliveredCalls = perDay.reduce((total, row) => total + row.deliveredCalls, 0);
-  const submittedApplications = perDay.reduce(
-    (total, row) => total + row.submittedApplications,
-    0
-  );
-  const closingPct =
-    deliveredCalls > 0 ? (submittedApplications / deliveredCalls) * 100 : null;
+  const submittedApplications = perDay.reduce((total, row) => total + row.submittedApplications, 0);
+  const closingPct = deliveredCalls > 0 ? (submittedApplications / deliveredCalls) * 100 : null;
 
   const storedRate = settlement.rate === null ? null : toNumber(settlement.rate);
 
@@ -1540,4 +1540,229 @@ function bracketingAnchors(
     }
   }
   return null;
+}
+
+/* ── The team over a range ─────────────────────────────────────────────────── */
+
+/** One agent's production across a span of Delivery Days. */
+export interface AgentRangeRow {
+  userId: string | null;
+  name: string;
+  email: string | null;
+  callsTaken: number;
+  applications: number;
+  annualizedPremium: number;
+  /** Null when the agent took no calls in the range -- never 0%. */
+  closingPct: number | null;
+  talkTimeSeconds: number;
+  /** Summed across the range. Null when no hours were ever recorded in it. */
+  hoursWorked: number | null;
+  /** Talk time as a share of recorded hours. Null without hours to divide by. */
+  occupancyPct: number | null;
+}
+
+export interface AgentRangeBreakdown {
+  from: CalendarDayKey;
+  to: CalendarDayKey;
+  /** Inclusive count of Delivery Days covered. */
+  days: number;
+  agencyCallsTaken: number;
+  agencyApplications: number;
+  agencyAnnualizedPremium: number;
+  agencyClosingPct: number | null;
+  agents: AgentRangeRow[];
+}
+
+/**
+ * The per-agent table over a span of days rather than one.
+ *
+ * ── Why this is a second function and not a parameter ────────────────────────
+ *
+ * `getAgentBreakdown` is a single day by design: it is read beside today's
+ * block, today's overrun and tonight's rate, and it computes live presence and
+ * "seconds available today", neither of which means anything across a week.
+ * More to the point, it sits on the screen an agency's PRICE is explained from,
+ * and widening it in place would put every one of those figures at risk to add
+ * a feature none of them need.
+ *
+ * So the day view keeps its exact behaviour and this answers the other
+ * question: how did the team do over a week, a month, a pay period.
+ *
+ * ── It measures the same things the same way ─────────────────────────────────
+ *
+ * `deliveredCallWhere` and `submittedApplicationWhere` are the Phase 2
+ * predicates, used verbatim, exactly as the day view uses them -- they already
+ * take an arbitrary instant range, so nothing here reimplements a definition.
+ * A week's figures therefore sum the days that compose it, and a voided
+ * application leaves this table on the same terms it leaves the agency's
+ * numerator.
+ *
+ * ── What it deliberately does not carry ──────────────────────────────────────
+ *
+ * No live softphone status and no "seconds available". The first is a fact
+ * about right now and would be nonsense stamped on a range that ended in
+ * March; the second is derived from a day's state transitions and does not
+ * generalise without a definition somebody would have to trust. An absent
+ * column is better than a column that reads as a measurement and is not one.
+ */
+export async function getAgentRange(
+  tenantId: string,
+  from: CalendarDayKey,
+  to: CalendarDayKey,
+  options: { prisma?: PrismaClient } = {}
+): Promise<AgentRangeBreakdown> {
+  const prisma = options.prisma ?? getPrismaClient();
+
+  /*
+   * Half-open across the whole span: the first instant of `from` to the first
+   * instant of the day after `to`. Built from the same day-bounds helper the
+   * day view uses, so the range respects the platform time zone and DST
+   * exactly as a single day does.
+   */
+  const bounds = {
+    start: calendarDayBounds(from).start,
+    endExclusive: calendarDayBounds(to).endExclusive,
+  };
+
+  const [callRows, applicationRows, users] = await Promise.all([
+    prisma.call.groupBy({
+      by: ['answeredByUserId'],
+      where: deliveredCallWhere(tenantId, bounds),
+      _count: { _all: true },
+      _sum: { connectedDuration: true },
+    }),
+    prisma.insuranceCarrierApplication.groupBy({
+      by: ['createdById'],
+      where: submittedApplicationWhere(tenantId, bounds),
+      _count: { _all: true },
+      _sum: { annualizedPremium: true },
+    }),
+    prisma.user.findMany({
+      where: { tenantId },
+      select: { id: true, email: true, firstName: true, lastName: true },
+    }),
+  ]);
+
+  const userIds = users.map(u => u.id);
+
+  /*
+   * Hours SUMMED across the range, not read for one date. `TimeEntry.date` is
+   * a date column, one row per agent per day, so a week is a group-by rather
+   * than a lookup.
+   */
+  const timeEntries = await prisma.timeEntry.groupBy({
+    by: ['userId'],
+    where: {
+      userId: { in: userIds },
+      date: { gte: bounds.start, lt: bounds.endExclusive },
+    },
+    _sum: { hoursWorked: true },
+  });
+  const hoursByUser = new Map(
+    timeEntries.map(t => [
+      t.userId,
+      t._sum.hoursWorked === null ? null : toNumber(t._sum.hoursWorked),
+    ])
+  );
+
+  const byUser = new Map(users.map(u => [u.id, u]));
+  const applicationsByUser = new Map(
+    applicationRows.map(row => [row.createdById, row._count._all])
+  );
+  const premiumByUser = new Map(
+    applicationRows.map(row => [
+      row.createdById,
+      row._sum.annualizedPremium === null ? 0 : toNumber(row._sum.annualizedPremium),
+    ])
+  );
+
+  function nameOf(userId: string | null): string {
+    if (!userId) return 'Unattributed';
+    const user = byUser.get(userId);
+    return [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || userId;
+  }
+
+  const rows: AgentRangeRow[] = callRows.map(row => {
+    const userId = row.answeredByUserId;
+    const calls = row._count._all;
+    const applications = userId ? (applicationsByUser.get(userId) ?? 0) : 0;
+    const talkTimeSeconds = row._sum.connectedDuration ?? 0;
+    const hoursWorked = userId ? (hoursByUser.get(userId) ?? null) : null;
+
+    return {
+      userId,
+      name: nameOf(userId),
+      email: userId ? (byUser.get(userId)?.email ?? null) : null,
+      callsTaken: calls,
+      applications,
+      annualizedPremium: userId ? (premiumByUser.get(userId) ?? 0) : 0,
+      closingPct: calls > 0 ? (applications / calls) * 100 : null,
+      talkTimeSeconds,
+      hoursWorked,
+      occupancyPct:
+        hoursWorked && hoursWorked > 0 ? (talkTimeSeconds / (hoursWorked * 3600)) * 100 : null,
+    };
+  });
+
+  /*
+   * An agent who wrote business in the range but answered no call is still a
+   * row: their applications belong to the agency's numerator, and an agent
+   * missing from the table entirely reads as an agent who did nothing.
+   */
+  for (const [userId, applications] of applicationsByUser) {
+    if (!userId) continue;
+    if (rows.some(r => r.userId === userId)) continue;
+    const hoursWorked = hoursByUser.get(userId) ?? null;
+    rows.push({
+      userId,
+      name: nameOf(userId),
+      email: byUser.get(userId)?.email ?? null,
+      callsTaken: 0,
+      applications,
+      annualizedPremium: premiumByUser.get(userId) ?? 0,
+      closingPct: null,
+      talkTimeSeconds: 0,
+      hoursWorked,
+      occupancyPct: hoursWorked && hoursWorked > 0 ? 0 : null,
+    });
+  }
+
+  /*
+   * Sorted by applications written, DESCENDING.
+   *
+   * Deliberately the opposite of the day view, which sorts ascending because it
+   * is a work list: who to coach today. This is a period report -- a month, a
+   * pay period -- and the question it answers is what the team produced. The
+   * unattributed row is held to the bottom either way: it is not a person and
+   * nobody can be coached or paid on it.
+   */
+  rows.sort((a, b) => {
+    if (a.userId === null) return 1;
+    if (b.userId === null) return -1;
+    if (b.applications !== a.applications) return b.applications - a.applications;
+    return b.callsTaken - a.callsTaken;
+  });
+
+  const agencyCallsTaken = rows.reduce((total, row) => total + row.callsTaken, 0);
+  const agencyApplications = rows.reduce((total, row) => total + row.applications, 0);
+
+  /* Inclusive day count, from the half-open instant span. */
+  const days = Math.max(
+    1,
+    Math.round((bounds.endExclusive.getTime() - bounds.start.getTime()) / 86_400_000)
+  );
+
+  return {
+    from,
+    to,
+    days,
+    agencyCallsTaken,
+    agencyApplications,
+    agencyAnnualizedPremium: Number(
+      rows.reduce((total, row) => total + row.annualizedPremium, 0).toFixed(2)
+    ),
+    /* Null rather than 0% for a range with no delivered calls behind it. */
+    agencyClosingPct: agencyCallsTaken > 0 ? (agencyApplications / agencyCallsTaken) * 100 : null,
+    agents: rows,
+  };
 }
