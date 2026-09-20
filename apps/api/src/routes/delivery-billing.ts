@@ -79,6 +79,7 @@ import {
 } from '../services/billing/credit-ledger.js';
 import {
   getAgentBreakdown,
+  getAgentRange,
   getAgentSelfView,
   getSettlementDerivation,
   getDeliveryToday,
@@ -123,12 +124,16 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * what is left on the block, the overrun and what it will cost tonight, the
    * distance to the ceiling, and the projected charge at settlement.
    */
-  fastify.get('/api/v1/delivery/today', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
-    const tenantId = resolveTenant(request, reply);
-    if (!tenantId) return;
+  fastify.get(
+    '/api/v1/delivery/today',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
-    return reply.send({ data: await getDeliveryToday(tenantId, { prisma }) });
-  });
+      return reply.send({ data: await getDeliveryToday(tenantId, { prisma }) });
+    }
+  );
 
   /**
    * GET /api/v1/delivery/agents
@@ -151,6 +156,98 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       }
 
       return reply.send({ data: await getAgentBreakdown(tenantId, { prisma, day }) });
+    }
+  );
+
+  /**
+   * GET /api/v1/delivery/agents/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+   *
+   * The same table over a span of days, and `?format=csv` to take it away.
+   *
+   * ── Why this is beside the day view rather than inside it ────────────────
+   *
+   * `/delivery/agents` is one day by design: it is read next to today's block
+   * and tonight's rate, and it carries live presence and seconds-available,
+   * neither of which means anything across a week. It also sits on the screen
+   * an agency's PRICE is explained from. Widening it in place would put every
+   * figure on that screen at risk to answer a different question.
+   *
+   * The question it could not answer is the ordinary one: how did the team do
+   * this week, this month, this pay period.
+   */
+  fastify.get<{ Querystring: { from?: string; to?: string; format?: string } }>(
+    '/api/v1/delivery/agents/range',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const { from, to, format } = request.query;
+
+      for (const [name, value] of [
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (value === undefined || !DAY_PATTERN.test(value)) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: `${name} must be YYYY-MM-DD` },
+          });
+        }
+      }
+
+      /*
+       * Refused rather than silently swapped. A reversed range is a caller
+       * bug, and quietly returning the days they did not ask for hides it --
+       * on a report somebody may be paying people from.
+       */
+      if ((from as string) > (to as string)) {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'from must not be after to' },
+        });
+      }
+
+      const data = await getAgentRange(tenantId, from as string, to as string, { prisma });
+
+      if (format === 'csv') {
+        const header = [
+          'Agent',
+          'Email',
+          'Calls taken',
+          'Applications',
+          'Closing %',
+          'Annualized premium',
+          'Talk time (seconds)',
+          'Hours worked',
+          'Occupancy %',
+        ].join(',');
+
+        const rows = data.agents.map(agent =>
+          [
+            csvCell(agent.name),
+            csvCell(agent.email ?? ''),
+            agent.callsTaken,
+            agent.applications,
+            /*
+             * Empty, not 0. A closing percentage with no delivered calls
+             * behind it is an absent measurement, and a spreadsheet that
+             * averages a fabricated 0% reports a number nobody measured.
+             */
+            agent.closingPct === null ? '' : agent.closingPct.toFixed(2),
+            agent.annualizedPremium.toFixed(2),
+            agent.talkTimeSeconds,
+            agent.hoursWorked === null ? '' : agent.hoursWorked.toFixed(2),
+            agent.occupancyPct === null ? '' : agent.occupancyPct.toFixed(2),
+          ].join(',')
+        );
+
+        void reply.header(
+          'content-disposition',
+          `attachment; filename="agents-${data.from}-to-${data.to}.csv"`
+        );
+        return reply.type('text/csv; charset=utf-8').send([header, ...rows].join('\n'));
+      }
+
+      return reply.send({ data });
     }
   );
 
@@ -234,11 +331,9 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
-      const derivation = await getSettlementDerivation(
-        tenantId,
-        request.params.settlementId,
-        { prisma }
-      );
+      const derivation = await getSettlementDerivation(tenantId, request.params.settlementId, {
+        prisma,
+      });
 
       if (!derivation) {
         return reply
@@ -354,35 +449,39 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * Whether this agency has a usable ACH mandate. No mandate, no delivery, so
    * an agency has to be able to see the state of its own.
    */
-  fastify.get('/api/v1/delivery/mandate', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
-    const tenantId = resolveTenant(request, reply);
-    if (!tenantId) return;
+  fastify.get(
+    '/api/v1/delivery/mandate',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
-    const terms = await loadAgencyTerms(tenantId, { prisma });
-    const payingByCard = terms.paymentMethod === AgencyPaymentMethod.CARD;
+      const terms = await loadAgencyTerms(tenantId, { prisma });
+      const payingByCard = terms.paymentMethod === AgencyPaymentMethod.CARD;
 
-    return reply.send({
-      data: {
-        /*
-         * The instrument this agency actually pays with. `status` and `valid`
-         * answer for THAT one -- a card-paying agency reading "no mandate"
-         * because it has no bank account on file would be reading a defect that
-         * is not there.
-         */
-        paymentMethod: terms.paymentMethod,
-        status: terms.mandateStatus,
-        valid: terms.hasValidMandate,
-        bankName: payingByCard ? null : terms.profile?.achBankName ?? null,
-        cardBrand: payingByCard ? terms.profile?.cardBrand ?? null : null,
-        last4: payingByCard
-          ? terms.profile?.cardLast4 ?? null
-          : terms.profile?.achLast4 ?? null,
-        verifiedAt: payingByCard
-          ? terms.profile?.cardMandateVerifiedAt ?? null
-          : terms.profile?.achMandateVerifiedAt ?? null,
-      },
-    });
-  });
+      return reply.send({
+        data: {
+          /*
+           * The instrument this agency actually pays with. `status` and `valid`
+           * answer for THAT one -- a card-paying agency reading "no mandate"
+           * because it has no bank account on file would be reading a defect that
+           * is not there.
+           */
+          paymentMethod: terms.paymentMethod,
+          status: terms.mandateStatus,
+          valid: terms.hasValidMandate,
+          bankName: payingByCard ? null : (terms.profile?.achBankName ?? null),
+          cardBrand: payingByCard ? (terms.profile?.cardBrand ?? null) : null,
+          last4: payingByCard
+            ? (terms.profile?.cardLast4 ?? null)
+            : (terms.profile?.achLast4 ?? null),
+          verifiedAt: payingByCard
+            ? (terms.profile?.cardMandateVerifiedAt ?? null)
+            : (terms.profile?.achMandateVerifiedAt ?? null),
+        },
+      });
+    }
+  );
 
   /**
    * POST /api/v1/delivery/card/setup-intent
@@ -627,7 +726,11 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
        * check, an agency could confirm a SetupIntent id belonging to another
        * agency and attach that agency's bank account to its own profile.
        */
-      if (facts.customerId && profile.stripeCustomerId && facts.customerId !== profile.stripeCustomerId) {
+      if (
+        facts.customerId &&
+        profile.stripeCustomerId &&
+        facts.customerId !== profile.stripeCustomerId
+      ) {
         return reply.code(403).send({
           error: {
             code: 'FORBIDDEN',
@@ -753,13 +856,14 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
            * settlement at the ceiling would halt on a cap that was never the
            * real cost of the day.
            */
-          computedMaxDailyDebitAtRate: Number.isFinite(rate) && rate > 0
-            ? maxDailyDebitFor(
-                terms.dailyBlockApplications,
-                terms.ceilingPct,
-                rate + terms.rateOffset
-              )
-            : null,
+          computedMaxDailyDebitAtRate:
+            Number.isFinite(rate) && rate > 0
+              ? maxDailyDebitFor(
+                  terms.dailyBlockApplications,
+                  terms.ceilingPct,
+                  rate + terms.rateOffset
+                )
+              : null,
           /** The rate the figure above was computed at, so it reads on its own. */
           computedAtEffectiveRate:
             Number.isFinite(rate) && rate > 0 ? Number((rate + terms.rateOffset).toFixed(2)) : null,
@@ -932,7 +1036,10 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const { tenantId } = request.params;
       const override = request.body?.ceilingPctOverride ?? null;
 
-      if (override !== null && (typeof override !== 'number' || !Number.isFinite(override) || override < 0)) {
+      if (
+        override !== null &&
+        (typeof override !== 'number' || !Number.isFinite(override) || override < 0)
+      ) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -1084,7 +1191,11 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           error: { code: 'VALIDATION_ERROR', message: 'quantity must be a positive whole number' },
         });
       }
-      if (typeof body.unitRate !== 'number' || !Number.isFinite(body.unitRate) || body.unitRate <= 0) {
+      if (
+        typeof body.unitRate !== 'number' ||
+        !Number.isFinite(body.unitRate) ||
+        body.unitRate <= 0
+      ) {
         return reply.code(400).send({
           error: { code: 'VALIDATION_ERROR', message: 'unitRate must be a positive number' },
         });
@@ -1338,7 +1449,12 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         });
       }
 
-      const result = await standDownDispute({ prisma, tenantId, operatorUserId, note: request.body?.note });
+      const result = await standDownDispute({
+        prisma,
+        tenantId,
+        operatorUserId,
+        note: request.body?.note,
+      });
 
       if (result.disputesStoodDown === 0) {
         return reply.code(409).send({

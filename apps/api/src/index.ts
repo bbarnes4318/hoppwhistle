@@ -407,6 +407,12 @@ async function buildServer() {
   const { registerFreeswitchDirectoryRoutes } = await import('./routes/freeswitch-directory.js');
   await server.register(registerFreeswitchDirectoryRoutes);
 
+  // Register the agency's own agent roster: the screen where an agency adds its
+  // agents and puts them in a call pool. This is what makes `CampaignAgent`
+  // real -- see routes/agent-roster.ts.
+  const { registerAgentRosterRoutes } = await import('./routes/agent-roster.js');
+  await server.register(registerAgentRosterRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

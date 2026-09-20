@@ -138,6 +138,12 @@ export const PLATFORM_NAV: NavGroup[] = [
       // First, and before its own sub-pages: /settings is the page the four
       // /settings/* entries below are reached from.
       { name: 'Settings', href: '/settings', icon: Settings },
+      {
+        name: 'Agents',
+        href: '/settings/agents',
+        icon: Headphones,
+        title: 'Your agents, and whether each one can actually take a call',
+      },
       { name: 'Users', href: '/settings/users', icon: Users },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
       { name: 'DNC lists', href: '/settings/dnc', icon: Shield },

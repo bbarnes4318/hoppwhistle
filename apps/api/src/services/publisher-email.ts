@@ -103,7 +103,12 @@ earned.</p>
   }
 }
 
-function escapeHtml(value: string): string {
+/**
+ * Exported because the email shell below is shared. `agent-invite-email.ts`
+ * renders into the same shell and needs the same escaping; a second copy is a
+ * second place for an unescaped agency name to become broken markup.
+ */
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

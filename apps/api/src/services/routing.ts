@@ -152,6 +152,112 @@ export class RoutingService {
       });
     }
 
+    /*
+     * The agency's own agents, from `campaign_agents`.
+     *
+     * ── Why this exists ──────────────────────────────────────────────────────
+     *
+     * Until now the ONLY way an agent could be rung was for somebody to build
+     * them a `BuyerEndpoint` and attach it to the campaign -- a screen an
+     * agency principal cannot reach (`lib/staff-only-routes.ts` holds
+     * `/buyers` and `/campaigns`). So "the agency adds its agents and sets them
+     * up to receive calls" required NetEnroll staff for every agent, and
+     * `CampaignAgent` sat in the schema, documented as the dialer's hot read,
+     * with nothing reading or writing it.
+     *
+     * An assignment made on the agency's own roster screen now produces a
+     * destination here.
+     *
+     * ── It is a source of destinations, not a second routing system ──────────
+     *
+     * These rows join `allEndpoints` BEFORE every gate below, so an agent
+     * assigned this way is held to exactly the same rules as one reached
+     * through a buyer endpoint: the accepted-state filter, the licence gate,
+     * and the concurrency limit, in that order. Nothing here grants anything.
+     *
+     * ── The destination is the extension, resolved here ──────────────────────
+     *
+     * A buyer endpoint stores a destination string that the translation pass
+     * below has to map back to an agent. A `CampaignAgent` row names the agent
+     * directly, so the extension is read straight from their credential and no
+     * translation is needed or attempted. An agent with no ACTIVE credential
+     * has no softphone to ring and is skipped -- they appear on the roster
+     * screen with "Has not opened the softphone yet", which is the actionable
+     * form of the same fact.
+     *
+     * `acceptedStates` is empty: an agent's geography is their LICENCE, which
+     * the gate below reads from `metadata.licensedStates`. Copying it into a
+     * second field here would be a second copy to disagree with the first.
+     */
+    try {
+      const agentAssignments = await this.prisma.campaignAgent.findMany({
+        where: { tenantId, campaignId, status: 'ACTIVE' },
+        select: {
+          userId: true,
+          priority: true,
+          user: {
+            select: {
+              id: true,
+              status: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              sipCredential: {
+                select: { extension: true, status: true, passwordEncrypted: true },
+              },
+            },
+          },
+        },
+      });
+
+      for (const assignment of agentAssignments) {
+        const agent = assignment.user;
+        if (agent.status !== 'ACTIVE') continue;
+
+        const credential = agent.sipCredential;
+        // A reservation (null password) cannot authenticate, so its extension
+        // cannot register and ringing it is a call into nothing.
+        if (!credential || credential.status !== 'ACTIVE' || !credential.passwordEncrypted) {
+          logger.info({
+            msg: 'Agent-routing: campaign agent has no usable SIP credential; not a destination',
+            userId: agent.id,
+            campaignId,
+          });
+          continue;
+        }
+
+        allEndpoints.push({
+          /*
+           * `buyerId` is the AGENT's id, and `endpointId` is null. This is not
+           * a buyer: the field carries the routed party's identity through the
+           * pipeline below, which logs it and matches on it, and putting the
+           * agent's id there is what makes the concurrency gate and the licence
+           * gate resolve the same agent the destination belongs to.
+           */
+          buyerId: agent.id,
+          buyerName:
+            [agent.firstName, agent.lastName].filter(Boolean).join(' ') || agent.email || agent.id,
+          endpointId: null,
+          destination: credential.extension,
+          priority: assignment.priority ?? 0,
+          weight: 100,
+          acceptedStates: [],
+          isNational: true,
+        });
+      }
+    } catch (agentErr) {
+      /*
+       * Its own try/catch, so a failure here cannot take the buyer-endpoint
+       * destinations down with it. Losing the agency's agents is bad; losing
+       * every destination on the campaign is an outage.
+       */
+      logger.error({
+        msg: 'Agent-routing: could not read campaign agent assignments',
+        campaignId,
+        error: (agentErr as Error).message,
+      });
+    }
+
     let eligibleEndpoints = allEndpoints.filter(ep => {
       const isAccepted = isCallerStateAccepted(callerState, ep.acceptedStates);
 
@@ -361,6 +467,14 @@ export class RoutingService {
         const { getRedisClient } = await import('./redis.js');
         const redis = getRedisClient();
 
+        /*
+         * Once per routing decision, not once per candidate. The service
+         * caches the parsed table for a few seconds, so a burst of calls
+         * shares one ESL lookup rather than one per agent per call.
+         */
+        const { getRegisteredExtensions } = await import('./telephony/sip-registrations.js');
+        const registeredExtensions = await getRegisteredExtensions();
+
         const statuses = await Promise.all(
           eligibleEndpoints.map(async ep => {
             const originalDestination = ep.destination.trim();
@@ -453,12 +567,48 @@ export class RoutingService {
               return { ep: normalizedEndpoint, eligible: false };
             }
 
-            // Concurrency gate ONLY. We deliberately do NOT exclude an agent
-            // merely for being offline or DND — the availability flag is often
-            // stale and over-blocks transfers. The agent is excluded only when
-            // their live active-call count is at their limit. The Redis
-            // "on a call" flag (currentCallId) is a floor so a just-started call
-            // that hasn't landed in the Call table yet still counts.
+            /*
+             * Registration gate: do not ring a softphone that is not there.
+             *
+             * This is NOT the availability flag, and the distinction is the
+             * whole point. That flag is written by the browser, goes stale when
+             * a tab closes or a laptop sleeps, and the comment below records
+             * why it is deliberately ignored. This is FreeSWITCH's own
+             * registration table -- the same fact the dialplan consults with
+             * `sofia_contact` before it bridges -- and it cannot go stale in
+             * the direction that matters, because an expired registration is
+             * removed rather than left behind.
+             *
+             * The failure it closes is recorded in `routes/agent-phone.ts`: an
+             * agent on a network that blocks 7443 fetched credentials fine,
+             * never opened the WebSocket, never sent a REGISTER, "and every
+             * call to them died with USER_NOT_REGISTERED while the dashboard
+             * still showed them available". Those calls were delivered to
+             * nobody and were not offered to an agent who could have taken
+             * them.
+             *
+             * `registeredExtensions` is null when the registrar could not be
+             * read, and null means DO NOT FILTER -- see the service for why
+             * "cannot tell" must never collapse into "nobody is registered".
+             */
+            if (registeredExtensions && !registeredExtensions.has(normalizedEndpoint.destination)) {
+              logger.info({
+                msg: 'Agent-registration: Endpoint EXCLUDED (softphone is not registered)',
+                userId,
+                destination: normalizedEndpoint.destination,
+                campaignId,
+              });
+              return { ep: normalizedEndpoint, eligible: false };
+            }
+
+            // Concurrency gate. We deliberately do NOT exclude an agent merely
+            // for being offline or DND — that availability flag is often stale
+            // and over-blocks transfers; the registration gate above is the
+            // reliable form of the same question. The agent is excluded here
+            // only when their live active-call count is at their limit. The
+            // Redis "on a call" flag (currentCallId) is a floor so a
+            // just-started call that hasn't landed in the Call table yet still
+            // counts.
             const maxConcurrent = agentMaxConcurrent.get(userId) ?? DEFAULT_MAX_CONCURRENT;
 
             let onCallFloor = 0;

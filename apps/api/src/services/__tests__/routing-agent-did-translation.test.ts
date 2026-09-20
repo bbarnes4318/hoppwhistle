@@ -16,6 +16,7 @@ const { prismaMock, redisGet } = vi.hoisted(() => ({
      * is what an empty result means.
      */
     agentSipCredential: { findMany: vi.fn() },
+    campaignAgent: { findMany: vi.fn() },
   },
   redisGet: vi.fn(),
 }));
@@ -66,6 +67,7 @@ describe('RoutingService agent-DID → extension translation', () => {
     ]);
     prismaMock.campaign.findFirst.mockResolvedValue({ metadata: {} });
     prismaMock.agentSipCredential.findMany.mockResolvedValue([]);
+    prismaMock.campaignAgent.findMany.mockResolvedValue([]);
     prismaMock.call.count.mockResolvedValue(0);
   });
 
