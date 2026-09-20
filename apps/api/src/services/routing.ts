@@ -1,4 +1,5 @@
 import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
+import { normalizeLicensedStates } from '../lib/licensed-states.js';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -225,6 +226,14 @@ export class RoutingService {
       const extensionToUserMap = new Map<string, string>();
       const userIdToExtensionMap = new Map<string, string>();
       const agentMaxConcurrent = new Map<string, number>();
+      /**
+       * Each agent's licensed jurisdictions, from the same `metadata` this loop
+       * is already reading -- so the licence gate below costs no extra query.
+       *
+       * An agent with no entry, or an empty one, is UNCONFIGURED, and the gate
+       * treats that differently from "licensed nowhere". See the gate itself.
+       */
+      const agentLicensedStates = new Map<string, Set<string>>();
 
       for (const user of users) {
         if (!user.metadata || typeof user.metadata !== 'object' || Array.isArray(user.metadata)) {
@@ -238,6 +247,11 @@ export class RoutingService {
           user.id,
           Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_CONCURRENT
         );
+
+        // Normalised through the same helper the CRM gate uses, so a row that
+        // stores a lower-case or unrecognised code is read identically by both.
+        const licensed = normalizeLicensedStates(meta.licensedStates);
+        if (licensed.length > 0) agentLicensedStates.set(user.id, new Set(licensed));
 
         const extension = meta.extension;
         if (typeof extension !== 'string' && typeof extension !== 'number') continue;
@@ -315,6 +329,55 @@ export class RoutingService {
 
             if (!userId) {
               return { ep: normalizedEndpoint, eligible: true };
+            }
+
+            /*
+             * Licence gate: an agent is not rung for a state they cannot write.
+             *
+             * `metadata.licensedStates` already decides which CRM leads an
+             * agent may open (`lib/licensed-states.ts`). Until this existed it
+             * decided nothing about calls, so the same agent the CRM refused to
+             * show a Tennessee lead would be rung by a Tennessee caller and
+             * would sell to them on the phone. The two gates now read the one
+             * list.
+             *
+             * ── Unconfigured is not "licensed nowhere" ───────────────────────
+             *
+             * This is the whole reason the rule here is not the CRM's.
+             * `docs/AGENT_LICENSED_STATES_ROLLOUT.md` records that there is no
+             * licence data to back-fill from and that every agent therefore
+             * starts with nothing. The CRM can default to deny on that and cost
+             * an agent a lead list. Routing cannot: deny-by-default on a
+             * database that has never recorded a licence excludes EVERY agent
+             * from EVERY state-identified call, which is not a compliance
+             * posture, it is the phones not ringing.
+             *
+             * So an agent with no licence recorded is not filtered here, and an
+             * agent WITH one is held to it exactly. Enforce what you have been
+             * told; do not invent a constraint from the absence of data. The
+             * users screen marks every unconfigured agent so the gap is visible
+             * rather than inferred from a quiet call centre.
+             *
+             * ── And a call with no state is not a call in the wrong state ────
+             *
+             * `callerState` is null when the ANI is withheld or its area code
+             * resolves to nothing. Excluding licensed agents from those calls
+             * would drop traffic on a fact nobody established, so a stateless
+             * call passes every licence.
+             */
+            const licensed = agentLicensedStates.get(userId);
+            if (callerState && licensed && !licensed.has(callerState)) {
+              logger.info({
+                msg: 'Agent-licence: Endpoint EXCLUDED (agent not licensed in caller state)',
+                buyerId: normalizedEndpoint.buyerId,
+                buyerName: normalizedEndpoint.buyerName,
+                destination: normalizedEndpoint.destination,
+                userId,
+                callerState,
+                licensedStates: [...licensed].sort(),
+                campaignId,
+              });
+              return { ep: normalizedEndpoint, eligible: false };
             }
 
             // Concurrency gate ONLY. We deliberately do NOT exclude an agent
