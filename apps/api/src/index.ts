@@ -400,6 +400,13 @@ async function buildServer() {
   const { registerCarrierRoutingRoutes } = await import('./routes/carrier-routing.js');
   await server.register(registerCarrierRoutingRoutes);
 
+  // Register the FreeSWITCH user directory. mod_xml_curl asks this endpoint who
+  // a SIP username is on every registration and every call to an agent, so each
+  // agent can hold their own password instead of the one that used to be shared
+  // across the platform. See routes/freeswitch-directory.ts.
+  const { registerFreeswitchDirectoryRoutes } = await import('./routes/freeswitch-directory.js');
+  await server.register(registerFreeswitchDirectoryRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

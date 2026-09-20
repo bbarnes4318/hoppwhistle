@@ -36,7 +36,7 @@
 
 ### Telephony (staging + approval gate required — see §4)
 
-`apps/freeswitch/**` — all FreeSWITCH config: dialplans (`dialplan/default.xml`, `dialplan/vapi_outbound.xml`, `public.xml`), SIP profiles (`sip_profiles/external/*.xml`), directory (`directory/default/1000-1019.xml`, `vapi.xml`), scripts (`upload-recording.sh`), STIR/SHAKEN keys.
+`apps/freeswitch/**` — all FreeSWITCH config: dialplans (`dialplan/default.xml`, `dialplan/vapi_outbound.xml`, `public.xml`), SIP profiles (`sip_profiles/external/*.xml`), directory (`directory/default/1000-1019.xml`, `vapi.xml` — now the fall-through behind the `mod_xml_curl` binding in `autoload_configs/xml_curl.conf.xml`, not the only source), scripts (`upload-recording.sh`), STIR/SHAKEN keys.
 
 ### Legacy workers (build Dialer V2 separately; do not edit in early phases)
 
@@ -68,7 +68,9 @@
 
 1. **Human calls originate from the browser, not the server.** The API `originate` endpoint must remain state-only; do not "helpfully" add server-side origination to it.
 2. **The browser client is sip.js over FS WSS :7443 / WS :8083.** Do not change ports, realm derivation, or the `X-Caller-ID`/`X-Hopwhistle-Call-Id` INVITE headers.
-3. **Agent SIP password comes from `SIP_AGENT_PASSWORD`** (fallback `'1234'` in dev) — see the related memory. Do not hard-code.
+3. **Each agent has their OWN SIP password, from `agent_sip_credentials`.** This supersedes the former invariant that the agent SIP password comes from `SIP_AGENT_PASSWORD`, and it supersedes it deliberately: one password shared across the platform meant any agent could register as any extension, including another agency's, and take their calls. `GET /api/v1/agent/webrtc/credentials` issues a per-agent secret via `services/telephony/agent-sip-credential.ts`; FreeSWITCH reads it through the `mod_xml_curl` directory binding at `POST /api/v1/freeswitch/directory`. Do not reintroduce a shared credential, and do not hard-code one.
+   - `SIP_AGENT_PASSWORD` is **still required**: `vars.xml` expands it as `$${default_password}` for the static directory files (`1000-1019.xml`, `vapi.xml`, `demo-agent.xml`) that remain in place as the fall-through when the database has no credential for an extension. It is no longer what a provisioned agent authenticates with.
+   - **Extensions are unique across the PLATFORM, not per tenant.** FreeSWITCH's directory is one flat domain with no tenant dimension, so a per-agency unique index re-creates the collision it exists to stop. The range is 1000–1999 because that is what `dialplan/default.xml` routes (`^(1[0-9]{3})$`, and `^\d{4}$` in two more places); widening it is a dialplan change first.
 4. **The Hopper is the single active background dialer**; the Autodialer stays disabled. Any new dialer must be a separate Dialer V2 gated behind `TENANT_DIALER_V2_ENABLED` + `TENANT_DIALER_V2_ORIGINATE_ENABLED` + tenant allowlist (currently no such gate exists — this is net-new).
 5. **FracTEL (`fractel1-6`) is the default outbound gateway** and the STIR/SHAKEN signer. Do not repoint default routing.
 6. **Recordings are stereo 16 kHz** on the dialplan path (`default.xml:127-128`) — a recent, deliberate fix (`b6363fc`). Do not revert to mono/8k.

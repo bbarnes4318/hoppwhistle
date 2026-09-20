@@ -1,0 +1,61 @@
+<configuration name="xml_curl.conf" description="cURL XML Gateway">
+  <!--
+    The user directory, fetched from the API instead of read from disk.
+
+    ── Why ───────────────────────────────────────────────────────────────────
+
+    The directory used to be twenty files under conf/directory/default/, 1000
+    through 1019, each carrying `$${default_password}` — one password shared by
+    every agent on the platform, and a hard ceiling of twenty SIP identities.
+    Two agencies were handed the same extension, so whichever browser
+    registered last received both agencies' calls, and any agent could register
+    as any extension because they all authenticated with the same secret.
+
+    Each agent now has a row in `agent_sip_credentials` with an extension that
+    is unique across the platform and a password that is theirs alone. This
+    binding is how FreeSWITCH reads it. See apps/api/src/routes/freeswitch-directory.ts.
+
+    ── The static files still work ───────────────────────────────────────────
+
+    When the endpoint answers `<result status="not found"/>` FreeSWITCH falls
+    through to the next binding for the section, which is the XML still on
+    disk. So vapi.xml, demo-agent.xml and every 1000..1019 file resolve exactly
+    as they did, and agents move onto database credentials one at a time rather
+    than in a single cutover. Deleting those files is a later step, once no
+    registration depends on them.
+
+    ── The URL and the key ───────────────────────────────────────────────────
+
+    `http://api:3001` is the in-cluster address the dialplan's carrier-route
+    lookup already uses, so this reaches the API the same proven way.
+
+    The shared secret travels as `?k=` because mod_curl cannot set a request
+    header — the same constraint, and the same trade-off, recorded in
+    apps/api/src/lib/internal-auth.ts and in the vars.xml comment above
+    `internal_key`. FreeSWITCH logs the URLs it fetches, so this key is its own
+    secret, used for nothing but these callbacks, and cheap to rotate.
+  -->
+  <bindings>
+    <binding name="directory">
+      <param name="gateway-url" value="http://api:3001/api/v1/freeswitch/directory?k=$${internal_key}" bindings="directory"/>
+      <param name="method" value="post"/>
+      <!--
+        A registration waits on this fetch, so the timeout is what an agent
+        experiences when the API is slow. Four seconds is long enough for a
+        database round trip on a cold connection and short enough that a hung
+        API fails the registration rather than hanging the SIP transaction —
+        at which point the static XML is consulted and a legacy extension
+        still comes up.
+      -->
+      <param name="timeout" value="4"/>
+      <param name="connect-timeout" value="2"/>
+      <!--
+        Without this, libcurl sends `Expect: 100-continue` on the POST and waits
+        for an interim response that Fastify does not send, adding a one-second
+        stall to every directory lookup — which is every registration and every
+        call to an agent.
+      -->
+      <param name="disable-100-continue" value="true"/>
+    </binding>
+  </bindings>
+</configuration>

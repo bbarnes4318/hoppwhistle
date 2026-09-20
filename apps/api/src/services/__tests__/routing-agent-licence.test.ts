@@ -26,6 +26,13 @@ const prisma = vi.hoisted(() => ({
   user: { findMany: vi.fn() },
   phoneNumber: { findMany: vi.fn() },
   call: { count: vi.fn() },
+  /*
+   * These suites model the LEGACY mapping, where an agent's extension lives in
+   * `users.metadata.extension`. Routing now prefers `agent_sip_credentials` and
+   * falls back to metadata for an agent who has no credential row, so every
+   * agent here is an agent without one -- which is what an empty result means.
+   */
+  agentSipCredential: { findMany: vi.fn() },
 }));
 
 vi.mock('../../lib/prisma.js', () => ({ getPrismaClient: () => prisma }));
@@ -94,6 +101,7 @@ async function eligibleExtensions(
   prisma.campaignBuyer.findMany.mockResolvedValue(extensions.map(assignment));
   prisma.user.findMany.mockResolvedValue(users);
   prisma.phoneNumber.findMany.mockResolvedValue([]);
+  prisma.agentSipCredential.findMany.mockResolvedValue([]);
   prisma.call.count.mockResolvedValue(0);
 
   const service = new RoutingService();
@@ -196,6 +204,7 @@ describe('the licence gate fails open where it has no fact to act on', () => {
     prisma.campaignBuyer.findMany.mockResolvedValue([assignment('+18005551212')]);
     prisma.user.findMany.mockResolvedValue([agent('u-tn', '1000', ['TN'])]);
     prisma.phoneNumber.findMany.mockResolvedValue([]);
+    prisma.agentSipCredential.findMany.mockResolvedValue([]);
     prisma.call.count.mockResolvedValue(0);
 
     const service = new RoutingService();
