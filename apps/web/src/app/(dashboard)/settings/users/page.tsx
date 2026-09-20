@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Mail, Shield, Loader2, Building2 } from 'lucide-react';
+import { AlertTriangle, Building2, Loader2, Mail, MapPin, Plus, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -15,10 +15,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { InviteUserDialog } from '@/components/users/invite-user-dialog';
+import { LicensedStatesDialog } from '@/components/users/licensed-states-dialog';
 import { PendingApprovals } from '@/components/users/pending-approvals';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
+import { jurisdictionName } from '@/lib/licensable-jurisdictions';
 
 interface User {
   id: string;
@@ -32,12 +34,75 @@ interface User {
   buyerCode?: string | null;
   invitedAt: string;
   lastLoginAt: string | null;
+  /** Normalised by the server; absent on a row written before it validated. */
+  licensedStates?: string[];
+}
+
+/**
+ * Only an agent is gated on a licence.
+ *
+ * `lib/licensed-states.ts` restricts a principal that holds AGENT and is not
+ * staff, so showing an empty licence beside an owner or a buyer would report a
+ * gap that does not exist and send somebody granting licences to people who do
+ * not need them.
+ */
+function isLicenceGated(user: User): boolean {
+  const roles = user.roles.map(role => role.toUpperCase());
+  return roles.includes('AGENT') && !roles.includes('OWNER') && !roles.includes('ADMIN');
+}
+
+/**
+ * One agent's licence, read at a glance.
+ *
+ * Three states, and the middle one is the reason this column exists. An empty
+ * licence is not a blank cell: it is default-deny in force, and an
+ * administrator scanning this table needs to see that it is the reason an agent
+ * is getting no work -- not wonder whether the column failed to load.
+ */
+function LicenceCell({ user }: { user: User }): JSX.Element {
+  if (!isLicenceGated(user)) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
+  const states = user.licensedStates ?? [];
+
+  if (states.length === 0) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+        title="No licence recorded. This agent is served no leads and routed no state-identified calls."
+      >
+        <AlertTriangle className="h-3 w-3" />
+        None recorded
+      </span>
+    );
+  }
+
+  // Six is what fits on one line at this width; the rest go behind a count
+  // rather than wrapping the row to three lines.
+  const shown = states.slice(0, 6);
+  const rest = states.length - shown.length;
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1"
+      title={states.map(jurisdictionName).join(', ')}
+    >
+      {shown.map(code => (
+        <Badge key={code} variant="outline" className="px-1.5 py-0 font-mono text-[10px]">
+          {code}
+        </Badge>
+      ))}
+      {rest > 0 ? <span className="text-xs text-muted-foreground">+{rest}</span> : null}
+    </div>
+  );
 }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [licenceUser, setLicenceUser] = useState<User | null>(null);
   const { hasFullAccess } = useAuth();
 
   // The API returns status lowercased. Approving is admin-only on the server,
@@ -134,6 +199,7 @@ export default function UsersPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Buyer Company</TableHead>
+                  <TableHead>Licensed states</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Invited</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -181,15 +247,38 @@ export default function UsersPage() {
                       )}
                     </TableCell>
                     <TableCell>
+                      <LicenceCell user={user} />
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
                         {user.status}
                       </Badge>
                     </TableCell>
                     <TableCell>{new Date(user.invitedAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
+                      {/*
+                        This was a dead `Edit` button with no handler. It is now
+                        the licence control, and it is offered only for the
+                        accounts a licence applies to.
+                      */}
+                      {isLicenceGated(user) ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setLicenceUser(user)}
+                          disabled={!hasFullAccess}
+                          title={
+                            hasFullAccess
+                              ? undefined
+                              : 'Only an owner or administrator can change a licence'
+                          }
+                        >
+                          <MapPin className="mr-1.5 h-3.5 w-3.5" />
+                          Licence
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -203,6 +292,15 @@ export default function UsersPage() {
         open={inviteDialogOpen}
         onOpenChange={setInviteDialogOpen}
         onSuccess={loadUsers}
+      />
+
+      <LicensedStatesDialog
+        open={licenceUser !== null}
+        onOpenChange={open => {
+          if (!open) setLicenceUser(null);
+        }}
+        user={licenceUser}
+        onSaved={() => void loadUsers()}
       />
     </div>
   );
