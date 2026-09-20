@@ -33,6 +33,7 @@ const prisma = vi.hoisted(() => ({
    * agent here is an agent without one -- which is what an empty result means.
    */
   agentSipCredential: { findMany: vi.fn() },
+  campaignAgent: { findMany: vi.fn() },
 }));
 
 vi.mock('../../lib/prisma.js', () => ({ getPrismaClient: () => prisma }));
@@ -102,6 +103,7 @@ async function eligibleExtensions(
   prisma.user.findMany.mockResolvedValue(users);
   prisma.phoneNumber.findMany.mockResolvedValue([]);
   prisma.agentSipCredential.findMany.mockResolvedValue([]);
+  prisma.campaignAgent.findMany.mockResolvedValue([]);
   prisma.call.count.mockResolvedValue(0);
 
   const service = new RoutingService();
@@ -205,6 +207,7 @@ describe('the licence gate fails open where it has no fact to act on', () => {
     prisma.user.findMany.mockResolvedValue([agent('u-tn', '1000', ['TN'])]);
     prisma.phoneNumber.findMany.mockResolvedValue([]);
     prisma.agentSipCredential.findMany.mockResolvedValue([]);
+  prisma.campaignAgent.findMany.mockResolvedValue([]);
     prisma.call.count.mockResolvedValue(0);
 
     const service = new RoutingService();

@@ -152,6 +152,112 @@ export class RoutingService {
       });
     }
 
+    /*
+     * The agency's own agents, from `campaign_agents`.
+     *
+     * ── Why this exists ──────────────────────────────────────────────────────
+     *
+     * Until now the ONLY way an agent could be rung was for somebody to build
+     * them a `BuyerEndpoint` and attach it to the campaign -- a screen an
+     * agency principal cannot reach (`lib/staff-only-routes.ts` holds
+     * `/buyers` and `/campaigns`). So "the agency adds its agents and sets them
+     * up to receive calls" required NetEnroll staff for every agent, and
+     * `CampaignAgent` sat in the schema, documented as the dialer's hot read,
+     * with nothing reading or writing it.
+     *
+     * An assignment made on the agency's own roster screen now produces a
+     * destination here.
+     *
+     * ── It is a source of destinations, not a second routing system ──────────
+     *
+     * These rows join `allEndpoints` BEFORE every gate below, so an agent
+     * assigned this way is held to exactly the same rules as one reached
+     * through a buyer endpoint: the accepted-state filter, the licence gate,
+     * and the concurrency limit, in that order. Nothing here grants anything.
+     *
+     * ── The destination is the extension, resolved here ──────────────────────
+     *
+     * A buyer endpoint stores a destination string that the translation pass
+     * below has to map back to an agent. A `CampaignAgent` row names the agent
+     * directly, so the extension is read straight from their credential and no
+     * translation is needed or attempted. An agent with no ACTIVE credential
+     * has no softphone to ring and is skipped -- they appear on the roster
+     * screen with "Has not opened the softphone yet", which is the actionable
+     * form of the same fact.
+     *
+     * `acceptedStates` is empty: an agent's geography is their LICENCE, which
+     * the gate below reads from `metadata.licensedStates`. Copying it into a
+     * second field here would be a second copy to disagree with the first.
+     */
+    try {
+      const agentAssignments = await this.prisma.campaignAgent.findMany({
+        where: { tenantId, campaignId, status: 'ACTIVE' },
+        select: {
+          userId: true,
+          priority: true,
+          user: {
+            select: {
+              id: true,
+              status: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              sipCredential: {
+                select: { extension: true, status: true, passwordEncrypted: true },
+              },
+            },
+          },
+        },
+      });
+
+      for (const assignment of agentAssignments) {
+        const agent = assignment.user;
+        if (agent.status !== 'ACTIVE') continue;
+
+        const credential = agent.sipCredential;
+        // A reservation (null password) cannot authenticate, so its extension
+        // cannot register and ringing it is a call into nothing.
+        if (!credential || credential.status !== 'ACTIVE' || !credential.passwordEncrypted) {
+          logger.info({
+            msg: 'Agent-routing: campaign agent has no usable SIP credential; not a destination',
+            userId: agent.id,
+            campaignId,
+          });
+          continue;
+        }
+
+        allEndpoints.push({
+          /*
+           * `buyerId` is the AGENT's id, and `endpointId` is null. This is not
+           * a buyer: the field carries the routed party's identity through the
+           * pipeline below, which logs it and matches on it, and putting the
+           * agent's id there is what makes the concurrency gate and the licence
+           * gate resolve the same agent the destination belongs to.
+           */
+          buyerId: agent.id,
+          buyerName:
+            [agent.firstName, agent.lastName].filter(Boolean).join(' ') || agent.email || agent.id,
+          endpointId: null,
+          destination: credential.extension,
+          priority: assignment.priority ?? 0,
+          weight: 100,
+          acceptedStates: [],
+          isNational: true,
+        });
+      }
+    } catch (agentErr) {
+      /*
+       * Its own try/catch, so a failure here cannot take the buyer-endpoint
+       * destinations down with it. Losing the agency's agents is bad; losing
+       * every destination on the campaign is an outage.
+       */
+      logger.error({
+        msg: 'Agent-routing: could not read campaign agent assignments',
+        campaignId,
+        error: (agentErr as Error).message,
+      });
+    }
+
     let eligibleEndpoints = allEndpoints.filter(ep => {
       const isAccepted = isCallerStateAccepted(callerState, ep.acceptedStates);
 

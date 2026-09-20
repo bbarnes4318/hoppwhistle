@@ -648,12 +648,45 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         success: true,
       });
 
+      /*
+       * Send it, rather than making the owner deliver it.
+       *
+       * This used to end at the response, with the token and a comment telling
+       * the caller to get it to the invitee themselves -- so adding an agent
+       * meant copying a token out of a dialog and into a text message. That is
+       * the first thing every agent on this platform experiences.
+       *
+       * Awaited, because the answer goes in the response: an owner has to know
+       * whether to follow up by hand. Never throws and never fails the
+       * invitation -- the grant is already written and the token is returned
+       * either way. See `services/agent-invite-email.ts`.
+       */
+      const agency = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
+
+      const { sendAgentInvitationEmail } = await import('../services/agent-invite-email.js');
+      const delivery = await sendAgentInvitationEmail({
+        email: email.toLowerCase(),
+        agencyName: agency?.name ?? null,
+        activationToken: grant.token,
+        expiresAt: grant.expiresAt,
+      });
+
       return reply.code(201).send({
-        // Shown once. Send it to the invitee; it cannot be retrieved again.
+        /*
+         * Still returned, and deliberately. When the send failed -- or there is
+         * no SMTP configured at all -- the token is the only copy of a grant
+         * that cannot be retrieved again, and hand-delivery is the fallback the
+         * owner needs. `emailed` is what tells them which case they are in.
+         */
         activationToken: grant.token,
         email: email.toLowerCase(),
         role: requested,
         expiresAt: grant.expiresAt.toISOString(),
+        emailed: delivery.sent,
+        emailFailureReason: delivery.reason ?? null,
       });
     }
   );

@@ -36,6 +36,7 @@ const prisma = vi.hoisted(() => ({
   phoneNumber: { findMany: vi.fn() },
   call: { count: vi.fn() },
   agentSipCredential: { findMany: vi.fn() },
+  campaignAgent: { findMany: vi.fn() },
 }));
 
 vi.mock('../../lib/prisma.js', () => ({ getPrismaClient: () => prisma }));
@@ -93,6 +94,10 @@ async function eligibleExtensions(scenario: Scenario): Promise<string[]> {
   prisma.user.findMany.mockResolvedValue(scenario.users);
   prisma.phoneNumber.findMany.mockResolvedValue([]);
   prisma.call.count.mockResolvedValue(0);
+  // These suites reach agents through a campaign BUYER destination. Agents
+  // assigned through `campaign_agents` are a separate source, covered by
+  // routing-campaign-agent.test.ts.
+  prisma.campaignAgent.findMany.mockResolvedValue([]);
 
   if (scenario.credentialError) {
     prisma.agentSipCredential.findMany.mockRejectedValue(scenario.credentialError);
