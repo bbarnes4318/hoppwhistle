@@ -66,6 +66,29 @@ export class TranscriberService {
       let stdout = '';
       let stderr = '';
 
+      /**
+       * Finish the job and stop the watchdog that would outlive it.
+       *
+       * The timeout below used to be assigned and never cleared, so every
+       * transcription left a timer pending for the full PY_SVC_TIMEOUT_MS --
+       * fifteen minutes by default. A pending timer holds the event loop open,
+       * so a worker that had finished its work would not exit promptly and a
+       * busy one accumulated a live timer per job. Worse, when the stale timer
+       * eventually fired it sent SIGTERM to a PID that had exited long before
+       * and that the OS may since have reused.
+       *
+       * Every path that settles this promise goes through here, so there is one
+       * place that has to remember, rather than four.
+       */
+      let timeout: NodeJS.Timeout | undefined;
+      const settle = (result: TranscriptionResult) => {
+        if (timeout !== undefined) {
+          clearTimeout(timeout);
+          timeout = undefined;
+        }
+        resolve(result);
+      };
+
       pythonProcess.stdout.on('data', (data) => {
         stdout += data.toString();
       });
@@ -79,7 +102,7 @@ export class TranscriberService {
         if (code !== 0) {
           logger.error(`Python process exited with code ${code}`);
           logger.error(`Stderr: ${stderr}`);
-          resolve({
+          settle({
             ok: false,
             error: `Process exited with code ${code}`,
             stage: 'process',
@@ -89,10 +112,10 @@ export class TranscriberService {
 
         try {
           const result = JSON.parse(stdout.trim());
-          resolve(result);
+          settle(result);
         } catch (error) {
           logger.error(`Failed to parse Python output: ${stdout}`);
-          resolve({
+          settle({
             ok: false,
             error: 'Failed to parse result',
             stage: 'parse',
@@ -102,7 +125,7 @@ export class TranscriberService {
 
       pythonProcess.on('error', (error) => {
         logger.error(`Failed to spawn Python process: ${error}`);
-        resolve({
+        settle({
           ok: false,
           error: `Failed to spawn process: ${error.message}`,
           stage: 'spawn',
@@ -113,10 +136,11 @@ export class TranscriberService {
       pythonProcess.stdin.write(JSON.stringify(job));
       pythonProcess.stdin.end();
 
-      // Timeout
-      const timeout = setTimeout(() => {
+      // Watchdog. `settle` clears it on every other path, so it only ever
+      // fires for a job that really is still running.
+      timeout = setTimeout(() => {
         pythonProcess.kill('SIGTERM');
-        resolve({
+        settle({
           ok: false,
           error: 'Transcription timeout',
           stage: 'timeout',
