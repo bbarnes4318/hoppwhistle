@@ -1,0 +1,41 @@
+<include>
+  <!--
+    Vonage (formerly Nexmo) SIP trunk — outbound termination.
+
+    Vonage terminates on its programmable SIP endpoint, `sip.nexmo.com` by
+    default. Some accounts are provisioned against a regional endpoint instead
+    (for example sip-us.nexmo.com); VONAGE_SIP_PROXY is what points this
+    gateway at the one the account was given.
+
+    Auth is by IP whitelist, by credentials, or by both:
+
+      IP whitelist  authorize this host's public SIP IP under Voice → SIP
+                    Trunking in the Vonage dashboard, and leave
+                    VONAGE_SIP_USERNAME / VONAGE_SIP_PASSWORD unset.
+      Credentials   set both, and this gateway answers Vonage's 401/407
+                    challenge with them.
+
+    register MUST stay false. Vonage SIP trunks are terminated against, not
+    registered to.
+
+    Number format: Vonage expects the destination in international format with
+    NO leading `+` — `sip:1XXXXXXXXXX@sip.nexmo.com`. That is why the VONAGE
+    carrier's gateway row is seeded NANP11 rather than E164, unlike Twilio's.
+    A `+` in the user part is rejected.
+
+    Caller ID: Vonage requires the From number to be one the account owns or
+    has verified, so the VONAGE carrier is seeded POOL against `vonage` DIDs —
+    a call falling to this carrier presents a number Vonage can attest to
+    instead of one it will reject.
+  -->
+  <gateway name="vonage">
+    <param name="proxy" value="$${vonage_sip_proxy}"/>
+    <param name="realm" value="$${vonage_sip_realm}"/>
+    <param name="from-domain" value="$${vonage_sip_realm}"/>
+    <param name="username" value="$${vonage_sip_user}"/>
+    <param name="password" value="$${vonage_sip_pass}"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+    <param name="ping" value="25"/>
+  </gateway>
+</include>

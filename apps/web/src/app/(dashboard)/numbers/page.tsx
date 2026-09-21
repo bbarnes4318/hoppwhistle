@@ -66,6 +66,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   fractel: 'FracTEL',
   signalwire: 'SignalWire',
   telnyx: 'Telnyx',
+  twilio: 'Twilio',
+  vonage: 'Vonage',
   bandwidth: 'Bandwidth',
   local: 'Local / Imported',
 };

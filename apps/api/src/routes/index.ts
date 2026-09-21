@@ -780,7 +780,16 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       areaCode?: string;
       country?: string;
       region?: string;
-      provider?: 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'anveo';
+      provider?:
+        | 'local'
+        | 'signalwire'
+        | 'telnyx'
+        | 'bandwidth'
+        | 'anveo'
+        | 'bulkvs'
+        | 'fractel'
+        | 'twilio'
+        | 'vonage';
       features?: {
         voice?: boolean;
         sms?: boolean;

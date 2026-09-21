@@ -48,8 +48,8 @@
 - `CLICKHOUSE_USER` - ClickHouse user (default: `default`)
 - `CLICKHOUSE_PASSWORD` - ClickHouse password
 - `CLICKHOUSE_DATABASE` - ClickHouse database name (default: `hopwhistle_analytics`)
-- `TWILIO_API_KEY` - Twilio API key (if using Twilio)
-- `TWILIO_API_SECRET` - Twilio API secret
+- `TWILIO_API_KEY` - Twilio API key SID (carrier/CNAM lookup; also accepted by the provisioning adapter)
+- `TWILIO_API_SECRET` - Twilio API key secret
 - `TRUSTEDFORM_API_KEY` - TrustedForm API key (for consent verification)
 - `JORNAYA_API_KEY` - Jornaya API key (for consent verification)
 - `STRIPE_SECRET_KEY` - Stripe secret key (if using payments)
@@ -64,6 +64,36 @@
 - `BULKVS_USERNAME` - BulkVS API Username (from BulkVS Portal → API → API Credentials)
 - `BULKVS_PASSWORD` - BulkVS API Password (from BulkVS Portal → API → API Credentials)
 - `BULKVS_TRUNK_GROUP` - BulkVS Trunk Group name for routing (from BulkVS Portal → Trunk Groups)
+
+#### Twilio (Optional — number provisioning and the `twilio` carrier):
+
+- `TWILIO_ACCOUNT_SID` - Account SID (Twilio Console → Account Info). Always required.
+- `TWILIO_AUTH_TOKEN` - Account auth token. Not needed if `TWILIO_API_KEY`/`TWILIO_API_SECRET` are set.
+- `TWILIO_TRUNK_SID` - Elastic SIP Trunk SID (`TK…`) that purchased numbers are routed to.
+- `TWILIO_VOICE_URL` - TwiML webhook, for accounts routing with Programmable Voice instead of a trunk.
+  A purchase is refused unless one of `TWILIO_TRUNK_SID` or `TWILIO_VOICE_URL` is set: an unrouted
+  Twilio DID answers with Twilio's demo message rather than reaching this platform.
+- `TWILIO_SIP_TERMINATION_DOMAIN` - **FreeSWITCH.** Termination SIP URI of the Elastic SIP Trunk,
+  `<your-trunk>.pstn.twilio.com`. The `twilio` gateway cannot route without it.
+- `TWILIO_SIP_USERNAME` / `TWILIO_SIP_PASSWORD` - **FreeSWITCH.** Credential List auth for that trunk.
+  Leave unset when the trunk authorizes this host's public SIP IP instead.
+
+#### Vonage (Optional — number provisioning and the `vonage` carrier):
+
+- `VONAGE_API_KEY` / `VONAGE_API_SECRET` - Numbers API credentials (Vonage Dashboard → API settings).
+- `VONAGE_APPLICATION_ID` - Voice application a purchased number is linked to.
+- `VONAGE_SIP_URI` - SIP URI to route numbers to instead, for trunks terminating to our SBC.
+  As with Twilio, a purchase is refused unless one of these two is set.
+- `VONAGE_DEFAULT_COUNTRY` - Country used when a number's own country cannot be read back
+  (releasing a number requires it). Default: `US`.
+- `VONAGE_SIP_PROXY` - **FreeSWITCH.** Termination host. Default: `sip.nexmo.com`; set it for accounts
+  on a regional endpoint.
+- `VONAGE_SIP_REALM` - **FreeSWITCH.** Digest realm. Defaults to `VONAGE_SIP_PROXY`.
+- `VONAGE_SIP_USERNAME` / `VONAGE_SIP_PASSWORD` - **FreeSWITCH.** Credential auth. Leave unset when the
+  trunk is IP-whitelisted.
+
+Neither carrier carries traffic until it is switched on in **Settings → Carrier Routing**; both are
+seeded onto every waterfall switched off.
 
 ### Web Service
 

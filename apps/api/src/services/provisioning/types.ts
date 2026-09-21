@@ -10,7 +10,9 @@ export type Provider =
   | 'clec'
   | 'anveo'
   | 'bulkvs'
-  | 'fractel';
+  | 'fractel'
+  | 'twilio'
+  | 'vonage';
 
 export type NumberStatus = 'available' | 'assigned' | 'released' | 'pending' | 'failed';
 
