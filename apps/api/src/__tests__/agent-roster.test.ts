@@ -35,6 +35,8 @@ const prisma = vi.hoisted(() => ({
   user: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   campaign: { findMany: vi.fn() },
   campaignAgent: { findMany: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
+  agentSchedule: { upsert: vi.fn(), deleteMany: vi.fn() },
+  agencyProfile: { findUnique: vi.fn() },
   $transaction: vi.fn(),
 }));
 
@@ -75,6 +77,7 @@ function agentRow(overrides: Record<string, any> = {}) {
     createdAt: new Date('2026-01-01'),
     roles: [{ role: { name: 'AGENT' } }],
     sipCredential: { extension: '1042', status: 'ACTIVE', passwordEncrypted: 'enc:v1:x:y:z' },
+    schedule: null,
     ...overrides,
   };
 }
@@ -90,6 +93,9 @@ beforeEach(async () => {
   prisma.campaignAgent.findMany.mockResolvedValue([]);
   prisma.campaignAgent.deleteMany.mockResolvedValue({ count: 0 });
   prisma.campaignAgent.upsert.mockResolvedValue({});
+  prisma.agentSchedule.upsert.mockResolvedValue({});
+  prisma.agentSchedule.deleteMany.mockResolvedValue({ count: 0 });
+  prisma.agencyProfile.findUnique.mockResolvedValue({ deliveryTimeZone: 'America/New_York' });
   prisma.$transaction.mockResolvedValue([]);
 
   app = Fastify({ logger: false });
@@ -342,6 +348,167 @@ describe('PATCH /api/v1/agent-roster/:userId', () => {
       url,
       payload: { maxConcurrentCalls: 0 },
     });
+    expect(response.statusCode).toBe(400);
+  });
+});
+
+/* ── Working hours ─────────────────────────────────────────────────────────── */
+
+describe('the roster read', () => {
+  it('carries each agents schedule and the clock it is written in', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      agentRow({ schedule: { days: ['MON', 'TUE'], startTime: '09:00', endTime: '17:00' } }),
+    ]);
+    prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+    const body = (response.json() as any).data;
+
+    expect(body.agents[0].schedule).toEqual({
+      days: ['MON', 'TUE'],
+      startTime: '09:00',
+      endTime: '17:00',
+    });
+    /*
+     * There is deliberately no per-agent timezone -- the agency's is the clock
+     * its billing day is measured on -- so the screen has to be told which one
+     * the times mean.
+     */
+    expect(body.deliveryTimeZone).toBe('America/New_York');
+  });
+
+  it('reports null for an agent whose hours are not enforced', async () => {
+    prisma.user.findMany.mockResolvedValue([agentRow()]);
+    prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+    // Null, not an empty schedule: the two mean opposite things to routing.
+    expect((response.json() as any).data.agents[0].schedule).toBeNull();
+  });
+});
+
+describe('PUT /api/v1/agent-roster/:userId/schedule', () => {
+  const url = '/api/v1/agent-roster/u-1/schedule';
+
+  it('refuses an agent who is not in the acting agency', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: ['MON'], startTime: '09:00', endTime: '17:00' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(prisma.agentSchedule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('saves a schedule for this agency and agent', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: ['MON', 'WED'], startTime: '09:00', endTime: '17:00' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.agentSchedule.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'u-1' },
+        create: expect.objectContaining({ tenantId: 'agency-a', userId: 'u-1' }),
+      })
+    );
+  });
+
+  it('accepts an overnight shift rather than reading it as a mistake', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: ['FRI'], startTime: '21:00', endTime: '05:00' },
+    });
+
+    /*
+     * A night shift is ordinary in this business. Refusing it would push a
+     * night-shift agency back to having no schedule at all.
+     */
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('accepts an empty day list, which is an agent on leave', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: [], startTime: '09:00', endTime: '17:00' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // A row IS written: "works no days" restricts, unlike having no row.
+    expect(prisma.agentSchedule.upsert).toHaveBeenCalled();
+  });
+
+  it('clears the schedule on DELETE, which is not the same as no days', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({ method: 'DELETE', url });
+
+    expect(response.statusCode).toBe(200);
+    /*
+     * Deleted, not written empty: this returns the agent to unenforced hours.
+     * It is a separate verb rather than a `null` body because a JSON null is
+     * not reliably distinguishable from no body -- `apiClient.put(url, null)`
+     * in the web app sends nothing, since `null` is falsy.
+     */
+    expect(prisma.agentSchedule.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 'agency-a', userId: 'u-1' },
+    });
+    expect(prisma.agentSchedule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('refuses to clear a schedule for an agent outside the acting agency', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    const response = await app.inject({ method: 'DELETE', url });
+
+    expect(response.statusCode).toBe(404);
+    expect(prisma.agentSchedule.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when there is no schedule to clear', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+    prisma.agentSchedule.deleteMany.mockResolvedValue({ count: 0 });
+
+    // Not a 404 about a row the caller never claimed existed.
+    const response = await app.inject({ method: 'DELETE', url });
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('rejects a time that is not HH:MM', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: ['MON'], startTime: '9am', endTime: '17:00' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(prisma.agentSchedule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a day key it does not recognise', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-1' });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { days: ['FUNDAY'], startTime: '09:00', endTime: '17:00' },
+    });
+
     expect(response.statusCode).toBe(400);
   });
 });

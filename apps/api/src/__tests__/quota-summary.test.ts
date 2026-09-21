@@ -221,10 +221,43 @@ describe.skipIf(!gate.available)("an agency's own quota reading", () => {
       headers: tokenFor(tenantA.ownerId, tenantA.id),
     });
 
-    const serialised = JSON.stringify(response.json());
-    for (const bravo of ['99999', '9999', 'Bravo']) {
-      expect(serialised, `Bravo's ${bravo} reached Alpha`).not.toContain(bravo);
-    }
+    /*
+     * Swept over every value in the answer, not just the fields this suite
+     * happens to name -- the leak worth catching is the one in a field nobody
+     * thought to assert on.
+     *
+     * Compared as VALUES rather than as substrings of the serialised body.
+     * This used to `JSON.stringify` the response and search it for '9999',
+     * which is also a substring of an ordinary millisecond timestamp: the
+     * fixture's own `finance@Alpha-<Date.now()>-...local` alert address
+     * matched it, and the test began failing for every run in a window where
+     * the clock happened to contain four consecutive nines. A tenant-isolation
+     * assertion that fires on the date is one nobody can act on.
+     */
+    const BRAVO_FIGURES = new Set([99, 9999, 99_999]);
+    const offenders: string[] = [];
+
+    const sweep = (value: unknown, path: string): void => {
+      if (typeof value === 'number') {
+        if (BRAVO_FIGURES.has(value)) offenders.push(`${path} = ${value}`);
+        return;
+      }
+      if (typeof value === 'string') {
+        if (value.includes('Bravo')) offenders.push(`${path} = ${value}`);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => sweep(item, `${path}[${index}]`));
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const [key, inner] of Object.entries(value)) sweep(inner, `${path}.${key}`);
+      }
+    };
+
+    sweep(response.json(), 'body');
+
+    expect(offenders, `Bravo's figures reached Alpha: ${offenders.join(', ')}`).toEqual([]);
   });
 
   /**

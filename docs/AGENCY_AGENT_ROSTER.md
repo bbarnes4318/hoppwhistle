@@ -186,18 +186,124 @@ the bug.
 
 ---
 
-## 7. What this does NOT do
+## 7. Each agent has their own working hours
+
+`agent_schedules`: days (`MON`..`SUN`), a start time and an end time, in the
+agency's `deliveryTimeZone`. Set from the roster screen.
+
+`AgencyProfile` carries delivery days and hours for the **whole agency**, and
+routing knew nothing about hours at all — it gated on licence, registration and
+concurrency and nothing else. An agency running two shifts could not express it,
+so an agent who finished at 2pm kept being rung at 7pm: the call reached a phone
+nobody was sitting at, and was not offered to the agent who was.
+
+**Absence is not a constraint.** An agent with no row is not restricted, and
+there is deliberately **no backfill** — not even the agency's own delivery
+window. The agency window is a billing concept, not a staffing one; applying it
+as a routing gate would silence every agent who works outside it the moment this
+deployed, with nothing on any screen explaining why the phones went quiet. Same
+posture as the licence gate: enforce what you have been told, never invent a
+constraint from the absence of data. An unresolvable timezone and a malformed
+time also enforce nothing.
+
+**Three states, not two:**
+
+| | Means | Routing |
+| --- | --- | --- |
+| No schedule (`DELETE`) | Hours are not enforced | Routable whenever else allows |
+| `days: []` | On leave | Routed nothing |
+| `days: [...]` + times | Works those hours | Gated on them |
+
+Clearing is its own verb rather than a `PUT` with a `null` body, because a JSON
+`null` body is not reliably distinguishable from *no* body — `apiClient.put(url,
+null)` in the web app sends nothing, since `null` is falsy. An endpoint whose
+"clear" case rested on that distinction would clear on a malformed request and
+refuse a well-formed clear.
+
+**Overnight shifts work.** `startTime` after `endTime` is a night shift (21:00
+to 05:00), not a mistake, and `days` names the day the shift **starts** on. The
+early-hours half is the one a naive implementation drops, which would silence
+every night-shift agent between midnight and their end time — the busiest part
+of their shift. `startTime === endTime` is a 24-hour day.
+
+There is **no per-agent timezone**: the agency's `deliveryTimeZone` is the clock
+its billing day is measured on, and a second one per agent would be a second
+answer to "what time is it here" that could disagree with it. The roster screen
+states which zone the times are in rather than letting anyone assume their own.
+
+---
+
+## 8. Every application is tied to the call that produced it
+
+`insurance_carrier_applications.callAttribution`, resolved server-side.
+
+The closing percentage prices every agency, and its two sides were **correlated
+by agent and day** rather than joined: delivered calls through
+`Call.answeredByUserId`, submitted applications through `createdById`. That
+answers "this agent took 40 calls and wrote 4 applications" and cannot answer
+"which call became this application" — so an agency disputing the figure that
+sets its price had nothing to drill into.
+
+`callId` existed and was barely used: optional, so the form almost never sent
+it, and verified only against the **tenant**. That check was correct and is why
+another agency's call never reached the column — but it did not check that the
+call belonged to the submitting **agent**, so an agent could attribute their
+application to a colleague's call, and the per-agent closing percentages a
+principal decides coaching and pay from would describe the wrong people.
+
+| | Meaning |
+| --- | --- |
+| `CLIENT` | The agent's form named the call, and it is this agency's **and** was answered by this agent |
+| `INFERRED` | Matched to the agent's own most recent answered call, within a window (default 30 min, `APPLICATION_CALL_INFERENCE_WINDOW_MS`) |
+| `NONE` | Nothing could be tied to it — a callback, paper, or hours later |
+
+`INFERRED` is stored apart from `CLIENT` because it can be wrong in a knowable
+way: an agent who hangs up, takes a second call and then writes the *first*
+caller's business is matched to the second. A dispute over a price has to tell a
+claim the agent made from one the server inferred.
+
+A named call that is **not this agent's is refused**, not quietly downgraded —
+substituting a different call would write a plausible-looking row for something
+nobody asked for, and the caller would never learn their link was wrong. An
+inference that cannot run returns `NONE` rather than failing the application:
+the row is what the agency is measured on; the link is a convenience for reading
+it afterwards.
+
+**Existing rows all read `NONE`, including ones that carry a `callId`.** Running
+the inference over history would be guesswork producing rows indistinguishable
+from evidence, on the one measurement an agency can dispute. A column of honest
+`NONE`s is worth more than one of plausible fabrications.
+
+---
+
+## 9. The team range report has a screen
+
+`/delivery/team` — presets for the last 7 days, last 30 days and this month, a
+date pair, and CSV.
+
+Separate from `/delivery`, which is a **live panel** beside today's block and
+tonight's rate and whose per-agent table sorts **ascending** (worst closer
+first) because it is a work list: who to coach today. This is a period report;
+it sorts descending, carries no rate and no money owed, and nothing on it moves
+during the day. One screen doing both would have a table whose sort order
+silently meant two different things depending on the dates above it.
+
+Em dashes, never zeroes — this is a screen somebody may decide pay or headcount
+from, and a fabricated 0% reads as a measurement.
+
+---
+
+## 10. What this does NOT do
 
 - **It does not let an agency create campaigns.** Campaigns stay NetEnroll's;
   the agency chooses which of its own agents work the ones it has. An agency
   with no active campaign sees a notice saying so.
-- **There is still no per-agent schedule.** `AgencyProfile` carries delivery
-  days and hours for the whole agency; routing knows only licence, registration
-  and concurrency, so an agency running two shifts cannot express it.
-- **Applications are still not joined to calls.** `callId` is optional on
-  submit, and the closing percentage correlates `Call.answeredByUserId` with
-  `InsuranceCarrierApplication.createdById` by agent and day rather than by
-  call — so a disputed figure cannot be drilled to "which call became this
-  application".
-- **The range view has no screen yet.** It is an endpoint and a CSV; the
-  `/delivery` page still shows one day.
+- **No holidays or one-off exceptions.** A schedule is a weekly pattern; an
+  agent off next Thursday has to be handled by clearing their days and putting
+  them back, which is blunt.
+- **Nothing reads `callAttribution` on a screen yet.** It is on the API and in
+  the database, and the applications page shows the call id, but there is no
+  drill-down from a closing percentage to the calls behind it.
+- **The measurement still counts by agent and day.** `getAgentBreakdown` and the
+  range report group by `answeredByUserId` and `createdById` as before; the new
+  column makes the join *possible* without changing what prices an agency.
