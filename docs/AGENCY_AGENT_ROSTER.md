@@ -473,6 +473,26 @@ linked to that call. Non-voided, because a voided application is not one: the
 measurement drops it from the numerator and this has to agree with the
 measurement.
 
+**There are two ways in, and both still work.** A sale reaches the numerator
+either from a call disposition (`APPLICATION_SUBMITTED`, which now carries the
+application) or **standalone**, with no call attached — a callback taken on the
+agent's own phone, a follow-up that closed, an application submitted the
+morning after the call that produced it. The standalone path is
+`POST /api/v1/applications` and the guard above never touched it: the refusal
+is about sending an application *alongside a disposition that is not a sale*,
+on the disposition endpoint, and it has nothing to say about one sent on its
+own.
+
+That second door existed but had exactly one handle — the header of the
+call-centre console. An agent sitting on the Applications page, looking at the
+list of business they wrote, could not add the one they had just written; the
+page carried an Export button and nothing else. `/applications` now carries a
+**Log an application** button opening the same form, and the list reloads on
+save so the agent sees the row rather than trusting that it landed. Business
+written and never recorded understates the closing percentage, and a lower
+closing percentage is a higher price per application: a missing button is a
+bill.
+
 **Required is required, in one place.** The field list moved out of
 `routes/applications.ts` into `services/applications/input-schema.ts`, so the
 two endpoints that accept an application validate identically. Two copies would
