@@ -213,12 +213,38 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
     });
   }
 
+  /**
+   * Delivered calls for one day, in one statement.
+   *
+   * This looped `await seedCall(...)`, which is one round-trip per row. The
+   * heaviest case here seeds a THOUSAND, and vitest's default per-test budget
+   * is five seconds -- so the test spent almost all of it inserting fixtures
+   * before doing any of the work it asserts on. On 2026-09-21 that tipped over
+   * in CI (`Test timed out in 5000ms`) while the runner's Postgres was mid
+   * checkpoint: `total=124.784 s; sync files=243083`.
+   *
+   * `createMany` writes the same rows with the same spread of `answeredAt` in
+   * a single statement, which is a fixture detail no assertion depends on.
+   * Deliberately not a longer timeout: the budget was not the problem.
+   */
   async function seedDeliveredCalls(tenantId: string, day: string, count: number) {
-    for (let i = 0; i < count; i++) {
-      // Spread across the day so nothing depends on all of them sharing an
-      // instant.
-      await seedCall({ tenantId, answeredAt: middayOf(day, i * 1000) });
-    }
+    await prisma.call.createMany({
+      data: Array.from({ length: count }, (_, i) => {
+        callSeq += 1;
+        return {
+          tenantId,
+          callSid: `sid-${callSeq}-${Math.random().toString(36).slice(2, 8)}`,
+          toNumber: '+15550000000',
+          status: 'COMPLETED',
+          direction: 'INBOUND' as const,
+          // Spread across the day so nothing depends on all of them sharing an
+          // instant.
+          answeredAt: middayOf(day, i * 1000),
+          duration: 60,
+          blocked: false,
+        };
+      }),
+    });
   }
 
   let appSeq = 0;
