@@ -1,6 +1,7 @@
 'use client';
 
 import { Download, Loader2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -360,7 +361,27 @@ function TeamRangeReport(): JSX.Element {
                 className={cn(agent.userId === null && 'text-muted-foreground')}
               >
                 <TableCell>
-                  <div className="font-medium">{agent.name}</div>
+                  {agent.userId ? (
+                    /*
+                     * The drill-down this report never had. It showed a
+                     * closing percentage and a talk time with no way to reach
+                     * the calls behind them, so "why is this agent at 4%" was
+                     * a question the screen raised and could not answer.
+                     *
+                     * The window travels with the link. Landing on all-time
+                     * calls from a seven-day figure would make the two screens
+                     * disagree about the number the click started from.
+                     */
+                    <Link
+                      href={`/calls?agentId=${encodeURIComponent(agent.userId)}&from=${from}&to=${to}`}
+                      className="font-medium underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                      title={`Every call ${agent.name} took in this window`}
+                    >
+                      {agent.name}
+                    </Link>
+                  ) : (
+                    <div className="font-medium">{agent.name}</div>
+                  )}
                   {agent.email ? (
                     <div className="text-xs text-muted-foreground">{agent.email}</div>
                   ) : null}
