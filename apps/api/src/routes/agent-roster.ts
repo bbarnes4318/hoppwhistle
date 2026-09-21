@@ -65,6 +65,22 @@ const CampaignAssignmentSchema = z.object({
   campaignIds: z.array(z.string().uuid()).max(50),
 });
 
+const DAY_KEYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+
+const ScheduleSchema = z.object({
+  /**
+   * An EMPTY list is an agent on leave, and it restricts them. It is NOT the
+   * same as having no schedule, which is what `DELETE` produces and is how
+   * every agent starts. The two are opposite instructions to routing, which is
+   * why clearing is its own verb rather than a special value here -- see the
+   * DELETE route below.
+   */
+  days: z.array(z.enum(DAY_KEYS)).max(7),
+  /** `HH:MM`, 24-hour, in the agency's delivery time zone. */
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'startTime must be HH:MM'),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'endTime must be HH:MM'),
+});
+
 const AgentSettingsSchema = z.object({
   /**
    * How many calls this agent may hold at once. Bounded at 10 because this is
@@ -155,13 +171,14 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           createdAt: true,
           roles: { select: { role: { select: { name: true } } } },
           sipCredential: { select: { extension: true, status: true, passwordEncrypted: true } },
+          schedule: { select: { days: true, startTime: true, endTime: true } },
         },
         orderBy: [{ firstName: 'asc' }, { email: 'asc' }],
       });
 
       const userIds = users.map(u => u.id);
 
-      const [assignments, campaigns, statuses] = await Promise.all([
+      const [assignments, campaigns, statuses, agencyProfile] = await Promise.all([
         prisma.campaignAgent.findMany({
           where: { tenantId, userId: { in: userIds }, status: 'ACTIVE' },
           select: { userId: true, campaignId: true },
@@ -172,6 +189,10 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           orderBy: { name: 'asc' },
         }),
         readStatuses(userIds),
+        prisma.agencyProfile.findUnique({
+          where: { tenantId },
+          select: { deliveryTimeZone: true },
+        }),
       ]);
 
       const campaignsByUser = new Map<string, string[]>();
@@ -219,6 +240,18 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           maxConcurrentCalls:
             Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_CONCURRENT,
           campaignIds: assignedCampaigns,
+          /*
+           * Null means no hours are enforced for this agent, which is how every
+           * agent starts. An empty `days` list is different -- an agent on
+           * leave -- and the screen has to render the two differently.
+           */
+          schedule: user.schedule
+            ? {
+                days: user.schedule.days,
+                startTime: user.schedule.startTime,
+                endTime: user.schedule.endTime,
+              }
+            : null,
           softphoneStatus: statuses.get(user.id) ?? 'offline',
           blockedReason: blockedReason({
             status: user.status,
@@ -239,6 +272,13 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
            */
           campaigns: campaigns.map(c => ({ id: c.id, name: c.name })),
           defaultMaxConcurrentCalls: DEFAULT_MAX_CONCURRENT,
+          /*
+           * The clock every schedule on this screen is written in. There is
+           * deliberately no per-agent zone -- the agency's is the one its
+           * billing day is measured on -- so the screen states it once rather
+           * than letting somebody assume their own.
+           */
+          deliveryTimeZone: agencyProfile?.deliveryTimeZone ?? 'America/New_York',
         },
       });
     }
@@ -356,6 +396,150 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
       });
 
       return reply.send({ data: { userId, campaignIds: requested } });
+    }
+  );
+
+  /**
+   * PUT /api/v1/agent-roster/:userId/schedule
+   *
+   * When this agent works, or `null` to stop enforcing hours for them.
+   *
+   * ── The two kinds of "not working", and why they are two verbs ──────────
+   *
+   * NO SCHEDULE means no hours are enforced: the agent is routable whenever
+   * everything else allows it, which is how every agent starts. That is
+   * `DELETE`.
+   *
+   * An EMPTY `days` list is an agent on leave, and it DOES stop calls reaching
+   * them. That is `PUT` with `days: []`.
+   *
+   * They are opposite instructions to routing, and they are separate verbs
+   * rather than one endpoint taking `null`, because a JSON `null` body is not
+   * reliably distinguishable from no body at all -- `apiClient.put(url, null)`
+   * in the web app sends no body, since `null` is falsy. An endpoint whose
+   * "clear" case depends on that distinction would clear a schedule on a
+   * malformed request and refuse one on a well-formed clear.
+   */
+  fastify.put<{ Params: { userId: string } }>(
+    '/api/v1/agent-roster/:userId/schedule',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const parsed = ScheduleSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; '),
+          },
+        });
+      }
+
+      const { userId } = request.params;
+      const agent = await prisma.user.findFirst({
+        where: { id: userId, tenantId },
+        select: { id: true },
+      });
+      if (!agent) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'No such agent in this agency' },
+        });
+      }
+
+      const schedule = parsed.data;
+
+      /*
+       * `startTime` equal to or after `endTime` is NOT rejected: it is an
+       * overnight shift (21:00 to 05:00), which is ordinary in this business,
+       * and `services/telephony/agent-schedule.ts` reads it as one. Refusing it
+       * would push a night-shift agency back to having no schedule at all.
+       */
+      await prisma.agentSchedule.upsert({
+        where: { userId },
+        create: {
+          tenantId,
+          userId,
+          days: schedule.days,
+          startTime: schedule.startTime,
+          endTime: schedule.endTime,
+        },
+        update: {
+          days: schedule.days,
+          startTime: schedule.startTime,
+          endTime: schedule.endTime,
+        },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'agent_roster.schedule.set',
+        entityType: 'AgentSchedule',
+        entityId: userId,
+        resource: `/api/v1/agent-roster/${userId}/schedule`,
+        method: 'PUT',
+        changes: { ...schedule },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        success: true,
+      });
+
+      return reply.send({ data: { userId, schedule } });
+    }
+  );
+
+  /**
+   * DELETE /api/v1/agent-roster/:userId/schedule
+   *
+   * Stop enforcing hours for this agent, returning them to the state every
+   * agent starts in: routable whenever licence, registration and concurrency
+   * allow it.
+   *
+   * Not the same as `PUT { days: [] }`, which is an agent on leave and stops
+   * calls reaching them entirely. See the PUT above for why these are two
+   * verbs.
+   */
+  fastify.delete<{ Params: { userId: string } }>(
+    '/api/v1/agent-roster/:userId/schedule',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const { userId } = request.params;
+      const agent = await prisma.user.findFirst({
+        where: { id: userId, tenantId },
+        select: { id: true },
+      });
+      if (!agent) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'No such agent in this agency' },
+        });
+      }
+
+      // `deleteMany`, so clearing a schedule that is already absent is a no-op
+      // rather than a 404 about a row the caller never claimed existed.
+      await prisma.agentSchedule.deleteMany({ where: { tenantId, userId } });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'agent_roster.schedule.cleared',
+        entityType: 'AgentSchedule',
+        entityId: userId,
+        resource: `/api/v1/agent-roster/${userId}/schedule`,
+        method: 'DELETE',
+        changes: { cleared: true },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        success: true,
+      });
+
+      return reply.send({ data: { userId, schedule: null } });
     }
   );
 

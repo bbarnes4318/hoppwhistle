@@ -79,6 +79,12 @@ export const PLATFORM_NAV: NavGroup[] = [
         title: "Today's block, overrun, ceiling and per-agent closing percentages",
       },
       {
+        name: 'Team',
+        href: '/delivery/team',
+        icon: BarChart3,
+        title: 'What the team produced over a week, a month, a pay period',
+      },
+      {
         name: 'Settlements',
         href: '/delivery/settlements',
         icon: Receipt,

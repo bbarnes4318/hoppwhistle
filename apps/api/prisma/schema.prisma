@@ -99,6 +99,7 @@ model Tenant {
   agencyProfile            AgencyProfile?
   settlementDisputes       SettlementDispute[]
   agentSipCredentials      AgentSipCredential[]
+  agentSchedules           AgentSchedule[]
 
   @@index([slug])
   @@index([status])
@@ -352,6 +353,9 @@ model User {
 
   /// This agent's own SIP identity. See `AgentSipCredential`.
   sipCredential  AgentSipCredential?
+
+  /// When this agent works. Absent means no schedule is enforced for them.
+  schedule       AgentSchedule?
 
   // Payroll relations
   timeEntries    TimeEntry[]
@@ -2450,6 +2454,65 @@ enum AgentSipCredentialStatus {
   REVOKED
 }
 
+/// When one agent works.
+///
+/// ── The gap this fills ───────────────────────────────────────────────────────
+///
+/// `AgencyProfile` carries `deliveryDays`, `deliveryStartTime` and
+/// `deliveryEndTime` for the WHOLE agency, and routing knew nothing about
+/// hours at all -- only licence, registration and concurrency. An agency
+/// running two shifts could not express it, so an agent who finished at 2pm
+/// kept being rung at 7pm: the call reached a phone nobody was sitting at, and
+/// was not offered to the agent who was.
+///
+/// ── Absence means "follow the agency", never "never available" ───────────────
+///
+/// An agent with no row here is NOT restricted. Every agent starts without one,
+/// and a default of "unavailable" would take an entire platform off the queue
+/// the moment this shipped. The gate only ever excludes an agent who HAS a
+/// schedule and is outside it -- the same posture as the licence gate in
+/// `services/routing.ts`, and for the same reason: enforce what you have been
+/// told, never invent a constraint from the absence of data.
+///
+/// ── Strings, and one clock ───────────────────────────────────────────────────
+///
+/// `HH:MM` strings and `MON`..`SUN` day keys, exactly as `AgencyProfile` stores
+/// them, so nothing between here and the browser can shift a shift by a
+/// timezone. There is deliberately no timezone column: the agency's
+/// `deliveryTimeZone` is the clock the whole agency's day is measured on, and a
+/// second one per agent would be a second answer to "what time is it here" that
+/// could disagree with the billing day.
+model AgentSchedule {
+  id       String @id @default(uuid())
+  tenantId String
+  /// One schedule per agent. Two rows would be two answers to "are they on".
+  userId   String @unique
+
+  /// The days this agent works, as `MON`..`SUN`. An empty list is a deliberate
+  /// "works no days" -- an agent on leave -- and is NOT the same as having no
+  /// row at all, which means no schedule is being enforced for them.
+  days String[]
+
+  /// `HH:MM`, 24-hour, in the agency's `deliveryTimeZone`.
+  ///
+  /// `startTime` after `endTime` is an OVERNIGHT shift (21:00 to 05:00), not a
+  /// mistake, and the gate reads it that way. A night shift is an ordinary
+  /// thing in this business and refusing to store one would push the agency
+  /// back to having no schedule at all.
+  startTime String
+  endTime   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The routing read: every schedule in one agency, resolved at once.
+  @@index([tenantId])
+  @@map("agent_schedules")
+}
+
 model AgentStateEvent {
   id     String @id @default(uuid())
   userId String
@@ -3195,6 +3258,25 @@ enum CarrierAutomationStatus {
   FAILED
 }
 
+/// On what evidence an application was tied to the call that produced it.
+enum CallAttribution {
+  /// The agent's own form named the call, and the server verified that call is
+  /// this agency's and was answered by this agent. The strongest claim.
+  CLIENT
+
+  /// The server matched it to the call the agent was on, or had just finished,
+  /// when they submitted. Good evidence, and deliberately weaker than CLIENT:
+  /// an agent who hangs up and then writes the PREVIOUS caller's business would
+  /// be matched to the wrong call.
+  INFERRED
+
+  /// No call could be tied to it. An application written from a callback, from
+  /// paper, or hours after the call. Not a defect -- business written outside
+  /// the console legitimately lands here, and a row saying so is worth more
+  /// than a guess.
+  NONE
+}
+
 model InsuranceCarrierApplication {
   id       String @id @default(uuid())
   tenantId String
@@ -3204,6 +3286,23 @@ model InsuranceCarrierApplication {
   insuranceLeadId  String?
   prospectIntakeId String?
   callId           String?
+
+  /// HOW `callId` came to be set, or why it is not.
+  ///
+  /// The closing percentage prices every agency, and until this column its two
+  /// sides were correlated by AGENT AND DAY rather than joined: delivered calls
+  /// counted by `Call.answeredByUserId`, submitted applications by
+  /// `createdById`. That answers "this agent took 40 calls and wrote 4
+  /// applications" and cannot answer "which call became this application" --
+  /// so an agency disputing the figure that sets its price had nothing to drill
+  /// into.
+  ///
+  /// `callId` existed but was optional, UNVALIDATED and almost always null.
+  /// It is now resolved server-side, and this records on what evidence: "the
+  /// agent's form named this call" and "we matched it to the call they were on"
+  /// are different strengths of claim, and a dispute has to tell them apart.
+  /// See `services/applications/call-attribution.ts`.
+  callAttribution  CallAttribution @default(NONE)
 
   // Product
   carrier        String   @default("American Amicable")
@@ -3352,6 +3451,8 @@ model InsuranceCarrierApplication {
   /// One agent's own applications, newest first: the agent reading of
   /// GET /api/v1/applications and the per-agent production breakdown.
   @@index([tenantId, createdById, submittedAt])
+  /// The drill-down this column exists for: which applications came off a call.
+  @@index([tenantId, callId])
   @@index([prospectIntakeId])
   @@index([insuranceLeadId])
   @@index([callId])

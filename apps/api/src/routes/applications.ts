@@ -45,6 +45,7 @@ import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { recordAgentApplication } from '../services/applications/agent-entry.js';
 import type { PaymentMode } from '../services/applications/agent-entry.js';
+import { UnknownCallError } from '../services/applications/call-attribution.js';
 import { auditLog } from '../services/audit.js';
 import { toMaskedApplicationResponse } from '../services/carrier-rpa/application-store.js';
 import { calendarDayBounds } from '../services/rating/calendar-day.js';
@@ -177,48 +178,61 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
     const body = parsed.data;
 
     /*
-     * A call id is verified against this tenant, and NOT required.
+     * The call is resolved by `services/applications/call-attribution.ts`, not
+     * here.
      *
-     * Verified, because a call id is the one identifier on this body that
-     * points at another row, and accepting one from another agency would
-     * attribute an application to a call its owner cannot see.
+     * This used to verify `body.callId` against the tenant and then pass it
+     * through. That check was right and is not lost -- it moved into the
+     * resolver, which adds the half that was missing: the call must also have
+     * been answered by THIS agent. Without it an agent could attribute their
+     * application to a colleague's call, and the per-agent closing percentages
+     * a principal decides coaching and pay from would describe the wrong
+     * people.
      *
-     * Not required, because an application written on a callback after the
-     * softphone session ended has no call to attach, and refusing it would push
-     * the agent back to the state this whole feature exists to remove: business
-     * written and never counted.
+     * Keeping a copy of the tenant check here as well would be two places
+     * deciding one thing, which is two places to drift.
+     *
+     * A call id is still NOT required. An application written on a callback
+     * after the softphone session ended has no call to attach, and refusing it
+     * would push the agent back to the state this whole feature exists to
+     * remove: business written and never counted. The resolver records that
+     * absence as `NONE` and, when it can, infers the agent's own recent call.
      */
-    if (body.callId) {
-      const call = await prisma.call.findFirst({
-        where: { id: body.callId, tenantId },
-        select: { id: true },
+    let application;
+    try {
+      application = await recordAgentApplication({
+        tenantId,
+        createdById: userId,
+        clientRequestId: body.clientRequestId,
+        callId: body.callId ?? null,
+        insuranceLeadId: body.insuranceLeadId ?? null,
+        carrier: body.carrier,
+        product: body.product ?? null,
+        planType: body.planType ?? null,
+        faceAmount: body.faceAmount,
+        modalPremium: body.modalPremium,
+        paymentMode: body.paymentMode as PaymentMode,
+        carrierApplicationNumber: body.carrierApplicationNumber ?? null,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        dob: body.dob ?? null,
+        state: body.state ?? null,
+        phone: body.phone ?? null,
       });
-      if (!call) {
+    } catch (error) {
+      /*
+       * The one refusal the resolver raises: a named call that is not this
+       * agent's. 404 rather than 400 because it is the same answer the caller
+       * used to get for a call that does not exist for them -- which, from the
+       * client's side, is exactly what this is.
+       */
+      if (error instanceof UnknownCallError) {
         return reply.code(404).send({
-          error: { code: 'CALL_NOT_FOUND', message: 'No such call for this agency.' },
+          error: { code: 'CALL_NOT_FOUND', message: error.message },
         });
       }
+      throw error;
     }
-
-    const application = await recordAgentApplication({
-      tenantId,
-      createdById: userId,
-      clientRequestId: body.clientRequestId,
-      callId: body.callId ?? null,
-      insuranceLeadId: body.insuranceLeadId ?? null,
-      carrier: body.carrier,
-      product: body.product ?? null,
-      planType: body.planType ?? null,
-      faceAmount: body.faceAmount,
-      modalPremium: body.modalPremium,
-      paymentMode: body.paymentMode as PaymentMode,
-      carrierApplicationNumber: body.carrierApplicationNumber ?? null,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      dob: body.dob ?? null,
-      state: body.state ?? null,
-      phone: body.phone ?? null,
-    });
 
     return reply.code(201).send({ data: toMaskedApplicationResponse(application) });
   });
@@ -296,6 +310,7 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
         carrierApplicationNumber: true,
         createdById: true,
         callId: true,
+        callAttribution: true,
         voidedAt: true,
         voidReason: true,
       },
@@ -331,6 +346,13 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
           agentId: row.createdById,
           agentName: row.createdById ? (nameById.get(row.createdById) ?? null) : null,
           callId: row.callId,
+          /*
+           * On what evidence the call was tied to this application: the agent's
+           * form named it, the server matched it to the call they were on, or
+           * neither. An agency disputing its closing percentage needs to tell a
+           * claim from an inference -- see `CallAttribution`.
+           */
+          callAttribution: row.callAttribution,
           voidedAt: row.voidedAt?.toISOString() ?? null,
           voidReason: row.voidReason,
         })),

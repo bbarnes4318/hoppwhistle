@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Plus, RefreshCw } from 'lucide-re
 import { useCallback, useEffect, useState } from 'react';
 
 import { InviteAgentDialog } from '@/components/agents/invite-agent-dialog';
+import { ScheduleDialog, type AgentSchedule } from '@/components/agents/schedule-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,6 +73,8 @@ interface RosterAgent {
   hasSipCredential: boolean;
   maxConcurrentCalls: number;
   campaignIds: string[];
+  /** Null means no hours are enforced. An empty `days` is an agent on leave. */
+  schedule: AgentSchedule | null;
   softphoneStatus: string;
   blockedReason: string | null;
 }
@@ -85,6 +88,49 @@ interface Roster {
   agents: RosterAgent[];
   campaigns: RosterCampaign[];
   defaultMaxConcurrentCalls: number;
+  /** The clock every schedule is written in. The agency's, never the browser's. */
+  deliveryTimeZone: string;
+}
+
+const DAY_ORDER = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+/**
+ * A schedule at a glance.
+ *
+ * "Any time" and "No days" are opposite states and read as such: the first is
+ * an agent whose hours are not enforced, which is how everyone starts; the
+ * second is an agent on leave, who is routed nothing.
+ */
+function ScheduleCell({ schedule }: { schedule: AgentSchedule | null }): JSX.Element {
+  if (!schedule) {
+    return <span className="text-xs text-muted-foreground">Any time</span>;
+  }
+
+  if (schedule.days.length === 0) {
+    return (
+      <span
+        className="text-xs font-medium text-amber-700 dark:text-amber-300"
+        title="No days selected, so this agent is routed no calls."
+      >
+        No days
+      </span>
+    );
+  }
+
+  const ordered = DAY_ORDER.filter(d => schedule.days.includes(d)).map(
+    d => d[0] + d[1].toLowerCase()
+  );
+  const overnight = schedule.startTime > schedule.endTime;
+
+  return (
+    <div className="text-xs">
+      <div className="font-medium">
+        {schedule.startTime}–{schedule.endTime}
+        {overnight ? <span className="ml-1 text-muted-foreground">+1</span> : null}
+      </div>
+      <div className="text-muted-foreground">{ordered.join(' ')}</div>
+    </div>
+  );
 }
 
 /** How a live softphone status reads, and what it means for the next call. */
@@ -158,6 +204,7 @@ export default function AgentRosterPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [licenceAgent, setLicenceAgent] = useState<RosterAgent | null>(null);
+  const [scheduleAgent, setScheduleAgent] = useState<RosterAgent | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const platform = usePlatformContext();
@@ -298,6 +345,7 @@ export default function AgentRosterPage(): JSX.Element {
                   <TableHead>Licensed states</TableHead>
                   <TableHead>Extension</TableHead>
                   <TableHead>At once</TableHead>
+                  <TableHead>Working hours</TableHead>
                   <TableHead>{singleCampaign ? 'On the queue' : 'Campaigns'}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -354,6 +402,17 @@ export default function AgentRosterPage(): JSX.Element {
                       </TableCell>
 
                       <TableCell>
+                        <button
+                          type="button"
+                          className="text-left hover:opacity-80"
+                          onClick={() => setScheduleAgent(agent)}
+                          title="Edit working hours"
+                        >
+                          <ScheduleCell schedule={agent.schedule} />
+                        </button>
+                      </TableCell>
+
+                      <TableCell>
                         {singleCampaign ? (
                           <Switch
                             checked={agent.campaignIds.includes(singleCampaign.id)}
@@ -406,6 +465,19 @@ export default function AgentRosterPage(): JSX.Element {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onInvited={() => void load()}
+      />
+
+      <ScheduleDialog
+        open={scheduleAgent !== null}
+        onOpenChange={next => {
+          if (!next) setScheduleAgent(null);
+        }}
+        agent={scheduleAgent}
+        timeZone={roster?.deliveryTimeZone ?? 'America/New_York'}
+        onSaved={() => {
+          setScheduleAgent(null);
+          void load();
+        }}
       />
 
       <LicensedStatesDialog

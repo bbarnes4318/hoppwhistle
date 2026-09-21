@@ -3,6 +3,9 @@ import { normalizeLicensedStates } from '../lib/licensed-states.js';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
+import { agencyClock, isWithinSchedule } from './telephony/agent-schedule.js';
+import type { LocalClock } from './telephony/agent-schedule.js';
+
 const INTERNAL_EXTENSION_RE = /^\d{4}$/;
 const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -387,6 +390,73 @@ export class RoutingService {
           error: (credentialErr as Error).message,
         });
       }
+
+      /*
+       * Each agent's working hours, and what time it is for this agency.
+       *
+       * ── Why this exists ──────────────────────────────────────────────────
+       *
+       * `AgencyProfile` carries delivery days and hours for the WHOLE agency,
+       * and routing knew nothing about hours at all. An agency running two
+       * shifts could not express it, so an agent who finished at 2pm kept
+       * being rung at 7pm: the call reached a phone nobody was sitting at and
+       * was not offered to the agent who was.
+       *
+       * ── Read once, applied to everybody ──────────────────────────────────
+       *
+       * One query for the agency's schedules and one `Intl` resolution of its
+       * clock, shared by every candidate below. Asking per agent would resolve
+       * the same timezone N times and, worse, could land two agents in one
+       * agency on different days if the read straddled midnight.
+       *
+       * ── Empty is not a constraint ────────────────────────────────────────
+       *
+       * An agent with no row is NOT restricted -- every agent starts without
+       * one, and the gate below is written so that an empty map excludes
+       * nobody. A failure here leaves the map empty and the clock null, which
+       * is exactly the "enforce nothing" state.
+       */
+      const schedulesByUser = new Map<
+        string,
+        { days: string[]; startTime: string; endTime: string }
+      >();
+      let agencyLocalClock: LocalClock | null = null;
+
+      try {
+        const [scheduleRows, profile] = await Promise.all([
+          this.prisma.agentSchedule.findMany({
+            where: { tenantId },
+            select: { userId: true, days: true, startTime: true, endTime: true },
+          }),
+          this.prisma.agencyProfile.findUnique({
+            where: { tenantId },
+            select: { deliveryTimeZone: true },
+          }),
+        ]);
+
+        for (const row of scheduleRows) {
+          schedulesByUser.set(row.userId, {
+            days: row.days,
+            startTime: row.startTime,
+            endTime: row.endTime,
+          });
+        }
+
+        /*
+         * Only resolve the clock if somebody actually has a schedule. An
+         * agency with none needs no clock, and skipping it keeps the common
+         * case free.
+         */
+        if (schedulesByUser.size > 0) {
+          agencyLocalClock = agencyClock(profile?.deliveryTimeZone ?? 'America/New_York');
+        }
+      } catch (scheduleErr) {
+        logger.warn({
+          msg: 'Agent-schedule: could not read working hours; not enforcing them',
+          tenantId,
+          error: (scheduleErr as Error).message,
+        });
+      }
       const agentMaxConcurrent = new Map<string, number>();
       /**
        * Each agent's licensed jurisdictions, from the same `metadata` this loop
@@ -562,6 +632,30 @@ export class RoutingService {
                 userId,
                 callerState,
                 licensedStates: [...licensed].sort(),
+                campaignId,
+              });
+              return { ep: normalizedEndpoint, eligible: false };
+            }
+
+            /*
+             * Working-hours gate: do not ring an agent who is off shift.
+             *
+             * Checked before registration because it is the cheaper question
+             * and the more common exclusion -- an off-shift agent has usually
+             * closed the tab, so this saves asking about a registration that
+             * is not there either.
+             *
+             * `isWithinSchedule` answers TRUE for an agent with no schedule and
+             * true when the clock could not be resolved, so an agency that has
+             * configured nothing is unaffected and a timezone failure enforces
+             * nothing. Only a schedule that positively excludes this moment
+             * excludes an agent.
+             */
+            if (!isWithinSchedule(schedulesByUser.get(userId), agencyLocalClock)) {
+              logger.info({
+                msg: 'Agent-schedule: Endpoint EXCLUDED (agent is outside their working hours)',
+                userId,
+                destination: normalizedEndpoint.destination,
                 campaignId,
               });
               return { ep: normalizedEndpoint, eligible: false };
