@@ -1,8 +1,9 @@
 'use client';
 
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { Download, FileText, Loader2, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { StandaloneApplicationModal } from '@/components/call-center/StandaloneApplicationModal';
 import {
   Figure,
   FigureRow,
@@ -190,6 +191,7 @@ export default function ApplicationsPage() {
   const [summary, setSummary] = useState<ApplicationsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [logging, setLogging] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,11 +260,50 @@ export default function ApplicationsPage() {
 
   return (
     <CompactPageShell fullHeight={false}>
+      {/*
+       * The second way an application gets recorded.
+       *
+       * One way is the call disposition: an agent marks a call "application
+       * submitted" and fills the form attached to it. The other is business
+       * written with no live call behind it -- a callback taken on the agent's
+       * own phone, an application submitted the morning after the call that
+       * produced it, a follow-up that closed. That business is just as real and
+       * counts identically, and until this button the only door to it was the
+       * header of the call-centre console: an agent sitting on this page,
+       * looking at their own applications, had no way to add the one they had
+       * just written.
+       *
+       * Business that is written and never recorded understates the agency's
+       * closing percentage, and a lower closing percentage is a HIGHER price
+       * per application. A missing button is a bill.
+       */}
       <CompactPageHeader
         title="Applications"
         subtitle="Every application the agency submitted, however it was recorded"
         icon={FileText}
-      />
+      >
+        <button
+          type="button"
+          onClick={() => setLogging(true)}
+          className="flex items-center gap-1.5 rounded-control border border-rule bg-surface px-2.5 py-1.5 t-meta font-medium text-ink-2 hover:border-rule-strong hover:bg-sunken hover:text-ink focus-visible:outline-none"
+          title="Record business written outside a call — a follow-up, a callback, an application submitted later"
+        >
+          <Plus aria-hidden className="h-3.5 w-3.5" />
+          Log an application
+        </button>
+      </CompactPageHeader>
+
+      {logging ? (
+        <StandaloneApplicationModal
+          onClose={() => setLogging(false)}
+          onLogged={() => {
+            setLogging(false);
+            // Straight back onto the list it was just added to, so the agent
+            // sees the row rather than trusting that it landed.
+            void load();
+          }}
+        />
+      ) : null}
 
       {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
       <FigureRow className="pt-1">
