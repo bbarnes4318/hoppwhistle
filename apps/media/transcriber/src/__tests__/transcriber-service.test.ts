@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { TranscriberService } from '../transcriber-service.js';
 
@@ -66,6 +66,12 @@ describe('TranscriberService', () => {
     service = new TranscriberService();
   });
 
+  afterEach(() => {
+    // Only one test fakes them, but leaving fake timers installed would change
+    // how every test after it behaves.
+    vi.useRealTimers();
+  });
+
   it('should parse successful transcription result', async () => {
     const { proc, handlers } = mockChildProcess();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,5 +134,51 @@ describe('TranscriberService', () => {
 
     expect(transcription.ok).toBe(false);
     expect(transcription.error).toBeDefined();
+  });
+
+  /**
+   * The watchdog must not outlive the job it watches.
+   *
+   * `transcribe()` arms a SIGTERM timer for PY_SVC_TIMEOUT_MS -- fifteen
+   * minutes by default -- and used to leave it pending after the process had
+   * already exited. A pending timer holds the Node event loop open, so a
+   * finished worker would not exit promptly and a busy one accumulated one per
+   * job; when the stale timer finally fired it signalled a PID that had exited
+   * long before and that the OS may since have reused.
+   *
+   * Fake timers here, because the alternative is a test that waits a quarter of
+   * an hour to find out.
+   */
+  it('clears the timeout once the process has finished', async () => {
+    vi.useFakeTimers();
+
+    const { proc, handlers } = mockChildProcess();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const pending = service.transcribe({
+      recordingUrl: 'https://example.com/recording.wav',
+      options: {
+        prefer: 'whisperx',
+        fallback: 'whispercpp',
+        diarize: false,
+        model: 'tiny',
+      },
+    });
+
+    // Armed while the job is in flight -- otherwise this test would pass even
+    // if the timeout were deleted outright.
+    expect(vi.getTimerCount()).toBe(1);
+
+    handlers.stdout!(Buffer.from(JSON.stringify({ ok: true, fullText: 'Hello' }) + '\n'));
+    handlers.close!(0);
+    await pending;
+
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Past the full default timeout: nothing left to fire, and no signal sent
+    // to a process that exited a quarter of an hour ago.
+    vi.advanceTimersByTime(900_000 + 1_000);
+    expect(proc.kill).not.toHaveBeenCalled();
   });
 });

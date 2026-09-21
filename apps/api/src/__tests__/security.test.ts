@@ -2,7 +2,7 @@
 import { RoleName } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import Fastify, { FastifyInstance } from 'fastify';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
@@ -115,6 +115,18 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
   let userIds: Record<string, string>;
 
   /**
+   * One bcrypt hash for the whole file.
+   *
+   * This was recomputed inside `beforeEach` -- 91ms of CPU, measured, for a
+   * password that never changes, once per test. The seeding below is already
+   * a string of sequential round-trips against a 10s hook budget, and on
+   * 2026-09-21 a loaded CI runner tipped it over: `Hook timed out in 10000ms`.
+   * The cost factor is deliberately unchanged, because what these tests assert
+   * about passwords should be tested against a real one.
+   */
+  let passwordHash: string;
+
+  /**
    * A server carrying the real auth hook and the real route plugins.
    *
    * Built per test rather than once, because `registerApiV1Auth` reads the
@@ -144,11 +156,22 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
     return { authorization: `Bearer ${tokenFor(app, who)}` };
   }
 
+  /**
+   * One statement, not six: TRUNCATE takes a list, and CASCADE already pulls in
+   * anything referencing them, so the per-table loop only bought six
+   * round-trips. Order no longer matters for the same reason.
+   */
   async function cleanDatabase() {
-    for (const table of ['audit_logs', 'api_keys', 'user_roles', 'users', 'roles', 'tenants']) {
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`).catch(() => {});
-    }
+    await prisma
+      .$executeRawUnsafe(
+        'TRUNCATE TABLE "audit_logs", "api_keys", "user_roles", "users", "roles", "tenants" CASCADE;'
+      )
+      .catch(() => {});
   }
+
+  beforeAll(async () => {
+    passwordHash = await hash('password123', 10);
+  });
 
   beforeEach(async () => {
     delete process.env.ALLOW_DEMO_TENANT_AUTH;
@@ -163,22 +186,22 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
     });
     tenantId = tenant.id;
 
-    roleIds = {};
-    for (const name of [
+    // Two round-trips rather than six. `Role.name` is unique and roles are not
+    // tenant-scoped, so the ids can be read straight back by name.
+    const roleNames = [
       RoleName.OWNER,
       RoleName.ADMIN,
       RoleName.ANALYST,
       RoleName.AGENT,
       RoleName.READONLY,
       RoleName.BUYER,
-    ]) {
-      const role = await prisma.role.create({
-        data: { name, description: `${name} role`, permissions: [] },
-      });
-      roleIds[name] = role.id;
-    }
+    ];
+    await prisma.role.createMany({
+      data: roleNames.map(name => ({ name, description: `${name} role`, permissions: [] })),
+    });
+    const roles = await prisma.role.findMany({ where: { name: { in: roleNames } } });
+    roleIds = Object.fromEntries(roles.map(role => [role.name, role.id]));
 
-    const passwordHash = await hash('password123', 10);
     userIds = {};
     const people: Array<[string, RoleName | null, 'ACTIVE' | 'PENDING']> = [
       ['owner', RoleName.OWNER, 'ACTIVE'],
