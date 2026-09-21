@@ -15,7 +15,6 @@ import { apiClient } from '@/lib/api';
 
 import { usePhone } from './phone-provider';
 
-
 // Build button list from shared constants
 const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
   value,
@@ -102,7 +101,9 @@ export function GlobalDispositionModal() {
 
     const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
     if (wroteApplication && !application) {
-      setApplicationError('Record the carrier, face amount, premium and last name first.');
+      setApplicationError(
+        'Record the carrier, face amount, premium, first name and last name first.'
+      );
       return;
     }
 
@@ -118,11 +119,23 @@ export function GlobalDispositionModal() {
     }
 
     /*
-     * The disposition first, then the application carrying the call id it hands
-     * back. `pendingDispositionCall.callId` is the softphone's own session id,
-     * not a `Call` row; the disposition endpoint is what resolves it to one.
+     * One request, carrying the application when there is one.
+     *
+     * It used to be two -- the disposition, then the application with the call
+     * id that came back -- because `pendingDispositionCall.callId` is the
+     * softphone's own session id, not a `Call` row, and only the server can
+     * resolve it. That ordering meant anything failing in between left a call
+     * marked as a sale with no sale behind it: nothing in the agency's
+     * numerator, no credit spent, and this modal showing "saved".
+     *
+     * The server now resolves the call, records the application against it,
+     * and only then writes the disposition. Either both land or neither does,
+     * and a refusal comes back here as one error instead of a half-saved call.
+     *
+     * Retry reuses the same `clientRequestId`, so a save that landed before the
+     * network gave up comes back as the row it wrote rather than as a second
+     * application the agency is charged for.
      */
-    let savedCallId: string | null = null;
     try {
       const response = await apiClient.post<{ id?: string }>('/api/v1/calls/disposition', {
         callId: dispositionCallIdRef.current ?? pendingDispositionCall.callId,
@@ -133,44 +146,29 @@ export function GlobalDispositionModal() {
         direction: pendingDispositionCall.direction?.toUpperCase(),
         callSource: 'SOFTPHONE',
         followUpAt,
+        ...(wroteApplication && application ? { application } : {}),
       });
 
       if (response.error) {
         throw new Error(response.error.message || 'Save failed');
       }
-      savedCallId = response.data?.id ?? null;
+      const savedCallId = response.data?.id ?? null;
       if (savedCallId) dispositionCallIdRef.current = savedCallId;
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save disposition');
+      const message = err instanceof Error ? err.message : 'Failed to save disposition';
+      /*
+       * Shown against the form when an application was riding along, because
+       * that is where the agent has to act. Nothing is cleared and the modal
+       * stays open: the call is not marked saved, and the business the agent
+       * typed is still on screen.
+       */
+      if (wroteApplication) {
+        setApplicationError(`${message} Nothing has been recorded — try again.`);
+      } else {
+        setSaveError(message);
+      }
       setSaving(false);
       return;
-    }
-
-    if (wroteApplication && application) {
-      try {
-        const response = await apiClient.post('/api/v1/applications', {
-          ...application,
-          ...(savedCallId ? { callId: savedCallId } : {}),
-        });
-        if (response.error) {
-          throw new Error(response.error.message || 'The application could not be saved.');
-        }
-      } catch (err) {
-        /*
-         * Nothing is cleared and the modal stays open: the disposition is not
-         * marked saved and the form keeps what the agent typed. Retry reuses
-         * the same `clientRequestId`, so a submit that landed before the
-         * network gave up comes back as the row it wrote rather than as a
-         * second application.
-         */
-        setApplicationError(
-          err instanceof Error
-            ? `${err.message} The application has not been recorded — try again.`
-            : 'The application has not been recorded — try again.'
-        );
-        setSaving(false);
-        return;
-      }
     }
 
     // Mark as handled so it doesn't re-prompt

@@ -13,6 +13,13 @@ import {
 } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
+import { recordAgentApplication } from '../services/applications/agent-entry.js';
+import { UnknownCallError } from '../services/applications/call-attribution.js';
+import {
+  ApplicationInputSchema,
+  describeApplicationIssues,
+} from '../services/applications/input-schema.js';
+import type { ApplicationInput } from '../services/applications/input-schema.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -3955,6 +3962,27 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
   const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];
 
+  /**
+   * The dispositions that are a claim about business written, and so cannot be
+   * saved on their own.
+   *
+   * `APPLICATION_SUBMITTED` is not a note an agent leaves on a call. It is the
+   * numerator of the closing percentage that prices the agency, and it spends a
+   * credit off their balance. Until this endpoint carried the application, the
+   * two were separate requests -- disposition first, because the client only
+   * has a browser session id and this endpoint is what resolves it to a `Call`
+   * row, then the application with the id that came back. Any failure between
+   * them left a call LABELLED as a sale with no sale behind it: nothing in the
+   * numerator, no credit spent, and an agency whose measured closing percentage
+   * was lower than its real one -- which on the rate curve is a HIGHER price
+   * per application. The agent saw "saved".
+   *
+   * One request now. The application is recorded against the resolved call
+   * BEFORE the disposition is written, so the label cannot exist without the
+   * sale. If the application is refused, so is the disposition.
+   */
+  const DISPOSITIONS_REQUIRING_APPLICATION = new Set(['APPLICATION_SUBMITTED']);
+
   fastify.post<{
     Body: {
       callId?: string;
@@ -3966,6 +3994,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       callSource?: string;
       direction?: string;
       followUpAt?: string;
+      /**
+       * The business the agent wrote. Required when `disposition` is one of
+       * `DISPOSITIONS_REQUIRING_APPLICATION`, refused otherwise -- an
+       * application attached to "not interested" is a contradiction, and
+       * silently recording it would put a sale in the numerator that the agent
+       * never claimed.
+       */
+      application?: unknown;
     };
   }>('/api/v1/calls/disposition', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3985,6 +4021,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       callSource,
       direction,
       followUpAt,
+      application,
     } = request.body;
 
     // Validate disposition
@@ -4009,7 +4046,145 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       };
     }
 
+    /*
+     * The application, validated before anything is written.
+     *
+     * Required and refused are both enforced here rather than trusted to the
+     * screen. The two disposition screens already refuse to save without a
+     * complete form -- but a guard that lives only in a browser is a guard an
+     * integration, a script, or the next screen somebody builds does not have,
+     * and what it protects is the number the agency is priced on.
+     */
+    const requiresApplication = DISPOSITIONS_REQUIRING_APPLICATION.has(disposition);
+
+    let applicationInput: ApplicationInput | null = null;
+    if (requiresApplication) {
+      if (application === undefined || application === null) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'APPLICATION_REQUIRED',
+            message:
+              'Recording an application submitted needs the application: carrier, face amount, ' +
+              'premium, first name and last name.',
+          },
+        };
+      }
+
+      const parsed = ApplicationInputSchema.safeParse(application);
+      if (!parsed.success) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: describeApplicationIssues(parsed.error),
+          },
+        };
+      }
+      applicationInput = parsed.data;
+    } else if (application !== undefined && application !== null) {
+      /*
+       * An application on any other disposition. Refused rather than ignored:
+       * quietly dropping it loses business the agent believed they recorded,
+       * and quietly recording it puts a sale in the numerator against a call
+       * the agent marked "not interested".
+       */
+      void reply.code(400);
+      return {
+        error: {
+          code: 'APPLICATION_NOT_EXPECTED',
+          message: `An application can only be recorded with: ${[...DISPOSITIONS_REQUIRING_APPLICATION].join(', ')}`,
+        },
+      };
+    }
+
+    if (requiresApplication && !user?.userId) {
+      /*
+       * An application is attributed to the agent who wrote it -- that is what
+       * the per-agent production table reads. There is no such thing as one
+       * written by nobody.
+       */
+      void reply.code(401);
+      return {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Recording an application requires a signed-in agent',
+        },
+      };
+    }
+
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    /**
+     * Record the business, against the call we have just resolved.
+     *
+     * Called BEFORE the disposition is written, every time, so that a refused
+     * application refuses the disposition with it. The alternative -- write the
+     * label, then try the sale -- is what this endpoint used to do across two
+     * requests, and it is how a call ends up marked as a sale that the closing
+     * percentage never counted.
+     *
+     * `clientRequestId` makes it idempotent: an agent whose save timed out
+     * after the row landed presses the button again, the unique index turns the
+     * second write into a P2002, and `recordAgentApplication` answers with the
+     * row that already exists rather than charging a second credit.
+     */
+    // Bound here so the helper below closes over a narrowed value rather than
+    // the nullable one `getActingTenantId` returns.
+    const actingTenantId: string = tenantId;
+
+    async function recordTheApplication(
+      resolvedCallId: string
+    ): Promise<{ ok: true } | { ok: false; status: number; code: string; message: string }> {
+      if (!applicationInput || !user?.userId) return { ok: true };
+      try {
+        await recordAgentApplication({
+          tenantId: actingTenantId,
+          createdById: user.userId,
+          clientRequestId: applicationInput.clientRequestId,
+          callId: resolvedCallId,
+          insuranceLeadId: applicationInput.insuranceLeadId ?? null,
+          carrier: applicationInput.carrier,
+          product: applicationInput.product ?? null,
+          planType: applicationInput.planType ?? null,
+          faceAmount: applicationInput.faceAmount,
+          modalPremium: applicationInput.modalPremium,
+          paymentMode: applicationInput.paymentMode,
+          carrierApplicationNumber: applicationInput.carrierApplicationNumber ?? null,
+          firstName: applicationInput.firstName,
+          lastName: applicationInput.lastName,
+          dob: applicationInput.dob ?? null,
+          state: applicationInput.state ?? null,
+          phone: applicationInput.phone ?? null,
+        });
+        return { ok: true };
+      } catch (err) {
+        /*
+         * A call id this agent cannot claim. `attributeCall` refuses rather
+         * than downgrading, because a wrong link on the figure that sets an
+         * agency's price is worse than no link -- see `call-attribution.ts`.
+         */
+        if (err instanceof UnknownCallError) {
+          return {
+            ok: false,
+            status: 409,
+            code: 'CALL_NOT_ATTRIBUTABLE',
+            message: "That call is not this agent's to record an application against.",
+          };
+        }
+        request.log.error(
+          { err, tenantId: actingTenantId, callId: resolvedCallId },
+          'Application record failed'
+        );
+        return {
+          ok: false,
+          status: 500,
+          code: 'APPLICATION_NOT_RECORDED',
+          message:
+            'The application could not be recorded, so the call has not been marked as a sale. Try again.',
+        };
+      }
+    }
 
     // Find the call by callId or callSid (idempotent — supports repeated saves)
     let call = null;
@@ -4092,6 +4267,18 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const attribution =
         call.answeredByUserId === null && user?.userId ? { answeredByUserId: user.userId } : {};
 
+      /*
+       * The sale, before the label. A refused application leaves this call
+       * exactly as it was -- no disposition written, nothing marked saved --
+       * rather than a call reading "application submitted" with nothing in the
+       * numerator behind it.
+       */
+      const recorded = await recordTheApplication(call.id);
+      if (!recorded.ok) {
+        void reply.code(recorded.status);
+        return { error: { code: recorded.code, message: recorded.message } };
+      }
+
       // Update existing call record (idempotent upsert pattern)
       const updated = await prisma.call.update({
         where: { id: call.id },
@@ -4125,6 +4312,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       // Create a new call record if none exists (e.g. softphone call not yet tracked)
       // Use actual direction from the payload instead of hardcoding OUTBOUND
       const callDirection = direction === 'INBOUND' ? 'INBOUND' : 'OUTBOUND';
+      /*
+       * The call was never tracked, so the row is created in two steps when an
+       * application rides along: bare first, then the application against it,
+       * then the disposition. A single create carrying the disposition would
+       * write the label before the sale existed, and a failure after it would
+       * leave the same orphan this endpoint was changed to make impossible.
+       */
+      const dispositionFields = requiresApplication ? {} : { ...updateData };
+
       const newCall = await prisma.call.create({
         data: {
           tenantId,
@@ -4152,9 +4348,24 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
            * the call; it never says the call was delivered.
            */
           answeredByUserId: user?.userId || null,
-          ...updateData,
+          ...dispositionFields,
         },
       });
+
+      if (requiresApplication) {
+        const recorded = await recordTheApplication(newCall.id);
+        if (!recorded.ok) {
+          void reply.code(recorded.status);
+          return { error: { code: recorded.code, message: recorded.message } };
+        }
+        /*
+         * Only now is the call a sale. The row already exists and carries the
+         * agent and the number; what it did not carry until this line is the
+         * claim that business came off it.
+         */
+        await prisma.call.update({ where: { id: newCall.id }, data: updateData });
+        Object.assign(newCall, updateData);
+      }
 
       const rawPhone = callerNumber || newCall.toNumber || newCall.callerId;
       if (rawPhone) {
@@ -4214,6 +4425,46 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     if (!call) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
+    /*
+     * An after-the-fact edit cannot INVENT a sale.
+     *
+     * This route is the correction path -- it fixes a write-up, it does not
+     * record business, and it has no application on it to record. So marking a
+     * call `APPLICATION_SUBMITTED` here is only honest when the application
+     * already exists: otherwise the call reads as a sale, the numerator of the
+     * closing percentage does not, and the agency's measured performance drops
+     * below its real one, which on the rate curve is a higher price per
+     * application.
+     *
+     * The application is what counts, and it is recorded by
+     * `POST /api/v1/calls/disposition` or `POST /api/v1/applications`. This
+     * checks, it never writes one.
+     */
+    if (disposition !== undefined && DISPOSITIONS_REQUIRING_APPLICATION.has(disposition)) {
+      const existing = await prisma.insuranceCarrierApplication.findFirst({
+        where: {
+          tenantId,
+          callId,
+          submittedAt: { not: null },
+          // A voided application is not one -- see `rating/measurement.ts`.
+          voidedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        void reply.code(409);
+        return {
+          error: {
+            code: 'APPLICATION_REQUIRED',
+            message:
+              'This call has no submitted application on it. Record the application first; ' +
+              'marking the call alone would not count it or spend a credit.',
+          },
+        };
+      }
     }
 
     const updateData: Record<string, unknown> = {};

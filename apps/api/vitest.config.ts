@@ -61,6 +61,9 @@ const DATABASE_BACKED = [
   // `calls_tenantId_fkey` violations and a 401 where a 403 was expected --
   // neither of which names the race that caused them.
   '**/src/__tests__/call-log.test.ts',
+  // Truncates `insurance_carrier_applications`, `calls`, `tenants`, `roles`
+  // and `users` to seed one agency and its agents.
+  '**/src/__tests__/application-disposition.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
   // `TRUNCATE "tenants" CASCADE` would delete them mid-test.
