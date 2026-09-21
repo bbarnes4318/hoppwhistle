@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, PhoneOff, Plus, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { InviteAgentDialog } from '@/components/agents/invite-agent-dialog';
@@ -76,7 +76,27 @@ interface RosterAgent {
   /** Null means no hours are enforced. An empty `days` is an agent on leave. */
   schedule: AgentSchedule | null;
   softphoneStatus: string;
+  /**
+   * The agent's own on/off switch. Not `softphoneStatus`, which reports what
+   * their browser is doing and is overwritten automatically on every
+   * reconnect. This one is deliberate, durable, and the one routing obeys.
+   */
+  availableForCalls: boolean;
+  availabilityChangedAt: string | null;
   blockedReason: string | null;
+  /**
+   * The same fact as `blockedReason`, machine-readable. Branch on this, never
+   * on the sentence: the sentence is written to be read by a person and will
+   * be reworded.
+   */
+  blockedBy:
+    | 'INVITE_PENDING'
+    | 'ACCOUNT_STATUS'
+    | 'NO_LICENSED_STATES'
+    | 'NO_CAMPAIGN'
+    | 'NO_SOFTPHONE'
+    | 'UNAVAILABLE'
+    | null;
 }
 
 interface RosterCampaign {
@@ -180,6 +200,39 @@ function LicenceCell({ states }: { states: string[] }): JSX.Element {
  * showing the green word would be the screen lying.
  */
 function ReadinessCell({ agent }: { agent: RosterAgent }): JSX.Element {
+  /*
+   * An agent who has turned their own phone off is not a problem to fix, and
+   * the amber warning below would read as one. They are set up correctly and
+   * have stepped away, so it is stated plainly, in the muted colour, and the
+   * owner is told when -- which is the question they actually ask ("since
+   * when?"), and the difference between a lunch break and somebody who went
+   * off on Tuesday and never came back.
+   *
+   * This reads `blockedBy`, which the API only sets to UNAVAILABLE once every
+   * SETUP blocker is clear. An agent who is off AND has no campaign still
+   * shows the campaign, in amber: that one is the owner's to fix and will
+   * still be there when the agent comes back.
+   */
+  if (agent.blockedBy === 'UNAVAILABLE') {
+    const since = agent.availabilityChangedAt
+      ? new Date(agent.availabilityChangedAt).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null;
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+        title={since ? `Turned their phone off ${since}` : 'Turned their phone off'}
+      >
+        <PhoneOff className="h-3.5 w-3.5 shrink-0" />
+        Phone off{since ? ` · ${since}` : ''}
+      </span>
+    );
+  }
+
   if (agent.blockedReason) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">

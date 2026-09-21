@@ -123,18 +123,57 @@ async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
  * Ordered by what has to be fixed first. An agent with no licence AND no
  * campaign is told about the licence, because granting the campaign changes
  * nothing until the licence exists. One reason at a time, the earliest one.
+ *
+ * The agent's own on/off switch comes LAST, after every setup blocker. It is
+ * the only reason here that is not the agency's to fix and not a fault: an
+ * agent who is off for the afternoon is correctly configured. An agent who is
+ * off AND has no campaign has a setup problem the owner should be told about
+ * first, because it will still be there when they come back.
  */
-function blockedReason(agent: {
+type BlockerCode =
+  | 'INVITE_PENDING'
+  | 'ACCOUNT_STATUS'
+  | 'NO_LICENSED_STATES'
+  | 'NO_CAMPAIGN'
+  | 'NO_SOFTPHONE'
+  | 'UNAVAILABLE';
+
+/**
+ * The prose is for the person reading the screen; the code is for the screen.
+ * A client that has to branch on the sentence breaks the moment the sentence
+ * is reworded, and these sentences are written to be read, so they will be.
+ */
+function blocker(agent: {
   status: string;
   licensedStates: string[];
   hasSipCredential: boolean;
   campaignCount: number;
-}): string | null {
-  if (agent.status === 'PENDING') return 'Has not accepted their invitation yet';
-  if (agent.status !== 'ACTIVE') return `Account is ${agent.status.toLowerCase()}`;
-  if (agent.licensedStates.length === 0) return 'No licensed states recorded';
-  if (agent.campaignCount === 0) return 'Not assigned to a campaign';
-  if (!agent.hasSipCredential) return 'Has not opened the softphone yet';
+  availableForCalls: boolean;
+}): { code: BlockerCode; reason: string } | null {
+  if (agent.status === 'PENDING') {
+    return { code: 'INVITE_PENDING', reason: 'Has not accepted their invitation yet' };
+  }
+  if (agent.status !== 'ACTIVE') {
+    return { code: 'ACCOUNT_STATUS', reason: `Account is ${agent.status.toLowerCase()}` };
+  }
+  if (agent.licensedStates.length === 0) {
+    return { code: 'NO_LICENSED_STATES', reason: 'No licensed states recorded' };
+  }
+  if (agent.campaignCount === 0) {
+    return { code: 'NO_CAMPAIGN', reason: 'Not assigned to a campaign' };
+  }
+  if (!agent.hasSipCredential) {
+    return { code: 'NO_SOFTPHONE', reason: 'Has not opened the softphone yet' };
+  }
+  /*
+   * `=== false`, not `!`. Same posture as the routing gate this mirrors: only a
+   * POSITIVE "I am off" blocks. A value that is missing for any reason reads as
+   * available, because that is what routing will do with it, and a roster that
+   * said otherwise would send an owner looking for a problem that is not there.
+   */
+  if (agent.availableForCalls === false) {
+    return { code: 'UNAVAILABLE', reason: 'Has turned their phone off' };
+  }
   return null;
 }
 
@@ -166,6 +205,8 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           firstName: true,
           lastName: true,
           status: true,
+          availableForCalls: true,
+          availabilityChangedAt: true,
           lastLoginAt: true,
           metadata: true,
           createdAt: true,
@@ -224,6 +265,14 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           user.sipCredential.status === 'ACTIVE' &&
           user.sipCredential.passwordEncrypted !== null;
 
+        const blocked = blocker({
+          status: user.status,
+          licensedStates,
+          hasSipCredential,
+          campaignCount: assignedCampaigns.length,
+          availableForCalls: user.availableForCalls,
+        });
+
         return {
           id: user.id,
           email: user.email,
@@ -253,12 +302,21 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
               }
             : null,
           softphoneStatus: statuses.get(user.id) ?? 'offline',
-          blockedReason: blockedReason({
-            status: user.status,
-            licensedStates,
-            hasSipCredential,
-            campaignCount: assignedCampaigns.length,
-          }),
+          /*
+           * The agent's own switch, not the Redis presence key beside it.
+           * `softphoneStatus` says what their browser is doing and is
+           * overwritten automatically; this is what the person decided, and it
+           * is the one routing obeys.
+           */
+          availableForCalls: user.availableForCalls,
+          availabilityChangedAt: user.availabilityChangedAt?.toISOString() ?? null,
+          blockedReason: blocked?.reason ?? null,
+          /**
+           * The same fact, machine-readable. `UNAVAILABLE` is the one the
+           * screen renders differently: an agent who stepped away is not a
+           * misconfiguration and must not be shown as one.
+           */
+          blockedBy: blocked?.code ?? null,
         };
       });
 

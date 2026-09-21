@@ -18,6 +18,7 @@ import {
 import { useState, useEffect, useMemo } from 'react';
 
 import { AgentStatusSelector } from './agent-status-selector';
+import { AvailabilitySwitch } from './availability-switch';
 import { CallControls } from './call-controls';
 import { CustomerDetailsPanel } from './CustomerDetailsPanel';
 import { DialPad } from './dial-pad';
@@ -294,8 +295,14 @@ export function AgentPhonePanel(): JSX.Element | null {
             </div>
             <div>
               <h3 className="font-bold text-ink text-xs leading-none">Softphone</h3>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5">
+                {/*
+                  Two different facts, deliberately side by side. The selector
+                  reports what the SOFTPHONE is doing; the switch is what the
+                  AGENT decided, and it is the one routing obeys.
+                */}
                 <AgentStatusSelector />
+                <AvailabilitySwitch />
               </div>
             </div>
           </div>

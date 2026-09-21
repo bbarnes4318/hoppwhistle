@@ -72,6 +72,8 @@ function agentRow(overrides: Record<string, any> = {}) {
     firstName: 'Dana',
     lastName: 'Reed',
     status: 'ACTIVE',
+    availableForCalls: true,
+    availabilityChangedAt: null,
     lastLoginAt: null,
     metadata: { licensedStates: ['TN'] },
     createdAt: new Date('2026-01-01'),
@@ -153,6 +155,53 @@ describe('GET /api/v1/agent-roster', () => {
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
     expect((response.json() as any).data.agents[0].blockedReason).toMatch(/campaign/i);
+  });
+
+  it("names the agent's own switch once every setup blocker is clear", async () => {
+    prisma.user.findMany.mockResolvedValue([
+      agentRow({
+        availableForCalls: false,
+        availabilityChangedAt: new Date('2026-09-21T12:30:00.000Z'),
+      }),
+    ]);
+    prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+    const agent = (response.json() as any).data.agents[0];
+
+    expect(agent.blockedBy).toBe('UNAVAILABLE');
+    expect(agent.blockedReason).toMatch(/phone off/i);
+    expect(agent.availableForCalls).toBe(false);
+    // "Since when" is the question an owner asks next: a lunch break and
+    // somebody who went off on Tuesday read identically without it.
+    expect(agent.availabilityChangedAt).toBe('2026-09-21T12:30:00.000Z');
+  });
+
+  it('names a setup blocker ahead of the agent being off', async () => {
+    prisma.user.findMany.mockResolvedValue([agentRow({ availableForCalls: false })]);
+    prisma.campaignAgent.findMany.mockResolvedValue([]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+    const agent = (response.json() as any).data.agents[0];
+
+    // The campaign is the owner's to fix and will still be missing when the
+    // agent comes back. Reporting the break instead sends nobody to fix it.
+    expect(agent.blockedBy).toBe('NO_CAMPAIGN');
+    expect(agent.blockedReason).toMatch(/campaign/i);
+  });
+
+  it('treats a missing availability value as available, never as off', async () => {
+    const row = agentRow({});
+    delete (row as Record<string, unknown>).availableForCalls;
+    prisma.user.findMany.mockResolvedValue([row]);
+    prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+
+    // Routing rings an agent it has not been told to stop ringing. A roster
+    // that showed them as off would describe a state the dialer does not act
+    // on, and send an owner looking for a problem that is not there.
+    expect((response.json() as any).data.agents[0].blockedBy).toBeNull();
   });
 
   it('names the invitation before anything else', async () => {

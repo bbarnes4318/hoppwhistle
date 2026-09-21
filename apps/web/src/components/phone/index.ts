@@ -2,6 +2,7 @@
 export { AgentPhonePanel } from './agent-phone-panel';
 export { GlobalDispositionModal } from './global-disposition-modal';
 export { AgentStatusSelector } from './agent-status-selector';
+export { AvailabilitySwitch } from './availability-switch';
 export { CallControls } from './call-controls';
 export { CallTransferDialog } from './call-transfer-dialog';
 export { DialPad } from './dial-pad';
@@ -21,4 +22,3 @@ export {
 export { ScreenPop } from './screen-pop';
 export { ScreenPopSettings } from './screen-pop-settings';
 export { AddCallDialog } from './add-call-dialog';
-

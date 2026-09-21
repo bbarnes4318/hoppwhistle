@@ -258,6 +258,105 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   });
 
   /**
+   * GET /api/v1/agent/availability
+   *
+   * Whether this agent is taking calls, as they declared it.
+   */
+  fastify.get(
+    '/api/v1/agent/availability',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+
+      const row = await getPrismaClient().user.findFirst({
+        where: { id: agent.userId, tenantId: agent.tenantId },
+        select: { availableForCalls: true, availabilityChangedAt: true },
+      });
+
+      return {
+        // Absent reads as available, matching the column default: an agent whose
+        // row could not be read must not be silently taken off the queue.
+        availableForCalls: row?.availableForCalls ?? true,
+        changedAt: row?.availabilityChangedAt?.toISOString() ?? null,
+      };
+    }
+  );
+
+  /**
+   * PUT /api/v1/agent/availability
+   *
+   * The agent turns their own phone on or off.
+   *
+   * ── Why this is not `PUT /api/v1/agent/status` ───────────────────────────
+   *
+   * That endpoint writes `agent:status:<id>` in Redis, and the softphone writes
+   * it automatically on every SIP lifecycle event -- including an unconditional
+   * 'available' on registration and on every reconnect. An agent who set
+   * themselves away there had their choice silently undone by the next
+   * transport blip, and `services/routing.ts` ignores that key anyway, for the
+   * documented reason that browser-inferred presence goes stale.
+   *
+   * This is the other kind of fact: a deliberate declaration, stored durably,
+   * that nothing automatic overwrites -- which is what makes it safe for
+   * routing to obey.
+   */
+  fastify.put<{ Body: { availableForCalls?: unknown } }>(
+    '/api/v1/agent/availability',
+    async (request, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
+
+      const { availableForCalls } = request.body ?? {};
+      if (typeof availableForCalls !== 'boolean') {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'availableForCalls must be true or false',
+          },
+        };
+      }
+
+      const prisma = getPrismaClient();
+
+      /*
+       * Scoped to the acting agency as well as the user. `userId` comes from
+       * the authenticated principal so it cannot name somebody else, and the
+       * tenant filter keeps that true even for a platform operator acting
+       * inside an agency.
+       */
+      const { count } = await prisma.user.updateMany({
+        where: { id: userId, tenantId },
+        data: { availableForCalls, availabilityChangedAt: new Date() },
+      });
+
+      if (count === 0) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'No such agent in this agency' } };
+      }
+
+      /*
+       * Logged to the same append-only table the softphone transitions go to,
+       * so "how long was this agent on the queue today" still has one place to
+       * read. Distinct status strings, because turning the phone off is a
+       * different act from a tab closing and a supervisor reading the log
+       * needs to tell them apart. Best-effort, exactly as the softphone
+       * transitions are: a reporting gap must never fail the toggle.
+       */
+      await recordAgentStateEvent(userId, availableForCalls ? 'on-queue' : 'off-queue');
+
+      void eventBus.publish('call.*', {
+        event: 'agent.availability.changed',
+        tenantId,
+        data: { agentId: userId, availableForCalls, timestamp: new Date().toISOString() },
+      });
+
+      return { availableForCalls, changedAt: new Date().toISOString() };
+    }
+  );
+
+  /**
    * PUT /api/v1/agent/status
    * Update agent status
    */
@@ -456,8 +555,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           if (callerId) {
             const requested = userNumbers.find(
               n =>
-                n.number === callerId ||
-                n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
+                n.number === callerId || n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
             );
             outboundCallerId = (requested ?? userNumbers[0]).number;
           } else {
@@ -752,8 +850,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       endReason,
     } = request.body || {};
     const agent = requireAgent(request, reply);
-      if (!agent) return;
-      const { userId, tenantId } = agent;
+    if (!agent) return;
+    const { userId, tenantId } = agent;
     const prisma = getPrismaClient();
 
     // Get call from PostgreSQL
