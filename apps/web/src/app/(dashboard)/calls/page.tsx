@@ -50,6 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, isNoActingTenant } from '@/lib/api';
+import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
@@ -100,7 +101,41 @@ interface CallRecord {
   disposition?: string | null;
   dispositionNotes?: string | null;
   callSource?: string | null;
+  /**
+   * The agent who ANSWERED the call, resolved server-side.
+   *
+   * Not `createdBy`, which is whoever caused the row to exist -- an importer,
+   * a click-to-dial, a disposition save -- and is null on the inbound calls
+   * that make up the floor's day. `agentName` null means unattributed, which
+   * is a statement about what was recorded and is rendered as its own thing.
+   */
+  answeredByUserId?: string | null;
+  agentName?: string | null;
 }
+
+/**
+ * The canonical dispositions, and how they read on screen.
+ *
+ * The list mirrors `VALID_DISPOSITIONS` in `apps/api/src/routes/index.ts`,
+ * which is what the write path enforces. Anything not in it renders verbatim
+ * rather than being hidden: a value the API accepted and this map has not
+ * caught up with is still the truth about that call, and blanking it would
+ * make the screen quietly disagree with the database.
+ */
+const DISPOSITION_LABELS: Record<string, string> = {
+  APPLICATION_SUBMITTED: 'Application submitted',
+  LIVE_TRANSFER: 'Live transfer',
+  SET_APPOINTMENT: 'Appointment set',
+  SET_CALLBACK: 'Callback set',
+  FOLLOW_UP: 'Follow up',
+  VERIFIED: 'Verified',
+  NOT_INTERESTED: 'Not interested',
+  NOT_QUALIFIED: 'Not qualified',
+  NO_MEMORY_CONFUSED: 'No memory / confused',
+  WRONG_NUMBER: 'Wrong number',
+  NO_ANSWER: 'No answer',
+  DISCONNECTED: 'Disconnected',
+};
 
 interface CallDetail extends CallRecord {
   legs?: Array<{
@@ -208,10 +243,46 @@ export default function OperationsCallLogsPage() {
   const [selectedBuyerId, setSelectedBuyerId] = useState<string>('all');
   const [selectedDisputeStatus, setSelectedDisputeStatus] = useState<string>('all');
   const [selectedListId, setSelectedListId] = useState<string>('all');
+  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  /*
+   * Seeded from the URL so the team report can link straight to one agent's
+   * calls, which is the drill-down that screen never had: it showed a closing
+   * percentage with no way to read the calls behind it.
+   *
+   * Read once, at mount, rather than kept in sync with the address bar. The
+   * filter is a control the user then drives; re-reading the query on every
+   * render would fight them for it, snapping the dropdown back to whatever the
+   * link said every time they changed it.
+   */
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'all';
+    return new URLSearchParams(window.location.search).get('agentId') ?? 'all';
+  });
+  const [selectedDisposition, setSelectedDisposition] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'all';
+    return new URLSearchParams(window.location.search).get('disposition') ?? 'all';
+  });
 
-  const [datePreset, setDatePreset] = useState<string>('All Time');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  /*
+   * `?from=` and `?to=` arrive with an agent link so the drill-down lands on
+   * the SAME window the report was showing. Without them a principal clicking
+   * an agent's seven-day closing percentage would get that agent's calls for
+   * all time, and the two screens would disagree about the number the click
+   * started from.
+   */
+  const [datePreset, setDatePreset] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'All Time';
+    const query = new URLSearchParams(window.location.search);
+    return query.get('from') || query.get('to') ? 'Custom' : 'All Time';
+  });
+  const [fromDate, setFromDate] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('from') ?? '';
+  });
+  const [toDate, setToDate] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('to') ?? '';
+  });
 
   // Selected Call Detail Drawer
   const [detailCallId, setDetailCallId] = useState<string | null>(null);
@@ -226,21 +297,13 @@ export default function OperationsCallLogsPage() {
 
   // Column Selection and Visibility
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('hopwhistle_calls_columns');
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          // Ignore invalid JSON in local storage
-        }
-      }
-    }
-    return {
+    const defaults: Record<string, boolean> = {
       time: true,
+      agentName: true,
       campaignName: true,
       callerId: true,
       duration: true,
+      disposition: true,
       status: false,
       recording: true,
       dispositionNotes: true,
@@ -256,6 +319,22 @@ export default function OperationsCallLogsPage() {
       profit: false,
       margin: false,
     };
+
+    if (typeof window === 'undefined') return defaults;
+
+    /*
+     * MERGED under the defaults, never returned in place of them -- see
+     * `lib/call-column-visibility.ts`, which holds the reasoning and the
+     * tests. In short: this used to be `return JSON.parse(stored)`, which
+     * hid every column added after a user's last visit, permanently, from
+     * exactly the people who use this screen most.
+     */
+    try {
+      return resolveVisibleColumns(localStorage.getItem('hopwhistle_calls_columns'), defaults);
+    } catch {
+      // Reading localStorage throws outright in some privacy modes.
+      return defaults;
+    }
   });
 
   const toggleColumn = (columnId: string) => {
@@ -270,6 +349,9 @@ export default function OperationsCallLogsPage() {
 
   const columns = [
     { id: 'time', label: 'Time', canSee: true },
+    // Second, beside the time. The two questions asked of any row on this
+    // screen are "when" and "who", in that order.
+    { id: 'agentName', label: 'Agent', canSee: true },
     { id: 'publisherName', label: 'Publisher', canSee: !!isAdminOrOwner },
     { id: 'buyerName', label: 'Buyer', canSee: !!isAdminOrOwner },
     { id: 'campaignName', label: 'Campaign', canSee: true },
@@ -285,6 +367,9 @@ export default function OperationsCallLogsPage() {
     { id: 'profit', label: 'Profit', canSee: !!isAdminOrOwner },
     { id: 'margin', label: 'Margin', canSee: !!isAdminOrOwner },
     { id: 'status', label: 'Status', canSee: true },
+    // The canonical outcome, beside the free text about it. The screen showed
+    // the notes and not the disposition, which is the one that is countable.
+    { id: 'disposition', label: 'Disposition', canSee: true },
     { id: 'dispositionNotes', label: 'Call Notes', canSee: true },
     { id: 'recording', label: 'Recording', canSee: true },
   ];
@@ -369,6 +454,24 @@ export default function OperationsCallLogsPage() {
         }
 
         if (isAdminOrOwner) {
+          /*
+           * The agent filter's options, from the roster the agency already
+           * manages. Principals only: an agent's list is their own calls, so
+           * there is nobody for them to pick, and asking would hand them a
+           * directory of their colleagues.
+           *
+           * A roster that will not load leaves the filter out rather than
+           * failing the page. The ledger's job is to list calls.
+           */
+          const rosterRes = await apiClient.get<{
+            data: { agents: { id: string; name: string }[] };
+          }>('/api/v1/agent-roster');
+          if (rosterRes.data?.data?.agents) {
+            setAgents(
+              rosterRes.data.data.agents.map(agent => ({ id: agent.id, name: agent.name }))
+            );
+          }
+
           const pubRes = await apiClient.get<any>('/api/v1/publishers');
           if (pubRes.data) {
             const list = Array.isArray(pubRes.data)
@@ -419,6 +522,12 @@ export default function OperationsCallLogsPage() {
       if (endIso) queryParams.append('endDate', endIso);
 
       // Filters
+      if (selectedAgentId !== 'all') {
+        queryParams.append('agentId', selectedAgentId);
+      }
+      if (selectedDisposition !== 'all') {
+        queryParams.append('disposition', selectedDisposition);
+      }
       if (selectedCampaignId !== 'all') {
         queryParams.append('campaignId', selectedCampaignId);
       }
@@ -465,6 +574,8 @@ export default function OperationsCallLogsPage() {
     datePreset,
     fromDate,
     toDate,
+    selectedAgentId,
+    selectedDisposition,
     selectedCampaignId,
     selectedPublisherId,
     selectedBuyerId,
@@ -498,6 +609,8 @@ export default function OperationsCallLogsPage() {
       if (startIso) queryParams.append('startDate', startIso);
       if (endIso) queryParams.append('endDate', endIso);
 
+      if (selectedAgentId !== 'all') queryParams.append('agentId', selectedAgentId);
+      if (selectedDisposition !== 'all') queryParams.append('disposition', selectedDisposition);
       if (selectedCampaignId !== 'all') queryParams.append('campaignId', selectedCampaignId);
       if (selectedPublisherId !== 'all') queryParams.append('publisherId', selectedPublisherId);
       if (selectedBuyerId !== 'all') queryParams.append('buyerId', selectedBuyerId);
@@ -839,6 +952,60 @@ export default function OperationsCallLogsPage() {
           </Select>
         </div>
 
+        {/* Agent Filter — principals only; an agent's list is already their own */}
+        {isAdminOrOwner && agents.length > 0 && (
+          <div>
+            <Select
+              value={selectedAgentId}
+              onValueChange={val => {
+                setSelectedAgentId(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="bg-surface border-rule text-ink">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent className="bg-surface border-rule text-ink">
+                <SelectItem value="all">All Agents</SelectItem>
+                {agents.map(agent => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Disposition Filter */}
+        <div>
+          <Select
+            value={selectedDisposition}
+            onValueChange={val => {
+              setSelectedDisposition(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="bg-surface border-rule text-ink">
+              <SelectValue placeholder="All Dispositions" />
+            </SelectTrigger>
+            <SelectContent className="bg-surface border-rule text-ink">
+              <SelectItem value="all">All Dispositions</SelectItem>
+              {/*
+               * "Not written up" is a filter of its own, not the absence of
+               * one: leaving this on "All" means every call. It is the
+               * end-of-shift question -- which calls has nobody dispositioned.
+               */}
+              <SelectItem value="NONE">Not written up</SelectItem>
+              {Object.entries(DISPOSITION_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Campaign Filter */}
         <div>
           <Select
@@ -988,6 +1155,9 @@ export default function OperationsCallLogsPage() {
                 {visibleColumns.time && (
                   <TableHead className="text-ink-3 font-medium pl-6">Time</TableHead>
                 )}
+                {visibleColumns.agentName && (
+                  <TableHead className="text-ink-3 font-medium">Agent</TableHead>
+                )}
                 {visibleColumns.publisherName && isAdminOrOwner && (
                   <TableHead className="text-ink-3 font-medium">Publisher</TableHead>
                 )}
@@ -1034,6 +1204,9 @@ export default function OperationsCallLogsPage() {
                 {visibleColumns.status && (
                   <TableHead className="text-ink-3 font-medium text-center">Status</TableHead>
                 )}{' '}
+                {visibleColumns.disposition && (
+                  <TableHead className="text-ink-3 font-medium">Disposition</TableHead>
+                )}
                 {visibleColumns.dispositionNotes && (
                   <TableHead className="text-ink-3 font-medium">Call Notes</TableHead>
                 )}
@@ -1127,6 +1300,27 @@ export default function OperationsCallLogsPage() {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
+                        </TableCell>
+                      )}
+                      {visibleColumns.agentName && (
+                        <TableCell className="text-xs">
+                          {call.agentName ? (
+                            <span className="font-medium text-ink">{call.agentName}</span>
+                          ) : (
+                            /*
+                             * Its own reading, not an em dash beside every
+                             * other missing value on the row. "Nobody is
+                             * recorded as having taken this" is a fact a floor
+                             * lead acts on -- it is the call that went to an
+                             * empty chair, or the one an agent never wrote up.
+                             */
+                            <span
+                              className="text-ink-3 italic"
+                              title="No agent is recorded as having answered this call"
+                            >
+                              Unattributed
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.publisherName && isAdminOrOwner && (
@@ -1238,6 +1432,19 @@ export default function OperationsCallLogsPage() {
                               </div>
                             )}
                           </div>
+                        </TableCell>
+                      )}
+                      {visibleColumns.disposition && (
+                        <TableCell className="text-xs">
+                          {call.disposition ? (
+                            <span className="rounded-control border border-rule bg-sunken px-1.5 py-0.5 font-medium text-ink-2">
+                              {DISPOSITION_LABELS[call.disposition] ?? call.disposition}
+                            </span>
+                          ) : (
+                            <span className="text-ink-3" title="Not written up yet">
+                              Not set
+                            </span>
+                          )}
                         </TableCell>
                       )}
                       {visibleColumns.dispositionNotes && (
@@ -1541,11 +1748,31 @@ export default function OperationsCallLogsPage() {
                       </div>
                     )}
 
-                    {/* Outcome notes */}
-                    <div className="bg-sunken border border-rule rounded-lg p-4 space-y-2">
+                    {/* Who took it, and how they wrote it up */}
+                    <div className="bg-sunken border border-rule rounded-lg p-4 space-y-3">
                       <h4 className="text-xs font-bold text-ink-3 uppercase tracking-widest">
                         Agent Notes / Outcome
                       </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] text-ink-3">Answered by</span>
+                          <p className="text-xs font-medium text-ink mt-0.5">
+                            {detailCall.agentName ?? (
+                              <span className="italic text-ink-3">Unattributed</span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-ink-3">Disposition</span>
+                          <p className="text-xs font-medium text-ink mt-0.5">
+                            {detailCall.disposition ? (
+                              (DISPOSITION_LABELS[detailCall.disposition] ?? detailCall.disposition)
+                            ) : (
+                              <span className="text-ink-3">Not written up</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
                       <p className="text-xs text-ink-2 leading-relaxed font-sans">
                         {detailCall.dispositionNotes || 'No notes were recorded for this call.'}
                       </p>

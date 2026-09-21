@@ -54,6 +54,13 @@ const DATABASE_BACKED = [
   // `tenants`, `roles` and the insurance tables to do it.
   '**/src/__tests__/agent-licensed-states.test.ts',
   '**/src/__tests__/audit-log.test.ts',
+  // Truncates `calls`, `tenants`, `roles` and `users` to seed two agencies
+  // with a principal and two agents each. Left off this list it ran on the
+  // default pool beside settlement.test.ts and the two deleted each other's
+  // fixtures: twenty failures across both files, reported as
+  // `calls_tenantId_fkey` violations and a 401 where a 403 was expected --
+  // neither of which names the race that caused them.
+  '**/src/__tests__/call-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
   // `TRUNCATE "tenants" CASCADE` would delete them mid-test.

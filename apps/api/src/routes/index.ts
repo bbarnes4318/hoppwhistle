@@ -30,6 +30,10 @@ function buildCallWhere(params: {
   campaignId?: string | null;
   disputeStatus?: string | null;
   listPhoneNumbers?: string[];
+  /** One agent's calls, by `answeredByUserId`. Ignored for a non-principal. */
+  agentId?: string | null;
+  /** One disposition, or `NONE` for the calls nobody has written up. */
+  disposition?: string | null;
 }) {
   const {
     tenantId,
@@ -45,6 +49,8 @@ function buildCallWhere(params: {
     campaignId,
     disputeStatus,
     listPhoneNumbers,
+    agentId,
+    disposition,
   } = params;
   const where: Record<string, any> = { tenantId };
 
@@ -68,7 +74,21 @@ function buildCallWhere(params: {
           numberFormats.push('1' + num);
         }
       }
+      /*
+       * "My calls", and the clause it was missing.
+       *
+       * The sidebar promises an agent that this list is "narrowed server-side
+       * to the ones you took". It was narrowed to the calls they CREATED and
+       * to the phone numbers assigned to them -- and an agent taking inbound
+       * Final Expense calls satisfies neither. The row is created by the
+       * inbound handler, and the DID belongs to the agency, not to the agent,
+       * so `userNumbers` is empty for the entire floor.
+       *
+       * The result was the one list an agent looks at every day showing
+       * everything except the calls they actually answered.
+       */
       where.OR = [
+        { answeredByUserId: userId },
         { createdById: userId },
         { fromNumber: { userId: userId } },
         { callerId: { in: numberFormats } },
@@ -98,6 +118,31 @@ function buildCallWhere(params: {
     } else {
       where.disputeStatus = disputeStatus;
     }
+  }
+
+  /*
+   * One agent's calls.
+   *
+   * Set for a principal picking an agent off the roster or arriving from the
+   * team report. It is deliberately NOT applied for a non-principal: their own
+   * `where.OR` above already limits them to their own calls, and letting an
+   * `agentId` narrow further inside that set is harmless, but letting it
+   * WIDEN would be a tenant-scoped agent reading a colleague's calls. The
+   * callers pass it only when `isAdminOrOwner`, and it is an AND with the OR,
+   * never a replacement for it.
+   */
+  if (agentId) {
+    where.answeredByUserId = agentId;
+  }
+
+  /*
+   * `NONE` is a real answer, not an absent filter. "Which calls has nobody
+   * written up yet" is the question a floor lead asks at the end of a shift,
+   * and it cannot be expressed by leaving the parameter off -- that means "all
+   * calls". Same shape as the dispute filter above, for the same reason.
+   */
+  if (disposition) {
+    where.disposition = disposition === 'NONE' ? null : disposition;
   }
 
   const andClauses: any[] = [];
@@ -324,6 +369,60 @@ function csvEscape(value: any): string {
   return `"${str.replace(/"/g, '""')}"`;
 }
 
+/**
+ * Resolve the agent who answered each call, in one query for the page.
+ *
+ * ── Why a lookup and not a Prisma relation ──────────────────────────────────
+ *
+ * `Call.answeredByUserId` carries no foreign key. The column was backfilled
+ * from a `metadata.answeredByAgentId` JSON key written by an older softphone,
+ * and a backfilled id can name a user who has since been deleted -- so adding
+ * the constraint is a migration that can fail on live data, for a join this
+ * does in one indexed read against the primary key.
+ *
+ * It also buys a property the relation would not: the lookup is SCOPED TO THE
+ * TENANT. A stale id from another agency resolves to nothing rather than
+ * printing that agency's employee's name on this agency's call ledger.
+ *
+ * The result is attached as `answeredBy` so `mapCallRecord` reads it exactly as
+ * it reads Prisma's own includes, and nothing downstream has to know the
+ * difference.
+ */
+async function attachAnsweredBy<T extends { answeredByUserId?: string | null }>(
+  calls: T[],
+  prisma: any,
+  tenantId: string
+): Promise<void> {
+  const ids = [
+    ...new Set(calls.map(call => call.answeredByUserId).filter((id): id is string => !!id)),
+  ];
+  if (ids.length === 0) return;
+
+  let users: { id: string; firstName: string | null; lastName: string | null; email: string }[] =
+    [];
+  try {
+    users = await prisma.user.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+  } catch {
+    /*
+     * A name is a label on a row that is otherwise complete. If this read
+     * fails, every call still lists with its time, number, duration and
+     * disposition and the agent column reads as unattributed -- which is worse
+     * than the truth but far better than a ledger that will not load.
+     */
+    return;
+  }
+
+  const byId = new Map(users.map(user => [user.id, user]));
+  for (const call of calls) {
+    (call as { answeredBy?: unknown }).answeredBy = call.answeredByUserId
+      ? (byId.get(call.answeredByUserId) ?? null)
+      : null;
+  }
+}
+
 function mapCallRecord(
   call: any,
   apiBaseUrl: string,
@@ -536,6 +635,28 @@ function mapCallRecord(
     fromNumber: call.fromNumber ? { id: call.fromNumber.id, number: call.fromNumber.number } : null,
     createdBy: call.createdBy
       ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
+      : null,
+    /*
+     * The agent who took the call.
+     *
+     * `createdBy` above is NOT this, and reading it as this is the mistake the
+     * ledger made for as long as it existed. `createdById` is whoever caused
+     * the ROW to exist -- an importer, a click-to-dial, a disposition save --
+     * and on an inbound call routed to an agency's floor it is usually null.
+     * `answeredByUserId` is who picked the phone up, and it is what the
+     * per-agent table and the closing percentage are built on.
+     *
+     * `agentName` is resolved here rather than in each caller so the ledger,
+     * the CSV and the detail drawer cannot disagree about how a missing name
+     * reads. Null means unattributed, and callers must render that as its own
+     * state -- an empty cell says "nobody" to a floor lead, which is a claim
+     * about the call rather than about what we recorded.
+     */
+    answeredByUserId: call.answeredByUserId ?? null,
+    agentName: call.answeredBy
+      ? [call.answeredBy.firstName, call.answeredBy.lastName].filter(Boolean).join(' ') ||
+        call.answeredBy.email ||
+        null
       : null,
     createdAt: call.createdAt.toISOString(),
     updatedAt: call.updatedAt.toISOString(),
@@ -2895,6 +3016,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       campaignId?: string;
       disputeStatus?: string;
       listId?: string;
+      agentId?: string;
+      disposition?: string;
     };
   }>('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -2997,6 +3120,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       campaignId: request.query.campaignId,
       disputeStatus: request.query.disputeStatus,
       listPhoneNumbers,
+      /*
+       * Only a principal may name an agent. For anybody else the parameter is
+       * dropped rather than refused: their list is already their own calls,
+       * and a 400 on a stray query parameter would break a bookmarked link
+       * shared from a principal's screen for no gain.
+       */
+      agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
+      disposition: request.query.disposition,
     });
 
     const [calls, total] = await Promise.all([
@@ -3020,6 +3151,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       }),
       prisma.call.count({ where }),
     ]);
+
+    await attachAnsweredBy(calls, prisma, tenantId);
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
     const mappedCalls = calls.map(call =>
@@ -3049,6 +3182,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       campaignId?: string;
       disputeStatus?: string;
       listId?: string;
+      agentId?: string;
+      disposition?: string;
     };
   }>('/api/v1/calls/export.csv', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3127,6 +3262,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       campaignId: request.query.campaignId,
       disputeStatus: request.query.disputeStatus,
       listPhoneNumbers,
+      /*
+       * Only a principal may name an agent. For anybody else the parameter is
+       * dropped rather than refused: their list is already their own calls,
+       * and a 400 on a stray query parameter would break a bookmarked link
+       * shared from a principal's screen for no gain.
+       */
+      agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
+      disposition: request.query.disposition,
     });
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
@@ -3164,7 +3307,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       'Duration',
       'Connected Duration',
       'Billable',
+      'Agent',
       'Disposition',
+      'Disposition Notes',
       'Source',
       'Buyer Charge Status',
       'Publisher Payout Status',
@@ -3209,6 +3354,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         break;
       }
 
+      await attachAnsweredBy(batch, prisma, tenantId);
+
       const mappedBatch = batch.map(call => {
         const mapped = mapCallRecord(call, apiBaseUrl, prisma, request, true, profile);
 
@@ -3225,7 +3372,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           mapped.duration ? formatDuration(mapped.duration) : '0:00',
           mapped.connectedDuration ? formatDuration(mapped.connectedDuration) : '0:00',
           mapped.billable ? 'Y' : 'N',
+          /*
+           * Named, not blank. An empty cell in a spreadsheet reads as "no
+           * agent", which is a claim about the call; this is a claim about
+           * what we recorded, and the two are worth telling apart when
+           * somebody sorts the export by this column.
+           */
+          mapped.agentName || 'Unattributed',
           mapped.disposition || '',
+          mapped.dispositionNotes || '',
           mapped.callSource || '',
           mapped.buyerChargeStatus || '',
           mapped.publisherPayoutStatus || '',
@@ -3432,7 +3587,19 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           numberFormats.includes(callTo) ||
           numberFormats.includes(callDid);
 
-        if (call.createdById !== user?.userId && !hasNumberMatch) {
+        /*
+         * The call they ANSWERED counts as theirs.
+         *
+         * This used to be `createdById` and a number match, neither of which
+         * an inbound call routed to a softphone satisfies: the row is created
+         * by the inbound handler, not the agent, and the agent owns no
+         * `PhoneNumber` -- their DID belongs to the agency. So an agent could
+         * take a call, write it up, see it in their own figures on My day, and
+         * then be refused when they clicked it to re-read their notes.
+         */
+        const answeredByThisAgent = !!user?.userId && call.answeredByUserId === user.userId;
+
+        if (call.createdById !== user?.userId && !answeredByThisAgent && !hasNumberMatch) {
           void reply.code(403);
           return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
         }
@@ -3441,6 +3608,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
       }
     }
+
+    await attachAnsweredBy([call], prisma, tenantId);
 
     const mapped = mapCallRecord(
       call,
@@ -3893,11 +4062,42 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         }
       }
 
+      /*
+       * Who took this call, when nothing else recorded it.
+       *
+       * `answeredByUserId` had exactly one writer: the softphone answer
+       * handler in `routes/agent-phone.ts`. Every other way a call reaches a
+       * disposition -- the call-centre console, a click-to-dial that was never
+       * answered through that endpoint, a row this very request is about to
+       * create -- left it null. Those calls then read as UNATTRIBUTED in the
+       * per-agent table the agency principal coaches from, and showed no agent
+       * at all on the call ledger.
+       *
+       * The person saving a disposition is the person who handled the call, so
+       * they are the honest answer when there is no better one.
+       *
+       * ONLY WHEN IT IS NULL. This endpoint is idempotent and is re-called on
+       * repeated saves; a supervisor or a later correction must never be able
+       * to take a call off the agent who actually answered it. An existing
+       * attribution is a fact from the answer handler and outranks this guess.
+       *
+       * This does not move any money. A delivered call is INBOUND, not blocked,
+       * with `answeredAt` in the window -- see `rating/measurement.ts` -- and
+       * none of those three are touched here. What changes is which agent a
+       * call already in the agency's total is credited to: a delivered call
+       * that read as unattributed now names somebody. The agency total is the
+       * same number either way, which is the property that lets the per-agent
+       * table reconcile with it.
+       */
+      const attribution =
+        call.answeredByUserId === null && user?.userId ? { answeredByUserId: user.userId } : {};
+
       // Update existing call record (idempotent upsert pattern)
       const updated = await prisma.call.update({
         where: { id: call.id },
         data: {
           ...updateData,
+          ...attribution,
           status: 'COMPLETED',
           endedAt: finalEndedAt,
           duration: finalDuration,
@@ -3933,6 +4133,25 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           status: 'COMPLETED',
           direction: callDirection,
           createdById: user?.userId || null,
+          /*
+           * `createdById` alone is not attribution. It is written here and
+           * nowhere else on an inbound call, and the per-agent table groups by
+           * `answeredByUserId` -- so a row created by a disposition save used
+           * to count for nobody: the agent who made the call and wrote it up
+           * did not see it in their own figures, and their agency's per-agent
+           * total did not reconcile with its agency total.
+           *
+           * There is no ambiguity on this path: the row exists BECAUSE this
+           * agent dispositioned a call no other record covers.
+           *
+           * `answeredAt` is deliberately NOT set here, and must not be. It is
+           * what `rating/measurement.ts` counts to bill the agency for a
+           * delivered call, and this endpoint is reachable by any agent: a
+           * disposition save that stamped it would let the floor mint billable
+           * delivered calls by writing calls up. This column says who handled
+           * the call; it never says the call was delivered.
+           */
+          answeredByUserId: user?.userId || null,
           ...updateData,
         },
       });

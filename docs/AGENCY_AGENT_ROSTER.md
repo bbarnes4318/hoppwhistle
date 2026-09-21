@@ -358,7 +358,81 @@ the agent comes back.
 
 ---
 
-## 11. What this does NOT do
+## 11. Every call, with the agent who took it
+
+`GET /api/v1/calls` and `GET /api/v1/calls/export.csv`, on the ledger at
+`/calls`.
+
+The ledger could show every call and could not show **who took any of them**.
+It returned `createdBy` — whoever caused the ROW to exist, which for an inbound
+call routed to the floor is the inbound handler, so null — and never
+`answeredByUserId`, which is who picked the phone up and is what the per-agent
+table and the closing percentage are built on. There was no agent column, no
+agent filter, and no disposition column: the table showed the free-text call
+notes and not the canonical outcome beside them.
+
+The agent's own list was worse than incomplete. The sidebar calls it *"My
+calls — narrowed server-side to the ones you took"*, and it was narrowed to the
+calls they **created** plus the phone numbers assigned to them. An agent taking
+inbound calls on a softphone satisfies neither: the row is created by the
+inbound handler, and the DID belongs to the agency, so `userNumbers` is empty
+for the entire floor. The one list an agent opens every day showed everything
+except the calls they answered — and the call detail refused them for the same
+reason, so a call could appear in their own figures and then 403 when they
+clicked it to re-read their notes.
+
+**Attribution had one writer.** `POST /api/v1/agent/calls/:callId/answer`, the
+softphone answer handler. Every other route to a disposition left
+`answeredByUserId` null — including the disposition save that CREATES a call
+row, so an agent who wrote up a call nothing had tracked produced a row that
+counted for nobody. The disposition endpoints now fill it **only when it is
+null**: a supervisor correcting a write-up can never take a call off the agent
+who answered it, because the answer handler's record is a fact and this is a
+guess.
+
+**It moves no money.** A delivered call is INBOUND, not blocked, with
+`answeredAt` in the window — see `rating/measurement.ts` — and none of those
+three are touched. `answeredAt` in particular is deliberately NOT stamped on a
+disposition save: that endpoint is reachable by any agent on the floor, and
+stamping it would let writing calls up mint billable delivered calls out of
+nothing. What changes is which agent a call *already in the agency's total* is
+credited to, so the per-agent rows still reconcile with the agency total.
+
+**The name is resolved tenant-scoped**, in one indexed read per page, rather
+than through a foreign key. The column was backfilled from a JSON key written
+by an older softphone and can name a deleted user, so the constraint is a
+migration that can fail on live data — and the lookup buys a property the
+relation would not: a stale id from another agency resolves to nothing instead
+of printing that agency's employee on this agency's ledger.
+
+Unattributed is **its own reading** everywhere — the table, the detail drawer
+and the CSV, which writes `Unattributed` rather than an empty cell. A blank
+says "nobody took this call", which is a claim about the call; the truth is a
+claim about what was recorded, and a floor lead acts differently on each.
+
+`blockedBy`-style machine readability applies here too: `?agentId=` and
+`?disposition=` filter the list and the export, `disposition=NONE` answers
+"which calls has nobody written up yet" (which leaving the parameter off cannot
+express, since that means *all* calls), and an `agentId` from a non-principal
+is **dropped, not honoured and not refused** — their list is already their own
+calls, refusing would break a link shared from a principal's screen, and
+honouring it would be one agent reading another's calls on a floor where the
+closing percentage decides pay.
+
+Each agent's name on the team report now links to that agent's calls **over the
+same window**, which is the drill-down that screen never had: it showed a
+closing percentage with no way to read the calls behind it.
+
+One thing fixed in passing: the ledger's column-visibility map was read out of
+`localStorage` **wholesale**, so any column added after a user's last visit read
+as `undefined` and rendered hidden — permanently, for everyone who had ever
+opened the page, with nothing on screen to say it existed. It is merged under
+the defaults now (`lib/call-column-visibility.ts`), so a choice is kept and a
+new column arrives at its default.
+
+---
+
+## 12. What this does NOT do
 
 - **It does not let an agency create campaigns.** Campaigns stay NetEnroll's;
   the agency chooses which of its own agents work the ones it has. An agency
@@ -376,6 +450,18 @@ the agent comes back.
   own. The roster screen *shows* who is off and since when; it has no control
   to put somebody back on the queue, deliberately — an owner overriding an
   agent's own "I am not at my desk" delivers a call to an empty chair.
+- **Attribution is not backfilled.** Calls answered before this shipped, on any
+  path other than the softphone answer handler, stay unattributed. They read as
+  `Unattributed` on the ledger rather than being guessed at after the fact.
+- **The ledger does not group or total.** It is a list: one row per call, with
+  filters and an export. The per-agent totals live on the team report, and the
+  link between them runs one way — a name there opens that agent's calls here.
+- **`disposition` is still a string, not an enum.** `VALID_DISPOSITIONS` in
+  `routes/index.ts` is enforced on the write path and mirrored by
+  `DISPOSITION_LABELS` on the screen, but nothing in the database stops a
+  direct insert writing something else. An unrecognised value renders verbatim
+  rather than being hidden, so the screen cannot quietly disagree with the
+  row.
 - **Nothing reads `callAttribution` on a screen yet.** It is on the API and in
   the database, and the applications page shows the call id, but there is no
   drill-down from a closing percentage to the calls behind it.
