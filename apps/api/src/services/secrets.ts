@@ -83,6 +83,18 @@ export class SecretsManager {
       'BULKVS_USERNAME',
       'BULKVS_PASSWORD',
       'BULKVS_TRUNK_GROUP',
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_API_KEY_SID',
+      'TWILIO_API_KEY_SECRET',
+      'TWILIO_API_KEY',
+      'TWILIO_API_SECRET',
+      'TWILIO_TRUNK_SID',
+      'TWILIO_VOICE_URL',
+      'VONAGE_API_KEY',
+      'VONAGE_API_SECRET',
+      'VONAGE_APPLICATION_ID',
+      'VONAGE_SIP_URI',
     ];
 
     secretKeys.forEach(key => {

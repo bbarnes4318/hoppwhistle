@@ -9,6 +9,8 @@ import { FractelAdapter } from './adapters/fractel-adapter.js';
 import { LocalAdapter } from './adapters/local-adapter.js';
 import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
 import { TelnyxAdapter } from './adapters/telnyx-adapter.js';
+import { TwilioAdapter } from './adapters/twilio-adapter.js';
+import { VonageAdapter } from './adapters/vonage-adapter.js';
 import type {
   Provider,
   ProvisionedNumber,
@@ -27,6 +29,8 @@ const DEFAULT_PROVIDER_ORDER: Provider[] = [
   'bulkvs',
   'signalwire',
   'telnyx',
+  'twilio',
+  'vonage',
   'bandwidth',
 ];
 
@@ -106,6 +110,24 @@ export class ProvisioningService {
       }
     } catch (error) {
       logger.warn('FracTEL adapter not configured, skipping');
+    }
+
+    try {
+      const twilio = new TwilioAdapter();
+      if (twilio.isConfigured()) {
+        this.adapters.set('twilio', twilio);
+      }
+    } catch (error) {
+      logger.warn('Twilio adapter not configured, skipping');
+    }
+
+    try {
+      const vonage = new VonageAdapter();
+      if (vonage.isConfigured()) {
+        this.adapters.set('vonage', vonage);
+      }
+    } catch (error) {
+      logger.warn('Vonage adapter not configured, skipping');
     }
   }
 
@@ -203,7 +225,8 @@ export class ProvisioningService {
    * Selection logic:
    * 1. Tenant preference (metadata.defaultProvider)
    * 2. Environment variable (DEFAULT_PROVIDER)
-   * 3. First configured adapter in priority order (Anveo -> SignalWire -> Telnyx -> Bandwidth)
+   * 3. First configured adapter in priority order
+   *    (FracTEL -> Anveo -> BulkVS -> SignalWire -> Telnyx -> Twilio -> Vonage -> Bandwidth)
    */
   async getProviderForTenant(tenantId: string): Promise<Provider> {
     const prisma = getPrismaClient();

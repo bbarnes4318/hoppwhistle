@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Loader2,
   PhoneForwarded,
+  Plus,
   RotateCcw,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -74,10 +75,28 @@ interface RouteView {
   effectiveSource: 'db' | 'fallback';
 }
 
+interface CarrierView {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
 interface Overview {
   routes: RouteView[];
-  carriers: Array<{ id: string; code: string; name: string; status: string }>;
+  carriers: CarrierView[];
   callTypes: Array<{ value: string; label: string }>;
+}
+
+/**
+ * What the server needs to rewrite a waterfall: the carriers, in order, and
+ * whether each is on. A full `StepView` is more than the PUT reads, and
+ * insisting on one would mean inventing health and caller-ID fields for a
+ * carrier that has not been added to the waterfall yet.
+ */
+interface CarrierSelection {
+  carrierId: string;
+  enabled: boolean;
 }
 
 /** Groups the six waterfalls the way an operator thinks about them. */
@@ -133,7 +152,7 @@ export default function CarrierRoutingPage() {
    * the server treats it as a replacement, which is what keeps two admins
    * editing during an outage from producing two carriers at position 0.
    */
-  const saveRoute = async (callType: string, steps: StepView[], enabled?: boolean) => {
+  const saveRoute = async (callType: string, steps: CarrierSelection[], enabled?: boolean) => {
     setSavingType(callType);
     try {
       const res = await apiClient.put<{ effectiveChain: string[]; carrierOrder: string[] }>(
@@ -178,6 +197,19 @@ export default function CarrierRoutingPage() {
   const toggleStep = (route: RouteView, index: number, enabled: boolean) => {
     const next = route.steps.map((s, i) => (i === index ? { ...s, enabled } : s));
     void saveRoute(route.callType, next);
+  };
+
+  /**
+   * Put a carrier on a waterfall.
+   *
+   * It lands at the bottom and switched off, which is the only safe place for
+   * it: a carrier is added before its trunk has ever carried a call here, and
+   * inserting an unproven one above the carrier currently taking the traffic
+   * would reroute live calls on the next dial. Switching it on afterwards is
+   * the deliberate second step.
+   */
+  const addCarrier = (route: RouteView, carrierId: string) => {
+    void saveRoute(route.callType, [...route.steps, { carrierId, enabled: false }]);
   };
 
   const resetGatewayHealth = async (gatewayId: string, name: string) => {
@@ -242,9 +274,11 @@ export default function CarrierRoutingPage() {
                 <WaterfallCard
                   key={callType}
                   route={route}
+                  carriers={overview?.carriers ?? []}
                   saving={savingType === callType}
                   onMove={(i, d) => move(route, i, d)}
                   onToggleStep={(i, v) => toggleStep(route, i, v)}
+                  onAddCarrier={carrierId => addCarrier(route, carrierId)}
                   onResetGateway={resetGatewayHealth}
                 />
               );
@@ -258,18 +292,29 @@ export default function CarrierRoutingPage() {
 
 function WaterfallCard({
   route,
+  carriers,
   saving,
   onMove,
   onToggleStep,
+  onAddCarrier,
   onResetGateway,
 }: {
   route: RouteView;
+  carriers: CarrierView[];
   saving: boolean;
   onMove: (index: number, delta: number) => void;
   onToggleStep: (index: number, enabled: boolean) => void;
+  onAddCarrier: (carrierId: string) => void;
   onResetGateway: (gatewayId: string, name: string) => Promise<void>;
 }) {
   const activeCount = route.steps.filter(s => s.enabled && s.gateways.some(g => g.enabled)).length;
+
+  // A carrier the account has but this waterfall does not. Every carrier is
+  // seeded onto every waterfall, so this is normally empty — it fills when a
+  // carrier is added to the platform after a tenant's routes were created, or
+  // after one has been removed from a waterfall by hand.
+  const inWaterfall = new Set(route.steps.map(s => s.carrierId));
+  const unused = carriers.filter(c => !inWaterfall.has(c.id));
 
   return (
     <Card>
@@ -423,6 +468,28 @@ function WaterfallCard({
             );
           })}
         </div>
+
+        {unused.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Not on this waterfall
+            </span>
+            {unused.map(carrier => (
+              <Button
+                key={carrier.id}
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-[11px]"
+                disabled={saving}
+                onClick={() => onAddCarrier(carrier.id)}
+                title={`Add ${carrier.name} to the bottom of this waterfall, switched off`}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {carrier.name}
+              </Button>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-start gap-2 rounded bg-sunken px-3 py-2">
           <PhoneForwarded className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />

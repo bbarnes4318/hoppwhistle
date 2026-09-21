@@ -5,4 +5,6 @@ export { BandwidthAdapter } from './bandwidth-adapter.js';
 export { AnveoAdapter } from './anveo-adapter.js';
 export { BulkvsAdapter } from './bulkvs-adapter.js';
 export { FractelAdapter } from './fractel-adapter.js';
+export { TwilioAdapter } from './twilio-adapter.js';
+export { VonageAdapter } from './vonage-adapter.js';
 export type { ProvisioningAdapter } from '../types.js';

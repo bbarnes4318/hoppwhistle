@@ -88,7 +88,20 @@ async function importNumbers(options: ImportOptions) {
           }
 
           const normalizedNumber = normalizePhoneNumber(number);
-          const validProvider = (['local', 'signalwire', 'telnyx', 'bandwidth', 'clec'] as Provider[]).includes(provider as Provider)
+          const validProvider = (
+            [
+              'local',
+              'signalwire',
+              'telnyx',
+              'bandwidth',
+              'clec',
+              'anveo',
+              'bulkvs',
+              'fractel',
+              'twilio',
+              'vonage',
+            ] as Provider[]
+          ).includes(provider as Provider)
             ? (provider as Provider)
             : 'local';
 

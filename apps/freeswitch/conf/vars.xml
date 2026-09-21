@@ -48,6 +48,27 @@
   <X-PRE-PROCESS cmd="set" data="anveo_user=${ANVEO_SIP_USERNAME}"/>
   <X-PRE-PROCESS cmd="set" data="anveo_pass=${ANVEO_SIP_PASSWORD}"/>
 
+  <!--
+    Twilio Elastic SIP Trunking. The termination domain doubles as the digest
+    realm, so realm and proxy default to the same value; credentials are only
+    needed when the trunk authenticates by Credential List rather than by IP
+    ACL. See sip_profiles/external/twilio.xml.
+  -->
+  <X-PRE-PROCESS cmd="set" data="twilio_sip_proxy=${TWILIO_SIP_TERMINATION_DOMAIN}"/>
+  <X-PRE-PROCESS cmd="set" data="twilio_sip_realm=${TWILIO_SIP_TERMINATION_DOMAIN}"/>
+  <X-PRE-PROCESS cmd="set" data="twilio_sip_user=${TWILIO_SIP_USERNAME}"/>
+  <X-PRE-PROCESS cmd="set" data="twilio_sip_pass=${TWILIO_SIP_PASSWORD}"/>
+
+  <!--
+    Vonage SIP trunking. Defaults to the shared programmable SIP endpoint;
+    accounts provisioned on a regional endpoint set VONAGE_SIP_PROXY. Leave the
+    credentials unset for IP-whitelisted trunks.
+  -->
+  <X-PRE-PROCESS cmd="set" data="vonage_sip_proxy=${VONAGE_SIP_PROXY}"/>
+  <X-PRE-PROCESS cmd="set" data="vonage_sip_realm=${VONAGE_SIP_REALM}"/>
+  <X-PRE-PROCESS cmd="set" data="vonage_sip_user=${VONAGE_SIP_USERNAME}"/>
+  <X-PRE-PROCESS cmd="set" data="vonage_sip_pass=${VONAGE_SIP_PASSWORD}"/>
+
   <X-PRE-PROCESS cmd="set" data="outbound_caller_id=${OUTBOUND_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="esl_password=${FREESWITCH_ESL_PASSWORD}"/>

@@ -74,6 +74,27 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${SIGNALWIRE_OUTBOUND_PROXY}|${SIGNALWIRE_OUTBOUND_PROXY:-${SIGNALWIRE_SIP_DOMAIN:-}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIGNALWIRE_SIP_USERNAME}|${SIGNALWIRE_SIP_USERNAME:-fe}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIGNALWIRE_SIP_PASSWORD}|${SIGNALWIRE_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
+
+    # Twilio Elastic SIP Trunking. The termination domain has no sensible
+    # default -- it is per-trunk (<name>.pstn.twilio.com) -- so an unset value
+    # leaves the gateway pointing nowhere and is called out here rather than
+    # discovered as NO_ROUTE_DESTINATION on the first call that falls to it.
+    if [ -z "${TWILIO_SIP_TERMINATION_DOMAIN:-}" ]; then
+        echo "NOTE: TWILIO_SIP_TERMINATION_DOMAIN is not set; the twilio gateway" >&2
+        echo "      will not route. Set it to your Elastic SIP Trunk's" >&2
+        echo "      termination URI (<trunk>.pstn.twilio.com) before enabling" >&2
+        echo "      Twilio in Settings -> Carrier Routing." >&2
+    fi
+    sed -i "s|\${TWILIO_SIP_TERMINATION_DOMAIN}|${TWILIO_SIP_TERMINATION_DOMAIN:-}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${TWILIO_SIP_USERNAME}|${TWILIO_SIP_USERNAME:-}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${TWILIO_SIP_PASSWORD}|${TWILIO_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
+
+    # Vonage. Unlike Twilio the endpoint is shared, so the documented default
+    # is a working value for most accounts.
+    sed -i "s|\${VONAGE_SIP_PROXY}|${VONAGE_SIP_PROXY:-sip.nexmo.com}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${VONAGE_SIP_REALM}|${VONAGE_SIP_REALM:-${VONAGE_SIP_PROXY:-sip.nexmo.com}}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${VONAGE_SIP_USERNAME}|${VONAGE_SIP_USERNAME:-}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${VONAGE_SIP_PASSWORD}|${VONAGE_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
 fi
 
 # Patch switch.conf.xml to restrict RTP ports to Docker-exposed range (16384-16484)

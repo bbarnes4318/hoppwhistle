@@ -118,6 +118,8 @@ export function PurchaseNumberDialog({ open, onOpenChange, onSuccess }: Purchase
  <SelectItem value="anveo">Anveo Direct (Recommended)</SelectItem>
  <SelectItem value="signalwire">SignalWire</SelectItem>
  <SelectItem value="telnyx">Telnyx</SelectItem>
+ <SelectItem value="twilio">Twilio</SelectItem>
+ <SelectItem value="vonage">Vonage</SelectItem>
  <SelectItem value="bandwidth">Bandwidth</SelectItem>
  <SelectItem value="local" className="text-muted-foreground">
  Local (Test - Fake Numbers Only)

@@ -1,6 +1,6 @@
 # Phone Number Provisioning Service
 
-Unified provisioning abstraction for managing phone numbers across multiple providers (SignalWire, Telnyx, Bandwidth, and local inventory).
+Unified provisioning abstraction for managing phone numbers across multiple providers.
 
 ## Architecture
 
@@ -8,11 +8,20 @@ The provisioning system uses an **adapter pattern** to abstract provider-specifi
 
 ```
 ProvisioningService
-  ├── LocalAdapter (development/testing)
-  ├── SignalWireAdapter (production)
-  ├── TelnyxAdapter (placeholder)
-  └── BandwidthAdapter (placeholder)
+  ├── LocalAdapter       (development/testing — no external calls)
+  ├── FractelAdapter
+  ├── AnveoAdapter
+  ├── BulkvsAdapter
+  ├── SignalWireAdapter
+  ├── TelnyxAdapter
+  ├── TwilioAdapter
+  ├── VonageAdapter
+  └── BandwidthAdapter
 ```
+
+An adapter is registered only when `isConfigured()` is true, so an unconfigured
+provider is absent rather than present-and-broken. `getAvailableProviders()`
+reports what is actually usable in a given deployment.
 
 ## Core Interface
 
@@ -65,13 +74,104 @@ SIGNALWIRE_SPACE_URL=your-space.signalwire.com
 - `GET /api/relay/rest/phone_numbers/{id}` - Get number details
 - `PATCH /api/relay/rest/phone_numbers/{id}` - Configure number
 
-### Telnyx Adapter (Placeholder)
+### Telnyx Adapter
 
-Placeholder for future Telnyx integration. Currently throws "not yet implemented" errors.
+Telnyx REST API v2. Requires `TELNYX_API_KEY` and `TELNYX_CONNECTION_ID`; purchases
+are assigned to that connection so inbound calls reach our edge.
 
-### Bandwidth Adapter (Placeholder)
+### Twilio Adapter
 
-Placeholder for future Bandwidth integration. Currently throws "not yet implemented" errors.
+Twilio REST API (2010-04-01).
+
+**Configuration:**
+
+```env
+TWILIO_ACCOUNT_SID=ACxxxxxxxx
+# Either the account token…
+TWILIO_AUTH_TOKEN=your-auth-token
+# …or an API key pair (preferred — revocable on its own).
+# TWILIO_API_KEY_SID / TWILIO_API_KEY_SECRET, or the TWILIO_API_KEY /
+# TWILIO_API_SECRET names the carrier and CNAM lookups already use.
+TWILIO_API_KEY_SID=SKxxxxxxxx
+TWILIO_API_KEY_SECRET=your-api-key-secret
+# Where purchased numbers are routed — one of these is required to buy.
+TWILIO_TRUNK_SID=TKxxxxxxxx   # Elastic SIP Trunk (pairs with the `twilio` gateway)
+TWILIO_VOICE_URL=             # …or a TwiML webhook
+```
+
+**Endpoints used** (all under `/Accounts/{AccountSid}`):
+
+- `GET /AvailablePhoneNumbers/{Country}/Local.json` — search inventory
+- `POST /IncomingPhoneNumbers.json` — purchase, and set the routing target
+- `GET /IncomingPhoneNumbers.json` — list owned numbers
+- `GET|POST /IncomingPhoneNumbers/{Sid}.json` — read / re-point a number
+- `DELETE /IncomingPhoneNumbers/{Sid}.json` — release
+
+**Notes:**
+
+- Requests are `application/x-www-form-urlencoded`; a JSON body is rejected with a
+  400 that names no field.
+- Buying without a routing target is refused rather than silently landing a
+  number on Twilio's demo greeting.
+- The owned-number area-code filter is a `+1NPA*******` pattern; `AreaCode` only
+  exists on the availability search.
+
+### Vonage Adapter
+
+Vonage (formerly Nexmo) Numbers API.
+
+**Configuration:**
+
+```env
+VONAGE_API_KEY=your-api-key
+VONAGE_API_SECRET=your-api-secret
+# Where purchased numbers are routed — one of these is required to buy.
+VONAGE_APPLICATION_ID=       # Voice application id
+VONAGE_SIP_URI=              # …or a SIP URI (pairs with the `vonage` gateway)
+VONAGE_DEFAULT_COUNTRY=US    # fallback when a number's country can't be read back
+```
+
+**Endpoints used** (`https://rest.nexmo.com`):
+
+- `GET /number/search` — search inventory
+- `POST /number/buy` — purchase
+- `POST /number/update` — link the number to the application or SIP URI
+- `GET /account/numbers` — list owned numbers / look one up
+- `POST /number/cancel` — release
+
+**Notes:**
+
+- Numbers are MSISDNs (bare digits). The adapter converts to and from E.164 at
+  the boundary; a `+` sent to Vonage matches nothing.
+- There is no opaque number id — the MSISDN is the `providerId`.
+- Cancelling needs the number's country, which the id cannot carry, so it is read
+  back from the account before the cancel call.
+- Several endpoints answer HTTP 200 with an `error-code` in the body, so the
+  status line alone is not evidence of success.
+- Purchase is two calls (buy, then route). If routing fails the error names the
+  number, because it is already on the account and billing.
+
+### Bandwidth Adapter
+
+Bandwidth Dashboard API. Requires `BANDWIDTH_ACCOUNT_ID`, `BANDWIDTH_USERNAME`,
+`BANDWIDTH_PASSWORD` and `BANDWIDTH_SITE_ID`.
+
+## Provisioning is not routing
+
+Buying a DID from a provider and _dialing out through_ that provider are separate
+concerns with separate configuration:
+
+|               | Provisioning (this service)          | Termination (carrier waterfall)                                 |
+| ------------- | ------------------------------------ | --------------------------------------------------------------- |
+| Configured by | provider API credentials             | a `Carrier` + `CarrierGateway` row and a FreeSWITCH `<gateway>` |
+| Surface       | Numbers page                         | Settings → Carrier Routing                                      |
+| Twilio        | `TWILIO_ACCOUNT_SID` + token/key     | `TWILIO_SIP_TERMINATION_DOMAIN`                                 |
+| Vonage        | `VONAGE_API_KEY`/`VONAGE_API_SECRET` | `VONAGE_SIP_PROXY`                                              |
+
+A provider can be usable for one and not the other. Numbers bought here carry
+`phone_numbers.provider`, which is what a carrier's `numberProvider` matches to
+find a caller ID it can attest to — so buying Twilio DIDs is what makes the
+`TWILIO` carrier presentable on outbound legs.
 
 ## Usage
 

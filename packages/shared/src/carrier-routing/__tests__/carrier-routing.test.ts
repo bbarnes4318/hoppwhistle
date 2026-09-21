@@ -236,6 +236,67 @@ describe('buildBridgeString', () => {
   });
 });
 
+describe('Twilio and Vonage legs', () => {
+  // The two carriers disagree about the destination format and each rejects
+  // the other's spelling: Twilio wants sip:+1XXXXXXXXXX@<trunk>.pstn.twilio.com
+  // and answers 404 to a bare 1XXXXXXXXXX; Vonage wants 1XXXXXXXXXX and
+  // rejects the `+`. Getting this wrong produces a dead call on a carrier that
+  // is perfectly healthy, which is the hardest kind to diagnose — so the
+  // seeded formats are pinned here.
+  const chain = resolveChain(
+    route([
+      step('TWILIO', 0, [gw('twilio', { numberFormat: 'E164' })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['12816991130'],
+      }),
+      step('VONAGE', 1, [gw('vonage', { numberFormat: 'NANP11' })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['12816991131'],
+      }),
+    ]),
+    'SOFTPHONE_MANUAL',
+    NOW
+  );
+
+  it('dials Twilio in E.164 and Vonage without the plus', () => {
+    const s = buildBridgeString(chain, '2816991120')!;
+    expect(s).toContain('sofia/gateway/twilio/+12816991120');
+    expect(s).toContain('sofia/gateway/vonage/12816991120');
+    expect(s).not.toContain('vonage/+1');
+  });
+
+  // Both carriers refuse an outbound call whose From number the account does
+  // not own, so a leg that falls to either has to bring its own caller ID
+  // rather than carry the previous carrier's DID across.
+  it('presents each carrier a number it issued', () => {
+    expect(chain.gateways.map(g => g.callerId)).toEqual(['12816991130', '12816991131']);
+
+    const s = buildBridgeString(chain, '2816991120')!;
+    expect(s).toContain('[origination_caller_id_number=12816991130');
+    expect(s).toContain('[origination_caller_id_number=12816991131');
+  });
+
+  // An account with no DIDs at either carrier is the state right after the
+  // credentials are set up. The resolver must not emit an empty caller ID —
+  // carriers reject anonymous origination outright — and must flag it so the
+  // settings page can warn before the carrier is switched on.
+  it('flags a carrier that owns no numbers instead of sending an empty caller ID', () => {
+    const bare = resolveChain(
+      route([
+        step('TWILIO', 0, [gw('twilio', { numberFormat: 'E164' })], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: [],
+        }),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+
+    expect(bare.gateways[0].callerId).toBeNull();
+    expect(bare.gateways[0].callerIdUnavailable).toBe(true);
+  });
+});
+
 describe('per-carrier caller ID', () => {
   const fractelPool = ['12816991120', '18656000124'];
 

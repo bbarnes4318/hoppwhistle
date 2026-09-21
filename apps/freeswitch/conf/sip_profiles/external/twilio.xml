@@ -1,0 +1,44 @@
+<include>
+  <!--
+    Twilio Elastic SIP Trunking — outbound termination.
+
+    Twilio terminates against a Termination SIP URI provisioned in the console
+    (Elastic SIP Trunking → Trunks → Termination), which looks like
+    `<your-trunk>.pstn.twilio.com`. That hostname is both the proxy and the
+    digest realm, so TWILIO_SIP_TERMINATION_DOMAIN is the one variable that has
+    to be right; leaving it unset resolves this gateway to a hostname that does
+    not exist and every leg fails with NO_ROUTE_DESTINATION.
+
+    Auth is by Credential List, by IP ACL, or by both:
+
+      Credential List  set TWILIO_SIP_USERNAME / TWILIO_SIP_PASSWORD to the
+                       credential you created under Elastic SIP Trunking →
+                       Authentication. Twilio challenges with 407 and this
+                       gateway answers.
+      IP ACL           leave the credentials unset and add this host's public
+                       SIP IP to the trunk's Access Control List. No gateway
+                       setting substitutes for that entry.
+
+    register MUST stay false. Twilio trunks are terminated against, never
+    registered to, and a REGISTER attempt is refused.
+
+    Number format: Twilio requires E.164 with the leading `+`, which is why the
+    TWILIO carrier's gateway row is seeded `E164`. A bare 1XXXXXXXXXX is
+    rejected with 404.
+
+    Caller ID: Twilio only allows a From number the account owns (a Twilio DID
+    or a Verified Caller ID). Presenting someone else's number is refused
+    outright, so the TWILIO carrier is seeded POOL against `twilio` DIDs —
+    calls that fall to this carrier swap to a number it issued.
+  -->
+  <gateway name="twilio">
+    <param name="proxy" value="$${twilio_sip_proxy}"/>
+    <param name="realm" value="$${twilio_sip_realm}"/>
+    <param name="from-domain" value="$${twilio_sip_realm}"/>
+    <param name="username" value="$${twilio_sip_user}"/>
+    <param name="password" value="$${twilio_sip_pass}"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+    <param name="ping" value="25"/>
+  </gateway>
+</include>
