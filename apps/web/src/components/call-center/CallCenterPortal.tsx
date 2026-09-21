@@ -56,7 +56,6 @@ import { StandaloneApplicationModal } from './StandaloneApplicationModal';
 import { StatsStrip } from './StatsStrip';
 import type {
   ActiveCallView,
-  AgentStatus,
   ApplicationData,
   CallRecord,
   CurrentView,
@@ -66,7 +65,6 @@ import type {
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
-
 
 // ============================================================================
 // DEFAULT SCRIPT CONTENT FOR EDITOR
@@ -168,7 +166,6 @@ export function CallCenterPortal(): JSX.Element {
 
   // State - Default directly to agentDashboard (skip role selection menu)
   const [currentView, setCurrentView] = useState<CurrentView>('agentDashboard');
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>('available');
 
   // Call State
   const [isIncomingCall, setIsIncomingCall] = useState(false);
@@ -452,7 +449,6 @@ export function CallCenterPortal(): JSX.Element {
         } else {
           console.log('[CallCenter] Triggering manual disposition modal');
           setShowDisposition(true);
-          setAgentStatus('available');
         }
       }
       setIsIncomingCall(false);
@@ -475,7 +471,6 @@ export function CallCenterPortal(): JSX.Element {
         phone: currentCall.phoneNumber,
         ...currentCall.prospectData,
       } as ProspectData);
-      setAgentStatus('on_call');
       hasHadActiveSessionRef.current = false; // Reset for incoming call
     }
 
@@ -499,7 +494,6 @@ export function CallCenterPortal(): JSX.Element {
 
       setIsIncomingCall(false);
       setIsCallActive(true);
-      setAgentStatus('on_call');
 
       // Set active call data if not already set
       if (!activeCallData) {
@@ -761,7 +755,6 @@ export function CallCenterPortal(): JSX.Element {
     setIsCallActive(true);
     setActiveCallData(incomingCallData);
     setActiveCallView(crmData?.customer ? 'data' : 'script'); // Switch dynamically if CRM record found
-    setAgentStatus('on_call');
     setCallTimer(0);
 
     // Increment total calls on every answered call
@@ -780,7 +773,6 @@ export function CallCenterPortal(): JSX.Element {
     }
     setIsIncomingCall(false);
     setIncomingCallData(null);
-    setAgentStatus('available');
   };
 
   const handleHangup = async () => {
@@ -1195,7 +1187,6 @@ export function CallCenterPortal(): JSX.Element {
     }
     setActiveCallData(app);
     setIsCallActive(true);
-    setAgentStatus('on_call');
     setCallTimer(0);
     dispositionHandledRef.current = false;
     wasAnsweredRef.current = false;
@@ -1491,8 +1482,6 @@ export function CallCenterPortal(): JSX.Element {
   return (
     <div className="h-screen bg-paper flex flex-col overflow-hidden">
       <CallCenterHeader
-        agentStatus={agentStatus}
-        setAgentStatus={setAgentStatus}
         isCallActive={isCallActive}
         isIncomingCall={isIncomingCall}
         isAdminOrOwner={isAdminOrOwner}

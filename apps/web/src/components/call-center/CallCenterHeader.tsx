@@ -1,13 +1,12 @@
 import { FilePlus2, Headphones, Settings } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
 
+import { AvailabilitySwitch } from '@/components/phone';
 import { cn } from '@/lib/utils';
 
-import type { AgentStatus, SelectedScript } from './types';
+import type { SelectedScript } from './types';
 
 interface CallCenterHeaderProps {
-  agentStatus: AgentStatus;
-  setAgentStatus: (status: AgentStatus) => void;
   isCallActive: boolean;
   isIncomingCall: boolean;
   isAdminOrOwner: boolean;
@@ -41,13 +40,26 @@ interface CallCenterHeaderProps {
  *
  * The colours are the call-state signals, not the brand: a connected call is
  * --live because that is what --live means, an incoming call is --ringing, and
- * "away" is --blocked because it is a deliberate stop rather than a failure.
+ * off-queue is --blocked because it is a deliberate stop rather than a failure.
  * Brand green appears nowhere in this header.
+ *
+ * ── The off reading is the server's, not a local guess ──────────────────────
+ *
+ * This used to read an "away" value held in a `useState` in CallCenterPortal
+ * that was never sent anywhere. An agent who picked Away saw AWAY across the
+ * top of the console in large letters while calls carried on ringing their
+ * phone -- the display asserted a state the platform had never been told
+ * about. It now reads `availableForCalls`, the column routing actually obeys,
+ * reported up by the switch that writes it.
+ *
+ * `null` -- not an agent, or the read failed -- is NOT off. Routing rings an
+ * agent it cannot read a preference for, so showing "Not taking calls" there
+ * would be the same lie in the other direction.
  */
 function callState(
   isIncomingCall: boolean,
   isCallActive: boolean,
-  agentStatus: AgentStatus
+  availableForCalls: boolean | null
 ): { label: string; className: string; dot: string; pulse: boolean } {
   if (isIncomingCall) {
     return {
@@ -65,9 +77,9 @@ function callState(
       pulse: false,
     };
   }
-  if (agentStatus === 'away') {
+  if (availableForCalls === false) {
     return {
-      label: 'Away',
+      label: 'Not taking calls',
       className: 'bg-blocked-tint text-blocked-ink',
       dot: 'bg-blocked',
       pulse: false,
@@ -85,8 +97,6 @@ const CONTROL =
   'h-8 cursor-pointer appearance-none rounded-control border border-rule bg-surface pl-2.5 pr-7 t-meta font-medium uppercase tracking-wide text-ink-2 hover:border-rule-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 export function CallCenterHeader({
-  agentStatus,
-  setAgentStatus,
   isCallActive,
   isIncomingCall,
   isAdminOrOwner: _isAdminOrOwner,
@@ -101,7 +111,13 @@ export function CallCenterHeader({
   onLogApplication,
   onExit,
 }: CallCenterHeaderProps) {
-  const state = callState(isIncomingCall, isCallActive, agentStatus);
+  /*
+   * Owned here, but written by the switch below rather than by this component:
+   * the switch is the thing that reads and writes the server, and this is only
+   * the reading it reports back so the banner and the control agree.
+   */
+  const [availableForCalls, setAvailableForCalls] = useState<boolean | null>(null);
+  const state = callState(isIncomingCall, isCallActive, availableForCalls);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-rule bg-surface px-4">
@@ -133,20 +149,10 @@ export function CallCenterHeader({
 
       {/* The controls that change it. */}
       <div className="flex items-center gap-2">
-        <label className="sr-only" htmlFor="agent-status">
-          Agent status
-        </label>
-        <select
-          id="agent-status"
-          value={agentStatus}
-          onChange={e => setAgentStatus(e.target.value as AgentStatus)}
-          disabled={isCallActive || isIncomingCall}
-          className={CONTROL}
-        >
-          <option value="available">Available</option>
-          <option value="away">Away</option>
-          <option value="on_call">On call</option>
-        </select>
+        <AvailabilitySwitch
+          onChange={setAvailableForCalls}
+          className="rounded-control border border-rule bg-surface px-2.5 py-1.5"
+        />
 
         <label className="sr-only" htmlFor="call-script">
           Call script

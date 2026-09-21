@@ -329,8 +329,20 @@ export class RoutingService {
 
       const users = await this.prisma.user.findMany({
         where: { tenantId, status: 'ACTIVE' },
-        select: { id: true, metadata: true },
+        select: { id: true, metadata: true, availableForCalls: true },
       });
+
+      /*
+       * Which agents have declared themselves OFF the queue.
+       *
+       * A set of the unavailable rather than the available, so that an agent
+       * missing from this map -- a row that failed to load, a user the query
+       * did not return -- reads as AVAILABLE. Inverting it would turn any gap
+       * in this read into an agent silently taken off the queue.
+       */
+      const unavailableUsers = new Set(
+        users.filter(user => user.availableForCalls === false).map(user => user.id)
+      );
 
       /*
        * Each agent's SIP extension, from `agent_sip_credentials`.
@@ -632,6 +644,33 @@ export class RoutingService {
                 userId,
                 callerState,
                 licensedStates: [...licensed].sort(),
+                campaignId,
+              });
+              return { ep: normalizedEndpoint, eligible: false };
+            }
+
+            /*
+             * The agent's own switch: they said they are not taking calls.
+             *
+             * Checked first because it costs nothing -- the flag came back on
+             * the user query this loop already ran -- and because it is the
+             * most direct statement there is. An agent at lunch is not
+             * off-shift, is still registered, and is under their concurrency
+             * limit; every other gate would pass them.
+             *
+             * This is NOT the Redis presence key. That one is written by the
+             * browser on every SIP lifecycle event -- including an
+             * unconditional 'available' on reconnect, which silently undid an
+             * agent's own choice -- and the concurrency comment below records
+             * why it is ignored. This flag is a deliberate, durable
+             * declaration that nothing automatic writes, which is precisely
+             * what makes it safe to obey.
+             */
+            if (unavailableUsers.has(userId)) {
+              logger.info({
+                msg: 'Agent-availability: Endpoint EXCLUDED (agent has turned their phone off)',
+                userId,
+                destination: normalizedEndpoint.destination,
                 campaignId,
               });
               return { ep: normalizedEndpoint, eligible: false };

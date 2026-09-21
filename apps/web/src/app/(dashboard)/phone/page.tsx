@@ -15,6 +15,7 @@ import { KPICard } from '@/components/dashboard/kpi-card';
 import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { usePhone, type CallInfo } from '@/components/phone';
 import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
+import { AvailabilitySwitch } from '@/components/phone/availability-switch';
 import { DialPad } from '@/components/phone/dial-pad';
 import { ScreenPopSettings } from '@/components/phone/screen-pop-settings';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,12 @@ export default function PhonePage(): JSX.Element {
             </span>
             <AgentStatusSelector />
           </div>
+          {/*
+           * Beside it, not inside it: the selector reports what the softphone
+           * is doing, this is what the agent decided, and it is the one
+           * routing obeys.
+           */}
+          <AvailabilitySwitch className="rounded border border-rule bg-surface px-2.5 py-1" />
           <Button
             variant="outline"
             size="sm"

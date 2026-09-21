@@ -293,14 +293,89 @@ from, and a fabricated 0% reads as a measurement.
 
 ---
 
-## 10. What this does NOT do
+## 10. An agent can turn their own phone off
+
+`users.availableForCalls` (default `true`) and `users.availabilityChangedAt`.
+Read and written by the agent at `GET`/`PUT /api/v1/agent/availability`, and
+obeyed by `services/routing.ts` as the first of the per-agent gates.
+
+An agent had **no working way to stop calls reaching them**, while two controls
+looked like they did it:
+
+1. The Available/Away/On-call dropdown in the call-centre header was bound to a
+   React `useState` in `CallCenterPortal` and was never sent anywhere. It did
+   drive the large banner at the top of the console, so an agent who picked
+   "Away" read AWAY in capitals across their screen while calls carried on
+   ringing their phone. It is removed.
+2. `AgentStatusSelector` does reach `PUT /api/v1/agent/status`, which writes
+   `agent:status:<id>` in Redis — but routing deliberately ignores that key, and
+   says why: it is browser-inferred state that goes stale when a tab closes.
+   Worse for an agent trying to step away, the softphone writes `'available'`
+   unconditionally on SIP registration and on every reconnect, so a transport
+   blip silently undid their choice. The key also carries a 24-hour TTL.
+
+So an agent at lunch, on a break or finishing paperwork kept being rung, and the
+call went to somebody who could not take it instead of to somebody who could.
+
+**Why a new column rather than making routing read the presence key.** The two
+answer different questions, and the presence key is still the right answer to
+its own: what is this agent's softphone doing right now, for the live view and
+the availability-seconds figure on the delivery page. That one is inferred and
+overwritten automatically. This one is a deliberate, durable act by the agent —
+nothing automatic writes it — which is exactly what makes it safe to route on.
+Both are shown, side by side, because both are worth knowing.
+
+**Absence is not a constraint**, again. The column defaults to `true`, so every
+existing agent stays on the queue when this deploys; a default of `false` would
+take the whole platform off the queue at once. An unreadable value is not "off"
+— the screens render the switch as on, because routing rings an agent it has
+not been told to stop ringing. The routing gate and the roster both test
+`=== false`, never `!value`.
+
+**It stays usable during a call.** The control it replaced disabled itself while
+a call was up, which is exactly when an agent reaches for it ("this is my last
+one"). Turning off never touches the call in progress; it stops the next one.
+
+**Only a boolean toggles it.** A string body is refused rather than coerced:
+`'false'` is truthy, and coercing it would turn an agent's phone *on* while they
+were looking at the word "false".
+
+Toggling writes an `on-queue` / `off-queue` agent state event — its own status
+strings, so a supervisor can tell a deliberate step-away from a tab closing —
+and the console banner reads the real value: **Not taking calls**, in the
+blocked colour, only when the server says so.
+
+On the roster screen it answers the question that screen exists for. The API
+now returns `blockedBy` beside `blockedReason` — the same fact, machine-readable,
+so a client never has to branch on a sentence written to be read — and the
+readiness cell renders `UNAVAILABLE` as a muted **Phone off · Sep 21, 12:30**
+rather than the amber warning used for setup faults. An agent who stepped away
+is correctly configured, and a warning triangle would send an owner looking for
+a problem that is not there. The order matters too: `UNAVAILABLE` is the LAST
+blocker checked, so an agent who is off *and* has no campaign still shows the
+campaign, in amber — that one is the owner's to fix and will still be there when
+the agent comes back.
+
+---
+
+## 11. What this does NOT do
 
 - **It does not let an agency create campaigns.** Campaigns stay NetEnroll's;
   the agency chooses which of its own agents work the ones it has. An agency
   with no active campaign sees a notice saying so.
 - **No holidays or one-off exceptions.** A schedule is a weekly pattern; an
   agent off next Thursday has to be handled by clearing their days and putting
-  them back, which is blunt.
+  them back, which is blunt. The availability switch covers the short version
+  of this — a break, an afternoon — but it is manual and does not come back on
+  by itself.
+- **The availability switch has no timer and no auto-reset.** An agent who
+  turns off at lunch and forgets is off until they turn back on. There is no
+  "back in 30 minutes", and nothing turns them on at the start of their next
+  shift.
+- **An agency owner cannot flip it for an agent.** The endpoint is the agent's
+  own. The roster screen *shows* who is off and since when; it has no control
+  to put somebody back on the queue, deliberately — an owner overriding an
+  agent's own "I am not at my desk" delivers a call to an empty chair.
 - **Nothing reads `callAttribution` on a screen yet.** It is on the API and in
   the database, and the applications page shows the call id, but there is no
   drill-down from a closing percentage to the calls behind it.

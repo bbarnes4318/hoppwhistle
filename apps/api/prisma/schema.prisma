@@ -348,6 +348,36 @@ model User {
   platformAdmin      PlatformAdmin?
   platformActingTenant PlatformActingTenant?
 
+  /// Whether this agent is taking calls right now, as THEY declared it.
+  ///
+  /// ── Not the same thing as the softphone status ───────────────────────────
+  ///
+  /// `agent:status:<id>` in Redis is written by the browser on every SIP
+  /// lifecycle event -- registration, reconnect, call start, call end,
+  /// teardown. `services/routing.ts` deliberately ignores it, and the comment
+  /// there says why: it is inferred state, it goes stale when a tab closes, and
+  /// excluding agents on it silenced people who were sitting there ready.
+  ///
+  /// Worse, for an agent trying to step away it is actively wrong: a SIP
+  /// reconnect writes 'available' unconditionally, so a reconnect silently
+  /// undid the agent's own choice. And it carries a 24-hour TTL, so it does not
+  /// survive a Redis flush or a long weekend.
+  ///
+  /// This column is the other kind of fact: a person saying "I am not taking
+  /// calls". Nothing automatic writes it -- only a deliberate act by the agent
+  /// or their principal -- it is durable, and routing DOES gate on it.
+  ///
+  /// ── Default true, and it has to be ───────────────────────────────────────
+  ///
+  /// Every existing agent gets `true` on the migration. A default of false
+  /// would take the entire platform off the queue the moment this deployed,
+  /// which is the same trap the licence and schedule rollouts were written to
+  /// avoid.
+  availableForCalls      Boolean   @default(true)
+  /// When `availableForCalls` last changed, so a supervisor can see "off since
+  /// 2pm" rather than just "off". Null until it is first toggled.
+  availabilityChangedAt  DateTime?
+
   /// Softphone status transitions. Append-only; see `AgentStateEvent`.
   stateEvents    AgentStateEvent[]
 
