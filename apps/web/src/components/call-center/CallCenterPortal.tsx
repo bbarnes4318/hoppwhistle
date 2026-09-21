@@ -815,7 +815,9 @@ export function CallCenterPortal(): JSX.Element {
      */
     const wroteApplication = disp === 'APPLICATION_SUBMITTED' && !autoDisp;
     if (wroteApplication && !applicationPayload) {
-      setApplicationError('Record the carrier, face amount, premium and last name first.');
+      setApplicationError(
+        'Record the carrier, face amount, premium, first name and last name first.'
+      );
       return;
     }
 
@@ -833,20 +835,25 @@ export function CallCenterPortal(): JSX.Element {
     };
 
     /*
-     * The disposition first, then the application carrying the call id it hands
-     * back.
+     * One request, carrying the application when there is one.
      *
-     * That order, and not the other way round: `callSessionIdRef` is a
-     * browser-generated session id, not a `Call` row, and the disposition
-     * endpoint is what resolves it to one (creating the row when the call was
-     * never tracked). Posting the application first would attach it to an id
-     * the server does not have, and an application with no call on it is one an
-     * agency cannot reconcile against the call that produced it.
+     * It used to be two -- the disposition, then the application with the call
+     * id that came back -- because `callSessionIdRef` is a browser-generated
+     * session id, not a `Call` row, and only the server can resolve it. That
+     * ordering meant anything failing in between left a call marked as a sale
+     * with no sale behind it: nothing in the agency's numerator, no credit
+     * spent, and this screen counting it as closed business.
+     *
+     * The server now resolves the call, records the application against it,
+     * and only then writes the disposition. Either both land or neither does.
+     *
+     * Retry reuses the same `clientRequestId`, so a save that landed before the
+     * network gave up comes back as the row it wrote rather than as a second
+     * application the agency is charged for.
      */
     setSavingApplication(wroteApplication);
     setApplicationError(null);
 
-    let savedCallId: string | null = null;
     try {
       const response = await apiClient.post<{ id?: string }>('/api/v1/calls/disposition', {
         callId: dispositionCallIdRef.current ?? callSessionIdRef.current,
@@ -857,45 +864,25 @@ export function CallCenterPortal(): JSX.Element {
         direction: 'OUTBOUND',
         callSource: 'CALL_CENTER',
         followUpAt,
+        ...(wroteApplication && applicationPayload ? { application: applicationPayload } : {}),
       });
       if (response.error) {
-        console.error('[CallCenter] Disposition save failed:', response.error.message);
-      } else if (response.data?.id) {
-        savedCallId = response.data.id;
-        dispositionCallIdRef.current = savedCallId;
+        throw new Error(response.error.message || 'The call could not be saved.');
+      }
+      if (response.data?.id) {
+        dispositionCallIdRef.current = response.data.id;
       }
     } catch (err) {
-      console.error('[CallCenter] Disposition save error:', err);
-    }
+      const message = err instanceof Error ? err.message : 'The call could not be saved.';
+      console.error('[CallCenter] Disposition save failed:', message);
 
-    if (wroteApplication && applicationPayload) {
-      try {
-        /*
-         * `callId` is omitted rather than guessed when the disposition post did
-         * not come back with one. The application is the thing that must not be
-         * lost; an unattached one still counts, and the server refuses a call id
-         * that is not this agency's.
-         */
-        const response = await apiClient.post('/api/v1/applications', {
-          ...applicationPayload,
-          ...(savedCallId ? { callId: savedCallId } : {}),
-        });
-        if (response.error) {
-          throw new Error(response.error.message || 'The application could not be saved.');
-        }
-      } catch (err) {
-        /*
-         * The form stays exactly as the agent filled it, the disposition is NOT
-         * marked saved, and nothing is cleared. Retry reuses the same
-         * `clientRequestId`, so a submit that actually landed before the network
-         * gave up comes back as the row it wrote rather than as a second
-         * application.
-         */
-        setApplicationError(
-          err instanceof Error
-            ? `${err.message} The application has not been recorded — try again.`
-            : 'The application has not been recorded — try again.'
-        );
+      /*
+       * A failed save with business on it stops here, with the form exactly as
+       * the agent filled it. Without an application it is logged and the screen
+       * carries on, as it always has -- a lost note is not a lost sale.
+       */
+      if (wroteApplication) {
+        setApplicationError(`${message} Nothing has been recorded — try again.`);
         setSavingApplication(false);
         return;
       }

@@ -149,6 +149,22 @@ const FIELD =
   'focus:outline-none focus:border-brand-ink disabled:opacity-60 disabled:cursor-not-allowed';
 const LABEL = 'text-[10px] font-mono uppercase tracking-widest text-ink-2 mb-1 block';
 
+/**
+ * The mark on a field the save is gated on.
+ *
+ * Five of these fields decide whether the Save button does anything, and until
+ * this mark existed nothing on the form said which. An agent filled it in,
+ * found Save disabled, and had no way to see what was missing except to try
+ * boxes -- between calls, with the next one ringing.
+ */
+function Req(): JSX.Element {
+  return (
+    <span className="ml-1 text-ringing-ink" title="Required">
+      *
+    </span>
+  );
+}
+
 export function ApplicationLogForm({
   prefill,
   onChange,
@@ -212,6 +228,15 @@ export function ApplicationLogForm({
     if (!carrier) return null;
     if (!faceValue || faceValue <= 0) return null;
     if (!premiumValue || premiumValue <= 0) return null;
+    /*
+     * BOTH names. The first one used to fall back to the last, so an agent who
+     * skipped it produced an application reading "Quintero Quintero" -- a row
+     * the agency cannot match against a carrier statement, on the screen whose
+     * whole job is that reconciliation, and one it has been charged a credit
+     * for. A name is two boxes and the agent has the application in front of
+     * them.
+     */
+    if (!firstName.trim()) return null;
     if (!lastName.trim()) return null;
 
     return {
@@ -222,11 +247,7 @@ export function ApplicationLogForm({
       modalPremium: Number(premiumValue.toFixed(2)),
       paymentMode,
       carrierApplicationNumber: applicationNumber.trim() || undefined,
-      // An application needs a name on it, and an agent who has the last name
-      // may not have caught the first. The server takes a first name, so a
-      // blank one is sent as the last name rather than refusing the whole
-      // application over it.
-      firstName: firstName.trim() || lastName.trim(),
+      firstName: firstName.trim(),
       lastName: lastName.trim(),
       dob: /^\d{2}\/\d{2}\/\d{4}$/.test(dob.trim()) ? dob.trim() : undefined,
       state: state.trim() || undefined,
@@ -270,6 +291,7 @@ export function ApplicationLogForm({
       <div>
         <label className={LABEL} htmlFor="app-carrier">
           Carrier
+          <Req />
         </label>
         <select
           id="app-carrier"
@@ -323,6 +345,7 @@ export function ApplicationLogForm({
       <div>
         <label className={LABEL} htmlFor="app-face-amount">
           Face amount
+          <Req />
         </label>
         <input
           id="app-face-amount"
@@ -339,6 +362,7 @@ export function ApplicationLogForm({
       <div>
         <label className={LABEL} htmlFor="app-premium">
           Premium
+          <Req />
         </label>
         <input
           id="app-premium"
@@ -384,6 +408,7 @@ export function ApplicationLogForm({
         <div>
           <label className={LABEL} htmlFor="app-first-name">
             First name
+            <Req />
           </label>
           <input
             id="app-first-name"
@@ -397,6 +422,7 @@ export function ApplicationLogForm({
         <div>
           <label className={LABEL} htmlFor="app-last-name">
             Last name
+            <Req />
           </label>
           <input
             id="app-last-name"

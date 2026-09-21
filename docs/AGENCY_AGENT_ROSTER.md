@@ -432,7 +432,76 @@ new column arrives at its default.
 
 ---
 
-## 12. What this does NOT do
+## 12. "Application submitted" has to carry the application
+
+`POST /api/v1/calls/disposition` now takes the application in the same request,
+and refuses the disposition without it.
+
+`APPLICATION_SUBMITTED` is not a note an agent leaves on a call. It is the
+**numerator of the closing percentage that prices the agency**, and it spends a
+credit off the balance the agency bought. It was saved in **two requests**: the
+disposition first — because the browser holds a session id, not a `Call` row,
+and that endpoint is what resolves one — then the application with the id that
+came back.
+
+Anything failing between them left a call **labelled as a sale with no sale
+behind it**. The agent saw "saved". The numerator never moved, no credit was
+spent, and the agency's measured closing percentage sat below its real one —
+which on the rate curve is a **higher price per application**. The failure
+quietly charged the agency more for business it had actually written.
+
+Both screens guarded against it. **Only the screens**: the API accepted
+`APPLICATION_SUBMITTED` from anything — a script, an integration, the next
+screen somebody builds — with nothing attached.
+
+**One request now, and the order inside it is the point.** The server resolves
+the call, records the application against it, and writes the disposition
+*last*. A refused application refuses the disposition with it, so the label
+cannot exist without the sale. On a call that was never tracked the row is
+created bare, the application goes on, and only then is it marked — a single
+create carrying the disposition would write the label before the sale existed.
+
+**An application on any other disposition is refused, not ignored.** Dropping
+it silently loses business the agent believed they recorded; recording it puts
+a sale in the numerator against a call the agent marked "not interested".
+
+**The after-the-fact edit cannot invent one either.** `PATCH
+/api/v1/calls/:callId/disposition` is the correction path — it has no
+application on it and cannot record one — so it refuses
+`APPLICATION_SUBMITTED` unless a submitted, non-voided application is already
+linked to that call. Non-voided, because a voided application is not one: the
+measurement drops it from the numerator and this has to agree with the
+measurement.
+
+**Required is required, in one place.** The field list moved out of
+`routes/applications.ts` into `services/applications/input-schema.ts`, so the
+two endpoints that accept an application validate identically. Two copies would
+drift, and the drift is not symmetric — an endpoint accepting a thinner
+application lets in rows an agency cannot reconcile, and one refusing rows that
+should have counted quietly raises what the agency pays.
+
+Required: `carrier`, `faceAmount`, `modalPremium`, `firstName`, `lastName`.
+`paymentMode` is the one field that defaults (to `MONTHLY`), because
+`annualizePremium` needs a mode. Strings are **trimmed before they are
+measured**: `z.string().min(1)` accepts a single space, which writes a blank
+onto the row and prints as an empty cell on the screen an agency reconciles
+against carrier statements.
+
+`firstName` in particular was **not** required before. The form substituted the
+last name for a blank first name, so applications landed reading "Quintero
+Quintero" — unmatchable against a carrier statement, on a row the agency was
+charged a credit for. Both names are required now, and the five fields the save
+is gated on are marked on the form, which previously said nothing about which
+ones they were.
+
+Saving twice is still one application and one credit: `clientRequestId` is
+generated when the form mounts and reused on every retry, so the second write
+is a `P2002` and `recordAgentApplication` answers with the row that already
+exists.
+
+---
+
+## 13. What this does NOT do
 
 - **It does not let an agency create campaigns.** Campaigns stay NetEnroll's;
   the agency chooses which of its own agents work the ones it has. An agency
@@ -462,6 +531,20 @@ new column arrives at its default.
   direct insert writing something else. An unrecognised value renders verbatim
   rather than being hidden, so the screen cannot quietly disagree with the
   row.
+- **Nothing backfills the calls already marked as sales.** A call carrying
+  `APPLICATION_SUBMITTED` from before this change, with no application behind
+  it, stays as it is. Writing the missing applications would be inventing
+  business, and voiding the dispositions would be erasing an agent's record of
+  a call they did work.
+- **The credit is still spent outside the write.** `consumeCreditForApplication`
+  runs after the application row lands, not in its transaction, and swallows
+  its own failure — deliberately, because the business is already written at
+  the carrier and a ledger hiccup must not refuse a submission that happened.
+  `reconcileDeliveryDay` writes the missing row that evening. So the
+  application is guaranteed; the ledger row is guaranteed by nightfall.
+- **`LIVE_TRANSFER` carries nothing.** It is in the disposition list and reads
+  like business, but it is not a submitted application and nothing here asks it
+  for one.
 - **Nothing reads `callAttribution` on a screen yet.** It is on the API and in
   the database, and the applications page shows the call id, but there is no
   drill-down from a closing percentage to the calls behind it.
