@@ -17,11 +17,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  * ── Thirty seconds ───────────────────────────────────────────────────────────
  *
  * An agent fills this in at the end of a call, with the next one already
- * ringing. One column, no sections, every field that can be prefilled from the
- * quote and the call data already filled, and nothing asked for that is not
- * needed to count and reconcile the application. In particular: no SSN and no
- * banking details. The business is already written at the carrier; this records
- * that it happened.
+ * ringing. FIVE fields, one column, no sections, everything the call already
+ * knows prefilled:
+ *
+ *     first name · last name · carrier · annual premium · coverage amount
+ *
+ * That is the whole list, and it is short on purpose. The application itself is
+ * written on the carrier's own portal -- these agents are the agency's, not
+ * ours, and they are not going to retype an application into a second system.
+ * This records THAT IT HAPPENED and enough to match the row against a carrier
+ * statement later. Everything that was once asked for and is not on that list
+ * -- plan type, payment mode, date of birth, state, application number -- is
+ * gone. No SSN and no banking details, ever.
+ *
+ * The premium is asked for ANNUALLY, not as a modal premium plus a mode. The
+ * agency's production is reported annualised, so asking for the number that is
+ * reported removes both the arithmetic and the chance of logging a monthly
+ * figure in a box the report reads as yearly.
  *
  * ── One form instance is one application ─────────────────────────────────────
  *
@@ -34,6 +46,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  * silently drop the second.
  */
 
+/** Monthly first: it is what almost every final-expense policy is written on. */
 /**
  * The eleven carriers on the quote panel, in the order `CARRIER_LOGOS` lists
  * them in `IntegratedScriptPanel.tsx`, plus "Other".
@@ -58,14 +71,6 @@ export const APPLICATION_CARRIERS = [
 
 const OTHER_CARRIER = 'Other';
 
-const PLAN_TYPES = [
-  { value: 'LEVEL', label: 'Level' },
-  { value: 'GRADED', label: 'Graded' },
-  { value: 'ROP', label: 'Return of Premium' },
-  { value: 'GUARANTEED_ISSUE', label: 'Guaranteed Issue' },
-] as const;
-
-/** Monthly first: it is what almost every final-expense policy is written on. */
 const PAYMENT_MODES = [
   { value: 'MONTHLY', label: 'Monthly', perYear: 12 },
   { value: 'QUARTERLY', label: 'Quarterly', perYear: 4 },
@@ -75,35 +80,40 @@ const PAYMENT_MODES = [
 
 export type PaymentMode = (typeof PAYMENT_MODES)[number]['value'];
 
-/** The body `POST /api/v1/applications` takes. */
+/**
+ * The application body, as both the disposition endpoint and
+ * `POST /api/v1/applications` take it.
+ *
+ * `paymentMode` is always `ANNUAL` and `modalPremium` is the annual premium.
+ * The server annualises `modalPremium` by `paymentMode`, so sending the annual
+ * figure on the annual mode makes the stored annualised premium exactly what
+ * the agent typed -- no conversion, nothing to get backwards.
+ */
 export interface ApplicationLogPayload {
   clientRequestId: string;
   carrier: string;
-  product?: string;
-  planType?: string;
   faceAmount: number;
   modalPremium: number;
   paymentMode: PaymentMode;
-  carrierApplicationNumber?: string;
   firstName: string;
   lastName: string;
-  dob?: string;
-  state?: string;
   phone?: string;
-  notes?: string;
 }
 
 /** What the call already knows, so the agent does not retype it. */
 export interface ApplicationLogPrefill {
   carrier?: string | null;
-  planType?: string | null;
+  /** Coverage amount. Named for the column it fills. */
   faceAmount?: number | string | null;
+  /** The ANNUAL premium. */
   premium?: number | string | null;
   firstName?: string | null;
   lastName?: string | null;
+  phone?: string | null;
+  /** Accepted and ignored: the form no longer asks for these. */
+  planType?: string | null;
   dob?: string | null;
   state?: string | null;
-  phone?: string | null;
 }
 
 interface ApplicationLogFormProps {
@@ -117,12 +127,6 @@ interface ApplicationLogFormProps {
   /** An error from the last submit, rendered inline above the fields. */
   error?: string | null;
   disabled?: boolean;
-}
-
-/** The annualisation rule, the same one the server stores. */
-function annualize(modalPremium: number, mode: PaymentMode): number {
-  const perYear = PAYMENT_MODES.find(m => m.value === mode)?.perYear ?? 12;
-  return Math.round(modalPremium * perYear * 100) / 100;
 }
 
 const currency = new Intl.NumberFormat('en-US', {
@@ -196,28 +200,23 @@ export function ApplicationLogForm({
     knownCarrier ? prefilledCarrier : prefilledCarrier ? OTHER_CARRIER : ''
   );
   const [otherCarrier, setOtherCarrier] = useState(knownCarrier ? '' : prefilledCarrier);
-  const [planType, setPlanType] = useState(() => {
-    const raw = (prefill?.planType ?? '').toString().toUpperCase().replace(/\s+/g, '_');
-    return (PLAN_TYPES as readonly { value: string }[]).some(p => p.value === raw) ? raw : '';
-  });
+
   const [faceAmount, setFaceAmount] = useState(prefillString(prefill?.faceAmount));
   const [premium, setPremium] = useState(prefillString(prefill?.premium));
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('MONTHLY');
   const [firstName, setFirstName] = useState(prefillString(prefill?.firstName));
   const [lastName, setLastName] = useState(prefillString(prefill?.lastName));
-  const [dob, setDob] = useState(prefillString(prefill?.dob));
-  const [state, setState] = useState(prefillString(prefill?.state));
-  const [applicationNumber, setApplicationNumber] = useState('');
-  const [notes, setNotes] = useState('');
 
   const carrier = carrierChoice === OTHER_CARRIER ? otherCarrier.trim() : carrierChoice;
   const faceValue = numeric(faceAmount);
   const premiumValue = numeric(premium);
 
-  const annualized = useMemo(
-    () => (premiumValue && premiumValue > 0 ? annualize(premiumValue, paymentMode) : null),
-    [premiumValue, paymentMode]
-  );
+  /*
+   * The premium is entered annually, so the annualised figure IS what the agent
+   * typed. Kept as a named value anyway, because it is the number the agency's
+   * production is reported in and the form echoes it back under the field --
+   * the agent should see the figure their report will show, not infer it.
+   */
+  const annualized = premiumValue && premiumValue > 0 ? Number(premiumValue.toFixed(2)) : null;
 
   /*
    * The payload, or null while it is incomplete. The owning screen disables its
@@ -242,32 +241,19 @@ export function ApplicationLogForm({
     return {
       clientRequestId: clientRequestIdRef.current,
       carrier,
-      planType: planType || undefined,
       faceAmount: Math.round(faceValue),
+      /*
+       * The annual premium, on the annual mode. The server annualises
+       * `modalPremium` by `paymentMode`, so this stores exactly the figure the
+       * agent typed -- there is no conversion to get backwards.
+       */
       modalPremium: Number(premiumValue.toFixed(2)),
-      paymentMode,
-      carrierApplicationNumber: applicationNumber.trim() || undefined,
+      paymentMode: 'ANNUAL',
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      dob: /^\d{2}\/\d{2}\/\d{4}$/.test(dob.trim()) ? dob.trim() : undefined,
-      state: state.trim() || undefined,
       phone: prefill?.phone ? String(prefill.phone).replace(/\D/g, '') || undefined : undefined,
-      notes: notes.trim() || undefined,
     };
-  }, [
-    carrier,
-    faceValue,
-    premiumValue,
-    paymentMode,
-    planType,
-    applicationNumber,
-    firstName,
-    lastName,
-    dob,
-    state,
-    notes,
-    prefill?.phone,
-  ]);
+  }, [carrier, faceValue, premiumValue, firstName, lastName, prefill?.phone]);
 
   useEffect(() => {
     onChange(payload);
@@ -323,28 +309,8 @@ export function ApplicationLogForm({
       </div>
 
       <div>
-        <label className={LABEL} htmlFor="app-plan-type">
-          Plan type
-        </label>
-        <select
-          id="app-plan-type"
-          value={planType}
-          onChange={e => setPlanType(e.target.value)}
-          disabled={disabled}
-          className={FIELD}
-        >
-          <option value="">Not recorded</option>
-          {PLAN_TYPES.map(plan => (
-            <option key={plan.value} value={plan.value}>
-              {plan.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
         <label className={LABEL} htmlFor="app-face-amount">
-          Face amount
+          Coverage amount
           <Req />
         </label>
         <input
@@ -361,7 +327,7 @@ export function ApplicationLogForm({
 
       <div>
         <label className={LABEL} htmlFor="app-premium">
-          Premium
+          Annual premium
           <Req />
         </label>
         <input
@@ -370,38 +336,17 @@ export function ApplicationLogForm({
           inputMode="decimal"
           value={premium}
           onChange={e => setPremium(e.target.value)}
-          placeholder="52.40"
+          placeholder="628.80"
           disabled={disabled}
           className={FIELD}
         />
         {/*
-          The annualised figure, live, under the field the agent just typed in.
-          It is what the agency's production is reported in, so the agent sees
-          the number they actually logged rather than finding out on a report
-          that they logged an annual premium in the monthly box.
+          Echoed back under the field, so the agent sees the figure their
+          production report will show rather than inferring it.
         */}
         <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-ink-3">
           {annualized === null ? 'Annualized —' : `Annualized ${currency.format(annualized)} / yr`}
         </p>
-      </div>
-
-      <div>
-        <label className={LABEL} htmlFor="app-payment-mode">
-          Paid
-        </label>
-        <select
-          id="app-payment-mode"
-          value={paymentMode}
-          onChange={e => setPaymentMode(e.target.value as PaymentMode)}
-          disabled={disabled}
-          className={FIELD}
-        >
-          {PAYMENT_MODES.map(mode => (
-            <option key={mode.value} value={mode.value}>
-              {mode.label}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -435,65 +380,11 @@ export function ApplicationLogForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={LABEL} htmlFor="app-dob">
-            Date of birth
-          </label>
-          <input
-            id="app-dob"
-            type="text"
-            value={dob}
-            onChange={e => setDob(e.target.value)}
-            placeholder="MM/DD/YYYY"
-            disabled={disabled}
-            className={FIELD}
-          />
-        </div>
-        <div>
-          <label className={LABEL} htmlFor="app-state">
-            State
-          </label>
-          <input
-            id="app-state"
-            type="text"
-            value={state}
-            onChange={e => setState(e.target.value)}
-            disabled={disabled}
-            className={FIELD}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className={LABEL} htmlFor="app-number">
-          Application no.
-        </label>
-        <input
-          id="app-number"
-          type="text"
-          value={applicationNumber}
-          onChange={e => setApplicationNumber(e.target.value)}
-          placeholder="Optional"
-          disabled={disabled}
-          className={FIELD}
-        />
-      </div>
-
-      <div>
-        <label className={LABEL} htmlFor="app-notes">
-          Notes
-        </label>
-        <textarea
-          id="app-notes"
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          rows={2}
-          placeholder="Optional"
-          disabled={disabled}
-          className={`${FIELD} resize-none`}
-        />
-      </div>
+      {/*
+        No notes box here. The disposition the agent is filling in already has
+        one, and two note fields on one screen is an agent wondering which the
+        supervisor reads.
+      */}
     </div>
   );
 }

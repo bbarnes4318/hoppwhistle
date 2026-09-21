@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
+import { RedispositionPanel } from '@/components/calls/redisposition-panel';
 import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
+import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
@@ -113,31 +115,9 @@ interface CallRecord {
   agentName?: string | null;
 }
 
-/**
- * The canonical dispositions, and how they read on screen.
- *
- * The list mirrors `VALID_DISPOSITIONS` in `apps/api/src/routes/index.ts`,
- * which is what the write path enforces. Anything not in it renders verbatim
- * rather than being hidden: a value the API accepted and this map has not
- * caught up with is still the truth about that call, and blanking it would
- * make the screen quietly disagree with the database.
- */
-const DISPOSITION_LABELS: Record<string, string> = {
-  APPLICATION_SUBMITTED: 'Application submitted',
-  LIVE_TRANSFER: 'Live transfer',
-  SET_APPOINTMENT: 'Appointment set',
-  SET_CALLBACK: 'Callback set',
-  FOLLOW_UP: 'Follow up',
-  VERIFIED: 'Verified',
-  NOT_INTERESTED: 'Not interested',
-  NOT_QUALIFIED: 'Not qualified',
-  NO_MEMORY_CONFUSED: 'No memory / confused',
-  WRONG_NUMBER: 'Wrong number',
-  NO_ANSWER: 'No answer',
-  DISCONNECTED: 'Disconnected',
-};
-
 interface CallDetail extends CallRecord {
+  /** Whether a submitted, non-voided application is already on this call. */
+  hasSubmittedApplication?: boolean;
   legs?: Array<{
     id: string;
     direction: string;
@@ -1753,6 +1733,27 @@ export default function OperationsCallLogsPage() {
                       <h4 className="text-xs font-bold text-ink-3 uppercase tracking-widest">
                         Agent Notes / Outcome
                       </h4>
+                      {/*
+                        Writing the call up, from here.
+
+                        Most business closes on a follow-up rather than on the
+                        call that produced it, and until this control the ledger
+                        rendered the disposition as text with no way to change
+                        it -- so a sale made on the second call was never
+                        recorded, and business that is never recorded raises
+                        what the agency pays per application.
+                      */}
+                      <RedispositionPanel
+                        callId={detailCall.id}
+                        currentDisposition={detailCall.disposition ?? null}
+                        currentNotes={detailCall.dispositionNotes ?? null}
+                        hasSubmittedApplication={detailCall.hasSubmittedApplication === true}
+                        onSaved={() => {
+                          void handleOpenDetailDrawer(detailCall.id);
+                          void fetchCalls();
+                        }}
+                      />
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <span className="text-[10px] text-ink-3">Answered by</span>

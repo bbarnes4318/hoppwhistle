@@ -473,6 +473,45 @@ linked to that call. Non-voided, because a voided application is not one: the
 measurement drops it from the numerator and this has to agree with the
 measurement.
 
+**These agents are the agency's, not ours.** They write the application on the
+carrier's own portal and they are not going to retype it into a second system.
+What they do in here is disposition the call. So the form asks for FIVE things
+and nothing else:
+
+> first name · last name · carrier · annual premium · coverage amount
+
+Plan type, payment mode, date of birth, state, application number and a second
+notes box are gone. The premium is asked for **annually** rather than as a modal
+premium plus a mode, because annualised is how the agency's production is
+reported: asking for the number that gets reported removes both the arithmetic
+and the chance of logging a monthly figure in a box the report reads as yearly.
+(The call-centre prefill multiplies the quote's monthly premium by twelve on the
+way in, for the same reason.)
+
+**And it can be done later, which is when most of it happens.** Final expense
+does not close on the call that produced it. The agent talks to somebody on
+Monday, the customer signs on Thursday, and the agent opens the call log, finds
+that customer, and marks the call as an application submitted then. `PATCH
+/api/v1/calls/:callId/disposition` takes the application for exactly that, and
+the calls ledger grew a **Change disposition** control on the call detail so
+there is somewhere to do it.
+
+That route used to REFUSE it. It returned 409 unless an application already
+existed, reasoning that a correction path should not be able to invent
+business. The reasoning was sound and the premise was wrong: the agent is not
+correcting a write-up, they are writing the sale up for the first time, days
+later, and this is the only door they have. Refusing meant the business was
+never counted — which understates the closing percentage, and a lower closing
+percentage is a HIGHER price per application. The guard charged the agency for
+its own sales.
+
+A call that already carries a submitted application is **not asked again**.
+That is the real correction case — dispositioned wrong, fixed, put back — and
+asking would spend a second credit for one piece of business. A voided
+application is not one, so a call whose only application was voided needs a
+real one again; the check agrees with the measurement, which drops voided rows
+from the numerator.
+
 **There are two ways in, and both still work.** A sale reaches the numerator
 either from a call disposition (`APPLICATION_SUBMITTED`, which now carries the
 application) or **standalone**, with no call attached — a callback taken on the

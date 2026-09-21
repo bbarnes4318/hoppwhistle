@@ -102,7 +102,7 @@ export function GlobalDispositionModal() {
     const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
     if (wroteApplication && !application) {
       setApplicationError(
-        'Record the carrier, face amount, premium, first name and last name first.'
+        'Record the carrier, coverage amount, annual premium, first name and last name first.'
       );
       return;
     }
