@@ -18,6 +18,7 @@ import {
   Settings,
   Shield,
   Telescope,
+  Trophy,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -50,6 +51,12 @@ export const PLATFORM_NAV: NavGroup[] = [
       { name: 'Call center', href: '/call-center', icon: Headphones },
       { name: 'Calls', href: '/calls', icon: AudioLines },
       { name: 'Applications', href: '/applications', icon: FileText },
+      {
+        name: 'Leaderboard',
+        href: '/leaderboard',
+        icon: Trophy,
+        title: 'The floor ranked over any period: calls, dials, applications, conversion',
+      },
       { name: 'CRM', href: '/insurance-leads', icon: Users },
       {
         name: 'CRM reports',
@@ -251,6 +258,18 @@ export const AGENT_NAV: NavGroup[] = [
         href: '/applications',
         icon: FileText,
         title: 'The applications you wrote',
+      },
+      {
+        /*
+         * An agent's screen as much as a principal's, and the one agency view
+         * an agent sees colleagues' numbers on. It carries no rate, balance or
+         * charge -- see the header of routes/leaderboard.ts -- so the reason
+         * /delivery is kept off this list does not apply to it.
+         */
+        name: 'Leaderboard',
+        href: '/leaderboard',
+        icon: Trophy,
+        title: 'Where you stand on the floor, and what it would take to move up',
       },
       { name: 'CRM', href: '/insurance-leads', icon: Users },
     ],

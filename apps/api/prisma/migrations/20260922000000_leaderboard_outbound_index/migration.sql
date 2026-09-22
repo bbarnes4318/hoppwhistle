@@ -1,0 +1,37 @@
+-- The index the agency leaderboard's outbound column needs.
+--
+-- ── What it serves ───────────────────────────────────────────────────────────
+--
+-- `GET /api/v1/leaderboard` reports, per agent, the outbound calls they placed
+-- in a window. Inbound is already covered: `calls_tenantId_answeredByUserId_answeredAt_idx`
+-- was added for the per-agent delivery table and it is exactly right, because a
+-- delivered call belongs to the agent who ANSWERED it at the moment they picked
+-- up.
+--
+-- Outbound is attributed and timed differently, and has to be. Most outbound
+-- calls are never answered by anybody, so `answeredAt` is null on the majority
+-- of them and timing by it would silently drop every dial that rang out -- a
+-- dialling column that counts only connects is not a dialling column. The agent
+-- is the one who PLACED the call (`createdById`, written by the softphone
+-- originate handler) and the moment is when they dialled (`createdAt`).
+--
+-- Without this index that query has only `calls_tenantId_createdAt_idx` to work
+-- with: it reads every call the agency made in the window, inbound included,
+-- and discards most of them. Over the board's `THIS_YEAR` period on a floor
+-- taking 450 calls a day, that is the whole year of the table to answer one
+-- column, on a screen forty agents refresh all day.
+--
+-- ── Nothing else changes ─────────────────────────────────────────────────────
+--
+-- One index, on an existing table. No column is added, altered or dropped, no
+-- constraint is created and no row is written or read. `IF NOT EXISTS` makes it
+-- re-runnable, which matters on this database -- see docs/MIGRATION_DIVERGENCE.md,
+-- and `scripts/deploy-netenroll.sh`, which applies migration SQL through psql
+-- because there is no _prisma_migrations table to consult.
+--
+-- The matching `@@index` is in schema.prisma, so `prisma db push` (which is how
+-- CI and every fresh dev database are built) creates the same index from the
+-- schema and this file is the path for a database that already exists.
+
+CREATE INDEX IF NOT EXISTS "calls_tenantId_direction_createdById_createdAt_idx"
+  ON "calls" ("tenantId", "direction", "createdById", "createdAt");
