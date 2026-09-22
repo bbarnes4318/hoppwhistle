@@ -77,10 +77,17 @@
  */
 
 import type { AgencyBillingProfile, PrismaClient } from '@prisma/client';
-import { AchMandateStatus, AgencyPaymentMethod, SettlementPaymentStatus } from '@prisma/client';
+import {
+  AchMandateStatus,
+  AgencyPaymentMethod,
+  PaymentProvider,
+  SettlementPaymentStatus,
+} from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 import { toNumber } from '../rating/rate-curve.js';
+
+import { providerChargesInPlatform } from './payment-provider.js';
 
 export type TermsClient = Pick<PrismaClient, 'agencyBillingProfile' | 'dailySettlement'>;
 
@@ -240,6 +247,22 @@ export interface AgencyTerms {
   rateOffset: number;
   /** Which instrument the settlement debits. */
   paymentMethod: AgencyPaymentMethod;
+  /**
+   * Who debits it. STRIPE for every agency that has not been moved off it.
+   *
+   * Read this rather than the profile column: an agency with no profile has no
+   * column to read and every caller would have to decide what a missing one
+   * means. Here it means STRIPE, once.
+   */
+  paymentProvider: PaymentProvider;
+  /**
+   * Whether this agency's money moves through this platform.
+   *
+   * False for OFFLINE. The settlement and the opening purchase branch on this
+   * rather than on the provider itself, so a provider added later does not need
+   * either of them reopened.
+   */
+  chargesInPlatform: boolean;
   /** The ceiling actually in force, as a percentage above the Daily Block. */
   ceilingPct: number;
   /** Where that percentage came from, so the portal can say. */
@@ -294,6 +317,9 @@ export async function loadAgencyTerms(
   const paymentMethod = profile?.paymentMethod ?? AgencyPaymentMethod.ACH;
   const payingByCard = paymentMethod === AgencyPaymentMethod.CARD;
 
+  const paymentProvider = profile?.paymentProvider ?? PaymentProvider.STRIPE;
+  const chargesInPlatform = providerChargesInPlatform(paymentProvider);
+
   const mandateStatus = payingByCard
     ? profile?.cardMandateStatus ?? AchMandateStatus.NONE
     : profile?.achMandateStatus ?? AchMandateStatus.NONE;
@@ -301,6 +327,23 @@ export async function loadAgencyTerms(
   const settlementPaymentMethodId = payingByCard
     ? profile?.cardPaymentMethodId ?? null
     : profile?.achPaymentMethodId ?? null;
+
+  /*
+   * An OFFLINE agency has nothing to debit and is not missing anything.
+   *
+   * `hasValidMandate` is the question "can this agency be billed", and for an
+   * agency billed outside this platform the answer is yes -- elsewhere. Reading
+   * it off `mandateStatus` instead would give NONE, which surfaces as the
+   * `NO_VALID_MANDATE` enrolment blocker and as `HALTED_NO_MANDATE` on every
+   * settlement: an agency that pays by check would be refused enrolment for
+   * failing to produce a bank mandate nobody asked it for.
+   *
+   * This is the only place the two readings are reconciled, so no caller has to
+   * know that an offline agency's mandate columns are empty on purpose.
+   */
+  const hasValidMandate = chargesInPlatform
+    ? mandateStatus === AchMandateStatus.ACTIVE && !!settlementPaymentMethodId
+    : true;
 
   return {
     tenantId,
@@ -311,13 +354,15 @@ export async function loadAgencyTerms(
     dailyBlockApplications,
     rateOffset: profile?.rateOffset == null ? 0 : toNumber(profile.rateOffset),
     paymentMethod,
+    paymentProvider,
+    chargesInPlatform,
     ceilingPct,
     ceilingSource,
     ceilingApplications: overrunCeilingApplications(dailyBlockApplications, ceilingPct),
     consecutiveCleanSettlements: clean,
     maxDailyDebit: profile === null ? 0 : toNumber(profile.maxDailyDebit),
     mandateStatus,
-    hasValidMandate: mandateStatus === AchMandateStatus.ACTIVE && !!settlementPaymentMethodId,
+    hasValidMandate,
     stripeCustomerId: profile?.stripeCustomerId ?? null,
     achPaymentMethodId: profile?.achPaymentMethodId ?? null,
     cardPaymentMethodId: profile?.cardPaymentMethodId ?? null,

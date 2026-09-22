@@ -382,6 +382,13 @@ function AgencySteps({
   });
   const [paymentMethod, setPaymentMethod] = useState('ACH');
   const [ownerEmail, setOwnerEmail] = useState('');
+  /**
+   * Who moves this agency's money. Defaults to STRIPE, which is what every
+   * agency was on before the column existed -- an onboarding screen that
+   * defaulted to OFFLINE would quietly stop charging the next agency somebody
+   * onboarded without noticing the control.
+   */
+  const [paymentProvider, setPaymentProvider] = useState('STRIPE');
 
   const stepById = (id: StepId): StepState =>
     state.steps.find(step => step.id === id) ?? {
@@ -608,6 +615,50 @@ function AgencySteps({
             Record
           </Button>
         </div>
+
+        {/*
+          Who moves the money, as opposed to what is debited above.
+
+          Separate control and separate request, because they are separate
+          decisions with separate consequences: the method decides the Overrun
+          ceiling (a card is reversible whoever processes it), the provider
+          decides whether this platform debits anybody at all.
+        */}
+        <div className="flex items-end gap-3 border-t border-rule pt-3">
+          <div>
+            <label className="mb-1 block text-[11px] text-muted-foreground">
+              Payment provider
+            </label>
+            <select
+              value={paymentProvider}
+              onChange={e => setPaymentProvider(e.target.value)}
+              className="h-9 rounded-control border border-rule bg-paper px-2 text-sm"
+            >
+              <option value="STRIPE">Stripe — charged here</option>
+              <option value="OFFLINE">Offline — invoiced elsewhere</option>
+            </select>
+          </div>
+          <Button
+            disabled={busy}
+            variant="outline"
+            onClick={() =>
+              void call(
+                'put',
+                `/api/v1/platform/delivery/agencies/${state.tenantId}/payment-provider`,
+                { paymentProvider }
+              )
+            }
+          >
+            Record
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          An <strong>offline</strong> agency is never debited by this platform. Its calls, credits,
+          rate and Overrun ceiling work exactly as any other agency&rsquo;s; each night&rsquo;s
+          settlement is computed in full and recorded as payable, for you to invoice wherever this
+          agency is billed. Its opening block is recorded with the reference the money arrived
+          against, and it needs no mandate below.
+        </p>
         {/*
           Stated because it is the question this step raises: choosing CARD does
           not price the agency differently by itself. The offset above is a

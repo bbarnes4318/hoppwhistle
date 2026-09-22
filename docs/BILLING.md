@@ -1136,7 +1136,8 @@ nothing, which is asserted.
 
 ## 5. Payment
 
-ACH debit, off-session, against a saved mandate.
+ACH debit, off-session, against a saved mandate — for an agency whose payment
+provider charges through this platform. See §5b for the one that does not.
 
 ### One Stripe integration
 
@@ -1243,6 +1244,135 @@ than assertions about it:
 An agency OWNER is refused every one of them.
 
 ---
+
+## 5b. The payment provider — who moves the money
+
+`AgencyPaymentMethod` answers WHAT is debited: a bank account, or a card. It
+carries the Overrun ceiling consequence, because a card can be taken back
+whoever processes it.
+
+`PaymentProvider` on `agency_billing_profiles` answers WHO debits it, and
+carries none. Two columns rather than one enum with a member per pair, because
+`ceilingFor()` asks only the first question and the settlement asks only the
+second, and a combined enum makes both of them enumerate both.
+
+| | |
+| --- | --- |
+| `STRIPE` | the default, and what every agency was on before the column existed. Mandates, setup intents, webhooks and debits are Stripe's. |
+| `OFFLINE` | billed outside this platform entirely — a check, a wire, an invoice raised in somebody else's system. |
+
+`PUT /api/v1/platform/delivery/agencies/:tenantId/payment-provider` sets it.
+Platform-only, audited, and **refused while a settlement is PENDING**: that
+status means a debit was either not placed yet or placed and not yet answered
+for, and switching provider underneath it leaves a charge in flight that no
+provider now owns.
+
+### What OFFLINE changes, and what it deliberately does not
+
+Nothing about delivery, metering, rating or the ledger. An offline agency's
+calls, credits, closing percentage, rate, Daily Block and Overrun ceiling work
+exactly as any other agency's. What changes is the last step of the settlement:
+
+- The settlement is **computed in full** and written with
+  `paymentStatus: EXTERNAL`. Every figure on the row is the real computation —
+  it is what this agency owes for that Delivery Day.
+- **No gateway call is made.** Not a refused one: none at all. The settlement
+  checks `terms.chargesInPlatform` and takes the EXTERNAL branch.
+- **The next Delivery Day's block is still sold.** Withholding it until somebody
+  confirms a wire would starve the agency to its Overrun ceiling by mid-morning
+  for an invoice that is not due yet. What stops a non-paying offline agency is
+  the same thing that stops any other: suspension, or a withdrawn ceiling.
+- **Platform staff are notified**, and the agency is not
+  (`SETTLEMENT_PAYABLE_EXTERNALLY`). It is a bill for somebody here to raise;
+  being invoiced is what the agency agreed to, and a nightly "we did not debit
+  you" is noise on its floor.
+
+### EXTERNAL is not SUCCEEDED, and that is the point
+
+`consecutiveCleanSettlements()` counts `SUCCEEDED` and `NOT_CHARGED`, and at ten
+it doubles an agency's Overrun ceiling from 50% to 100%. Nothing in an EXTERNAL
+settlement observed money arriving, so counting it would buy an agency unsecured
+credit on the strength of an invoice nobody has confirmed was paid. It is
+excluded for the same reason `DRY_RUN` is.
+
+It is not `FAILED` either, which would stop delivery for a debit that was never
+attempted.
+
+### No mandate, and not missing one
+
+`loadAgencyTerms` reports `hasValidMandate: true` for an offline agency on the
+strength of the provider rather than a stored instrument. Without that, an
+agency that pays by check is refused enrolment with `NO_VALID_MANDATE` for
+failing to produce a bank mandate nobody asked it for, and every settlement
+halts with `HALTED_NO_MANDATE`.
+
+The agency-facing mandate setup routes refuse an offline agency explicitly, with
+`PROVIDER_HAS_NO_MANDATE`, rather than letting it fail further down where
+`ensureCustomer` answers null and the principal reads "Could not create a Stripe
+customer" — an outage message for something working as configured.
+
+### The opening purchase, for money that already arrived
+
+`POST /api/v1/platform/delivery/agencies/:tenantId/opening-purchase` charges
+before it writes. For an agency that had already paid — by check, by wire —
+there was no way to record the block it had bought without debiting it a second
+time for the same money. The alternatives were a hand-written ledger row with no
+audit trail, or charging and refunding, in a product whose first rule is that
+nothing here is ever refunded.
+
+For an OFFLINE agency the route skips the gateway and writes the purchase
+directly, and `externalPaymentReference` is **required**:
+
+```
+POST /platform/delivery/agencies/$T/opening-purchase
+{ "quantity": 10, "unitRate": 160, "externalPaymentReference": "check #1042" }
+```
+
+A ledger row saying a block was paid for outside the platform, with nothing
+saying where, is not a record — it is an assertion, and the only person who
+could check it is the one who wrote it.
+
+Sending that field for an agency that IS charged here is **refused**, not
+ignored: it means the caller believed the purchase was already paid for, and
+debiting them anyway is the exact double-charge the branch exists to prevent.
+
+`externalPaymentReference` is also what separates the two kinds of
+unpaid-looking ledger row. A `DRY_RUN` block carries nulls in both payment
+columns and was genuinely paid for by nobody; an OFFLINE block carries this one.
+Both null on a PURCHASE means nobody has paid for it.
+
+### Adding a provider
+
+Three things:
+
+1. A member on `PaymentProvider`, plus a migration.
+2. A class implementing `PaymentGateway`. `services/billing/offline-gateway.ts`
+   is the smallest possible one.
+3. One line in `ADAPTERS` in `services/billing/payment-gateways.ts`.
+
+The settlement, the ledger, the delivery gate and the enrolment check are
+untouched by any of it: they resolve a gateway for the tenant and call the
+interface.
+
+An unrecognised provider **falls back to Stripe rather than throwing**.
+`settleAllAgencies` walks every enrolled tenant in one process, so a throw takes
+the nightly run down for every agency, not just the one on the new provider.
+
+### On Melio
+
+Not implemented, and deliberately not stubbed. Melio's partner API is documented
+as an accounts-**payable** surface — bills, vendors, scheduled payouts to
+vendors. This platform's settlement needs the opposite: an unattended pull debit
+against an agency's bank account, nightly, with nobody present to approve it.
+Whether their API can do that has to be answered from their sandbox before an
+adapter is written, and their API access is partner-gated rather than open
+signup.
+
+An enum member nothing implements is a member an agency can be assigned to and
+then silently fail to be billed under. Until that question is settled, an agency
+invoiced through Melio is an `OFFLINE` agency: it delivers, meters and computes
+exactly like any other, the money is collected in Melio, and the reference is
+recorded against the settlement.
 
 ## 6. What the portal shows
 

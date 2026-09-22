@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
+import { PaymentProvider } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import Fastify, { FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
@@ -327,6 +328,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       mandate: boolean;
       enrolled: boolean;
       chargesEnabled: boolean;
+      paymentProvider: PaymentProvider;
     }> = {}
   ) {
     const block = overrides.dailyBlockApplications ?? 45;
@@ -345,6 +347,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       achMandateVerifiedAt: mandate ? new Date() : null,
       billingEnrolledAt: enrolled ? new Date() : null,
       chargesEnabled,
+      paymentProvider: overrides.paymentProvider ?? PaymentProvider.STRIPE,
     };
 
     return prisma.agencyBillingProfile.upsert({
@@ -2331,6 +2334,167 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
 
       expect(response.statusCode).toBe(403);
       expect(await prisma.dailySettlement.count()).toBe(0);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4b. An agency billed outside the platform
+  // ══════════════════════════════════════════════════════════════════════════
+  /**
+   * The OFFLINE payment provider.
+   *
+   * Before it existed, an agency that had already paid -- by check, by wire,
+   * through somebody else's accounts-payable system -- could not be recorded.
+   * The only route that writes an opening purchase charges first, so giving
+   * that agency the credits it had paid for meant debiting it a second time for
+   * the same money.
+   *
+   * The properties that have to hold:
+   *
+   *   1. NO DEBIT IS EVER PLACED for an offline agency, from any path.
+   *   2. THE SETTLEMENT IS STILL COMPUTED IN FULL, and the next day's block is
+   *      still sold, so the agency is not starved for an invoice not yet due.
+   *   3. EXTERNAL IS NOT A CLEAN SETTLEMENT. It must not raise the Overrun
+   *      ceiling, because nothing observed money arriving.
+   *   4. IT IS NOT REPORTED AS HAVING NO MANDATE. An offline agency has none by
+   *      design, and the mandate halt is what stops delivery.
+   */
+  describe('the OFFLINE payment provider', () => {
+    async function seedOfflineSettleableDay(tenantId: string) {
+      await seedTerms(tenantId, {
+        dailyBlockApplications: 45,
+        paymentProvider: PaymentProvider.OFFLINE,
+        // No mandate at all: an offline agency was never asked for one, and
+        // that is the state this suite has to prove is fine.
+        mandate: false,
+      });
+      await seedOpeningAgreement(tenantId);
+      await recordPurchase(prisma, {
+        tenantId,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: null,
+        externalPaymentReference: 'check #1042',
+      });
+      // The same 440 calls and 67 applications as the charging case, so the
+      // figures below are comparable to the settlement suite above line for
+      // line: 45 consumed, 22 overrun, $8,978 owed.
+      await seedDeliveredCalls(tenantId, CLOSED_DAY, 440);
+      await submitApplications(tenantId, CLOSED_DAY, 67);
+    }
+
+    it('computes the settlement in full and places no debit', async () => {
+      await seedOfflineSettleableDay(big.id);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        // Deliberately the FakeGateway, not the OfflineGateway: this asserts
+        // the settlement declines to call a working gateway, rather than
+        // calling one that happens to refuse.
+        gateway,
+      });
+
+      // Every figure is the real computation, identical to a charging agency's.
+      expect(result.overrunQuantity).toBe(22);
+      expect(result.rate).toBe(134);
+      expect(result.nextBlockQuantity).toBe(45);
+      expect(result.totalCharged).toBe(8978);
+
+      // And nothing was charged, through any instrument.
+      expect(result.paymentStatus).toBe('EXTERNAL');
+      expect(gateway.achCharges).toHaveLength(0);
+      expect(gateway.cardCharges).toHaveLength(0);
+    });
+
+    it('still sells the next Delivery Day block, so the agency is not starved', async () => {
+      await seedOfflineSettleableDay(big.id);
+
+      await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      const purchase = await prisma.applicationCreditLedgerEntry.findFirst({
+        where: { tenantId: big.id, entryType: 'PURCHASE', deliveryDay: NEXT_DAY },
+      });
+      expect(purchase).not.toBeNull();
+      expect(purchase?.quantity).toBe(45);
+      // No payment reference of either kind: the invoice has not been raised
+      // yet, let alone paid. A purchase with both null is exactly what it looks
+      // like -- a block nobody has paid for -- and the settlement it names
+      // carries the amount owed.
+      expect(purchase?.stripePaymentIntentId).toBeNull();
+      expect(purchase?.externalPaymentReference).toBeNull();
+    });
+
+    it('records no payment attempt, because none was attempted', async () => {
+      await seedOfflineSettleableDay(big.id);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      const attempts = await prisma.settlementPaymentAttempt.count({
+        where: { settlementId: result.settlementId as string },
+      });
+      expect(attempts).toBe(0);
+    });
+
+    /**
+     * The property that protects the Overrun ceiling.
+     *
+     * `consecutiveCleanSettlements()` counts SUCCEEDED and NOT_CHARGED, and at
+     * ten it doubles an agency's ceiling from 50% to 100%. An EXTERNAL
+     * settlement is an unconfirmed invoice, so counting it would buy an agency
+     * unsecured credit on the strength of money nobody has seen.
+     */
+    it('does not count an EXTERNAL settlement as a clean one', async () => {
+      await seedOfflineSettleableDay(big.id);
+      await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.consecutiveCleanSettlements).toBe(0);
+    });
+
+    /**
+     * Without this, an agency that pays by check is refused enrolment for
+     * failing to produce a bank mandate nobody asked it for, and every one of
+     * its settlements halts with HALTED_NO_MANDATE.
+     */
+    it('is not reported as missing a mandate', async () => {
+      await seedTerms(big.id, {
+        paymentProvider: PaymentProvider.OFFLINE,
+        mandate: false,
+      });
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.chargesInPlatform).toBe(false);
+      expect(terms.hasValidMandate).toBe(true);
+    });
+
+    /** And a STRIPE agency with no mandate is still reported as missing one. */
+    it('still reports a Stripe agency with no mandate as missing one', async () => {
+      await seedTerms(big.id, {
+        paymentProvider: PaymentProvider.STRIPE,
+        mandate: false,
+      });
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.chargesInPlatform).toBe(true);
+      expect(terms.hasValidMandate).toBe(false);
     });
   });
 

@@ -120,7 +120,6 @@ import { measureCalendarDay } from '../rating/measurement.js';
 import { toNumber } from '../rating/rate-curve.js';
 import { rateAgencyForClosedDay } from '../rating/rating-engine.js';
 
-import { paymentGateway } from './ach.js';
 import type { PaymentGateway } from './ach.js';
 import {
   creditBalance,
@@ -129,6 +128,7 @@ import {
   reconcileDeliveryDay,
 } from './credit-ledger.js';
 import { BillingNotificationKind, notify } from './notifications.js';
+import { gatewayForProvider } from './payment-gateways.js';
 import { loadAgencyTerms } from './terms.js';
 
 /** Dollars to whole cents, without floating-point drift. */
@@ -187,7 +187,6 @@ export async function settleAgencyForDeliveryDay(
   options: SettleOptions
 ): Promise<SettlementResult> {
   const prisma = options.prisma ?? getPrismaClient();
-  const gateway = options.gateway ?? paymentGateway();
   const now = options.now ?? new Date();
   const deliveryDay = options.deliveryDay ?? lastClosedCalendarDay(now);
   const tenantId = options.tenantId;
@@ -349,6 +348,17 @@ export async function settleAgencyForDeliveryDay(
   const chargingAllowed = terms.chargesEnabled && options.settleWithoutCharge !== true;
 
   /*
+   * The gateway this agency's money actually moves through.
+   *
+   * Resolved from the agency's own `paymentProvider` rather than from a
+   * process-wide singleton, which is what made "who charges this agency" a
+   * question with one compiled-in answer. An explicit `options.gateway` still
+   * wins, because that is how the concurrency suite installs a gateway that
+   * counts its calls.
+   */
+  const gateway = options.gateway ?? gatewayForProvider(terms.paymentProvider);
+
+  /*
    * The maximum-daily-debit halt is checked even in a dry run, and comes first.
    *
    * A dry run exists to show what would happen. An agency whose computed
@@ -362,9 +372,27 @@ export async function settleAgencyForDeliveryDay(
       ? SettlementPaymentStatus.NOT_CHARGED
       : !chargingAllowed
         ? SettlementPaymentStatus.DRY_RUN
-        : missingMandate
-          ? SettlementPaymentStatus.HALTED_NO_MANDATE
-          : SettlementPaymentStatus.PENDING;
+        : /*
+           * EXTERNAL sits below the dry run and above the mandate halt, and
+           * both placements are deliberate.
+           *
+           * Below the dry run: an agency whose charging is not yet enabled is
+           * being watched, and what it WOULD have done is the thing being
+           * watched. Reporting EXTERNAL there would hide that it is still in a
+           * dry run.
+           *
+           * Above the mandate halt: an offline agency has no mandate and is not
+           * supposed to. `terms.hasValidMandate` already answers true for it,
+           * so `missingMandate` is false and the order below is belt and
+           * braces -- but the halt is the branch that stops delivery, and an
+           * offline agency must never reach it by some later edit to that
+           * flag.
+           */
+          !terms.chargesInPlatform
+          ? SettlementPaymentStatus.EXTERNAL
+          : missingMandate
+            ? SettlementPaymentStatus.HALTED_NO_MANDATE
+            : SettlementPaymentStatus.PENDING;
 
   /*
    * Step 6, part one -- the record. Written BEFORE any money moves.
@@ -536,6 +564,76 @@ export async function settleAgencyForDeliveryDay(
       deliveryDay,
       settlementId: settlement.id,
       wouldHaveCharged: totalCharged,
+    });
+
+    return base;
+  }
+
+  if (initialStatus === SettlementPaymentStatus.EXTERNAL) {
+    /*
+     * An agency billed outside this platform. Everything except the debit.
+     *
+     * The next day's block IS sold, and that is the point of the branch rather
+     * than an oversight. An offline agency has agreed to pay; withholding its
+     * block until somebody confirms a wire would starve it to its Overrun
+     * ceiling by mid-morning for an invoice that is not due yet. What stops a
+     * non-paying offline agency is the same thing that stops any other -- a
+     * platform admin suspending it, or its ceiling being withdrawn -- not a
+     * silent failure to deliver the thing it bought.
+     *
+     * ── Why the purchase carries no payment reference ────────────────────────
+     *
+     * `stripePaymentIntentId` is null because no Stripe payment exists, and
+     * `externalPaymentReference` is null because at this moment nobody has told
+     * us one: the invoice has not been raised yet, let alone paid. The
+     * reference is written later, by the platform route that records the
+     * collection. A purchase with both columns null is exactly what it looks
+     * like -- a block nobody has yet paid for -- and the settlement it names
+     * carries the amount owed.
+     */
+    if (nextBlockQuantity > 0 && effective !== null) {
+      await recordPurchase(prisma, {
+        tenantId,
+        deliveryDay: nextCalendarDay(deliveryDay),
+        quantity: nextBlockQuantity,
+        unitRate: effective,
+        stripePaymentIntentId: null,
+        settlementId: settlement.id,
+        curveVersionId: rateChange?.curveVersionId ?? null,
+        curveVersion: rateChange?.curveVersion ?? null,
+      });
+    }
+
+    /*
+     * Platform staff only. This is a bill somebody here has to go and raise,
+     * and it is not news to the agency -- being invoiced is what it agreed to.
+     * `toAgency: true` here would mean an agency that pays by wire receives a
+     * nightly notification that it was not charged.
+     */
+    await notify(
+      {
+        tenantId,
+        kind: BillingNotificationKind.SETTLEMENT_PAYABLE_EXTERNALLY,
+        subjectKey: settlement.id,
+        subject: `Settlement for ${deliveryDay} is payable outside the platform`,
+        body:
+          `$${totalCharged.toFixed(2)} for Delivery Day ${deliveryDay} was computed in full ` +
+          'and NOT charged: this agency\'s payment provider is OFFLINE. Raise it wherever ' +
+          'this agency is billed, and record the reference against the settlement once it ' +
+          'is collected.',
+        toAgency: false,
+        toPlatform: true,
+      },
+      { prisma }
+    );
+
+    logger.info({
+      msg: 'Settlement computed and recorded as payable outside the platform',
+      tenantId,
+      deliveryDay,
+      settlementId: settlement.id,
+      owed: totalCharged,
+      paymentProvider: terms.paymentProvider,
     });
 
     return base;
@@ -925,7 +1023,6 @@ export async function retryFailedSettlements(
   } = {}
 ): Promise<Array<{ settlementId: string; status: SettlementPaymentStatus }>> {
   const prisma = options.prisma ?? getPrismaClient();
-  const gateway = options.gateway ?? paymentGateway();
   const now = options.now ?? new Date();
   const today = options.today ?? lastClosedCalendarDay(now);
 
@@ -953,6 +1050,18 @@ export async function retryFailedSettlements(
     }
 
     const terms = await loadAgencyTerms(settlement.tenantId, { prisma });
+
+    /*
+     * An offline agency has nothing to retry.
+     *
+     * It cannot reach FAILED in the first place -- its settlements are written
+     * EXTERNAL and never submitted to a gateway -- so this is guarding against
+     * a row that predates the agency being moved to OFFLINE. Retrying one would
+     * put a debit through a gateway the agency is no longer billed by.
+     */
+    if (!terms.chargesInPlatform) continue;
+
+    const gateway = options.gateway ?? gatewayForProvider(terms.paymentProvider);
     const total = toNumber(settlement.totalCharged);
 
     const result = await chargeAndFinalise({
@@ -1021,7 +1130,6 @@ export async function resumeStalledSettlements(
   } = {}
 ): Promise<Array<{ settlementId: string; status: SettlementPaymentStatus }>> {
   const prisma = options.prisma ?? getPrismaClient();
-  const gateway = options.gateway ?? paymentGateway();
   const now = options.now ?? new Date();
   const staleAfter = options.staleAfterMinutes ?? 30;
 
@@ -1040,6 +1148,17 @@ export async function resumeStalledSettlements(
 
   for (const settlement of stalled) {
     const terms = await loadAgencyTerms(settlement.tenantId, { prisma });
+
+    /*
+     * Same guard as the retry loop. A PENDING settlement belonging to an agency
+     * that is now OFFLINE was computed while it was still on a gateway; putting
+     * the debit through now would charge it through a provider it has been
+     * moved off. It is left PENDING for a human, which is what a stalled
+     * settlement nobody can safely finish should be.
+     */
+    if (!terms.chargesInPlatform) continue;
+
+    const gateway = options.gateway ?? gatewayForProvider(terms.paymentProvider);
     const total = toNumber(settlement.totalCharged);
 
     const result = await chargeAndFinalise({

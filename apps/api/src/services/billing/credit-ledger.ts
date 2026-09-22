@@ -169,6 +169,15 @@ export interface PurchaseInput {
   unitRate: number;
   /** The Stripe payment the block was bought with. */
   stripePaymentIntentId: string | null;
+  /**
+   * Where the money arrived, for a block this platform did not charge -- a
+   * check number, a wire reference, an invoice id.
+   *
+   * This is what separates the two kinds of unpaid-looking row. A DRY_RUN block
+   * carries nulls in both columns and was genuinely paid for by nobody; an
+   * OFFLINE block carries this one and was paid for somewhere else.
+   */
+  externalPaymentReference?: string | null;
   /** The settlement that sold it. Null for an agency's opening purchase. */
   settlementId?: string | null;
   curveVersionId?: string | null;
@@ -205,6 +214,7 @@ export async function recordPurchase(
       curveVersionId: input.curveVersionId ?? null,
       curveVersion: input.curveVersion ?? null,
       stripePaymentIntentId: input.stripePaymentIntentId,
+      externalPaymentReference: input.externalPaymentReference ?? null,
       settlementId: input.settlementId ?? null,
     },
     select: { id: true },
