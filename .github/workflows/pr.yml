@@ -15,7 +15,20 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30.
+    #
+    # This job ran at 22-23 minutes against a 30-minute cap, which is about 25%
+    # headroom on a job whose longest steps are a full workspace test suite
+    # against real Postgres and Redis. A runner having a bad day is enough to
+    # cross it: PR #135 was CANCELLED at 30m20s and then passed in 23m29s on the
+    # identical commit, with an 85-second Postgres checkpoint (178,805 files
+    # synced) in the log of the run that died.
+    #
+    # A cancelled job reads as a failed check and sends whoever opened the PR
+    # hunting for a defect that is not there. The browser smoke test moved to
+    # its own job below, which takes ~10 minutes off this one; the larger cap is
+    # so that the next slow runner is absorbed rather than reported as a bug.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -185,39 +198,11 @@ jobs:
           # fails the build rather than quietly removing the coverage.
           TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
 
-      # Blocking, and new in this PR.
-      #
-      # Three consecutive phases shipped a defect that one load of a page as a
-      # platform admin would have caught -- a crash that unmounted the
-      # dashboard, fourteen routes answering 401, and a cross-agency page
-      # rendering "Choose an agency" with agency-scoped endpoints polling behind
-      # it. Every one of them passed this job. Nothing in it had ever rendered
-      # a page: apps/api tested the endpoints, which were correct, and apps/web
-      # tested source text and pure functions.
-      #
-      # This boots the API and the web app and loads the three platform-wide
-      # landing routes in Chromium as a platform admin with no acting tenant,
-      # then every significant route as an agency principal, an agent, a
-      # publisher, a buyer and the platform admin inside an agency. It asserts
-      # each page rendered, the URL did not move, the prompt is absent, nothing
-      # was refused, the page is light and legible (every run of text clears
-      # 3:1, every border can be seen), the one dark scope is dark, and the
-      # polling settles. See the header of apps/web/e2e/platform-landing.smoke.mjs.
-      #
-      # It refuses rather than skips when it has no database: a smoke test that
-      # skips inside a blocking job is a green tick that means nothing, which is
-      # the failure this whole step exists to stop.
-      - name: Install Chromium for the browser smoke test
-        run: pnpm --filter @hopwhistle/web exec playwright install --with-deps chromium
-
-      - name: Platform landing smoke test (browser)
-        run: pnpm --filter @hopwhistle/web test:smoke
-        env:
-          CI: true
-          NODE_ENV: development
-          SMOKE_DATABASE_URL: postgresql://test:test@localhost:5432/test
-          SMOKE_REDIS_URL: redis://localhost:6379/2
-          JWT_SECRET: platform-smoke-secret-platform-smoke-secret
+      # The browser smoke test used to run here. It is its own job now --
+      # `browser-smoke` below -- because it takes about ten minutes on its own
+      # and sharing one timeout with a full workspace test suite meant neither
+      # had room. They also do not depend on each other, so running them in
+      # parallel makes the whole workflow finish sooner rather than later.
 
       - name: Build
         run: pnpm build
@@ -233,6 +218,122 @@ jobs:
             apps/*/dist
             packages/*/dist
           retention-days: 1
+
+  browser-smoke:
+    name: Browser smoke test
+    runs-on: ubuntu-latest
+    # Its own job, and deliberately NOT `needs: quality-gates`.
+    #
+    # It boots the API and the web app and loads every significant route in
+    # Chromium, which takes about ten minutes. Inside quality-gates that ten
+    # minutes sat on top of a full workspace test suite under one 30-minute cap,
+    # so a slow runner cancelled the pair and the cancellation read as a failing
+    # check on whoever's PR happened to be running.
+    #
+    # Split out it has its own budget, it runs at the same time as the suite
+    # rather than after it, and when it does fail the failure names itself
+    # instead of arriving as "quality gates failed".
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The smoke test signs people in, so it needs the schema. `exec`, not a
+      # bare `prisma`: without it pnpm looks for a package script by that name,
+      # finds none, and exits 0 having pushed nothing --
+      # `workflow-pnpm-invocations.test.ts` fails the build for that shape.
+      - name: Push Prisma Schema
+        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
+      - name: Install Chromium
+        run: pnpm --filter @hopwhistle/web exec playwright install --with-deps chromium
+
+      # Blocking.
+      #
+      # Three consecutive phases shipped a defect that one load of a page as a
+      # platform admin would have caught -- a crash that unmounted the
+      # dashboard, fourteen routes answering 401, and a cross-agency page
+      # rendering "Choose an agency" with agency-scoped endpoints polling behind
+      # it. Every one of them passed CI. Nothing in it had ever rendered a page:
+      # apps/api tested the endpoints, which were correct, and apps/web tested
+      # source text and pure functions.
+      #
+      # This boots the API and the web app and loads the three platform-wide
+      # landing routes in Chromium as a platform admin with no acting tenant,
+      # then every significant route as an agency principal, an agent, a
+      # publisher, a buyer and the platform admin inside an agency. It asserts
+      # each page rendered, the URL did not move, the prompt is absent, nothing
+      # was refused, the page is light and legible (every run of text clears
+      # 3:1, every border can be seen), the one dark scope is dark, and the
+      # polling settles. See the header of apps/web/e2e/platform-landing.smoke.mjs.
+      #
+      # It refuses rather than skips when it has no database: a smoke test that
+      # skips inside a blocking job is a green tick that means nothing, which is
+      # the failure this whole job exists to stop.
+      - name: Platform landing smoke test (browser)
+        run: pnpm --filter @hopwhistle/web test:smoke
+        env:
+          CI: true
+          NODE_ENV: development
+          SMOKE_DATABASE_URL: postgresql://test:test@localhost:5432/test
+          SMOKE_REDIS_URL: redis://localhost:6379/2
+          JWT_SECRET: platform-smoke-secret-platform-smoke-secret
 
   sip-tests:
     name: SIP Tests
@@ -311,14 +412,31 @@ jobs:
   summary:
     name: PR Summary
     runs-on: ubuntu-latest
-    needs: [quality-gates, sip-tests]
+    needs: [quality-gates, browser-smoke, sip-tests]
     if: always()
 
     steps:
       - name: Check results
         run: |
+          # `cancelled` lands here too, and it is worth naming as itself: a job
+          # killed by its own timeout is not a test failure, and reporting it as
+          # one sends somebody hunting for a defect that does not exist.
+          if [ "${{ needs.quality-gates.result }}" = "cancelled" ]; then
+            echo "❌ Quality gates was CANCELLED — it hit its timeout, or the run was cancelled."
+            echo "   This is not a test failure. Check the job's duration before looking for a bug."
+            exit 1
+          fi
           if [ "${{ needs.quality-gates.result }}" != "success" ]; then
             echo "❌ Quality gates failed"
+            exit 1
+          fi
+          if [ "${{ needs.browser-smoke.result }}" = "cancelled" ]; then
+            echo "❌ Browser smoke test was CANCELLED — it hit its timeout, or the run was cancelled."
+            echo "   This is not a test failure. Check the job's duration before looking for a bug."
+            exit 1
+          fi
+          if [ "${{ needs.browser-smoke.result }}" != "success" ]; then
+            echo "❌ Browser smoke test failed"
             exit 1
           fi
           if [ "${{ needs.sip-tests.result }}" != "success" ] && [ "${{ needs.sip-tests.result }}" != "skipped" ]; then
