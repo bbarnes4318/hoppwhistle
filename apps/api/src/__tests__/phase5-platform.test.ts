@@ -1543,6 +1543,11 @@ describe.skipIf(!gate.available)(
         });
         expect(audits.map(a => a.action).sort()).toEqual([
           'platform.delivery.enrolled',
+          // Sorts first among the delivery actions. This walk is the STRIPE
+          // path, and putting an agency on a provider that debits it is a step
+          // somebody took -- so it is audited like every other one, and named
+          // here rather than left to widen the list silently.
+          'platform.delivery.payment_provider.updated',
           'platform.onboarding.owner.invited',
           'platform.onboarding.payment_method.recorded',
           'platform.onboarding.tenant.created',
