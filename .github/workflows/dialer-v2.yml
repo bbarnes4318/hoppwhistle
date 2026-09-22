@@ -32,6 +32,9 @@ on:
       # Without them the kill-switch guard and the migration checks could be
       # edited — or broken — with nothing running them.
       - 'scripts/ci/**'
+      # The list this checks lives here, so pruning an entry from it must
+      # re-run the check that guards the list.
+      - 'scripts/deploy-netenroll.sh'
       # The enum and the Hopper entrypoint are what the kill-switch guard reads.
       # A change to either must re-evaluate it, and neither lives under a path
       # this workflow otherwise watches.
@@ -66,6 +69,9 @@ on:
       # Without them the kill-switch guard and the migration checks could be
       # edited — or broken — with nothing running them.
       - 'scripts/ci/**'
+      # The list this checks lives here, so pruning an entry from it must
+      # re-run the check that guards the list.
+      - 'scripts/deploy-netenroll.sh'
       # The enum and the Hopper entrypoint are what the kill-switch guard reads.
       # A change to either must re-evaluate it, and neither lives under a path
       # this workflow otherwise watches.
@@ -103,6 +109,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every migration reaches production only by being named in the deploy
+  # script's hand-maintained list. Forgetting it is silent -- CI green, review
+  # passed, deploy succeeded, column never arrived -- so the omission is caught
+  # here instead of by whoever is on call. No dependencies, so it answers in
+  # seconds and blocks nothing.
+  migrations-listed:
+    name: every migration is in the deploy list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migrations are all named in deploy-netenroll.sh, with probes
+        run: ./scripts/ci/check-migrations-listed.sh
+
   tracked-files:
     name: required files are tracked
     runs-on: ubuntu-latest
