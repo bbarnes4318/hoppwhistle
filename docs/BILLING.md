@@ -1420,6 +1420,16 @@ Prisma runs each migration file in its own transaction, so
 them into one file fails on every database, every time — it is not a race and
 not environment-specific.
 
+**Both are in `scripts/deploy-netenroll.sh`**, with an applied-state probe each,
+along with `20260922010000_payment_provider_offline` from the change that
+introduced the provider column. That script's `REQUIRED_MIGRATIONS` is a
+hand-maintained list and it refuses to apply any migration it has no probe for,
+so a migration added to the repository and not to that list is a migration
+production never gets — and the API would then ship code reading a
+`paymentProvider` column that does not exist. See `docs/MIGRATION_DIVERGENCE.md`
+for why this database is migrated through `psql` rather than
+`prisma migrate deploy`.
+
 ## 6. What the portal shows
 
 ### The agency principal — `/delivery`
