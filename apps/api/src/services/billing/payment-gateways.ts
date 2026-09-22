@@ -24,19 +24,24 @@
  * The settlement, the ledger, the delivery gate and the enrolment check are
  * untouched by any of it: they resolve a gateway and call the interface.
  *
- * ── On Melio specifically ────────────────────────────────────────────────────
+ * ── On Melio, which is now the default ───────────────────────────────────────
  *
- * Deliberately not added here yet. Melio's partner API is documented as an
- * accounts-PAYABLE surface -- bills, vendors, scheduled payouts to vendors --
- * and this platform's settlement needs the opposite: an unattended pull debit
- * against an agency's bank account, nightly, with no one present to approve it.
- * Whether their API can do that has to be answered from their sandbox before an
- * adapter is written, and an enum member nothing implements is a member an
- * agency can be assigned to and then fail to be billed under.
+ * ASKED AND ANSWERED: Melio's partner API is an accounts-PAYABLE surface --
+ * bills, vendors, payouts pushed OUT to vendors -- and cannot pull an unattended
+ * debit from an agency's bank account, which is what a nightly settlement with
+ * nobody present to approve it requires. Nobody needs to go and re-check this in
+ * their sandbox.
  *
- * Until that is settled, an agency invoiced through Melio is an OFFLINE agency:
- * it delivers, meters and computes exactly like any other, and the money is
- * collected in Melio with the reference recorded on the settlement.
+ * So MELIO resolves to the OfflineGateway: no money moves through this platform,
+ * every settlement is computed in full and recorded EXTERNAL, and the invoice is
+ * raised in Melio. It is a separate member from OFFLINE only so the ledger and
+ * the settlement say which one it was -- a Melio invoice and a hand-deposited
+ * check are both "collected elsewhere", and a year from now the difference is
+ * one somebody will want.
+ *
+ * It is the column default as of `20260922020001_payment_provider_melio_default`.
+ * That governs NEW agencies only; every agency already on STRIPE carries that
+ * value explicitly and keeps being debited.
  *
  * ── Singletons, per provider ─────────────────────────────────────────────────
  *
@@ -64,6 +69,16 @@ export { providerChargesInPlatform } from './payment-provider.js';
 const ADAPTERS: Record<PaymentProvider, () => PaymentGateway> = {
   [PaymentProvider.STRIPE]: () => paymentGateway(),
   [PaymentProvider.OFFLINE]: () => new OfflineGateway(),
+  /*
+   * The same gateway as OFFLINE, and not a mistake.
+   *
+   * Melio cannot pull an unattended debit from an agency's bank account, so no
+   * money moves through this platform for a Melio agency either. What differs
+   * is only what the record says, which is why it is a separate member rather
+   * than an alias -- see the schema, and `payment-provider.ts` for the
+   * predicate both share.
+   */
+  [PaymentProvider.MELIO]: () => new OfflineGateway(),
 };
 
 const built = new Map<PaymentProvider, PaymentGateway>();
@@ -89,8 +104,12 @@ export function gatewayForProvider(provider: PaymentProvider): PaymentGateway {
 /**
  * The gateway for one agency, read from its billing profile.
  *
- * An agency with no profile has not been given terms and cannot be charged; it
- * gets Stripe, which is what every caller assumed before this column existed.
+ * A tenant with no profile has not been given terms and cannot be charged at
+ * all -- enrolment requires one. It gets Stripe rather than the column's MELIO
+ * default, for the reason spelled out in `loadAgencyTerms`: the default is for
+ * rows being written for a real agency, and treating a tenant with no terms as
+ * collected-elsewhere would have it report itself as needing no mandate.
+ *
  * The callers that matter all load the profile for other reasons anyway and
  * should pass the provider to `gatewayForProvider` directly rather than paying
  * for this second read.

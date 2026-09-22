@@ -317,6 +317,20 @@ export async function loadAgencyTerms(
   const paymentMethod = profile?.paymentMethod ?? AgencyPaymentMethod.ACH;
   const payingByCard = paymentMethod === AgencyPaymentMethod.CARD;
 
+  /*
+   * STRIPE when there is no profile at all -- NOT the column's MELIO default,
+   * and the difference matters.
+   *
+   * The default governs a row being written for an agency somebody is
+   * onboarding. This fallback covers a tenant with NO billing profile, which is
+   * not an agency with terms; it is a tenant nobody has onboarded. Falling back
+   * to MELIO would make `hasValidMandate` below answer TRUE for it, because a
+   * collected-elsewhere agency needs no mandate -- so a tenant with no
+   * commercial terms of any kind would report itself ready to be billed.
+   *
+   * STRIPE keeps that answer false, which is what an un-onboarded tenant should
+   * say. It cannot be charged either way: enrolment requires a profile.
+   */
   const paymentProvider = profile?.paymentProvider ?? PaymentProvider.STRIPE;
   const chargesInPlatform = providerChargesInPlatform(paymentProvider);
 

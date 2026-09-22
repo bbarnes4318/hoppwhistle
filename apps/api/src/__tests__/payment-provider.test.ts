@@ -54,16 +54,25 @@ describe('providerChargesInPlatform', () => {
   });
 
   /**
+   * Melio cannot pull an unattended debit from an agency's bank account -- its
+   * partner API pushes payouts OUT to vendors. So no money moves through this
+   * platform for a Melio agency, exactly as for an offline one.
+   */
+  it('is false for MELIO', () => {
+    expect(providerChargesInPlatform(PaymentProvider.MELIO)).toBe(false);
+  });
+
+  /**
    * The direction the default has to fail in.
    *
-   * A provider added later and not wired into this predicate is charged
+   * A provider added later and not wired into the deny list is charged
    * through, which surfaces as a refused charge somebody investigates. The
-   * other default -- treating anything unrecognised as offline -- surfaces as
-   * an agency that is silently never billed, which nobody notices until a
-   * quarter closes.
+   * other default -- treating anything unrecognised as collected elsewhere --
+   * surfaces as an agency that is silently never billed, which nobody notices
+   * until a quarter closes.
    */
   it('treats an unrecognised provider as charging in-platform', () => {
-    expect(providerChargesInPlatform('MELIO' as PaymentProvider)).toBe(true);
+    expect(providerChargesInPlatform('ACME_PAY' as PaymentProvider)).toBe(true);
   });
 });
 
@@ -145,6 +154,27 @@ describe('gatewayForProvider', () => {
   });
 
   /**
+   * MELIO resolves to the same gateway, because the behaviour is the same: no
+   * debit is placed and the settlement is recorded as payable. The member is
+   * separate so the LEDGER says which one it was, not because the money moves
+   * differently.
+   */
+  it('answers an OfflineGateway for MELIO', () => {
+    expect(gatewayForProvider(PaymentProvider.MELIO)).toBeInstanceOf(OfflineGateway);
+  });
+
+  /**
+   * Distinct instances, not one shared object. Nothing today depends on it, but
+   * a future Melio adapter replaces one line in ADAPTERS, and a shared instance
+   * would make that change silently alter OFFLINE too.
+   */
+  it('keeps MELIO and OFFLINE adapters separate', () => {
+    expect(gatewayForProvider(PaymentProvider.MELIO)).not.toBe(
+      gatewayForProvider(PaymentProvider.OFFLINE)
+    );
+  });
+
+  /**
    * Built once. A settlement run walks every enrolled tenant in one process and
    * constructing the Stripe adapter reads `STRIPE_SECRET_KEY`; two hundred
    * tenants must not mean two hundred clients.
@@ -171,7 +201,7 @@ describe('gatewayForProvider', () => {
   it('falls back to Stripe for a provider with no adapter, rather than throwing', () => {
     let resolved: PaymentGateway | null = null;
     expect(() => {
-      resolved = gatewayForProvider('MELIO' as PaymentProvider);
+      resolved = gatewayForProvider('ACME_PAY' as PaymentProvider);
     }).not.toThrow();
     expect(resolved).not.toBeNull();
     expect(resolved).not.toBeInstanceOf(OfflineGateway);

@@ -100,6 +100,9 @@ REQUIRED_MIGRATIONS="
 20260913000000_add_rate_offset_disputes_and_onboarding
 20260914000000_agent_entered_applications
 20260915000000_role_preview
+20260922010000_payment_provider_offline
+20260922020000_payment_provider_melio_value
+20260922020001_payment_provider_melio_default
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -299,6 +302,33 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'platform_acting_tenants'
                 AND column_name = 'previewRole'), false)" ;;
+    *_payment_provider_offline)
+      # Last effect: SETTLEMENT_PAYABLE_EXTERNALLY on BillingNotificationKind,
+      # the final ALTER TYPE in the file. Probing the `paymentProvider` column
+      # would answer true for a file that stopped after its second statement,
+      # leaving the EXTERNAL settlement status absent -- and the settlement
+      # writes that status the first night an offline agency is settled.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type ty ON ty.oid = e.enumtypid
+              WHERE ty.typname = 'BillingNotificationKind'
+                AND e.enumlabel = 'SETTLEMENT_PAYABLE_EXTERNALLY'), false)" ;;
+    *_payment_provider_melio_value)
+      # One statement, one effect. It is its own migration because PostgreSQL
+      # refuses to USE a new enum value in the transaction that added it, and
+      # the next migration sets it as a column default.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type ty ON ty.oid = e.enumtypid
+              WHERE ty.typname = 'PaymentProvider'
+                AND e.enumlabel = 'MELIO'), false)" ;;
+    *_payment_provider_melio_default)
+      # The column default itself, which is the whole file. Stored by PostgreSQL
+      # as 'MELIO'::\"PaymentProvider\", so this matches the value rather than
+      # the whole expression -- the cast's spelling is not ours to depend on.
+      echo "SELECT COALESCE((SELECT column_default LIKE '%MELIO%'
+              FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'agency_billing_profiles'
+                AND column_name = 'paymentProvider'), false)" ;;
     *)
       echo "" ;;
   esac

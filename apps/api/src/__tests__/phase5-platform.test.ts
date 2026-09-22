@@ -1357,6 +1357,10 @@ describe.skipIf(!gate.available)(
             tenantId: ridgeline.id,
             dailyBlockApplications: 0,
             maxDailyDebit: 0,
+            // NO_VALID_MANDATE is one of the blockers asserted below, and only
+            // an agency this platform debits can be missing a mandate. The
+            // column default is MELIO, which owes none.
+            paymentProvider: 'STRIPE',
           },
         });
 
@@ -1455,7 +1459,27 @@ describe.skipIf(!gate.available)(
         const stored = await prisma.agencyBillingProfile.findUnique({ where: { tenantId } });
         expect(Number(stored!.maxDailyDebit)).toBe(9_380);
 
-        // c. Payment method.
+        /*
+         * c. Payment method.
+         *
+         * The provider first, and through its own route, because this walk is
+         * the STRIPE path: a card is an instrument this platform debits. A
+         * newly onboarded agency defaults to MELIO -- invoiced, no instrument
+         * to collect -- for which the payment step is complete the moment the
+         * terms are, and the card half of this walk could not be exercised at
+         * all.
+         */
+        const provider = await app.inject({
+          method: 'PUT',
+          url: `/api/v1/platform/delivery/agencies/${tenantId}/payment-provider`,
+          headers: tokenFor(operatorId, null),
+          payload: { paymentProvider: 'STRIPE' },
+        });
+        expect(provider.statusCode).toBe(200);
+        expect(provider.json().data.paymentProvider).toBe('STRIPE');
+        // Now it owes an instrument, and has none.
+        expect(provider.json().data.hasValidMandate).toBe(false);
+
         const payment = await app.inject({
           method: 'PUT',
           url: `/api/v1/platform/onboarding/agencies/${tenantId}/payment-method`,
@@ -1519,6 +1543,11 @@ describe.skipIf(!gate.available)(
         });
         expect(audits.map(a => a.action).sort()).toEqual([
           'platform.delivery.enrolled',
+          // Sorts first among the delivery actions. This walk is the STRIPE
+          // path, and putting an agency on a provider that debits it is a step
+          // somebody took -- so it is audited like every other one, and named
+          // here rather than left to widen the list silently.
+          'platform.delivery.payment_provider.updated',
           'platform.onboarding.owner.invited',
           'platform.onboarding.payment_method.recorded',
           'platform.onboarding.tenant.created',

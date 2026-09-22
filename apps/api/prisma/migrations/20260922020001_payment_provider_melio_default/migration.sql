@@ -1,0 +1,31 @@
+-- MELIO as a payment provider: step 2 of 2, the column default.
+--
+-- Separate from the migration that added the value, because PostgreSQL refuses
+-- to use a new enum value in the transaction that created it. See the previous
+-- directory for the exact error.
+--
+-- ── What changes, and what deliberately does not ─────────────────────────────
+--
+-- An agency onboarded from here on is invoiced through Melio unless a platform
+-- admin says otherwise. That is the commercial default now.
+--
+-- NO EXISTING ROW IS REWRITTEN. A default governs rows written after it and
+-- nothing else, and that is the entire point of doing it this way:
+--
+--   - Every agency currently on STRIPE carries that value explicitly, because
+--     the column was created NOT NULL DEFAULT 'STRIPE' and backfilled with it
+--     one day ago. Changing the default cannot reach them.
+--   - Agencies being debited tonight keep being debited tonight. An UPDATE here
+--     would stop every live ACH debit on the platform at once and start
+--     accruing invoices nobody has raised yet -- a revenue interruption dressed
+--     up as a schema change.
+--
+-- Moving an existing agency over is a deliberate, audited act, one agency at a
+-- time, through:
+--
+--     PUT /api/v1/platform/delivery/agencies/:tenantId/payment-provider
+--
+-- which also refuses while that agency has a settlement in flight.
+
+ALTER TABLE "agency_billing_profiles"
+  ALTER COLUMN "paymentProvider" SET DEFAULT 'MELIO';

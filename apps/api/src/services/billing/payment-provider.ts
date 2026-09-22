@@ -11,15 +11,32 @@
 import { PaymentProvider } from '@prisma/client';
 
 /**
+ * The providers whose money is collected somewhere else.
+ *
+ * A deny list rather than an allow list, and that direction is the safety
+ * property: a provider added later and not listed here is charged through by
+ * default and has to opt out explicitly. Forgetting to add one produces a
+ * charge that is attempted and refused -- loud, and recoverable. Forgetting the
+ * other way round produces an agency that is silently never billed, which
+ * nobody notices until a quarter closes.
+ *
+ * MELIO is here because Melio's partner API is an accounts-payable surface and
+ * cannot pull an unattended debit from an agency's bank account. It is the same
+ * behaviour as OFFLINE for that reason, and a separate member only so the
+ * record says which one it was.
+ */
+const COLLECTED_OUTSIDE_PLATFORM: ReadonlySet<PaymentProvider> = new Set([
+  PaymentProvider.OFFLINE,
+  PaymentProvider.MELIO,
+]);
+
+/**
  * Does this provider move money through this platform at all?
  *
  * The one question the settlement and the opening purchase ask before they
- * charge. Phrased as "not OFFLINE" rather than as a list of the providers that
- * do charge, so a provider added later is charged through by default and has to
- * opt out explicitly. The failure mode of forgetting is then a charge that is
- * attempted and refused -- loud, and recoverable -- rather than one that is
- * silently skipped and never billed to anybody.
+ * charge. Every branch in both reads this rather than comparing enum members
+ * itself, so adding a provider is one line in the set above.
  */
 export function providerChargesInPlatform(provider: PaymentProvider): boolean {
-  return provider !== PaymentProvider.OFFLINE;
+  return !COLLECTED_OUTSIDE_PLATFORM.has(provider);
 }
