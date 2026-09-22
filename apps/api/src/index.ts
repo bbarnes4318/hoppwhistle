@@ -239,6 +239,14 @@ async function buildServer() {
   const { registerApplicationRoutes } = await import('./routes/applications.js');
   await server.register(registerApplicationRoutes);
 
+  // The agency leaderboard: one agency's own agents, ranked over any period.
+  // Registered beside the delivery routes because it measures the same things
+  // with the same predicates, and apart from them because it loads no money --
+  // which is what lets every agent in the agency read it, not just the
+  // principal. See the header of routes/leaderboard.ts.
+  const { registerLeaderboardRoutes } = await import('./routes/leaderboard.js');
+  await server.register(registerLeaderboardRoutes);
+
   // Internal onboarding: one platform-admin screen from nothing to enrolled.
   const { registerOnboardingRoutes } = await import('./routes/onboarding.js');
   await server.register(registerOnboardingRoutes);

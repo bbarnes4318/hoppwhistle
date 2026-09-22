@@ -150,6 +150,11 @@ const SWEEP = [
       '/rating',
       '/delivery',
       '/delivery/settlements',
+      // The floor ranked. Reached by principals and agents alike, which is why
+      // it appears in two of these lists -- it is the one agency screen an
+      // AGENT sees colleagues' figures on, and the assertion that matters is
+      // that neither role is refused anything behind it.
+      '/leaderboard',
       '/billing',
       '/reports',
       '/settings',
@@ -218,6 +223,10 @@ const SWEEP = [
       '/applications',
       '/insurance-leads',
       '/delivery/me',
+      // An agent's own standing against the floor. On AGENT_NAV, so it is on
+      // this list: the comment above says "exactly AGENT_NAV" and a route that
+      // drifts out of it is a page nobody loads.
+      '/leaderboard',
       '/payroll',
       '/settings',
     ],

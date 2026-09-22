@@ -1304,6 +1304,13 @@ model Call {
   @@index([tenantId, answeredAt])
   /// The per-agent table the agency principal coaches from.
   @@index([tenantId, answeredByUserId, answeredAt])
+  /// The leaderboard's outbound column: one agency's agent-placed dials over a
+  /// window. Inbound already had its index above; outbound is attributed and
+  /// timed differently -- by who PLACED the call and when they dialled, because
+  /// most outbound calls are never answered by anybody -- so it could only be
+  /// served by scanning [tenantId, createdAt] and discarding the inbound rows.
+  /// At THIS_YEAR on a floor taking 450 calls a day that is the whole table.
+  @@index([tenantId, direction, createdById, createdAt])
   @@map("calls")
 }
 
