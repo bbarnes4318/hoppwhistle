@@ -2496,6 +2496,95 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(terms.chargesInPlatform).toBe(true);
       expect(terms.hasValidMandate).toBe(false);
     });
+
+    /**
+     * MELIO behaves exactly as OFFLINE: no debit, settlement recorded EXTERNAL.
+     *
+     * Asserted rather than assumed, because the two are separate enum members
+     * and a future adapter for one must not silently change the other.
+     */
+    it('treats a MELIO agency exactly as an offline one', async () => {
+      await seedTerms(big.id, {
+        dailyBlockApplications: 45,
+        paymentProvider: PaymentProvider.MELIO,
+        mandate: false,
+      });
+      await seedOpeningAgreement(big.id);
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: null,
+        externalPaymentReference: 'melio invoice INV-8841',
+      });
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 440);
+      await submitApplications(big.id, CLOSED_DAY, 67);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      expect(result.totalCharged).toBe(8978);
+      expect(result.paymentStatus).toBe('EXTERNAL');
+      expect(gateway.achCharges).toHaveLength(0);
+      expect(gateway.cardCharges).toHaveLength(0);
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.chargesInPlatform).toBe(false);
+      expect(terms.hasValidMandate).toBe(true);
+    });
+
+    /**
+     * The column default, asserted against the database rather than the schema
+     * file.
+     *
+     * An agency onboarded without anybody naming a provider is invoiced through
+     * Melio. A `@default` that did not reach the database -- a migration that
+     * was written but never applied -- is invisible in code review and shows up
+     * as the next agency quietly being set up for ACH debits nobody arranged.
+     *
+     * Written with raw SQL naming only the NOT NULL columns, so the default is
+     * what fills `paymentProvider` rather than Prisma sending an explicit value.
+     */
+    it('defaults a newly created billing profile to MELIO', async () => {
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: 'Default Provider Insurance',
+          slug: `default-provider-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          status: 'ACTIVE',
+        },
+      });
+
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "agency_billing_profiles" ("id", "tenantId", "maxDailyDebit", "updatedAt")
+         VALUES (gen_random_uuid(), $1, 0, NOW())`,
+        tenant.id
+      );
+
+      const profile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId: tenant.id },
+      });
+      expect(profile?.paymentProvider).toBe(PaymentProvider.MELIO);
+    });
+
+    /**
+     * And the change of default reached no existing row.
+     *
+     * This is the property the migration is written around: a default governs
+     * rows written after it. An UPDATE would have stopped every live ACH debit
+     * on the platform at once.
+     */
+    it('leaves an agency explicitly on STRIPE alone', async () => {
+      await seedTerms(big.id, { paymentProvider: PaymentProvider.STRIPE });
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.paymentProvider).toBe(PaymentProvider.STRIPE);
+      expect(terms.chargesInPlatform).toBe(true);
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════

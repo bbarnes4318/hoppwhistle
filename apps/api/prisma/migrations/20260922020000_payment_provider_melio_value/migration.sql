@@ -1,0 +1,32 @@
+-- MELIO as a payment provider: step 1 of 2, the enum value alone.
+--
+-- ── Why this is split across two migrations ──────────────────────────────────
+--
+-- PostgreSQL will not let a newly added enum value be USED in the same
+-- transaction that added it:
+--
+--     ERROR:  unsafe use of new value "MELIO" of enum type "PaymentProvider"
+--     HINT:   New enum values must be committed before they can be used.
+--
+-- Prisma runs each migration file in its own transaction, so `ADD VALUE` here
+-- and `SET DEFAULT 'MELIO'` in the next directory is what makes the pair apply.
+-- Putting both in one file fails on every database, every time -- it is not a
+-- race and not environment-specific.
+--
+-- This file therefore changes no behaviour by itself. Nothing reads the new
+-- member until the migration after it lands.
+--
+-- ── What MELIO means ─────────────────────────────────────────────────────────
+--
+-- Invoiced and collected in Melio. Behaviourally identical to OFFLINE -- no
+-- debit is ever placed by this platform, and every settlement is computed in
+-- full and recorded EXTERNAL -- because Melio's partner API is an
+-- accounts-payable surface and cannot pull an unattended debit from an agency's
+-- bank account. That was asked and answered.
+--
+-- It is a separate member from OFFLINE so the ledger and the settlement record
+-- where the money actually went. "Offline" does not say Melio, and a year from
+-- now the difference between a Melio invoice and a hand-deposited check is one
+-- somebody will want.
+
+ALTER TYPE "PaymentProvider" ADD VALUE IF NOT EXISTS 'MELIO';

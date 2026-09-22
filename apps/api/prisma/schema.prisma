@@ -4397,8 +4397,11 @@ enum AgencyPaymentMethod {
 /// for the tenant and call the interface. That is the whole reason the registry
 /// exists rather than `paymentGateway()` returning a singleton.
 enum PaymentProvider {
-  /// The default, and what every agency was on before this column existed.
-  /// Mandates, setup intents and webhooks are Stripe's.
+  /// Stripe. Mandates, setup intents and webhooks are Stripe's, and the nightly
+  /// settlement debits a saved mandate off-session.
+  ///
+  /// No longer the default -- see `MELIO` -- but unchanged for every agency
+  /// already on it.
   STRIPE
 
   /// Collected outside this platform entirely -- a check, a wire, an invoice
@@ -4410,6 +4413,36 @@ enum PaymentProvider {
   /// does NOT do is assert that money arrived: an EXTERNAL settlement is not a
   /// clean settlement and does not raise an Overrun ceiling.
   OFFLINE
+
+  /// Invoiced and collected in Melio. THE DEFAULT for every agency onboarded
+  /// from 2026-09-22 onward.
+  ///
+  /// ── Why this behaves exactly like OFFLINE ─────────────────────────────────
+  ///
+  /// Melio's partner API is an accounts-PAYABLE surface: bills, vendors, and
+  /// payouts pushed OUT to vendors. This platform's settlement needs the
+  /// opposite -- an unattended pull debit against an agency's bank account,
+  /// nightly, with nobody present to approve it -- and Melio does not do that.
+  /// That was asked and answered; it is not an open question somebody should go
+  /// and re-check in their sandbox.
+  ///
+  /// So no money moves through this platform for a MELIO agency, exactly as for
+  /// an OFFLINE one, and both resolve to the same gateway. Every settlement is
+  /// computed in full, recorded `EXTERNAL`, and collected by raising the
+  /// invoice in Melio.
+  ///
+  /// ── Then why is it a separate member ──────────────────────────────────────
+  ///
+  /// Because the ledger and the settlement record where the money actually went,
+  /// and "offline" does not say Melio. Keeping them apart means a Melio invoice
+  /// and a hand-deposited check are distinguishable in the record a year from
+  /// now, which is the whole reason `externalPaymentReference` exists too.
+  ///
+  /// This is NOT the "enum member nothing implements" hazard that kept MELIO out
+  /// of the first cut. That hazard was a member an agency could be assigned to
+  /// and then silently fail to be billed under. This member is fully
+  /// implemented: it resolves to a real gateway with defined behaviour.
+  MELIO
 }
 
 /// Where a card dispute has got to.
@@ -4513,13 +4546,19 @@ model AgencyBillingProfile {
   /// ceiling below.
   paymentMethod AgencyPaymentMethod @default(ACH)
 
-  /// Which provider moves this agency's money. STRIPE by default, so every row
-  /// that existed before this column keeps the behaviour it had.
+  /// Which provider moves this agency's money.
   ///
-  /// Read through `loadAgencyTerms`, never off this column directly: an OFFLINE
-  /// agency has no mandate to have, and a caller reading `achMandateStatus`
-  /// itself would report it as unpayable and stop its delivery.
-  paymentProvider PaymentProvider @default(STRIPE)
+  /// MELIO by default: agencies are invoiced rather than debited, and an agency
+  /// onboarded without anybody touching this column gets that. The default was
+  /// STRIPE for exactly one day; rows written in that window, and every row that
+  /// predates the column, carry STRIPE explicitly and are untouched by the
+  /// change. A default governs new rows and nothing else.
+  ///
+  /// Read through `loadAgencyTerms`, never off this column directly: an agency
+  /// collected outside the platform has no mandate to have, and a caller reading
+  /// `achMandateStatus` itself would report it as unpayable and stop its
+  /// delivery.
+  paymentProvider PaymentProvider @default(MELIO)
 
   /// The Overrun ceiling for a card-paying agency, as a percentage above the
   /// Daily Block. Flat: it does not rise with settlement history the way the

@@ -1533,8 +1533,12 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   /**
    * PUT /api/v1/platform/delivery/agencies/:tenantId/payment-provider
    *
-   * Who moves this agency's money: STRIPE, or OFFLINE for an agency billed
-   * outside the platform entirely.
+   * Who moves this agency's money: STRIPE for an agency this platform debits,
+   * or MELIO / OFFLINE for one billed outside it.
+   *
+   * MELIO is the default for a newly onboarded agency, so this route is mostly
+   * used to move an agency the other way -- onto Stripe, or between the two
+   * collected-elsewhere providers.
    *
    * ── Separate from payment-method, and deliberately ───────────────────────
    *
@@ -1565,11 +1569,16 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const { tenantId } = request.params;
       const requested = (request.body?.paymentProvider ?? '').toUpperCase();
 
-      if (requested !== 'STRIPE' && requested !== 'OFFLINE') {
+      /*
+       * Checked against the enum itself rather than a hand-written list, which
+       * is how the list came to be missing MELIO for the length of one commit.
+       * A member added to the schema is accepted here the moment it exists.
+       */
+      if (!Object.values(PaymentProvider).includes(requested as PaymentProvider)) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'paymentProvider must be STRIPE or OFFLINE',
+            message: `paymentProvider must be one of ${Object.values(PaymentProvider).join(', ')}`,
           },
         });
       }

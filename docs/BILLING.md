@@ -1136,8 +1136,9 @@ nothing, which is asserted.
 
 ## 5. Payment
 
-ACH debit, off-session, against a saved mandate — for an agency whose payment
-provider charges through this platform. See §5b for the one that does not.
+ACH debit, off-session, against a saved mandate — for an agency on the `STRIPE`
+provider. Newly onboarded agencies default to `MELIO` and are invoiced instead;
+see §5b.
 
 ### One Stripe integration
 
@@ -1258,8 +1259,15 @@ second, and a combined enum makes both of them enumerate both.
 
 | | |
 | --- | --- |
-| `STRIPE` | the default, and what every agency was on before the column existed. Mandates, setup intents, webhooks and debits are Stripe's. |
-| `OFFLINE` | billed outside this platform entirely — a check, a wire, an invoice raised in somebody else's system. |
+| `MELIO` | **the default.** Invoiced and collected in Melio. No debit is placed here. |
+| `OFFLINE` | billed outside this platform some other way — a check, a wire, an invoice raised in somebody else's system. |
+| `STRIPE` | this platform debits a saved mandate off-session, nightly. What every agency was on before the column existed, and what they are still on. |
+
+`MELIO` and `OFFLINE` are behaviourally identical — same gateway, same
+`EXTERNAL` settlement, no debit either way. They are separate members so the
+ledger and the settlement record **which** one it was. A Melio invoice and a
+hand-deposited check are both "collected elsewhere", and a year from now the
+difference is one somebody will want.
 
 `PUT /api/v1/platform/delivery/agencies/:tenantId/payment-provider` sets it.
 Platform-only, audited, and **refused while a settlement is PENDING**: that
@@ -1358,21 +1366,59 @@ An unrecognised provider **falls back to Stripe rather than throwing**.
 `settleAllAgencies` walks every enrolled tenant in one process, so a throw takes
 the nightly run down for every agency, not just the one on the new provider.
 
-### On Melio
+### On Melio — asked and answered
 
-Not implemented, and deliberately not stubbed. Melio's partner API is documented
-as an accounts-**payable** surface — bills, vendors, scheduled payouts to
-vendors. This platform's settlement needs the opposite: an unattended pull debit
-against an agency's bank account, nightly, with nobody present to approve it.
-Whether their API can do that has to be answered from their sandbox before an
-adapter is written, and their API access is partner-gated rather than open
-signup.
+**Melio cannot pull an unattended debit from an agency's bank account.** Its
+partner API is an accounts-**payable** surface: bills, vendors, payouts pushed
+*out* to vendors. This platform's settlement needs the opposite — a nightly pull
+debit with nobody present to approve it.
 
-An enum member nothing implements is a member an agency can be assigned to and
-then silently fail to be billed under. Until that question is settled, an agency
-invoiced through Melio is an `OFFLINE` agency: it delivers, meters and computes
-exactly like any other, the money is collected in Melio, and the reference is
-recorded against the settlement.
+That question is closed. Nobody needs to go and re-check it in a sandbox.
+
+So `MELIO` resolves to the same `OfflineGateway` as `OFFLINE`: every settlement
+is computed in full, recorded `EXTERNAL`, and collected by raising the invoice
+in Melio. There is no Melio API integration in this codebase and there is not
+expected to be one.
+
+This is not the "enum member nothing implements" hazard that kept `MELIO` out of
+the first cut of this feature. That hazard was a member an agency could be
+assigned to and then silently fail to be billed under. This member is fully
+implemented — it resolves to a real gateway with defined behaviour — and is the
+default precisely because it is.
+
+### Why the default is MELIO, and what that did not change
+
+An agency onboarded without anybody touching the provider control is invoiced.
+That is the commercial default: agencies are invoiced, not debited.
+
+**No existing agency moved.** The default is `SET DEFAULT` on the column, and a
+default governs rows written after it. Every agency on `STRIPE` carries that
+value explicitly — the column was created `NOT NULL DEFAULT 'STRIPE'` and
+backfilled with it — so the change cannot reach them. Agencies being debited
+tonight keep being debited tonight.
+
+That was the deliberate choice over a backfill. An `UPDATE` would have stopped
+every live ACH debit on the platform at once and started accruing invoices
+nobody had raised yet — a revenue interruption dressed up as a schema change.
+Moving an existing agency over is one audited call at a time, through
+`PUT …/payment-provider`, which also refuses while that agency has a settlement
+in flight.
+
+Two tests hold this down: a billing profile inserted with only its NOT NULL
+columns comes back `MELIO`, and an agency explicitly on `STRIPE` stays there.
+
+### The migration is two files, and has to be
+
+PostgreSQL refuses to *use* a new enum value in the transaction that added it:
+
+    ERROR:  unsafe use of new value "MELIO" of enum type "PaymentProvider"
+    HINT:   New enum values must be committed before they can be used.
+
+Prisma runs each migration file in its own transaction, so
+`20260922020000_payment_provider_melio_value` adds the member and
+`20260922020001_payment_provider_melio_default` sets the default. Collapsing
+them into one file fails on every database, every time — it is not a race and
+not environment-specific.
 
 ## 6. What the portal shows
 
