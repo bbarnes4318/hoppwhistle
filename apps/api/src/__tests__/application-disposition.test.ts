@@ -419,28 +419,80 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
   // ══════════════════════════════════════════════════════════════════════════
   // 4. The after-the-fact edit
   // ══════════════════════════════════════════════════════════════════════════
-  describe('correcting a write-up afterwards', () => {
-    it('refuses to mark a call as a sale it has no application for', async () => {
-      const callId = await seedAnsweredCall(agency);
-
-      const response = await app.inject({
+  describe('the follow-up: writing the call up days later', () => {
+    function patchDisposition(callId: string, payload: Record<string, unknown>) {
+      return app.inject({
         method: 'PATCH',
         url: `/api/v1/calls/${callId}/disposition`,
         headers: asAgent(agency),
-        payload: { disposition: 'APPLICATION_SUBMITTED' },
+        payload,
+      });
+    }
+
+    it('records the sale when the customer signs on a later call', async () => {
+      // Monday: the agent talks to somebody and sets a callback.
+      const callId = await seedAnsweredCall(agency);
+      await saveDisposition({ callId, disposition: 'SET_CALLBACK' });
+
+      // Thursday: they sign. The agent opens the call log and writes it up.
+      const response = await patchDisposition(callId, {
+        disposition: 'APPLICATION_SUBMITTED',
+        application: applicationBody(),
       });
 
-      // This route corrects a write-up; it has no application on it and cannot
-      // record one, so letting it set this disposition would label a sale the
-      // numerator never sees.
-      expect(response.statusCode).toBe(409);
+      expect(response.statusCode).toBe(200);
+
+      const written = await prisma.insuranceCarrierApplication.findFirst({
+        where: { tenantId: agency.tenantId, callId },
+      });
+      /*
+       * The whole point of this path. Most final-expense business does not
+       * close on the call that produced it, and this route used to REFUSE the
+       * disposition outright -- so that business was never counted, which
+       * understates the closing percentage and raises the agency's price.
+       */
+      expect(written).not.toBeNull();
+      expect(written?.submittedAt).not.toBeNull();
+      expect(written?.createdById).toBe(agency.agentId);
+      expect(Number(written?.annualizedPremium)).toBeCloseTo(750, 2);
+
+      const call = await prisma.call.findUnique({ where: { id: callId } });
+      expect(call?.disposition).toBe('APPLICATION_SUBMITTED');
+    });
+
+    it('refuses the disposition with no application, and leaves the call alone', async () => {
+      const callId = await seedAnsweredCall(agency);
+      await saveDisposition({ callId, disposition: 'SET_CALLBACK' });
+
+      const response = await patchDisposition(callId, { disposition: 'APPLICATION_SUBMITTED' });
+
+      expect(response.statusCode).toBe(400);
       expect((response.json() as any).error.code).toBe('APPLICATION_REQUIRED');
 
+      const call = await prisma.call.findUnique({ where: { id: callId } });
+      // Not relabelled. A call reading as a sale the numerator never saw is the
+      // failure this whole area exists to remove.
+      expect(call?.disposition).toBe('SET_CALLBACK');
+    });
+
+    it.each([
+      ['no first name', { firstName: ' ' }],
+      ['no carrier', { carrier: '' }],
+      ['no coverage amount', { faceAmount: 0 }],
+    ])('refuses an application with %s', async (_label, patch) => {
+      const callId = await seedAnsweredCall(agency);
+
+      const response = await patchDisposition(callId, {
+        disposition: 'APPLICATION_SUBMITTED',
+        application: applicationBody(patch),
+      });
+
+      expect(response.statusCode).toBe(400);
       const call = await prisma.call.findUnique({ where: { id: callId } });
       expect(call?.disposition).toBeNull();
     });
 
-    it('allows it once the application is really there', async () => {
+    it('does not ask again, or charge again, when the call already has one', async () => {
       const callId = await seedAnsweredCall(agency);
       await saveDisposition({
         callId,
@@ -448,25 +500,19 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
         application: applicationBody(),
       });
 
-      // Corrected to something else, then back.
-      await app.inject({
-        method: 'PATCH',
-        url: `/api/v1/calls/${callId}/disposition`,
-        headers: asAgent(agency),
-        payload: { disposition: 'NOT_INTERESTED' },
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/api/v1/calls/${callId}/disposition`,
-        headers: asAgent(agency),
-        payload: { disposition: 'APPLICATION_SUBMITTED' },
-      });
+      // The genuine correction case: dispositioned wrong, fixed, put back.
+      await patchDisposition(callId, { disposition: 'NOT_INTERESTED' });
+      const response = await patchDisposition(callId, { disposition: 'APPLICATION_SUBMITTED' });
 
       expect(response.statusCode).toBe(200);
+      const count = await prisma.insuranceCarrierApplication.count({
+        where: { tenantId: agency.tenantId, callId },
+      });
+      // One piece of business, one application, one credit.
+      expect(count).toBe(1);
     });
 
-    it('still refuses when the only application on the call was voided', async () => {
+    it('refuses a second application for a call that already has one', async () => {
       const callId = await seedAnsweredCall(agency);
       await saveDisposition({
         callId,
@@ -474,21 +520,41 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
         application: applicationBody(),
       });
 
+      const response = await patchDisposition(callId, {
+        disposition: 'APPLICATION_SUBMITTED',
+        application: applicationBody(),
+      });
+
+      // Silently writing it would spend a second credit the agent did not
+      // intend. A couple insuring together is two applications and belongs on
+      // the live path, each with its own form instance.
+      expect(response.statusCode).toBe(409);
+      expect((response.json() as any).error.code).toBe('APPLICATION_ALREADY_RECORDED');
+    });
+
+    it('treats a voided application as no application at all', async () => {
+      const callId = await seedAnsweredCall(agency);
+      await saveDisposition({
+        callId,
+        disposition: 'APPLICATION_SUBMITTED',
+        application: applicationBody(),
+      });
       await prisma.insuranceCarrierApplication.updateMany({
         where: { tenantId: agency.tenantId, callId },
         data: { voidedAt: new Date() },
       });
 
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/api/v1/calls/${callId}/disposition`,
-        headers: asAgent(agency),
-        payload: { disposition: 'APPLICATION_SUBMITTED' },
-      });
-
       // A voided application is not a submitted one -- the measurement drops it
-      // from the numerator, and this must agree with the measurement.
-      expect(response.statusCode).toBe(409);
+      // from the numerator, and this has to agree with the measurement. So the
+      // call needs a real one again.
+      const refused = await patchDisposition(callId, { disposition: 'APPLICATION_SUBMITTED' });
+      expect(refused.statusCode).toBe(400);
+
+      const accepted = await patchDisposition(callId, {
+        disposition: 'APPLICATION_SUBMITTED',
+        application: applicationBody(),
+      });
+      expect(accepted.statusCode).toBe(200);
     });
 
     it('leaves every other correction alone', async () => {

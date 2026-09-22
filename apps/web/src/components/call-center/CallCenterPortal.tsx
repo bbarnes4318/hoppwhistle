@@ -279,11 +279,26 @@ export function CallCenterPortal(): JSX.Element {
     const text = (value: unknown): string | null =>
       typeof value === 'string' || typeof value === 'number' ? String(value) : null;
 
+    /*
+     * The quote's premium is MONTHLY -- see the CRM payload below, which sends
+     * `selectedPremium` as `monthlyPremium`. The form asks for the ANNUAL
+     * premium, because that is the figure the agency's production is reported
+     * in. So it is converted here, once, rather than prefilled raw into a box
+     * labelled "Annual premium": a monthly number in that box understates the
+     * agency's reported production by a factor of twelve, and nothing
+     * downstream would catch it.
+     */
+    const annualFromMonthly = (value: unknown): string | null => {
+      const monthly = typeof value === 'number' ? value : Number(text(value) ?? NaN);
+      if (!Number.isFinite(monthly) || monthly <= 0) return null;
+      return (Math.round(monthly * 12 * 100) / 100).toFixed(2);
+    };
+
     return {
       carrier: text(activeCallData?.selectedCarrier),
       planType: text(activeCallData?.selectedPlanType),
       faceAmount: text(activeCallData?.selectedCoverage),
-      premium: text(activeCallData?.selectedPremium),
+      premium: annualFromMonthly(activeCallData?.selectedPremium),
       firstName: text(activeCallData?.firstName ?? activeCallData?.first_name),
       lastName: text(activeCallData?.lastName ?? activeCallData?.last_name),
       dob: text(activeCallData?.dob),
@@ -816,7 +831,7 @@ export function CallCenterPortal(): JSX.Element {
     const wroteApplication = disp === 'APPLICATION_SUBMITTED' && !autoDisp;
     if (wroteApplication && !applicationPayload) {
       setApplicationError(
-        'Record the carrier, face amount, premium, first name and last name first.'
+        'Record the carrier, coverage amount, annual premium, first name and last name first.'
       );
       return;
     }
