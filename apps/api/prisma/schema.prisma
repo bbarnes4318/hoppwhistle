@@ -4290,6 +4290,16 @@ enum SettlementPaymentStatus {
   /// Nothing was charged because the computed total was zero -- no overrun, and
   /// the next day's block fully covered by unused paid applications.
   NOT_CHARGED
+
+  /// Computed in full and owed, with no debit placed, because this agency's
+  /// `PaymentProvider` is OFFLINE -- it is billed outside this platform.
+  ///
+  /// Deliberately NOT `SUCCEEDED`: nothing here observed money arriving, and a
+  /// status that claims payment would raise the agency's Overrun ceiling on the
+  /// strength of an invoice nobody has confirmed was paid. Deliberately not
+  /// `FAILED` either, which would stop delivery for a debit that was never
+  /// attempted. It is its own outcome because it is one.
+  EXTERNAL
   /// The computed total exceeded the agency's configured maximum daily debit.
   /// Nothing was sent to Stripe. Platform admins are alerted and a human
   /// decides. This is a halt, not a retry.
@@ -4347,6 +4357,11 @@ enum BillingNotificationKind {
   DELIVERY_PAUSED
   MANDATE_MISSING
   SETTLEMENT_RUN_FAILED
+  /// A settlement was computed in full and deliberately not charged, because
+  /// the agency's `PaymentProvider` is OFFLINE. Platform staff only: it is a
+  /// bill for somebody here to raise, and an agency that agreed to be invoiced
+  /// does not need telling nightly that it was not debited.
+  SETTLEMENT_PAYABLE_EXTERNALLY
   /// A card payment was disputed. Platform staff only: a chargeback is a
   /// payment event for NetEnroll to answer, not news for the agency's floor.
   PAYMENT_DISPUTE_OPENED
@@ -4364,6 +4379,37 @@ enum BillingNotificationKind {
 enum AgencyPaymentMethod {
   ACH
   CARD
+}
+
+/// WHO moves the money, as distinct from `AgencyPaymentMethod`, which is the
+/// instrument.
+///
+/// The two are deliberately separate columns. "ACH" answers what is debited;
+/// this answers who debits it. Collapsing them into one enum produces a member
+/// per pair -- STRIPE_ACH, STRIPE_CARD, MELIO_ACH -- and every one of them has
+/// to be spelled out at every site that asks either question.
+///
+/// ── Adding a provider ────────────────────────────────────────────────────────
+///
+/// A member here, an adapter implementing `PaymentGateway`, and one line in the
+/// registry in `services/billing/payment-gateways.ts`. Nothing in the
+/// settlement, the ledger or the delivery gate changes: they resolve a gateway
+/// for the tenant and call the interface. That is the whole reason the registry
+/// exists rather than `paymentGateway()` returning a singleton.
+enum PaymentProvider {
+  /// The default, and what every agency was on before this column existed.
+  /// Mandates, setup intents and webhooks are Stripe's.
+  STRIPE
+
+  /// Collected outside this platform entirely -- a check, a wire, an invoice
+  /// paid through somebody else's system.
+  ///
+  /// No gateway call is ever made for an OFFLINE agency. The settlement still
+  /// computes every figure, still sells the next day's block, and records what
+  /// is owed as `EXTERNAL` with whatever reference the operator gave. What it
+  /// does NOT do is assert that money arrived: an EXTERNAL settlement is not a
+  /// clean settlement and does not raise an Overrun ceiling.
+  OFFLINE
 }
 
 /// Where a card dispute has got to.
@@ -4466,6 +4512,14 @@ model AgencyBillingProfile {
   /// off-session instead of the bank mandate, and gets the lower Overrun
   /// ceiling below.
   paymentMethod AgencyPaymentMethod @default(ACH)
+
+  /// Which provider moves this agency's money. STRIPE by default, so every row
+  /// that existed before this column keeps the behaviour it had.
+  ///
+  /// Read through `loadAgencyTerms`, never off this column directly: an OFFLINE
+  /// agency has no mandate to have, and a caller reading `achMandateStatus`
+  /// itself would report it as unpayable and stop its delivery.
+  paymentProvider PaymentProvider @default(STRIPE)
 
   /// The Overrun ceiling for a card-paying agency, as a percentage above the
   /// Daily Block. Flat: it does not rise with settlement history the way the
@@ -4626,6 +4680,17 @@ model ApplicationCreditLedgerEntry {
   stripePaymentIntentId String?
   settlementId          String?
 
+  /// PURCHASE only, and only where the money did not move through this
+  /// platform: the check number, wire reference or invoice id the block was
+  /// paid against elsewhere.
+  ///
+  /// This is what distinguishes the two kinds of row that carry a null
+  /// `stripePaymentIntentId`. A DRY_RUN block was never paid for by anybody. An
+  /// OFFLINE block was paid for, somewhere this system cannot see, and this
+  /// column is the only record of where. A null in both columns on a PURCHASE
+  /// means nobody has paid for it.
+  externalPaymentReference String?
+
   createdAt DateTime @default(now())
 
   tenant       Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -4708,6 +4773,14 @@ model DailySettlement {
 
   paymentStatus         SettlementPaymentStatus @default(PENDING)
   stripePaymentIntentId String?
+
+  /// How an EXTERNAL settlement is being collected -- an invoice number, a
+  /// check number, a reference in whatever system actually took the money.
+  ///
+  /// Free text, because it names a record in a system this one does not talk
+  /// to. Null on every settlement this platform charged itself, where
+  /// `stripePaymentIntentId` is the reference.
+  externalPaymentReference String?
   paymentFailureCode    String?
   paymentFailureMessage String?
   paidAt                DateTime?

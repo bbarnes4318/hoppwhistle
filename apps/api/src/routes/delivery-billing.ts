@@ -60,6 +60,7 @@
 import {
   AchMandateStatus,
   AgencyPaymentMethod,
+  PaymentProvider,
   Prisma,
   SettlementPaymentStatus,
 } from '@prisma/client';
@@ -86,6 +87,10 @@ import {
   getPlatformOverview,
 } from '../services/billing/delivery-view.js';
 import { standDownDispute } from '../services/billing/disputes.js';
+import {
+  gatewayForProvider,
+  providerChargesInPlatform,
+} from '../services/billing/payment-gateways.js';
 import { runDailySettlement } from '../services/billing/settlement.js';
 import {
   enrolmentBlockersFor,
@@ -507,6 +512,32 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
+      /*
+       * An OFFLINE agency has no mandate to set up.
+       *
+       * Refused explicitly rather than left to fail further down, where
+       * `ensureCustomer` answers null and the agency's principal would get
+       * "Could not create a Stripe customer" -- a message describing an outage
+       * for something that is working exactly as configured.
+       */
+      const providerProfile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId },
+        select: { paymentProvider: true },
+      });
+      if (
+        providerProfile &&
+        !providerChargesInPlatform(providerProfile.paymentProvider)
+      ) {
+        return reply.code(409).send({
+          error: {
+            code: 'PROVIDER_HAS_NO_MANDATE',
+            message:
+              'This agency is billed outside the platform, so there is no mandate to set up ' +
+              'here. Its settlements are recorded as payable and collected elsewhere.',
+          },
+        });
+      }
+
       const gateway = paymentGateway();
       if (!gateway.isEnabled()) {
         return reply.code(503).send({
@@ -638,6 +669,32 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
+
+      /*
+       * An OFFLINE agency has no mandate to set up.
+       *
+       * Refused explicitly rather than left to fail further down, where
+       * `ensureCustomer` answers null and the agency's principal would get
+       * "Could not create a Stripe customer" -- a message describing an outage
+       * for something that is working exactly as configured.
+       */
+      const providerProfile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId },
+        select: { paymentProvider: true },
+      });
+      if (
+        providerProfile &&
+        !providerChargesInPlatform(providerProfile.paymentProvider)
+      ) {
+        return reply.code(409).send({
+          error: {
+            code: 'PROVIDER_HAS_NO_MANDATE',
+            message:
+              'This agency is billed outside the platform, so there is no mandate to set up ' +
+              'here. Its settlements are recorded as payable and collected elsewhere.',
+          },
+        });
+      }
 
       const gateway = paymentGateway();
       if (!gateway.isEnabled()) {
@@ -1178,6 +1235,13 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       paymentMethodId?: string;
       method?: 'ACH' | 'CARD';
       deliveryDay?: string;
+      /**
+       * Where an OFFLINE agency's money actually arrived -- a check number, a
+       * wire reference, an invoice id. Required for an OFFLINE agency and
+       * refused for any other, so the two cases cannot be confused by a caller
+       * that sends the wrong one.
+       */
+      externalPaymentReference?: string;
     };
   }>(
     '/api/v1/platform/delivery/agencies/:tenantId/opening-purchase',
@@ -1221,7 +1285,99 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const amount = Number((quantity * unitRate).toFixed(2));
       const deliveryDay = body.deliveryDay ?? currentCalendarDay();
 
-      const gateway = paymentGateway();
+      const externalReference =
+        typeof body.externalPaymentReference === 'string'
+          ? body.externalPaymentReference.trim()
+          : '';
+
+      /*
+       * ── The offline branch ───────────────────────────────────────────────
+       *
+       * An agency that has already paid for its opening block somewhere else.
+       *
+       * Before this existed there was no way to record that: this route charges
+       * before it writes, so giving an agency the credits it had already paid
+       * for by check meant debiting it a second time for the same money. The
+       * alternatives on offer were a hand-written ledger row with no audit
+       * trail, or charging and refunding -- in a product whose first documented
+       * rule is that nothing here is ever refunded.
+       *
+       * The reference is REQUIRED rather than optional. A ledger row saying a
+       * block was paid for outside the platform, with nothing saying where, is
+       * not a record -- it is an assertion, and the only person who could check
+       * it is the one who wrote it.
+       */
+      if (!providerChargesInPlatform(profile.paymentProvider)) {
+        if (!externalReference) {
+          return reply.code(400).send({
+            error: {
+              code: 'EXTERNAL_REFERENCE_REQUIRED',
+              message:
+                "This agency's payment provider is OFFLINE, so no debit can be placed. " +
+                'Send externalPaymentReference naming where the money was collected ' +
+                '(a check number, a wire reference, an invoice id).',
+            },
+          });
+        }
+
+        const offlineEntry = await recordPurchase(prisma, {
+          tenantId,
+          deliveryDay,
+          quantity,
+          unitRate,
+          // No Stripe payment exists. The reference below is the record.
+          stripePaymentIntentId: null,
+          externalPaymentReference: externalReference,
+          settlementId: null,
+        });
+
+        await auditLog({
+          tenantId,
+          userId: getActingUserId(request) ?? undefined,
+          action: 'platform.delivery.opening_purchase.external',
+          entityType: 'application_credit_ledger',
+          entityId: offlineEntry.id,
+          changes: {
+            quantity,
+            unitRate,
+            amount,
+            method: 'OFFLINE',
+            externalPaymentReference: externalReference,
+          },
+        });
+
+        return reply.code(201).send({
+          data: {
+            ledgerEntryId: offlineEntry.id,
+            quantity,
+            unitRate,
+            amount,
+            deliveryDay,
+            charged: false,
+            externalPaymentReference: externalReference,
+          },
+        });
+      }
+
+      /*
+       * Everything below charges. A reference sent to a charging agency is
+       * refused rather than ignored: it means the caller believed this purchase
+       * was already paid for, and silently debiting them anyway is the exact
+       * double-charge the branch above exists to prevent.
+       */
+      if (externalReference) {
+        return reply.code(400).send({
+          error: {
+            code: 'EXTERNAL_REFERENCE_NOT_APPLICABLE',
+            message:
+              'externalPaymentReference applies only to an agency whose payment provider is ' +
+              'OFFLINE. This agency is charged through the platform, and this request would ' +
+              'have placed a real debit.',
+          },
+        });
+      }
+
+      const gateway = gatewayForProvider(profile.paymentProvider);
       const paymentMethodId = body.paymentMethodId ?? profile.achPaymentMethodId;
 
       if (!profile.stripeCustomerId || !paymentMethodId) {
@@ -1369,6 +1525,118 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           ceilingPct: terms.ceilingPct,
           ceilingSource: terms.ceilingSource,
           ceilingApplications: terms.ceilingApplications,
+        },
+      });
+    }
+  );
+
+  /**
+   * PUT /api/v1/platform/delivery/agencies/:tenantId/payment-provider
+   *
+   * Who moves this agency's money: STRIPE, or OFFLINE for an agency billed
+   * outside the platform entirely.
+   *
+   * ── Separate from payment-method, and deliberately ───────────────────────
+   *
+   * `payment-method` answers WHAT is debited -- a bank account or a card -- and
+   * carries the Overrun ceiling consequence, because a card is reversible
+   * whoever processes it. This answers WHO debits it, and carries none: an
+   * offline agency keeps the ceiling schedule its instrument earns it.
+   *
+   * ── Moving an agency to OFFLINE does not settle what it already owes ──────
+   *
+   * Settlements already written keep the status they were written with. A
+   * FAILED settlement stays FAILED and keeps holding delivery until it is paid
+   * or a platform admin deals with it; moving the agency to OFFLINE is not a
+   * way to make an unpaid debit stop counting. What changes is tonight onward.
+   *
+   * The refusal below is the other half of that. An agency mid-way through a
+   * PENDING settlement has a debit that may or may not have reached Stripe, and
+   * switching provider underneath it would leave a charge in flight that no
+   * provider now owns.
+   */
+  fastify.put<{
+    Params: { tenantId: string };
+    Body: { paymentProvider?: string; note?: string };
+  }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/payment-provider',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const requested = (request.body?.paymentProvider ?? '').toUpperCase();
+
+      if (requested !== 'STRIPE' && requested !== 'OFFLINE') {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'paymentProvider must be STRIPE or OFFLINE',
+          },
+        });
+      }
+
+      const existing = await prisma.agencyBillingProfile.findUnique({ where: { tenantId } });
+      if (!existing) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'This agency has no recorded terms' },
+        });
+      }
+
+      /*
+       * A debit that may be in flight. See the note above: PENDING means the
+       * settlement row exists and the charge was either not placed yet or
+       * placed and not yet answered for. Neither is a safe moment to change
+       * which provider owns it.
+       */
+      const inFlight = await prisma.dailySettlement.findFirst({
+        where: { tenantId, paymentStatus: SettlementPaymentStatus.PENDING },
+        orderBy: { deliveryDay: 'asc' },
+        select: { id: true, deliveryDay: true },
+      });
+      if (inFlight) {
+        return reply.code(409).send({
+          error: {
+            code: 'SETTLEMENT_IN_FLIGHT',
+            message:
+              `The settlement for ${inFlight.deliveryDay} is still pending. Let it resolve ` +
+              'before changing this agency\'s payment provider, so the debit it may have ' +
+              'placed is answered for by the provider that placed it.',
+          },
+        });
+      }
+
+      const profile = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: { paymentProvider: requested as PaymentProvider },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.delivery.payment_provider.updated',
+        entityType: 'agency_billing_profile',
+        entityId: profile.id,
+        changes: {
+          from: existing.paymentProvider,
+          to: requested,
+          note: request.body?.note ?? null,
+        },
+      });
+
+      const terms = await loadAgencyTerms(tenantId, { prisma });
+
+      return reply.send({
+        data: {
+          tenantId,
+          paymentProvider: profile.paymentProvider,
+          chargesInPlatform: terms.chargesInPlatform,
+          /*
+           * Returned because moving an agency BACK to STRIPE is the direction
+           * that can leave it unpayable: it has no mandate on file, having
+           * never needed one, and the next settlement would halt. Better here
+           * than discovered at 2am.
+           */
+          hasValidMandate: terms.hasValidMandate,
+          mandateStatus: terms.mandateStatus,
         },
       });
     }
