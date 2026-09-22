@@ -26,6 +26,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:carriers": "prisma db execute --file prisma/sql/carrier-catalog.sql --schema prisma/schema.prisma",
     "audit:accounts": "tsx src/cli/audit-account-provenance.ts",
     "calls:diagnose": "tsx src/cli/diagnose-missing-calls.ts",
     "calls:inventory": "tsx src/cli/call-history-inventory.ts",
