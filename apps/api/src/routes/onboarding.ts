@@ -219,12 +219,30 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         paymentDone,
         termsDone,
         [
-          terms.paymentMethod === AgencyPaymentMethod.CARD
-            ? 'No usable card on file. The agency saves one from its own portal.'
-            : 'No valid ACH mandate. The agency completes it from its own portal.',
+          /*
+           * An agency collected outside the platform has no instrument to
+           * collect, so this step is complete the moment its terms are. The
+           * blocker text is therefore unreachable for one -- but it is written
+           * for the right provider anyway, because a message that says "no
+           * valid ACH mandate" about an invoiced agency is exactly the kind of
+           * line somebody acts on before noticing it cannot apply.
+           */
+          !terms.chargesInPlatform
+            ? `This agency is billed outside the platform (${terms.paymentProvider}); ` +
+              'there is no payment instrument to collect.'
+            : terms.paymentMethod === AgencyPaymentMethod.CARD
+              ? 'No usable card on file. The agency saves one from its own portal.'
+              : 'No valid ACH mandate. The agency completes it from its own portal.',
         ],
         {
           paymentMethod: terms.paymentMethod,
+          /*
+           * Returned so the screen can say WHY this step is complete. Without
+           * it a newly onboarded agency shows "payment method: complete" with
+           * no instrument on file and nothing explaining that none is coming.
+           */
+          paymentProvider: terms.paymentProvider,
+          chargesInPlatform: terms.chargesInPlatform,
           mandateStatus: terms.mandateStatus,
           hasValidMandate: terms.hasValidMandate,
           bankName: terms.profile?.achBankName ?? null,

@@ -214,7 +214,18 @@ describe.skipIf(!gate.available)(
         await seedDidRoute('+15551230003');
         await prisma.agencyBillingProfile.update({
           where: { tenantId },
-          data: { achMandateStatus: 'NONE', achPaymentMethodId: null },
+          data: {
+            achMandateStatus: 'NONE',
+            achPaymentMethodId: null,
+            /*
+             * Stated rather than inherited from the column default, which is
+             * MELIO. A mandate is only owed by an agency this platform debits;
+             * an invoiced one has none to be missing, so without this the
+             * scenario under test cannot arise and the assertion below would
+             * be passing on a hold that never fires.
+             */
+            paymentProvider: 'STRIPE',
+          },
         });
 
         const response = await app.inject({

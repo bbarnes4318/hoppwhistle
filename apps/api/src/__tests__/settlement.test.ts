@@ -583,7 +583,15 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
     it('names every missing precondition rather than one at a time', async () => {
       // Terms exist, but with no Daily Block, no mandate and no agreed rate.
       await prisma.agencyBillingProfile.create({
-        data: { tenantId: big.id, dailyBlockApplications: 0, maxDailyDebit: 0 },
+        data: {
+          tenantId: big.id,
+          dailyBlockApplications: 0,
+          maxDailyDebit: 0,
+          // NO_VALID_MANDATE is one of the blockers asserted below, and only an
+          // agency this platform debits can be missing a mandate. The column
+          // default is MELIO, which owes none.
+          paymentProvider: PaymentProvider.STRIPE,
+        },
       });
 
       const response = await app.inject({
@@ -622,6 +630,34 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(response.json().error.blockers.map((b: any) => b.code)).toEqual([
         'NO_VALID_MANDATE',
       ]);
+    });
+
+    /**
+     * The counterpart to the test above, and the reason the tests around it now
+     * name STRIPE explicitly.
+     *
+     * An invoiced agency has no mandate and is not missing one. Without this,
+     * `NO_VALID_MANDATE` would refuse enrolment to every agency onboarded on
+     * the default provider -- which is every new agency -- for failing to
+     * produce a bank mandate nobody asked it for.
+     */
+    it('does not block a MELIO agency on a mandate it never owed', async () => {
+      await seedTerms(big.id, {
+        mandate: false,
+        enrolled: false,
+        paymentProvider: PaymentProvider.MELIO,
+      });
+      await seedOpeningAgreement(big.id);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrolment`,
+        headers: tokenFor(operatorId, null),
+      });
+
+      const codes = response.json().data.blockers.map((b: any) => b.code);
+      expect(codes).not.toContain('NO_VALID_MANDATE');
+      expect(response.json().data.readyToEnrol).toBe(true);
     });
 
     it('enrols an agency that has everything, with charging still off', async () => {
