@@ -435,6 +435,47 @@ else
   GRN "  applied prisma/sql/db-push-constraints.sql"
 fi
 
+# ── The carrier catalog ─────────────────────────────────────────────────────
+#
+# The rows behind Settings -> Carrier Routing. Applied here for the same reason
+# the constraints file is: a carrier added as a data-only migration reaches no
+# database at all. `prisma migrate deploy` is refused, both CI workflows build
+# with `db push` (which never reads a migration), and this script only applies
+# the files named in REQUIRED_MIGRATIONS -- which stops at 2026-09-15.
+#
+# Twilio and Vonage were added in 20260921030000_add_twilio_vonage_carriers and
+# were invisible everywhere for exactly that reason.
+#
+# Unconditional, unlike the constraints file above: it touches only the four
+# carrier tables, which are in schema.prisma and present on every database this
+# script runs against. It is append-only by construction -- every statement is
+# ON CONFLICT DO NOTHING or NOT EXISTS -- so a re-run never disturbs a carrier
+# order, an enabled/disabled choice, a tech prefix or a caller-ID strategy.
+CATALOG="$ROOT/apps/api/prisma/sql/carrier-catalog.sql"
+[ -f "$CATALOG" ] || {
+  RED "REFUSED: $CATALOG is not in this checkout."; exit 1; }
+
+if [ "$DRY_RUN" = "1" ]; then
+  printf "  would apply: %s\n" "prisma/sql/carrier-catalog.sql"
+else
+  if ! OUT="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$CATALOG" 2>&1)"; then
+    RED "REFUSED: carrier-catalog.sql failed."
+    RED "$OUT"
+    exit 1
+  fi
+
+  # Verify rather than trust: a file that silently did nothing exits zero and
+  # looks identical from here. Every tenant should now have both new carriers.
+  MISSING_CARRIERS="$(probe "SELECT count(*) FROM \"tenants\" t WHERE NOT EXISTS (SELECT 1 FROM \"carriers\" c WHERE c.\"tenantId\" = t.\"id\" AND c.\"code\" = 'TWILIO') OR NOT EXISTS (SELECT 1 FROM \"carriers\" c WHERE c.\"tenantId\" = t.\"id\" AND c.\"code\" = 'VONAGE')")"
+  if [ "$MISSING_CARRIERS" != "0" ]; then
+    RED "REFUSED: the carrier catalog reported success but $MISSING_CARRIERS tenant(s)"
+    RED "still have no Twilio or Vonage carrier."
+    RED "$OUT"
+    exit 1
+  fi
+  GRN "  applied prisma/sql/carrier-catalog.sql"
+fi
+
 GRN "migrations applied and verified"
 
 # ═══════════════════════════════════════════════════════════════════════════
