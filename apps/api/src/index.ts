@@ -438,6 +438,23 @@ async function buildServer() {
     console.error('[REPAIR] UUID route repair failed (non-fatal):', err);
   });
 
+  // Every tenant gets the carrier catalog behind Settings -> Carrier Routing.
+  //
+  // It lives here because no other mechanism reaches every environment: this
+  // platform deploys with Coolify, which builds an image and runs it and never
+  // invokes scripts/deploy-netenroll.sh, and `prisma db push` -- what CI and a
+  // fresh checkout use -- never reads a migration. A carrier added as a
+  // data-only migration therefore reached no database at all, which is exactly
+  // what happened to Twilio and Vonage.
+  //
+  // Non-fatal, like the repair above: the SQL is append-only and changes no
+  // existing row, and routing degrades to the legacy chain without it. Refusing
+  // to serve over a missing catalog row would be far worse than the row.
+  const { ensureCarrierCatalog } = await import('./services/carrier-catalog.js');
+  ensureCarrierCatalog().catch(err => {
+    console.error('[carrier-catalog] bootstrap failed (non-fatal):', err);
+  });
+
   // Error handler
   server.setErrorHandler((error, request, reply) => {
     server.log.error(error);

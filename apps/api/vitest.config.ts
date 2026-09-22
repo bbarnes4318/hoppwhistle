@@ -42,6 +42,11 @@ const DATABASE_BACKED = [
   // fixtures -- which surfaced as the recording suite failing to seed at all,
   // not as anything to do with recordings.
   '**/src/__tests__/recording-access.test.ts',
+  // Truncates `tenants` CASCADE, which takes the carrier tables with it, to
+  // prove the boot-time catalog converges for a tenant that has none. On the
+  // default pool that would delete every other suite's fixtures -- the same
+  // race the entries above record.
+  '**/src/__tests__/carrier-catalog.test.ts',
   // Truncates `tenants`, `roles` and `users` to seed one account per role.
   '**/src/__tests__/me-capabilities.test.ts',
   // Truncates `tenants`, `roles`, `users` and `audit_logs`, and suspends its
