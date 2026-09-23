@@ -193,7 +193,7 @@ function TeamRangeReport(): JSX.Element {
   if (withoutAgency) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="Team" subtitle="Select an agency to see its team." />
+        <CompactPageHeader subtitle="Select an agency to see its team." />
       </CompactPageShell>
     );
   }
@@ -201,7 +201,6 @@ function TeamRangeReport(): JSX.Element {
   return (
     <CompactPageShell>
       <CompactPageHeader
-        title="Team"
         subtitle={
           data
             ? `${data.days} day${data.days === 1 ? '' : 's'}, ${data.from} to ${data.to}`

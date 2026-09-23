@@ -280,7 +280,6 @@ export default function InsuranceLeadsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-ink">CRM</h1>
           <p className="mt-0.5 text-sm text-ink-2">
             Manage inbound ACA, FE Customers, and B2B leads
           </p>

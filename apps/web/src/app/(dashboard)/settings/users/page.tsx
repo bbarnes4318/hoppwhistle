@@ -164,7 +164,6 @@ export default function UsersPage() {
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between flex-shrink-0 mb-4">
         <div>
-          <h1 className="text-3xl font-bold">Users</h1>
           <p className="text-muted-foreground">Manage team members and permissions</p>
         </div>
         <Button onClick={() => setInviteDialogOpen(true)}>

@@ -839,11 +839,7 @@ export default function OperationsCallLogsPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Operations Console"
-        subtitle="Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center."
-        icon={Activity}
-      >
+      <CompactPageHeader subtitle="Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center.">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Gauge, Loader2, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Loader2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -202,7 +202,6 @@ function AgencyRatingPanel(): JSX.Element {
   if (error || !summary) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="Rate" icon={Gauge} />
         <p className="text-sm text-muted-foreground">{error ?? 'No rating data yet.'}</p>
       </CompactPageShell>
     );
@@ -226,11 +225,7 @@ function AgencyRatingPanel(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Rate"
-        subtitle={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}
-        icon={Gauge}
-      >
+      <CompactPageHeader subtitle={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}>
         <Badge variant={summary.status === 'UNDER_REVIEW' ? 'destructive' : 'secondary'}>
           {summary.status.replace('_', ' ').toLowerCase()}
         </Badge>

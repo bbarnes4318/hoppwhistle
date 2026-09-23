@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Download, Loader2, RefreshCw, Trophy } from 'lucide-react';
+import { AlertTriangle, Download, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -169,11 +169,7 @@ export default function LeaderboardPage(): JSX.Element {
   if (withoutAgency) {
     return (
       <CompactPageShell>
-        <CompactPageHeader
-          title="Leaderboard"
-          subtitle="Select an agency to see its board."
-          icon={Trophy}
-        />
+        <CompactPageHeader subtitle="Select an agency to see its board." />
       </CompactPageShell>
     );
   }
@@ -181,13 +177,11 @@ export default function LeaderboardPage(): JSX.Element {
   return (
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
-        title="Leaderboard"
         subtitle={
           data
             ? `${data.period.label} · ${data.rows.filter(row => row.rank !== null).length} ranked`
             : 'Who is closing, who is dialling, and who is on a run'
         }
-        icon={Trophy}
       >
         <div className="flex items-center gap-2">
           <Button

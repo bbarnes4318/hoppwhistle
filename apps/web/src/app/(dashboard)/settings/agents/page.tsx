@@ -319,7 +319,6 @@ export default function AgentRosterPage(): JSX.Element {
   if (withoutAgency) {
     return (
       <div className="p-6">
-        <h1 className="text-3xl font-bold">Agents</h1>
         <p className="mt-2 text-muted-foreground">Select an agency to see its agents.</p>
       </div>
     );
@@ -339,7 +338,6 @@ export default function AgentRosterPage(): JSX.Element {
     <div className="flex h-full flex-col overflow-hidden">
       <div className="mb-4 flex flex-shrink-0 items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Agents</h1>
           <p className="text-muted-foreground">
             {agents.length === 0
               ? 'Add the agents who work for your agency.'

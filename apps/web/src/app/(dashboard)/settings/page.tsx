@@ -102,7 +102,7 @@ export default function SettingsPage() {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader title="Settings" subtitle="Manage your account settings and integrations">
+      <CompactPageHeader subtitle="Manage your account settings and integrations">
         <div className="flex items-center gap-2 border border-rule rounded px-2 py-1 bg-surface">
           <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
             Demo Mode:

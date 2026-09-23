@@ -106,8 +106,11 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
   );
 
   /**
-   * The twelve screens named in the removal, plus the two cross-agency admin
-   * screens that were already absent from the sidebar.
+   * The twelve screens named in the removal, the two cross-agency admin screens
+   * that were already absent from the sidebar, and NetEnroll's two unbuilt
+   * stubs -- the cross-agency live board, and the payouts screen for the
+   * publishers NetEnroll buys calls from. An agency has no publishers and is
+   * never paid out; it is billed.
    *
    * Spelled out here rather than read from STAFF_ONLY_ROUTES on purpose. A test
    * that imports the list it is checking passes whatever the list happens to
@@ -129,6 +132,9 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
     '/settings/carriers',
     '/admin/agencies',
     '/admin/onboarding',
+    '/admin/live',
+    '/payouts',
+    '/admin/payroll',
   ];
 
   it.each(REMOVED)('does not link to %s', href => {
@@ -174,7 +180,6 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
       '/settings/webhooks',
       '/settings/dnc',
       '/settings/quotas',
-      '/admin/payroll',
     ]) {
       expect(ownerHrefs.has(href), `AGENCY_OWNER_NAV missing ${href}`).toBe(true);
     }
@@ -266,7 +271,16 @@ describe('isStaffOnlyRoute matches whole segments', () => {
     ['/publisher/calls', '/publishers'],
     ['/ai-campaigns', '/campaigns'],
     ['/ai-campaigns/new', '/campaigns'],
-    ['/admin/payroll', '/admin/agencies'],
+    /*
+     * `/payroll` is an AGENT's own pay, and `/admin/payroll` -- which is now
+     * staff's -- must not take it. They share five characters and nothing else:
+     * one is the screen an agent reads what they are owed on, and it is in
+     * AGENT_NAV. This replaces a case that paired `/admin/payroll` with
+     * `/admin/agencies`, which stopped proving anything once `/admin/payroll`
+     * became staff-only on its own account.
+     */
+    ['/payroll', '/admin/payroll'],
+    ['/payouts-summary', '/payouts'],
   ])('%s is not swallowed by %s', path => {
     expect(isStaffOnlyRoute(path)).toBe(false);
   });

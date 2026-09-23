@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Globe, Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Ledger, count, dollars, pct } from '@/components/delivery/ledger';
@@ -174,11 +174,8 @@ export function PlatformSettlementsView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false} data-print="page">
-      <CompactPageHeader
-        title="Settlements — every agency"
-        subtitle="One row per agency per settled Delivery Day"
-        icon={Globe}
-      >
+      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
+      <CompactPageHeader subtitle="Every agency · one row per agency per settled Delivery Day">
         <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
           <Download className="mr-2 h-3 w-3" />
           {exporting ? 'Exporting…' : 'Export CSV'}

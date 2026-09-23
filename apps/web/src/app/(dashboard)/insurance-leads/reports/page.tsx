@@ -228,7 +228,6 @@ export default function CrmReportsPage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to CRM
           </Link>
-          <h1 className="text-xl font-semibold text-foreground">CRM Reports</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Every lead sent to Ameriquote — what they accepted, what they refused, and why.
           </p>

@@ -60,11 +60,7 @@ export default function PhonePage(): JSX.Element {
       {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
 
       {/* Header */}
-      <CompactPageHeader
-        title="Agent Console"
-        subtitle="Manage softphone operations and check live calling activity"
-        icon={Phone}
-      >
+      <CompactPageHeader subtitle="Manage softphone operations and check live calling activity">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-surface border border-rule rounded px-2.5 py-1 text-xs">
             <span className="text-[10px] uppercase font-bold text-muted-foreground/60">

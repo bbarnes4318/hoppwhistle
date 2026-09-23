@@ -89,14 +89,30 @@ const FRONT = `http://127.0.0.1:${FRONT_PORT}`;
 const OPERATOR = { email: 'platform-smoke@netenroll.invalid', password: 'smoke-Passw0rd!' };
 
 /**
- * The routes that must render platform-wide, and the heading that proves each
+ * The routes that must render platform-wide, and the string that proves each
  * one did. Kept beside `PLATFORM_WIDE_LANDING_ROUTES` in
  * `src/lib/platform-routes.ts`; the guard below fails if they drift apart.
+ *
+ * ── Why "Every agency" and not the page's name ───────────────────────────────
+ *
+ * These were the three headings "Delivery — every agency", "Rate — every
+ * agency" and "Settlements — every agency". Those headings are gone: the page
+ * name is the topbar's now, once, and a page no longer draws a second copy of
+ * it over its own content. What each of these views still says, and must, is
+ * its SCOPE -- it shares a route with the single-agency view and which one you
+ * get turns on whether the operator has entered an agency.
+ *
+ * Scope is the better assertion anyway. WHICH page rendered is already checked,
+ * separately and more exactly, by the `landed !== route.path` test below. What
+ * that cannot catch is the right URL rendering the WRONG VARIANT -- an operator
+ * with no acting tenant being handed the agency view -- and that is precisely
+ * what this string is now proving, because the agency variant never says it.
+ * The same string on all three is therefore not a weakness here.
  */
 const ROUTES = [
-  { path: '/delivery', heading: 'Delivery — every agency' },
-  { path: '/rating', heading: 'Rate — every agency' },
-  { path: '/delivery/settlements', heading: 'Settlements — every agency' },
+  { path: '/delivery', heading: 'Every agency' },
+  { path: '/rating', heading: 'Every agency' },
+  { path: '/delivery/settlements', heading: 'Every agency' },
 ];
 
 /**
@@ -162,7 +178,6 @@ const SWEEP = [
       '/settings/webhooks',
       '/settings/dnc',
       '/settings/quotas',
-      '/admin/payroll',
     ],
     /*
      * NetEnroll's own screens, asked for by an agency principal.
@@ -199,6 +214,18 @@ const SWEEP = [
       { from: '/tools/campaign-map', to: '/dashboard' },
       { from: '/tools/industry-research', to: '/dashboard' },
       { from: '/music-console', to: '/dashboard' },
+      /*
+       * Payroll administration, which an agency principal COULD reach until
+       * now -- it was on the reachable list directly above this one.
+       *
+       * It is NetEnroll's screen, not the agency's, so it moved rather than
+       * being deleted: the property worth asserting is that asking for it by
+       * URL sends them away, and a route merely dropped from the list above
+       * would leave that redirect untested. The agent's own `/payroll` is a
+       * different screen and still theirs -- see the AGENT entry below, which
+       * loads it.
+       */
+      { from: '/admin/payroll', to: '/dashboard' },
     ],
   },
   {
@@ -299,6 +326,10 @@ const SWEEP = [
       // inside an agency administer that agency's ceilings, addressed to the
       // tenant they entered rather than to anything in the URL.
       '/settings/quotas',
+      // Payroll administration, now staff's. It was loaded by the agency
+      // principal above until it became staff-only; it is here so that taking
+      // it off that list did not quietly leave the page rendered by nobody.
+      '/admin/payroll',
     ],
   },
 ];

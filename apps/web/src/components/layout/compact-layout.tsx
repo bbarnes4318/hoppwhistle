@@ -39,36 +39,43 @@ export function CompactPageShell({
 }
 
 interface CompactPageHeaderProps {
-  title: string;
-  subtitle?: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  /** A context line: the range being shown, the day, the agency. Not a title. */
+  subtitle?: React.ReactNode;
+  /** The page's actions, right-aligned. */
   children?: React.ReactNode;
 }
 
 /**
- * A standardized compact header (40-48px height) for dashboard pages.
+ * The bar across the top of a page's CONTENT: its context line and its actions.
+ *
+ * ── It does not carry the page title, and that is the point ──────────────────
+ *
+ * It used to. So does the topbar, from `pageTitleFor(pathname)`. Both rendered
+ * `<h1 className="t-title">` with the same words in the same face, one directly
+ * above the other, on every screen under the dashboard -- "Delivery" over
+ * "Delivery", "Applications" over "Applications". Several pages then opened
+ * with a section heading as well, so the name of the page could appear three
+ * times before any data did.
+ *
+ * Two `<h1>`s in one document is also simply wrong. A screen reader announces
+ * the document's heading twice and the outline has no single root; every page
+ * in this app had that.
+ *
+ * So the title is the topbar's, once, and it is derived from the nav -- see
+ * `page-title.ts`, which is why renaming a sidebar entry renames the heading
+ * and the browser tab with it. What is left here is what a title never was:
+ * the line that says WHICH day or range is on screen, and the buttons that act
+ * on it.
+ *
+ * Rendering nothing when given neither keeps a page that only wanted a title
+ * from drawing an empty rule across the top of itself.
  */
-export function CompactPageHeader({
-  title,
-  subtitle,
-  icon: Icon,
-  children,
-}: CompactPageHeaderProps) {
+export function CompactPageHeader({ subtitle, children }: CompactPageHeaderProps) {
+  if (!subtitle && !children) return null;
+
   return (
-    <div className="flex flex-row items-center justify-between border-b border-rule pb-3 flex-shrink-0">
-      <div className="flex items-center gap-2.5">
-        {Icon && (
-          <div className="w-8 h-8 rounded-control border border-rule bg-surface flex items-center justify-center flex-shrink-0">
-            <Icon className="w-4 h-4 text-muted-foreground" />
-          </div>
-        )}
-        <div>
-          <h1 className="t-title flex items-center gap-2 text-ink">
-            {title}
-          </h1>
-          {subtitle && <p className="t-meta mt-0.5 text-ink-3">{subtitle}</p>}
-        </div>
-      </div>
+    <div className="flex flex-row items-center justify-between gap-3 border-b border-rule pb-3 flex-shrink-0">
+      {subtitle ? <p className="t-meta text-ink-3">{subtitle}</p> : <span />}
       {children && <div className="flex items-center gap-2">{children}</div>}
     </div>
   );

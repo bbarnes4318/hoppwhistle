@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { Figure, FigureRow, SectionRule, count, pct, points } from '@/components/delivery/ledger';
@@ -74,7 +74,6 @@ export default function MyDeliveryPage(): JSX.Element {
   if (error || !view) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="My day" icon={User} />
         <p className="t-body text-ink-3">{error ?? 'Nothing recorded yet today.'}</p>
       </CompactPageShell>
     );
@@ -88,9 +87,7 @@ export default function MyDeliveryPage(): JSX.Element {
   return (
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
-        title="My day"
         subtitle={`${view.calendarDay} · your calls, your applications, your closing percentage`}
-        icon={User}
       />
 
       {/*

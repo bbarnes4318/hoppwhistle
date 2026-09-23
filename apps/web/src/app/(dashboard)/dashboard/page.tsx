@@ -3,13 +3,12 @@
 import {
   Activity,
   Calendar,
-  CalendarCheck,
   ChevronDown,
   ClipboardCheck,
+  FileText,
   Headphones,
   Phone,
   PhoneIncoming,
-  Play,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -38,6 +37,17 @@ import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
 /* ─── Types ────────────────────────────────────────────────────── */
 interface DashboardStats {
   totalCalls: number;
+  /** Inbound, unblocked, answered. The denominator the agency is billed on. */
+  deliveredCalls: number;
+  /** Reached submitted state and not voided. The numerator it is paid for. */
+  submittedApplications: number;
+  /**
+   * Applications over delivered calls, as a percentage. Null -- not zero --
+   * when no calls were delivered: an agency that took calls and wrote nothing
+   * is a real and serious zero, and a closed day is not that. Rendered as a
+   * dash.
+   */
+  closingPct: number | null;
   connectedCalls: number;
   appointmentsSet: number;
   callbacksScheduled: number;
@@ -355,11 +365,7 @@ export default function DashboardPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Dashboard"
-        subtitle="Final expense call center performance"
-        icon={Activity}
-      >
+      <CompactPageHeader subtitle="Final expense call center performance">
         <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1">
           <span className="relative flex h-2 w-2">
             <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
@@ -434,16 +440,16 @@ export default function DashboardPage() {
           className="py-2.5"
         />
         <KPICard
-          title="Connected"
-          value={stats?.connectedCalls || 0}
+          title="Delivered"
+          value={stats?.deliveredCalls || 0}
           icon={PhoneIncoming}
           loading={loading}
           className="py-2.5"
         />
         <KPICard
-          title="Appointments"
-          value={stats?.appointmentsSet || 0}
-          icon={CalendarCheck}
+          title="Applications"
+          value={stats?.submittedApplications || 0}
+          icon={FileText}
           loading={loading}
           className="py-2.5"
         />
@@ -461,10 +467,13 @@ export default function DashboardPage() {
           loading={loading}
           className="py-2.5"
         />
+        {/* The number that sets the agency's price. `??` and not `||`: a real
+            0% must render as 0, and only a null -- no delivered calls at all
+            -- becomes the dash. */}
         <KPICard
-          title="Appt. Rate"
-          value={stats?.appointmentRate || 0}
-          unit="%"
+          title="Closing %"
+          value={stats?.closingPct ?? '\u2014'}
+          unit={stats?.closingPct == null ? undefined : '%'}
           icon={Activity}
           loading={loading}
           className="py-2.5"

@@ -337,10 +337,7 @@ export default function QuotasPage() {
   if (withoutAgency) {
     return (
       <CompactPageShell fullHeight={false}>
-        <CompactPageHeader
-          title="Quotas & Budgets"
-          subtitle="Call ceilings and spend caps, per agency"
-        />
+        <CompactPageHeader subtitle="Call ceilings and spend caps, per agency" />
         <Card className="border-rule">
           <CardContent className="flex items-start gap-3 p-4">
             <Building2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-ink-3" />
@@ -367,7 +364,6 @@ export default function QuotasPage() {
   return (
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
-        title="Quotas & Budgets"
         subtitle={
           administering
             ? `Limits and spend caps for ${administering.name ?? 'this agency'}`

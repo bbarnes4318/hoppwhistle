@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  Building2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -329,11 +328,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Agencies"
-        subtitle="Cross-agency delivery, revenue and settlement status"
-        icon={Building2}
-      >
+      <CompactPageHeader subtitle="Cross-agency delivery, revenue and settlement status">
         <div className="flex items-center gap-2">
           <Input
             type="date"

@@ -1,6 +1,6 @@
 'use client';
 
-import { Globe, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
@@ -120,7 +120,6 @@ export function PlatformRatingView(): JSX.Element {
   if (error || !overview) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="Rate — every agency" icon={Globe} />
         <p className="text-sm text-muted-foreground">{error ?? 'No rating data yet.'}</p>
       </CompactPageShell>
     );
@@ -130,10 +129,9 @@ export function PlatformRatingView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
+      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
       <CompactPageHeader
-        title="Rate — every agency"
-        subtitle={`${overview.calendarDay} · days end 23:59:59 ${overview.timeZone} · curve v${overview.curveVersion}`}
-        icon={Globe}
+        subtitle={`Every agency · ${overview.calendarDay} · days end 23:59:59 ${overview.timeZone} · curve v${overview.curveVersion}`}
       >
         <Button variant="outline" size="sm" onClick={() => void load()}>
           <RefreshCw className="mr-2 h-3 w-3" />

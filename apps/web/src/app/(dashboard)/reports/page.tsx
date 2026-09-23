@@ -380,10 +380,7 @@ function ReportsPage() {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Financial Reports"
-        subtitle="Analyze publisher revenue, buyer costs, and campaign profit margins."
-      >
+      <CompactPageHeader subtitle="Analyze publisher revenue, buyer costs, and campaign profit margins.">
         <Button
           onClick={() => void handleCsvExport()}
           disabled={exporting || loading}
