@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
-  Mail,
   MapPin,
   Plus,
   RefreshCw,
@@ -16,6 +15,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { InviteAgentDialog } from '@/components/agents/invite-agent-dialog';
 import { ScheduleDialog } from '@/components/agents/schedule-dialog';
+import { EmptyState, Notice, Panel, PanelBody, PanelDescription } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import {
   ReadinessCell,
   RosterLicenceCell,
@@ -25,7 +26,6 @@ import {
 } from '@/components/team/roster-cells';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
@@ -43,6 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { InviteUserDialog } from '@/components/users/invite-user-dialog';
 import { LicensedStatesDialog } from '@/components/users/licensed-states-dialog';
 import { PendingApprovals } from '@/components/users/pending-approvals';
@@ -125,7 +126,7 @@ function isLicenceGated(user: User): boolean {
  */
 function LicenceCell({ user }: { user: User }): JSX.Element {
   if (!isLicenceGated(user)) {
-    return <span className="text-sm text-muted-foreground">—</span>;
+    return <span className="text-sm text-ink-3">—</span>;
   }
 
   const states = user.licensedStates ?? [];
@@ -133,7 +134,7 @@ function LicenceCell({ user }: { user: User }): JSX.Element {
   if (states.length === 0) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+        className="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full bg-ringing-tint px-2.5 text-[12px] font-medium text-ringing-ink"
         title="No licence recorded. This agent is served no leads and routed no state-identified calls."
       >
         <AlertTriangle className="h-3 w-3" />
@@ -153,11 +154,11 @@ function LicenceCell({ user }: { user: User }): JSX.Element {
       title={states.map(jurisdictionName).join(', ')}
     >
       {shown.map(code => (
-        <Badge key={code} variant="outline" className="px-1.5 py-0 font-mono text-[10px]">
+        <Badge key={code} variant="outline" className="px-2">
           {code}
         </Badge>
       ))}
-      {rest > 0 ? <span className="text-xs text-muted-foreground">+{rest}</span> : null}
+      {rest > 0 ? <span className="t-meta tabular-nums text-ink-3">+{rest}</span> : null}
     </div>
   );
 }
@@ -354,58 +355,53 @@ export default function TeamMembersPage(): JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
-        <p className="text-muted-foreground">
-          {agentTotal === 0
+    <div className="page-canvas">
+      <PageHeader
+        description={
+          agentTotal === 0
             ? 'Everyone in your agency, and what each of them can do.'
-            : `${readyCount} of ${agentTotal} ${agentTotal === 1 ? 'agent' : 'agents'} ready to take calls.`}
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          </Button>
-          <Button variant="outline" onClick={() => setInviteUserOpen(true)}>
-            Invite user
-          </Button>
-          <Button onClick={() => setInviteAgentOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add agent
-          </Button>
-        </div>
-      </div>
+            : `${readyCount} of ${agentTotal} ${agentTotal === 1 ? 'agent' : 'agents'} ready to take calls.`
+        }
+        actions={
+          <>
+            <Tooltip content="Refresh">
+              <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+              </Button>
+            </Tooltip>
+            <Button variant="outline" onClick={() => setInviteUserOpen(true)}>
+              Invite user
+            </Button>
+            <Button onClick={() => setInviteAgentOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add agent
+            </Button>
+          </>
+        }
+      />
 
-      {error ? (
-        <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
 
-      {rosterError && !withoutAgency ? (
-        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          {rosterError}
-        </div>
-      ) : null}
+      {rosterError && !withoutAgency ? <Notice tone="warning">{rosterError}</Notice> : null}
 
       {campaigns.length === 0 && !loading && !withoutAgency && agentTotal > 0 ? (
-        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <Notice tone="warning">
           This agency has no active campaign, so there is nothing to assign an agent to yet.
           NetEnroll sets that up.
-        </div>
+        </Notice>
       ) : null}
 
       {hasFullAccess && <PendingApprovals users={pendingUsers} onDecided={() => void load()} />}
 
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <CardHeader className="flex-shrink-0 gap-3">
-          <div>
-            <CardTitle>Team Members</CardTitle>
-            <CardDescription>
-              An agent takes calls once they have accepted their invitation, have their licensed
-              states recorded, are assigned a campaign, and have opened the softphone once. Open a
-              row to set those.
-            </CardDescription>
-          </div>
+      <Panel className="min-w-0">
+        <div className="px-5 pt-4 min-[1440px]:px-6">
+          <PanelDescription className="mt-0 max-w-[72ch]">
+            An agent takes calls once they have accepted their invitation, have their licensed
+            states recorded, are assigned a campaign, and have opened the softphone once. Open a row
+            to set those.
+          </PanelDescription>
+        </div>
+        <div className="mt-3 overflow-x-auto border-b border-rule px-5 min-[1440px]:px-6 [&>[role=group]]:flex-nowrap [&>[role=group]]:gap-6">
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by role">
             {FILTERS.map(f => (
               <button
@@ -414,33 +410,45 @@ export default function TeamMembersPage(): JSX.Element {
                 onClick={() => setFilter(f.id)}
                 aria-pressed={filter === f.id}
                 className={cn(
-                  'rounded-control border px-2.5 py-1 t-meta transition-colors',
+                  '-mb-px inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-0.5 text-sm font-medium transition-colors duration-150 ease-out [@media(pointer:coarse)]:min-h-[44px]',
                   filter === f.id
-                    ? 'border-transparent bg-brand-tint font-medium text-brand-ink'
-                    : 'border-rule text-ink-2 hover:bg-sunken'
+                    ? 'border-brand text-ink'
+                    : 'border-transparent text-ink-2 hover:text-ink'
                 )}
               >
                 {f.label}
-                <span className="ml-1.5 text-ink-3">{counts[f.id]}</span>
+                <span
+                  className={cn(
+                    'inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums',
+                    filter === f.id ? 'bg-brand-tint text-brand-ink' : 'bg-sunken text-ink-3'
+                  )}
+                >
+                  {counts[f.id]}
+                </span>
               </button>
             ))}
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent className="min-h-0 flex-1 overflow-y-auto">
+        <PanelBody flush className="min-w-0 overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="h-8 w-8 animate-spin text-ink-3" />
             </div>
           ) : withoutAgency ? (
-            <div className="py-12 text-center t-body text-ink-3">
-              People belong to an agency. Enter one in the switcher above to see and manage its
-              team.
+            <div className="p-5">
+              <Notice tone="info">
+                People belong to an agency. Enter one in the switcher above to see and manage its
+                team.
+              </Notice>
             </div>
           ) : visible.length === 0 ? (
-            <div className="py-12 text-center t-body text-ink-3">
-              {activeUsers.length === 0 ? 'No one here yet.' : 'Nobody matches that filter.'}
-            </div>
+            <EmptyState
+              variant={activeUsers.length === 0 ? 'empty' : 'filtered'}
+              headline={
+                activeUsers.length === 0 ? 'No one here yet.' : 'Nobody matches that filter.'
+              }
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -462,7 +470,7 @@ export default function TeamMembersPage(): JSX.Element {
                   const busy = savingId === user.id;
 
                   return [
-                    <TableRow key={user.id} className={cn(busy && 'opacity-60')}>
+                    <TableRow key={user.id} className={cn('h-14', busy && 'opacity-60')}>
                       <TableCell className="w-8 pr-0">
                         {agent ? (
                           <button
@@ -486,15 +494,29 @@ export default function TeamMembersPage(): JSX.Element {
                       </TableCell>
 
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[12px] font-semibold text-brand-ink">
+                            {(
+                              `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}` ||
+                              user.email.slice(0, 1)
+                            ).toUpperCase()}
+                          </span>
                           <div className="min-w-0">
-                            <div className="truncate">{user.email}</div>
                             {(user.firstName || user.lastName) && (
-                              <div className="truncate text-xs text-muted-foreground">
+                              <div className="truncate font-medium text-ink">
                                 {[user.firstName, user.lastName].filter(Boolean).join(' ')}
                               </div>
                             )}
+                            <div
+                              className={cn(
+                                'truncate',
+                                user.firstName || user.lastName
+                                  ? 't-meta text-ink-3'
+                                  : 'font-medium text-ink'
+                              )}
+                            >
+                              {user.email}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
@@ -502,11 +524,7 @@ export default function TeamMembersPage(): JSX.Element {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {user.roles.map(role => (
-                            <Badge
-                              key={role}
-                              variant={roleBadgeVariant(role)}
-                              className="flex w-fit items-center gap-1"
-                            >
+                            <Badge key={role} variant={roleBadgeVariant(role)} className="w-fit">
                               <Shield className="h-3 w-3" />
                               {role.toUpperCase()}
                             </Badge>
@@ -524,7 +542,7 @@ export default function TeamMembersPage(): JSX.Element {
                         {agent ? (
                           <ReadinessCell agent={agent} />
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-ink-3">—</span>
                         )}
                       </TableCell>
 
@@ -535,14 +553,14 @@ export default function TeamMembersPage(): JSX.Element {
                       <TableCell>
                         {user.buyerId ? (
                           <div className="flex items-center gap-1.5">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <Building2 className="h-4 w-4 shrink-0 text-ink-3" />
                             <div>
-                              <div className="text-sm font-medium">{user.buyerName}</div>
-                              <div className="text-xs text-muted-foreground">{user.buyerCode}</div>
+                              <div className="text-sm font-medium text-ink">{user.buyerName}</div>
+                              <div className="t-meta text-ink-3">{user.buyerCode}</div>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-ink-3">—</span>
                         )}
                       </TableCell>
 
@@ -565,11 +583,11 @@ export default function TeamMembersPage(): JSX.Element {
                                 : 'Only an owner or administrator can change a licence'
                             }
                           >
-                            <MapPin className="mr-1.5 h-3.5 w-3.5" />
+                            <MapPin className="h-3.5 w-3.5" />
                             Licence
                           </Button>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-ink-3">—</span>
                         )}
                       </TableCell>
                     </TableRow>,
@@ -582,9 +600,9 @@ export default function TeamMembersPage(): JSX.Element {
                             <div>
                               <div className="mb-1 t-label text-ink-3">Extension</div>
                               {agent.extension ? (
-                                <span className="font-mono text-xs">{agent.extension}</span>
+                                <span className="t-data text-ink">{agent.extension}</span>
                               ) : (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="t-meta text-ink-3">
                                   Allocated when they first open the softphone
                                 </span>
                               )}
@@ -636,9 +654,7 @@ export default function TeamMembersPage(): JSX.Element {
                                   aria-label={`Take calls from ${singleCampaign.name}`}
                                 />
                               ) : campaigns.length === 0 ? (
-                                <span className="text-xs text-muted-foreground">
-                                  No active campaign
-                                </span>
+                                <span className="t-meta text-ink-3">No active campaign</span>
                               ) : (
                                 <div className="space-y-1">
                                   {campaigns.map(campaign => {
@@ -688,8 +704,8 @@ export default function TeamMembersPage(): JSX.Element {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
       <InviteUserDialog
         open={inviteUserOpen}

@@ -11,7 +11,6 @@
  */
 
 import {
-  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Download,
@@ -25,7 +24,19 @@ import {
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+  Segmented,
+  SegmentedItem,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { apiClient } from '@/lib/api';
 import {
   exportDeliveryReportCsv,
@@ -64,10 +75,18 @@ const DATE_PRESETS: Array<{ key: string; label: string; days: number }> = [
 ];
 
 const OUTCOME_STYLES: Record<DeliveryOutcome, string> = {
-  ACCEPTED: 'bg-live-tint text-live-ink border-live/40',
-  NOT_ACCEPTED: 'bg-dropped-tint text-dropped-ink border-dropped/40',
-  NOT_SENT: 'bg-ringing-tint text-ringing-ink border-ringing/40',
+  ACCEPTED: 'bg-live-tint text-live-ink',
+  NOT_ACCEPTED: 'bg-dropped-tint text-dropped-ink',
+  NOT_SENT: 'bg-ringing-tint text-ringing-ink',
 };
+
+/** Native date inputs and selects, drawn like the Input and Select primitives. */
+const CONTROL =
+  'h-9 rounded-control border border-rule-strong bg-surface px-3 text-sm text-ink shadow-card transition-[border-color,box-shadow] duration-150 ease-out hover:border-ink-3 focus-visible:border-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-[40px]';
+
+/** The pill a count or an outcome sits in — the Badge shape. */
+const PILL =
+  'inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium';
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—';
@@ -110,17 +129,21 @@ function SummaryTile({
     <Wrapper
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={cn(
-        'rounded-lg border bg-card p-3 text-left transition-colors',
-        active ? 'border-brand ring-1 ring-brand-tint' : 'border-rule',
+        'flex min-w-0 flex-col rounded-card border bg-surface p-5 text-left shadow-card',
+        'transition-[border-color,box-shadow] duration-150 ease-out',
+        active ? 'border-brand ring-1 ring-brand' : 'border-rule',
+        Wrapper === 'button' && 'hover:shadow-raised',
         onClick && 'hover:border-border cursor-pointer'
       )}
     >
-      <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        <span>{label}</span>
-        <Icon className={cn('h-3.5 w-3.5', tone)} />
+      <div className="flex items-start justify-between gap-3">
+        <span className="t-label pt-0.5 text-ink-3">{label}</span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
-      <div className={cn('mt-1 text-xl font-bold', tone)}>{value}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>
+      <div className={cn('t-figure mt-1 min-w-0 tabular-nums', tone)}>{value}</div>
+      <div className="t-meta mt-1 min-h-[17px] text-ink-3">{sub}</div>
     </Wrapper>
   );
 }
@@ -217,160 +240,154 @@ export default function CrmReportsPage() {
   const totalPages = report?.meta.totalPages ?? 1;
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/insurance-leads"
-            className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to CRM
-          </Link>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Every lead sent to Ameriquote — what they accepted, what they refused, and why.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 border-rule"
-            onClick={() => void loadReport()}
-            disabled={loading}
-            title="Refresh"
-          >
-            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          </Button>
-          <Button
-            onClick={() => void handleExport()}
-            disabled={exporting}
-            className="flex items-center gap-1.5 bg-brand text-brand-fg hover:bg-brand-ink"
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            {exporting ? 'Building CSV…' : 'Export CSV'}
-          </Button>
-        </div>
-      </div>
+    <div className="page-canvas">
+      <PageHeader
+        description={
+          <>
+            <Link
+              href="/insurance-leads"
+              className="t-meta mb-1 inline-flex items-center gap-1 text-ink-3 transition-colors hover:text-ink"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to CRM
+            </Link>
+            <p>Every lead sent to Ameriquote — what they accepted, what they refused, and why.</p>
+          </>
+        }
+        actions={
+          <>
+            <Tooltip content="Refresh">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void loadReport()}
+                disabled={loading}
+                title="Refresh"
+              >
+                <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+              </Button>
+            </Tooltip>
+            <Button
+              onClick={() => void handleExport()}
+              disabled={exporting}
+              className="min-w-[136px]"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {exporting ? 'Building CSV…' : 'Export CSV'}
+            </Button>
+          </>
+        }
+      />
 
-      {error && (
-        <div className="flex items-start gap-2 rounded-lg bg-dropped-tint p-3 text-sm text-dropped-ink">
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <Notice tone="error">{error}</Notice>}
 
       {/* Filters */}
-      <div className="flex flex-col gap-2.5 rounded-lg border border-rule bg-card p-2.5 md:flex-row md:flex-wrap md:items-center">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase text-muted-foreground">From</span>
-          <input
-            type="date"
-            value={filters.startDate}
-            onChange={e => {
-              setFilter('startDate', e.target.value);
-              setDatePreset('custom');
-            }}
-            className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-          />
-          <span className="text-[10px] font-semibold uppercase text-muted-foreground">To</span>
-          <input
-            type="date"
-            value={filters.endDate}
-            onChange={e => {
-              setFilter('endDate', e.target.value);
-              setDatePreset('custom');
-            }}
-            className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-          />
-        </div>
+      <Panel>
+        <PanelBody className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="t-label text-ink-3">From</span>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={e => {
+                setFilter('startDate', e.target.value);
+                setDatePreset('custom');
+              }}
+              className={CONTROL}
+            />
+            <span className="t-label text-ink-3">To</span>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={e => {
+                setFilter('endDate', e.target.value);
+                setDatePreset('custom');
+              }}
+              className={CONTROL}
+            />
+          </div>
 
-        <div className="flex rounded border border-rule bg-sunken p-0.5">
-          {DATE_PRESETS.map(preset => (
-            <button
-              key={preset.key}
-              type="button"
-              onClick={() => applyPreset(preset)}
-              className={cn(
-                'rounded px-2 py-1 text-[10px] font-semibold transition-colors',
-                datePreset === preset.key
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
+          <Segmented>
+            {DATE_PRESETS.map(preset => (
+              <SegmentedItem
+                key={preset.key}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                active={datePreset === preset.key}
+              >
+                {preset.label}
+              </SegmentedItem>
+            ))}
+          </Segmented>
 
-        <select
-          value={filters.outcome}
-          onChange={e => setFilter('outcome', e.target.value)}
-          className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs text-foreground"
-          aria-label="Outcome"
-        >
-          <option value="">All outcomes</option>
-          <option value="ACCEPTED">Accepted</option>
-          <option value="NOT_ACCEPTED">Not accepted</option>
-          <option value="NOT_SENT">Not sent</option>
-        </select>
+          <select
+            value={filters.outcome}
+            onChange={e => setFilter('outcome', e.target.value)}
+            className={cn(CONTROL, 'min-w-[168px] cursor-pointer')}
+            aria-label="Outcome"
+          >
+            <option value="">All outcomes</option>
+            <option value="ACCEPTED">Accepted</option>
+            <option value="NOT_ACCEPTED">Not accepted</option>
+            <option value="NOT_SENT">Not sent</option>
+          </select>
 
-        <select
-          value={filters.vertical}
-          onChange={e => setFilter('vertical', e.target.value)}
-          className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs text-foreground"
-          aria-label="Vertical"
-        >
-          <option value="">All verticals</option>
-          <option value="ACA">ACA</option>
-          <option value="FE">FE</option>
-          <option value="B2B">B2B</option>
-        </select>
+          <select
+            value={filters.vertical}
+            onChange={e => setFilter('vertical', e.target.value)}
+            className={cn(CONTROL, 'min-w-[168px] cursor-pointer')}
+            aria-label="Vertical"
+          >
+            <option value="">All verticals</option>
+            <option value="ACA">ACA</option>
+            <option value="FE">FE</option>
+            <option value="B2B">B2B</option>
+          </select>
 
-        <select
-          value={filters.postMode}
-          onChange={e => setFilter('postMode', e.target.value)}
-          className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs text-foreground"
-          aria-label="Mode"
-        >
-          <option value="">Test + Live</option>
-          <option value="LIVE">Live only</option>
-          <option value="TEST">Test only</option>
-        </select>
+          <select
+            value={filters.postMode}
+            onChange={e => setFilter('postMode', e.target.value)}
+            className={cn(CONTROL, 'min-w-[168px] cursor-pointer')}
+            aria-label="Mode"
+          >
+            <option value="">Test + Live</option>
+            <option value="LIVE">Live only</option>
+            <option value="TEST">Test only</option>
+          </select>
 
-        <select
-          value={filters.listId}
-          onChange={e => setFilter('listId', e.target.value)}
-          className="h-8 cursor-pointer rounded-md border border-border bg-card px-2 text-xs text-foreground"
-          aria-label="Lead list"
-        >
-          <option value="">All lead lists</option>
-          {leadLists.map(list => (
-            <option key={list.id} value={list.id}>
-              {list.name}
-            </option>
-          ))}
-        </select>
+          <select
+            value={filters.listId}
+            onChange={e => setFilter('listId', e.target.value)}
+            className={cn(CONTROL, 'min-w-[168px] cursor-pointer')}
+            aria-label="Lead list"
+          >
+            <option value="">All lead lists</option>
+            {leadLists.map(list => (
+              <option key={list.id} value={list.id}>
+                {list.name}
+              </option>
+            ))}
+          </select>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Name, phone, email, zip…"
-            value={filters.search}
-            onChange={e => setFilter('search', e.target.value)}
-            className="h-8 w-52 rounded-md border border-border bg-card pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
-          />
-        </div>
-      </div>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+            <input
+              type="text"
+              placeholder="Name, phone, email, zip…"
+              value={filters.search}
+              onChange={e => setFilter('search', e.target.value)}
+              className={cn(CONTROL, 'w-full pl-9 placeholder:text-ink-3')}
+            />
+          </div>
+        </PanelBody>
+      </Panel>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <SummaryTile
           label="Accepted"
           value={(summary?.accepted ?? 0).toLocaleString()}
@@ -419,27 +436,24 @@ export default function CrmReportsPage() {
 
       {/* Why the rest were not accepted */}
       {report && report.reasons.length > 0 && (
-        <div className="rounded-lg border border-rule bg-card">
-          <div className="border-b border-rule px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Why leads were not accepted — whole date range, most common first
-          </div>
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>
+              Why leads were not accepted — whole date range, most common first
+            </PanelTitle>
+          </PanelHeader>
           <div className="divide-y divide-rule">
             {report.reasons.slice(0, TOP_REASONS).map(reason => (
               <div
                 key={`${reason.postStatus}-${reason.reason}`}
-                className="flex items-start gap-3 px-3 py-2"
+                className="flex items-start gap-3 px-5 py-3 min-[1440px]:px-6"
               >
-                <span
-                  className={cn(
-                    'mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold',
-                    OUTCOME_STYLES[reason.outcome]
-                  )}
-                >
+                <span className={cn(PILL, 'tabular-nums', OUTCOME_STYLES[reason.outcome])}>
                   {reason.count.toLocaleString()}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-xs text-foreground">{reason.reason}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  <div className="t-body text-ink">{reason.reason}</div>
+                  <div className="t-meta mt-0.5 truncate text-ink-3">
                     {reason.postStatus} · e.g.{' '}
                     {reason.examples
                       .map(example => `${example.name} ${formatPhone(example.phone)}`)
@@ -452,7 +466,7 @@ export default function CrmReportsPage() {
           {report.reasons.length > TOP_REASONS && (
             /* Without this the visible counts sum to less than the tiles and
                the arithmetic looks broken. Say what is not shown. */
-            <div className="border-t border-rule px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="t-meta border-t border-rule px-5 py-3 text-ink-3 min-[1440px]:px-6">
               +{report.reasons.length - TOP_REASONS} more{' '}
               {report.reasons.length - TOP_REASONS === 1 ? 'reason' : 'reasons'} covering{' '}
               {report.reasons
@@ -462,103 +476,106 @@ export default function CrmReportsPage() {
               more leads — all of them are in the CSV export.
             </div>
           )}
-        </div>
+        </Panel>
       )}
 
       {/* Per-lead detail */}
-      <div className="overflow-x-auto rounded-lg border border-rule bg-card">
-        <table className="w-full min-w-[1100px] text-left text-xs">
-          <thead className="border-b border-rule text-[10px] uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-semibold">Outcome</th>
-              <th className="px-3 py-2 font-semibold">Lead</th>
-              <th className="px-3 py-2 font-semibold">Phone</th>
-              <th className="px-3 py-2 font-semibold">Vertical</th>
-              <th className="px-3 py-2 font-semibold">Sent</th>
-              <th className="px-3 py-2 font-semibold">Ameriquote ID</th>
-              <th className="px-3 py-2 font-semibold">Price</th>
-              <th className="px-3 py-2 font-semibold">Reason</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-rule">
-            {loading && (
-              <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                </td>
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] text-left text-sm">
+            <thead className="sticky top-0 bg-sunken [&_th]:h-10 [&_th]:whitespace-nowrap [&_th]:px-3 [&_th]:py-0 [&_th]:align-middle [&_th]:t-label [&_th]:text-ink-3">
+              <tr className="border-b border-rule">
+                <th>Outcome</th>
+                <th>Lead</th>
+                <th>Phone</th>
+                <th>Vertical</th>
+                <th>Sent</th>
+                <th>Ameriquote ID</th>
+                <th>Price</th>
+                <th>Reason</th>
               </tr>
-            )}
-            {!loading && report && report.rows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
-                  No delivery attempts match these filters.
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              report?.rows.map(row => (
-                <tr key={row.submissionId} className="hover:bg-sunken">
-                  <td className="px-3 py-2">
-                    <span
-                      className={cn(
-                        'whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold',
-                        OUTCOME_STYLES[row.outcome]
-                      )}
-                    >
-                      {row.outcomeLabel}
-                    </span>
+            </thead>
+            <tbody className="divide-y divide-rule [&_td]:px-3 [&_td]:py-2.5">
+              {loading && (
+                <tr>
+                  <td colSpan={8} className="py-10 text-center text-ink-3">
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-foreground">{row.leadName}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {row.listName || row.source || '—'}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatPhone(row.phone)}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {row.vertical}
-                    <span className="ml-1 text-[10px] uppercase text-muted-foreground/70">
-                      {row.postMode}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(row.sentAt ?? row.receivedAt)}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{row.ameriquoteLeadId || '—'}</td>
-                  <td className="px-3 py-2 text-money-ink">
-                    {row.ameriquotePrice ? `$${row.ameriquotePrice}` : '—'}
-                  </td>
-                  <td className="max-w-md px-3 py-2 text-muted-foreground">{row.reason}</td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {!loading && report && report.rows.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <EmptyState
+                      variant="filtered"
+                      headline="No delivery attempts match these filters."
+                    />
+                  </td>
+                </tr>
+              )}
+              {!loading &&
+                report?.rows.map(row => (
+                  <tr
+                    key={row.submissionId}
+                    className="h-11 transition-colors duration-150 ease-out hover:bg-sunken"
+                  >
+                    <td>
+                      <span className={cn(PILL, OUTCOME_STYLES[row.outcome])}>
+                        {row.outcomeLabel}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="font-medium text-ink">{row.leadName}</div>
+                      <div className="t-meta text-ink-3">{row.listName || row.source || '—'}</div>
+                    </td>
+                    <td className="t-data whitespace-nowrap text-ink-2">
+                      {formatPhone(row.phone)}
+                    </td>
+                    <td className="whitespace-nowrap text-ink-2">
+                      {row.vertical}
+                      <span className="t-label ml-1.5 text-ink-3">{row.postMode}</span>
+                    </td>
+                    <td className="t-data whitespace-nowrap text-ink-2">
+                      {formatDateTime(row.sentAt ?? row.receivedAt)}
+                    </td>
+                    <td className="t-data whitespace-nowrap text-ink-2">
+                      {row.ameriquoteLeadId || '—'}
+                    </td>
+                    <td className="whitespace-nowrap font-medium tabular-nums text-money-ink">
+                      {row.ameriquotePrice ? `$${row.ameriquotePrice}` : '—'}
+                    </td>
+                    <td className="max-w-md text-ink-2">{row.reason}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </PanelBody>
+      </Panel>
 
       {/* Pagination */}
       {report && totalPages > 1 && (
-        <div className="flex flex-col items-center gap-2 py-2">
+        <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-1">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
             >
               Prev
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
             >
               Next
-            </button>
+            </Button>
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="t-meta tabular-nums text-ink-3">
             Page {page} of {totalPages} · {report.meta.total.toLocaleString()} delivery attempts ·
             the export covers all of them
           </div>

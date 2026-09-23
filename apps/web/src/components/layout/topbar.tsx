@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -27,10 +28,9 @@ import { CommandPalette, useCommandPalette } from './command-palette';
 import { MobileNav } from './mobile-nav';
 import { pageTitleFor } from './page-title';
 
-
 /**
- * Topbar: page title in the display face, the command palette trigger,
- * notifications and the account menu.
+ * Topbar: 64px, the page title at the title step on the left; the command
+ * palette trigger, notifications and the account menu on the right.
  *
  * The search box is a button, not an input. It opens the palette, which is
  * where search actually happens — a second input that behaves differently from
@@ -79,7 +79,7 @@ export function Topbar() {
 
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-rule bg-surface px-4">
+      <header className="flex h-16 shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
         <MobileNav />
         <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
 
@@ -132,52 +132,59 @@ export function Topbar() {
           type="button"
           onClick={() => setOpen(true)}
           className={cn(
-            'hidden items-center gap-2 rounded-control border border-rule bg-paper px-2 py-1.5 sm:flex',
-            'w-[240px] text-left t-body text-ink-3 hover:border-rule-strong hover:text-ink-2',
-            'focus-visible:outline-none'
+            'hidden h-9 items-center gap-2 rounded-control border border-rule bg-paper px-3 sm:flex [&>svg]:h-4 [&>svg]:w-4',
+            'w-[260px] text-left t-body text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
           )}
           aria-label="Open command palette"
         >
           <Search aria-hidden className="h-3.5 w-3.5 shrink-0" />
           <span className="flex-1 truncate">Search</span>
-          <kbd className="shrink-0 rounded-control border border-rule bg-surface px-1 t-meta text-ink-3">
+          <kbd className="shrink-0 rounded-[6px] border border-rule bg-surface px-1.5 font-sans t-meta font-medium text-ink-3">
             {isMac ? '⌘' : 'Ctrl '}K
           </kbd>
         </button>
 
         {/* Below sm the labelled button is replaced by an icon. */}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="rounded-control p-1.5 text-ink-3 hover:bg-sunken hover:text-ink focus-visible:outline-none sm:hidden"
-          aria-label="Open command palette"
-        >
-          <Search aria-hidden className="h-4 w-4" />
-        </button>
+        <Tooltip content="Open command palette" className="sm:hidden">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-control text-ink-2 [&_svg]:h-[18px] [&_svg]:w-[18px] transition-colors duration-150 hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Open command palette"
+          >
+            <Search aria-hidden className="h-4 w-4" />
+          </button>
+        </Tooltip>
 
-        <button
-          type="button"
-          className="rounded-control p-1.5 text-ink-3 hover:bg-sunken hover:text-ink focus-visible:outline-none"
-          aria-label="Notifications"
-        >
-          <Bell aria-hidden className="h-4 w-4" />
-        </button>
+        <Tooltip content="Notifications">
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-control text-ink-2 [&_svg]:h-[18px] [&_svg]:w-[18px] transition-colors duration-150 hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10"
+            aria-label="Notifications"
+          >
+            <Bell aria-hidden className="h-4 w-4" />
+          </button>
+        </Tooltip>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-                'bg-sunken t-meta font-medium text-ink-2',
-                'hover:bg-rule focus-visible:outline-none'
-              )}
-              aria-label="Account menu"
-            >
-              {initials}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <Tooltip content="Account menu" align="end">
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                  'bg-brand-tint t-meta font-semibold text-brand-ink',
+                  'ring-1 ring-inset ring-rule transition-colors duration-150 hover:ring-rule-strong',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                aria-label="Account menu"
+              >
+                {initials}
+              </button>
+            </DropdownMenuTrigger>
+          </Tooltip>
+          <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="t-body">
               <span className="block truncate text-ink">
                 {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Signed in'}

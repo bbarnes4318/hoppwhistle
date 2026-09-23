@@ -28,7 +28,7 @@ const TONE_CLASS: Record<StatusTone, string> = {
   neutral: 'bg-sunken text-ink-2',
 };
 
-/** A 4px dot carries the state for anyone who cannot separate the hues. */
+/** A 6px dot carries the state for anyone who cannot separate the hues. */
 const DOT_CLASS: Record<StatusTone, string> = {
   live: 'bg-live',
   ringing: 'bg-ringing',
@@ -72,8 +72,8 @@ export function StatusChip({
     <Badge
       className={cn(
         'gap-1.5 border-transparent font-medium',
-        'rounded-control',
-        size === 'sm' ? 'px-1.5 py-0 text-[11px] leading-5' : 't-meta px-2 py-0.5',
+        size === 'sm' ? 'h-5 px-2 text-[11px]' : 'h-[22px] px-2.5 text-[12px]',
+        '[&>span:first-child]:h-1.5 [&>span:first-child]:w-1.5',
         TONE_CLASS[resolved],
         // Badge's own hover styles assume a clickable chip. These are labels.
         'hover:bg-[color:inherit]',

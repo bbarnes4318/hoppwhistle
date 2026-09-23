@@ -3,6 +3,8 @@ import {
   BarChart3,
   Bot,
   Building2,
+  Contact,
+  CreditCard,
   Disc3,
   FileText,
   Gauge,
@@ -18,7 +20,9 @@ import {
   Settings,
   Shield,
   Telescope,
+  TrendingUp,
   Trophy,
+  UserCog,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -62,7 +66,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Trophy,
         title: 'The floor ranked over any period: calls, dials, applications, conversion',
       },
-      { name: 'CRM', href: '/insurance-leads', icon: Users },
+      { name: 'CRM', href: '/insurance-leads', icon: Contact },
       {
         name: 'CRM reports',
         href: '/insurance-leads/reports',
@@ -83,7 +87,7 @@ export const PLATFORM_NAV: NavGroup[] = [
   {
     label: 'Money',
     items: [
-      { name: 'Rate', href: '/rating', icon: Gauge },
+      { name: 'Rate', href: '/rating', icon: TrendingUp },
       {
         name: 'Delivery',
         href: '/delivery',
@@ -102,7 +106,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: Receipt,
         title: 'One row per settled Delivery Day, downloadable as CSV',
       },
-      { name: 'Billing', href: '/billing', icon: Receipt },
+      { name: 'Billing', href: '/billing', icon: CreditCard },
       { name: 'Payouts', href: '/payouts', icon: Wallet, pending: true },
       { name: 'Reports', href: '/reports', icon: BarChart3 },
     ],
@@ -165,7 +169,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       {
         name: 'Team Members',
         href: '/settings/users',
-        icon: Users,
+        icon: UserCog,
         title: 'Everyone in the agency, and whether each agent can take a call',
       },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
@@ -281,7 +285,7 @@ export const AGENT_NAV: NavGroup[] = [
         icon: Trophy,
         title: 'Where you stand on the floor, and what it would take to move up',
       },
-      { name: 'CRM', href: '/insurance-leads', icon: Users },
+      { name: 'CRM', href: '/insurance-leads', icon: Contact },
     ],
   },
   {

@@ -4,10 +4,18 @@ import { Plus, Copy, Trash2, Loader2, Shield, Scale, FileText } from 'lucide-rea
 import { useState, useEffect } from 'react';
 
 import { DemoToggle } from '@/components/demo/demo-toggle';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -101,82 +109,64 @@ export default function SettingsPage() {
   };
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Manage your account settings and integrations">
-        <div className="flex items-center gap-2 border border-rule rounded px-2 py-1 bg-surface">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            Demo Mode:
-          </span>
-          <DemoToggle />
-        </div>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader description="Manage your account settings and integrations" />
 
-      <Tabs defaultValue="webhooks" className="w-full flex flex-col">
-        <TabsList className="w-full justify-start border-b border-rule bg-transparent h-9 p-0 mb-3 gap-6">
-          <TabsTrigger
-            value="webhooks"
-            className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-ink rounded-none border-b-2 border-transparent h-9 px-1 text-xs font-semibold text-muted-foreground"
-          >
-            Webhooks
-          </TabsTrigger>
-          <TabsTrigger
-            value="api-keys"
-            className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-ink rounded-none border-b-2 border-transparent h-9 px-1 text-xs font-semibold text-muted-foreground"
-          >
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger
-            value="dnc"
-            className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-ink rounded-none border-b-2 border-transparent h-9 px-1 text-xs font-semibold text-muted-foreground"
-          >
-            DNC Lists
-          </TabsTrigger>
-          <TabsTrigger
-            value="legal"
-            className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-ink rounded-none border-b-2 border-transparent h-9 px-1 text-xs font-semibold text-muted-foreground"
-          >
-            Legal
-          </TabsTrigger>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Workspace</PanelTitle>
+        </PanelHeader>
+        <PanelBody className="[&_label]:text-ink [&_p]:text-ink-3 [&_[role=alert]]:mt-3">
+          <div className="t-label mb-2 text-ink-3">Demo Mode:</div>
+          <DemoToggle />
+        </PanelBody>
+      </Panel>
+
+      <Tabs defaultValue="webhooks" className="w-full">
+        <TabsList>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="dnc">DNC Lists</TabsTrigger>
+          <TabsTrigger value="legal">Legal</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="webhooks" className="w-full mt-0 data-[state=active]:flex flex-col">
-          <Card className="w-full border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-rule flex flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Webhooks
-                </CardTitle>
-                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
-                  Configure webhook endpoints for events
-                </CardDescription>
-              </div>
-              <Button
-                size="sm"
-                className="h-7 text-xs px-2.5"
-                onClick={() => setAddWebhookOpen(true)}
-                disabled={readOnly}
-                title={readOnlyProps.title}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Webhook
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
+        <TabsContent value="webhooks">
+          <Panel>
+            <PanelHeader
+              action={
+                <Button
+                  size="sm"
+                  onClick={() => setAddWebhookOpen(true)}
+                  disabled={readOnly}
+                  title={readOnlyProps.title}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Webhook
+                </Button>
+              }
+            >
+              <PanelTitle>Webhooks</PanelTitle>
+              <PanelDescription>Configure webhook endpoints for events</PanelDescription>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
               {loading ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
                 </div>
               ) : withoutAgency ? (
-                <div className="py-8 text-center t-body text-ink-3">
-                  Webhooks belong to an agency. Enter one in the switcher above to see and manage
-                  its endpoints.
+                <div className="p-5">
+                  <Notice tone="info">
+                    Webhooks belong to an agency. Enter one in the switcher above to see and manage
+                    its endpoints.
+                  </Notice>
                 </div>
               ) : webhooks.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                  No webhooks configured
-                </div>
+                <EmptyState
+                  headline="No webhooks configured"
+                  body="Send call and application events to your own systems."
+                />
               ) : (
-                <Table className="table-dense">
+                <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>URL</TableHead>
@@ -189,36 +179,29 @@ export default function SettingsPage() {
                   <TableBody>
                     {webhooks.map(webhook => (
                       <TableRow key={webhook.id}>
-                        <TableCell className="font-mono text-[11px] truncate max-w-[300px]">
+                        <TableCell className="t-data max-w-[300px] truncate text-ink">
                           {webhook.url}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {webhook.events.slice(0, 2).map(event => (
-                              <Badge
-                                key={event}
-                                variant="outline"
-                                className="text-[10px] py-0 px-1.5 h-4"
-                              >
+                              <Badge key={event} variant="outline">
                                 {event}
                               </Badge>
                             ))}
                             {webhook.events.length > 2 && (
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4">
+                              <Badge variant="outline" className="tabular-nums">
                                 +{webhook.events.length - 2}
                               </Badge>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={webhook.status === 'active' ? 'success' : 'secondary'}
-                            className="text-[10px] py-0 px-1.5 h-4"
-                          >
+                          <Badge variant={webhook.status === 'active' ? 'success' : 'secondary'}>
                             {webhook.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="t-data whitespace-nowrap text-ink-3">
                           {webhook.lastTriggeredAt
                             ? new Date(webhook.lastTriggeredAt).toLocaleString()
                             : 'Never'}
@@ -226,13 +209,13 @@ export default function SettingsPage() {
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                            size="icon"
+                            className="hover:bg-dropped-tint hover:text-dropped-ink"
                             onClick={() => handleDeleteWebhook(webhook.id)}
                             disabled={readOnly}
                             title={readOnlyProps.title}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -240,28 +223,25 @@ export default function SettingsPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
-        <TabsContent value="api-keys" className="w-full mt-0 data-[state=active]:flex flex-col">
-          <Card className="w-full border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-rule flex flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  API Keys
-                </CardTitle>
-                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
-                  Manage your API authentication keys
-                </CardDescription>
-              </div>
-              <Button size="sm" className="h-7 text-xs px-2.5">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Generate Key
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table className="table-dense">
+        <TabsContent value="api-keys">
+          <Panel>
+            <PanelHeader
+              action={
+                <Button size="sm">
+                  <Plus className="h-4 w-4" />
+                  Generate Key
+                </Button>
+              }
+            >
+              <PanelTitle>API Keys</PanelTitle>
+              <PanelDescription>Manage your API authentication keys</PanelDescription>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -272,41 +252,38 @@ export default function SettingsPage() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium text-xs">Production Key</TableCell>
-                    <TableCell className="font-mono text-[11px]">cf_live_****1234</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="font-medium text-ink">Production Key</TableCell>
+                    <TableCell className="t-data text-ink-2">cf_live_****1234</TableCell>
+                    <TableCell className="t-data text-ink-3">
                       {new Date().toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                        <Copy className="h-3.5 w-3.5" />
+                      <Button variant="ghost" size="icon">
+                        <Copy className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
-        <TabsContent value="dnc" className="w-full mt-0 data-[state=active]:flex flex-col">
-          <Card className="w-full border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-rule flex flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  DNC Lists
-                </CardTitle>
-                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
-                  Upload and manage Do Not Call lists
-                </CardDescription>
-              </div>
-              <Button size="sm" className="h-7 text-xs px-2.5">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Upload List
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table className="table-dense">
+        <TabsContent value="dnc">
+          <Panel>
+            <PanelHeader
+              action={
+                <Button size="sm">
+                  <Plus className="h-4 w-4" />
+                  Upload List
+                </Button>
+              }
+            >
+              <PanelTitle>DNC Lists</PanelTitle>
+              <PanelDescription>Upload and manage Do Not Call lists</PanelDescription>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -318,114 +295,118 @@ export default function SettingsPage() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium text-xs">Global DNC</TableCell>
+                    <TableCell className="font-medium text-ink">Global DNC</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4">
-                        Global
-                      </Badge>
+                      <Badge variant="outline">Global</Badge>
                     </TableCell>
-                    <TableCell className="text-xs">1,234</TableCell>
+                    <TableCell className="t-num text-ink">1,234</TableCell>
                     <TableCell>
-                      <Badge variant="success" className="text-[10px] py-0 px-1.5 h-4">
-                        Active
-                      </Badge>
+                      <Badge variant="success">Active</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                        size="icon"
+                        className="hover:bg-dropped-tint hover:text-dropped-ink"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
-        <TabsContent value="legal" className="w-full mt-0 data-[state=active]:flex flex-col">
-          <Card className="w-full border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-rule">
-              <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Legal Documents
-                </CardTitle>
-                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
-                  Privacy policy, terms of service, and compliance documents
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <TabsContent value="legal">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Legal Documents</PanelTitle>
+              <PanelDescription>
+                Privacy policy, terms of service, and compliance documents
+              </PanelDescription>
+            </PanelHeader>
+            <PanelBody>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 <a
                   href="/legal/privacy"
-                  className="flex items-center gap-2.5 p-2.5 rounded border border-border bg-card hover:bg-muted transition-colors text-xs"
+                  className="flex min-w-0 items-center gap-3 rounded-card border border-rule bg-surface p-4 shadow-card transition-shadow duration-150 ease-out hover:shadow-raised"
                 >
-                  <Shield className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium text-ink">Privacy Policy</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+                    <Shield className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">Privacy Policy</div>
+                    <div className="t-meta truncate text-ink-3">
                       How we collect and use your data
                     </div>
                   </div>
                 </a>
                 <a
                   href="/legal/terms"
-                  className="flex items-center gap-2.5 p-2.5 rounded border border-border bg-card hover:bg-muted transition-colors text-xs"
+                  className="flex min-w-0 items-center gap-3 rounded-card border border-rule bg-surface p-4 shadow-card transition-shadow duration-150 ease-out hover:shadow-raised"
                 >
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium text-ink">Terms of Service</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">Terms of Service</div>
+                    <div className="t-meta truncate text-ink-3">
                       Service agreements and conditions
                     </div>
                   </div>
                 </a>
                 <a
                   href="/legal/data-retention"
-                  className="flex items-center gap-2.5 p-2.5 rounded border border-border bg-card hover:bg-muted transition-colors text-xs"
+                  className="flex min-w-0 items-center gap-3 rounded-card border border-rule bg-surface p-4 shadow-card transition-shadow duration-150 ease-out hover:shadow-raised"
                 >
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium text-ink">Data Retention Policy</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
-                      How long we keep your data
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">
+                      Data Retention Policy
                     </div>
+                    <div className="t-meta truncate text-ink-3">How long we keep your data</div>
                   </div>
                 </a>
                 <a
                   href="/legal/call-recording"
-                  className="flex items-center gap-2.5 p-2.5 rounded border border-border bg-card hover:bg-muted transition-colors text-xs"
+                  className="flex min-w-0 items-center gap-3 rounded-card border border-rule bg-surface p-4 shadow-card transition-shadow duration-150 ease-out hover:shadow-raised"
                 >
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium text-ink">Call Recording Policy</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">
+                      Call Recording Policy
+                    </div>
+                    <div className="t-meta truncate text-ink-3">
                       Recording consent and compliance
                     </div>
                   </div>
                 </a>
                 <a
                   href="/legal/dpa"
-                  className="flex items-center gap-2.5 p-2.5 rounded border border-border bg-card hover:bg-muted transition-colors text-xs"
+                  className="flex min-w-0 items-center gap-3 rounded-card border border-rule bg-surface p-4 shadow-card transition-shadow duration-150 ease-out hover:shadow-raised"
                 >
-                  <Scale className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="truncate">
-                    <div className="font-medium text-ink">Data Processing Agreement</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
-                      GDPR and data processing terms
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+                    <Scale className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">
+                      Data Processing Agreement
                     </div>
+                    <div className="t-meta truncate text-ink-3">GDPR and data processing terms</div>
                   </div>
                 </a>
               </div>
-              <div className="mt-4 pt-3 border-t border-rule text-[10px] text-muted-foreground flex justify-between items-center">
+              <div className="t-meta mt-5 flex items-center justify-between border-t border-rule pt-4 text-ink-3">
                 <span>© {new Date().getFullYear()} NetEnroll. All rights reserved.</span>
               </div>
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
       </Tabs>
 
@@ -434,6 +415,6 @@ export default function SettingsPage() {
         onOpenChange={setAddWebhookOpen}
         onSuccess={loadWebhooks}
       />
-    </CompactPageShell>
+    </div>
   );
 }

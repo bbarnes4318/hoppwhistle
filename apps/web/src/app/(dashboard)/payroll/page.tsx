@@ -4,9 +4,18 @@ import { Clock, DollarSign, Calendar, Loader2, Lock, Plus, Edit2, Save, X } from
 import { useState, useEffect, useCallback } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import {
+  EmptyState,
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -178,75 +187,53 @@ function PayrollPage() {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="page-canvas min-h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-ink-3" />
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 mb-4">
-        <p className="text-muted-foreground">Track your hours and manage your earnings</p>
-      </div>
+    <div className="page-canvas">
+      <PageHeader description="Track your hours and manage your earnings" />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 flex-shrink-0">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pay Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${summary?.payRate?.toFixed(2) || '0.00'}/hr</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Hours This Period
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              {summary?.totalHours?.toFixed(1) || '0'}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
+      {/* Summary tiles */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile
+          label="Pay Rate"
+          icon={DollarSign}
+          figure={<>${summary?.payRate?.toFixed(2) || '0.00'}/hr</>}
+        />
+        <StatTile
+          label="Hours This Period"
+          icon={Clock}
+          figure={summary?.totalHours?.toFixed(1) || '0'}
+          sub={
+            <>
               {summary?.pendingHours?.toFixed(1) || '0'} pending,{' '}
               {summary?.paidHours?.toFixed(1) || '0'} paid
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pending Earnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-ringing-ink flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
+            </>
+          }
+        />
+        <StatTile
+          label="Pending Earnings"
+          icon={DollarSign}
+          figure={
+            <span className="text-ringing-ink">
               {summary?.pendingEarnings?.toFixed(2) || '0.00'}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Earned
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-live-ink flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              {summary?.paidEarnings?.toFixed(2) || '0.00'}
-            </div>
-          </CardContent>
-        </Card>
+            </span>
+          }
+        />
+        <StatTile
+          label="Total Earned"
+          icon={DollarSign}
+          tone="money"
+          figure={summary?.paidEarnings?.toFixed(2) || '0.00'}
+        />
       </div>
 
-      <Tabs defaultValue="log-hours" className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <TabsList className="flex-shrink-0">
+      <Tabs defaultValue="log-hours" className="min-w-0">
+        <TabsList>
           <TabsTrigger value="log-hours">Log Hours</TabsTrigger>
           <TabsTrigger value="history">Time History</TabsTrigger>
           <TabsTrigger value="payouts">Payouts</TabsTrigger>
@@ -254,13 +241,13 @@ function PayrollPage() {
         </TabsList>
 
         {/* Log Hours Tab */}
-        <TabsContent value="log-hours" className="flex-1 overflow-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Log Your Hours</CardTitle>
-              <CardDescription>Record your work hours for a specific date</CardDescription>
-            </CardHeader>
-            <CardContent>
+        <TabsContent value="log-hours">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Log Your Hours</PanelTitle>
+              <PanelDescription>Record your work hours for a specific date</PanelDescription>
+            </PanelHeader>
+            <PanelBody>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="date">Date</Label>
@@ -298,31 +285,32 @@ function PayrollPage() {
                 onClick={() => void handleLogHours()}
                 disabled={saving || readOnly}
                 title={readOnlyProps.title}
-                className="mt-4"
+                className="mt-5"
               >
                 {saving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                 )}
                 Log Hours
               </Button>
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
         {/* History Tab */}
-        <TabsContent value="history" className="flex-1 overflow-auto">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="flex-shrink-0">
-              <CardTitle>Time Entry History</CardTitle>
-              <CardDescription>View all your logged hours</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+        <TabsContent value="history">
+          <Panel className="min-w-0">
+            <PanelHeader>
+              <PanelTitle>Time Entry History</PanelTitle>
+              <PanelDescription>View all your logged hours</PanelDescription>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
               {timeEntries.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  No time entries found. Start logging your hours!
-                </div>
+                <EmptyState
+                  icon={Calendar}
+                  headline="No time entries found. Start logging your hours!"
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -336,16 +324,16 @@ function PayrollPage() {
                   <TableBody>
                     {timeEntries.map(entry => (
                       <TableRow key={entry.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="whitespace-nowrap font-medium text-ink">
                           <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <Calendar className="h-4 w-4 text-ink-3" />
                             {new Date(entry.date).toLocaleDateString()}
                           </div>
                         </TableCell>
-                        <TableCell>{entry.hoursWorked.toFixed(2)}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {entry.notes || '—'}
+                        <TableCell className="t-num text-ink">
+                          {entry.hoursWorked.toFixed(2)}
                         </TableCell>
+                        <TableCell className="text-ink-2">{entry.notes || '—'}</TableCell>
                         <TableCell>
                           {entry.isLocked ? (
                             <Badge variant="secondary" className="gap-1">
@@ -361,22 +349,23 @@ function PayrollPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
         {/* Payouts Tab */}
-        <TabsContent value="payouts" className="flex-1 overflow-auto">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="flex-shrink-0">
-              <CardTitle>Payout History</CardTitle>
-              <CardDescription>View your completed and pending payouts</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+        <TabsContent value="payouts">
+          <Panel className="min-w-0">
+            <PanelHeader>
+              <PanelTitle>Payout History</PanelTitle>
+              <PanelDescription>View your completed and pending payouts</PanelDescription>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
               {payouts.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  No payouts yet. Your payouts will appear here once processed.
-                </div>
+                <EmptyState
+                  icon={DollarSign}
+                  headline="No payouts yet. Your payouts will appear here once processed."
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -391,12 +380,14 @@ function PayrollPage() {
                   <TableBody>
                     {payouts.map(payout => (
                       <TableRow key={payout.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="t-data whitespace-nowrap text-ink">
                           {new Date(payout.startDate).toLocaleDateString()} -{' '}
                           {new Date(payout.endDate).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>{payout.totalHours.toFixed(1)}</TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="t-num text-ink">
+                          {payout.totalHours.toFixed(1)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap font-medium tabular-nums text-money-ink">
                           ${payout.totalAmount.toFixed(2)}
                         </TableCell>
                         <TableCell>
@@ -412,7 +403,7 @@ function PayrollPage() {
                             {payout.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="t-data whitespace-nowrap text-ink-2">
                           {payout.paidAt ? new Date(payout.paidAt).toLocaleDateString() : '—'}
                         </TableCell>
                       </TableRow>
@@ -420,35 +411,34 @@ function PayrollPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
         {/* Banking Tab */}
-        <TabsContent value="banking" className="flex-1 overflow-auto">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Banking Information</CardTitle>
-                  <CardDescription>
-                    Your banking details for receiving payments (securely encrypted)
-                  </CardDescription>
-                </div>
-                {!editingBanking && (
+        <TabsContent value="banking">
+          <Panel>
+            <PanelHeader
+              action={
+                !editingBanking && (
                   <Button
                     variant="outline"
                     onClick={() => setEditingBanking(true)}
                     disabled={readOnly}
                     title={readOnlyProps.title}
                   >
-                    <Edit2 className="mr-2 h-4 w-4" />
+                    <Edit2 className="h-4 w-4" />
                     {banking?.hasBankingInfo ? 'Update' : 'Add'} Banking Info
                   </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
+                )
+              }
+            >
+              <PanelTitle>Banking Information</PanelTitle>
+              <PanelDescription>
+                Your banking details for receiving payments (securely encrypted)
+              </PanelDescription>
+            </PanelHeader>
+            <PanelBody>
               {editingBanking ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -488,40 +478,38 @@ function PayrollPage() {
                       title={readOnlyProps.title}
                     >
                       {saving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Save className="mr-2 h-4 w-4" />
+                        <Save className="h-4 w-4" />
                       )}
                       Save Banking Info
                     </Button>
                     <Button variant="outline" onClick={() => setEditingBanking(false)}>
-                      <X className="mr-2 h-4 w-4" />
+                      <X className="h-4 w-4" />
                       Cancel
                     </Button>
                   </div>
                 </div>
               ) : banking?.hasBankingInfo ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Bank Name</p>
-                    <p className="font-medium">{banking.bankName}</p>
+                  <div className="min-w-0">
+                    <p className="t-label text-ink-3">Bank Name</p>
+                    <p className="mt-1 font-medium text-ink">{banking.bankName}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Routing Number</p>
-                    <p className="font-medium font-mono">{banking.routingNumber}</p>
+                  <div className="min-w-0">
+                    <p className="t-label text-ink-3">Routing Number</p>
+                    <p className="t-data mt-1 text-ink">{banking.routingNumber}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Account Number</p>
-                    <p className="font-medium font-mono">{banking.maskedAccountNumber}</p>
+                  <div className="min-w-0">
+                    <p className="t-label text-ink-3">Account Number</p>
+                    <p className="t-data mt-1 text-ink">{banking.maskedAccountNumber}</p>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No banking information on file. Add your banking details to receive payments.
-                </div>
+                <EmptyState headline="No banking information on file. Add your banking details to receive payments." />
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
       </Tabs>
     </div>
