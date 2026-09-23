@@ -1,32 +1,22 @@
 'use client';
 
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  Gauge,
-  Loader2,
-  PauseCircle,
-  RefreshCw,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, Gauge, Loader2, PauseCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { count, dollars, duration, pct, points } from '@/components/delivery/ledger';
 import {
-  Figure,
-  FigureRow,
-  Ledger,
   Notice,
-  SectionRule,
-  count,
-  dollars,
-  duration,
-  pct,
-  points,
-} from '@/components/delivery/ledger';
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { PlatformDeliveryView } from '@/components/platform/platform-delivery-view';
 import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
@@ -195,12 +185,12 @@ function DeliveryPage(): JSX.Element {
 
   if (platform.loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas min-h-full">
         <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading delivery
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
@@ -297,20 +287,20 @@ function AgencyDeliveryPanel(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas min-h-full">
         <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading delivery
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (error || !today) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
-      </CompactPageShell>
+      </div>
     );
   }
 
@@ -322,46 +312,59 @@ function AgencyDeliveryPanel(): JSX.Element {
    */
   if (!today.enrolled) {
     return (
-      <CompactPageShell fullHeight={false}>
-        <CompactPageHeader subtitle={`${today.calendarDay} · ${today.timeZone}`}>
-          <StatusChip value="ACTIVE" label="Delivering" tone="live" />
-        </CompactPageHeader>
+      <div className="page-canvas">
+        <PageHeader
+          description={`${today.calendarDay} · ${today.timeZone}`}
+          actions={<StatusChip value="ACTIVE" label="Delivering" tone="live" />}
+        />
 
         {/*
           Operational figures only. These are true whether or not an agency is
           in the billing system, and a principal running a floor needs them.
         */}
-        <FigureRow>
-          <Figure
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
             label="Calls today"
-            value={count(today.callsAnswered)}
+            figure={count(today.callsAnswered)}
             sub={`answered by an agent · ${count(today.callsRouted)} routed`}
+            data-figure-label="Calls today"
+            data-figure-value={count(today.callsAnswered)}
           />
-          <Figure
+          <StatTile
             label="In progress now"
-            value={count(today.callsInProgress)}
-            tone={today.callsInProgress > 0 ? 'live' : 'ink'}
+            figure={
+              <span className={today.callsInProgress > 0 ? 'text-live-ink' : 'text-ink'}>
+                {count(today.callsInProgress)}
+              </span>
+            }
             sub="this instant, not today"
+            data-figure-label="In progress now"
+            data-figure-value={count(today.callsInProgress)}
           />
-          <Figure
+          <StatTile
             label="Applications today"
-            value={count(today.applicationsSubmitted)}
+            figure={count(today.applicationsSubmitted)}
             sub="submitted today"
+            data-figure-label="Applications today"
+            data-figure-value={count(today.applicationsSubmitted)}
           />
-          <Figure
+          <StatTile
             label="Today so far"
-            value={pct(today.todayClosingPct)}
+            figure={pct(today.todayClosingPct)}
             sub="applications as a share of answered calls"
+            data-figure-label="Today so far"
+            data-figure-value={pct(today.todayClosingPct)}
           />
-        </FigureRow>
+        </div>
 
-        <SectionRule>Billing is not enabled for this agency</SectionRule>
-        <p className="t-body max-w-prose text-ink-2">
-          Calls are delivered without a prepaid block, an overrun ceiling or a nightly settlement.
-          There is nothing to charge and nothing to run out of. NetEnroll enables it per agency,
-          once the terms and a bank mandate are in place.
-        </p>
-      </CompactPageShell>
+        <Notice tone="info" title="Billing is not enabled for this agency">
+          <p className="max-w-prose">
+            Calls are delivered without a prepaid block, an overrun ceiling or a nightly settlement.
+            There is nothing to charge and nothing to run out of. NetEnroll enables it per agency,
+            once the terms and a bank mandate are in place.
+          </p>
+        </Notice>
+      </div>
     );
   }
 
@@ -371,28 +374,31 @@ function AgencyDeliveryPanel(): JSX.Element {
       : `${today.windowDeliveryDays} delivery days`;
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}>
-        <div className="flex items-center gap-2">
-          {today.delivering ? (
-            <StatusChip value="ACTIVE" label="Delivering" tone="live" />
-          ) : (
-            <StatusChip value="PAUSED" label="Paused" tone="blocked" />
-          )}
-          <Button variant="outline" size="sm" onClick={refresh}>
-            <RefreshCw className="mr-2 h-3 w-3" />
-            Refresh
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/delivery/settlements">Settlement history</Link>
-          </Button>
-        </div>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}
+        actions={
+          <>
+            {today.delivering ? (
+              <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+            ) : (
+              <StatusChip value="PAUSED" label="Paused" tone="blocked" />
+            )}
+            <Button variant="outline" size="sm" onClick={refresh}>
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/delivery/settlements">Settlement history</Link>
+            </Button>
+          </>
+        }
+      />
 
       {!today.delivering && (
         <Notice
-          tone="blocked"
-          icon={<PauseCircle className="h-4 w-4" />}
+          tone="warning"
+          icon={PauseCircle}
           title={
             <>
               Delivery is paused
@@ -409,22 +415,14 @@ function AgencyDeliveryPanel(): JSX.Element {
       )}
 
       {!today.chargesEnabled && (
-        <Notice
-          tone="money"
-          icon={<Gauge className="h-4 w-4" />}
-          title="Settlements are running without charging"
-        >
+        <Notice tone="info" icon={Gauge} title="Settlements are running without charging">
           Every figure on this page is real and each night&rsquo;s settlement is recorded in full,
           but no payment is taken. NetEnroll turns charging on separately.
         </Notice>
       )}
 
       {today.mandate.status !== 'ACTIVE' && (
-        <Notice
-          tone="ringing"
-          icon={<AlertTriangle className="h-4 w-4" />}
-          title="No valid ACH mandate"
-        >
+        <Notice tone="warning" title="No valid ACH mandate">
           Delivery requires a verified bank mandate. Contact NetEnroll to set one up.
         </Notice>
       )}
@@ -437,19 +435,23 @@ function AgencyDeliveryPanel(): JSX.Element {
         is provisional and says so in its sub line rather than in a muted
         colour: a muted hero is a hero the reader is told to ignore.
       */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:[&>*+*]:border-l md:[&>*+*]:border-rule md:[&>*+*]:pl-6">
-        <Figure
-          size="hero"
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <StatTile
+          emphasis
           label="Projected charge at tonight's settlement"
-          value={dollars(today.projectedTotalCharge)}
+          figure={dollars(today.projectedTotalCharge)}
           sub={`${dollars(today.overrunAmountTonight)} for ${count(today.overrunToday)} overrun ${
             today.overrunToday === 1 ? 'application' : 'applications'
           } plus a block of ${count(today.projectedNextBlockQuantity)} · provisional until 23:59:59`}
+          data-figure-label="Projected charge at tonight's settlement"
+          data-figure-value={dollars(today.projectedTotalCharge)}
         />
-        <Figure
-          size="hero"
+        <StatTile
+          emphasis
           label="Current rate"
-          value={dollars(today.currentRate)}
+          figure={dollars(today.currentRate)}
+          data-figure-label="Current rate"
+          data-figure-value={dollars(today.currentRate)}
           sub={
             <>
               per submitted application, today
@@ -479,75 +481,101 @@ function AgencyDeliveryPanel(): JSX.Element {
         numbers with different jobs, and putting them side by side as two
         percentages is how an agency comes to believe its price moved at 10am.
       */}
-      <SectionRule note="Tonight's settlement re-measures the window and sets tomorrow's rate.">
-        What sets the rate
-      </SectionRule>
-      <FigureRow className="md:grid-cols-3">
-        <Figure
-          label="Rating window closing"
-          value={pct(today.windowClosingPct)}
-          sub={
-            <>
-              set today&rsquo;s rate · Delivery Days {windowLabel}
-              {today.windowDaysFound < today.windowDeliveryDays
-                ? ` · ${today.windowDaysFound} of ${today.windowDeliveryDays} found`
-                : ''}
-            </>
-          }
-        />
-        <Figure
-          size="quiet"
-          label="Tomorrow is tracking toward"
-          value={today.trackingBelowMinimum ? 'review' : dollars(today.trackingRate)}
-          tone={today.trackingBelowMinimum ? 'ringing' : 'ink'}
-          sub={
-            today.trackingBelowMinimum
-              ? 'the window ending today is below the curve minimum'
-              : 'if today closed now · provisional'
-          }
-        />
-        <Figure
-          label="Ceiling"
-          value={count(today.distanceToCeiling)}
-          tone={today.distanceToCeiling === 0 ? 'dropped' : 'ink'}
-          sub={`more applications before delivery stops for today · ceiling ${count(
-            today.overrunCeiling
-          )}`}
-        />
-      </FigureRow>
+      <section className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="t-section text-ink">What sets the rate</h2>
+          <p className="t-meta text-ink-3">
+            {"Tonight's settlement re-measures the window and sets tomorrow's rate."}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <StatTile
+            label="Rating window closing"
+            figure={pct(today.windowClosingPct)}
+            data-figure-label="Rating window closing"
+            data-figure-value={pct(today.windowClosingPct)}
+            sub={
+              <>
+                set today&rsquo;s rate · Delivery Days {windowLabel}
+                {today.windowDaysFound < today.windowDeliveryDays
+                  ? ` · ${today.windowDaysFound} of ${today.windowDeliveryDays} found`
+                  : ''}
+              </>
+            }
+          />
+          <StatTile
+            label="Tomorrow is tracking toward"
+            figure={
+              <span className={today.trackingBelowMinimum ? 'text-ringing-ink' : 'text-ink-2'}>
+                {today.trackingBelowMinimum ? 'review' : dollars(today.trackingRate)}
+              </span>
+            }
+            data-figure-label="Tomorrow is tracking toward"
+            data-figure-value={today.trackingBelowMinimum ? 'review' : dollars(today.trackingRate)}
+            sub={
+              today.trackingBelowMinimum
+                ? 'the window ending today is below the curve minimum'
+                : 'if today closed now · provisional'
+            }
+          />
+          <StatTile
+            label="Ceiling"
+            figure={
+              <span className={today.distanceToCeiling === 0 ? 'text-dropped-ink' : 'text-ink'}>
+                {count(today.distanceToCeiling)}
+              </span>
+            }
+            data-figure-label="Ceiling"
+            data-figure-value={count(today.distanceToCeiling)}
+            sub={`more applications before delivery stops for today · ceiling ${count(
+              today.overrunCeiling
+            )}`}
+          />
+        </div>
+      </section>
 
       {/* ── Today ────────────────────────────────────────────────────────── */}
-      <SectionRule
-        note={`${count(today.callsInProgress)} ${today.callsInProgress === 1 ? 'call' : 'calls'} in progress now`}
-      >
-        Today
-      </SectionRule>
-      <FigureRow>
-        <Figure
-          label="Calls answered"
-          value={count(today.callsAnswered)}
-          sub={`${count(today.callsRouted)} routed · answered is what your rate is measured on`}
-        />
-        <Figure
-          label="Applications"
-          value={count(today.applicationsSubmitted)}
-          sub={`${count(today.applicationsConsumedToday)} on the block · ${count(
-            today.overrunToday
-          )} overrun`}
-        />
-        <Figure
-          label="Remaining on the block"
-          value={count(today.applicationsRemainingOnBlock)}
-          sub={`paid for and unused · daily block ${count(today.dailyBlockApplications)}`}
-        />
-        {/* Today so far. Prices nothing, and says so. */}
-        <Figure
-          size="quiet"
-          label="Closing today so far"
-          value={pct(today.todayClosingPct)}
-          sub="moves all day · does not set today's rate"
-        />
-      </FigureRow>
+      <section className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="t-section text-ink">Today</h2>
+          <p className="t-meta text-ink-3">
+            {`${count(today.callsInProgress)} ${today.callsInProgress === 1 ? 'call' : 'calls'} in progress now`}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
+            label="Calls answered"
+            figure={count(today.callsAnswered)}
+            sub={`${count(today.callsRouted)} routed · answered is what your rate is measured on`}
+            data-figure-label="Calls answered"
+            data-figure-value={count(today.callsAnswered)}
+          />
+          <StatTile
+            label="Applications"
+            figure={count(today.applicationsSubmitted)}
+            sub={`${count(today.applicationsConsumedToday)} on the block · ${count(
+              today.overrunToday
+            )} overrun`}
+            data-figure-label="Applications"
+            data-figure-value={count(today.applicationsSubmitted)}
+          />
+          <StatTile
+            label="Remaining on the block"
+            figure={count(today.applicationsRemainingOnBlock)}
+            sub={`paid for and unused · daily block ${count(today.dailyBlockApplications)}`}
+            data-figure-label="Remaining on the block"
+            data-figure-value={count(today.applicationsRemainingOnBlock)}
+          />
+          {/* Today so far. Prices nothing, and says so. */}
+          <StatTile
+            label="Closing today so far"
+            figure={<span className="text-ink-2">{pct(today.todayClosingPct)}</span>}
+            sub="moves all day · does not set today's rate"
+            data-figure-label="Closing today so far"
+            data-figure-value={pct(today.todayClosingPct)}
+          />
+        </div>
+      </section>
 
       {/* ── Per agent ───────────────────────────────────────────────────── */}
       <AgentTable
@@ -559,7 +587,7 @@ function AgencyDeliveryPanel(): JSX.Element {
         onSort={toggleSort}
         sortIcon={sortIcon}
       />
-    </CompactPageShell>
+    </div>
   );
 }
 
@@ -657,24 +685,36 @@ function AgentTable({
   );
 
   return (
-    <div>
-      <SectionRule
-        note={
-          <>
-            Agency today <span className="t-data text-ink">{pct(agencyClosingPct)}</span> — the line
-            each agent is read against ·{' '}
-            <span className="t-data text-ink">{dollars(agencyPremium)}</span> annualized premium
-          </>
-        }
-      >
-        Agents today
-      </SectionRule>
+    <Panel className="min-w-0">
+      <PanelHeader>
+        <PanelTitle>Agents today</PanelTitle>
+        <PanelDescription>
+          Agency today <span className="t-num font-medium text-ink">{pct(agencyClosingPct)}</span> —
+          the line each agent is read against ·{' '}
+          <span className="t-num font-medium text-ink">{dollars(agencyPremium)}</span> annualized
+          premium
+        </PanelDescription>
+      </PanelHeader>
 
       {agents.length === 0 ? (
-        <p className="mt-3 t-body text-ink-3">No calls answered yet today.</p>
+        <PanelBody>
+          <p className="t-body text-ink-3">No calls answered yet today.</p>
+        </PanelBody>
       ) : (
-        <div className="mt-3 max-h-[calc(100vh-12rem)] overflow-auto rounded-card border border-rule bg-surface">
-          <Ledger>
+        <PanelBody flush className="max-h-[calc(100vh-12rem)] overflow-auto rounded-b-card">
+          <table
+            className={cn(
+              'w-full border-collapse text-left t-body',
+              '[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-sunken',
+              '[&_thead_th]:h-10 [&_thead_th]:whitespace-nowrap [&_thead_th]:border-b [&_thead_th]:border-rule [&_thead_th]:px-3 [&_thead_th]:align-middle [&_thead_th]:t-label [&_thead_th]:text-ink-3',
+              '[&_tbody_td]:h-row [&_tbody_td]:border-b [&_tbody_td]:border-rule [&_tbody_td]:px-3 [&_tbody_td]:py-0 [&_tbody_td]:align-middle',
+              '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr]:ease-out',
+              '[&_tbody_tr:last-child_td]:border-b-0',
+              '[&_th:first-child]:pl-5 [&_td:first-child]:pl-5 [&_th:last-child]:pr-5 [&_td:last-child]:pr-5',
+              '[&_.num]:text-right [&_.num]:t-num [&_.num]:text-ink',
+              '[&_th.num]:t-label [&_th.num]:text-ink-3'
+            )}
+          >
             <thead>
               <tr>
                 {header('name', 'Agent')}
@@ -791,10 +831,10 @@ function AgentTable({
                 ? agencyLine
                 : null}
             </tbody>
-          </Ledger>
-        </div>
+          </table>
+        </PanelBody>
       )}
-    </div>
+    </Panel>
   );
 }
 

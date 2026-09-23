@@ -12,10 +12,19 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -175,76 +184,49 @@ function BillingPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <p className="text-muted-foreground">Manage invoices, balances, and payouts</p>
-        </div>
+      <div className="page-canvas">
+        <PageHeader description="Manage invoices, balances, and payouts" />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="h-8 w-8 animate-spin text-ink-3" />
         </div>
       </div>
     );
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Manage invoices, balances, and payouts" />
+    <div className="page-canvas">
+      <PageHeader description="Manage invoices, balances, and payouts" />
 
-      {error && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-destructive">Error: {error}</div>
-          </CardContent>
-        </Card>
-      )}
+      {error && <Notice tone="error">Error: {error}</Notice>}
 
       {/* Balance Cards */}
       {balance && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Available Balance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(parseFloat(balance.available))}
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <StatTile
+            label="Available Balance"
+            icon={DollarSign}
+            tone="money"
+            figure={formatCurrency(parseFloat(balance.available))}
+          />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(parseFloat(balance.pending))}
-              </div>
-            </CardContent>
-          </Card>
+          <StatTile
+            label="Pending"
+            icon={TrendingUp}
+            figure={formatCurrency(parseFloat(balance.pending))}
+          />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Held</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(parseFloat(balance.held))}</div>
-            </CardContent>
-          </Card>
+          <StatTile
+            label="Held"
+            icon={DollarSign}
+            figure={formatCurrency(parseFloat(balance.held))}
+          />
         </div>
       )}
 
       {/* Buyer Transaction Ledger */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Buyer Transaction Ledger</CardTitle>
-              <CardDescription>View credit and debit history for Upfront buyers</CardDescription>
-            </div>
+      <Panel className="min-w-0">
+        <PanelHeader
+          action={
             <Button
               variant="outline"
               size="icon"
@@ -253,12 +235,15 @@ function BillingPage() {
             >
               <RefreshCw className={cn('h-4 w-4', transactionsLoading && 'animate-spin')} />
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+          }
+        >
+          <PanelTitle>Buyer Transaction Ledger</PanelTitle>
+          <PanelDescription>View credit and debit history for Upfront buyers</PanelDescription>
+        </PanelHeader>
+        <PanelBody className="flex flex-col gap-4">
           {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div className="w-64">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-full sm:w-64">
               <Select
                 value={selectedBuyerId}
                 onValueChange={id => {
@@ -278,7 +263,7 @@ function BillingPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 type="date"
                 value={startDate}
@@ -286,7 +271,7 @@ function BillingPage() {
                 className="w-40"
                 placeholder="Start Date"
               />
-              <span className="text-muted-foreground">to</span>
+              <span className="t-body text-ink-3">to</span>
               <Input
                 type="date"
                 value={endDate}
@@ -299,44 +284,48 @@ function BillingPage() {
 
           {/* Buyer Info */}
           {buyerInfo && (
-            <div className="flex items-center gap-6 mb-4 p-3 bg-muted rounded-md border border-border">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-control border border-rule bg-sunken p-3">
               <div>
-                <div className="text-sm text-muted-foreground">Buyer</div>
-                <div className="font-semibold">{buyerInfo.name}</div>
+                <div className="t-label text-ink-3">Buyer</div>
+                <div className="t-body font-semibold text-ink">{buyerInfo.name}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Publisher</div>
-                <div>{buyerInfo.publisherName}</div>
+                <div className="t-label text-ink-3">Publisher</div>
+                <div className="t-body text-ink">{buyerInfo.publisherName}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Current Balance</div>
-                <div className="font-mono font-semibold">
+                <div className="t-label text-ink-3">Current Balance</div>
+                <div className="t-body font-semibold tabular-nums text-ink">
                   {buyerInfo.leadsRemaining.toLocaleString()} leads
                 </div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Status</div>
+                <div className="t-label text-ink-3">Status</div>
                 <Badge variant={buyerInfo.status === 'ACTIVE' ? 'default' : 'secondary'}>
                   {buyerInfo.status}
                 </Badge>
               </div>
             </div>
           )}
+        </PanelBody>
 
-          {/* Transactions Table */}
-          {!selectedBuyerId ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Select a buyer to view their transaction history
-            </div>
-          ) : transactionsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No transactions found</div>
-          ) : (
-            <>
-              <Table className="table-dense">
+        {/* Transactions Table */}
+        {!selectedBuyerId ? (
+          <div className="t-body border-t border-rule py-8 text-center text-ink-3">
+            Select a buyer to view their transaction history
+          </div>
+        ) : transactionsLoading ? (
+          <div className="flex items-center justify-center border-t border-rule py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="t-body border-t border-rule py-8 text-center text-ink-3">
+            No transactions found
+          </div>
+        ) : (
+          <>
+            <PanelBody flush className="overflow-x-auto border-t border-rule">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
@@ -349,7 +338,7 @@ function BillingPage() {
                 <TableBody>
                   {transactions.map(tx => (
                     <TableRow key={tx.id}>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="t-num whitespace-nowrap text-ink-3">
                         {formatDate(tx.createdAt)}
                       </TableCell>
                       <TableCell>
@@ -359,76 +348,70 @@ function BillingPage() {
                           ) : (
                             <ArrowDownCircle className="h-4 w-4 text-dropped-ink" />
                           )}
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              tx.type === 'CREDIT'
-                                ? 'bg-live-tint text-live-ink border-live/40'
-                                : 'bg-dropped-tint text-dropped-ink border-dropped/40'
-                            )}
-                          >
+                          <Badge variant={tx.type === 'CREDIT' ? 'success' : 'destructive'}>
                             {tx.type}
                           </Badge>
                         </div>
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'text-right font-mono font-semibold',
+                          't-num text-right font-semibold',
                           tx.type === 'CREDIT' ? 'text-live-ink' : 'text-dropped-ink'
                         )}
                       >
                         {tx.type === 'CREDIT' ? '+' : ''}
                         {tx.amount}
                       </TableCell>
-                      <TableCell>{tx.description}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {tx.createdByEmail || 'System'}
-                      </TableCell>
+                      <TableCell className="text-ink">{tx.description}</TableCell>
+                      <TableCell className="text-ink-3">{tx.createdByEmail || 'System'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            </PanelBody>
 
-              {/* Pagination */}
-              {transactionTotalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTransactionPage(p => Math.max(1, p - 1))}
-                    disabled={transactionPage === 1}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {transactionPage} of {transactionTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTransactionPage(p => Math.min(transactionTotalPages, p + 1))}
-                    disabled={transactionPage === transactionTotalPages}
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            {/* Pagination */}
+            {transactionTotalPages > 1 && (
+              <div className="flex flex-wrap items-center justify-center gap-2 border-t border-rule px-5 py-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionPage(p => Math.max(1, p - 1))}
+                  disabled={transactionPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="t-meta tabular-nums text-ink-3">
+                  Page {transactionPage} of {transactionTotalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionPage(p => Math.min(transactionTotalPages, p + 1))}
+                  disabled={transactionPage === transactionTotalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </Panel>
 
       {/* Invoices */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-          <CardDescription>View and download your invoices</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {invoices.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No invoices found</div>
-          ) : (
-            <Table className="table-dense">
+      <Panel className="min-w-0">
+        <PanelHeader>
+          <PanelTitle>Invoices</PanelTitle>
+          <PanelDescription>View and download your invoices</PanelDescription>
+        </PanelHeader>
+        {invoices.length === 0 ? (
+          <EmptyState
+            headline="No invoices found"
+            body="Invoices appear here once charging is turned on."
+          />
+        ) : (
+          <PanelBody flush className="overflow-x-auto">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Invoice Number</TableHead>
@@ -442,17 +425,23 @@ function BillingPage() {
               <TableBody>
                 {invoices.map(invoice => (
                   <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                    <TableCell>
+                    <TableCell className="t-data font-medium text-ink">
+                      {invoice.invoiceNumber}
+                    </TableCell>
+                    <TableCell className="t-num whitespace-nowrap text-ink-2">
                       {formatDate(invoice.period.start)} - {formatDate(invoice.period.end)}
                     </TableCell>
-                    <TableCell>{formatCurrency(parseFloat(invoice.total))}</TableCell>
+                    <TableCell className="t-num font-medium text-ink">
+                      {formatCurrency(parseFloat(invoice.total))}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={invoice.status === 'paid' ? 'success' : 'warning'}>
                         {invoice.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDate(invoice.dueDate)}</TableCell>
+                    <TableCell className="t-num whitespace-nowrap text-ink-2">
+                      {formatDate(invoice.dueDate)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm">
                         <Download className="h-4 w-4" />
@@ -462,13 +451,12 @@ function BillingPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
-    </CompactPageShell>
+          </PanelBody>
+        )}
+      </Panel>
+    </div>
   );
 }
-
 
 export default function GuardedBillingPage() {
   return (

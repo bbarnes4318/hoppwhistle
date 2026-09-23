@@ -5,16 +5,20 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { count, dollars, duration, pct } from '@/components/delivery/ledger';
 import {
-  Figure,
-  FigureRow,
-  SectionRule,
-  count,
-  dollars,
-  duration,
-  pct,
-} from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Segmented,
+  SegmentedItem,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -192,16 +196,16 @@ function TeamRangeReport(): JSX.Element {
 
   if (withoutAgency) {
     return (
-      <CompactPageShell>
-        <CompactPageHeader subtitle="Select an agency to see its team." />
-      </CompactPageShell>
+      <div className="page-canvas">
+        <PageHeader description="Select an agency to see its team." />
+      </div>
     );
   }
 
   return (
-    <CompactPageShell>
-      <CompactPageHeader
-        subtitle={
+    <div className="page-canvas">
+      <PageHeader
+        description={
           data
             ? `${data.days} day${data.days === 1 ? '' : 's'}, ${data.from} to ${data.to}`
             : 'What the team produced over a span of days'
@@ -209,28 +213,29 @@ function TeamRangeReport(): JSX.Element {
       />
 
       {/* ── The range ───────────────────────────────────────────────────── */}
-      <div className="mb-4 flex flex-wrap items-end gap-2">
-        {PRESETS.map(preset => {
-          const presetFrom = preset.from();
-          const presetTo = preset.to();
-          const active = from === presetFrom && to === presetTo;
-          return (
-            <Button
-              key={preset.label}
-              variant={active ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setFrom(presetFrom);
-                setTo(presetTo);
-              }}
-            >
-              {preset.label}
-            </Button>
-          );
-        })}
+      <div className="flex min-w-0 flex-wrap items-end gap-3">
+        <Segmented>
+          {PRESETS.map(preset => {
+            const presetFrom = preset.from();
+            const presetTo = preset.to();
+            const active = from === presetFrom && to === presetTo;
+            return (
+              <SegmentedItem
+                key={preset.label}
+                active={active}
+                onClick={() => {
+                  setFrom(presetFrom);
+                  setTo(presetTo);
+                }}
+              >
+                {preset.label}
+              </SegmentedItem>
+            );
+          })}
+        </Segmented>
 
-        <div className="flex items-end gap-2">
-          <div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1">
             <label className="t-label text-ink-3" htmlFor="range-from">
               From
             </label>
@@ -240,10 +245,10 @@ function TeamRangeReport(): JSX.Element {
               value={from}
               max={to}
               onChange={event => setFrom(event.target.value)}
-              className="h-8 w-[10rem]"
+              className="h-9 w-[10rem]"
             />
           </div>
-          <div>
+          <div className="flex flex-col gap-1">
             <label className="t-label text-ink-3" htmlFor="range-to">
               To
             </label>
@@ -253,7 +258,7 @@ function TeamRangeReport(): JSX.Element {
               value={to}
               min={from}
               onChange={event => setTo(event.target.value)}
-              className="h-8 w-[10rem]"
+              className="h-9 w-[10rem]"
             />
           </div>
         </div>
@@ -283,131 +288,144 @@ function TeamRangeReport(): JSX.Element {
         </Button>
       </div>
 
-      {reversed ? (
-        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          The start date is after the end date.
-        </div>
-      ) : null}
+      {reversed ? <Notice tone="warning">The start date is after the end date.</Notice> : null}
 
-      {error ? (
-        <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
 
       {/* ── The agency's own figures for the range ──────────────────────── */}
-      <SectionRule note={data ? `${data.from} → ${data.to}` : undefined}>The agency</SectionRule>
-      <FigureRow className="mb-5">
-        <Figure label="Calls taken" value={count(data?.agencyCallsTaken)} />
-        <Figure label="Applications" value={count(data?.agencyApplications)} />
-        <Figure
-          label="Closing"
-          value={pct(data?.agencyClosingPct ?? null)}
-          size="hero"
-          tone="money"
-          title="Submitted applications as a share of delivered calls, over the whole range."
-        />
-        <Figure label="Annualized premium" value={dollars(data?.agencyAnnualizedPremium)} />
-        <Figure
-          label="Applications / hour"
-          value={perHour === null ? '—' : perHour.toFixed(2)}
-          sub="Across agents with recorded hours"
-        />
-      </FigureRow>
+      <section className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="t-section text-ink">The agency</h2>
+          {data ? <p className="t-meta text-ink-3">{`${data.from} → ${data.to}`}</p> : null}
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+          <StatTile
+            label="Calls taken"
+            figure={count(data?.agencyCallsTaken)}
+            data-figure-label="Calls taken"
+            data-figure-value={count(data?.agencyCallsTaken)}
+          />
+          <StatTile
+            label="Applications"
+            figure={count(data?.agencyApplications)}
+            data-figure-label="Applications"
+            data-figure-value={count(data?.agencyApplications)}
+          />
+          <StatTile
+            label="Closing"
+            figure={pct(data?.agencyClosingPct ?? null)}
+            emphasis
+            tone="money"
+            title="Submitted applications as a share of delivered calls, over the whole range."
+            data-figure-label="Closing"
+            data-figure-value={pct(data?.agencyClosingPct ?? null)}
+          />
+          <StatTile
+            label="Annualized premium"
+            figure={dollars(data?.agencyAnnualizedPremium)}
+            data-figure-label="Annualized premium"
+            data-figure-value={dollars(data?.agencyAnnualizedPremium)}
+          />
+          <StatTile
+            label="Applications / hour"
+            figure={perHour === null ? '—' : perHour.toFixed(2)}
+            sub="Across agents with recorded hours"
+            data-figure-label="Applications / hour"
+            data-figure-value={perHour === null ? '—' : perHour.toFixed(2)}
+          />
+        </div>
+      </section>
 
       {/* ── Per agent ───────────────────────────────────────────────────── */}
-      <SectionRule
-        note={
-          data ? `${data.agents.length} agent${data.agents.length === 1 ? '' : 's'}` : undefined
-        }
-      >
-        By agent
-      </SectionRule>
+      <Panel className="min-w-0">
+        <PanelHeader>
+          <PanelTitle>By agent</PanelTitle>
+          {data ? (
+            <PanelDescription>
+              {`${data.agents.length} agent${data.agents.length === 1 ? '' : 's'}`}
+            </PanelDescription>
+          ) : null}
+        </PanelHeader>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading
-        </div>
-      ) : !data || data.agents.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">
-          <p>No calls or applications in this range.</p>
-        </div>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Agent</TableHead>
-              <TableHead className="text-right">Calls</TableHead>
-              <TableHead className="text-right">Applications</TableHead>
-              <TableHead className="text-right">Closing</TableHead>
-              <TableHead className="text-right">Annualized premium</TableHead>
-              <TableHead className="text-right">Talk time</TableHead>
-              <TableHead className="text-right">Hours</TableHead>
-              <TableHead className="text-right">Occupancy</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.agents.map(agent => (
-              <TableRow
-                key={agent.userId ?? 'unattributed'}
-                /*
-                 * The unattributed row is delivered calls with no agent
-                 * recorded. It is not a person, nobody can be coached or paid
-                 * on it, and it is here only so the rows reconcile with the
-                 * agency total — so it reads quieter than the people.
-                 */
-                className={cn(agent.userId === null && 'text-muted-foreground')}
-              >
-                <TableCell>
-                  {agent.userId ? (
+        {loading ? (
+          <PanelBody className="t-body flex items-center justify-center py-12 text-ink-3">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading
+          </PanelBody>
+        ) : !data || data.agents.length === 0 ? (
+          <EmptyState headline="No calls or applications in this range." />
+        ) : (
+          <PanelBody flush className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Agent</TableHead>
+                  <TableHead className="text-right">Calls</TableHead>
+                  <TableHead className="text-right">Applications</TableHead>
+                  <TableHead className="text-right">Closing</TableHead>
+                  <TableHead className="text-right">Annualized premium</TableHead>
+                  <TableHead className="text-right">Talk time</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
+                  <TableHead className="text-right">Occupancy</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.agents.map(agent => (
+                  <TableRow
+                    key={agent.userId ?? 'unattributed'}
                     /*
-                     * The drill-down this report never had. It showed a
-                     * closing percentage and a talk time with no way to reach
-                     * the calls behind them, so "why is this agent at 4%" was
-                     * a question the screen raised and could not answer.
-                     *
-                     * The window travels with the link. Landing on all-time
-                     * calls from a seven-day figure would make the two screens
-                     * disagree about the number the click started from.
+                     * The unattributed row is delivered calls with no agent
+                     * recorded. It is not a person, nobody can be coached or paid
+                     * on it, and it is here only so the rows reconcile with the
+                     * agency total — so it reads quieter than the people.
                      */
-                    <Link
-                      href={`/calls?agentId=${encodeURIComponent(agent.userId)}&from=${from}&to=${to}`}
-                      className="font-medium underline decoration-dotted underline-offset-4 hover:decoration-solid"
-                      title={`Every call ${agent.name} took in this window`}
-                    >
-                      {agent.name}
-                    </Link>
-                  ) : (
-                    <div className="font-medium">{agent.name}</div>
-                  )}
-                  {agent.email ? (
-                    <div className="text-xs text-muted-foreground">{agent.email}</div>
-                  ) : null}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{count(agent.callsTaken)}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {count(agent.applications)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{pct(agent.closingPct)}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {dollars(agent.annualizedPremium)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {duration(agent.talkTimeSeconds)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {agent.hoursWorked === null ? '—' : agent.hoursWorked.toFixed(1)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {pct(agent.occupancyPct, 1)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </CompactPageShell>
+                    className={cn(agent.userId === null && 'text-ink-3')}
+                  >
+                    <TableCell>
+                      {agent.userId ? (
+                        /*
+                         * The drill-down this report never had. It showed a
+                         * closing percentage and a talk time with no way to reach
+                         * the calls behind them, so "why is this agent at 4%" was
+                         * a question the screen raised and could not answer.
+                         *
+                         * The window travels with the link. Landing on all-time
+                         * calls from a seven-day figure would make the two screens
+                         * disagree about the number the click started from.
+                         */
+                        <Link
+                          href={`/calls?agentId=${encodeURIComponent(agent.userId)}&from=${from}&to=${to}`}
+                          className="font-medium text-ink underline decoration-dotted underline-offset-4 transition-colors hover:text-brand-ink hover:decoration-solid"
+                          title={`Every call ${agent.name} took in this window`}
+                        >
+                          {agent.name}
+                        </Link>
+                      ) : (
+                        <div className="font-medium">{agent.name}</div>
+                      )}
+                      {agent.email ? <div className="t-meta text-ink-3">{agent.email}</div> : null}
+                    </TableCell>
+                    <TableCell className="t-num text-right">{count(agent.callsTaken)}</TableCell>
+                    <TableCell className="t-num text-right">{count(agent.applications)}</TableCell>
+                    <TableCell className="t-num text-right">{pct(agent.closingPct)}</TableCell>
+                    <TableCell className="t-num text-right">
+                      {dollars(agent.annualizedPremium)}
+                    </TableCell>
+                    <TableCell className="t-num text-right">
+                      {duration(agent.talkTimeSeconds)}
+                    </TableCell>
+                    <TableCell className="t-num text-right">
+                      {agent.hoursWorked === null ? '—' : agent.hoursWorked.toFixed(1)}
+                    </TableCell>
+                    <TableCell className="t-num text-right">{pct(agent.occupancyPct, 1)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </PanelBody>
+        )}
+      </Panel>
+    </div>
   );
 }
 

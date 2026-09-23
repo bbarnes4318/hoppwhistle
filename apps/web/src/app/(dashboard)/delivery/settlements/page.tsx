@@ -5,11 +5,13 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Ledger, SectionRule, count, pct } from '@/components/delivery/ledger';
+import { EmptyState, Notice, Panel, PanelBody } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { PlatformSettlementsView } from '@/components/platform/platform-settlements-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip } from '@/components/ui/tooltip';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -197,12 +199,12 @@ function SettlementsPage(): JSX.Element {
 
   if (platform.loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas min-h-full">
         <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
@@ -301,234 +303,255 @@ function AgencySettlementsPanel(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas min-h-full">
         <div className="flex flex-1 items-center justify-center t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
-  return (
-    <CompactPageShell fullHeight={false} data-print="page">
-      <CompactPageHeader subtitle="One row per settled Delivery Day, exactly as it was recorded">
-        <div className="flex flex-wrap items-end gap-2" data-print="hide">
-          <label className="t-meta text-ink-3">
-            From
-            <Input
-              type="date"
-              value={from}
-              onChange={event => setFrom(event.target.value)}
-              className="mt-1 h-8 w-36"
-            />
-          </label>
-          <label className="t-meta text-ink-3">
-            To
-            <Input
-              type="date"
-              value={to}
-              onChange={event => setTo(event.target.value)}
-              className="mt-1 h-8 w-36"
-            />
-          </label>
-          <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
-            {exporting ? (
-              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-            ) : (
-              <Download className="mr-2 h-3 w-3" />
-            )}
-            CSV
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            title="Prints the ledger with the open row's derivation, without the navigation"
-          >
-            <Printer className="mr-2 h-3 w-3" />
-            Print
-          </Button>
-        </div>
-      </CompactPageHeader>
+  const toolbar = (
+    <div className="flex flex-wrap items-end gap-2" data-print="hide">
+      <label className="t-meta text-ink-3">
+        From
+        <Input
+          type="date"
+          value={from}
+          onChange={event => setFrom(event.target.value)}
+          className="mt-1 h-9 w-36"
+        />
+      </label>
+      <label className="t-meta text-ink-3">
+        To
+        <Input
+          type="date"
+          value={to}
+          onChange={event => setTo(event.target.value)}
+          className="mt-1 h-9 w-36"
+        />
+      </label>
+      <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
+        {exporting ? (
+          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+        ) : (
+          <Download className="mr-2 h-3 w-3" />
+        )}
+        CSV
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => window.print()}
+        title="Prints the ledger with the open row's derivation, without the navigation"
+      >
+        <Printer className="mr-2 h-3 w-3" />
+        Print
+      </Button>
+    </div>
+  );
 
-      {error && <p className="t-body text-dropped-ink">{error}</p>}
+  return (
+    <div className="page-canvas" data-print="page">
+      <PageHeader
+        description="One row per settled Delivery Day, exactly as it was recorded"
+        actions={toolbar}
+      />
+
+      {error && <Notice tone="error">{error}</Notice>}
 
       {rows.length === 0 ? (
-        <p className="t-body text-ink-3">
-          No settlements yet. One is written after the close of each Delivery Day.
-        </p>
+        <Panel>
+          <EmptyState
+            headline="No settlements yet. One is written after the close of each Delivery Day."
+            body="Each night's settlement is recorded here after the Delivery Day closes."
+          />
+        </Panel>
       ) : (
-        <div className="overflow-auto rounded-card border border-rule bg-surface">
-          <Ledger>
-            <thead>
-              <tr>
-                <th scope="col" className="w-8" data-print="hide" />
-                <th scope="col">Delivery day</th>
-                <th scope="col" className="num">
-                  Calls
-                </th>
-                <th scope="col" className="num">
-                  Apps
-                </th>
-                <th
-                  scope="col"
-                  className="num"
-                  title="The trailing-window closing percentage that set this day's rate"
-                >
-                  Window
-                </th>
-                <th scope="col" className="num">
-                  Rate
-                </th>
-                <th scope="col" className="num">
-                  Overrun
-                </th>
-                <th scope="col" className="num">
-                  Overrun $
-                </th>
-                <th scope="col" className="num">
-                  Next block
-                </th>
-                <th scope="col" className="num">
-                  Block $
-                </th>
-                <th scope="col" className="num">
-                  Total
-                </th>
-                <th
-                  scope="col"
-                  className="num"
-                  title="The maximum daily debit on the Insertion Order at the time"
-                >
-                  Max debit
-                </th>
-                <th scope="col">Outcome</th>
-                <th scope="col">Payment</th>
-                <th scope="col">Curve</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => {
-                const open = openRow === row.id;
-                const mode = settlementMode(row.paymentStatus);
-                return (
-                  <Fragment key={row.id}>
-                    <tr
-                      className={cn('cursor-pointer hover:bg-sunken', open && 'bg-sunken')}
-                      onClick={() => void toggleRow(row.id)}
-                    >
-                      <td data-print="hide">
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          aria-label={`How the rate on ${row.deliveryDay} was derived`}
-                          className="flex h-6 w-6 items-center justify-center rounded-control text-ink-3 hover:bg-rule hover:text-ink"
-                          onClick={event => {
-                            event.stopPropagation();
-                            void toggleRow(row.id);
-                          }}
-                        >
-                          {open ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="t-data whitespace-nowrap font-medium text-ink">
-                        {row.deliveryDay}
-                      </td>
-                      <td className="num">{count(row.deliveredCalls)}</td>
-                      <td className="num">{count(row.submittedApplications)}</td>
-                      <td className="num">{pct(row.windowClosingPct)}</td>
-                      <td className="num">{money(row.rate)}</td>
-                      <td className="num">{count(row.overrunQuantity)}</td>
-                      <td className="num">{money(row.overrunAmount)}</td>
-                      <td className="num">
-                        {count(row.nextBlockQuantity)}
-                        {row.unusedPaidApplications > 0 && (
-                          <span
-                            className="ml-1 text-ink-3"
-                            title={`Reduced by ${row.unusedPaidApplications} unused paid applications from a configured block of ${row.configuredBlockQuantity}`}
+        <Panel className="min-w-0">
+          <PanelBody flush className="overflow-auto rounded-card">
+            <Ledger
+              className={cn(
+                '[&_thead_th]:h-10 [&_thead_th]:border-rule [&_thead_th]:bg-sunken [&_thead_th]:px-3',
+                '[&_tbody_td]:h-11 [&_tbody_td]:px-3 [&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150',
+                '[&_.num]:font-sans'
+              )}
+            >
+              <thead>
+                <tr>
+                  <th scope="col" className="w-8" data-print="hide" />
+                  <th scope="col">Delivery day</th>
+                  <th scope="col" className="num">
+                    Calls
+                  </th>
+                  <th scope="col" className="num">
+                    Apps
+                  </th>
+                  <th
+                    scope="col"
+                    className="num"
+                    title="The trailing-window closing percentage that set this day's rate"
+                  >
+                    Window
+                  </th>
+                  <th scope="col" className="num">
+                    Rate
+                  </th>
+                  <th scope="col" className="num">
+                    Overrun
+                  </th>
+                  <th scope="col" className="num">
+                    Overrun $
+                  </th>
+                  <th scope="col" className="num">
+                    Next block
+                  </th>
+                  <th scope="col" className="num">
+                    Block $
+                  </th>
+                  <th scope="col" className="num">
+                    Total
+                  </th>
+                  <th
+                    scope="col"
+                    className="num"
+                    title="The maximum daily debit on the Insertion Order at the time"
+                  >
+                    Max debit
+                  </th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Payment</th>
+                  <th scope="col">Curve</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => {
+                  const open = openRow === row.id;
+                  const mode = settlementMode(row.paymentStatus);
+                  return (
+                    <Fragment key={row.id}>
+                      <tr
+                        className={cn('cursor-pointer hover:bg-sunken', open && 'bg-sunken')}
+                        onClick={() => void toggleRow(row.id)}
+                      >
+                        <td data-print="hide">
+                          <Tooltip
+                            content={`How the rate on ${row.deliveryDay} was derived`}
+                            side="bottom"
                           >
-                            ({row.configuredBlockQuantity}−{row.unusedPaidApplications})
-                          </span>
-                        )}
-                      </td>
-                      <td className="num">{money(row.nextBlockAmount)}</td>
-                      {/* The one figure per row: what was charged. */}
-                      <td className="num font-medium">{money(row.totalCharged)}</td>
-                      <td className="num !text-ink-3">{money(row.maxDailyDebit)}</td>
-                      {/*
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-label={`How the rate on ${row.deliveryDay} was derived`}
+                              className="flex h-8 w-8 items-center justify-center rounded-control text-ink-3 transition-colors hover:bg-rule hover:text-ink"
+                              onClick={event => {
+                                event.stopPropagation();
+                                void toggleRow(row.id);
+                              }}
+                            >
+                              {open ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                          </Tooltip>
+                        </td>
+                        <td className="t-data whitespace-nowrap font-medium text-ink">
+                          {row.deliveryDay}
+                        </td>
+                        <td className="num">{count(row.deliveredCalls)}</td>
+                        <td className="num">{count(row.submittedApplications)}</td>
+                        <td className="num">{pct(row.windowClosingPct)}</td>
+                        <td className="num">{money(row.rate)}</td>
+                        <td className="num">{count(row.overrunQuantity)}</td>
+                        <td className="num">{money(row.overrunAmount)}</td>
+                        <td className="num">
+                          {count(row.nextBlockQuantity)}
+                          {row.unusedPaidApplications > 0 && (
+                            <span
+                              className="ml-1 text-ink-3"
+                              title={`Reduced by ${row.unusedPaidApplications} unused paid applications from a configured block of ${row.configuredBlockQuantity}`}
+                            >
+                              ({row.configuredBlockQuantity}−{row.unusedPaidApplications})
+                            </span>
+                          )}
+                        </td>
+                        <td className="num">{money(row.nextBlockAmount)}</td>
+                        {/* The one figure per row: what was charged. */}
+                        <td className="num font-medium">{money(row.totalCharged)}</td>
+                        <td className="num !text-ink-3">{money(row.maxDailyDebit)}</td>
+                        {/*
                         The shorter question, answered first: were we charged
                         for this day. The payment status beside it is the same
                         fact in the vocabulary of a payment attempt.
                       */}
-                      <td
-                        className="whitespace-nowrap t-body font-medium text-ink"
-                        title={mode.detail}
-                      >
-                        {mode.label}
-                      </td>
-                      <td className="whitespace-nowrap">
-                        <StatusChip
-                          value={row.paymentStatus}
-                          label={row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
-                          tone={statusTone(row.paymentStatus)}
-                          size="sm"
-                        />
-                        {row.gracePeriodEndsOn && row.paymentStatus !== 'SUCCEEDED' && (
-                          <span className="ml-1.5 t-meta text-ink-3">
-                            grace ends {row.gracePeriodEndsOn}
-                          </span>
-                        )}
-                      </td>
-                      <td className="t-data whitespace-nowrap text-ink-3">
-                        {row.curveVersion === null ? (
-                          <span title="The window closed below the curve minimum, so no rate was derived from the curve. The overrun was billed at the rate in force on the Delivery Day.">
-                            —
-                          </span>
-                        ) : (
-                          `v${row.curveVersion}`
-                        )}
-                        {row.windowDaysFound < row.windowDeliveryDays && (
-                          <span
-                            className="ml-1"
-                            title={`Only ${row.windowDaysFound} of ${row.windowDeliveryDays} Delivery Days were found for the window`}
-                          >
-                            ({row.windowDaysFound}/{row.windowDeliveryDays})
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-
-                    {open && (
-                      <tr className="bg-paper">
-                        <td colSpan={15} className="!h-auto px-4 py-4">
-                          {derivationLoading === row.id ? (
-                            <p className="flex items-center t-body text-ink-3">
-                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                              Working out how this rate was reached
-                            </p>
-                          ) : derivations[row.id] ? (
-                            <Derivation settlement={row} derivation={derivations[row.id]} />
+                        <td
+                          className="whitespace-nowrap t-body font-medium text-ink"
+                          title={mode.detail}
+                        >
+                          {mode.label}
+                        </td>
+                        <td className="whitespace-nowrap">
+                          <StatusChip
+                            value={row.paymentStatus}
+                            label={row.paymentStatus.replace(/_/g, ' ').toLowerCase()}
+                            tone={statusTone(row.paymentStatus)}
+                            size="sm"
+                          />
+                          {row.gracePeriodEndsOn && row.paymentStatus !== 'SUCCEEDED' && (
+                            <span className="ml-1.5 t-meta text-ink-3">
+                              grace ends {row.gracePeriodEndsOn}
+                            </span>
+                          )}
+                        </td>
+                        <td className="t-data whitespace-nowrap text-ink-3">
+                          {row.curveVersion === null ? (
+                            <span title="The window closed below the curve minimum, so no rate was derived from the curve. The overrun was billed at the rate in force on the Delivery Day.">
+                              —
+                            </span>
                           ) : (
-                            <p className="t-body text-ink-3">
-                              This breakdown could not be loaded. Please try again.
-                            </p>
+                            `v${row.curveVersion}`
+                          )}
+                          {row.windowDaysFound < row.windowDeliveryDays && (
+                            <span
+                              className="ml-1"
+                              title={`Only ${row.windowDaysFound} of ${row.windowDeliveryDays} Delivery Days were found for the window`}
+                            >
+                              ({row.windowDaysFound}/{row.windowDeliveryDays})
+                            </span>
                           )}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </Ledger>
-        </div>
+
+                      {open && (
+                        <tr className="bg-paper">
+                          <td colSpan={15} className="!h-auto px-4 py-4">
+                            {derivationLoading === row.id ? (
+                              <p className="flex items-center t-body text-ink-3">
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                Working out how this rate was reached
+                              </p>
+                            ) : derivations[row.id] ? (
+                              <Derivation settlement={row} derivation={derivations[row.id]} />
+                            ) : (
+                              <p className="t-body text-ink-3">
+                                This breakdown could not be loaded. Please try again.
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </Ledger>
+          </PanelBody>
+        </Panel>
       )}
-    </CompactPageShell>
+    </div>
   );
 }
 
@@ -571,7 +594,7 @@ function Derivation({
       )}
     >
       <dt className={strong ? 'text-ink' : 'text-ink-2'}>{label}</dt>
-      <dd className="t-data text-ink">{value}</dd>
+      <dd className="t-num text-ink">{value}</dd>
     </div>
   );
 
@@ -588,7 +611,7 @@ function Derivation({
       </div>
 
       <div>
-        <Ledger className="[&_thead_th]:static [&_thead_th]:bg-transparent">
+        <Ledger className="[&_.num]:font-sans [&_thead_th]:static [&_thead_th]:bg-transparent">
           <thead>
             <tr>
               <th scope="col">Delivery day</th>

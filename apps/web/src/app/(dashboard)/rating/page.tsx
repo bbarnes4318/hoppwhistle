@@ -1,13 +1,13 @@
 'use client';
 
-import { AlertTriangle, Loader2, TrendingUp } from 'lucide-react';
+import { Loader2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Notice, Panel, PanelBody, PanelHeader, PanelTitle, StatTile } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { PlatformRatingView } from '@/components/platform/platform-rating-view';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -149,12 +149,12 @@ function RatingPage(): JSX.Element {
 
   if (platform.loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas min-h-full">
+        <div className="t-body flex flex-1 items-center justify-center text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading rate
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
@@ -190,20 +190,20 @@ function AgencyRatingPanel(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas min-h-full">
+        <div className="t-body flex flex-1 items-center justify-center text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading rate
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (error || !summary) {
     return (
-      <CompactPageShell>
-        <p className="text-sm text-muted-foreground">{error ?? 'No rating data yet.'}</p>
-      </CompactPageShell>
+      <div className="page-canvas">
+        <p className="t-body text-ink-3">{error ?? 'No rating data yet.'}</p>
+      </div>
     );
   }
 
@@ -224,149 +224,129 @@ function AgencyRatingPanel(): JSX.Element {
     summary.ratingWindow.daysFound < summary.ratingWindow.deliveryDays;
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}>
-        <Badge variant={summary.status === 'UNDER_REVIEW' ? 'destructive' : 'secondary'}>
-          {summary.status.replace('_', ' ').toLowerCase()}
-        </Badge>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}
+        meta={
+          <Badge variant={summary.status === 'UNDER_REVIEW' ? 'destructive' : 'secondary'}>
+            {summary.status.replace('_', ' ').toLowerCase()}
+          </Badge>
+        }
+      />
 
       {summary.reviewFlag && (
-        <div className="flex items-start gap-2 rounded border border-ringing bg-ringing-tint p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
-          <div>
-            <p className="font-medium">Flagged for review</p>
-            <p className="text-muted-foreground">
-              The trailing window closed at {pct(summary.reviewFlag.closingPct)} —{' '}
-              {summary.reviewFlag.submittedApplications} applications from{' '}
-              {summary.reviewFlag.deliveredCalls} delivered calls. There is no rate while this
-              flag is open; NetEnroll clears it.
-            </p>
-          </div>
-        </div>
+        <Notice tone="warning" title="Flagged for review">
+          The trailing window closed at {pct(summary.reviewFlag.closingPct)} —{' '}
+          {summary.reviewFlag.submittedApplications} applications from{' '}
+          {summary.reviewFlag.deliveredCalls} delivered calls. There is no rate while this flag is
+          open; NetEnroll clears it.
+        </Notice>
       )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {/* The rate in force. The number the agency is being paid, today. */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Current rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{dollars(summary.currentRate)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              per submitted application
-              {summary.currentRateCalendarDay ? ` · effective ${summary.currentRateCalendarDay}` : ''}
-            </p>
-            {/*
-              An agreed rate offset is shown as part of the price rather than
-              as a fee beside it, which is what makes the number above add up
-              against the published curve. There is no line anywhere on this
-              page that adds anything to a charge.
-            */}
-            {summary.rateOffset > 0 && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {dollars(summary.curveRate)} from the curve, plus your agreed rate offset of{' '}
-                {dollars(summary.rateOffset)}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Current rate"
+          figure={dollars(summary.currentRate)}
+          sub={
+            <>
+              <span className="block">
+                per submitted application
+                {summary.currentRateCalendarDay
+                  ? ` · effective ${summary.currentRateCalendarDay}`
+                  : ''}
+              </span>
+              {/*
+                An agreed rate offset is shown as part of the price rather than
+                as a fee beside it, which is what makes the number above add up
+                against the published curve. There is no line anywhere on this
+                page that adds anything to a charge.
+              */}
+              {summary.rateOffset > 0 && (
+                <span className="mt-1 block">
+                  {dollars(summary.curveRate)} from the curve, plus your agreed rate offset of{' '}
+                  {dollars(summary.rateOffset)}
+                </span>
+              )}
+            </>
+          }
+        />
 
         {/* The window that set it. Deliberately adjacent to the rate, and
             deliberately not adjacent to "today". */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Rating window — sets the rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">
-              {pct(summary.ratingWindow.closingPct)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {summary.ratingWindow.submittedApplications} of{' '}
-              {summary.ratingWindow.deliveredCalls} delivered
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Delivery days: {windowLabel}
-              {windowShort
-                ? ` · ${summary.ratingWindow.daysFound} of ${summary.ratingWindow.deliveryDays} found`
-                : ''}
-            </p>
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Rating window — sets the rate"
+          figure={pct(summary.ratingWindow.closingPct)}
+          sub={
+            <>
+              <span className="block">
+                {summary.ratingWindow.submittedApplications} of{' '}
+                {summary.ratingWindow.deliveredCalls} delivered
+              </span>
+              <span className="mt-0.5 block">
+                Delivery days: {windowLabel}
+                {windowShort
+                  ? ` · ${summary.ratingWindow.daysFound} of ${summary.ratingWindow.deliveryDays} found`
+                  : ''}
+              </span>
+            </>
+          }
+        />
 
         {/* Today. Prices nothing, and says so. */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Today so far
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-muted-foreground">
-              {pct(summary.today.closingPct)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+        <StatTile
+          label="Today so far"
+          figure={<span className="text-ink-3">{pct(summary.today.closingPct)}</span>}
+          sub={
+            <>
               {summary.today.submittedApplications} of {summary.today.deliveredCalls} delivered ·
               does not set today&rsquo;s rate
-            </p>
-          </CardContent>
-        </Card>
+            </>
+          }
+        />
 
         {/* Tomorrow, provisionally. */}
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <TrendingUp className="h-3 w-3" />
-              Tracking toward
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                'text-3xl font-bold tabular-nums',
-                summary.trackingBelowMinimum ? 'text-ringing-ink' : 'text-muted-foreground'
-              )}
-            >
+        <StatTile
+          label="Tracking toward"
+          icon={TrendingUp}
+          figure={
+            <span className={cn(summary.trackingBelowMinimum ? 'text-ringing-ink' : 'text-ink-3')}>
               {summary.trackingBelowMinimum ? 'review' : dollars(summary.trackingRate)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {summary.trackingBelowMinimum
-                ? 'the window ending today is below the curve minimum'
-                : 'what tomorrow would be if today closed now'}
-            </p>
-            {summary.trackingDayKeys.length > 0 && (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                over {summary.trackingDayKeys.join(', ')}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            </span>
+          }
+          sub={
+            <>
+              <span className="block">
+                {summary.trackingBelowMinimum
+                  ? 'the window ending today is below the curve minimum'
+                  : 'what tomorrow would be if today closed now'}
+              </span>
+              {summary.trackingDayKeys.length > 0 && (
+                <span className="mt-0.5 block">over {summary.trackingDayKeys.join(', ')}</span>
+              )}
+            </>
+          }
+        />
       </div>
 
       {summary.openingBlock && (
-        <p className="text-[11px] text-muted-foreground">
+        <Notice tone="info">
           Agreed opening rate: ${summary.openingBlock.rate} per application
           {summary.openingBlock.applications
             ? ` for an opening block of ${summary.openingBlock.applications}`
             : ''}
-          . Daily rating begins from the first settled Delivery Day; from then the
-          rate curve governs. There is no introductory rate.
-        </p>
+          . Daily rating begins from the first settled Delivery Day; from then the rate curve
+          governs. There is no introductory rate.
+        </Notice>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Rate history</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Panel className="min-w-0">
+        <PanelHeader>
+          <PanelTitle>Rate history</PanelTitle>
+        </PanelHeader>
+        <PanelBody flush={history.length > 0} className="overflow-x-auto">
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="t-body text-ink-3">
               No rate changes yet. The engine runs after the close of each business day.
             </p>
           ) : (
@@ -385,21 +365,19 @@ function AgencyRatingPanel(): JSX.Element {
               <TableBody>
                 {history.map(row => (
                   <TableRow key={row.id}>
-                    <TableCell className="font-medium tabular-nums">
+                    <TableCell className="t-num font-medium text-ink">
                       {row.effectiveCalendarDay}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.submittedApplications}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="t-num text-right">{row.deliveredCalls}</TableCell>
+                    <TableCell className="t-num text-right">{row.submittedApplications}</TableCell>
+                    <TableCell className="t-num text-right">{pct(row.closingPct)}</TableCell>
+                    <TableCell className="t-num text-right">
                       {row.status === 'BELOW_MINIMUM' ? (
                         <span className="text-ringing-ink">review</span>
                       ) : (
                         <>
                           {row.previousRate !== null && row.previousRate !== row.newRate && (
-                            <span className="mr-1 text-muted-foreground line-through">
+                            <span className="mr-1 text-ink-3 line-through">
                               {dollars(row.previousRate)}
                             </span>
                           )}
@@ -407,23 +385,21 @@ function AgencyRatingPanel(): JSX.Element {
                         </>
                       )}
                     </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
+                    <TableCell className="t-meta text-ink-3">
                       {row.windowDayKeys.join(', ') || '—'}
                       {row.windowDaysFound < row.windowDeliveryDays
                         ? ` (${row.windowDaysFound}/${row.windowDeliveryDays})`
                         : ''}
                     </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
-                      v{row.curveVersion}
-                    </TableCell>
+                    <TableCell className="t-meta text-ink-3">v{row.curveVersion}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
-    </CompactPageShell>
+        </PanelBody>
+      </Panel>
+    </div>
   );
 }
 
