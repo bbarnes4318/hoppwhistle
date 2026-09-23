@@ -29,9 +29,9 @@ const buttonVariants = cva(
           'bg-brand-strong text-white shadow-card hover:bg-brand-strong-hover disabled:bg-sunken',
         destructive: 'bg-dropped text-white shadow-card hover:bg-dropped-ink disabled:bg-sunken',
         outline:
-          'border border-rule-strong bg-surface text-ink shadow-card hover:bg-sunken disabled:border-rule disabled:bg-sunken',
+          'border border-rule-strong bg-surface text-ink shadow-card hover:bg-sunken disabled:bg-sunken',
         secondary:
-          'border border-rule-strong bg-surface text-ink shadow-card hover:bg-sunken disabled:border-rule disabled:bg-sunken',
+          'border border-rule-strong bg-surface text-ink shadow-card hover:bg-sunken disabled:bg-sunken',
         ghost: 'bg-transparent text-ink-2 hover:bg-sunken hover:text-ink',
         link: 'text-brand-ink underline-offset-4 hover:underline',
       },

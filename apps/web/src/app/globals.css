@@ -289,6 +289,21 @@
     color-scheme: dark;
   }
 
+  /*
+   * A hairline on the sunken ground. --rule is 1.24:1 on --surface but only
+   * 1.09:1 on --sunken, which reads as no line at all (the browser smoke test
+   * holds every border to 1.1:1 against what it sits on). Inside anything
+   * painted sunken — a table header, a well, a disabled control — the rule
+   * steps up to --rule-strong, 1.29:1 there. Custom properties inherit, so a
+   * row border inside a sunken <thead> is covered too. Light theme only; the
+   * dark live board's values are its own.
+   */
+  :is(.bg-sunken, .bg-muted, .bg-secondary, .bg-accent):not([data-theme='dark'] *) {
+    --rule: var(--rule-strong);
+    --border: 216 16% 84%; /* rule-strong */
+    --input: 216 16% 84%; /* rule-strong */
+  }
+
   /* One focus treatment for the whole product. --brand-ink rather than --brand:
      the ring must clear 3:1 against the surface it sits on, and the raw brand
      green does not. */
