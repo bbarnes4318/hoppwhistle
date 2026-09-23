@@ -178,7 +178,6 @@ const SWEEP = [
       '/settings/webhooks',
       '/settings/dnc',
       '/settings/quotas',
-      '/admin/payroll',
     ],
     /*
      * NetEnroll's own screens, asked for by an agency principal.
@@ -215,6 +214,18 @@ const SWEEP = [
       { from: '/tools/campaign-map', to: '/dashboard' },
       { from: '/tools/industry-research', to: '/dashboard' },
       { from: '/music-console', to: '/dashboard' },
+      /*
+       * Payroll administration, which an agency principal COULD reach until
+       * now -- it was on the reachable list directly above this one.
+       *
+       * It is NetEnroll's screen, not the agency's, so it moved rather than
+       * being deleted: the property worth asserting is that asking for it by
+       * URL sends them away, and a route merely dropped from the list above
+       * would leave that redirect untested. The agent's own `/payroll` is a
+       * different screen and still theirs -- see the AGENT entry below, which
+       * loads it.
+       */
+      { from: '/admin/payroll', to: '/dashboard' },
     ],
   },
   {
@@ -315,6 +326,10 @@ const SWEEP = [
       // inside an agency administer that agency's ceilings, addressed to the
       // tenant they entered rather than to anything in the URL.
       '/settings/quotas',
+      // Payroll administration, now staff's. It was loaded by the agency
+      // principal above until it became staff-only; it is here so that taking
+      // it off that list did not quietly leave the page rendered by nobody.
+      '/admin/payroll',
     ],
   },
 ];
