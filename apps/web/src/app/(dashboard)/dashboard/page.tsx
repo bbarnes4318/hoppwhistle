@@ -67,7 +67,7 @@ interface DashboardStats {
   dateRange: { startDate: string; endDate: string };
 }
 
-import { DISPOSITION_LABELS, DISPOSITION_COLORS } from '@hopwhistle/shared';
+import { DISPOSITION_LABELS } from '@hopwhistle/shared';
 
 interface CallRecord {
   id: string;
@@ -141,20 +141,39 @@ function getCallResult(call: CallRecord): string {
   return call.status || 'Unknown';
 }
 
+/*
+ * Result pill colours, from the product's own contrast-checked tones rather
+ * than DISPOSITION_COLORS: those are the dark console's classes (a -400 text
+ * on a 10% tint), and on the light portal both the text and the border all
+ * but vanish. Won business is live, a lost connection is dropped, anything
+ * still owed a next step is brand, and everything else is neutral.
+ */
+const RESULT_TONE: Record<string, string> = {
+  APPLICATION_SUBMITTED: 'bg-live-tint text-live-ink',
+  VERIFIED: 'bg-live-tint text-live-ink',
+  SET_APPOINTMENT: 'bg-brand-tint text-brand-ink',
+  SET_CALLBACK: 'bg-brand-tint text-brand-ink',
+  FOLLOW_UP: 'bg-brand-tint text-brand-ink',
+  LIVE_TRANSFER: 'bg-brand-tint text-brand-ink',
+  DISCONNECTED: 'bg-dropped-tint text-dropped-ink',
+  WRONG_NUMBER: 'bg-dropped-tint text-dropped-ink',
+};
+const NEUTRAL_RESULT = 'bg-sunken text-ink-2';
+
 function getResultColor(result: string): string {
   for (const [key, label] of Object.entries(DISPOSITION_LABELS)) {
     if (label === result) {
-      return DISPOSITION_COLORS[key] || 'bg-transparent text-muted-foreground border-border';
+      return `border-transparent ${RESULT_TONE[key] ?? NEUTRAL_RESULT}`;
     }
   }
   switch (result) {
     case 'Completed':
-      return 'bg-live-tint text-live-ink border-live/40';
+      return 'border-transparent bg-live-tint text-live-ink';
     case 'Busy':
     case 'Failed':
-      return 'bg-dropped-tint text-dropped-ink border-dropped/40';
+      return 'border-transparent bg-dropped-tint text-dropped-ink';
     default:
-      return 'bg-transparent text-muted-foreground border-border';
+      return `border-transparent ${NEUTRAL_RESULT}`;
   }
 }
 

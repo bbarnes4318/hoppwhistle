@@ -48,6 +48,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, isNoActingTenant } from '@/lib/api';
@@ -1441,39 +1442,43 @@ export default function OperationsCallLogsPage() {
                         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                           {call.recordingUrl || call.primaryRecordingId ? (
                             <div className="flex items-center justify-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  void handlePlayRecording(call.primaryRecordingId || call.id)
-                                }
-                                disabled={
-                                  audioLoading && playingId === (call.primaryRecordingId || call.id)
-                                }
-                                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
-                              >
-                                {audioLoading &&
-                                playingId === (call.primaryRecordingId || call.id) ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : playingId === (call.primaryRecordingId || call.id) ? (
-                                  <Pause className="h-4 w-4" />
-                                ) : (
-                                  <Play className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  void handleDownloadRecording(
-                                    call.primaryRecordingId || call.id,
-                                    `call-${call.id}-recording.wav`
-                                  )
-                                }
-                                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
+                              <Tooltip content="Play or pause recording">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handlePlayRecording(call.primaryRecordingId || call.id)
+                                  }
+                                  disabled={
+                                    audioLoading && playingId === (call.primaryRecordingId || call.id)
+                                  }
+                                  className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
+                                >
+                                  {audioLoading &&
+                                  playingId === (call.primaryRecordingId || call.id) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : playingId === (call.primaryRecordingId || call.id) ? (
+                                    <Pause className="h-4 w-4" />
+                                  ) : (
+                                    <Play className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </Tooltip>
+                              <Tooltip content="Download recording">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handleDownloadRecording(
+                                      call.primaryRecordingId || call.id,
+                                      `call-${call.id}-recording.wav`
+                                    )
+                                  }
+                                  className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </Tooltip>
                             </div>
                           ) : (
                             <span className="text-ink-3 text-xs italic">—</span>
@@ -1549,14 +1554,16 @@ export default function OperationsCallLogsPage() {
                   </h2>
                 </DialogHeader>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setDetailCallId(null)}
-                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <Tooltip content="Close" align="end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDetailCallId(null)}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </Tooltip>
             </div>
 
             {/* Body */}
@@ -1612,23 +1619,25 @@ export default function OperationsCallLogsPage() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0 flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              void handlePlayRecording(detailCall.primaryRecordingId || '')
-                            }
-                            disabled={audioLoading}
-                            className="h-9 w-9 flex-shrink-0 rounded-full border-none bg-brand-strong p-0 text-white hover:bg-brand-strong-hover hover:text-white"
-                          >
-                            {audioLoading && playingId === detailCall.primaryRecordingId ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : playingId === detailCall.primaryRecordingId ? (
-                              <Pause className="h-4.5 w-4.5" />
-                            ) : (
-                              <Play className="h-4.5 w-4.5 pl-0.5" />
-                            )}
-                          </Button>
+                          <Tooltip content="Play or pause recording">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                void handlePlayRecording(detailCall.primaryRecordingId || '')
+                              }
+                              disabled={audioLoading}
+                              className="h-9 w-9 flex-shrink-0 rounded-full border-none bg-brand-strong p-0 text-white hover:bg-brand-strong-hover hover:text-white"
+                            >
+                              {audioLoading && playingId === detailCall.primaryRecordingId ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : playingId === detailCall.primaryRecordingId ? (
+                                <Pause className="h-4.5 w-4.5" />
+                              ) : (
+                                <Play className="h-4.5 w-4.5 pl-0.5" />
+                              )}
+                            </Button>
+                          </Tooltip>
                           {isAudioPlayerInDrawer ? (
                             audioPlayer
                           ) : (

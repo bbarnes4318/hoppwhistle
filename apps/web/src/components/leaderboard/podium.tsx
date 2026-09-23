@@ -119,7 +119,7 @@ export function Podium({ rows }: { rows: LeaderboardRow[] }): JSX.Element | null
               {row.name}
             </div>
 
-            <div className={cn('font-mono tabular text-ink', first ? 't-hero' : 't-figure')}>
+            <div className={cn('tabular-nums text-ink', first ? 't-hero' : 't-figure')}>
               {count(row.points)}
               <span className="ml-1 t-meta text-ink-3">pts</span>
             </div>

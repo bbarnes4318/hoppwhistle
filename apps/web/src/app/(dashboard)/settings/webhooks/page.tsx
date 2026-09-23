@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { AddWebhookDialog } from '@/components/webhooks/add-webhook-dialog';
 import { apiClient } from '@/lib/api';
@@ -154,14 +155,16 @@ export default function WebhooksPage() {
                       {new Date(webhook.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="hover:bg-dropped-tint hover:text-dropped-ink"
-                        onClick={() => handleDeleteWebhook(webhook.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Tooltip content="Delete webhook" align="end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="hover:bg-dropped-tint hover:text-dropped-ink"
+                          onClick={() => handleDeleteWebhook(webhook.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}
