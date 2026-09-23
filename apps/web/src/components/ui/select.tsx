@@ -15,14 +15,14 @@ const SelectTrigger = React.forwardRef<
  <SelectPrimitive.Trigger
  ref={ref}
  className={cn(
- 'flex h-9 w-full items-center justify-between rounded-control border border-rule bg-surface px-3 py-2 text-sm text-ink ring-offset-background placeholder:text-ink-3 hover:border-rule-strong focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+ 'flex h-9 w-full min-w-[168px] items-center justify-between gap-2 whitespace-nowrap rounded-control border border-rule-strong bg-surface px-3 py-2 text-left text-sm text-ink shadow-card transition-[border-color,box-shadow] duration-150 ease-out ne-motion placeholder:text-ink-3 hover:border-ink-3 focus:border-brand-ink focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:bg-sunken disabled:text-ink-3 data-[placeholder]:text-ink-3 [@media(pointer:coarse)]:min-h-[40px] [&>span]:whitespace-nowrap',
  className
  )}
  {...props}
  >
  {children}
  <SelectPrimitive.Icon asChild>
- <ChevronDown className="h-4 w-4 opacity-50" />
+ <ChevronDown className="h-4 w-4 shrink-0 text-ink-3" />
  </SelectPrimitive.Icon>
  </SelectPrimitive.Trigger>
 ));
@@ -64,7 +64,7 @@ const SelectContent = React.forwardRef<
  <SelectPrimitive.Content
  ref={ref}
  className={cn(
- 'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-card border border-rule bg-surface text-ink shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in- data-[side=left]:slide-in- data-[side=right]:slide-in- data-[side=top]:slide-in-',
+ 'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-[12px] border border-rule bg-surface text-ink shadow-pop data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in- data-[side=left]:slide-in- data-[side=right]:slide-in- data-[side=top]:slide-in-',
  position === 'popper' &&
  'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
  className
@@ -77,7 +77,7 @@ const SelectContent = React.forwardRef<
  className={cn(
  'p-1',
  position === 'popper' &&
- 'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]'
+ 'h-[var(--radix-select-trigger-height)] w-max min-w-[var(--radix-select-trigger-width)]'
  )}
  >
  {children}
@@ -94,7 +94,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
  <SelectPrimitive.Label
  ref={ref}
- className={cn('py-1.5 pl-8 pr-2 text-sm font-semibold', className)}
+ className={cn('py-1.5 pl-8 pr-2 t-label text-ink-3', className)}
  {...props}
  />
 ));
@@ -107,14 +107,14 @@ const SelectItem = React.forwardRef<
  <SelectPrimitive.Item
  ref={ref}
  className={cn(
- 'relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-sunken focus:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+ 'relative flex w-full cursor-default select-none items-center whitespace-nowrap rounded-control py-2 pl-8 pr-3 text-sm text-ink outline-none transition-colors duration-150 focus:bg-sunken focus:text-ink data-[state=checked]:font-medium data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
  className
  )}
  {...props}
  >
  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
  <SelectPrimitive.ItemIndicator>
- <Check className="h-4 w-4" />
+ <Check className="h-4 w-4 text-brand-ink" />
  </SelectPrimitive.ItemIndicator>
  </span>
 
@@ -129,7 +129,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
  <SelectPrimitive.Separator
  ref={ref}
- className={cn('-mx-1 my-1 h-px bg-muted', className)}
+ className={cn('-mx-1 my-1 h-px bg-rule', className)}
  {...props}
  />
 ));
