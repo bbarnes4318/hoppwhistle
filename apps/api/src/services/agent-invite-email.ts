@@ -73,7 +73,27 @@ function transporter(): Transporter | null {
   return createTransport({
     host,
     port,
+    /*
+     * TLS is required, not merely preferred.
+     *
+     * `secure: true` means the whole session is wrapped in TLS from the first
+     * byte, which is what port 465 is. Every other port -- 587 being the one
+     * that matters -- starts in the clear and upgrades with STARTTLS, and
+     * nodemailer will do that upgrade OPPORTUNISTICALLY: if the server does not
+     * advertise STARTTLS it carries on and sends AUTH in plaintext. The
+     * password crosses the network in the clear, and nothing anywhere says so.
+     *
+     * That was theoretical while this ran on 465. It is not any more: Hetzner
+     * blocks outbound 25 and 465, so production authenticates on 587, and an
+     * opportunistic upgrade is one stripped capability line away from leaking
+     * the mailbox password.
+     *
+     * `requireTLS` makes the send FAIL instead. A failed invitation is already
+     * a handled case -- the grant stands, the token is returned, the caller is
+     * told -- so refusing is cheap here and leaking is not.
+     */
     secure: port === 465,
+    requireTLS: port !== 465,
     auth: { user, pass },
   });
 }
