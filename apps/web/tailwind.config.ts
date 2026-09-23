@@ -1,6 +1,13 @@
 import type { Config } from 'tailwindcss';
 
 /**
+ * The NetEnroll agency portal: a bright, calm workspace — cool grey canvas,
+ * white cards on soft layered shadows, Inter with tabular figures, and the
+ * NetEnroll green as the single accent. This supersedes the "paper and ink,
+ * no shadows" direction of hoppwhistle-redesign.md for palette, type and
+ * elevation; its signal semantics (live, ringing, dropped, blocked, money)
+ * still stand and are untouched.
+ *
  * Two colour groups, matching the two token groups in globals.css.
  *
  * The DESIGN TOKENS resolve straight to their hex custom property. They do not
@@ -10,9 +17,11 @@ import type { Config } from 'tailwindcss';
  * `*-ink` values for signal-coloured text, each contrast-checked against the
  * surface it is designed to sit on.
  *
- * The SHADCN ALIASES stay in `hsl(var(--x))` form so existing pages and the
- * unmodified primitives in src/components/ui keep working unchanged during the
- * conversion. Do not reach for them in new code.
+ * The SHADCN ALIASES stay in `hsl(var(--x))` form so pages still written
+ * against shadcn's names keep working. Do not reach for them in new code.
+ *
+ * Elevation is three named shadows — `shadow-card`, `shadow-raised`,
+ * `shadow-pop` — each a token in globals.css.
  */
 const config: Config = {
   // Dark is a per-subtree opt-in, never the document: `dark:` variants follow
@@ -28,25 +37,35 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Bricolage Grotesque — page titles and hero numbers only.
-        display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Inter — body, labels, buttons, navigation.
+        // Inter, like everything else. Page titles and hero figures are set in
+        // the same face as the body; `font-display` is kept as a name so older
+        // call sites resolve, and it resolves to Inter.
+        display: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Inter — body, labels, buttons, navigation, and every figure (with
+        // `tabular-nums`).
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // IBM Plex Mono, tabular — every number in the product.
+        // IBM Plex Mono — phone numbers, call IDs, API keys, webhook URLs and
+        // table timestamps only.
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       fontSize: {
-        hero: ['34px', { lineHeight: '1.05', fontWeight: '500', letterSpacing: '-0.015em' }],
-        title: ['20px', { lineHeight: '1.2', fontWeight: '500', letterSpacing: '-0.01em' }],
-        section: ['15px', { lineHeight: '1.3', fontWeight: '500' }],
-        body: ['14px', { lineHeight: '1.5', fontWeight: '400' }],
-        label: ['12px', { lineHeight: '1.3', fontWeight: '500', letterSpacing: '0.06em' }],
-        meta: ['12px', { lineHeight: '1.4', fontWeight: '400' }],
-        figure: ['19px', { lineHeight: '1', fontWeight: '500' }],
+        hero: ['36px', { lineHeight: '1.1', fontWeight: '600', letterSpacing: '-0.02em' }],
+        figure: ['26px', { lineHeight: '1.15', fontWeight: '600', letterSpacing: '-0.01em' }],
+        title: ['22px', { lineHeight: '1.25', fontWeight: '600', letterSpacing: '-0.01em' }],
+        section: ['16px', { lineHeight: '1.35', fontWeight: '600' }],
+        body: ['14px', { lineHeight: '1.55', fontWeight: '400' }],
+        // Pair with `uppercase` — Tailwind font sizes cannot set a transform.
+        label: ['11px', { lineHeight: '1.3', fontWeight: '600', letterSpacing: '0.06em' }],
+        meta: ['12px', { lineHeight: '1.45', fontWeight: '400' }],
         data: ['13px', { lineHeight: '1.4', fontWeight: '400' }],
       },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+        raised: 'var(--shadow-raised)',
+        pop: 'var(--shadow-pop)',
+      },
       borderRadius: {
-        // shadcn's scale, driven by --radius (6px): lg 6px, md 4px, sm 2px.
+        // shadcn's scale, driven by --radius (12px): lg 12px, md 10px, sm 8px.
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
@@ -105,7 +124,7 @@ const config: Config = {
         },
 
         /*
-         * The NetEnroll accent. `brand` is a fill (pair it with `text-ink`);
+         * The NetEnroll accent. `brand` is a bright fill (pair it with `text-ink`);
          * `brand-ink` is the only brand green that may be used for text;
          * `brand-tint` is the ground for an active or selected item.
          */
@@ -113,8 +132,11 @@ const config: Config = {
           DEFAULT: 'var(--brand)',
           tint: 'var(--brand-tint)',
           ink: 'var(--brand-ink)',
-          // Text on a brand fill: `bg-brand text-brand-fg`, in either theme.
+          // Text on the bright brand fill: `bg-brand text-brand-fg`.
           fg: 'var(--brand-fg)',
+          // The primary button: `bg-brand-strong text-white`, 5.48:1.
+          strong: 'var(--brand-strong)',
+          'strong-hover': 'var(--brand-strong-hover)',
         },
 
         /* ------------- shadcn aliases — compatibility only ------------- */

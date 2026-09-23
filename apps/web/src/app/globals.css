@@ -4,46 +4,52 @@
 
 /* ==========================================================================
    NETENROLL DESIGN SYSTEM
-   Source of truth: /hoppwhistle-redesign.md (palette, type, layout) plus the
-   NetEnroll brand: the wordmark is "net" in #000000 and "Enroll" in #10B981,
-   and that green is the one accent — primary actions, links, active
-   navigation, focus rings, selected states. Nothing else is green by default.
+   The agency portal is a calm, bright workspace in the manner of Stripe and
+   Linear: a cool grey canvas, white cards lifted by soft layered shadows,
+   Inter throughout with tabular figures, and the NetEnroll green (#10B981,
+   the "Enroll" in the wordmark) as the one accent. It supersedes the "paper
+   and ink, no shadows" direction in /hoppwhistle-redesign.md for palette,
+   type and elevation. The signal semantics in that brief still stand: --live,
+   --ringing, --dropped, --blocked and --money mean call states and money, are
+   never decoration, and are untouched here.
    --------------------------------------------------------------------------
    Two token groups live here.
 
-   1. DESIGN TOKENS (--paper, --ink, --live ...) are the new system. Hex, so
-      they read the way the brief writes them. New code uses these, via the
-      Tailwind names `paper`, `ink`, `live`, `dropped`, `blocked`, `money` etc.
+   1. DESIGN TOKENS (--paper, --ink, --live ...) are the system. Hex, so they
+      read the way they are specified. New code uses these, via the Tailwind
+      names `paper`, `ink`, `live`, `dropped`, `blocked`, `money` etc.
 
    2. SHADCN ALIASES (--background, --foreground ...) are a COMPATIBILITY
-      LAYER, kept so the 68 existing pages keep rendering while they are
-      converted. They are HSL triplets because Tailwind wraps them in hsl().
-      Every one is derived from a group-1 token — no independent values.
-      New code must not use them; every one is derived from a group-1 token.
+      LAYER for pages still written against shadcn's names. They are HSL
+      triplets because Tailwind wraps them in hsl(). Every one is derived from
+      a group-1 token — no independent values. New code must not use them.
+
+   Elevation is three steps: --shadow-card for anything resting on the canvas,
+   --shadow-raised for a clickable card under the pointer, and --shadow-pop
+   for menus, popovers and dialogs that float above the page.
 
    Light is the default: :root carries the light palette and the root layout
    forces nothing. Dark is opt-in per subtree via [data-theme='dark'] and is
-   intended only for the admin live board, which is a dark-room screen. The
-   transitional `.dark` alias and the <html class="dark"> it served are gone;
-   a page that wants to be dark says so with the attribute.
+   intended only for the admin live board, which is a dark-room screen. A page
+   that wants to be dark says so with the attribute.
    ========================================================================== */
 
 @layer base {
   :root,
   [data-theme='light'] {
     /* --- surfaces ------------------------------------------------------- */
-    --paper: #fbfaf8;
+    --paper: #f5f6f8;
     --surface: #ffffff;
-    --sunken: #f3f1ec;
+    --sunken: #eef0f3;
 
     /* --- ink ------------------------------------------------------------ */
-    --ink: #171614;
-    --ink-2: #55524b;
-    --ink-3: #8a867c;
+    --ink: #101828;
+    --ink-2: #475467;
+    --ink-3: #5f6b7d;
 
     /* --- rules ---------------------------------------------------------- */
-    --rule: #e4e0d8;
-    --rule-strong: #cfc9bd;
+    --rule: #e4e7ec;
+    --rule-strong: #d0d5dd;
 
     /* --- signals -------------------------------------------------------- */
     --live: #0f7a5a;
@@ -58,25 +64,31 @@
      * not a call-state colour: --live stays the colour of a connected call and
      * is never used for a button, and --brand is never used for a state.
      *
-     * Three values, because the raw brand green is a fill colour, not a text
+     * Four values, because the raw brand green is a fill colour, not a text
      * colour: #10B981 is 2.54:1 on --surface, so nothing legible can be set in
-     * it on a light ground, and white on it fails for the same reason. A
-     * brand-filled control therefore carries INK text, and brand-coloured text
-     * uses the darkened --brand-ink.
-     *   brand-fg   on brand        7.13:1   (the primary button; brand-fg is ink)
+     * it on a light ground, and white on it fails for the same reason.
+     *   --brand         the bright fill: chips, bars, the chart line
+     *   --brand-ink     brand-coloured text and icons
+     *   --brand-tint    the ground for an active or selected item
+     *   --brand-strong  the primary button fill, carrying white text
+     *
+     *   brand-fg   on brand        7.00:1   (ink on the bright fill)
      *   brand-ink  on surface      5.48:1
-     *   brand-ink  on paper        5.26:1
-     *   brand-ink  on brand-tint   4.80:1   (active nav, selected row)
-     *   brand-ink  on sunken       4.86:1
+     *   brand-ink  on paper        5.07:1
+     *   brand-ink  on brand-tint   4.98:1   (active nav, selected row)
+     *   brand-ink  on sunken       4.80:1
      *   brand      vs live         2.09:1   (a button beside a live chip)
-     * --brand-tint is 14% of --brand over --surface, like the signal tints.
+     *   white on brand-strong      5.48:1   (the primary button)
+     *   ink-3 on surface / paper / sunken   5.40 / 5.00 / 4.73:1
      */
     --brand: #10b981;
     --brand-ink: #047857;
-    --brand-tint: #def5ed;
-    /* Text on a brand fill. Ink here; in dark it is the dark paper, because
-       the dark theme's ink is light and would fail on the same fill. */
-    --brand-fg: #171614;
+    --brand-tint: #e7f8f0;
+    /* Text on the bright brand fill. Ink here; in dark it is the dark paper,
+       because the dark theme's ink is light and would fail on the same fill. */
+    --brand-fg: #101828;
+    --brand-strong: #047857;
+    --brand-strong-hover: #065f46;
 
     /*
      * Signal tints — 14% of the signal over --surface, precomputed rather
@@ -113,33 +125,38 @@
     --live-deep: #0c644a;
 
     /* --- geometry ------------------------------------------------------- */
-    --radius-card: 6px;
-    --radius-control: 4px;
-    --row-height: 40px;
+    --radius-card: 12px;
+    --radius-control: 8px;
+    --row-height: 44px;
+
+    /* --- elevation ------------------------------------------------------ */
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+    --shadow-raised: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+    --shadow-pop: 0 12px 32px -4px rgba(16, 24, 40, 0.14), 0 4px 8px -4px rgba(16, 24, 40, 0.06);
 
     /* ------------------------------------------------------------------ *
      * shadcn compatibility aliases — derived, do not use in new code
      * ------------------------------------------------------------------ */
-    --background: 40 27% 98%; /* paper */
-    --foreground: 40 7% 8%; /* ink */
+    --background: 220 18% 97%; /* paper */
+    --foreground: 220 43% 11%; /* ink */
     --card: 0 0% 100%; /* surface */
-    --card-foreground: 40 7% 8%; /* ink */
+    --card-foreground: 220 43% 11%; /* ink */
     --popover: 0 0% 100%; /* surface */
-    --popover-foreground: 40 7% 8%; /* ink */
+    --popover-foreground: 220 43% 11%; /* ink */
     --primary: 160 84% 39%; /* brand */
-    --primary-foreground: 40 7% 8%; /* ink — white on brand is 2.54:1 */
-    --secondary: 43 23% 94%; /* sunken */
-    --secondary-foreground: 40 7% 8%; /* ink */
-    --muted: 43 23% 94%; /* sunken */
-    --muted-foreground: 43 6% 51%; /* ink-3 */
-    --accent: 43 23% 94%; /* sunken */
-    --accent-foreground: 40 7% 8%; /* ink */
+    --primary-foreground: 220 43% 11%; /* ink — white on brand is 2.54:1 */
+    --secondary: 216 17% 94%; /* sunken */
+    --secondary-foreground: 220 43% 11%; /* ink */
+    --muted: 216 17% 94%; /* sunken */
+    --muted-foreground: 216 14% 43%; /* ink-3 */
+    --accent: 216 17% 94%; /* sunken */
+    --accent-foreground: 220 43% 11%; /* ink */
     --destructive: 12 58% 42%; /* dropped */
     --destructive-foreground: 0 0% 100%; /* surface */
-    --border: 40 18% 87%; /* rule */
-    --input: 40 18% 87%; /* rule */
+    --border: 218 17% 91%; /* rule */
+    --input: 218 17% 91%; /* rule */
     --ring: 163 94% 24%; /* brand-ink */
-    --radius: 0.375rem; /* 6px card; md=4px control, sm=2px */
+    --radius: 0.75rem; /* 12px card; md=10px, sm=8px */
     --chart-1: 162 78% 27%; /* live */
     --chart-2: 214 68% 33%; /* money */
     --chart-3: 35 77% 44%; /* ringing */
@@ -284,62 +301,74 @@
 
 /* ==========================================================================
    TYPE SCALE
-   Eight steps, three faces, from the brief. Each class sets family, size,
-   line-height and weight together — a step is not a size, it is all four.
+   Inter for everything, page titles included. Every figure — KPIs, hero
+   numbers, rates, currency, counts — is Inter with tabular numerals, so a
+   column of numbers lines up without a monospace face. IBM Plex Mono is kept
+   for the things that are read character by character: phone numbers, call
+   IDs, API keys, webhook URLs and table timestamps (.t-data, .t-code).
+   Each class sets size, line-height, weight and tracking together — a step is
+   not a size, it is all four.
    ========================================================================== */
 
 @layer components {
   .t-hero {
-    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-    font-size: 34px;
-    line-height: 1.05;
-    font-weight: 500;
-    letter-spacing: -0.015em;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 36px;
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .t-figure {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 26px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
   }
   .t-title {
-    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-    font-size: 20px;
-    line-height: 1.2;
-    font-weight: 500;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 22px;
+    line-height: 1.25;
+    font-weight: 600;
     letter-spacing: -0.01em;
   }
   .t-section {
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-    font-size: 15px;
-    line-height: 1.3;
-    font-weight: 500;
+    font-size: 16px;
+    line-height: 1.35;
+    font-weight: 600;
   }
   .t-body {
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.55;
     font-weight: 400;
   }
   .t-label {
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.3;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
   .t-meta {
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
     font-size: 12px;
-    line-height: 1.4;
+    line-height: 1.45;
     font-weight: 400;
   }
-  .t-figure {
-    font-family: var(--font-mono), ui-monospace, monospace;
-    font-size: 19px;
-    line-height: 1;
-    font-weight: 500;
-    font-feature-settings:
-      'tnum' 1,
-      'zero' 1,
-      'ss02' 1;
-    font-variant-numeric: tabular-nums slashed-zero;
+  /* A number in running text or a table cell: Inter, tabular. */
+  .t-num {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
   }
+  /* Phone numbers, IDs, keys, URLs and timestamps: Plex Mono. */
   .t-data {
     font-family: var(--font-mono), ui-monospace, monospace;
     font-size: 13px;
@@ -351,6 +380,151 @@
       'ss02' 1;
     font-variant-numeric: tabular-nums slashed-zero;
   }
+
+  /*
+   * The page canvas: every in-scope page's outermost wrapper. Paper ground,
+   * 24px gutters (32px from 1440px), 24px between sections.
+   */
+  .page-canvas {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+    min-width: 0;
+    padding: 24px;
+    background-color: var(--paper);
+    color: var(--ink);
+  }
+  @media (max-width: 639px) {
+    .page-canvas {
+      padding: 16px;
+      gap: 20px;
+    }
+  }
+  @media (min-width: 1440px) {
+    .page-canvas {
+      padding: 32px;
+    }
+  }
+
+  /*
+   * Tooltip. The text lives in `data-tooltip` and is painted by ::after, so it
+   * adds no text node to the document: it never changes an accessible name and
+   * never duplicates a string a test looks for. Shown on hover and on keyboard
+   * focus inside the wrapper.
+   */
+  .ne-tooltip {
+    position: relative;
+    display: inline-flex;
+  }
+  .ne-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 6px);
+    z-index: 60;
+    width: max-content;
+    max-width: 320px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--surface);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.45;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: pre-line;
+    text-align: left;
+    box-shadow: var(--shadow-pop);
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -2px);
+    transition:
+      opacity 150ms ease-out,
+      transform 150ms ease-out;
+  }
+  .ne-tooltip[data-tooltip-side='top']::after {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
+  .ne-tooltip[data-tooltip-align='end']::after {
+    left: auto;
+    right: 0;
+    transform: translate(0, -2px);
+  }
+  .ne-tooltip:hover::after,
+  .ne-tooltip:focus-within::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .ne-tooltip[data-tooltip-align='end']:hover::after,
+  .ne-tooltip[data-tooltip-align='end']:focus-within::after {
+    transform: translate(0, 0);
+  }
+
+  /* Skeleton shimmer: a soft band across the sunken ground. */
+  .ne-shimmer {
+    background-color: var(--sunken);
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: ne-shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes ne-shimmer {
+    0% {
+      background-position: 150% 0;
+    }
+    100% {
+      background-position: -50% 0;
+    }
+  }
+
+  /* A strip that scrolls sideways fades out at the edge that overflows. */
+  .ne-fade-end {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  .ne-fade-start {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+  }
+  .ne-fade-both {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 24px,
+      #000 calc(100% - 24px),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 24px,
+      #000 calc(100% - 24px),
+      transparent
+    );
+  }
+}
+
+/* The one motion rule: nothing moves for someone who has asked it not to. */
+@media (prefers-reduced-motion: reduce) {
+  .ne-shimmer {
+    animation: none;
+    background-image: none;
+  }
+  .ne-tooltip::after {
+    transition: none;
+  }
+  .ne-motion {
+    transition: none !important;
+  }
 }
 
 @layer utilities {
@@ -359,13 +533,10 @@
    * already; this is for the cases that need the figures without the step.
    */
   .tabular {
-    font-feature-settings:
-      'tnum' 1,
-      'zero' 1;
-    font-variant-numeric: tabular-nums slashed-zero;
+    font-variant-numeric: tabular-nums;
   }
 
-  /* Hairline separators. Never a shadow to divide two flat surfaces. */
+  /* Hairline separators. */
   .rule-t {
     border-top: 1px solid var(--rule);
   }
@@ -416,11 +587,14 @@
 @media print {
   :root {
     --paper: #ffffff;
-    --sunken: #f3f1ec;
+    --sunken: #eef0f3;
+    --shadow-card: none;
+    --shadow-raised: none;
+    --shadow-pop: none;
   }
   body {
     background: #ffffff;
-    color: #171614;
+    color: #101828;
   }
   [data-print='hide'],
   nav,

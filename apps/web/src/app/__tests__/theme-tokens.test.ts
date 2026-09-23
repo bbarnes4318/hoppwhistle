@@ -92,9 +92,9 @@ function hueDistance(a: string, b: string): number {
 
 describe('the document is light by default', () => {
   it(':root carries the light palette', () => {
-    expect(light.paper).toBe('#fbfaf8');
+    expect(light.paper).toBe('#f5f6f8');
     expect(light.surface).toBe('#ffffff');
-    expect(light.ink).toBe('#171614');
+    expect(light.ink).toBe('#101828');
     expect(luminance(light.paper)).toBeGreaterThan(0.9);
     expect(luminance(light.ink)).toBeLessThan(0.02);
   });
@@ -147,6 +147,7 @@ describe('the brand accent', () => {
       );
     }
     expect(contrast('#ffffff', light.brand)).toBeLessThan(4.5);
+    expect(contrast('#ffffff', light['brand-strong'])).toBeGreaterThanOrEqual(4.5);
   });
 
   it('states its ratios in the stylesheet, to the value actually computed', () => {
