@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { clearConsoleExit } from '@/lib/console-exit';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
@@ -245,6 +246,13 @@ export default function AuthPage() {
    * this cannot strand someone who is holding a valid token.
    */
   const { refetch: refreshSession } = useAuth();
+  /*
+   * The platform context is mounted beside the session provider and has the
+   * same once-per-page-load problem. Left alone it kept the PREVIOUS session's
+   * answer: an agency owner signing in after a NetEnroll operator on the same
+   * tab got the platform sidebar and the agency/role switchers until a reload.
+   */
+  const { refetch: refreshPlatformContext } = usePlatformContext();
 
   const enter = useCallback(
     async (auth: AuthResponse) => {
@@ -252,10 +260,10 @@ export default function AuthPage() {
       // A fresh sign-in is a fresh start: an agent lands in the console again
       // even if the previous session on this tab had stepped out of it.
       clearConsoleExit();
-      await refreshSession();
+      await Promise.all([refreshSession(), refreshPlatformContext()]);
       router.push(getRedirectPath(auth.user.roles));
     },
-    [refreshSession, router]
+    [refreshSession, refreshPlatformContext, router]
   );
 
   /**

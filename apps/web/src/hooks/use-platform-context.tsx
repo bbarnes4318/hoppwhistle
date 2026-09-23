@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { apiClient, payload } from '@/lib/api';
@@ -104,6 +104,8 @@ export interface PlatformContextState {
   leaveTenant: () => Promise<void>;
   /** Start previewing as a role, or pass null to stop. Reloads on success. */
   setPreviewRole: (role: PreviewRole | null) => Promise<void>;
+  /** Re-ask the server from scratch. Called on sign-in; resolves when settled. */
+  refetch: () => Promise<void>;
   error: string | null;
 }
 
@@ -117,70 +119,102 @@ function usePlatformContextState(): PlatformContextState {
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  /*
+   * Bumped on every (re)load. An answer that arrives for an older generation
+   * belongs to a session that is no longer the one on screen and is dropped.
+   */
+  const generation = useRef(0);
 
-    void (async () => {
-      // No token means nobody is signed in; asking would only produce a 401 the
-      // client would act on.
-      if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
-        if (!cancelled) setLoading(false);
-        return;
+  /*
+   * Ask the server who this session is, from scratch.
+   *
+   * ── Why this is callable and not only a mount effect ─────────────────────
+   *
+   * The provider lives in the root layout, so it mounts once per page load and
+   * sign-in is a client-side navigation that does not remount it. When a
+   * NetEnroll operator signed out and an agency owner signed in on the same tab,
+   * this state still said `isPlatformAdmin: true` from the operator's session.
+   * `useAuth` ORs that into its own flag, so the agency owner got the platform
+   * sidebar and the agency/role switchers until they reloaded the page. The
+   * login page now awaits this alongside the auth refetch, and the state is
+   * reset to "unknown" first so nothing from the previous session renders
+   * while the new answer is in flight.
+   */
+  const refetch = useCallback(async () => {
+    const mine = ++generation.current;
+    const stale = () => generation.current !== mine;
+
+    setIsPlatformAdmin(false);
+    setActingTenant(null);
+    setPreviewRoleState(null);
+    setReadOnly(false);
+    setTenants([]);
+    setError(null);
+    setLoading(true);
+
+    // No token means nobody is signed in; asking would only produce a 401 the
+    // client would act on.
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * Retried, because a failed answer here is read as "not staff".
+     *
+     * When this request failed -- and it did, when ten duplicate auth
+     * requests exhausted the API's connection pool -- `isPlatformAdmin`
+     * stayed false, so a NetEnroll operator with no agency was handed the
+     * one-agency delivery panel, which polled two agency-scoped endpoints
+     * that could only answer 409 for as long as the tab was open. One
+     * transient 500 became a page of refusals.
+     *
+     * Three attempts over about two seconds, which covers a pool blip
+     * without leaving anybody staring at a blank shell. If all three fail we
+     * stop asking and settle as "not staff": that is the right default for
+     * the overwhelming majority of users, who are not, and the switcher's
+     * absence is a visible symptom rather than a silent one.
+     */
+    const attempts = [0, 500, 1500];
+    for (const wait of attempts) {
+      if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+      if (stale()) return;
+
+      const response = await apiClient.get<
+        Envelope<{
+          isPlatformAdmin: boolean;
+          actingTenant: ActingTenant | null;
+          previewRole: PreviewRole | null;
+          readOnly: boolean;
+        }>
+      >('/api/v1/platform/context');
+
+      if (stale()) return;
+
+      const context = payload(response);
+      if (context) {
+        setIsPlatformAdmin(context.isPlatformAdmin === true);
+        setActingTenant(context.actingTenant ?? null);
+        setPreviewRoleState(context.previewRole ?? null);
+        setReadOnly(context.readOnly === true);
+        break;
       }
 
-      /*
-       * Retried, because a failed answer here is read as "not staff".
-       *
-       * When this request failed -- and it did, when ten duplicate auth
-       * requests exhausted the API's connection pool -- `isPlatformAdmin`
-       * stayed false, so a NetEnroll operator with no agency was handed the
-       * one-agency delivery panel, which polled two agency-scoped endpoints
-       * that could only answer 409 for as long as the tab was open. One
-       * transient 500 became a page of refusals.
-       *
-       * Three attempts over about two seconds, which covers a pool blip
-       * without leaving anybody staring at a blank shell. If all three fail we
-       * stop asking and settle as "not staff": that is the right default for
-       * the overwhelming majority of users, who are not, and the switcher's
-       * absence is a visible symptom rather than a silent one.
-       */
-      const attempts = [0, 500, 1500];
-      for (const wait of attempts) {
-        if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
-        if (cancelled) return;
+      // A 401 is a dead session, not a busy server. Asking twice more would
+      // only add two more of them to the console.
+      if (response.error?.code === 'UNAUTHORIZED') break;
+    }
 
-        const response = await apiClient.get<
-          Envelope<{
-            isPlatformAdmin: boolean;
-            actingTenant: ActingTenant | null;
-            previewRole: PreviewRole | null;
-            readOnly: boolean;
-          }>
-        >('/api/v1/platform/context');
-
-        if (cancelled) return;
-
-        const context = payload(response);
-        if (context) {
-          setIsPlatformAdmin(context.isPlatformAdmin === true);
-          setActingTenant(context.actingTenant ?? null);
-          setPreviewRoleState(context.previewRole ?? null);
-          setReadOnly(context.readOnly === true);
-          break;
-        }
-
-        // A 401 is a dead session, not a busy server. Asking twice more would
-        // only add two more of them to the console.
-        if (response.error?.code === 'UNAUTHORIZED') break;
-      }
-
-      if (!cancelled) setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    if (!stale()) setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void refetch();
+    // Unmounting invalidates whatever is still in flight.
+    return () => {
+      generation.current += 1;
+    };
+  }, [refetch]);
 
   const loadTenants = useCallback(async () => {
     setTenantsLoading(true);
@@ -256,6 +290,7 @@ function usePlatformContextState(): PlatformContextState {
       enterTenant,
       leaveTenant,
       setPreviewRole,
+      refetch,
       error,
     }),
     [
@@ -270,6 +305,7 @@ function usePlatformContextState(): PlatformContextState {
       enterTenant,
       leaveTenant,
       setPreviewRole,
+      refetch,
       error,
     ]
   );
@@ -312,5 +348,6 @@ const OUTSIDE_PROVIDER: PlatformContextState = {
   enterTenant: async () => {},
   leaveTenant: async () => {},
   setPreviewRole: async () => {},
+  refetch: async () => {},
   error: null,
 };

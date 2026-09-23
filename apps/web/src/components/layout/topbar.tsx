@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Bell, LogOut, Search, User } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -38,7 +38,6 @@ import { pageTitleFor } from './page-title';
  */
 export function Topbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
@@ -58,10 +57,17 @@ export function Topbar() {
     setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
   }, []);
 
+  /*
+   * A full page load, not a client-side replace. The session and platform
+   * providers live in the root layout and hold who the LAST person was; a
+   * router navigation keeps them mounted, so the next person to sign in on this
+   * tab inherited the previous one's staff flag and saw the platform nav. A
+   * real navigation discards every bit of in-memory state with the session.
+   */
   const signOut = React.useCallback(() => {
     apiClient.clearToken();
-    router.replace('/login');
-  }, [router]);
+    window.location.replace('/login');
+  }, []);
 
   const initials =
     [user?.firstName, user?.lastName]
