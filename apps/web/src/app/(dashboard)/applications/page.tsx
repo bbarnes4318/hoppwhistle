@@ -1,17 +1,20 @@
 'use client';
 
-import { Download, Loader2 } from 'lucide-react';
+import { Building2, Calculator, DollarSign, Download, FileText, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Ledger, count, dollars } from '@/components/delivery/ledger';
 import {
-  Figure,
-  FigureRow,
-  Ledger,
-  SectionRule,
-  count,
-  dollars,
-} from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
+import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -179,7 +182,7 @@ function submitted(value: string | null): string {
 }
 
 const INPUT =
-  'h-8 rounded-control border border-rule bg-surface px-2 t-meta text-ink ' +
+  'h-9 w-full min-w-0 rounded-control border border-rule bg-surface px-3 text-sm text-ink ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export default function ApplicationsPage() {
@@ -257,206 +260,233 @@ export default function ApplicationsPage() {
   }, [rows, range.from, range.to]);
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Every application the agency submitted, however it was recorded" />
-
-      {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
-      <FigureRow className="pt-1">
-        <Figure
-          label="Applications"
-          value={count(summary?.count)}
-          size="hero"
-          sub={`${range.from} to ${range.to}`}
-        />
-        <Figure
-          label="Annualized premium"
-          value={dollars(summary?.totalAnnualizedPremium)}
-          size="figure"
-          tone="money"
-          sub="total for the range"
-        />
-        <Figure
-          label="Average premium"
-          value={dollars(summary?.averageAnnualizedPremium)}
-          size="figure"
-          sub="annualized, per application"
-        />
-        <Figure
-          label="Carriers"
-          value={count(summary?.byCarrier.length)}
-          size="figure"
-          sub="written in the range"
-        />
-      </FigureRow>
-
-      <SectionRule
-        note={
-          <button
+    <div className="page-canvas">
+      <PageHeader
+        description="Every application the agency submitted, however it was recorded"
+        actions={
+          <Button
             type="button"
+            variant="outline"
             onClick={exportCsv}
             disabled={rows.length === 0}
-            className="flex items-center gap-1.5 rounded-control border border-rule px-2 py-1 t-meta text-ink-2 hover:border-rule-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download aria-hidden className="h-3.5 w-3.5" />
             Export CSV
-          </button>
+          </Button>
         }
-      >
-        Filters
-      </SectionRule>
+      />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="t-label text-ink-3">From</span>
-          <input
-            type="date"
-            value={range.from}
-            onChange={e => setRange(prev => ({ ...prev, from: e.target.value }))}
-            className={INPUT}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="t-label text-ink-3">To</span>
-          <input
-            type="date"
-            value={range.to}
-            onChange={e => setRange(prev => ({ ...prev, to: e.target.value }))}
-            className={INPUT}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="t-label text-ink-3">Carrier</span>
-          <select value={carrier} onChange={e => setCarrier(e.target.value)} className={INPUT}>
-            <option value="">All carriers</option>
-            {carriers.map(name => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {showAgentFilter && (
-          <label className="flex flex-col gap-1">
-            <span className="t-label text-ink-3">Agent</span>
-            <select value={agentId} onChange={e => setAgentId(e.target.value)} className={INPUT}>
-              <option value="">All agents</option>
-              {agents.map(agent => (
-                <option key={agent.agentId ?? 'unattributed'} value={agent.agentId ?? ''}>
-                  {agent.agentName}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            void load();
-          }}
-          disabled={loading}
-          className="h-8 rounded-control border border-rule bg-surface px-3 t-meta font-medium text-ink hover:border-rule-strong hover:bg-sunken disabled:opacity-50"
-        >
-          {loading ? 'Loading…' : 'Apply'}
-        </button>
+      {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile
+          label="Applications"
+          figure={count(summary?.count)}
+          data-figure-label="Applications"
+          data-figure-value={count(summary?.count)}
+          icon={FileText}
+          sub={`${range.from} to ${range.to}`}
+        />
+        <StatTile
+          label="Annualized premium"
+          figure={dollars(summary?.totalAnnualizedPremium)}
+          data-figure-label="Annualized premium"
+          data-figure-value={dollars(summary?.totalAnnualizedPremium)}
+          icon={DollarSign}
+          tone="money"
+          sub="total for the range"
+        />
+        <StatTile
+          label="Average premium"
+          figure={dollars(summary?.averageAnnualizedPremium)}
+          data-figure-label="Average premium"
+          data-figure-value={dollars(summary?.averageAnnualizedPremium)}
+          icon={Calculator}
+          sub="annualized, per application"
+        />
+        <StatTile
+          label="Carriers"
+          figure={count(summary?.byCarrier.length)}
+          data-figure-label="Carriers"
+          data-figure-value={count(summary?.byCarrier.length)}
+          icon={Building2}
+          sub="written in the range"
+        />
       </div>
 
-      {error && (
-        <p role="alert" className="t-body text-dropped-ink">
-          {error}
-        </p>
-      )}
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Filters</PanelTitle>
+        </PanelHeader>
+        <PanelBody>
+          <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="t-label text-ink-3">From</span>
+              <input
+                type="date"
+                value={range.from}
+                onChange={e => setRange(prev => ({ ...prev, from: e.target.value }))}
+                className={INPUT}
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="t-label text-ink-3">To</span>
+              <input
+                type="date"
+                value={range.to}
+                onChange={e => setRange(prev => ({ ...prev, to: e.target.value }))}
+                className={INPUT}
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="t-label text-ink-3">Carrier</span>
+              <select value={carrier} onChange={e => setCarrier(e.target.value)} className={INPUT}>
+                <option value="">All carriers</option>
+                {carriers.map(name => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {showAgentFilter && (
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="t-label text-ink-3">Agent</span>
+                <select value={agentId} onChange={e => setAgentId(e.target.value)} className={INPUT}>
+                  <option value="">All agents</option>
+                  {agents.map(agent => (
+                    <option key={agent.agentId ?? 'unattributed'} value={agent.agentId ?? ''}>
+                      {agent.agentName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div>
+              <Button
+                type="button"
+                onClick={() => {
+                  void load();
+                }}
+                disabled={loading}
+              >
+                {loading ? 'Loading…' : 'Apply'}
+              </Button>
+            </div>
+          </div>
+        </PanelBody>
+      </Panel>
 
-      <SectionRule note={`${count(rows.length)} shown`}>Applications</SectionRule>
+      {error && <Notice tone="error">{error}</Notice>}
 
-      {loading && rows.length === 0 ? (
-        <div className="flex items-center gap-2 py-8 t-body text-ink-3">
-          <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
-          Loading applications…
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="py-8 t-body text-ink-3">No applications submitted in this range.</p>
-      ) : (
-        <div className="overflow-auto rounded-card border border-rule bg-surface">
-          <Ledger>
-            <thead>
-              <tr>
-                <th scope="col">Submitted</th>
-                <th scope="col">Carrier</th>
-                <th scope="col">Plan</th>
-                <th scope="col">Applicant</th>
-                <th scope="col">Application no.</th>
-                <th scope="col" className="num">
-                  Face
-                </th>
-                <th scope="col" className="num">
-                  Premium
-                </th>
-                <th scope="col" className="num" title="The premium as written, annualized">
-                  Annualized
-                </th>
-                <th scope="col">Agent</th>
-                <th scope="col">Entered</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => {
-                const voided = row.voidedAt !== null;
-                return (
-                  <tr
-                    key={row.id}
-                    className={cn('hover:bg-sunken', voided && 'line-through opacity-60')}
-                    title={
-                      voided
-                        ? `Voided${row.voidReason ? `: ${row.voidReason}` : ''}. Excluded from the ` +
-                          'totals above and from the closing percentage. The credit it consumed ' +
-                          'was not reversed.'
-                        : undefined
-                    }
-                  >
-                    <td className="whitespace-nowrap !text-ink-2">{submitted(row.submittedAt)}</td>
-                    <td className="font-medium text-ink">{row.carrier}</td>
-                    <td className="!text-ink-2">
-                      {row.planType ? (PLAN_LABELS[row.planType] ?? row.planType) : '—'}
-                    </td>
-                    <td className="!text-ink-2">{row.applicant}</td>
-                    <td className="!text-ink-2">{row.carrierApplicationNumber || '—'}</td>
-                    <td className="num">
-                      {row.faceAmount === null ? '—' : `$${row.faceAmount.toLocaleString()}`}
-                    </td>
-                    <td className="num !text-ink-2" title={MODE_LABELS[row.paymentMode] ?? ''}>
-                      {dollars(row.modalPremium)}
-                    </td>
-                    <td className="num">{dollars(row.annualizedPremium)}</td>
-                    <td className="max-w-[12rem] truncate !text-ink-2">{row.agentName ?? '—'}</td>
-                    <td>
-                      {/*
-                        A label, and only a label. Both paths count identically
-                        in the closing percentage; this says which one to go and
-                        check when a number does not match a statement.
-                      */}
-                      <span
+      <Panel className="min-w-0">
+        <PanelHeader action={<span className="t-meta tabular-nums text-ink-3">{`${count(rows.length)} shown`}</span>}>
+          <PanelTitle>Applications</PanelTitle>
+        </PanelHeader>
+        <PanelBody flush>
+          {loading && rows.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-12 t-body text-ink-3">
+              <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
+              Loading applications…
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              headline="No applications submitted in this range."
+              body="Applications appear here as agents enter them at the end of a call."
+              icon={FileText}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <Ledger
+                className={cn(
+                  '[&_thead_th]:h-10 [&_thead_th]:border-rule [&_thead_th]:bg-sunken [&_thead_th]:px-3',
+                  '[&_tbody_td]:h-11 [&_tbody_td]:px-3',
+                  '[&_td.num]:font-sans [&_td.num]:text-[13px] [&_td.num]:tabular-nums'
+                )}
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">Submitted</th>
+                    <th scope="col">Carrier</th>
+                    <th scope="col">Plan</th>
+                    <th scope="col">Applicant</th>
+                    <th scope="col">Application no.</th>
+                    <th scope="col" className="num">
+                      Face
+                    </th>
+                    <th scope="col" className="num">
+                      Premium
+                    </th>
+                    <th scope="col" className="num" title="The premium as written, annualized">
+                      Annualized
+                    </th>
+                    <th scope="col">Agent</th>
+                    <th scope="col">Entered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(row => {
+                    const voided = row.voidedAt !== null;
+                    return (
+                      <tr
+                        key={row.id}
                         className={cn(
-                          'rounded px-1.5 py-0.5 t-meta uppercase tracking-wide',
-                          row.source === 'AGENT_ENTRY'
-                            ? 'bg-sunken text-ink-2'
-                            : 'bg-brand-tint text-brand-ink'
+                          'transition-colors duration-150 ease-out hover:bg-sunken',
+                          voided && 'line-through opacity-60'
                         )}
                         title={
-                          row.source === 'AGENT_ENTRY'
-                            ? 'Logged by the agent after they wrote the business'
-                            : 'Submitted by the carrier automation'
+                          voided
+                            ? `Voided${row.voidReason ? `: ${row.voidReason}` : ''}. Excluded from the ` +
+                              'totals above and from the closing percentage. The credit it consumed ' +
+                              'was not reversed.'
+                            : undefined
                         }
                       >
-                        {row.source === 'AGENT_ENTRY' ? 'Agent' : 'Automation'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Ledger>
-        </div>
-      )}
-    </CompactPageShell>
+                        <td className="t-data whitespace-nowrap !text-ink-2">{submitted(row.submittedAt)}</td>
+                        <td className="font-medium text-ink">{row.carrier}</td>
+                        <td className="!text-ink-2">
+                          {row.planType ? (PLAN_LABELS[row.planType] ?? row.planType) : '—'}
+                        </td>
+                        <td className="!text-ink-2">{row.applicant}</td>
+                        <td className="t-data !text-ink-2">{row.carrierApplicationNumber || '—'}</td>
+                        <td className="num">
+                          {row.faceAmount === null ? '—' : `$${row.faceAmount.toLocaleString()}`}
+                        </td>
+                        <td className="num !text-ink-2" title={MODE_LABELS[row.paymentMode] ?? ''}>
+                          {dollars(row.modalPremium)}
+                        </td>
+                        <td className="num">{dollars(row.annualizedPremium)}</td>
+                        <td className="max-w-[12rem] truncate !text-ink-2">{row.agentName ?? '—'}</td>
+                        <td>
+                          {/*
+                            A label, and only a label. Both paths count identically
+                            in the closing percentage; this says which one to go and
+                            check when a number does not match a statement.
+                          */}
+                          <span
+                            className={cn(
+                              'inline-flex h-[22px] items-center rounded-full px-2 t-meta font-medium',
+                              row.source === 'AGENT_ENTRY'
+                                ? 'bg-sunken text-ink-2'
+                                : 'bg-brand-tint text-brand-ink'
+                            )}
+                            title={
+                              row.source === 'AGENT_ENTRY'
+                                ? 'Logged by the agent after they wrote the business'
+                                : 'Submitted by the carrier automation'
+                            }
+                          >
+                            {row.source === 'AGENT_ENTRY' ? 'Agent' : 'Automation'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Ledger>
+            </div>
+          )}
+        </PanelBody>
+      </Panel>
+    </div>
   );
 }

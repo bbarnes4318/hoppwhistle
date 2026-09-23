@@ -1,19 +1,19 @@
 'use client';
 
-import { AlertTriangle, Download, Loader2, RefreshCw } from 'lucide-react';
+import { Download, Loader2, RefreshCw, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { count, dollars, duration, pct } from '@/components/delivery/ledger';
 import {
-  Figure,
-  FigureRow,
+  EmptyState,
   Notice,
-  SectionRule,
-  count,
-  dollars,
-  duration,
-  pct,
-} from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Board, Records, ScoringNote, YourStanding } from '@/components/leaderboard/board';
 import {
   PeriodPicker,
@@ -168,46 +168,45 @@ export default function LeaderboardPage(): JSX.Element {
 
   if (withoutAgency) {
     return (
-      <CompactPageShell>
-        <CompactPageHeader subtitle="Select an agency to see its board." />
-      </CompactPageShell>
+      <div className="page-canvas">
+        <PageHeader description="Select an agency to see its board." />
+      </div>
     );
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        subtitle={
+    <div className="page-canvas">
+      <PageHeader
+        description={
           data
             ? `${data.period.label} · ${data.rows.filter(row => row.rank !== null).length} ranked`
             : 'Who is closing, who is dialling, and who is on a run'
         }
-      >
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refresh()}
-            disabled={loading || !sendable}
-          >
-            <RefreshCw className={cn('mr-2 h-3.5 w-3.5', loading && 'animate-spin')} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void exportCsv()}
-            disabled={exporting || !sendable || !data}
-          >
-            {exporting ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Download className="mr-2 h-3.5 w-3.5" />
-            )}
-            CSV
-          </Button>
-        </div>
-      </CompactPageHeader>
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => refresh()}
+              disabled={loading || !sendable}
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void exportCsv()}
+              disabled={exporting || !sendable || !data}
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              CSV
+            </Button>
+          </>
+        }
+      />
 
       <PeriodPicker
         period={period}
@@ -222,9 +221,7 @@ export default function LeaderboardPage(): JSX.Element {
         }}
       />
 
-      {error ? (
-        <Notice tone="dropped" icon={<AlertTriangle className="h-4 w-4" />} title={error} />
-      ) : null}
+      {error ? <Notice tone="error" title={error} /> : null}
 
       {loading && !data ? (
         <div className="flex items-center justify-center py-16 t-body text-ink-3">
@@ -238,84 +235,115 @@ export default function LeaderboardPage(): JSX.Element {
           <Podium rows={data.rows} />
 
           {/* ── The agency, for the same period ──────────────────────────── */}
-          <SectionRule
-            note={
-              data.period.complete
-                ? `against ${data.previousPeriod.label.toLowerCase()}`
-                : 'period still open'
-            }
-          >
-            The agency
-          </SectionRule>
-          <FigureRow>
-            <Figure
-              label="Conversion"
-              value={pct(data.agency.conversionPct, 1)}
-              size="hero"
-              tone="money"
-              sub={`${count(data.agency.applications)} applications from ${count(
-                data.agency.uniqueInboundCallers
-              )} unique callers`}
-              title="Applications as a share of UNIQUE inbound callers. A caller who rings back four times is one opportunity, not four."
-            />
-            <Figure
-              label="Closing"
-              value={pct(data.agency.closingPct, 1)}
-              size="quiet"
-              sub="of every delivered call — the priced figure"
-              title="Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
-            />
-            <Figure
-              label="Inbound calls"
-              value={count(data.agency.inboundCalls)}
-              sub={
-                data.agencyChange
-                  ? `${signed(data.agencyChange.inboundCalls)} vs ${data.previousPeriod.label.toLowerCase()}`
-                  : `${count(data.agency.uniqueInboundCallers)} unique callers`
-              }
-            />
-            <Figure
-              label="Outbound calls"
-              value={count(data.agency.outboundCalls)}
-              sub={`${count(data.agency.outboundConnected)} connected`}
-            />
-            <Figure
-              label="Applications"
-              value={count(data.agency.applications)}
-              sub={
-                data.agencyChange
-                  ? `${signed(data.agencyChange.applications)} vs ${data.previousPeriod.label.toLowerCase()}`
-                  : undefined
-              }
-            />
-            <Figure
-              label="Annualized premium"
-              value={dollars(data.agency.annualizedPremium)}
-              tone="money"
-            />
-            <Figure
-              label="Talk time"
-              value={duration(data.agency.talkTimeSeconds)}
-              sub="connected, on inbound calls"
-            />
-            <Figure
-              label="Applications / hour"
-              value={perHour === null ? '—' : perHour.toFixed(2)}
-              sub="across agents with recorded hours"
-            />
-          </FigureRow>
+          <section className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="t-section text-ink">The agency</h2>
+              <span className="t-meta text-ink-3">
+                {data.period.complete
+                  ? `against ${data.previousPeriod.label.toLowerCase()}`
+                  : 'period still open'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatTile
+                label="Conversion"
+                figure={pct(data.agency.conversionPct, 1)}
+                data-figure-label="Conversion"
+                data-figure-value={pct(data.agency.conversionPct, 1)}
+                tone="money"
+                sub={`${count(data.agency.applications)} applications from ${count(
+                  data.agency.uniqueInboundCallers
+                )} unique callers`}
+                title="Applications as a share of UNIQUE inbound callers. A caller who rings back four times is one opportunity, not four."
+              />
+              <StatTile
+                label="Closing"
+                figure={pct(data.agency.closingPct, 1)}
+                data-figure-label="Closing"
+                data-figure-value={pct(data.agency.closingPct, 1)}
+                sub="of every delivered call — the priced figure"
+                title="Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
+              />
+              <StatTile
+                label="Inbound calls"
+                figure={count(data.agency.inboundCalls)}
+                data-figure-label="Inbound calls"
+                data-figure-value={count(data.agency.inboundCalls)}
+                sub={
+                  data.agencyChange
+                    ? `${signed(data.agencyChange.inboundCalls)} vs ${data.previousPeriod.label.toLowerCase()}`
+                    : `${count(data.agency.uniqueInboundCallers)} unique callers`
+                }
+              />
+              <StatTile
+                label="Outbound calls"
+                figure={count(data.agency.outboundCalls)}
+                data-figure-label="Outbound calls"
+                data-figure-value={count(data.agency.outboundCalls)}
+                sub={`${count(data.agency.outboundConnected)} connected`}
+              />
+              <StatTile
+                label="Applications"
+                figure={count(data.agency.applications)}
+                data-figure-label="Applications"
+                data-figure-value={count(data.agency.applications)}
+                sub={
+                  data.agencyChange
+                    ? `${signed(data.agencyChange.applications)} vs ${data.previousPeriod.label.toLowerCase()}`
+                    : undefined
+                }
+              />
+              <StatTile
+                label="Annualized premium"
+                figure={dollars(data.agency.annualizedPremium)}
+                data-figure-label="Annualized premium"
+                data-figure-value={dollars(data.agency.annualizedPremium)}
+                tone="money"
+              />
+              <StatTile
+                label="Talk time"
+                figure={duration(data.agency.talkTimeSeconds)}
+                data-figure-label="Talk time"
+                data-figure-value={duration(data.agency.talkTimeSeconds)}
+                sub="connected, on inbound calls"
+              />
+              <StatTile
+                label="Applications / hour"
+                figure={perHour === null ? '—' : perHour.toFixed(2)}
+                data-figure-label="Applications / hour"
+                data-figure-value={perHour === null ? '—' : perHour.toFixed(2)}
+                sub="across agents with recorded hours"
+              />
+            </div>
+          </section>
 
           {/* ── The board ────────────────────────────────────────────────── */}
-          <SectionRule note={`${data.rows.filter(row => row.rank !== null).length} ranked`}>
-            The board
-          </SectionRule>
           <Records data={data} />
-          <Board data={data} viewerId={data.you?.userId ?? null} />
+          <Panel className="min-w-0">
+            <PanelHeader
+              action={
+                <span className="t-meta tabular-nums text-ink-3">{`${data.rows.filter(row => row.rank !== null).length} ranked`}</span>
+              }
+            >
+              <PanelTitle>The board</PanelTitle>
+            </PanelHeader>
+            <PanelBody flush className="overflow-x-auto">
+              {data.rows.length === 0 ? (
+                <EmptyState
+                  headline="No calls, dials or applications in this period."
+                  body="Rankings fill in as soon as your agents start taking calls."
+                  icon={Trophy}
+                />
+              ) : (
+                <Board data={data} viewerId={data.you?.userId ?? null} />
+              )}
+            </PanelBody>
+          </Panel>
 
           <ScoringNote data={data} />
         </>
       )}
-    </CompactPageShell>
+    </div>
   );
 }
 
