@@ -514,6 +514,61 @@
 }
 
 /*
+ * The LiveStrip's figures fade at whichever edge overflows. Pure CSS: a
+ * scroll-driven animation moves two registered lengths with the scroll
+ * position, and when the row fits there is no scroll timeline, the animation
+ * does nothing, and neither edge fades. Browsers without scroll timelines get
+ * the scroll without the fade.
+ */
+@property --ne-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --ne-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes ne-edge-fade {
+  0% {
+    --ne-fade-start: 0px;
+    --ne-fade-end: 24px;
+  }
+  8%,
+  92% {
+    --ne-fade-start: 24px;
+    --ne-fade-end: 24px;
+  }
+  100% {
+    --ne-fade-start: 24px;
+    --ne-fade-end: 0px;
+  }
+}
+.ne-live-strip {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--ne-fade-start),
+    #000 calc(100% - var(--ne-fade-end)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--ne-fade-start),
+    #000 calc(100% - var(--ne-fade-end)),
+    transparent 100%
+  );
+}
+@supports (animation-timeline: scroll()) {
+  .ne-live-strip {
+    animation: ne-edge-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+
+/*
  * A card that is itself the control — a link or a role=button tile — lifts to
  * the raised shadow under the pointer.
  */

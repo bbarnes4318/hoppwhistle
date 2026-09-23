@@ -44,6 +44,33 @@ import {
  * is the whole reason the preview replaces rather than merges.
  */
 
+/*
+ * ── Exactly one active item ──────────────────────────────────────────────────
+ *
+ * `isItemActive` matches a page and everything under it, so on /delivery/team
+ * both Delivery and Team matched, and on /settings/users both Settings and
+ * Team Members did. Two highlighted items is no highlight at all. Of every
+ * item that matches, only the one with the LONGEST path is styled active —
+ * across all groups, so a parent in one group cannot share the highlight with
+ * its child in another. The drawer renders this same component, so the rule
+ * holds on mobile too.
+ */
+function activeHrefFor(pathname: string | null, groups: NavGroup[]): string | null {
+  let best: string | null = null;
+  let bestLength = -1;
+  for (const group of groups) {
+    for (const item of group.items) {
+      if (item.pending || !isItemActive(pathname, item.href)) continue;
+      const length = item.href.split('?')[0].length;
+      if (length > bestLength) {
+        best = item.href;
+        bestLength = length;
+      }
+    }
+  }
+  return best;
+}
+
 function isItemActive(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
   // Strip the query so /publisher/calls?hasRecording=true matches its page.
@@ -59,15 +86,13 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   if (item.pending) {
     return (
       <span
-        className="flex items-center gap-2 rounded-control px-2 py-1.5 t-body text-ink-3"
+        className="flex h-9 items-center gap-3 rounded-control px-3 text-sm font-medium text-ink-3"
         title={`${item.name} — not built yet`}
         aria-disabled="true"
       >
-        <Icon className="h-4 w-4 shrink-0 opacity-60" />
+        <Icon className="h-[18px] w-[18px] shrink-0 opacity-60" />
         <span className="truncate">{item.name}</span>
-        <span className="ml-auto t-meta shrink-0 rounded-control bg-sunken px-1 text-ink-3">
-          Soon
-        </span>
+        <span className="ml-auto t-meta shrink-0 rounded-full bg-sunken px-2 text-ink-3">Soon</span>
       </span>
     );
   }
@@ -78,13 +103,16 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       title={item.title}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-2 rounded-control px-2 py-1.5 t-body transition-colors',
+        'relative flex h-9 items-center gap-3 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out ne-motion',
+        '[@media(pointer:coarse)]:h-10',
         active
-          ? 'bg-brand-tint font-medium text-brand-ink'
+          ? 'bg-brand-tint text-brand-ink before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[3px] before:rounded-r-full before:bg-brand'
           : 'text-ink-2 hover:bg-sunken hover:text-ink'
       )}
     >
-      <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-brand-ink' : 'text-ink-3')} />
+      <Icon
+        className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-brand-ink' : 'text-ink-3')}
+      />
       <span className="truncate">{item.name}</span>
     </Link>
   );
@@ -111,7 +139,7 @@ function ResolvingNotice() {
 function UnreachableNotice() {
   const { refetch, error } = useAuth();
   return (
-    <div className="rounded-control border border-rule bg-sunken p-2 t-body text-ink-2">
+    <div className="mx-1 rounded-card border border-rule bg-sunken p-3 t-body text-ink-2">
       <p className="font-medium text-ink">Your menu could not load</p>
       <p className="mt-1 t-meta text-ink-3">
         {error ?? 'The server did not answer.'} You are still signed in.
@@ -119,7 +147,7 @@ function UnreachableNotice() {
       <button
         type="button"
         onClick={() => void refetch()}
-        className="mt-2 rounded-control border border-rule px-2 py-1 t-meta text-ink hover:bg-surface"
+        className="mt-2 rounded-control border border-rule-strong bg-surface px-3 py-1 t-meta font-medium text-ink shadow-card hover:bg-sunken"
       >
         Try again
       </button>
@@ -137,7 +165,7 @@ function UnreachableNotice() {
  */
 function NoRoleNotice() {
   return (
-    <div className="rounded-control border border-rule bg-sunken p-2 t-body text-ink-2">
+    <div className="mx-1 rounded-card border border-rule bg-sunken p-3 t-body text-ink-2">
       <p className="font-medium text-ink">No role assigned</p>
       <p className="mt-1 t-meta text-ink-3">
         Your account is active but has not been given a role yet. Ask your agency administrator to
@@ -147,10 +175,15 @@ function NoRoleNotice() {
   );
 }
 
-/** Role banner. Publishers and buyers should never be unsure whose data this is. */
+/**
+ * Role eyebrow. Publishers and buyers should never be unsure whose data this
+ * is. A line of text with a brand dot, not a box: boxed, it read as a
+ * disabled button.
+ */
 function PortalBadge({ label }: { label: string }) {
   return (
-    <div className="mb-2 rounded-control border border-rule bg-sunken px-2 py-1 text-center t-label text-ink-2">
+    <div className="mb-1 flex items-center gap-2 px-3 pb-2 pt-1 text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-brand-ink">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
       {label}
     </div>
   );
@@ -228,53 +261,58 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   ]);
 
   const drawer = variant === 'drawer';
+  const activeHref = activeHrefFor(pathname, groups);
 
   return (
     <div
       className={cn(
-        'flex h-full flex-col bg-surface',
-        drawer ? 'w-full' : 'w-52 shrink-0 border-r border-rule'
+        'flex h-full min-h-0 flex-col bg-surface',
+        drawer ? 'w-full' : 'sticky top-0 w-[248px] shrink-0 border-r border-rule'
       )}
     >
       {/* In the drawer the panel already has a header, so the brand row would
           be a second one. */}
       {drawer ? null : (
-        <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
+        <div className="flex h-16 shrink-0 items-center border-b border-rule px-5">
           <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
             {/* The whole lockup, tagline included: at 128px the
-                PAY-PER-APPLICATION line still reads. h-12 matches the topbar
+                PAY-PER-APPLICATION line still reads. h-16 matches the topbar
                 beside it (topbar.tsx), so the two bottom rules meet in a
-                single line across the top of the page -- the lockup is sized
-                to fit that, not the other way round. */}
+                single line across the top of the page. Only the nav below
+                scrolls; this block stays put. */}
             <Logo width={128} />
           </Link>
         </div>
       )}
 
       <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
-        {status === 'resolving' ? <ResolvingNotice /> : null}
-        {status === 'failed' ? <UnreachableNotice /> : null}
-        {hasResolvedNoRole ? <NoRoleNotice /> : null}
-        {/* Whose product this is, said at the top of the column. An agency
+        <div className="px-1 py-2">
+          {status === 'resolving' ? <ResolvingNotice /> : null}
+          {status === 'failed' ? <UnreachableNotice /> : null}
+          {hasResolvedNoRole ? <NoRoleNotice /> : null}
+          {/* Whose product this is, said at the top of the column. An agency
             principal gets one for the same reason a publisher does: the screen
             they are on is an agency's, not NetEnroll's. */}
-        {!isPlatformAdmin && hasFullAccess ? <PortalBadge label="Agency portal" /> : null}
-        {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
-        {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
-        {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
+          {!isPlatformAdmin && hasFullAccess ? <PortalBadge label="Agency portal" /> : null}
+          {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
+          {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
+          {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
 
-        {groups.map((group, gi) => (
-          <div key={group.label ?? `group-${gi}`} className={cn(gi > 0 && 'mt-4')}>
-            {group.label ? <h2 className="px-2 pb-1 t-label text-ink-3">{group.label}</h2> : null}
-            <ul className="space-y-0.5">
-              {group.items.map(item => (
-                <li key={`${item.name}-${item.href}`}>
-                  <NavLink item={item} active={isItemActive(pathname, item.href)} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+          {groups.map((group, gi) => (
+            <div key={group.label ?? `group-${gi}`} className={cn(gi > 0 && 'mt-5')}>
+              {group.label ? (
+                <h2 className="px-3 pb-1.5 t-label text-ink-3">{group.label}</h2>
+              ) : null}
+              <ul className="space-y-0.5">
+                {group.items.map(item => (
+                  <li key={`${item.name}-${item.href}`}>
+                    <NavLink item={item} active={item.href === activeHref} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </nav>
     </div>
   );

@@ -3,6 +3,7 @@
 import { WifiOff } from 'lucide-react';
 import * as React from 'react';
 
+import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,10 +22,15 @@ import { cn } from '@/lib/utils';
  *
  * It used to be four large cards across the full width, and it took forty-odd
  * pixels off the top of every page in the application to say very little. This
- * is a single dense row: a small uppercase label, the figure in the tabular
- * mono face at the reading size, and its denominator or caveat inline beside it
- * rather than on a third line. Legible from across a desk; it does not dominate
- * the page beneath it.
+ * is a single 56px row: a small uppercase label over the figure in Inter with
+ * tabular numerals, its denominator or caveat inline beside it rather than on a
+ * third line. Each figure is a free-width block between hairline dividers, so
+ * nothing is ever cut to an ellipsis; when the row is wider than the window it
+ * scrolls sideways and fades at the edge that overflows.
+ *
+ * The date, timezone, polling and connection state collapse into one status
+ * pill at the right. The pill says Live / the feed state and the time of the
+ * last update; the full original wording is its tooltip.
  *
  * ── An absent figure is an em dash and an explanation ────────────────────────
  *
@@ -147,7 +153,7 @@ function LiveValue({
     <span className="inline-flex items-baseline gap-1">
       <span
         className={cn(
-          't-figure tabular transition-colors',
+          'text-[16px] font-semibold leading-tight tabular-nums transition-colors',
           unavailable ? 'text-ink-3' : flash ? 'text-live' : TONE_CLASS[tone]
         )}
         style={flash ? { transitionDuration: '600ms' } : undefined}
@@ -187,76 +193,110 @@ export function LiveStrip({
 
   const stale = connection !== 'live';
 
+  // The tail, as it read before it became a pill: the day and timezone, the
+  // feed state, and when the figures were last confirmed. Carried verbatim as
+  // the pill's tooltip.
+  const feedText = stale
+    ? (note ?? (connection === 'degraded' ? 'Live feed dropped — polling' : 'Not connected'))
+    : null;
+  const updatedText = lastUpdated
+    ? `${connection === 'offline' ? 'last known' : 'updated'} ${lastUpdated.toLocaleTimeString('en-US')}`
+    : null;
+  const statusTooltip = [asOf, feedText, updatedText].filter(Boolean).join(' · ');
+
   return (
     <div
       data-testid="live-strip"
       data-scope={scope}
       className={cn(
-        'flex items-stretch overflow-x-auto border-b border-rule bg-surface',
+        'flex h-14 items-stretch border-b border-rule bg-surface px-4 sm:px-6 min-[1440px]:px-8',
         className
       )}
       // Polite, not assertive: these tick constantly and must never interrupt.
       aria-live="polite"
       aria-atomic="false"
     >
-      {metrics.map(m => (
-        <div
-          key={m.id}
-          title={m.title}
-          /*
+      {/*
+        The figures scroll on their own when they are wider than the window;
+        the status pill stays put at the right, outside the scroller, so its
+        tooltip is never clipped. The fade at an overflowing edge is
+        `.ne-live-strip` in globals.css — pure CSS, driven by the scroll
+        position itself.
+      */}
+      <div className="ne-live-strip flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {metrics.map(m => (
+          <div
+            key={m.id}
+            title={m.title}
+            /*
             Machine-readable, so the browser smoke test can compare this figure
             with the one the page below reports for the same tenant rather than
             parsing it out of the rendered text. The attribute carries the SAME
             string that is rendered a line down, so the two cannot disagree.
             See apps/web/e2e/platform-landing.smoke.mjs.
           */
-          data-figure={m.id}
-          data-figure-value={m.value}
-          className="flex shrink-0 flex-col justify-center whitespace-nowrap border-r border-rule px-3 py-1"
-        >
-          <span className="t-label text-ink-3">{m.label}</span>
-          {/*
+            data-figure={m.id}
+            data-figure-value={m.value}
+            className="flex shrink-0 flex-col justify-center gap-0.5 whitespace-nowrap border-r border-rule px-5 first:pl-0 last:border-r-0"
+          >
+            <span className="t-label text-ink-3">{m.label}</span>
+            {/*
             The value and its denominator on ONE line. A third line per figure
             is what made this a band of cards rather than a strip, and the
             denominator is only ever read together with the number anyway.
           */}
-          <span className="flex items-baseline gap-1.5">
-            <LiveValue
-              value={m.value}
-              tone={m.tone ?? 'ink'}
-              reducedMotion={reducedMotion}
-              unavailable={m.unavailable}
-            />
-            {m.sub ? <span className="t-meta text-ink-3">{m.sub}</span> : null}
-          </span>
-        </div>
-      ))}
+            <span className="flex items-baseline gap-1.5">
+              <LiveValue
+                value={m.value}
+                tone={m.tone ?? 'ink'}
+                reducedMotion={reducedMotion}
+                unavailable={m.unavailable}
+              />
+              {m.sub ? <span className="t-meta text-ink-3">{m.sub}</span> : null}
+            </span>
+          </div>
+        ))}
+      </div>
 
       {/*
-        The tail: the day these figures are for, and the connection state when
-        it is not live. Pushed right and allowed to shrink, so a narrow window
-        loses the caveat before it loses a number.
+        The status pill, pushed right. Live: a live dot, "Live" and the time of
+        the last update. Degraded: a ringing dot and the feed's own wording.
+        Offline: a dropped dot, the WifiOff mark and the same. Everything the
+        tail used to spell out — date, timezone, polling interval, updated
+        time — is the tooltip, word for word.
       */}
-      <div className="ml-auto flex min-w-0 shrink items-center gap-3 px-3 py-1">
-        {asOf ? (
-          <span className="t-meta hidden min-w-0 truncate text-ink-3 lg:inline">{asOf}</span>
-        ) : null}
-        {stale ? (
-          <span className="flex min-w-0 items-center gap-1.5">
-            <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
-            <span className="t-meta min-w-0 truncate text-ringing-ink">
-              {note ??
-                (connection === 'degraded' ? 'Live feed dropped — polling' : 'Not connected')}
-              {lastUpdated ? (
-                <span className="text-ink-3">
-                  {' '}
-                  · {connection === 'offline' ? 'last known' : 'updated'}{' '}
-                  {lastUpdated.toLocaleTimeString('en-US')}
-                </span>
-              ) : null}
-            </span>
+      <div className="flex shrink-0 items-center border-l border-rule pl-4 sm:pl-5">
+        <Tooltip content={statusTooltip || 'Live'} align="end">
+          <span
+            tabIndex={0}
+            className={cn(
+              'inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full border px-3 t-meta font-medium',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              connection === 'live' && 'border-rule bg-surface text-ink-2',
+              connection === 'degraded' && 'border-transparent bg-ringing-tint text-ringing-ink',
+              connection === 'offline' &&
+                'border-transparent bg-dropped-tint text-dropped-ink [&>svg]:text-dropped'
+            )}
+          >
+            <span
+              className={cn(
+                'h-2 w-2 shrink-0 rounded-full',
+                connection === 'live' && 'bg-live',
+                connection === 'degraded' && 'bg-ringing',
+                connection === 'offline' && 'bg-dropped'
+              )}
+            />
+            {connection === 'offline' ? (
+              <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
+            ) : null}
+            <span className={cn(stale && 'hidden sm:inline')}>{stale ? feedText : 'Live'}</span>
+            {updatedText ? (
+              <span className="font-normal text-ink-3 tabular-nums">
+                {lastUpdated ? lastUpdated.toLocaleTimeString('en-US') : null}
+              </span>
+            ) : null}
           </span>
-        ) : null}
+        </Tooltip>
       </div>
     </div>
   );
