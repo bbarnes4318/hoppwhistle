@@ -3,9 +3,10 @@
 import { Play } from 'lucide-react';
 import { useParams } from 'next/navigation';
 
+import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
 
 // Mock data
@@ -33,90 +34,101 @@ export default function CallDetailPage() {
   const call = mockCall; // In real app, fetch by id
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-muted-foreground">Call ID: {id}</p>
-      </div>
+    <div className="page-canvas">
+      <PageHeader
+        description={
+          <>
+            Call ID: <span className="t-data text-ink">{id}</span>
+          </>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Call Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="text-sm text-muted-foreground">From</div>
-              <div className="text-lg font-medium">{formatPhoneNumber(call.from)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">To</div>
-              <div className="text-lg font-medium">{formatPhoneNumber(call.to)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Status</div>
-              <Badge variant={call.status === 'completed' ? 'success' : 'warning'}>
-                {call.status}
-              </Badge>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Duration</div>
-              <div className="text-lg font-medium">{formatDuration(call.duration)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Time</div>
-              <div className="text-lg font-medium">{formatDate(call.createdAt)}</div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>Call Information</PanelTitle>
+          </PanelHeader>
+          <PanelBody>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <div className="min-w-0">
+                <dt className="t-label text-ink-3">From</dt>
+                <dd className="t-data mt-1 text-[15px] text-ink">{formatPhoneNumber(call.from)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="t-label text-ink-3">To</dt>
+                <dd className="t-data mt-1 text-[15px] text-ink">{formatPhoneNumber(call.to)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="t-label text-ink-3">Status</dt>
+                <dd className="mt-1">
+                  <Badge variant={call.status === 'completed' ? 'success' : 'warning'}>
+                    {call.status}
+                  </Badge>
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="t-label text-ink-3">Duration</dt>
+                <dd className="mt-1 text-[15px] font-medium tabular-nums text-ink">
+                  {formatDuration(call.duration)}
+                </dd>
+              </div>
+              <div className="col-span-2 min-w-0">
+                <dt className="t-label text-ink-3">Time</dt>
+                <dd className="t-data mt-1 text-[15px] text-ink">{formatDate(call.createdAt)}</dd>
+              </div>
+            </dl>
+          </PanelBody>
+        </Panel>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Audio Player</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-center h-32 bg-muted rounded-lg">
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-2">Waveform Player</div>
-                  <Button>
-                    <Play className="h-4 w-4 mr-2" />
-                    Play Recording
-                  </Button>
-                </div>
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>Audio Player</PanelTitle>
+          </PanelHeader>
+          <PanelBody>
+            <div className="flex h-32 items-center justify-center rounded-control border border-rule bg-sunken">
+              <div className="text-center">
+                <div className="t-meta mb-3 text-ink-3">Waveform Player</div>
+                <Button>
+                  <Play className="h-4 w-4" />
+                  Play Recording
+                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </Panel>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Transcript</CardTitle>
-          <CardDescription>Full call transcript with speaker labels</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Transcript</PanelTitle>
+          <PanelDescription>Full call transcript with speaker labels</PanelDescription>
+        </PanelHeader>
+        <PanelBody>
           <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm">{call.transcript.fullText}</p>
+            <div className="rounded-control bg-sunken p-4">
+              <p className="t-body text-ink">{call.transcript.fullText}</p>
             </div>
-            <div className="space-y-2">
+            <div className="divide-y divide-rule">
               {call.transcript.segments.map((segment, idx) => (
-                <div key={idx} className="flex gap-4 p-2 hover:bg-muted rounded">
-                  <div className="text-xs text-muted-foreground w-20">
+                <div
+                  key={idx}
+                  className="flex gap-4 rounded-control px-2 py-3 transition-colors duration-150 ease-out hover:bg-sunken"
+                >
+                  <div className="t-data w-16 shrink-0 pt-0.5 text-ink-3">
                     {formatDuration(segment.start)}
                   </div>
-                  <div className="flex-1">
-                    <Badge variant="outline" className="mb-1">
+                  <div className="min-w-0 flex-1">
+                    <Badge variant="outline" className="mb-1.5">
                       {segment.speaker}
                     </Badge>
-                    <p className="text-sm">{segment.text}</p>
+                    <p className="t-body text-ink">{segment.text}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

@@ -3,8 +3,9 @@
 import { Loader2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
-import { Figure, FigureRow, SectionRule, count, pct, points } from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { count, pct, points } from '@/components/delivery/ledger';
+import { Notice, StatTile } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -62,20 +63,20 @@ export default function MyDeliveryPage(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
+      <div className="page-canvas min-h-full">
+        <div className="flex flex-1 items-center justify-center py-20 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading your day
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (error || !view) {
     return (
-      <CompactPageShell>
-        <p className="t-body text-ink-3">{error ?? 'Nothing recorded yet today.'}</p>
-      </CompactPageShell>
+      <div className="page-canvas">
+        <Notice tone={error ? 'error' : 'info'}>{error ?? 'Nothing recorded yet today.'}</Notice>
+      </div>
     );
   }
 
@@ -85,9 +86,9 @@ export default function MyDeliveryPage(): JSX.Element {
       : null;
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        subtitle={`${view.calendarDay} · your calls, your applications, your closing percentage`}
+    <div className="page-canvas">
+      <PageHeader
+        description={`${view.calendarDay} · your calls, your applications, your closing percentage`}
       />
 
       {/*
@@ -95,46 +96,67 @@ export default function MyDeliveryPage(): JSX.Element {
         agency's. Below the line is coloured, above is not — below is the
         thing to act on.
       */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:[&>*+*]:border-l md:[&>*+*]:border-rule md:[&>*+*]:pl-6">
-        <Figure
-          size="hero"
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <StatTile
+          emphasis
           label="My closing percentage"
-          value={pct(view.closingPct)}
-          tone={delta !== null && delta < 0 ? 'dropped' : 'ink'}
+          data-figure-label="My closing percentage"
+          data-figure-value={pct(view.closingPct)}
+          figure={
+            <span className={delta !== null && delta < 0 ? 'text-dropped-ink' : undefined}>
+              {pct(view.closingPct)}
+            </span>
+          }
           sub={
             delta === null
               ? 'applications as a share of the calls you answered'
               : `${points(delta)} points against the agency's ${pct(view.agencyClosingPct)} today`
           }
         />
-        <Figure
+        <StatTile
           label="Agency today"
-          value={pct(view.agencyClosingPct)}
+          data-figure-label="Agency today"
+          data-figure-value={pct(view.agencyClosingPct)}
+          figure={pct(view.agencyClosingPct)}
           sub={`${count(view.agencyApplications)} applications from ${count(
             view.agencyCallsTaken
           )} answered calls, across everyone`}
         />
       </div>
 
-      <SectionRule>Today</SectionRule>
-      <FigureRow>
-        <Figure
-          label="Calls taken"
-          value={count(view.callsTaken)}
-          sub={`of ${count(view.agencyCallsTaken)} across the agency`}
-        />
-        <Figure
-          label="Applications"
-          value={count(view.applications)}
-          sub={`of ${count(view.agencyApplications)} across the agency`}
-        />
-        <Figure label="Talk time" value={duration(view.talkTimeSeconds)} sub="connected, today" />
-        <Figure
-          label="On the queue"
-          value={available(view.availableSeconds)}
-          sub="waiting for a call, today"
-        />
-      </FigureRow>
-    </CompactPageShell>
+      <section className="space-y-3">
+        <h2 className="t-section text-ink">Today</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
+            label="Calls taken"
+            data-figure-label="Calls taken"
+            data-figure-value={count(view.callsTaken)}
+            figure={count(view.callsTaken)}
+            sub={`of ${count(view.agencyCallsTaken)} across the agency`}
+          />
+          <StatTile
+            label="Applications"
+            data-figure-label="Applications"
+            data-figure-value={count(view.applications)}
+            figure={count(view.applications)}
+            sub={`of ${count(view.agencyApplications)} across the agency`}
+          />
+          <StatTile
+            label="Talk time"
+            data-figure-label="Talk time"
+            data-figure-value={duration(view.talkTimeSeconds)}
+            figure={duration(view.talkTimeSeconds)}
+            sub="connected, today"
+          />
+          <StatTile
+            label="On the queue"
+            data-figure-label="On the queue"
+            data-figure-value={available(view.availableSeconds)}
+            figure={available(view.availableSeconds)}
+            sub="waiting for a call, today"
+          />
+        </div>
+      </section>
+    </div>
   );
 }
