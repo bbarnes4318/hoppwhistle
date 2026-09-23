@@ -45,8 +45,10 @@
  * `path === prefix` or `path.startsWith(prefix + '/')` for exactly that reason;
  * a naive `includes` or an unanchored `startsWith` gets both wrong.
  *
- * `/admin/payroll` is deliberately NOT here. An agency runs its own payroll and
- * keeps that screen; only the two cross-agency admin screens are staff's.
+ * `/admin/payroll` is deliberately NOT here, and the `/admin/` prefix is not
+ * what decides. An agency runs its own payroll and keeps that screen; what is
+ * listed is whatever belongs to NetEnroll rather than to the agency, wherever
+ * it happens to sit in the path.
  */
 export const STAFF_ONLY_ROUTES = [
   // Market. The call marketplace is NetEnroll's side of the business: an agency
@@ -75,6 +77,27 @@ export const STAFF_ONLY_ROUTES = [
   // adds the redirect the nav filter never gave them.
   '/admin/agencies',
   '/admin/onboarding',
+
+  /*
+   * NetEnroll's two unbuilt screens, which an agency principal was being shown
+   * as "Soon".
+   *
+   * Neither has a page: both are `pending: true` entries in PLATFORM_NAV and
+   * render as greyed, unclickable text. That is precisely why they were missed
+   * -- nothing was reachable, so nothing looked wrong -- but an agency reading
+   * its own sidebar cannot tell a stub from a feature, and these two are not
+   * theirs to be promised. `/admin/live` is the CROSS-AGENCY live board, which
+   * shows every agency at once. `/payouts` is what NetEnroll pays its
+   * PUBLISHERS for the calls it buys; an agency has no publishers and is never
+   * paid out -- it is billed. Advertising a payout screen to a customer who
+   * only ever owes money is the wrong way round.
+   *
+   * An agency's own money keeps its screens and they are not here: Delivery,
+   * Settlements and Billing all stay. So does `/admin/payroll`, which is the
+   * agency paying its own agents -- see the note above the list.
+   */
+  '/admin/live',
+  '/payouts',
 ] as const;
 
 /**

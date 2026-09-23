@@ -106,8 +106,11 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
   );
 
   /**
-   * The twelve screens named in the removal, plus the two cross-agency admin
-   * screens that were already absent from the sidebar.
+   * The twelve screens named in the removal, the two cross-agency admin screens
+   * that were already absent from the sidebar, and NetEnroll's two unbuilt
+   * stubs -- the cross-agency live board, and the payouts screen for the
+   * publishers NetEnroll buys calls from. An agency has no publishers and is
+   * never paid out; it is billed.
    *
    * Spelled out here rather than read from STAFF_ONLY_ROUTES on purpose. A test
    * that imports the list it is checking passes whatever the list happens to
@@ -129,6 +132,8 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
     '/settings/carriers',
     '/admin/agencies',
     '/admin/onboarding',
+    '/admin/live',
+    '/payouts',
   ];
 
   it.each(REMOVED)('does not link to %s', href => {

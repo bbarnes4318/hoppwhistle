@@ -20,6 +20,7 @@ import {
   describeApplicationIssues,
 } from '../services/applications/input-schema.js';
 import type { ApplicationInput } from '../services/applications/input-schema.js';
+import { deliveredCallWhere, submittedApplicationWhere } from '../services/rating/measurement.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -6036,9 +6037,55 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       ];
     }
 
+    /*
+     * Delivered calls and submitted applications: what this business is
+     * measured and billed on.
+     *
+     * The tiles here used to be "Appointments" and "Appt. Rate" -- calls with
+     * `disposition: 'SET_APPOINTMENT'`, over connected calls. NetEnroll does
+     * not sell appointments and has never billed for one. An agency is charged
+     * per SUBMITTED APPLICATION against the calls it was DELIVERED, and the
+     * closing percentage between those two is what places it on the rate curve
+     * and sets its price. A dashboard reporting a number nobody is paid for,
+     * beside a Delivery screen reporting the number they are, is two answers to
+     * "how did today go" -- and the agency reads the wrong one first.
+     *
+     * The predicates come from `services/rating/measurement.ts`, the module the
+     * nightly settlement bills from, rather than being restated here. That is
+     * the point rather than a convenience: a dashboard computing its own idea
+     * of a delivered call would drift from the invoice, and the invoice is the
+     * one that would be believed. One definition, two readers.
+     *
+     * -- Whose numbers --------------------------------------------------------
+     *
+     * An admin or owner sees the agency. An agent sees their own, on the same
+     * rule the call list above already applies: `answeredByUserId` for the
+     * calls they picked up, `createdById` for the applications they wrote.
+     * Both columns carry a composite index covering exactly this query
+     * (`[tenantId, answeredByUserId, answeredAt]` and
+     * `[tenantId, createdById, submittedAt]`), so an agent's dashboard costs
+     * no more than an owner's.
+     */
+    const measurementRange = { start: startDate, endExclusive: endDate };
+    const agentScope =
+      !profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId
+        ? user.userId
+        : null;
+
+    const deliveredWhere = {
+      ...deliveredCallWhere(tenantId, measurementRange),
+      ...(agentScope ? { answeredByUserId: agentScope } : {}),
+    };
+    const submittedWhere = {
+      ...submittedApplicationWhere(tenantId, measurementRange),
+      ...(agentScope ? { createdById: agentScope } : {}),
+    };
+
     // Run all aggregations in parallel
     const [
       totalCalls,
+      deliveredCalls,
+      submittedApplications,
       appointmentsSet,
       callbacksScheduled,
       followUpsDue,
@@ -6047,6 +6094,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     ] = await Promise.all([
       // Total calls in range
       prisma.call.count({ where: whereClause }),
+
+      // Delivered calls: inbound, unblocked, ANSWERED. The billing denominator.
+      prisma.call.count({ where: deliveredWhere }),
+
+      // Submitted applications, voided ones excluded. The billing numerator.
+      prisma.insuranceCarrierApplication.count({ where: submittedWhere }),
 
       // Appointments set
       prisma.call.count({
@@ -6080,6 +6133,20 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const appointmentRate =
       connectedCalls > 0 ? Math.round((appointmentsSet / connectedCalls) * 10000) / 100 : 0;
 
+    /*
+     * Closing percentage, and null rather than zero for an empty window.
+     *
+     * Zero is a real measurement -- calls taken, nothing written -- and it is
+     * the one that prices an agency to review. "No calls at all" is not that,
+     * and showing them as the same number would flag an agency for the offence
+     * of being closed. `measureClosing` draws exactly this distinction for
+     * exactly this reason; the tile renders null as a dash.
+     */
+    const closingPct =
+      deliveredCalls > 0
+        ? Math.round((submittedApplications / deliveredCalls) * 10000) / 100
+        : null;
+
     // Build disposition breakdown map
     const dispositions: Record<string, number> = {};
     for (const entry of dispositionBreakdown) {
@@ -6090,6 +6157,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     return {
       totalCalls,
+      deliveredCalls,
+      submittedApplications,
+      closingPct,
       connectedCalls,
       appointmentsSet,
       callbacksScheduled,
