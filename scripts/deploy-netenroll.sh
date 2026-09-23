@@ -101,6 +101,11 @@ REQUIRED_MIGRATIONS="
 20260913000000_add_rate_offset_disputes_and_onboarding
 20260914000000_agent_entered_applications
 20260915000000_role_preview
+20260920000000_agent_sip_credentials
+20260921000000_application_call_attribution
+20260921010000_agent_schedules
+20260921020000_agent_availability
+20260922000000_leaderboard_outbound_index
 20260922010000_payment_provider_offline
 20260922020000_payment_provider_melio_value
 20260922020001_payment_provider_melio_default
@@ -237,6 +242,51 @@ STEP "2/5  Database migrations"
 # Has this migration's effect landed? Echoes `t` or `f`.
 migration_applied() {
   case "$1" in
+    # ── The five the agent roster needs ────────────────────────────────────
+    #
+    # These sat in KNOWN_UNLISTED as tracked debt, so no deploy ever applied
+    # them, so GET /api/v1/agent-roster selected four things production does
+    # not have -- users.availableForCalls, users.availabilityChangedAt, and the
+    # agent_sip_credentials and agent_schedules relations -- and failed. The
+    # Team Members page showed "the agent roster could not be loaded" to every
+    # agency owner, which is the whole operational half of that screen.
+    #
+    # All five are additive and idempotent: new tables, new columns with
+    # defaults, new indexes, every one written IF NOT EXISTS. Four are wrapped
+    # BEGIN..COMMIT and the fifth is a single CREATE INDEX, so each is atomic --
+    # there is no half-applied state for a probe to be fooled by, and these can
+    # name the obvious effect rather than hunting the file's last statement.
+    #
+    # These comments are '#' and not '/* */' because this function is BASH, and
+    # scripts/ci/check-migrations-listed.sh EXECUTES it to read each probe. A
+    # C-style comment here is not a comment: it is parsed, it breaks the case,
+    # and every probe silently returns empty. That is how this block was first
+    # written, and the check caught it.
+    #
+    # The two that REMAIN unlisted are data, not schema, and are somebody's
+    # decision rather than a deploy's: 20260921030000_add_twilio_vonage_carriers
+    # inserts carrier rows for every tenant, and
+    # 20260915153900_grant_khall_owner_admin grants OWNER and ADMIN to a person.
+    *_agent_sip_credentials)
+      echo "SELECT to_regclass('public.agent_sip_credentials') IS NOT NULL" ;;
+    *_application_call_attribution)
+      # A column, so the table proves nothing: the table predates this file.
+      echo "SELECT COALESCE((SELECT true FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'insurance_carrier_applications'
+                AND column_name = 'callAttribution'), false)" ;;
+    *_agent_schedules)
+      echo "SELECT to_regclass('public.agent_schedules') IS NOT NULL" ;;
+    *_agent_availability)
+      # Two columns on an existing table. The second one added.
+      echo "SELECT COALESCE((SELECT true FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'users'
+                AND column_name = 'availabilityChangedAt'), false)" ;;
+    *_leaderboard_outbound_index)
+      # One index and nothing else, so the index IS the migration.
+      echo "SELECT COALESCE((SELECT true FROM pg_class
+              WHERE relkind = 'i'
+                AND relname = 'calls_tenantId_direction_createdById_createdAt_idx'), false)" ;;
     *_add_lead_dial_reservations)
       # Last effect: the campaignId foreign key, which is the final statement in
       # the file. Probing the TABLE would answer true for a file that created it
