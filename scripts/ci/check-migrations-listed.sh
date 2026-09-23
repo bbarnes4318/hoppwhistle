@@ -80,12 +80,7 @@ GRN() { printf "\033[32m%s\033[0m\n" "$*"; }
 # ─────────────────────────────────────────────────────────────────────────────
 KNOWN_UNLISTED="
 20260915153900_grant_khall_owner_admin
-20260920000000_agent_sip_credentials
-20260921000000_application_call_attribution
-20260921010000_agent_schedules
-20260921020000_agent_availability
 20260921030000_add_twilio_vonage_carriers
-20260922000000_leaderboard_outbound_index
 "
 
 [ -f "$SCRIPT" ] || { RED "REFUSED: $SCRIPT not found"; exit 1; }
