@@ -148,6 +148,8 @@ export interface DeliveryTodayView {
      * NONE on purpose for a card-paying or offline agency; render from this.
      */
     valid: boolean;
+    /** The instrument this agency pays with, so the warning names the right one. */
+    paymentMethod: 'ACH' | 'CARD';
     bankName: string | null;
     last4: string | null;
   };
@@ -195,7 +197,7 @@ const NOT_ENROLLED_VIEW: Omit<
   holdReason: null,
   holdDetail: null,
   holdSince: null,
-  mandate: { status: 'NONE', valid: false, bankName: null, last4: null },
+  mandate: { status: 'NONE', valid: false, paymentMethod: 'ACH', bankName: null, last4: null },
 };
 
 /**
@@ -365,6 +367,7 @@ export async function getDeliveryToday(
     mandate: {
       status: profile?.achMandateStatus ?? 'NONE',
       valid: hasValidPaymentInstrument(profile),
+      paymentMethod: profile?.paymentMethod ?? 'ACH',
       bankName: profile?.achBankName ?? null,
       last4: profile?.achLast4 ?? null,
     },
