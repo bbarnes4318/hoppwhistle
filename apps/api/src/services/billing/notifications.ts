@@ -65,7 +65,9 @@ function transporter(): Transporter | null {
   return createTransport({
     host,
     port,
+    // TLS is required, not opportunistic. See services/agent-invite-email.ts.
     secure: port === 465,
+    requireTLS: port !== 465,
     auth: { user, pass },
   });
 }

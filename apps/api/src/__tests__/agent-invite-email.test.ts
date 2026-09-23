@@ -191,6 +191,46 @@ describe('sending', () => {
  * first impression than the hand-delivered token it replaced. The role decides
  * the instruction, and these assert the two do not blur back together.
  */
+/**
+ * How the transport is built.
+ *
+ * Production authenticates on 587, because Hetzner blocks outbound 25 and 465.
+ * That port starts in the clear and upgrades with STARTTLS, and nodemailer's
+ * default is to do that upgrade only IF the server offers it -- so a server
+ * that does not advertise STARTTLS, or a stripped capability line, puts the
+ * mailbox password on the wire in plaintext with nothing reporting it.
+ */
+describe('the connection it opens', () => {
+  it('demands STARTTLS on a port that is not implicitly TLS', async () => {
+    configureSmtp();
+    process.env.SMTP_PORT = '587';
+    await sendAgentInvitationEmail(invitation());
+
+    const options = createTransport.mock.calls[0][0] as {
+      port: number;
+      secure: boolean;
+      requireTLS: boolean;
+    };
+    expect(options.port).toBe(587);
+    expect(options.secure).toBe(false);
+    expect(options.requireTLS).toBe(true);
+  });
+
+  it('wraps the whole session in TLS on 465 instead', async () => {
+    configureSmtp();
+    process.env.SMTP_PORT = '465';
+    await sendAgentInvitationEmail(invitation());
+
+    const options = createTransport.mock.calls[0][0] as {
+      secure: boolean;
+      requireTLS: boolean;
+    };
+    expect(options.secure).toBe(true);
+    // Already encrypted from the first byte; there is nothing to upgrade.
+    expect(options.requireTLS).toBe(false);
+  });
+});
+
 describe('who it is addressed to', () => {
   it('tells an agent to open the softphone', async () => {
     configureSmtp();
