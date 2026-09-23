@@ -31,9 +31,25 @@
 #
 # ── BASELINE ─────────────────────────────────────────────────────────────────
 #
-# Migrations older than the list's first entry predate this deploy script and
-# were applied by other means. They are out of scope; this check is about not
-# making the problem worse from here.
+# Migrations older than BASELINE predate this deploy script and were applied by
+# other means. They are out of scope; this check is about not making the problem
+# worse from here.
+#
+# It is a CONSTANT, and it used to be read from the first entry of
+# REQUIRED_MIGRATIONS. That conflated two different facts -- "when did this
+# script become the mechanism", which is fixed history, with "what happens to be
+# first in the list", which is not -- and the conflation had a bite:
+# registering a migration OLDER than the current first entry silently dragged
+# every migration between them into scope, so the one correct action (add the
+# missing migration) failed this check on eight unrelated names.
+#
+# That is what blocked `20260803000000_add_lead_dial_reservations`, whose table
+# the deploy needs before it can apply `prisma/sql/db-push-constraints.sql`.
+# Registering an old migration out of order is a legitimate thing to do; it must
+# not re-date the baseline.
+#
+# Moving this line forward is not allowed without deleting the migrations it
+# skips over: it is a statement about history, not a way to silence the check.
 
 set -euo pipefail
 
@@ -84,7 +100,9 @@ LISTED="$(sed -n '/^REQUIRED_MIGRATIONS="$/,/^"$/p' "$SCRIPT" | sed '1d;$d' | tr
   exit 1
 }
 
-BASELINE="$(echo "$LISTED" | awk 'NF{print $1; exit}')"
+# The first migration this deploy script was ever responsible for. See BASELINE
+# above: fixed history, deliberately not derived from the list.
+BASELINE="20260906000000_add_tenant_activation_grants"
 in_list()   { echo "$LISTED"         | grep -qx -- "$1"; }
 is_known()  { echo "$KNOWN_UNLISTED" | grep -qx -- "$1"; }
 

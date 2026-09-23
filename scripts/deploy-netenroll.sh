@@ -89,6 +89,7 @@ fi
 # rather than deploying code whose schema is absent, and so the order is a
 # reviewable list rather than whatever `ls` returns.
 REQUIRED_MIGRATIONS="
+20260803000000_add_lead_dial_reservations
 20260906000000_add_tenant_activation_grants
 20260907000000_add_platform_admin
 20260907010000_audit_log_nullable_tenant
@@ -236,6 +237,15 @@ STEP "2/5  Database migrations"
 # Has this migration's effect landed? Echoes `t` or `f`.
 migration_applied() {
   case "$1" in
+    *_add_lead_dial_reservations)
+      # Last effect: the campaignId foreign key, which is the final statement in
+      # the file. Probing the TABLE would answer true for a file that created it
+      # and then failed before any of the three foreign keys, and the partial
+      # unique index in the middle is the constraint the whole design rests on
+      # -- one active reservation per lead, enforced by PostgreSQL rather than by
+      # two workers agreeing not to dial the same person twice.
+      echo "SELECT COALESCE((SELECT true FROM pg_constraint
+              WHERE conname = 'lead_dial_reservations_campaignId_fkey'), false)" ;;
     *_add_tenant_activation_grants)
       echo "SELECT to_regclass('public.tenant_activation_grants') IS NOT NULL" ;;
     *_add_platform_admin)
@@ -449,7 +459,26 @@ if [ -n "$MISSING_TABLES" ]; then
 elif [ "$DRY_RUN" = "1" ]; then
   printf "  would apply: %s\n" "prisma/sql/db-push-constraints.sql"
 else
-  if ! OUT="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$CONSTRAINTS" 2>&1)"; then
+  # ── One transaction, and the reason is the ledger ──────────────────────────
+  #
+  # The file drops and recreates three triggers -- the append-only guard on
+  # application_credit_ledger, the immutability guard on daily_settlements, and
+  # the append-only guard on settlement_payment_attempts. Statement by statement
+  # in autocommit, each DROP commits and releases its lock before the matching
+  # CREATE takes it again, so there is a window, however brief, in which a
+  # financial ledger accepts an UPDATE or a DELETE that it exists to refuse.
+  #
+  # It was never reached before: this host has no lead_dial_reservations table,
+  # so the whole file has been skipped on every deploy. Registering that
+  # migration is what makes this run here for the first time, which is why the
+  # window is worth closing in the same change rather than after it.
+  #
+  # `--single-transaction` makes the swap atomic. Safe because nothing in the
+  # file is CREATE INDEX CONCURRENTLY, which is the one thing that cannot run
+  # inside a transaction -- checked, and it is a plain CREATE UNIQUE INDEX IF
+  # NOT EXISTS. It also means a failure half way leaves no half-applied set of
+  # constraints behind, which ON_ERROR_STOP alone does not give.
+  if ! OUT="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$CONSTRAINTS" 2>&1)"; then
     RED "REFUSED: db-push-constraints.sql failed."
     RED "$OUT"
     exit 1
