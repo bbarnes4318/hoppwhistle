@@ -263,7 +263,22 @@ export default function TeamMembersPage(): JSX.Element {
       // Deliberately not `error`: the account rows are still good, and blanking
       // the whole page because the operational half is unavailable would hide
       // the part that loaded.
-      setRosterError('The agent roster could not be loaded, so readiness is not shown.');
+      //
+      // The server's reason is shown, not swallowed. This failed in production
+      // with nothing on screen but the sentence below, while the API was
+      // answering with the exact cause (a missing column or table from a
+      // migration that had not been applied).
+      const reason =
+        rosterResult.status === 'fulfilled'
+          ? rosterResult.value.error?.message
+          : rosterResult.reason instanceof Error
+            ? rosterResult.reason.message
+            : undefined;
+      setRosterError(
+        reason
+          ? `The agent roster could not be loaded, so readiness is not shown. Server said: ${reason}`
+          : 'The agent roster could not be loaded, so readiness is not shown.'
+      );
     }
 
     setLoading(false);

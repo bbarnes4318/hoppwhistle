@@ -108,7 +108,7 @@ const BLOCKER_TEXT: Record<string, string> = {
   NO_DAILY_BLOCK: 'no daily block',
   NO_MAX_DAILY_DEBIT: 'no maximum daily debit',
   NO_OPENING_RATE: 'no agreed opening rate',
-  NO_VALID_MANDATE: 'no valid ACH mandate',
+  NO_VALID_MANDATE: 'no usable payment method',
 };
 
 interface EnrolmentStatus {
@@ -572,7 +572,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         {row.flags.noValidMandate && (
                           <FlagBadge
                             label="no mandate"
-                            title="No valid ACH mandate, so nothing will deliver."
+                            title="No usable payment method, so nothing will deliver."
                             onClick={() => void openEnrolment(row.tenantId)}
                           />
                         )}

@@ -109,7 +109,19 @@ interface DeliveryToday {
   holdReason: string | null;
   holdDetail: string | null;
   holdSince: string | null;
-  mandate: { status: string; bankName: string | null; last4: string | null };
+  /**
+   * `valid` is the server's "can this agency be billed" answer, the rule the
+   * delivery gate uses. `status` is the raw ACH column, NONE on purpose for an
+   * agency that pays by card or is billed outside the platform, so it must not
+   * decide the warning. Optional only for an API from before the field.
+   */
+  mandate: {
+    status: string;
+    valid?: boolean;
+    paymentMethod?: 'ACH' | 'CARD';
+    bankName: string | null;
+    last4: string | null;
+  };
 }
 
 interface AgentRow {
@@ -361,7 +373,7 @@ function AgencyDeliveryPanel(): JSX.Element {
           <p className="max-w-prose">
             Calls are delivered without a prepaid block, an overrun ceiling or a nightly settlement.
             There is nothing to charge and nothing to run out of. NetEnroll enables it per agency,
-            once the terms and a bank mandate are in place.
+            once the terms and a payment method are in place.
           </p>
         </Notice>
       </div>
@@ -421,9 +433,18 @@ function AgencyDeliveryPanel(): JSX.Element {
         </Notice>
       )}
 
-      {today.mandate.status !== 'ACTIVE' && (
-        <Notice tone="warning" title="No valid ACH mandate">
-          Delivery requires a verified bank mandate. Contact NetEnroll to set one up.
+      {!(today.mandate.valid ?? today.mandate.status === 'ACTIVE') && (
+        <Notice
+          tone="warning"
+          title={
+            today.mandate.paymentMethod === 'CARD'
+              ? 'No usable card on file'
+              : 'No valid ACH mandate'
+          }
+        >
+          {today.mandate.paymentMethod === 'CARD'
+            ? 'Delivery requires a saved card. Contact NetEnroll to set one up.'
+            : 'Delivery requires a verified bank mandate. Contact NetEnroll to set one up.'}
         </Notice>
       )}
 
