@@ -34,6 +34,7 @@ export {
   type LiveStripProps,
 } from './live-strip';
 export { MoneyCell, formatMoney, type MoneyCellProps } from './money-cell';
+export { Notice, type NoticeProps } from './notice';
 export {
   Panel,
   PanelBody,
@@ -46,6 +47,7 @@ export {
 export { Pagination, type PaginationProps } from './pagination';
 export { PhoneCell, formatPhone, type PhoneCellProps } from './phone-cell';
 export { RecordingPlayer, type RecordingPlayerProps } from './recording-player';
+export { Segmented, SegmentedItem, type SegmentedItemProps } from './segmented';
 export { SavedViews, useSavedViews, type SavedView, type SavedViewsProps } from './saved-views';
 export { DrawerField, DrawerSection, SheetDrawer, type SheetDrawerProps } from './sheet-drawer';
 export { StatTile, StatTileRow, type StatTileProps } from './stat-tile';

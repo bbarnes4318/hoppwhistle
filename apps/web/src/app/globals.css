@@ -513,6 +513,19 @@
   }
 }
 
+/*
+ * A card that is itself the control — a link or a role=button tile — lifts to
+ * the raised shadow under the pointer.
+ */
+a.rounded-card,
+[role='button'].rounded-card {
+  transition: box-shadow 150ms ease-out;
+}
+a.rounded-card:hover,
+[role='button'].rounded-card:hover {
+  box-shadow: var(--shadow-raised);
+}
+
 /* The one motion rule: nothing moves for someone who has asked it not to. */
 @media (prefers-reduced-motion: reduce) {
   .ne-shimmer {

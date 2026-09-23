@@ -4,31 +4,44 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 /**
- * StatTile — label, figure, sub, optional delta, optional sparkline lane.
+ * StatTile — a card holding one figure: label, figure, sub, optional delta,
+ * optional icon chip, optional sparkline.
  *
- * The sparkline lane is ALWAYS reserved, whether or not a series is passed.
- * A row of tiles where some have a sparkline and some do not would otherwise
- * put its numbers on different baselines, and a row of numbers that do not
- * share a baseline reads as a mistake even when every value is right.
+ * The figure is Inter at the figure step with tabular numerals, so a row of
+ * tiles reads as one set of numbers. `sub` has a reserved line whether or not
+ * it is passed, and the sparkline lane is reserved for every tile that is
+ * given a `series` prop, so tiles in a row share their baselines.
+ *
+ * `value` is the alternative to `figure` for a raw number or string: a number
+ * is shown with `toLocaleString()` and an optional `unit` beside it — the same
+ * formatting the dashboard's KPI cards have always applied.
  */
 
 export interface StatTileProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Uppercase label. "Billable rate", not "billable_rate". */
   label: string;
   /** The number. Pass a formatted node (MoneyCell) or a string. */
-  figure: React.ReactNode;
+  figure?: React.ReactNode;
+  /** A raw figure: numbers are rendered with toLocaleString(). */
+  value?: string | number;
+  /** Rendered after `value`, e.g. "%". */
+  unit?: string;
   /** One line under the figure — the denominator, the period, the caveat. */
-  sub?: string;
+  sub?: React.ReactNode;
+  /** A lucide icon, shown in a 32px brand-tint chip at the top right. */
+  icon?: React.ComponentType<{ className?: string }>;
   /**
    * Period-over-period change. `direction` says which way is good: `up` for
    * earnings, `down` for abandon rate. Without it a falling abandon rate would
    * be painted as bad news.
    */
   delta?: { value: string; direction: 'up' | 'down'; good?: 'up' | 'down' };
-  /** Values for the sparkline. The lane is reserved either way. */
+  /** Values for the sparkline. The lane is reserved when this is passed. */
   series?: number[];
-  /** Emphasise this tile — the one number the page is about. */
+  /** Emphasise this tile — the one number the page is about. Hero size. */
   emphasis?: boolean;
+  /** Colour the figure as money. */
+  tone?: 'ink' | 'money';
   loading?: boolean;
 }
 
@@ -78,10 +91,14 @@ function Sparkline({ series, tone }: { series: number[]; tone: string }) {
 export function StatTile({
   label,
   figure,
+  value,
+  unit,
   sub,
+  icon: Icon,
   delta,
   series,
   emphasis = false,
+  tone = 'ink',
   loading = false,
   className,
   ...props
@@ -91,29 +108,52 @@ export function StatTile({
   const good = delta?.good ?? 'up';
   const isGood = delta ? delta.direction === good : false;
 
+  const shown =
+    figure !== undefined ? figure : typeof value === 'number' ? value.toLocaleString() : value;
+
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col rounded-card border border-rule bg-surface p-3',
+        'flex min-w-0 flex-col rounded-card border border-rule bg-surface p-5 shadow-card',
+        'transition-shadow duration-150 ease-out ne-motion',
         emphasis && 'border-rule-strong',
         className
       )}
       {...props}
     >
-      <div className="t-label text-ink-3">{label}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="t-label pt-0.5 text-ink-3">{label}</div>
+        {Icon ? (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
 
-      <div className="mt-1.5 flex items-baseline gap-2">
+      <div className={cn('flex flex-wrap items-baseline gap-x-2 gap-y-1', Icon ? 'mt-1' : 'mt-3')}>
         {loading ? (
-          <Skeleton className="h-[19px] w-24 rounded-control" />
+          <Skeleton className={cn('w-24', emphasis ? 'h-10' : 'h-[30px]')} />
         ) : (
-          <span className={cn(emphasis ? 't-hero' : 't-figure', 'min-w-0 truncate text-ink')}>
-            {figure}
+          <span
+            className={cn(
+              emphasis ? 't-hero' : 't-figure',
+              'min-w-0 tabular-nums',
+              tone === 'money' ? 'text-money-ink' : 'text-ink'
+            )}
+          >
+            {shown}
+            {unit && figure === undefined ? (
+              <span className="ml-1 text-[15px] font-medium text-ink-3">{unit}</span>
+            ) : null}
           </span>
         )}
 
         {delta && !loading ? (
           <span
-            className={cn('t-meta tabular shrink-0', isGood ? 'text-live-ink' : 'text-dropped-ink')}
+            className={cn(
+              't-meta tabular-nums shrink-0 font-medium',
+              isGood ? 'text-live-ink' : 'text-dropped-ink'
+            )}
           >
             {delta.direction === 'up' ? '▲' : '▼'} {delta.value}
           </span>
@@ -121,21 +161,26 @@ export function StatTile({
       </div>
 
       {/* Reserved whether or not `sub` is passed, for the same baseline reason. */}
-      <div className="t-meta mt-1 min-h-[17px] truncate text-ink-3">
-        {loading ? <Skeleton className="h-3 w-16 rounded-control" /> : sub}
+      <div className="t-meta mt-1 min-h-[17px] text-ink-3">
+        {loading ? <Skeleton className="h-3 w-16" /> : sub}
       </div>
 
       {/*
-        The reserved sparkline lane. Fixed height, always present, empty when
-        there is no series. This is the whole reason tiles line up.
+        The sparkline lane: fixed height, reserved whenever `series` is passed
+        (even empty), so tiles that chart and tiles that do not yet still line up.
       */}
-      <div className="mt-2" style={{ height: SPARK_HEIGHT }} aria-hidden={!series}>
-        {loading ? (
-          <Skeleton className="h-full w-full rounded-control" />
-        ) : series && series.length > 1 ? (
-          <Sparkline series={series} tone={isGood || !delta ? 'var(--live)' : 'var(--dropped)'} />
-        ) : null}
-      </div>
+      {series !== undefined ? (
+        <div className="mt-2" style={{ height: SPARK_HEIGHT }} aria-hidden={!series}>
+          {loading ? (
+            <Skeleton className="h-full w-full" />
+          ) : series.length > 1 ? (
+            <Sparkline
+              series={series}
+              tone={isGood || !delta ? 'var(--brand)' : 'var(--dropped)'}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -150,7 +195,7 @@ export function StatTileRow({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('grid grid-cols-2 gap-3 lg:grid-cols-4', className)} {...props}>
+    <div className={cn('grid grid-cols-2 gap-4 lg:grid-cols-4', className)} {...props}>
       {children}
     </div>
   );

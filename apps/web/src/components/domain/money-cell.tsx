@@ -69,7 +69,7 @@ export function MoneyCell({
   className,
   ...props
 }: MoneyCellProps) {
-  const step = size === 'figure' ? 't-figure' : 't-data';
+  const step = size === 'figure' ? 't-figure' : 't-num';
 
   if (amount === null || amount === undefined || Number.isNaN(amount)) {
     return (

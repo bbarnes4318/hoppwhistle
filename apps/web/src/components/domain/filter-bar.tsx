@@ -19,6 +19,9 @@ import { useThemeScope } from './theme-scope';
 /**
  * FilterBar — search, selects, date range, and chips for what is active.
  *
+ * Laid out as a responsive grid with 12px gaps. Every control shows its full
+ * label: select triggers are at least 168px and never truncate to "All…".
+ *
  * The chips are the important part. A filtered table that does not say it is
  * filtered is how someone concludes their calls have disappeared, and the
  * cheapest fix is to always show what is currently narrowing the list, each one
@@ -107,12 +110,12 @@ export function FilterBar({
 
   return (
     <div className={cn('border-b border-rule', className)}>
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+      <div className="grid grid-cols-1 items-center gap-3 px-4 py-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
         {search ? (
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+          <div className="relative min-w-0 sm:col-span-2">
             <Search
               aria-hidden
-              className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3"
             />
             <Input
               type="search"
@@ -120,7 +123,7 @@ export function FilterBar({
               onChange={e => search.onChange(e.target.value)}
               placeholder={search.placeholder ?? 'Search'}
               aria-label={search.placeholder ?? 'Search'}
-              className="h-8 rounded-control border-rule bg-surface pl-7 t-body text-ink placeholder:text-ink-3"
+              className="h-9 pl-9 t-body text-ink placeholder:text-ink-3"
             />
           </div>
         ) : null}
@@ -133,7 +136,7 @@ export function FilterBar({
           >
             <SelectTrigger
               aria-label={s.label}
-              className="h-8 w-auto min-w-[128px] gap-1 rounded-control border-rule bg-surface t-body text-ink"
+              className="h-9 w-full min-w-[168px] t-body text-ink"
             >
               <SelectValue placeholder={s.allLabel ?? `All ${s.label.toLowerCase()}`} />
             </SelectTrigger>
@@ -151,7 +154,7 @@ export function FilterBar({
         ))}
 
         {dateRange ? (
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-2 sm:col-span-2">
             <Input
               type="date"
               aria-label="From date"
@@ -159,7 +162,7 @@ export function FilterBar({
               onChange={e =>
                 dateRange.onChange({ ...dateRange.value, from: e.target.value || null })
               }
-              className="h-8 w-[140px] rounded-control border-rule bg-surface t-data text-ink"
+              className="h-9 min-w-0 flex-1 t-num text-ink"
             />
             <span aria-hidden className="t-meta text-ink-3">
               →
@@ -169,29 +172,33 @@ export function FilterBar({
               aria-label="To date"
               value={dateRange.value.to ?? ''}
               onChange={e => dateRange.onChange({ ...dateRange.value, to: e.target.value || null })}
-              className="h-8 w-[140px] rounded-control border-rule bg-surface t-data text-ink"
+              className="h-9 min-w-0 flex-1 t-num text-ink"
             />
           </div>
         ) : null}
 
-        {children ? <div className="ml-auto flex items-center gap-2">{children}</div> : null}
+        {children ? (
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-full sm:justify-end">
+            {children}
+          </div>
+        ) : null}
       </div>
 
       {activeChips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
           <span className="t-label text-ink-3">Filtered by</span>
 
           {activeChips.map(chip => (
             <span
               key={chip.id}
-              className="t-meta inline-flex max-w-[240px] items-center gap-1 rounded-control bg-sunken py-0.5 pl-2 pr-1 text-ink-2"
+              className="t-meta inline-flex items-center gap-1 rounded-full bg-sunken py-0.5 pl-2.5 pr-1 text-ink-2"
             >
-              <span className="truncate">{chip.label}</span>
+              <span>{chip.label}</span>
               <button
                 type="button"
                 onClick={chip.onRemove}
                 aria-label={`Remove filter ${chip.label}`}
-                className="shrink-0 rounded-control p-0.5 text-ink-3 hover:bg-rule hover:text-ink focus-visible:outline-none"
+                className="shrink-0 rounded-full p-0.5 text-ink-3 hover:bg-rule hover:text-ink focus-visible:outline-none"
               >
                 <X aria-hidden className="h-3 w-3" />
               </button>
@@ -204,7 +211,7 @@ export function FilterBar({
               variant="ghost"
               size="sm"
               onClick={onClearAll}
-              className="t-meta h-6 rounded-control px-1.5 text-ink-3 hover:bg-sunken hover:text-ink"
+              className="t-meta h-6 px-2 text-ink-3 hover:bg-sunken hover:text-ink"
             >
               Clear all
             </Button>

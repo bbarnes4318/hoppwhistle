@@ -224,7 +224,7 @@ export function DurationBar({
       {showValue && (
         <span
           className={cn(
-            't-data shrink-0 tabular',
+            't-num shrink-0 tabular',
             state === 'short' && 'text-dropped-ink',
             state === 'billable' && 'text-live-ink',
             state === 'in-progress' && 'text-ringing-ink',

@@ -70,13 +70,11 @@ export function Pagination({
           <>No {noun}</>
         ) : (
           <>
-            <span className="t-data tabular text-ink-2">
+            <span className="t-num tabular text-ink-2">
               {fmt(first)}–{fmt(last)}
             </span>{' '}
             of{' '}
-            <span className="t-data tabular text-ink-2">
-              {total === null ? 'many' : fmt(total)}
-            </span>{' '}
+            <span className="t-num tabular text-ink-2">{total === null ? 'many' : fmt(total)}</span>{' '}
             {noun}
           </>
         )}
@@ -91,12 +89,12 @@ export function Pagination({
               onValueChange={v => onPageSizeChange(Number(v))}
               disabled={disabled}
             >
-              <SelectTrigger className="h-7 w-[72px] rounded-control border-rule bg-surface t-data text-ink">
+              <SelectTrigger className="h-8 w-[76px] min-w-0 rounded-control bg-surface t-num text-ink">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {pageSizeOptions.map(n => (
-                  <SelectItem key={n} value={String(n)} className="t-data">
+                  <SelectItem key={n} value={String(n)} className="t-num">
                     {n}
                   </SelectItem>
                 ))}
@@ -110,7 +108,7 @@ export function Pagination({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 rounded-control border-rule px-2 text-ink disabled:opacity-40"
+            className="h-8 rounded-control px-2 text-ink"
             onClick={() => onPageChange(page - 1)}
             disabled={!canPrev}
             aria-label="Previous page"
@@ -127,7 +125,7 @@ export function Pagination({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 rounded-control border-rule px-2 text-ink disabled:opacity-40"
+            className="h-8 rounded-control px-2 text-ink"
             onClick={() => onPageChange(page + 1)}
             disabled={!canNext}
             aria-label="Next page"
