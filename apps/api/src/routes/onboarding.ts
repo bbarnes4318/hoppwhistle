@@ -786,6 +786,37 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         changes: { email, roleName: 'OWNER', expiresAt: grant.expiresAt.toISOString() },
       });
 
+      /*
+       * And it is actually sent.
+       *
+       * This route minted a grant, returned the token, and stopped. An agency
+       * OWNER -- the first person at a new agency, the one who cannot be
+       * invited by anybody inside it because nobody is inside it yet -- was
+       * therefore onboarded by an operator copying a token out of an API
+       * response and getting it to them by hand. The agent path
+       * (`POST /api/v1/auth/activation-grants`) has emailed its invitation for
+       * some time; this one never did, and the asymmetry was not a decision.
+       *
+       * Best-effort, exactly as there: the grant is already written and stays
+       * valid whether or not SMTP accepts the message, the token is returned
+       * either way, and `emailed` says which happened. Silence about a failed
+       * send is worse than the manual step it replaces -- an operator would
+       * believe the owner had been written to, and wait.
+       */
+      const agency = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true },
+      });
+
+      const { sendAgentInvitationEmail } = await import('../services/agent-invite-email.js');
+      const delivery = await sendAgentInvitationEmail({
+        email,
+        agencyName: agency?.name ?? null,
+        activationToken: grant.token,
+        expiresAt: grant.expiresAt,
+        role: 'OWNER',
+      });
+
       return reply.code(201).send({
         data: {
           tenantId,
@@ -794,6 +825,9 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
           expiresAt: grant.expiresAt,
           /** Shown once. It is not stored and cannot be read back. */
           activationToken: grant.token,
+          /** False when SMTP is unconfigured or refused it. Hand-deliver then. */
+          emailed: delivery.sent,
+          emailFailureReason: delivery.reason ?? null,
           onboarding: await onboardingState(tenantId),
         },
       });
