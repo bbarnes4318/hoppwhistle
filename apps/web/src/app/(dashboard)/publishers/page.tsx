@@ -249,10 +249,7 @@ function PublishersPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Manage Publishers"
-        subtitle="Configure publisher accounts and track performance"
-      >
+      <CompactPageHeader subtitle="Configure publisher accounts and track performance">
         <Button onClick={() => setCreateDialogOpen(true)} size="sm">
           <Plus className="mr-2 h-4 w-4" />
           Add Publisher

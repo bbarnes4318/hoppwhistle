@@ -241,10 +241,7 @@ function CampaignsPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Manage Campaigns"
-        subtitle="Configure campaigns and track performance"
-      >
+      <CompactPageHeader subtitle="Configure campaigns and track performance">
         <Button onClick={() => setWizardOpen(true)} size="sm">
           <Plus className="mr-2 h-4 w-4" />
           Create Campaign

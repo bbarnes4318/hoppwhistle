@@ -45,10 +45,10 @@
  * `path === prefix` or `path.startsWith(prefix + '/')` for exactly that reason;
  * a naive `includes` or an unanchored `startsWith` gets both wrong.
  *
- * `/admin/payroll` is deliberately NOT here, and the `/admin/` prefix is not
- * what decides. An agency runs its own payroll and keeps that screen; what is
- * listed is whatever belongs to NetEnroll rather than to the agency, wherever
- * it happens to sit in the path.
+ * The `/admin/` prefix is not what decides. What is listed is whatever belongs
+ * to NetEnroll rather than to the agency, wherever it happens to sit in the
+ * path -- `/payouts` carries no prefix at all and is staff's; `/settings/dnc`
+ * sits under a staff-sounding parent and is the agency's.
  */
 export const STAFF_ONLY_ROUTES = [
   // Market. The call marketplace is NetEnroll's side of the business: an agency
@@ -98,6 +98,27 @@ export const STAFF_ONLY_ROUTES = [
    */
   '/admin/live',
   '/payouts',
+
+  /*
+   * Payroll administration: NetEnroll's, not the agency's.
+   *
+   * This was deliberately absent until now, on the reading that an agency pays
+   * its own agents and should run that itself. That is not how NetEnroll works
+   * it, so the screen leaves the agency portal.
+   *
+   * Two things this does NOT do, and both matter:
+   *
+   *   - An AGENT's own `/payroll` is untouched. Different route, different
+   *     screen, still in AGENT_NAV, and it is where an agent reads what they
+   *     are owed.
+   *   - It does not close the API. `/api/v1/admin/payroll-report`,
+   *     `/set-pay-rate` and `/payouts` are gated `requireRole('ADMIN','OWNER')`
+   *     and tenant-scoped -- NOT `requirePlatformAdmin` -- so an agency owner's
+   *     token still answers on them, as the note at the top of this file says
+   *     of every route here. Closing that is a server change with its own blast
+   *     radius and is not smuggled in behind a navigation edit.
+   */
+  '/admin/payroll',
 ] as const;
 
 /**

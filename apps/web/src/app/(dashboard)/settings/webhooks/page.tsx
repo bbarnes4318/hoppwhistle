@@ -65,7 +65,6 @@ export default function WebhooksPage() {
  <div className="h-full flex flex-col overflow-hidden">
  <div className="flex items-center justify-between flex-shrink-0 mb-4">
  <div>
- <h1 className="text-3xl font-bold">Webhooks</h1>
  <p className="text-muted-foreground">Configure webhook endpoints for event notifications</p>
  </div>
  <Button onClick={() => setAddWebhookOpen(true)}>

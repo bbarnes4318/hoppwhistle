@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Globe, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
 import {
@@ -250,7 +250,6 @@ export function PlatformDeliveryView(): JSX.Element {
   if (error || !overview) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="Delivery — every agency" icon={Globe} />
         <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
       </CompactPageShell>
     );
@@ -261,11 +260,9 @@ export function PlatformDeliveryView(): JSX.Element {
   return (
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
-        title="Delivery — every agency"
         subtitle={`${overview.calendarDay} · ${count(totals.agencies)} ${
           totals.agencies === 1 ? 'agency' : 'agencies'
         }, ${count(totals.enrolled)} enrolled`}
-        icon={Globe}
       >
         <div className="flex items-center gap-2">
           {totals.flagged > 0 && (

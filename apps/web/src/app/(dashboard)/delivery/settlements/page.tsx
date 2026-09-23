@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Download, Loader2, Printer, Receipt } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Loader2, Printer } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -312,11 +312,7 @@ function AgencySettlementsPanel(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false} data-print="page">
-      <CompactPageHeader
-        title="Settlements"
-        subtitle="One row per settled Delivery Day, exactly as it was recorded"
-        icon={Receipt}
-      >
+      <CompactPageHeader subtitle="One row per settled Delivery Day, exactly as it was recorded">
         <div className="flex flex-wrap items-end gap-2" data-print="hide">
           <label className="t-meta text-ink-3">
             From

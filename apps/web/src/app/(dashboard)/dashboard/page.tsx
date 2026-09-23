@@ -9,7 +9,6 @@ import {
   Headphones,
   Phone,
   PhoneIncoming,
-  Play,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -366,11 +365,7 @@ export default function DashboardPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Dashboard"
-        subtitle="Final expense call center performance"
-        icon={Activity}
-      >
+      <CompactPageHeader subtitle="Final expense call center performance">
         <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1">
           <span className="relative flex h-2 w-2">
             <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />

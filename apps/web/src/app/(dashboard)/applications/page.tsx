@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -258,11 +258,7 @@ export default function ApplicationsPage() {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Applications"
-        subtitle="Every application the agency submitted, however it was recorded"
-        icon={FileText}
-      />
+      <CompactPageHeader subtitle="Every application the agency submitted, however it was recorded" />
 
       {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
       <FigureRow className="pt-1">

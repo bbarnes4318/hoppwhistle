@@ -198,7 +198,6 @@ export default function AdminPayrollPage() {
  return (
  <div className="h-full flex flex-col overflow-hidden">
  <div className="flex-shrink-0 mb-4">
- <h1 className="text-3xl font-bold">Payroll Administration</h1>
  <p className="text-muted-foreground">
  Manage contractor payments and view payroll liability
  </p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Check, ChevronRight, Loader2, Lock } from 'lucide-react';
+import { Check, ChevronRight, Loader2, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
@@ -144,11 +144,7 @@ export default function OnboardingPage(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Onboard an agency"
-        subtitle="Internal. Every agency is onboarded by NetEnroll after a signed agreement."
-        icon={Building2}
-      />
+      <CompactPageHeader subtitle="Internal. Every agency is onboarded by NetEnroll after a signed agreement." />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {notice && <p className="text-sm text-muted-foreground">{notice}</p>}

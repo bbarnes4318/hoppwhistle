@@ -309,7 +309,6 @@ function AgencyDeliveryPanel(): JSX.Element {
   if (error || !today) {
     return (
       <CompactPageShell>
-        <CompactPageHeader title="Delivery" icon={Gauge} />
         <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
       </CompactPageShell>
     );
@@ -324,11 +323,7 @@ function AgencyDeliveryPanel(): JSX.Element {
   if (!today.enrolled) {
     return (
       <CompactPageShell fullHeight={false}>
-        <CompactPageHeader
-          title="Delivery"
-          subtitle={`${today.calendarDay} · ${today.timeZone}`}
-          icon={Gauge}
-        >
+        <CompactPageHeader subtitle={`${today.calendarDay} · ${today.timeZone}`}>
           <StatusChip value="ACTIVE" label="Delivering" tone="live" />
         </CompactPageHeader>
 
@@ -377,11 +372,7 @@ function AgencyDeliveryPanel(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Delivery"
-        subtitle={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}
-        icon={Gauge}
-      >
+      <CompactPageHeader subtitle={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}>
         <div className="flex items-center gap-2">
           {today.delivering ? (
             <StatusChip value="ACTIVE" label="Delivering" tone="live" />

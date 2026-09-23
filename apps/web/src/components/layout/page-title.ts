@@ -9,16 +9,19 @@ import { AGENCY_OWNER_NAV, AGENT_NAV, buyerNav, PLATFORM_NAV, publisherNav } fro
  * humanised last segment, which is right often enough and never wrong-looking.
  */
 
+/**
+ * Routes whose title the nav cannot supply, because they have no nav entry.
+ *
+ * Nothing that IS a nav entry belongs here. Five settings routes used to be
+ * listed, repeating the name their sidebar item already carried -- and because
+ * this map is consulted first, the copy WON. Renaming the sidebar entry then
+ * changed the sidebar and left the heading and the browser tab saying the old
+ * thing, which is the drift the comment above promises this module prevents.
+ */
 const EXPLICIT: Record<string, string> = {
   '/calls/my': 'My calls',
   '/design-preview': 'Design system',
-  '/admin/live': 'Live board',
   '/publisher/tester': 'Request tester',
-  '/settings/users': 'Users',
-  '/settings/webhooks': 'Webhooks',
-  '/settings/dnc': 'DNC lists',
-  '/settings/quotas': 'Quotas & budgets',
-  '/admin/payroll': 'Payroll admin',
 };
 
 const ALL_ITEMS = [

@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Upload, Trash2, Loader2 } from 'lucide-react';
+import { Upload, Trash2, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 
@@ -78,7 +78,6 @@ export default function DncPage() {
  <div className="h-full flex flex-col overflow-hidden">
  <div className="flex items-center justify-between flex-shrink-0 mb-4">
  <div>
- <h1 className="text-3xl font-bold">Do Not Call Lists</h1>
  <p className="text-muted-foreground">Manage DNC lists and compliance</p>
  </div>
  <Button onClick={handleUploadList}>

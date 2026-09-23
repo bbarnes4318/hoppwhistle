@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Users,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -656,11 +655,7 @@ function BuyersPage() {
   // -------------------------------------------------------------------------
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Manage Buyers"
-        subtitle="Configure buyer billing, permissions, and targets"
-        icon={Users}
-      >
+      <CompactPageHeader subtitle="Configure buyer billing, permissions, and targets">
         <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
           <Plus className="mr-2 h-4 w-4" />
           Add Buyer

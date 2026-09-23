@@ -355,10 +355,7 @@ function NumbersPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader
-        title="Numbers & Routing"
-        subtitle="Manage your phone numbers and inbound call routes"
-      >
+      <CompactPageHeader subtitle="Manage your phone numbers and inbound call routes">
         <Button
           variant="outline"
           size="sm"

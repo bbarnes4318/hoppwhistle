@@ -244,10 +244,7 @@ export default function CarrierRoutingPage() {
 
   return (
     <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        title="Carrier Routing"
-        subtitle="Set the order carriers are tried for each kind of call. Changes take effect on the next call."
-      >
+      <CompactPageHeader subtitle="Set the order carriers are tried for each kind of call. Changes take effect on the next call.">
         <Button variant="outline" size="sm" onClick={() => void load()}>
           <RotateCcw className="mr-2 h-3.5 w-3.5" />
           Refresh
