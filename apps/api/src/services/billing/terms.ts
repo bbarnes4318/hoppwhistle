@@ -291,6 +291,30 @@ export interface AgencyTerms {
   suspensionReason: string | null;
 }
 
+/**
+ * Whether this agency can be billed: the one rule every surface must share.
+ *
+ * In-platform billing needs an ACTIVE mandate on the instrument the agency
+ * actually pays with (the ACH columns for ACH, the card columns for card).
+ * An agency billed outside the platform needs nothing and is not missing
+ * anything. A missing profile is an un-onboarded tenant, read as STRIPE so it
+ * does NOT report itself billable; see the fallback note in `loadAgencyTerms`.
+ *
+ * Screens used to re-derive this from `achMandateStatus` alone, which told a
+ * card-paying or offline agency "No valid ACH mandate" while the delivery gate,
+ * which reads this rule, was delivering to it normally.
+ */
+export function hasValidPaymentInstrument(profile: AgencyBillingProfile | null): boolean {
+  const paymentProvider = profile?.paymentProvider ?? PaymentProvider.STRIPE;
+  if (!providerChargesInPlatform(paymentProvider)) return true;
+
+  const payingByCard =
+    (profile?.paymentMethod ?? AgencyPaymentMethod.ACH) === AgencyPaymentMethod.CARD;
+  const status = payingByCard ? profile?.cardMandateStatus : profile?.achMandateStatus;
+  const methodId = payingByCard ? profile?.cardPaymentMethodId : profile?.achPaymentMethodId;
+  return status === AchMandateStatus.ACTIVE && !!methodId;
+}
+
 export async function loadAgencyTerms(
   tenantId: string,
   options: { prisma?: TermsClient } = {}
@@ -355,9 +379,7 @@ export async function loadAgencyTerms(
    * This is the only place the two readings are reconciled, so no caller has to
    * know that an offline agency's mandate columns are empty on purpose.
    */
-  const hasValidMandate = chargesInPlatform
-    ? mandateStatus === AchMandateStatus.ACTIVE && !!settlementPaymentMethodId
-    : true;
+  const hasValidMandate = hasValidPaymentInstrument(profile);
 
   return {
     tenantId,

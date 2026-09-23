@@ -55,6 +55,7 @@ import type { DeliveryGateDecision } from './delivery-gate.js';
 import {
   ceilingFor,
   consecutiveCleanSettlements,
+  hasValidPaymentInstrument,
   isEnrolledForBilling,
   overrunCeilingApplications,
 } from './terms.js';
@@ -141,6 +142,12 @@ export interface DeliveryTodayView {
 
   mandate: {
     status: string;
+    /**
+     * Whether the agency can be billed, from `hasValidPaymentInstrument`: the
+     * same rule the delivery gate reads. `status` is the raw ACH column and is
+     * NONE on purpose for a card-paying or offline agency; render from this.
+     */
+    valid: boolean;
     bankName: string | null;
     last4: string | null;
   };
@@ -188,7 +195,7 @@ const NOT_ENROLLED_VIEW: Omit<
   holdReason: null,
   holdDetail: null,
   holdSince: null,
-  mandate: { status: 'NONE', bankName: null, last4: null },
+  mandate: { status: 'NONE', valid: false, bankName: null, last4: null },
 };
 
 /**
@@ -357,6 +364,7 @@ export async function getDeliveryToday(
     holdSince: hold?.occurredAt ?? null,
     mandate: {
       status: profile?.achMandateStatus ?? 'NONE',
+      valid: hasValidPaymentInstrument(profile),
       bankName: profile?.achBankName ?? null,
       last4: profile?.achLast4 ?? null,
     },
@@ -1195,8 +1203,7 @@ export async function getPlatformOverview(
                 belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
                 atCeiling: ledger.overrun >= effectiveCeiling && effectiveCeiling > 0,
                 settlementFailedOrUnpaid: unpaid > 0,
-                noValidMandate:
-                  profile.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
+                noValidMandate: !hasValidPaymentInstrument(profile),
                 suspended: profile.suspendedAt != null,
                 enrolledNeverSettled: settlementsEver === 0,
                 disputed,
