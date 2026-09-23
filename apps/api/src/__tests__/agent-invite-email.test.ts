@@ -182,6 +182,61 @@ describe('sending', () => {
 
 /* ── Failing without failing the invitation ────────────────────────────────── */
 
+/**
+ * The same email, to two entirely different people.
+ *
+ * The platform's owner-invite route sends through this service now. An agency
+ * PRINCIPAL told to "open the phone in the bottom-right corner and wait for
+ * calls" would be waiting for a call that is never routed to them -- a worse
+ * first impression than the hand-delivered token it replaced. The role decides
+ * the instruction, and these assert the two do not blur back together.
+ */
+describe('who it is addressed to', () => {
+  it('tells an agent to open the softphone', async () => {
+    configureSmtp();
+    await sendAgentInvitationEmail(invitation());
+
+    const message = sendMail.mock.calls[0][0] as { subject: string; text: string; html: string };
+    expect(message.text).toContain('as an agent');
+    expect(message.text).toContain('phone in the bottom-right');
+    expect(message.text).not.toContain('Team Members');
+  });
+
+  it('tells an owner to add their people instead', async () => {
+    configureSmtp();
+    await sendAgentInvitationEmail(invitation({ role: 'OWNER' }));
+
+    const message = sendMail.mock.calls[0][0] as { subject: string; text: string; html: string };
+    expect(message.text).toContain('administrator for');
+    expect(message.text).toContain('Team Members');
+    // The instruction an owner must NOT be given.
+    expect(message.text).not.toContain('phone in the bottom-right');
+    expect(message.html).not.toContain('phone in the bottom-right');
+  });
+
+  it('subjects an owner with setting the agency up, not with being added to it', async () => {
+    configureSmtp();
+    await sendAgentInvitationEmail(invitation({ role: 'OWNER' }));
+
+    const message = sendMail.mock.calls[0][0] as { subject: string };
+    expect(message.subject).toBe('Set up Bedrock Insurance on NetEnroll');
+  });
+
+  /**
+   * Every caller that predates the role wrote an agent's invitation and passed
+   * no role at all. Defaulting to OWNER -- or to anything else -- would rewrite
+   * what those callers send without touching them.
+   */
+  it('is an agent invitation when no role is named', async () => {
+    configureSmtp();
+    await sendAgentInvitationEmail(invitation());
+
+    const message = sendMail.mock.calls[0][0] as { subject: string; text: string };
+    expect(message.subject).toBe('You have been added to Bedrock Insurance on NetEnroll');
+    expect(message.text).toContain('as an agent');
+  });
+});
+
 describe('when it cannot send', () => {
   it('reports not_configured rather than throwing, with no SMTP', async () => {
     const result = await sendAgentInvitationEmail(invitation());

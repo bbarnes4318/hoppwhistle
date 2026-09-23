@@ -42,6 +42,16 @@ export interface AgentInvitation {
   /** Shown once, and never recoverable. The whole point of the link. */
   activationToken: string;
   expiresAt: Date;
+  /**
+   * What they are being invited AS. Defaults to AGENT, which is what every
+   * caller meant when this only had one.
+   *
+   * It is not decoration. The body told an agent to open the softphone and
+   * wait for calls, and the platform's owner-invite route now sends through
+   * here too -- an agency principal being told to sit and wait for a call that
+   * is never routed to them is a worse first impression than no email at all.
+   */
+  role?: 'AGENT' | 'OWNER';
 }
 
 export interface InviteEmailResult {
@@ -115,6 +125,8 @@ export async function sendAgentInvitationEmail(
   invitation: AgentInvitation
 ): Promise<InviteEmailResult> {
   const { email, agencyName, activationToken, expiresAt } = invitation;
+  const role = invitation.role ?? 'AGENT';
+  const isOwner = role === 'OWNER';
 
   const transport = transporter();
   if (!transport) {
@@ -130,10 +142,31 @@ export async function sendAgentInvitationEmail(
   const expires = expiryText(expiresAt);
 
   const subject = agencyName
-    ? `You have been added to ${agencyName} on NetEnroll`
-    : 'Your NetEnroll agent invitation';
+    ? isOwner
+      ? `Set up ${agencyName} on NetEnroll`
+      : `You have been added to ${agencyName} on NetEnroll`
+    : isOwner
+      ? 'Set up your agency on NetEnroll'
+      : 'Your NetEnroll agent invitation';
 
-  const text = `You have been added as an agent for ${joining}.
+  const opening = isOwner
+    ? `You have been set up as the administrator for ${joining}.`
+    : `You have been added as an agent for ${joining}.`;
+
+  /*
+   * What to do once you are in, and it differs entirely by role. An agent opens
+   * the softphone and waits. An owner has people to add before anyone can.
+   */
+  const nextStep = isOwner
+    ? `Once you are in, add your people under Settings -> Team Members. An agent
+can take calls once they have accepted their invitation, have their licensed
+states recorded and are assigned a campaign -- that screen says which of those
+is missing for each of them.`
+    : `Once you are in, open the phone in the bottom-right corner of the screen. It
+signs itself in; there is nothing to configure. Calls will start arriving once
+an administrator has recorded the states you are licensed in.`;
+
+  const text = `${opening}
 
 Set up your account here:
 ${link}
@@ -142,9 +175,7 @@ This link is good until ${expires}. It can be used once, and it is the only
 way to set up this account -- if it expires, ask whoever invited you to send
 another.
 
-Once you are in, open the phone in the bottom-right corner of the screen. It
-signs itself in; there is nothing to configure. Calls will start arriving once
-an administrator has recorded the states you are licensed in.
+${nextStep}
 
 If you were not expecting this, you can ignore this message. Nothing is created
 until the link is used.
@@ -153,13 +184,21 @@ Kind regards,
 The NetEnroll team`;
 
   const html = renderEmail({
-    title: agencyName ? `You have been added to ${agencyName}` : 'Your NetEnroll invitation',
-    body: `<p>You have been added as an agent for <strong>${escapeHtml(joining)}</strong>.</p>
+    title: agencyName
+      ? isOwner
+        ? `Set up ${agencyName} on NetEnroll`
+        : `You have been added to ${agencyName}`
+      : 'Your NetEnroll invitation',
+    body: `<p>${escapeHtml(opening)}</p>
 <p style="margin:20px 0;">
   <a href="${escapeHtml(link)}" style="display:inline-block;background:#10b981;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;">Set up your account</a>
 </p>
 <p style="color:#55524b;">This link is good until <strong>${escapeHtml(expires)}</strong>. It can be used once, and it is the only way to set up this account — if it expires, ask whoever invited you to send another.</p>
-<p>Once you are in, open the phone in the bottom-right corner of the screen. It signs itself in; there is nothing to configure. Calls will start arriving once an administrator has recorded the states you are licensed in.</p>
+<p>${
+      isOwner
+        ? 'Once you are in, add your people under <strong>Settings &rarr; Team Members</strong>. An agent can take calls once they have accepted their invitation, have their licensed states recorded and are assigned a campaign — that screen says which of those is missing for each of them.'
+        : 'Once you are in, open the phone in the bottom-right corner of the screen. It signs itself in; there is nothing to configure. Calls will start arriving once an administrator has recorded the states you are licensed in.'
+    }</p>
 <p style="color:#8a867c;font-size:13px;">If you were not expecting this, you can ignore this message. Nothing is created until the link is used.</p>`,
   });
 
@@ -171,7 +210,7 @@ The NetEnroll team`;
       text,
       html,
     });
-    logger.info({ msg: 'Agent invitation emailed', email });
+    logger.info({ msg: 'Invitation emailed', email, role });
     return { sent: true };
   } catch (error) {
     /*
