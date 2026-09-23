@@ -189,7 +189,6 @@ export default function AICampaignsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">AI Campaigns</h1>
           <p className="text-muted-foreground">
             Manage your automated AI outbound calling campaigns
           </p>

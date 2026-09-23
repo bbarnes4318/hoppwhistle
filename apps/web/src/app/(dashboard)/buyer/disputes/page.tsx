@@ -44,10 +44,7 @@ export default async function BuyerDisputesPage() {
   const range = resolveRange({ range: '30d' });
 
   const header = (
-    <PageHeader
-      title="Disputes"
-      purpose="File against a call you should not have been charged for, and follow what happens to it. The recording and the duration measurement go with every dispute automatically."
-    />
+    <PageHeader purpose="File against a call you should not have been charged for, and follow what happens to it. The recording and the duration measurement go with every dispute automatically." />
   );
 
   if (!scope.buyerId) {

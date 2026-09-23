@@ -32,10 +32,7 @@ export default async function BuyerTargetingPage() {
   const scope = await requireBuyerScope();
 
   const header = (
-    <PageHeader
-      title="Targeting"
-      purpose="Change what you receive. The price per call and the volume you would have taken update as you go — from the last thirty days of real calls, not a projection."
-    />
+    <PageHeader purpose="Change what you receive. The price per call and the volume you would have taken update as you go — from the last thirty days of real calls, not a projection." />
   );
 
   if (!scope.buyerId) {

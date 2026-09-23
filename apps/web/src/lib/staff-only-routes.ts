@@ -119,6 +119,34 @@ export const STAFF_ONLY_ROUTES = [
    *     radius and is not smuggled in behind a navigation edit.
    */
   '/admin/payroll',
+
+  /*
+   * Five more screens an agency was being shown that are not its own.
+   *
+   *   /insurance-leads/reports  which leads Ameriquote accepted and refused.
+   *                             That is the MARKETPLACE's acceptance record,
+   *                             not the agency's book. `/insurance-leads` --
+   *                             the CRM itself -- stays, and the prefix match
+   *                             is whole-segment so taking the reports child
+   *                             does not take the parent with it.
+   *   /reports                  publisher revenue, buyer costs and campaign
+   *                             profitability: NetEnroll's margin on the calls
+   *                             it buys and sells. An agency has no publishers,
+   *                             no buyers and no campaigns, so all three
+   *                             rendered empty for them anyway.
+   *   /settings/quotas          concurrency and budget ceilings. Platform
+   *                             capacity, set by whoever sells the capacity.
+   *   /settings/webhooks        platform event plumbing.
+   *   /settings/dnc             DNC list administration.
+   *
+   * What an agency keeps is still what an agency runs: the floor, its own
+   * money with NetEnroll, and its own people.
+   */
+  '/insurance-leads/reports',
+  '/reports',
+  '/settings/quotas',
+  '/settings/webhooks',
+  '/settings/dnc',
 ] as const;
 
 /**

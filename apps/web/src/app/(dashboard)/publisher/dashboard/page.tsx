@@ -212,7 +212,6 @@ function PublisherDashboard() {
       {/* Header section */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Publisher Overview</h1>
           <p className="text-ink-2 text-sm mt-1">Real-time performance metrics and call details.</p>
         </div>
 

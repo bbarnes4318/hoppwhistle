@@ -162,7 +162,6 @@ const SWEEP = [
       // against.
       '/applications',
       '/insurance-leads',
-      '/insurance-leads/reports',
       '/rating',
       '/delivery',
       '/delivery/settlements',
@@ -172,12 +171,8 @@ const SWEEP = [
       // that neither role is refused anything behind it.
       '/leaderboard',
       '/billing',
-      '/reports',
       '/settings',
       '/settings/users',
-      '/settings/webhooks',
-      '/settings/dnc',
-      '/settings/quotas',
     ],
     /*
      * NetEnroll's own screens, asked for by an agency principal.
@@ -226,6 +221,27 @@ const SWEEP = [
        * loads it.
        */
       { from: '/admin/payroll', to: '/dashboard' },
+      /*
+       * Five more that moved out of the reachable list directly above, for the
+       * reason `/admin/payroll` did: they are NetEnroll's, and a route merely
+       * deleted from that list leaves the redirect that took it away untested.
+       *
+       * `/insurance-leads/reports` goes while `/insurance-leads` stays, which
+       * is the whole-segment match doing its job -- the CRM is the agency's and
+       * only the Ameriquote acceptance report is the marketplace's.
+       */
+      { from: '/insurance-leads/reports', to: '/dashboard' },
+      { from: '/reports', to: '/dashboard' },
+      { from: '/settings/quotas', to: '/dashboard' },
+      { from: '/settings/webhooks', to: '/dashboard' },
+      { from: '/settings/dnc', to: '/dashboard' },
+      /*
+       * Newly worth asserting: `/admin/live` was a dead path until the board
+       * was built, so "an agency principal cannot reach it" was true only
+       * because nobody could. Now that it renders, the redirect is the only
+       * thing keeping them off every other agency's floor.
+       */
+      { from: '/admin/live', to: '/dashboard' },
     ],
   },
   {
@@ -300,6 +316,12 @@ const SWEEP = [
     // Every agency at once, and no agency-scoped request behind it.
     strip: 'platform',
     routes: [
+      /*
+       * The Live Board, which until now was a nav entry marked "Soon" with no
+       * page behind it. It is cross-agency and reads no acting tenant, so this
+       * is the principal it is for: every agency at once, nothing scoped.
+       */
+      '/admin/live',
       '/admin/agencies',
       '/admin/onboarding',
       '/settings',
@@ -730,7 +752,12 @@ const KNOWN_REFUSALS = [
     why:
       'The campaign-profitability tab asks for an endpoint apps/api does not ' +
       'implement. The tab has never worked; building the report is a feature, ' +
-      'not a repaint.',
+      'not a repaint. ' +
+      'DORMANT: /reports became staff-only, so no principal in the sweep loads ' +
+      'it any more and this allowance is currently unreachable. It stays ' +
+      'because it was never FIXED -- the endpoint is still missing -- and the ' +
+      'day somebody sweeps /reports again it is the difference between a known ' +
+      'gap and a mystery 404.',
   },
 ];
 

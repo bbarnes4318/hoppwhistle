@@ -45,10 +45,7 @@ export default async function BuyerSpendPage({ searchParams }: { searchParams: S
   const campaignId = firstParam(searchParams.campaign);
 
   const header = (
-    <PageHeader
-      title="Spend"
-      purpose="Where the money went over the window you pick — broken down by campaign, and by the hour of day it was spent."
-    />
+    <PageHeader purpose="Where the money went over the window you pick — broken down by campaign, and by the hour of day it was spent." />
   );
 
   if (!scope.buyerId) {

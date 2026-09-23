@@ -277,10 +277,6 @@ function PublisherTesterPage() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink flex items-center gap-2">
-            <Terminal className="h-8 w-8 text-brand-ink" />
-            Ping/Post Tester
-          </h1>
           <p className="text-sm text-ink-2">
             Simulate publisher integrations and verify campaign routing bidding auctions.
           </p>

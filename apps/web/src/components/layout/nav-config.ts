@@ -47,7 +47,12 @@ export const PLATFORM_NAV: NavGroup[] = [
   {
     label: 'Live',
     items: [
-      { name: 'Live board', href: '/admin/live', icon: MonitorPlay, pending: true },
+      {
+        name: 'Live board',
+        href: '/admin/live',
+        icon: MonitorPlay,
+        title: 'Every agency right now: calls up, delivered and applications so far today',
+      },
       { name: 'Call center', href: '/call-center', icon: Headphones },
       { name: 'Calls', href: '/calls', icon: AudioLines },
       { name: 'Applications', href: '/applications', icon: FileText },
@@ -151,13 +156,18 @@ export const PLATFORM_NAV: NavGroup[] = [
       // First, and before its own sub-pages: /settings is the page the four
       // /settings/* entries below are reached from.
       { name: 'Settings', href: '/settings', icon: Settings },
+      /*
+       * One entry, because there is one page. "Agents" pointed at a roster that
+       * listed the same people as this does, with the four settings that decide
+       * whether one of them ever rings; those are on an agent's row here now.
+       * `/settings/agents` still resolves and redirects.
+       */
       {
-        name: 'Agents',
-        href: '/settings/agents',
-        icon: Headphones,
-        title: 'Your agents, and whether each one can actually take a call',
+        name: 'Team Members',
+        href: '/settings/users',
+        icon: Users,
+        title: 'Everyone in the agency, and whether each agent can take a call',
       },
-      { name: 'Team Members', href: '/settings/users', icon: Users },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
       { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
       { name: 'Carrier routing', href: '/settings/carriers', icon: PhoneForwarded },

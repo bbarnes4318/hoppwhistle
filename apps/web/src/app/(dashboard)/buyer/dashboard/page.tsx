@@ -49,7 +49,6 @@ export default async function BuyerDashboardPage() {
 
   const header = (
     <PageHeader
-      title="Your account"
       purpose="What you spent, what share of it was billable, and what is happening right now."
       action={
         <Link

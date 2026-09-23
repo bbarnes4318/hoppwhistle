@@ -171,7 +171,6 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     isAgentOnly,
     isReadonlyOnly,
     canViewRecordings,
-    canViewReports,
     status,
     hasResolvedNoRole,
   } = useAuth();
@@ -198,14 +197,21 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     if (isBuyerOnly) return buyerNav(canViewRecordings);
     if (isAgentOnly) return AGENT_NAV;
     if (isReadonlyOnly) {
-      const items: NavItem[] = [PLATFORM_NAV[0].items[0]];
-      if (canViewReports) {
-        const reports = PLATFORM_NAV.find(g => g.label === 'Money')?.items.find(
-          i => i.href === '/reports'
-        );
-        if (reports) items.push(reports);
-      }
-      return [{ items }];
+      /*
+       * Dashboard alone.
+       *
+       * This used to add /reports when the account held `reports:read`, and
+       * that link now goes somewhere they are sent straight back from:
+       * /reports joined STAFF_ONLY_ROUTES, and the dashboard layout redirects
+       * a read-only account off every route on that list -- staff bypass the
+       * dispatch entirely, a read-only account does not. Leaving the entry in
+       * would have put a link in the sidebar whose only behaviour is to bounce.
+       *
+       * The capability is untouched: `reports:read` still means what it meant
+       * and the API still answers it. What has gone is a menu item pointing at
+       * a screen this principal can no longer open.
+       */
+      return [{ items: [PLATFORM_NAV[0].items[0]] }];
     }
     // Reached only once the server has answered and named no role we render a
     // nav for. `NoRoleNotice` is what the person sees; an empty list here keeps
@@ -219,7 +225,6 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     isAgentOnly,
     isReadonlyOnly,
     canViewRecordings,
-    canViewReports,
   ]);
 
   const drawer = variant === 'drawer';

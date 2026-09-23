@@ -187,7 +187,6 @@ function PayrollPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-shrink-0 mb-4">
-        <h1 className="text-3xl font-bold">My Payroll</h1>
         <p className="text-muted-foreground">Track your hours and manage your earnings</p>
       </div>
 

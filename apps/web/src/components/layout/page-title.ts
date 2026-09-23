@@ -22,6 +22,16 @@ const EXPLICIT: Record<string, string> = {
   '/calls/my': 'My calls',
   '/design-preview': 'Design system',
   '/publisher/tester': 'Request tester',
+  /*
+   * The AI campaign screens have no nav entry, so the fallback would humanise
+   * the last segment and title them "Ai campaigns" and "New" -- the first
+   * mis-capitalised, the second meaningless on its own. Both pages used to
+   * carry their own heading and that is what covered for this; now that the
+   * topbar is the only place a page is named, it has to say something a person
+   * would recognise.
+   */
+  '/ai-campaigns': 'AI campaigns',
+  '/ai-campaigns/new': 'New AI campaign',
 };
 
 const ALL_ITEMS = [

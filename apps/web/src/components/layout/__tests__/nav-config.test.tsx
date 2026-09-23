@@ -118,6 +118,12 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
    * requirement, written down a second time so the two have to agree.
    */
   const REMOVED = [
+    /*
+     * Built now, and still not an agency's: `/admin/live` is the CROSS-AGENCY
+     * board. It left `pending: true` when the page was written; what keeps it
+     * out of an agency's sidebar is this list, not the stub it used to be.
+     */
+    '/admin/live',
     '/campaigns',
     '/publishers',
     '/buyers',
@@ -132,9 +138,18 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
     '/settings/carriers',
     '/admin/agencies',
     '/admin/onboarding',
-    '/admin/live',
     '/payouts',
     '/admin/payroll',
+    /*
+     * Five more the agency does not run. `/insurance-leads/reports` is the
+     * marketplace's acceptance record while `/insurance-leads` -- the CRM
+     * itself -- stays, which is the whole-segment match earning its keep.
+     */
+    '/insurance-leads/reports',
+    '/reports',
+    '/settings/quotas',
+    '/settings/webhooks',
+    '/settings/dnc',
   ];
 
   it.each(REMOVED)('does not link to %s', href => {
@@ -169,17 +184,12 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
       '/calls',
       '/applications',
       '/insurance-leads',
-      '/insurance-leads/reports',
       '/rating',
       '/delivery',
       '/delivery/settlements',
       '/billing',
-      '/reports',
       '/settings',
       '/settings/users',
-      '/settings/webhooks',
-      '/settings/dnc',
-      '/settings/quotas',
     ]) {
       expect(ownerHrefs.has(href), `AGENCY_OWNER_NAV missing ${href}`).toBe(true);
     }
@@ -236,14 +246,12 @@ describe("AGENCY_OWNER_NAV: NetEnroll's own screens are gone", () => {
 
     const hrefs = admin!.items.map(item => pathOf(item.href));
     expect(hrefs).toContain('/settings');
-    for (const child of [
-      '/settings/users',
-      '/settings/webhooks',
-      '/settings/dnc',
-      '/settings/quotas',
-    ]) {
-      expect(hrefs, `${child} is not beside its parent`).toContain(child);
-    }
+    /*
+     * One child now. Webhooks, DNC lists and Quotas & budgets are NetEnroll's
+     * and have left; `/settings/agents` merged INTO `/settings/users`, which is
+     * why Team Members is the only sub-page an agency reaches from here.
+     */
+    expect(hrefs, '/settings/users is not beside its parent').toContain('/settings/users');
 
     // First, before the pages it leads to.
     expect(hrefs[0]).toBe('/settings');

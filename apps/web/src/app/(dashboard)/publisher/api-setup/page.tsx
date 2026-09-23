@@ -177,7 +177,6 @@ function PublisherApiSetupPage() {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink">API Credentials</h1>
         <p className="text-sm text-ink-2">
           Manage API keys for ping/post traffic delivery and integration endpoints.
         </p>

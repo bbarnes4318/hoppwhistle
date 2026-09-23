@@ -1,11 +1,40 @@
 'use client';
 
-import { AlertTriangle, Building2, Loader2, Mail, MapPin, Plus, Shield } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import {
+  AlertTriangle,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Mail,
+  MapPin,
+  Plus,
+  RefreshCw,
+  Shield,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { InviteAgentDialog } from '@/components/agents/invite-agent-dialog';
+import { ScheduleDialog } from '@/components/agents/schedule-dialog';
+import {
+  ReadinessCell,
+  RosterLicenceCell,
+  ScheduleCell,
+  type Roster,
+  type RosterAgent,
+} from '@/components/team/roster-cells';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -21,6 +50,41 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
 import { jurisdictionName } from '@/lib/licensable-jurisdictions';
+import { cn } from '@/lib/utils';
+
+/**
+ * Team Members: everybody in the agency, and for an agent, whether they can
+ * actually take a call.
+ *
+ * ── Why this used to be two screens ──────────────────────────────────────────
+ *
+ * `/settings/users` listed every account -- roles, status, licence -- and
+ * `/settings/agents` listed the agents AGAIN with the four things that decide
+ * whether one of them ever rings: their licensed states, a SIP extension, how
+ * many calls at once, and a campaign to take them from. Both pages listed the
+ * same people. Neither was complete.
+ *
+ * The cost was not the duplication, it was that neither screen answered a whole
+ * question. Somebody adding a person had to know which door to use. Somebody
+ * asking "why is this agent getting nothing?" had to know the other door
+ * existed at all, because the Users page showed them present, active and
+ * correctly roled while the roster held the reason.
+ *
+ * One page. One row per person. An agent's row OPENS onto the readiness
+ * controls, so the answer to "why is nobody ringing" is one click from the
+ * place you already are, rather than on a screen you had to know about.
+ *
+ * ── Two sources, joined on the user id ───────────────────────────────────────
+ *
+ * `/api/v1/users` is every account. `/api/v1/agent-roster` is the operational
+ * half, and it selects from `prisma.user` -- so `RosterAgent.id` IS the user
+ * id and the join is an identity, not a guess by email. A user with no roster
+ * row is simply not an agent, which is the ordinary case for an owner.
+ *
+ * The roster failing is NOT the page failing. The account list is the thing
+ * this page is chiefly for; if the roster does not load, every row still
+ * renders and the agent rows say so rather than the screen going blank.
+ */
 
 interface User {
   id: string;
@@ -98,12 +162,70 @@ function LicenceCell({ user }: { user: User }): JSX.Element {
   );
 }
 
-export default function UsersPage() {
+function roleBadgeVariant(role: string): 'default' | 'secondary' | 'outline' {
+  switch (role.toLowerCase()) {
+    case 'admin':
+    case 'owner':
+      return 'default';
+    case 'buyer':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+}
+
+/**
+ * The filter, which is the whole reason one table can replace two.
+ *
+ * "Everyone" is the default and not "Agents": the page is the agency's people,
+ * and opening on a filtered view would recreate the old problem of a screen
+ * that shows some of them without saying so.
+ */
+type RoleFilter = 'all' | 'agents' | 'admins' | 'other';
+
+const FILTERS: Array<{ id: RoleFilter; label: string }> = [
+  { id: 'all', label: 'Everyone' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'admins', label: 'Administrators' },
+  { id: 'other', label: 'Other' },
+];
+
+function matchesFilter(user: User, filter: RoleFilter): boolean {
+  const roles = user.roles.map(r => r.toUpperCase());
+  const isAdmin = roles.includes('OWNER') || roles.includes('ADMIN');
+  const isAgent = roles.includes('AGENT');
+
+  switch (filter) {
+    case 'agents':
+      return isAgent;
+    case 'admins':
+      return isAdmin;
+    case 'other':
+      return !isAgent && !isAdmin;
+    default:
+      return true;
+  }
+}
+
+export default function TeamMembersPage(): JSX.Element {
   const [users, setUsers] = useState<User[]>([]);
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [filter, setFilter] = useState<RoleFilter>('all');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const [inviteUserOpen, setInviteUserOpen] = useState(false);
+  const [inviteAgentOpen, setInviteAgentOpen] = useState(false);
   const [licenceUser, setLicenceUser] = useState<User | null>(null);
+  const [scheduleAgent, setScheduleAgent] = useState<RosterAgent | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
   const { hasFullAccess } = useAuth();
+  const platform = usePlatformContext();
+  const withoutAgency = platform.needsAgency;
 
   // The API returns status lowercased. Approving is admin-only on the server,
   // so a non-admin is not offered buttons that would come back 403.
@@ -111,176 +233,443 @@ export default function UsersPage() {
   const activeUsers = users.filter(u => u.status?.toLowerCase() !== 'pending');
 
   /*
-   * The user list belongs to one agency, and this page is reachable without one.
+   * Both lists, in parallel, and the roster is allowed to fail on its own.
    *
-   * /settings is in PLATFORM_WIDE_PREFIXES so NetEnroll staff can open it with
-   * no agency entered. There is no cross-agency reading of a user list, so
-   * asking for one with no acting tenant is a request the server refuses 409 —
-   * twice per load, for a table that could never have rendered. The browser
-   * smoke test found this; it is the same shape as the defect Phase 5 fixed on
-   * /delivery.
+   * A user list belongs to one agency and this page is reachable without one:
+   * /settings is platform-wide so NetEnroll staff can open it with no agency
+   * entered, and asking either endpoint then is a request the server refuses
+   * 409 for a table that could never have rendered.
    */
-  const platform = usePlatformContext();
-  const withoutAgency = platform.needsAgency;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setRosterError(null);
+
+    const [userResult, rosterResult] = await Promise.allSettled([
+      apiClient.get<{ data: User[] }>('/api/v1/users'),
+      apiClient.get<{ data: Roster }>('/api/v1/agent-roster'),
+    ]);
+
+    if (userResult.status === 'fulfilled' && userResult.value.data?.data) {
+      setUsers(userResult.value.data.data);
+    } else {
+      setError('The team could not be loaded.');
+    }
+
+    if (rosterResult.status === 'fulfilled' && rosterResult.value.data?.data) {
+      setRoster(rosterResult.value.data.data);
+    } else {
+      // Deliberately not `error`: the account rows are still good, and blanking
+      // the whole page because the operational half is unavailable would hide
+      // the part that loaded.
+      setRosterError('The agent roster could not be loaded, so readiness is not shown.');
+    }
+
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     if (platform.loading) return;
     if (withoutAgency) {
       setUsers([]);
+      setRoster(null);
       setLoading(false);
       return;
     }
-    loadUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [platform.loading, withoutAgency]);
+    void load();
+  }, [platform.loading, withoutAgency, load]);
 
-  const loadUsers = async () => {
-    setLoading(true);
+  /** user id -> roster row. An absent entry means "not an agent". */
+  const agentsById = useMemo(() => {
+    const map = new Map<string, RosterAgent>();
+    for (const agent of roster?.agents ?? []) map.set(agent.id, agent);
+    return map;
+  }, [roster]);
+
+  const campaigns = roster?.campaigns ?? [];
+  /*
+   * One campaign is the ordinary case for an agency, and "which campaigns does
+   * this agent take" is then a question with one answer. It renders as a single
+   * switch rather than a list of one checkbox.
+   */
+  const singleCampaign = campaigns.length === 1 ? campaigns[0] : null;
+
+  const counts = useMemo(() => {
+    const out: Record<RoleFilter, number> = { all: 0, agents: 0, admins: 0, other: 0 };
+    for (const f of FILTERS) out[f.id] = activeUsers.filter(u => matchesFilter(u, f.id)).length;
+    return out;
+  }, [activeUsers]);
+
+  const visible = activeUsers.filter(u => matchesFilter(u, filter));
+
+  const readyCount = (roster?.agents ?? []).filter(a => !a.blockedReason).length;
+  const agentTotal = roster?.agents.length ?? 0;
+
+  function toggle(id: string): void {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function setCampaigns(agent: RosterAgent, campaignIds: string[]): Promise<void> {
+    setSavingId(agent.id);
     try {
-      const response = await apiClient.get<{ data: User[] }>('/api/v1/users');
-      if (response.data?.data) {
-        setUsers(response.data.data);
-      }
+      await apiClient.put(`/api/v1/agent-roster/${agent.id}/campaigns`, { campaignIds });
+      await load();
     } catch (err) {
-      console.error('Failed to load users:', err);
+      setRosterError(err instanceof Error ? err.message : 'The assignment could not be saved.');
     } finally {
-      setLoading(false);
+      setSavingId(null);
     }
-  };
+  }
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role.toLowerCase()) {
-      case 'admin':
-      case 'owner':
-        return 'default';
-      case 'buyer':
-        return 'secondary';
-      default:
-        return 'outline';
+  async function setConcurrency(agent: RosterAgent, maxConcurrentCalls: number): Promise<void> {
+    setSavingId(agent.id);
+    try {
+      await apiClient.patch(`/api/v1/agent-roster/${agent.id}`, { maxConcurrentCalls });
+      await load();
+    } catch (err) {
+      setRosterError(err instanceof Error ? err.message : 'The setting could not be saved.');
+    } finally {
+      setSavingId(null);
     }
-  };
+  }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between flex-shrink-0 mb-4">
-        <div>
-          <p className="text-muted-foreground">Manage team members and permissions</p>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
+        <p className="text-muted-foreground">
+          {agentTotal === 0
+            ? 'Everyone in your agency, and what each of them can do.'
+            : `${readyCount} of ${agentTotal} ${agentTotal === 1 ? 'agent' : 'agents'} ready to take calls.`}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+          </Button>
+          <Button variant="outline" onClick={() => setInviteUserOpen(true)}>
+            Invite user
+          </Button>
+          <Button onClick={() => setInviteAgentOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add agent
+          </Button>
         </div>
-        <Button onClick={() => setInviteDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Invite User
-        </Button>
       </div>
 
-      {hasFullAccess && <PendingApprovals users={pendingUsers} onDecided={loadUsers} />}
+      {error ? (
+        <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
 
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <CardHeader className="flex-shrink-0">
-          <CardTitle>Team Members</CardTitle>
-          <CardDescription>View and manage user access</CardDescription>
+      {rosterError && !withoutAgency ? (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          {rosterError}
+        </div>
+      ) : null}
+
+      {campaigns.length === 0 && !loading && !withoutAgency && agentTotal > 0 ? (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          This agency has no active campaign, so there is nothing to assign an agent to yet.
+          NetEnroll sets that up.
+        </div>
+      ) : null}
+
+      {hasFullAccess && <PendingApprovals users={pendingUsers} onDecided={() => void load()} />}
+
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="flex-shrink-0 gap-3">
+          <div>
+            <CardTitle>Team Members</CardTitle>
+            <CardDescription>
+              An agent takes calls once they have accepted their invitation, have their licensed
+              states recorded, are assigned a campaign, and have opened the softphone once. Open a
+              row to set those.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by role">
+            {FILTERS.map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                aria-pressed={filter === f.id}
+                className={cn(
+                  'rounded-control border px-2.5 py-1 t-meta transition-colors',
+                  filter === f.id
+                    ? 'border-transparent bg-brand-tint font-medium text-brand-ink'
+                    : 'border-rule text-ink-2 hover:bg-sunken'
+                )}
+              >
+                {f.label}
+                <span className="ml-1.5 text-ink-3">{counts[f.id]}</span>
+              </button>
+            ))}
+          </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto min-h-0">
+
+        <CardContent className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : withoutAgency ? (
             <div className="py-12 text-center t-body text-ink-3">
-              Users belong to an agency. Enter one in the switcher above to see and manage its
-              people.
+              People belong to an agency. Enter one in the switcher above to see and manage its
+              team.
             </div>
-          ) : activeUsers.length === 0 ? (
-            <div className="py-12 text-center t-body text-ink-3">No users found</div>
+          ) : visible.length === 0 ? (
+            <div className="py-12 text-center t-body text-ink-3">
+              {activeUsers.length === 0 ? 'No one here yet.' : 'Nobody matches that filter.'}
+            </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
+                  <TableHead className="w-8" />
+                  <TableHead>Person</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Buyer Company</TableHead>
+                  <TableHead>Taking calls</TableHead>
                   <TableHead>Licensed states</TableHead>
+                  <TableHead>Buyer company</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Invited</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeUsers.map(user => (
-                  <TableRow key={user.id}>
-                    <TableCell className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div>{user.email}</div>
-                        {(user.firstName || user.lastName) && (
-                          <div className="text-xs text-muted-foreground">
-                            {[user.firstName, user.lastName].filter(Boolean).join(' ')}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {user.roles.map(role => (
-                          <Badge
-                            key={role}
-                            variant={getRoleBadgeVariant(role)}
-                            className="flex items-center gap-1 w-fit"
+                {visible.map(user => {
+                  const agent = agentsById.get(user.id);
+                  const isOpen = expanded.has(user.id);
+                  const busy = savingId === user.id;
+
+                  return [
+                    <TableRow key={user.id} className={cn(busy && 'opacity-60')}>
+                      <TableCell className="w-8 pr-0">
+                        {agent ? (
+                          <button
+                            type="button"
+                            onClick={() => toggle(user.id)}
+                            aria-expanded={isOpen}
+                            aria-label={
+                              isOpen
+                                ? `Hide call settings for ${user.email}`
+                                : `Show call settings for ${user.email}`
+                            }
+                            className="rounded-control p-1 text-ink-3 hover:bg-sunken hover:text-ink"
                           >
-                            <Shield className="h-3 w-3" />
-                            {role.toUpperCase()}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {user.buyerId ? (
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="text-sm font-medium">{user.buyerName}</div>
-                            <div className="text-xs text-muted-foreground">{user.buyerCode}</div>
+                            {isOpen ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : null}
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <div className="truncate">{user.email}</div>
+                            {(user.firstName || user.lastName) && (
+                              <div className="truncate text-xs text-muted-foreground">
+                                {[user.firstName, user.lastName].filter(Boolean).join(' ')}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <LicenceCell user={user} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
-                        {user.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{new Date(user.invitedAt).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right">
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles.map(role => (
+                            <Badge
+                              key={role}
+                              variant={roleBadgeVariant(role)}
+                              className="flex w-fit items-center gap-1"
+                            >
+                              <Shield className="h-3 w-3" />
+                              {role.toUpperCase()}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+
                       {/*
-                        This was a dead `Edit` button with no handler. It is now
-                        the licence control, and it is offered only for the
-                        accounts a licence applies to.
+                        The column the two pages were split over. An agent gets
+                        the roster's reading; anybody else gets an em dash,
+                        because "can this person take a call" is not a question
+                        about an owner or a buyer.
                       */}
-                      {isLicenceGated(user) ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setLicenceUser(user)}
-                          disabled={!hasFullAccess}
-                          title={
-                            hasFullAccess
-                              ? undefined
-                              : 'Only an owner or administrator can change a licence'
-                          }
-                        >
-                          <MapPin className="mr-1.5 h-3.5 w-3.5" />
-                          Licence
-                        </Button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableCell>
+                        {agent ? (
+                          <ReadinessCell agent={agent} />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        <LicenceCell user={user} />
+                      </TableCell>
+
+                      <TableCell>
+                        {user.buyerId ? (
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="text-sm font-medium">{user.buyerName}</div>
+                              <div className="text-xs text-muted-foreground">{user.buyerCode}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
+                          {user.status}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        {isLicenceGated(user) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setLicenceUser(user)}
+                            disabled={!hasFullAccess}
+                            title={
+                              hasFullAccess
+                                ? undefined
+                                : 'Only an owner or administrator can change a licence'
+                            }
+                          >
+                            <MapPin className="mr-1.5 h-3.5 w-3.5" />
+                            Licence
+                          </Button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>,
+
+                    agent && isOpen ? (
+                      <TableRow key={`${user.id}-settings`} className="bg-sunken/50">
+                        <TableCell />
+                        <TableCell colSpan={7} className="py-4">
+                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">Extension</div>
+                              {agent.extension ? (
+                                <span className="font-mono text-xs">{agent.extension}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  Allocated when they first open the softphone
+                                </span>
+                              )}
+                            </div>
+
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">Calls at once</div>
+                              <Select
+                                value={String(agent.maxConcurrentCalls)}
+                                onValueChange={value => void setConcurrency(agent, Number(value))}
+                                disabled={busy}
+                              >
+                                <SelectTrigger className="h-8 w-16">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[1, 2, 3, 4, 5].map(n => (
+                                    <SelectItem key={n} value={String(n)}>
+                                      {n}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">Working hours</div>
+                              <button
+                                type="button"
+                                className="text-left hover:opacity-80"
+                                onClick={() => setScheduleAgent(agent)}
+                                title="Edit working hours"
+                              >
+                                <ScheduleCell schedule={agent.schedule} />
+                              </button>
+                            </div>
+
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">
+                                {singleCampaign ? 'On the queue' : 'Campaigns'}
+                              </div>
+                              {singleCampaign ? (
+                                <Switch
+                                  checked={agent.campaignIds.includes(singleCampaign.id)}
+                                  disabled={busy}
+                                  onCheckedChange={on =>
+                                    void setCampaigns(agent, on ? [singleCampaign.id] : [])
+                                  }
+                                  aria-label={`Take calls from ${singleCampaign.name}`}
+                                />
+                              ) : campaigns.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  No active campaign
+                                </span>
+                              ) : (
+                                <div className="space-y-1">
+                                  {campaigns.map(campaign => {
+                                    const on = agent.campaignIds.includes(campaign.id);
+                                    return (
+                                      <label
+                                        key={campaign.id}
+                                        className="flex items-center gap-2 text-xs"
+                                      >
+                                        <Checkbox
+                                          checked={on}
+                                          disabled={busy}
+                                          onCheckedChange={next =>
+                                            void setCampaigns(
+                                              agent,
+                                              next === true
+                                                ? [...agent.campaignIds, campaign.id]
+                                                : agent.campaignIds.filter(id => id !== campaign.id)
+                                            )
+                                          }
+                                        />
+                                        {campaign.name}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-4 t-meta text-ink-3">
+                            Licensed states:{' '}
+                            <button
+                              type="button"
+                              className="align-middle hover:opacity-80"
+                              onClick={() => setLicenceUser(user)}
+                              title="Edit licensed states"
+                            >
+                              <RosterLicenceCell states={agent.licensedStates} />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null,
+                  ];
+                })}
               </TableBody>
             </Table>
           )}
@@ -288,9 +677,28 @@ export default function UsersPage() {
       </Card>
 
       <InviteUserDialog
-        open={inviteDialogOpen}
-        onOpenChange={setInviteDialogOpen}
-        onSuccess={loadUsers}
+        open={inviteUserOpen}
+        onOpenChange={setInviteUserOpen}
+        onSuccess={() => void load()}
+      />
+
+      <InviteAgentDialog
+        open={inviteAgentOpen}
+        onOpenChange={setInviteAgentOpen}
+        onInvited={() => void load()}
+      />
+
+      <ScheduleDialog
+        open={scheduleAgent !== null}
+        onOpenChange={next => {
+          if (!next) setScheduleAgent(null);
+        }}
+        agent={scheduleAgent}
+        timeZone={roster?.deliveryTimeZone ?? 'America/New_York'}
+        onSaved={() => {
+          setScheduleAgent(null);
+          void load();
+        }}
       />
 
       <LicensedStatesDialog
@@ -299,7 +707,10 @@ export default function UsersPage() {
           if (!open) setLicenceUser(null);
         }}
         user={licenceUser}
-        onSaved={() => void loadUsers()}
+        onSaved={() => {
+          setLicenceUser(null);
+          void load();
+        }}
       />
     </div>
   );

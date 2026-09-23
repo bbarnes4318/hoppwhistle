@@ -56,10 +56,7 @@ export default async function BuyerCallsPage({ searchParams }: { searchParams: S
   const disputeStatus = firstParam(searchParams.outcome);
 
   const header = (
-    <PageHeader
-      title="Calls"
-      purpose="Review what came in, then accept it or dispute it. Both are one click from the row — the detail panel is there when you want it, not because you need it to act."
-    />
+    <PageHeader purpose="Review what came in, then accept it or dispute it. Both are one click from the row — the detail panel is there when you want it, not because you need it to act." />
   );
 
   if (!scope.buyerId) {

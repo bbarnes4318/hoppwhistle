@@ -30,7 +30,11 @@ describe('the topbar is the only place a page is named', () => {
    * requirement, written down a second time so the two have to agree.
    */
   const REQUIRED: Array<[string, string]> = [
-    ['/settings/agents', 'Agents'],
+    /*
+     * `/settings/agents` is not here any more. It was its own page with its own
+     * title; the roster merged into Team Members and the path is a redirect, so
+     * the only honest assertion about its title is that nobody reads one.
+     */
     ['/settings/users', 'Team Members'],
     ['/settings/webhooks', 'Webhooks'],
     ['/settings/dnc', 'DNC Lists'],
@@ -97,6 +101,7 @@ describe('the pages that were fixed render no title of their own', () => {
     'settings',
     'settings/agents',
     'settings/users',
+    'admin/live',
     'settings/webhooks',
     'settings/dnc',
     'settings/quotas',

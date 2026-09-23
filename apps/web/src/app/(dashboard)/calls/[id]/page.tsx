@@ -35,7 +35,6 @@ export default function CallDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Call Details</h1>
         <p className="text-muted-foreground">Call ID: {id}</p>
       </div>
 

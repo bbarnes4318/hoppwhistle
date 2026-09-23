@@ -1366,7 +1366,6 @@ export function CallCenterPortal(): JSX.Element {
             <div className="w-16 h-16 bg-brand rounded-card flex items-center justify-center mx-auto mb-4 ">
               <Phone className="w-8 h-8 text-ink" />
             </div>
-            <h1 className="text-3xl font-bold text-ink mb-2">Call Center Platform</h1>
             <p className="text-ink-3">Select your workspace to continue</p>
           </div>
 

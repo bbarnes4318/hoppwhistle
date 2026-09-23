@@ -339,7 +339,6 @@ export default function NewCampaignPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">New AI Campaign</h1>
           <p className="text-sm text-muted-foreground">Template-based campaign wizard</p>
         </div>
       </div>
