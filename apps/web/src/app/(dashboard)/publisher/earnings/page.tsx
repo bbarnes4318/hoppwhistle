@@ -137,7 +137,6 @@ function PublisherEarningsPage() {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink">Earnings & Payouts</h1>
         <p className="text-sm text-ink-2">
           Review your lifetime payout stats, pending balances, and accrual transactions.
         </p>

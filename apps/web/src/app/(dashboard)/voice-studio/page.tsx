@@ -380,7 +380,6 @@ export default function VoiceStudioPage() {
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Voice Studio</h1>
           <p className="text-sm text-muted-foreground">
             Clone a voice, hear it perform a script, then paste its id into the agent&apos;s TTS
             config.

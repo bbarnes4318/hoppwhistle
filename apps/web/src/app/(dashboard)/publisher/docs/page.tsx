@@ -20,7 +20,6 @@ function PublisherDocsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="border-b pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Support & Documentation</h1>
         <p className="mt-1 text-sm text-ink-2">
           Everything you need to integrate with NetEnroll, test your integration, and work out what
           went wrong when a call does not price the way you expected.

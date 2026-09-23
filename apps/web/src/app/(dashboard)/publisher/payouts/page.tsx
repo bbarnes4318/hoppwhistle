@@ -115,7 +115,6 @@ function PublisherPayoutsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Payout Statements</h1>
           <p className="mt-1 text-sm text-ink-2">
             Monitor your earnings settlements, payout history, and payment processing status.
           </p>

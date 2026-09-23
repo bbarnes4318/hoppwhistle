@@ -98,6 +98,7 @@ import {
   maxDailyDebitFor,
   overrunCeilingApplications,
 } from '../services/billing/terms.js';
+import { getLiveBoard } from '../services/live/platform-board.js';
 import { currentCalendarDay } from '../services/rating/calendar-day.js';
 import { toNumber } from '../services/rating/rate-curve.js';
 
@@ -824,6 +825,39 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   // ==========================================================================
   // Platform-scoped
   // ==========================================================================
+
+  /**
+   * GET /api/v1/platform/live/board
+   *
+   * Every agency, right now: calls up this second, delivered calls and
+   * submitted applications so far today, and the closing percentage between
+   * them. Platform totals across the top.
+   *
+   * Distinct from `/overview` directly below, which is the same agencies as a
+   * settled money day -- rate, block, overrun, margin. This one is the floor,
+   * and the question it answers is "who is on the phone", which no screen in
+   * the product answered before: `/admin/live` has been a nav entry marked
+   * "Soon" with no page behind it since the sidebar was written.
+   *
+   * No acting tenant is read. Entering an agency narrows the delivery overview
+   * because that screen has a single-agency reading; a cross-agency live board
+   * does not, and an operator inside one agency still wants the whole floor.
+   *
+   * `?includeNonProduction=true` lists the demo and fixture tenants as well.
+   * They stay out of the totals either way.
+   */
+  fastify.get<{ Querystring: { includeNonProduction?: string } }>(
+    '/api/v1/platform/live/board',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      return reply.send({
+        data: await getLiveBoard({
+          prisma,
+          includeNonProduction: request.query.includeNonProduction === 'true',
+        }),
+      });
+    }
+  );
 
   /**
    * GET /api/v1/platform/delivery/overview

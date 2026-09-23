@@ -394,7 +394,7 @@ export default function CampaignDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">{campaign.name}</h1>
+              <h2 className="text-3xl font-bold tracking-tight">{campaign.name}</h2>
               <Badge variant="outline" className={statusColors[campaign.status]}>
                 {campaign.status}
               </Badge>

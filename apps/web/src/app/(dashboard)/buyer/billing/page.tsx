@@ -44,10 +44,7 @@ export default async function BuyerBillingPage() {
   const range = resolveRange({ range: '30d' });
 
   const header = (
-    <PageHeader
-      title="Billing"
-      purpose="What you have, what you are spending it at, how long it lasts — and the rule that decides when you get charged."
-    />
+    <PageHeader purpose="What you have, what you are spending it at, how long it lasts — and the rule that decides when you get charged." />
   );
 
   if (!scope.buyerId) {
