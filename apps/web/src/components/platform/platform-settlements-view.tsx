@@ -174,7 +174,8 @@ export function PlatformSettlementsView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false} data-print="page">
-      <CompactPageHeader subtitle="One row per agency per settled Delivery Day">
+      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
+      <CompactPageHeader subtitle="Every agency · one row per agency per settled Delivery Day">
         <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
           <Download className="mr-2 h-3 w-3" />
           {exporting ? 'Exporting…' : 'Export CSV'}

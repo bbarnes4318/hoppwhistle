@@ -259,8 +259,17 @@ export function PlatformDeliveryView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
+      {/*
+        "Every agency" leads the line, and it is load-bearing.
+
+        This view and the single-agency one share the route: which you get turns
+        on whether a platform operator has entered an agency. The only thing on
+        screen that said which was the heading -- "Delivery — every agency" --
+        and when that heading went, so did the distinction. It says so here
+        instead, as scope rather than as a second copy of the page's name.
+      */}
       <CompactPageHeader
-        subtitle={`${overview.calendarDay} · ${count(totals.agencies)} ${
+        subtitle={`Every agency · ${overview.calendarDay} · ${count(totals.agencies)} ${
           totals.agencies === 1 ? 'agency' : 'agencies'
         }, ${count(totals.enrolled)} enrolled`}
       >

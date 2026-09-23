@@ -89,14 +89,30 @@ const FRONT = `http://127.0.0.1:${FRONT_PORT}`;
 const OPERATOR = { email: 'platform-smoke@netenroll.invalid', password: 'smoke-Passw0rd!' };
 
 /**
- * The routes that must render platform-wide, and the heading that proves each
+ * The routes that must render platform-wide, and the string that proves each
  * one did. Kept beside `PLATFORM_WIDE_LANDING_ROUTES` in
  * `src/lib/platform-routes.ts`; the guard below fails if they drift apart.
+ *
+ * ── Why "Every agency" and not the page's name ───────────────────────────────
+ *
+ * These were the three headings "Delivery — every agency", "Rate — every
+ * agency" and "Settlements — every agency". Those headings are gone: the page
+ * name is the topbar's now, once, and a page no longer draws a second copy of
+ * it over its own content. What each of these views still says, and must, is
+ * its SCOPE -- it shares a route with the single-agency view and which one you
+ * get turns on whether the operator has entered an agency.
+ *
+ * Scope is the better assertion anyway. WHICH page rendered is already checked,
+ * separately and more exactly, by the `landed !== route.path` test below. What
+ * that cannot catch is the right URL rendering the WRONG VARIANT -- an operator
+ * with no acting tenant being handed the agency view -- and that is precisely
+ * what this string is now proving, because the agency variant never says it.
+ * The same string on all three is therefore not a weakness here.
  */
 const ROUTES = [
-  { path: '/delivery', heading: 'Delivery — every agency' },
-  { path: '/rating', heading: 'Rate — every agency' },
-  { path: '/delivery/settlements', heading: 'Settlements — every agency' },
+  { path: '/delivery', heading: 'Every agency' },
+  { path: '/rating', heading: 'Every agency' },
+  { path: '/delivery/settlements', heading: 'Every agency' },
 ];
 
 /**

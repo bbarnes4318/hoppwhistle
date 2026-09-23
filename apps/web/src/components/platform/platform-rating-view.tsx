@@ -129,8 +129,9 @@ export function PlatformRatingView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
+      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
       <CompactPageHeader
-        subtitle={`${overview.calendarDay} · days end 23:59:59 ${overview.timeZone} · curve v${overview.curveVersion}`}
+        subtitle={`Every agency · ${overview.calendarDay} · days end 23:59:59 ${overview.timeZone} · curve v${overview.curveVersion}`}
       >
         <Button variant="outline" size="sm" onClick={() => void load()}>
           <RefreshCw className="mr-2 h-3 w-3" />
