@@ -185,6 +185,21 @@ describe('a directory hit', () => {
     expect(mockLookup).toHaveBeenCalledWith('1042', expect.anything());
   });
 
+  it('reads the extension from `user` on a registration, where `key_value` is the domain', async () => {
+    // What mod_xml_curl actually posts for a REGISTER's digest check.
+    const body = lookupBody({
+      tag_name: 'domain',
+      key_name: 'name',
+      key_value: 'hopwhistle.com',
+      user: '1000',
+      domain: 'hopwhistle.com',
+      action: 'sip_auth',
+    });
+
+    await post(app, { body });
+    expect(mockLookup).toHaveBeenCalledWith('1000', expect.anything());
+  });
+
   it('escapes XML metacharacters in the password', async () => {
     mockLookup.mockResolvedValue({
       extension: '1042',

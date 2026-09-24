@@ -197,7 +197,21 @@ export async function registerFreeswitchDirectoryRoutes(fastify: FastifyInstance
         return reply.send(NOT_FOUND_DOCUMENT);
       }
 
-      const extension = (body.key_value ?? body.user ?? '').trim();
+      /*
+       * The extension is `user`. `key_value` is only the extension when the
+       * lookup is keyed on a user; for a registration FreeSWITCH asks with
+       * `tag_name=domain&key_name=name`, so `key_value` is the DOMAIN
+       * ("hopwhistle.com") and `user` carries the extension. Reading
+       * `key_value` first looked up an extension called "hopwhistle.com",
+       * answered not-found, and sent FreeSWITCH to the static 1000.xml with its
+       * old shared password -- every browser softphone got 403 Forbidden with
+       * the correct password.
+       */
+      const extension = (
+        body.user ??
+        (body.tag_name === 'domain' ? '' : body.key_value) ??
+        ''
+      ).trim();
       if (!extension) {
         return reply.send(NOT_FOUND_DOCUMENT);
       }
