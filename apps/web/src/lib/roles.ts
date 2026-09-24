@@ -22,7 +22,7 @@
  *   2. PUBLISHER     - ahead of BUYER, matching the ladder `useAuth()` and
  *                      `requireBuyerScope()` already used.
  *   3. BUYER
- *   4. AGENT         - the call centre, which is where an agent works.
+ *   4. AGENT         - their own calls (/calls, narrowed server-side).
  *   5. everyone else (analyst, readonly, no roles yet) - /dashboard.
  */
 
@@ -35,7 +35,7 @@ export function normalizeRoles(roles: string[] | null | undefined): string[] {
 /**
  * The page a user with these roles should land on.
  *
- * AGENT lands on /call-center rather than /dashboard because /dashboard is
+ * AGENT lands on /calls ("My calls") rather than /dashboard because /dashboard is
  * still the tenant-wide view: every call the agency took, every application it
  * wrote. That is the one destination an agent must not be sent to by default,
  * and it stays that way until the dashboard endpoint is narrowed to the
@@ -47,7 +47,7 @@ export function homePathForRoles(roles: string[] | null | undefined): string {
   if (normalized.includes('OWNER') || normalized.includes('ADMIN')) return '/dashboard';
   if (normalized.includes('PUBLISHER')) return '/publisher/dashboard';
   if (normalized.includes('BUYER')) return '/buyer/dashboard';
-  if (normalized.includes('AGENT')) return '/call-center';
+  if (normalized.includes('AGENT')) return '/calls';
 
   return '/dashboard';
 }

@@ -98,6 +98,6 @@ describe('where each role lands', () => {
 
     expect(homePathForRoles(['OWNER', 'AGENT'])).toBe('/dashboard');
     expect(homePathForRoles(['ADMIN', 'AGENT'])).toBe('/dashboard');
-    expect(homePathForRoles(['AGENT'])).toBe('/call-center');
+    expect(homePathForRoles(['AGENT'])).toBe('/calls');
   });
 });

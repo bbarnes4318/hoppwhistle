@@ -58,7 +58,7 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: MonitorPlay,
         title: 'Every agency right now: calls up, delivered and applications so far today',
       },
-      { name: 'Call center', href: '/call-center', icon: Headphones },
+      { name: 'Power Dialer', href: '/call-center', icon: Headphones },
       { name: 'Calls', href: '/calls', icon: AudioLines },
       { name: 'Applications', href: '/applications', icon: FileText },
       {
@@ -261,13 +261,13 @@ export const AGENT_NAV: NavGroup[] = [
   {
     label: 'Live',
     items: [
-      { name: 'Call center', href: '/call-center', icon: Headphones },
       {
         name: 'My calls',
         href: '/calls',
         icon: AudioLines,
         title: 'Your calls. Narrowed server-side to the ones you took.',
       },
+      { name: 'Power Dialer', href: '/call-center', icon: Headphones },
       {
         name: 'My applications',
         href: '/applications',

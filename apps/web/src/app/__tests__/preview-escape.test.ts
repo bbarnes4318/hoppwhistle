@@ -77,11 +77,10 @@ describe('a platform operator previewing a role', () => {
 });
 
 describe('what a previewed role routes to', () => {
-  it('sends a lone AGENT to the console, which is why the banner has to be there', async () => {
-    // Not a bug to fix -- it is correct for a real agent, and a preview is
-    // deliberately indistinguishable from one. That is precisely why the way
-    // out has to exist on the page it lands on.
+  it('sends a lone AGENT to My calls', async () => {
+    // A preview is deliberately indistinguishable from a real agent. /calls
+    // renders with the normal shell, so the "Leave preview" banner is there.
     const { homePathForRoles } = await import('@/lib/roles');
-    expect(homePathForRoles(['AGENT'])).toBe('/call-center');
+    expect(homePathForRoles(['AGENT'])).toBe('/calls');
   });
 });

@@ -237,7 +237,7 @@ export default function DashboardPage() {
        * agency took, every application it wrote, the whole floor's numbers. The
        * omission read as deliberate because the dependency was there.
        *
-       * /call-center is where an agent works, and it is the same destination
+       * /calls ("My calls") is an agent's home, and it is the same destination
        * `defaultDashboardPath` already names for them.
        *
        * ── Why a default must not be enforced against an explicit request ────
@@ -252,7 +252,7 @@ export default function DashboardPage() {
        * `hasLeftConsole()` is that button having been pressed. Signing in still
        * puts an agent in the console; asking to leave it now works.
        */
-      router.replace('/call-center');
+      router.replace('/calls');
     }
   }, [
     user,
