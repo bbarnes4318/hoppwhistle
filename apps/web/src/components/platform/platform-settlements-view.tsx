@@ -4,10 +4,17 @@ import { Download, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Ledger, count, dollars, pct } from '@/components/delivery/ledger';
+import {
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarDateRange,
+  ToolbarMeta,
+  ToolbarSelect,
+} from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { CompactPageShell } from '@/components/layout/compact-layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 
@@ -172,71 +179,60 @@ export function PlatformSettlementsView(): JSX.Element {
     }
   }
 
+  const filtered = Boolean(from || to || agencyId || includeNonProduction);
+
+  function clearFilters(): void {
+    setFrom('');
+    setTo('');
+    setAgencyId('');
+    setIncludeNonProduction(false);
+  }
+
   return (
     <CompactPageShell fullHeight={false} data-print="page">
-      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
-      <CompactPageHeader subtitle="Every agency · one row per agency per settled Delivery Day">
-        <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
-          <Download className="mr-2 h-3 w-3" />
-          {exporting ? 'Exporting…' : 'Export CSV'}
-        </Button>
-      </CompactPageHeader>
-
-      {/* The filters, on one line, no box: they are controls, not content. */}
-      <div className="flex flex-wrap items-end gap-3" data-print="hide">
-        <div>
-          <label className="mb-1 block t-meta text-ink-3" htmlFor="from">
-            From
-          </label>
-          <Input
-            id="from"
-            type="date"
-            value={from}
-            onChange={event => setFrom(event.target.value)}
-            className="h-8 w-36"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block t-meta text-ink-3" htmlFor="to">
-            To
-          </label>
-          <Input
-            id="to"
-            type="date"
-            value={to}
-            onChange={event => setTo(event.target.value)}
-            className="h-8 w-36"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block t-meta text-ink-3" htmlFor="agency">
-            Agency
-          </label>
-          <select
-            id="agency"
-            value={agencyId}
-            onChange={event => setAgencyId(event.target.value)}
-            className="h-8 rounded-control border border-rule bg-surface px-2 t-body text-ink"
-          >
-            <option value="">Every agency</option>
-            {agencies.map(agency => (
-              <option key={agency.tenantId} value={agency.tenantId}>
-                {agency.name}
-                {agency.isNonProduction ? ' (non-production)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <label className="flex h-8 cursor-pointer items-center gap-2 t-meta text-ink-2">
+      {/*
+        "Every agency" leads the line; see platform-delivery-view.tsx. The
+        filters and the export share that one row: they are controls, not
+        content. The agency select keeps its "no filter" state as '' in page
+        state (the server's shape); the toolbar select needs a non-empty
+        sentinel, so 'all' is mapped at the edge.
+      */}
+      <Toolbar>
+        <ToolbarMeta>Every agency</ToolbarMeta>
+        <ToolbarDateRange from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+        <ToolbarSelect
+          label="Agency"
+          allLabel="Every agency"
+          value={agencyId || 'all'}
+          onChange={value => setAgencyId(value === 'all' ? '' : value)}
+          options={agencies.map(agency => ({
+            value: agency.tenantId,
+            label: `${agency.name}${agency.isNonProduction ? ' (non-production)' : ''}`,
+          }))}
+        />
+        <label className="flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap px-1 text-xs text-ink-2">
           <input
             type="checkbox"
             checked={includeNonProduction}
             onChange={event => setIncludeNonProduction(event.target.checked)}
             className="accent-brand-ink"
           />
-          Include non-production tenants
+          Non-production
         </label>
-      </div>
+        <ToolbarActions data-print="hide">
+          {filtered && <ToolbarClear onClick={clearFilters} />}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => void download()}
+            disabled={exporting}
+          >
+            <Download className="mr-1.5 h-3 w-3" />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {error && <p className="t-body text-dropped-ink">{error}</p>}
 

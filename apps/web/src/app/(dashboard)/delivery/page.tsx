@@ -14,9 +14,11 @@ import {
   PanelHeader,
   PanelTitle,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarMeta,
 } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { PageHeader } from '@/components/layout/page-header';
 import { PlatformDeliveryView } from '@/components/platform/platform-delivery-view';
 import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
@@ -325,10 +327,13 @@ function AgencyDeliveryPanel(): JSX.Element {
   if (!today.enrolled) {
     return (
       <div className="page-canvas">
-        <PageHeader
-          description={`${today.calendarDay} · ${today.timeZone}`}
-          actions={<StatusChip value="ACTIVE" label="Delivering" tone="live" />}
-        />
+        {/* The day being read and the delivery state, on the one toolbar row. */}
+        <Toolbar>
+          <ToolbarMeta>{today.calendarDay}</ToolbarMeta>
+          <ToolbarActions>
+            <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+          </ToolbarActions>
+        </Toolbar>
 
         {/*
           Operational figures only. These are true whether or not an agency is
@@ -387,25 +392,28 @@ function AgencyDeliveryPanel(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}
-        actions={
-          <>
-            {today.delivering ? (
-              <StatusChip value="ACTIVE" label="Delivering" tone="live" />
-            ) : (
-              <StatusChip value="PAUSED" label="Paused" tone="blocked" />
-            )}
-            <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw className="mr-2 h-3 w-3" />
-              Refresh
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/delivery/settlements">Settlement history</Link>
-            </Button>
-          </>
-        }
-      />
+      {/*
+        The calendar day being read, the delivery state and the page's actions
+        share one row. There is no header blurb above it: the title is already
+        in the topbar.
+      */}
+      <Toolbar>
+        <ToolbarMeta>{today.calendarDay}</ToolbarMeta>
+        {today.delivering ? (
+          <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+        ) : (
+          <StatusChip value="PAUSED" label="Paused" tone="blocked" />
+        )}
+        <ToolbarActions>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={refresh}>
+            <RefreshCw className="mr-1.5 h-3 w-3" />
+            Refresh
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+            <Link href="/delivery/settlements">Settlement history</Link>
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {!today.delivering && (
         <Notice
@@ -428,8 +436,7 @@ function AgencyDeliveryPanel(): JSX.Element {
 
       {!today.chargesEnabled && (
         <Notice tone="info" icon={Gauge} title="Settlements are running without charging">
-          Every figure on this page is real and each night&rsquo;s settlement is recorded in full,
-          but no payment is taken. NetEnroll turns charging on separately.
+          Figures and settlements are real; no payment is taken until NetEnroll turns charging on.
         </Notice>
       )}
 
