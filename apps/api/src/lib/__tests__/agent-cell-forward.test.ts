@@ -59,7 +59,7 @@ describe('dialedKeyFromChannelName', () => {
   });
 
   it('ignores softphone legs and empty names', () => {
-    expect(dialedKeyFromChannelName('sofia/internal/1042@hopwhistle.com')).toBeNull();
+    expect(dialedKeyFromChannelName('sofia/internal/1042@10.0.0.5')).toBeNull();
     expect(dialedKeyFromChannelName('')).toBeNull();
     expect(dialedKeyFromChannelName(undefined)).toBeNull();
     expect(dialedKeyFromChannelName('sofia/gateway/fractel1/1042')).toBeNull();
