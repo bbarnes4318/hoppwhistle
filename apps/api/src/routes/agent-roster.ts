@@ -480,6 +480,83 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
   );
 
   /**
+   * PUT /api/v1/agent-roster/:userId/availability
+   *
+   * The agent's phone on/off switch, set by the agency. It is the same durable
+   * flag the agent flips from their own phone panel (`PUT
+   * /api/v1/agent/availability`) and the one routing obeys, with the same side
+   * effects: the state-event row and the live `agent.availability.changed`
+   * event. An agent who forwards to their cell may never open the dashboard,
+   * so without this nobody but the agent could put them back on the phones.
+   */
+  fastify.put<{ Params: { userId: string }; Body: { availableForCalls?: unknown } }>(
+    '/api/v1/agent-roster/:userId/availability',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const { availableForCalls } = request.body ?? {};
+      if (typeof availableForCalls !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'availableForCalls must be true or false' },
+        });
+      }
+
+      const { userId } = request.params;
+      const changedAt = new Date();
+      const { count } = await prisma.user.updateMany({
+        where: { id: userId, tenantId },
+        data: { availableForCalls, availabilityChangedAt: changedAt },
+      });
+      if (count === 0) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'No such agent in this agency' },
+        });
+      }
+
+      // Best-effort, as on the agent's own switch: a reporting gap must never
+      // fail the toggle.
+      try {
+        await prisma.agentStateEvent.create({
+          data: { userId, status: availableForCalls ? 'on-queue' : 'off-queue' },
+        });
+      } catch {
+        // The toggle itself has already succeeded.
+      }
+      try {
+        const { eventBus } = await import('../services/event-bus.js');
+        void eventBus.publish('call.*', {
+          event: 'agent.availability.changed',
+          tenantId,
+          data: { agentId: userId, availableForCalls, timestamp: changedAt.toISOString() },
+        });
+      } catch {
+        // Live dashboards catch up on their next poll.
+      }
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'agent_roster.availability.updated',
+        entityType: 'User',
+        entityId: userId,
+        resource: `/api/v1/agent-roster/${userId}/availability`,
+        method: 'PUT',
+        changes: { availableForCalls },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        success: true,
+      });
+
+      return reply.send({
+        data: { userId, availableForCalls, availabilityChangedAt: changedAt.toISOString() },
+      });
+    }
+  );
+
+  /**
    * PUT /api/v1/agent-roster/:userId/schedule
    *
    * When this agent works, or `null` to stop enforcing hours for them.

@@ -378,6 +378,23 @@ export default function TeamMembersPage(): JSX.Element {
     }
   }
 
+  async function setAvailability(agent: RosterAgent, availableForCalls: boolean): Promise<void> {
+    setSavingId(agent.id);
+    try {
+      const response = await apiClient.put(`/api/v1/agent-roster/${agent.id}/availability`, {
+        availableForCalls,
+      });
+      if (response.error) {
+        setRosterError(response.error.message);
+        return;
+      }
+      setRosterError(null);
+      await load();
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function setCellForward(
     agent: RosterAgent,
     cellForwardNumber: string | null
@@ -675,7 +692,7 @@ export default function TeamMembersPage(): JSX.Element {
                       <TableRow key={`${user.id}-settings`} className="bg-sunken/50">
                         <TableCell />
                         <TableCell colSpan={7} className="py-4">
-                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                             <div>
                               <div className="mb-1 t-label text-ink-3">Extension</div>
                               {agent.extension ? (
@@ -685,6 +702,21 @@ export default function TeamMembersPage(): JSX.Element {
                                   Allocated when they first open the softphone
                                 </span>
                               )}
+                            </div>
+
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">Phone</div>
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={agent.availableForCalls !== false}
+                                  disabled={busy}
+                                  onCheckedChange={on => void setAvailability(agent, on)}
+                                  aria-label={`Send calls to ${agent.name}`}
+                                />
+                                <span className="t-meta text-ink-3">
+                                  {agent.availableForCalls !== false ? 'On' : 'Off'}
+                                </span>
+                              </div>
                             </div>
 
                             <div>
