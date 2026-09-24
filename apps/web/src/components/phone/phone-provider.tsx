@@ -379,7 +379,6 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   // Refs
 
   const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
   const registererRef = useRef<Registerer | null>(null);
   const sessionRef = useRef<Session | null>(null);
@@ -396,42 +395,48 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   // Audio Utilities
   // ============================================================================
 
-  // Unlock audio (ringtone + AudioContext) on user interaction to bypass autoplay.
+  /*
+   * Unlock the AudioContext the ring is generated on, once, on the first user
+   * interaction -- browsers keep it suspended until then.
+   *
+   * This used to also play /sounds/ringtone.mp3 and pause it when play()
+   * resolved, on EVERY click, key and pointer press, and never removed its
+   * listeners. play() is already audible before its promise resolves, so every
+   * click in the app made a burst of ringing (twice per click: pointerdown and
+   * click both fired), and a click during a real incoming call could land in
+   * the middle of it. The mp3 was never the ring -- `playRingtone` synthesises
+   * it on the AudioContext -- so resuming the context is the whole unlock.
+   */
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!ringtoneRef.current) {
-      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-      ringtoneRef.current.loop = true;
-    }
+    const events = ['click', 'keydown', 'pointerdown'] as const;
     const unlock = () => {
       try {
         const AC =
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        if (AC) {
-          if (!audioContextRef.current) audioContextRef.current = new AC();
-          if (audioContextRef.current.state === 'suspended') void audioContextRef.current.resume();
+        if (!AC) return;
+        if (!audioContextRef.current) audioContextRef.current = new AC();
+        const ctx = audioContextRef.current;
+        if (ctx.state === 'running') {
+          events.forEach(e => window.removeEventListener(e, unlock));
+          return;
         }
+        void ctx
+          .resume()
+          .then(() => {
+            if (ctx.state === 'running') {
+              events.forEach(e => window.removeEventListener(e, unlock));
+            }
+          })
+          .catch(() => {});
       } catch {
         /* ignore */
       }
-      if (ringtoneRef.current) {
-        ringtoneRef.current
-          .play()
-          .then(() => {
-            ringtoneRef.current?.pause();
-            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
-          })
-          .catch(() => {});
-      }
     };
-    window.addEventListener('click', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('pointerdown', unlock);
+    events.forEach(e => window.addEventListener(e, unlock));
     return () => {
-      window.removeEventListener('click', unlock);
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('pointerdown', unlock);
+      events.forEach(e => window.removeEventListener(e, unlock));
     };
   }, []);
 
@@ -528,10 +533,6 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
     if (ringOscRef.current?.interval) {
       clearInterval(ringOscRef.current.interval);
       ringOscRef.current = null;
-    }
-    if (ringtoneRef.current) {
-      ringtoneRef.current.pause();
-      ringtoneRef.current.currentTime = 0;
     }
   }, []);
 
