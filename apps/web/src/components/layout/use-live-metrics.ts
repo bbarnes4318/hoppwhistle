@@ -86,11 +86,9 @@ const POLL_MS = 30_000;
  * these are the only pages in the product with a hero figure the strip also
  * carries:
  *
- *   agency on /delivery      the heroes are the projected charge at tonight's
- *                            settlement (never on the strip) and the current
- *                            rate. The rate drops, and the strip keeps
- *                            applications, calls, app credits and tomorrow's
- *                            tracking rate.
+ *   agency on /delivery      the heroes are the app credits remaining and the
+ *                            current rate. Both drop, and the strip keeps
+ *                            applications, calls and tomorrow's tracking rate.
  *   agent on /delivery/me    the hero is the agent's own closing percentage.
  *                            It drops, and the strip keeps their calls and
  *                            their applications.
@@ -104,7 +102,7 @@ const POLL_MS = 30_000;
  * A test caught exactly that.
  */
 export const HERO_BELOW: Record<string, readonly string[]> = {
-  'agency:/delivery': ['rate'],
+  'agency:/delivery': ['block', 'rate'],
   'agent:/delivery/me': ['closing'],
 };
 

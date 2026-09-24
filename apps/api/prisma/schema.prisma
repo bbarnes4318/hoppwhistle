@@ -4327,8 +4327,13 @@ enum AchMandateStatus {
 /// gate; the rows exist so the agency can be told which, so platform admins are
 /// notified once rather than once per call, and so the portal can say when.
 enum DeliveryHoldReason {
-  /// The Overrun ceiling for the Delivery Day was reached. Delivery resumes on
-  /// the next Delivery Day; a call already connected finishes normally.
+  /// The prepaid application credit balance is spent. Delivery stops at once
+  /// and resumes as soon as more credits are added; a call already connected
+  /// finishes normally.
+  NO_CREDITS
+  /// The Overrun ceiling for the Delivery Day was reached. No longer raised --
+  /// delivery now stops at a zero balance (NO_CREDITS) -- and kept so holds
+  /// recorded before that change still read.
   CEILING_REACHED
   /// A card payment against this agency has been disputed. Delivery stops on
   /// the webhook and resumes only when a platform admin says so -- never

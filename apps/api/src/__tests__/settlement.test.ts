@@ -689,11 +689,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
        * figure on the decision is a real measurement rather than the zeroes an
        * unenrolled agency gets.
        *
-       * It is allowed, on nothing: it has bought no block yet, so its balance
-       * is zero and it is in Overrun from its first application, up to a
-       * ceiling of 22. That is the design -- delivery does not stop at a zero
-       * balance -- and it is why an opening purchase is sold before an agency
-       * starts, not because the gate would otherwise refuse it.
+       * It is held: it has bought no credits yet, so its balance is zero and
+       * agencies pay up front -- delivery does not run on credit. The opening
+       * purchase is what starts it.
        */
       const decision = await evaluateDeliveryGate(big.id, {
         prisma,
@@ -701,10 +699,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
         record: false,
       });
       expect(decision.enrolled).toBe(true);
-      expect(decision.allowed).toBe(true);
+      expect(decision.allowed).toBe(false);
+      expect(decision.reason).toBe('NO_CREDITS');
       expect(decision.balance).toBe(0);
-      expect(decision.overrunCeiling).toBe(22);
-      expect(decision.overrunRemaining).toBe(22);
 
       const audit = await prisma.auditLog.findFirst({
         where: { tenantId: big.id, action: 'platform.delivery.enrolled' },
@@ -1550,16 +1547,14 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(overrunCeilingApplications(45, 100)).toBe(45);
     });
 
-    it('keeps delivering when the balance hits zero, and stops at the ceiling', async () => {
+    it('stops delivering the moment the credit balance hits zero, and resumes when credits are added', async () => {
       /*
-       * The brief's case: "Ceiling reached mid-day with a call connected: that
-       * call completes, no new calls."
-       *
-       * Delivery does NOT stop when the prepaid balance hits zero -- that is
-       * where Overrun begins. It stops at the ceiling, and the call that is
-       * already up is untouched by any of it.
+       * Agencies pay up front. Delivery stops when the prepaid balance reaches
+       * zero -- no Overrun is extended past it -- and a call that is already
+       * up is untouched by any of it. Buying more credits resumes delivery on
+       * the very next call offered, the same Delivery Day.
        */
-      await seedTerms(big.id, { dailyBlockApplications: 4 }); // ceiling: 2
+      await seedTerms(big.id, { dailyBlockApplications: 4 });
       await seedOpeningAgreement(big.id);
       await recordPurchase(prisma, {
         tenantId: big.id,
@@ -1584,20 +1579,19 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
         },
       });
 
-      // The block is spent. Delivery continues -- this is Overrun, not a stop.
-      await submitApplications(big.id, CLOSED_DAY, 4);
+      // Three of four credits spent: still delivering.
+      await submitApplications(big.id, CLOSED_DAY, 3);
       let decision = await evaluateDeliveryGate(big.id, { prisma, now });
       expect(decision.allowed).toBe(true);
-      expect(decision.balance).toBe(0);
-      expect(decision.overrunRemaining).toBe(2);
+      expect(decision.balance).toBe(1);
 
-      // Two more applications: the ceiling is reached.
-      await submitApplications(big.id, CLOSED_DAY, 2);
+      // The last credit is spent: delivery stops immediately.
+      await submitApplications(big.id, CLOSED_DAY, 1);
       decision = await evaluateDeliveryGate(big.id, { prisma, now });
       expect(decision.allowed).toBe(false);
-      expect(decision.reason).toBe('CEILING_REACHED');
-      expect(decision.overrunToday).toBe(2);
-      expect(decision.overrunRemaining).toBe(0);
+      expect(decision.reason).toBe('NO_CREDITS');
+      expect(decision.balance).toBe(0);
+      expect(decision.overrunToday).toBe(0);
 
       // The call that was already connected is untouched: nothing in the gate
       // writes to a call, and it is still ANSWERED with no end time.
@@ -1606,28 +1600,34 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(stillUp?.endedAt).toBeNull();
       expect(stillUp?.answeredAt).not.toBeNull();
 
-      // A hold event was recorded once, and platform admins were notified.
+      // A hold event was recorded once, and the agency and platform admins were
+      // notified once, however many times the gate is consulted.
+      await evaluateDeliveryGate(big.id, { prisma, now });
+      await evaluateDeliveryGate(big.id, { prisma, now });
       const holds = await prisma.deliveryHoldEvent.findMany({
         where: { tenantId: big.id, deliveryDay: CLOSED_DAY },
       });
       expect(holds).toHaveLength(1);
-      expect(holds[0].reason).toBe('CEILING_REACHED');
+      expect(holds[0].reason).toBe('NO_CREDITS');
 
       const notices = await prisma.billingNotification.findMany({
-        where: { tenantId: big.id, kind: 'CEILING_REACHED' },
+        where: { tenantId: big.id, kind: 'DELIVERY_PAUSED' },
       });
       expect(notices).toHaveLength(1);
       expect(notices[0].toPlatform).toBe(true);
       expect(notices[0].toAgency).toBe(true);
 
-      // Consulting the gate again does not send a second notice.
-      await evaluateDeliveryGate(big.id, { prisma, now });
-      await evaluateDeliveryGate(big.id, { prisma, now });
-      expect(
-        await prisma.billingNotification.count({
-          where: { tenantId: big.id, kind: 'CEILING_REACHED' },
-        })
-      ).toBe(1);
+      // More credits are bought mid-day: the very next call is delivered.
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 10,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_topup',
+      });
+      decision = await evaluateDeliveryGate(big.id, { prisma, now });
+      expect(decision.allowed).toBe(true);
+      expect(decision.balance).toBe(10);
     });
 
     it('extends no overrun at all to an agency with an unpaid settlement', async () => {

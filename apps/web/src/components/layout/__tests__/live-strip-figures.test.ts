@@ -240,11 +240,10 @@ describe('not repeating a figure the page below renders as its hero', () => {
     return slots.map(s => s.id).filter(id => !suppressed.includes(id));
   };
 
-  it('drops the current rate for an agency on /delivery', () => {
+  it('drops the credits remaining and the current rate for an agency on /delivery', () => {
     expect(kept(agencySlots(AGENCY_ENROLLED), 'agency', '/delivery')).toEqual([
       'applications',
       'calls',
-      'block',
       'tracking',
     ]);
   });
