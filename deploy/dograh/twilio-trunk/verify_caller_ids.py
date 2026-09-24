@@ -146,6 +146,9 @@ def dograh_numbers(container: str, config_id: int) -> List[str]:
     return out.splitlines()
 
 
+NO_CALL_AFTER = CALL_DELAY + 35  # seconds: Twilio's call should have been answered by now
+
+
 def verify_one(
     twilio: Twilio,
     e164: str,
@@ -153,8 +156,15 @@ def verify_one(
     clear: Callable[[str], None],
     sleep: Callable[[float], None] = time.sleep,
     wait: int = WAIT_FOR_RESULT,
+    pending: Optional[Callable[[str], bool]] = None,
 ) -> Tuple[str, str]:
-    """Returns (number, 'verified' | 'failed: why')."""
+    """Returns (number, 'verified' | 'failed: why').
+
+    ``pending(key)`` says whether FreeSWITCH still holds the code, i.e. has not
+    answered Twilio's call yet (inbound_route.lua deletes it once it has keyed
+    the code in). A code still there after NO_CALL_AFTER seconds means the call
+    never reached us, so there is no point waiting out the full timeout.
+    """
     key = re.sub(r"\D", "", e164)[-10:]
     try:
         code = twilio.request_validation(e164)
@@ -171,7 +181,9 @@ def verify_one(
             waited += 5
             if twilio.is_verified(e164):
                 return e164, "verified"
-        return e164, "failed: Twilio did not mark it verified (did the call reach FreeSWITCH?)"
+            if pending is not None and waited >= NO_CALL_AFTER and pending(key):
+                return e164, "failed: no_call (Twilio's verification call never reached FreeSWITCH)"
+        return e164, "failed: answered but Twilio did not mark it verified"
     finally:
         clear(key)
 
@@ -188,6 +200,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--limit", type=int, default=1, help="numbers to verify this run (default 1)")
     parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--failed-file", default="/root/twilio-verify-failed.txt",
+                        help="numbers that failed, with the reason, one per line")
     args = parser.parse_args(argv)
 
     with open(args.auth_file, encoding="utf-8") as handle:
@@ -202,7 +216,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     numbers = unique_numbers(raw)
     done = twilio.verified()
     todo = [n for n in numbers if n not in done]
-    print(f"Account {sid}: {len(numbers)} numbers, {len(numbers) - len(todo)} already verified, {len(todo)} to go.")
+    print(f"Account {sid}: {len(numbers)} numbers, {len(numbers) - len(todo)} already verified, {len(todo)} to go.", flush=True)
 
     if not args.apply:
         print("Dry run. Next up:", ", ".join(todo[:5]) or "(nothing)")
@@ -219,11 +233,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     def clear(key: str) -> None:
         fs_cli(args.fs_container, f"hash delete/twverify/{key}")
 
+    def pending(key: str) -> bool:
+        return bool(re.fullmatch(r"\d+", fs_cli(args.fs_container, f"hash select/twverify/{key}")))
+
+    failed_out = open(args.failed_file, "a", encoding="utf-8")
+
     def run(e164: str) -> None:
-        number, outcome = verify_one(twilio, e164, store, clear)
+        number, outcome = verify_one(twilio, e164, store, clear, pending=pending)
         with lock:
             results["verified" if outcome == "verified" else "failed"] += 1
             print(f"{number}: {outcome}", flush=True)
+            if outcome != "verified":
+                failed_out.write(f"{number} {outcome}\n")
+                failed_out.flush()
 
     with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
         list(pool.map(run, batch))
