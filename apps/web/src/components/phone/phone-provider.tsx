@@ -1682,6 +1682,15 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
           reconnectionAttempts: 1000,
           reconnectionDelay: 5,
           sessionDescriptionHandlerFactoryOptions: {
+            /*
+             * How long answering (and dialling) waits for ICE gathering before
+             * sending the SDP. SIP.js defaults to 5000ms, and with several STUN
+             * servers it routinely waits the whole 5s -- so an agent clicked
+             * Answer and talked into a call that was not connected yet,
+             * repeating "hello" until the 200 OK finally went out. The host and
+             * server-reflexive candidates this needs arrive well inside 1s.
+             */
+            iceGatheringTimeout: 1000,
             peerConnectionConfiguration: {
               iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
