@@ -450,6 +450,10 @@ for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
         local parallel_destinations = split(step, ",")
         local bridge_components = {}
+        -- The first carrier leg for each external destination, in that
+        -- carrier's own number format. Used when an external shares a step
+        -- with other legs, where the full waterfall cannot be expressed.
+        local external_first_leg = {}
 
         -- Channel snapshot for this step only. Failover steps run seconds or
         -- minutes apart, so it is refreshed per step, and only fetched at all
@@ -530,6 +534,8 @@ for i, step in ipairs(failover_steps) do
                     end
                     if string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
                         table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
+                        local templated = carrier_legs_for(dest_digits)
+                        external_first_leg[#bridge_components] = templated and string.match(templated, "^[^|]+") or nil
                     else
                         log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
                     end
@@ -586,7 +592,16 @@ for i, step in ipairs(failover_steps) do
                     bridge_body = bridge_components[1]
                 end
             else
-                bridge_body = table.concat(bridge_components, ",")
+                -- A mixed or ring-all step. Each external leg gets the first
+                -- carrier's rendered format -- the bare `gateway/1XXXXXXXXXX`
+                -- above drops a carrier's tech prefix, and Anveo refuses a
+                -- number without it, so every cell in a softphone+cell step
+                -- failed while the softphones rang.
+                local legs = {}
+                for idx, leg in ipairs(bridge_components) do
+                    table.insert(legs, external_first_leg[idx] or leg)
+                end
+                bridge_body = table.concat(legs, ",")
             end
             local bridge_string = bridge_vars .. bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
