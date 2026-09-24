@@ -233,13 +233,23 @@ function AgencySettlementsPanel(): JSX.Element {
   const [derivations, setDerivations] = useState<Record<string, Derivation>>({});
   const [derivationLoading, setDerivationLoading] = useState<string | null>(null);
 
+  /*
+   * The range selects the table's rows on the server, the same way it selects
+   * the CSV's, so the screen and the file it exports never disagree.
+   */
   const load = useCallback(async () => {
-    const response = await apiClient.get<Envelope<SettlementRow[]>>('/api/v1/delivery/settlements');
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const query = params.toString();
+    const response = await apiClient.get<Envelope<SettlementRow[]>>(
+      `/api/v1/delivery/settlements${query ? `?${query}` : ''}`
+    );
     setError(response.error ? response.error.message : null);
     const settlements = payload(response);
     setRows(Array.isArray(settlements) ? settlements : []);
     setLoading(false);
-  }, []);
+  }, [from, to]);
 
   useEffect(() => {
     void load();
@@ -321,9 +331,8 @@ function AgencySettlementsPanel(): JSX.Element {
   }
 
   /*
-   * The range and the page's actions on one row. The range selects what the
-   * CSV exports (the server picks the rows; see `download`); the table itself
-   * is the full history.
+   * The range and the page's actions on one row. The range selects both the
+   * table's rows and what the CSV exports (the server picks the rows for both).
    */
   const toolbar = (
     <Toolbar data-print="hide">
@@ -376,10 +385,17 @@ function AgencySettlementsPanel(): JSX.Element {
 
       {rows.length === 0 ? (
         <Panel>
-          <EmptyState
-            headline="No settlements yet. One is written after the close of each Delivery Day."
-            body="Each night's settlement is recorded here after the Delivery Day closes."
-          />
+          {from || to ? (
+            <EmptyState
+              headline="No settlements in this range."
+              body="Widen the dates, or clear them to see every settled Delivery Day."
+            />
+          ) : (
+            <EmptyState
+              headline="No settlements yet. One is written after the close of each Delivery Day."
+              body="Each night's settlement is recorded here after the Delivery Day closes."
+            />
+          )}
         </Panel>
       ) : (
         <Panel className="min-w-0">

@@ -293,18 +293,39 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * One row per settled Delivery Day, newest first, carrying every figure from
    * the settlement record. This is what an agency disputing a charge is shown,
    * so nothing is summarised away.
+   *
+   * `from` and `to` are optional inclusive Delivery Days, validated exactly as
+   * the CSV export validates them, so the table and the file it exports answer
+   * the same question for the same range.
    */
-  fastify.get<{ Querystring: { limit?: string } }>(
+  fastify.get<{ Querystring: { limit?: string; from?: string; to?: string } }>(
     '/api/v1/delivery/settlements',
     { preHandler: [authenticate, requireAgencyPrincipal] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
+      const { from, to } = request.query;
+      for (const [name, value] of [
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (value !== undefined && !DAY_PATTERN.test(value)) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: `${name} must be YYYY-MM-DD` },
+          });
+        }
+      }
+
       const limit = Math.min(Math.max(Number(request.query.limit ?? 90) || 90, 1), 400);
 
       const rows = await prisma.dailySettlement.findMany({
-        where: { tenantId },
+        where: {
+          tenantId,
+          ...(from || to
+            ? { deliveryDay: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+            : {}),
+        },
         orderBy: { deliveryDay: 'desc' },
         take: limit,
       });

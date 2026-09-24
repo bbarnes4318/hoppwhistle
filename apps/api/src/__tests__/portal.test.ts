@@ -1027,6 +1027,24 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       expect(inRange.body).toContain('2026-09-03');
       expect(inRange.body).not.toContain('2026-09-04');
 
+      // The table on screen answers the same range as the file it exports.
+      const tableInRange = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/settlements?from=2026-09-02&to=2026-09-03',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(tableInRange.statusCode).toBe(200);
+      expect(
+        tableInRange.json().data.map((row: { deliveryDay: string }) => row.deliveryDay)
+      ).toEqual(['2026-09-03', '2026-09-02']);
+
+      const badTable = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/settlements?to=2026/09/03',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(badTable.statusCode).toBe(400);
+
       // A bad date is refused rather than quietly ignored: an export that
       // widened its own range is one somebody reconciles from.
       const bad = await app.inject({
