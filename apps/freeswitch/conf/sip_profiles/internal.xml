@@ -49,7 +49,15 @@
 
       <!-- NAT Traversal -->
       <param name="aggressive-nat-detection" value="true"/>
-      <param name="local-network-acl" value="localnet.auto"/>
+      <!--
+        Loopback only, deliberately. Every browser reaches this profile through
+        nginx, so FreeSWITCH sees the Docker gateway (172.18.0.1) as the source.
+        With localnet.auto that counted as "on the local network", so the SDP and
+        ICE candidates offered the container address 172.18.0.11 instead of
+        ext-rtp-ip. No browser can reach that, so the softphone sent no audio and
+        the caller and the agent heard nothing on every call.
+      -->
+      <param name="local-network-acl" value="loopback_only"/>
       <param name="apply-nat-acl" value="nat.auto"/>
       <param name="NDLB-force-rport" value="true"/>
 
