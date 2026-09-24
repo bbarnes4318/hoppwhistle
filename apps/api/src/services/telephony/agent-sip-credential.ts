@@ -139,6 +139,23 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /**
+ * Whether `tenantId` is the agency this user belongs to (`users.tenantId`).
+ *
+ * An owner who switches to view another of their agencies still has one phone:
+ * the extension issued in their home agency. That is not the moved-agent case
+ * the cross-agency refusal exists for -- a moved agent's home agency is the NEW
+ * one, so their old credential still fails this check and is still refused.
+ */
+async function isHomeAgency(
+  prisma: PrismaClient,
+  userId: string,
+  tenantId: string
+): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { tenantId: true } });
+  return user?.tenantId === tenantId;
+}
+
+/**
  * This agent's credential, provisioning one if they have none.
  *
  * Idempotent in the sense that matters: an agent who already holds an ACTIVE
@@ -167,7 +184,10 @@ export async function issueCredential(
      * agency's calls end up on another agency's floor -- the exact defect this
      * whole change exists to close.
      */
-    if (existing.tenantId !== tenantId) {
+    if (
+      existing.tenantId !== tenantId &&
+      !(await isHomeAgency(prisma, userId, existing.tenantId))
+    ) {
       throw new Error(
         `Agent ${userId} holds a SIP credential belonging to a different agency. ` +
           'Revoke it before provisioning them here.'

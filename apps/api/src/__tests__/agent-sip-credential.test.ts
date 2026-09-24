@@ -142,8 +142,18 @@ class FakeTable {
   });
 }
 
+/** Each user's home agency (`users.tenantId`), as the `users` table holds it. */
+const homeAgency = new Map<string, string>();
+
 function fakePrisma(table: FakeTable): Parameters<typeof issueCredential>[2]['prisma'] {
-  return { agentSipCredential: table } as unknown as NonNullable<
+  const user = {
+    findUnique: vi.fn(async (args: { where: { id: string } }) => {
+      await Promise.resolve();
+      const tenantId = homeAgency.get(args.where.id);
+      return tenantId === undefined ? null : { tenantId };
+    }),
+  };
+  return { agentSipCredential: table, user } as unknown as NonNullable<
     Parameters<typeof issueCredential>[2]
   >['prisma'];
 }
@@ -152,6 +162,7 @@ let table: FakeTable;
 let prisma: NonNullable<Parameters<typeof issueCredential>[2]>['prisma'];
 
 beforeEach(() => {
+  homeAgency.clear();
   table = new FakeTable();
   prisma = fakePrisma(table);
 });
@@ -361,6 +372,27 @@ describe('an agent whose credential belongs to another agency', () => {
     await expect(issueCredential('agency-b', 'agent-1', { prisma })).rejects.toThrow(
       /different agency/i
     );
+  });
+
+  it('is refused when the agent has been moved: their home agency is the new one', async () => {
+    await issueCredential('agency-a', 'agent-1', { prisma });
+    homeAgency.set('agent-1', 'agency-b');
+
+    await expect(issueCredential('agency-b', 'agent-1', { prisma })).rejects.toThrow(
+      /different agency/i
+    );
+  });
+
+  it("gives an owner viewing another agency their own home agency's phone", async () => {
+    const home = await issueCredential('agency-a', 'owner-1', { prisma });
+    homeAgency.set('owner-1', 'agency-a');
+
+    // Switching the agency they are looking at does not give them a second
+    // phone, and must not take away the one they have.
+    const viewing = await issueCredential('agency-b', 'owner-1', { prisma });
+    expect(viewing).toEqual({ ...home, provisioned: false });
+    expect(table.rows).toHaveLength(1);
+    expect(table.rows[0].tenantId).toBe('agency-a');
   });
 });
 
