@@ -28,6 +28,7 @@ import {
   ToolbarSelect,
 } from '@/components/domain';
 import {
+  CellForwardField,
   ReadinessCell,
   RosterLicenceCell,
   ScheduleCell,
@@ -377,6 +378,30 @@ export default function TeamMembersPage(): JSX.Element {
     }
   }
 
+  async function setCellForward(
+    agent: RosterAgent,
+    cellForwardNumber: string | null
+  ): Promise<void> {
+    setSavingId(agent.id);
+    try {
+      const response = await apiClient.patch(`/api/v1/agent-roster/${agent.id}`, {
+        cellForwardNumber,
+      });
+      // The client returns a refusal rather than throwing it, and a mistyped
+      // number is exactly the refusal the owner needs to see.
+      if (response.error) {
+        setRosterError(response.error.message);
+        return;
+      }
+      setRosterError(null);
+      await load();
+    } catch (err) {
+      setRosterError(err instanceof Error ? err.message : 'The cell number could not be saved.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function setConcurrency(agent: RosterAgent, maxConcurrentCalls: number): Promise<void> {
     setSavingId(agent.id);
     try {
@@ -428,7 +453,7 @@ export default function TeamMembersPage(): JSX.Element {
          * requires moved from a paragraph above the table into the tooltip.
          */}
         {agentTotal > 0 ? (
-          <Tooltip content="An agent takes calls once they have accepted their invitation, have their licensed states recorded, are assigned a campaign, and have opened the softphone once. Open a row to set those.">
+          <Tooltip content="An agent takes calls once they have accepted their invitation, have their licensed states recorded, are assigned a campaign, and have opened the softphone once (or have a cell number to ring instead). Open a row to set those.">
             <ToolbarMeta>{`${readyCount} of ${agentTotal} ready`}</ToolbarMeta>
           </Tooltip>
         ) : null}
@@ -650,7 +675,7 @@ export default function TeamMembersPage(): JSX.Element {
                       <TableRow key={`${user.id}-settings`} className="bg-sunken/50">
                         <TableCell />
                         <TableCell colSpan={7} className="py-4">
-                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                             <div>
                               <div className="mb-1 t-label text-ink-3">Extension</div>
                               {agent.extension ? (
@@ -660,6 +685,15 @@ export default function TeamMembersPage(): JSX.Element {
                                   Allocated when they first open the softphone
                                 </span>
                               )}
+                            </div>
+
+                            <div>
+                              <div className="mb-1 t-label text-ink-3">Ring on</div>
+                              <CellForwardField
+                                agent={agent}
+                                disabled={busy}
+                                onSave={value => setCellForward(agent, value)}
+                              />
                             </div>
 
                             <div>

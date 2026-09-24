@@ -1,7 +1,10 @@
-import { AlertTriangle, CheckCircle2, PhoneOff } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, PhoneOff, Smartphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import type { AgentSchedule } from '@/components/agents/schedule-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { jurisdictionName } from '@/lib/licensable-jurisdictions';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +34,11 @@ export interface RosterAgent {
   licensedStates: string[];
   extension: string | null;
   hasSipCredential: boolean;
+  /**
+   * `+1XXXXXXXXXX` when the agent takes calls on their own cell instead of the
+   * softphone. Calls still route as this agent and are credited to them.
+   */
+  cellForwardNumber: string | null;
   maxConcurrentCalls: number;
   campaignIds: string[];
   /** Null means no hours are enforced. An empty `days` is an agent on leave. */
@@ -202,11 +210,102 @@ export function ReadinessCell({ agent }: { agent: RosterAgent }): JSX.Element {
     );
   }
 
+  /*
+   * A forwarding agent has no softphone to be online, so its status would read
+   * "Offline" while calls are in fact reaching them. Say where they ring.
+   */
+  if (agent.cellForwardNumber) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+        <Smartphone className="h-3.5 w-3.5 shrink-0" />
+        Rings cell · {formatUsPhone(agent.cellForwardNumber)}
+      </span>
+    );
+  }
+
   const style = STATUS_STYLES[agent.softphoneStatus] ?? STATUS_STYLES.offline;
   return (
     <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium', style.className)}>
       <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
       {style.label}
     </span>
+  );
+}
+
+/** `+18655551234` → `(865) 555-1234`; anything else is shown as stored. */
+export function formatUsPhone(e164: string): string {
+  const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : e164;
+}
+
+/**
+ * Where the agent's calls ring: the softphone (empty) or their own cell.
+ *
+ * Saving is the page's job -- this module does not talk to the network -- so
+ * `onSave` receives the typed number, or null to go back to the softphone. The
+ * API validates and normalises it; its refusal comes back through the page's
+ * own error notice.
+ */
+export function CellForwardField({
+  agent,
+  disabled,
+  onSave,
+}: {
+  agent: RosterAgent;
+  disabled?: boolean;
+  onSave: (cellForwardNumber: string | null) => Promise<void>;
+}): JSX.Element {
+  const stored = agent.cellForwardNumber;
+  const [draft, setDraft] = useState(stored ? formatUsPhone(stored) : '');
+
+  useEffect(() => {
+    setDraft(stored ? formatUsPhone(stored) : '');
+  }, [stored]);
+
+  const trimmed = draft.trim();
+  const unchanged = trimmed === (stored ? formatUsPhone(stored) : '');
+
+  return (
+    <div className="space-y-1.5">
+      <form
+        className="flex items-center gap-2"
+        onSubmit={event => {
+          event.preventDefault();
+          if (!unchanged) void onSave(trimmed === '' ? null : trimmed);
+        }}
+      >
+        <Input
+          type="tel"
+          inputMode="tel"
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          placeholder="Softphone"
+          aria-label={`Cell number for ${agent.name}`}
+          className="h-8 w-36"
+          disabled={disabled}
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          className="h-8"
+          disabled={disabled || unchanged}
+        >
+          Save
+        </Button>
+      </form>
+      {stored ? (
+        <button
+          type="button"
+          className="t-meta text-ink-3 underline-offset-2 hover:underline"
+          onClick={() => void onSave(null)}
+          disabled={disabled}
+        >
+          Ring the softphone instead
+        </button>
+      ) : (
+        <div className="t-meta text-ink-3">Enter a cell to ring it instead</div>
+      )}
+    </div>
   );
 }

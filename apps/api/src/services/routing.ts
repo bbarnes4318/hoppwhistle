@@ -1,3 +1,4 @@
+import { cellKey, readCellForwardNumber } from '../lib/agent-cell-forward.js';
 import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
 import { normalizeLicensedStates } from '../lib/licensed-states.js';
 import { logger } from '../lib/logger.js';
@@ -49,6 +50,14 @@ export interface EligibleEndpoint {
    * enables external fallback (campaign.metadata.allowAgentDidExternalFallback).
    */
   externalFallbackDestination?: string | null;
+  /**
+   * Set for a `CampaignAgent` destination: the agent this leg belongs to. The
+   * per-agent gates resolve the agent from this rather than by reverse-mapping
+   * the destination, which a cell number cannot be mapped back from.
+   */
+  agentUserId?: string;
+  /** The destination is the agent's own cell (`metadata.cellForwardNumber`), not their softphone. */
+  agentCell?: boolean;
 }
 
 /** Normalize phone-number-ish strings to their last 10 digits for comparison. */
@@ -205,6 +214,7 @@ export class RoutingService {
               firstName: true,
               lastName: true,
               email: true,
+              metadata: true,
               sipCredential: {
                 select: { extension: true, status: true, passwordEncrypted: true },
               },
@@ -216,6 +226,31 @@ export class RoutingService {
       for (const assignment of agentAssignments) {
         const agent = assignment.user;
         if (agent.status !== 'ACTIVE') continue;
+
+        const agentName =
+          [agent.firstName, agent.lastName].filter(Boolean).join(' ') || agent.email || agent.id;
+
+        /*
+         * An agent who forwards to their cell is rung THERE, instead of the
+         * softphone, and needs no SIP credential to be. The leg still carries
+         * the agent's id, so every gate below holds them to the same rules.
+         */
+        const cellNumber = readCellForwardNumber(agent.metadata);
+        if (cellNumber) {
+          allEndpoints.push({
+            buyerId: agent.id,
+            buyerName: agentName,
+            endpointId: null,
+            destination: cellNumber,
+            priority: assignment.priority ?? 0,
+            weight: 100,
+            acceptedStates: [],
+            isNational: true,
+            agentUserId: agent.id,
+            agentCell: true,
+          });
+          continue;
+        }
 
         const credential = agent.sipCredential;
         // A reservation (null password) cannot authenticate, so its extension
@@ -238,14 +273,14 @@ export class RoutingService {
            * gate resolve the same agent the destination belongs to.
            */
           buyerId: agent.id,
-          buyerName:
-            [agent.firstName, agent.lastName].filter(Boolean).join(' ') || agent.email || agent.id,
+          buyerName: agentName,
           endpointId: null,
           destination: credential.extension,
           priority: assignment.priority ?? 0,
           weight: 100,
           acceptedStates: [],
           isNational: true,
+          agentUserId: agent.id,
         });
       }
     } catch (agentErr) {
@@ -545,7 +580,12 @@ export class RoutingService {
         userToDids.set(row.userId, arr);
       }
 
-      if (extensionToUserMap.size > 0 || userIdToExtensionMap.size > 0 || didToUserMap.size > 0) {
+      if (
+        extensionToUserMap.size > 0 ||
+        userIdToExtensionMap.size > 0 ||
+        didToUserMap.size > 0 ||
+        eligibleEndpoints.some(ep => ep.agentUserId)
+      ) {
         const { getRedisClient } = await import('./redis.js');
         const redis = getRedisClient();
 
@@ -562,9 +602,9 @@ export class RoutingService {
             const originalDestination = ep.destination.trim();
             const legacyExtension = userIdToExtensionMap.get(originalDestination);
             let normalizedEndpoint = legacyExtension ? { ...ep, destination: legacyExtension } : ep;
-            let userId = legacyExtension
-              ? originalDestination
-              : extensionToUserMap.get(originalDestination);
+            let userId =
+              ep.agentUserId ??
+              (legacyExtension ? originalDestination : extensionToUserMap.get(originalDestination));
 
             if (legacyExtension) {
               logger.info({
@@ -724,7 +764,12 @@ export class RoutingService {
              * read, and null means DO NOT FILTER -- see the service for why
              * "cannot tell" must never collapse into "nobody is registered".
              */
-            if (registeredExtensions && !registeredExtensions.has(normalizedEndpoint.destination)) {
+            // A cell leg has no softphone to be registered; the carrier answers for it.
+            if (
+              !normalizedEndpoint.agentCell &&
+              registeredExtensions &&
+              !registeredExtensions.has(normalizedEndpoint.destination)
+            ) {
               logger.info({
                 msg: 'Agent-registration: Endpoint EXCLUDED (softphone is not registered)',
                 userId,
@@ -851,6 +896,12 @@ export class RoutingService {
     endpoint: string;
     targetId?: string | null;
     callerState?: string | null;
+    /**
+     * Ten-digit keys of the plan's legs that are agents' cells. FreeSWITCH
+     * asks the answerer on those legs to confirm (so a voicemail cannot take
+     * the call) and skips a cell that is already on a call.
+     */
+    agentCellKeys?: string[];
   } | null> {
     try {
       const eligibleEndpoints = await this.getEligibleEndpoints(tenantId, campaignId, callData);
@@ -945,12 +996,12 @@ export class RoutingService {
 
       for (const priority of sortedPriorities) {
         const group = priorityGroups.get(priority)!;
-        const internalEndpoints = group.filter(endpoint =>
-          isInternalAgentDestination(endpoint.destination)
-        );
-        const externalEndpoints = group.filter(
-          endpoint => !isInternalAgentDestination(endpoint.destination)
-        );
+        // An agent's cell is still an agent: it rings with the group rather
+        // than being reduced to one weighted pick among external buyers.
+        const isAgentLeg = (endpoint: EligibleEndpoint): boolean =>
+          endpoint.agentCell === true || isInternalAgentDestination(endpoint.destination);
+        const internalEndpoints = group.filter(isAgentLeg);
+        const externalEndpoints = group.filter(endpoint => !isAgentLeg(endpoint));
 
         const stepEndpoints: EligibleEndpoint[] = [...internalEndpoints];
         if (externalEndpoints.length > 0) {
@@ -1032,11 +1083,20 @@ export class RoutingService {
         callerState: this.resolveCallerState(callData),
       });
 
+      const agentCellKeys = [
+        ...new Set(
+          selectedEndpoints
+            .filter(endpoint => endpoint.agentCell)
+            .map(endpoint => cellKey(endpoint.destination))
+        ),
+      ];
+
       return {
         buyerId: primaryEndpoint.buyerId,
         endpoint: routePlan,
         targetId: primaryEndpoint.endpointId,
         callerState: this.resolveCallerState(callData),
+        ...(agentCellKeys.length > 0 ? { agentCellKeys } : {}),
       };
     } catch (error) {
       logger.error('Error selecting best buyer:', error);
