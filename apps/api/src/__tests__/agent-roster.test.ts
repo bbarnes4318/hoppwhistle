@@ -32,7 +32,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prisma = vi.hoisted(() => ({
-  user: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+  user: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  agentStateEvent: { create: vi.fn() },
   campaign: { findMany: vi.fn() },
   campaignAgent: { findMany: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
   agentSchedule: { upsert: vi.fn(), deleteMany: vi.fn() },
@@ -57,6 +58,9 @@ vi.mock('../lib/tenant-context.js', () => ({
 }));
 
 vi.mock('../services/audit.js', () => ({ auditLog: vi.fn(async () => undefined) }));
+
+const publish = vi.hoisted(() => vi.fn());
+vi.mock('../services/event-bus.js', () => ({ eventBus: { publish } }));
 
 vi.mock('../services/redis.js', () => ({
   getRedisClient: () => ({ mget: vi.fn(async () => []) }),
@@ -469,6 +473,83 @@ describe('PATCH /api/v1/agent-roster/:userId', () => {
       payload: { maxConcurrentCalls: 0 },
     });
     expect(response.statusCode).toBe(400);
+  });
+});
+
+/* ── Phone on/off, set by the agency ───────────────────────────────────────── */
+
+describe('PUT /api/v1/agent-roster/:userId/availability', () => {
+  const url = '/api/v1/agent-roster/u-1/availability';
+
+  it('turns the agent back on, within the acting agency only', async () => {
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { availableForCalls: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'u-1', tenantId: 'agency-a' },
+      data: { availableForCalls: true, availabilityChangedAt: expect.any(Date) },
+    });
+    expect(prisma.agentStateEvent.create).toHaveBeenCalledWith({
+      data: { userId: 'u-1', status: 'on-queue' },
+    });
+    expect(publish).toHaveBeenCalledWith(
+      'call.*',
+      expect.objectContaining({ event: 'agent.availability.changed', tenantId: 'agency-a' })
+    );
+    expect((response.json() as any).data.availableForCalls).toBe(true);
+  });
+
+  it('turns the agent off', async () => {
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+    await app.inject({ method: 'PUT', url, payload: { availableForCalls: false } });
+
+    expect(prisma.agentStateEvent.create).toHaveBeenCalledWith({
+      data: { userId: 'u-1', status: 'off-queue' },
+    });
+  });
+
+  it('refuses an agent who is not in the acting agency', async () => {
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { availableForCalls: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(prisma.agentStateEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses anything but a boolean', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { availableForCalls: 'yes' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('still succeeds when the state-event log is unavailable', async () => {
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+    prisma.agentStateEvent.create.mockRejectedValue(new Error('table missing'));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { availableForCalls: true },
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 });
 
