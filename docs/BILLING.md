@@ -649,18 +649,16 @@ GET /platform/delivery/agencies/$T/enrolment
 | the closeout | **not reversible.** It is an append-only ledger row, and there is no path in this system that returns a credit. |
 
 So turning charging back off does **not** restore the retired credits. An agency
-left on a zero balance delivers on Overrun only and stops at its ceiling. If you
-back out here, you must also sell it a block — step 9 — or it will run short the
-next day.
+left on a zero balance receives no calls (`NO_CREDITS`). If you back out here,
+you must also sell it a block — step 9 — or it will receive no calls.
 
 ---
 
 ### Step 9 — Sell the first paid block for the cutover day ⚠️ real money
 
 **This step is required, not optional.** After the closeout the balance is zero.
-An agency on a zero balance is in Overrun from its first application and stops
-delivering at its ceiling — 50% of the Daily Block, so 22 applications for a
-45-agent agency — partway through the morning.
+An agency on a zero balance receives no calls at all (`NO_CREDITS`) until
+credits are added.
 
 ```
 POST /platform/delivery/agencies/$T/opening-purchase
@@ -836,9 +834,16 @@ with three applications and no ledger rows at all.
 
 ## 2. Overrun
 
-Delivery does not stop when the prepaid balance hits zero. Applications beyond
-the Daily Block are recorded as Overrun and billed that evening at the newly
-calculated rate — the same rate that applies to the next Delivery Day.
+**Delivery stops the moment the prepaid credit balance hits zero** (hold reason
+`NO_CREDITS`) and resumes on the next call offered once more credits are added.
+Agencies pay up front; no Overrun is extended past a spent balance.
+
+Overrun rows can still occur, but only from a call that was already connected
+when the last credit was spent (the gate never tears down a live call). Those
+applications are recorded as Overrun and billed that evening at the newly
+calculated rate — the same rate that applies to the next Delivery Day. The
+ceiling below no longer stops delivery; it is retained for those residual rows
+and for the maximum daily debit.
 
 ### The ceiling
 
@@ -932,7 +937,8 @@ act on.
 | `BELOW_MINIMUM_CLOSING` | the trailing window closed below 5.0%. Only a platform admin clears it |
 | `SETTLEMENT_UNPAID` | a settlement is unpaid past its grace period |
 | `NO_OPENING_AGREEMENT` | no opening rate and block were ever agreed, so there is no price and nothing has been bought |
-| `CEILING_REACHED` | the balance is spent and today's Overrun has reached the ceiling |
+| `NO_CREDITS` | the prepaid application credit balance is spent. Resumes as soon as credits are added |
+| `CEILING_REACHED` | *(no longer raised)* the balance was spent and that day's Overrun had reached the ceiling |
 
 Nothing here reads a stored "paused" flag. Every condition is recomputed from
 the rows that decide it, because a stored flag is stale the instant a settlement
@@ -1811,9 +1817,10 @@ The cases the brief names, and where they are:
 - **concurrent consumption of the last credit: one credit spent** — "spends
   exactly one credit when two applications submit simultaneously", and again at
   twenty writers against twenty credits.
-- **ceiling reached mid-day with a call connected: that call completes, no new
-  calls** — "keeps delivering when the balance hits zero, and stops at the
-  ceiling". A call in `ANSWERED` with no `endedAt` is asserted untouched.
+- **credits run out mid-day with a call connected: that call completes, no new
+  calls, and a top-up resumes delivery** — "stops delivering the moment the
+  credit balance hits zero, and resumes when credits are added". A call in
+  `ANSWERED` with no `endedAt` is asserted untouched.
 - **ACH failure: delivery holds, agency and admins notified, no second block
   sold** — "holds delivery, notifies and sells no block when the debit fails".
 - **agency crossing below 5%: delivery pauses, paid applications survive** —

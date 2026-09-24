@@ -13,7 +13,6 @@ import {
   PanelHeader,
   PanelTitle,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -111,24 +110,28 @@ export default function SettingsPage() {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Manage your account settings and integrations" />
-
-      <Panel>
-        <PanelHeader>
-          <PanelTitle>Workspace</PanelTitle>
-        </PanelHeader>
-        <PanelBody>
-          <DemoToggle />
-        </PanelBody>
-      </Panel>
-
+      {/*
+       * The tabs are the first thing on the page. The title is already in the
+       * topbar, and the demo-mode switch that used to sit in a full-width
+       * "Workspace" card above them is a tab of its own: it is a setting like
+       * the others, not something every visit needs to scroll past.
+       */}
       <Tabs defaultValue="webhooks" className="w-full">
         <TabsList>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="dnc">DNC Lists</TabsTrigger>
+          <TabsTrigger value="workspace">Workspace</TabsTrigger>
           <TabsTrigger value="legal">Legal</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="workspace">
+          <Panel>
+            <PanelBody>
+              <DemoToggle />
+            </PanelBody>
+          </Panel>
+        </TabsContent>
 
         <TabsContent value="webhooks">
           <Panel>

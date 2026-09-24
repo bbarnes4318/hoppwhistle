@@ -14,9 +14,11 @@ import {
   PanelHeader,
   PanelTitle,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarMeta,
 } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { PageHeader } from '@/components/layout/page-header';
 import { PlatformDeliveryView } from '@/components/platform/platform-delivery-view';
 import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
@@ -325,10 +327,13 @@ function AgencyDeliveryPanel(): JSX.Element {
   if (!today.enrolled) {
     return (
       <div className="page-canvas">
-        <PageHeader
-          description={`${today.calendarDay} · ${today.timeZone}`}
-          actions={<StatusChip value="ACTIVE" label="Delivering" tone="live" />}
-        />
+        {/* The day being read and the delivery state, on the one toolbar row. */}
+        <Toolbar>
+          <ToolbarMeta>{today.calendarDay}</ToolbarMeta>
+          <ToolbarActions>
+            <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+          </ToolbarActions>
+        </Toolbar>
 
         {/*
           Operational figures only. These are true whether or not an agency is
@@ -371,7 +376,7 @@ function AgencyDeliveryPanel(): JSX.Element {
 
         <Notice tone="info" title="Billing is not enabled for this agency">
           <p className="max-w-prose">
-            Calls are delivered without a prepaid block, an overrun ceiling or a nightly settlement.
+            Calls are delivered without prepaid app credits or a nightly settlement.
             There is nothing to charge and nothing to run out of. NetEnroll enables it per agency,
             once the terms and a payment method are in place.
           </p>
@@ -387,25 +392,28 @@ function AgencyDeliveryPanel(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={`${today.calendarDay} · days end 23:59:59 ${today.timeZone}`}
-        actions={
-          <>
-            {today.delivering ? (
-              <StatusChip value="ACTIVE" label="Delivering" tone="live" />
-            ) : (
-              <StatusChip value="PAUSED" label="Paused" tone="blocked" />
-            )}
-            <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw className="mr-2 h-3 w-3" />
-              Refresh
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/delivery/settlements">Settlement history</Link>
-            </Button>
-          </>
-        }
-      />
+      {/*
+        The calendar day being read, the delivery state and the page's actions
+        share one row. There is no header blurb above it: the title is already
+        in the topbar.
+      */}
+      <Toolbar>
+        <ToolbarMeta>{today.calendarDay}</ToolbarMeta>
+        {today.delivering ? (
+          <StatusChip value="ACTIVE" label="Delivering" tone="live" />
+        ) : (
+          <StatusChip value="PAUSED" label="Paused" tone="blocked" />
+        )}
+        <ToolbarActions>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={refresh}>
+            <RefreshCw className="mr-1.5 h-3 w-3" />
+            Refresh
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+            <Link href="/delivery/settlements">Settlement history</Link>
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {!today.delivering && (
         <Notice
@@ -413,23 +421,26 @@ function AgencyDeliveryPanel(): JSX.Element {
           icon={PauseCircle}
           title={
             <>
-              Delivery is paused
+              {today.holdReason === 'NO_CREDITS'
+                ? 'Out of app credits — calls are paused'
+                : 'Delivery is paused'}
               {today.holdSince ? ` — since ${new Date(today.holdSince).toLocaleTimeString()}` : ''}
             </>
           }
         >
           <p>{today.holdDetail}</p>
-          <p className="t-meta mt-0.5">
-            Applications you have already paid for are untouched and available when delivery
-            resumes: {count(today.applicationsRemainingOnBlock)} remaining.
-          </p>
+          {today.holdReason !== 'NO_CREDITS' && (
+            <p className="t-meta mt-0.5">
+              Applications you have already paid for are untouched and available when delivery
+              resumes: {count(today.applicationsRemainingOnBlock)} remaining.
+            </p>
+          )}
         </Notice>
       )}
 
       {!today.chargesEnabled && (
         <Notice tone="info" icon={Gauge} title="Settlements are running without charging">
-          Every figure on this page is real and each night&rsquo;s settlement is recorded in full,
-          but no payment is taken. NetEnroll turns charging on separately.
+          Figures and settlements are real; no payment is taken until NetEnroll turns charging on.
         </Notice>
       )}
 
@@ -451,21 +462,24 @@ function AgencyDeliveryPanel(): JSX.Element {
       {/*
         ── The two numbers this screen is about ──────────────────────────────
 
-        What tonight will cost, and the price it is being charged at. Everything
-        under the rule below is the support for these two. The projected charge
-        is provisional and says so in its sub line rather than in a muted
-        colour: a muted hero is a hero the reader is told to ignore.
+        How many application credits are left, and what each one costs.
+        Agencies pay up front: calls stop the moment credits reach zero and
+        resume when more are added, so there is no running charge to project.
       */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <StatTile
           emphasis
-          label="Projected charge at tonight's settlement"
-          figure={dollars(today.projectedTotalCharge)}
-          sub={`${dollars(today.overrunAmountTonight)} for ${count(today.overrunToday)} overrun ${
-            today.overrunToday === 1 ? 'application' : 'applications'
-          } plus a block of ${count(today.projectedNextBlockQuantity)} · provisional until 23:59:59`}
-          data-figure-label="Projected charge at tonight's settlement"
-          data-figure-value={dollars(today.projectedTotalCharge)}
+          label="App credits remaining"
+          figure={
+            <span className={today.applicationsRemainingOnBlock === 0 ? 'text-dropped-ink' : undefined}>
+              {count(today.applicationsRemainingOnBlock)}
+            </span>
+          }
+          sub={`paid for and unused · daily block ${count(
+            today.dailyBlockApplications
+          )} · calls pause at 0`}
+          data-figure-label="App credits remaining"
+          data-figure-value={count(today.applicationsRemainingOnBlock)}
         />
         <StatTile
           emphasis
@@ -509,7 +523,7 @@ function AgencyDeliveryPanel(): JSX.Element {
             {"Tonight's settlement re-measures the window and sets tomorrow's rate."}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <StatTile
             label="Rating window closing"
             figure={pct(today.windowClosingPct)}
@@ -539,19 +553,6 @@ function AgencyDeliveryPanel(): JSX.Element {
                 : 'if today closed now · provisional'
             }
           />
-          <StatTile
-            label="Ceiling"
-            figure={
-              <span className={today.distanceToCeiling === 0 ? 'text-dropped-ink' : 'text-ink'}>
-                {count(today.distanceToCeiling)}
-              </span>
-            }
-            data-figure-label="Ceiling"
-            data-figure-value={count(today.distanceToCeiling)}
-            sub={`more applications before delivery stops for today · ceiling ${count(
-              today.overrunCeiling
-            )}`}
-          />
         </div>
       </section>
 
@@ -563,7 +564,7 @@ function AgencyDeliveryPanel(): JSX.Element {
             {`${count(today.callsInProgress)} ${today.callsInProgress === 1 ? 'call' : 'calls'} in progress now`}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <StatTile
             label="Calls answered"
             figure={count(today.callsAnswered)}
@@ -574,18 +575,9 @@ function AgencyDeliveryPanel(): JSX.Element {
           <StatTile
             label="Applications"
             figure={count(today.applicationsSubmitted)}
-            sub={`${count(today.applicationsConsumedToday)} on the block · ${count(
-              today.overrunToday
-            )} overrun`}
+            sub={`${count(today.applicationsConsumedToday)} credits used today`}
             data-figure-label="Applications"
             data-figure-value={count(today.applicationsSubmitted)}
-          />
-          <StatTile
-            label="Remaining on the block"
-            figure={count(today.applicationsRemainingOnBlock)}
-            sub={`paid for and unused · daily block ${count(today.dailyBlockApplications)}`}
-            data-figure-label="Remaining on the block"
-            data-figure-value={count(today.applicationsRemainingOnBlock)}
           />
           {/* Today so far. Prices nothing, and says so. */}
           <StatTile
@@ -862,7 +854,7 @@ function AgentTable({
 /**
  * ADMIN and OWNER only.
  *
- * Today's block, the overrun, the ceiling and tonight's charge. Money, and
+ * Today's credits, the rate and what sets it. Money, and
  * therefore the principal's: `/api/v1/delivery/*` refuses an AGENT everywhere
  * except `/me` (see `requireAgencyPrincipal`), and this guard is so an agent who
  * reaches the URL is sent somewhere useful instead of watching a page fill with

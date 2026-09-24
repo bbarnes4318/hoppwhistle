@@ -24,9 +24,10 @@ import { cn } from '@/lib/utils';
  * pixels off the top of every page in the application to say very little. This
  * is a single 56px row: a small uppercase label over the figure in Inter with
  * tabular numerals, its denominator or caveat inline beside it rather than on a
- * third line. Each figure is a free-width block between hairline dividers, so
- * nothing is ever cut to an ellipsis; when the row is wider than the window it
- * scrolls sideways and fades at the edge that overflows.
+ * third line, figures between hairline dividers. The
+ * figures share the row's width equally and it never scrolls sideways: a
+ * status row that hides figures off to the right is not a status row. Below
+ * 640px the figures wrap three to a line.
  *
  * The date, timezone, polling and connection state collapse into one status
  * pill at the right. The pill says Live / the feed state and the time of the
@@ -209,7 +210,7 @@ export function LiveStrip({
       data-testid="live-strip"
       data-scope={scope}
       className={cn(
-        'flex h-14 items-stretch border-b border-rule bg-surface px-4 sm:px-6 min-[1440px]:px-8',
+        'flex min-h-14 items-stretch border-b border-rule bg-surface px-4 sm:h-14 sm:px-6 min-[1440px]:px-8',
         className
       )}
       // Polite, not assertive: these tick constantly and must never interrupt.
@@ -217,13 +218,12 @@ export function LiveStrip({
       aria-atomic="false"
     >
       {/*
-        The figures scroll on their own when they are wider than the window;
-        the status pill stays put at the right, outside the scroller, so its
-        tooltip is never clipped. The fade at an overflowing edge is
-        `.ne-live-strip` in globals.css — pure CSS, driven by the scroll
-        position itself.
+        The figures share the row's width rather than scrolling: every figure
+        is visible at every width without anybody reaching for a scrollbar.
+        Each takes an equal share and truncates its caveat before its value;
+        below 640px they wrap three to a line instead of squeezing.
       */}
-      <div className="ne-live-strip flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="grid min-w-0 flex-1 grid-cols-3 gap-y-2 py-2 sm:flex sm:items-stretch sm:py-0">
         {metrics.map(m => (
           <div
             key={m.id}
@@ -237,22 +237,26 @@ export function LiveStrip({
           */
             data-figure={m.id}
             data-figure-value={m.value}
-            className="flex shrink-0 flex-col justify-center gap-0.5 whitespace-nowrap border-r border-rule px-5 first:pl-0 last:border-r-0"
+            className="flex min-w-0 flex-col justify-center gap-0.5 whitespace-nowrap pr-2 sm:flex-1 sm:border-r sm:border-rule sm:px-4 sm:first:pl-0 sm:last:border-r-0 xl:px-5"
           >
-            <span className="t-label text-ink-3">{m.label}</span>
+            <span className="t-label truncate text-ink-3">{m.label}</span>
             {/*
             The value and its denominator on ONE line. A third line per figure
             is what made this a band of cards rather than a strip, and the
             denominator is only ever read together with the number anyway.
           */}
-            <span className="flex items-baseline gap-1.5">
+            <span className="flex min-w-0 items-baseline gap-1.5">
               <LiveValue
                 value={m.value}
                 tone={m.tone ?? 'ink'}
                 reducedMotion={reducedMotion}
                 unavailable={m.unavailable}
               />
-              {m.sub ? <span className="t-meta text-ink-3">{m.sub}</span> : null}
+              {m.sub ? (
+                <span className="t-meta hidden min-w-0 truncate text-ink-3 md:inline">
+                  {m.sub}
+                </span>
+              ) : null}
             </span>
           </div>
         ))}
@@ -265,15 +269,15 @@ export function LiveStrip({
         tail used to spell out — date, timezone, polling interval, updated
         time — is the tooltip, word for word.
       */}
-      <div className="flex shrink-0 items-center border-l border-rule pl-4 sm:pl-5">
+      <div className="flex shrink-0 items-center border-l border-rule pl-3 sm:pl-4">
         <Tooltip content={statusTooltip || 'Live'} align="end">
           <span
             tabIndex={0}
             className={cn(
-              'inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full border px-3 t-meta font-medium',
+              'inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 t-meta font-medium',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               connection === 'live' && 'border-rule bg-surface text-ink-2',
-              connection === 'degraded' && 'border-transparent bg-ringing-tint text-ringing-ink',
+              connection === 'degraded' && 'border-rule bg-surface text-ink-2',
               connection === 'offline' &&
                 'border-transparent bg-dropped-tint text-dropped-ink [&>svg]:text-dropped'
             )}
@@ -289,10 +293,18 @@ export function LiveStrip({
             {connection === 'offline' ? (
               <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
             ) : null}
-            <span className={cn(stale && 'hidden sm:inline')}>{stale ? feedText : 'Live'}</span>
+            {/* Only an outage earns words on the strip; polling is the normal state
+                and says so in the tooltip rather than across the row. */}
+            {connection === 'offline' ? (
+              <span className="hidden lg:inline">{feedText}</span>
+            ) : connection === 'live' ? (
+              <span>Live</span>
+            ) : null}
             {updatedText ? (
-              <span className="font-normal text-ink-3 tabular-nums">
-                {lastUpdated ? lastUpdated.toLocaleTimeString('en-US') : null}
+              <span className="hidden font-normal text-ink-3 tabular-nums sm:inline">
+                {lastUpdated
+                  ? lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  : null}
               </span>
             ) : null}
           </span>

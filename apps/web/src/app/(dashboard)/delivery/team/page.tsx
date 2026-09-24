@@ -14,11 +14,12 @@ import {
   PanelDescription,
   PanelHeader,
   PanelTitle,
-  Segmented,
-  SegmentedItem,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarMeta,
+  ToolbarSelect,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -110,6 +111,9 @@ const PRESETS: Array<{ label: string; from: () => string; to: () => string }> = 
   },
 ];
 
+/** The period picker's value when the dates match no preset. */
+const CUSTOM = 'custom';
+
 function TeamRangeReport(): JSX.Element {
   const [from, setFrom] = useState(() => dayKey(6));
   const [to, setTo] = useState(() => dayKey(0));
@@ -194,110 +198,116 @@ function TeamRangeReport(): JSX.Element {
     return data.agencyApplications / hours;
   }, [data]);
 
+  /*
+   * Which preset the dates match, if any. Typing a date by hand drops the
+   * picker to "Custom" rather than leaving a preset lit that no longer
+   * describes the range on screen.
+   */
+  const activePreset =
+    PRESETS.find(preset => from === preset.from() && to === preset.to())?.label ?? CUSTOM;
+
   if (withoutAgency) {
     return (
       <div className="page-canvas">
-        <PageHeader description="Select an agency to see its team." />
+        <EmptyState headline="Select an agency to see its team." />
       </div>
     );
   }
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={
-          data
-            ? `${data.days} day${data.days === 1 ? '' : 's'}, ${data.from} to ${data.to}`
-            : 'What the team produced over a span of days'
-        }
-      />
+      {/* ── The range, and what to do with it: one row ──────────────────── */}
+      <Toolbar>
+        <ToolbarSelect
+          label="Period"
+          value={activePreset}
+          allValue={null}
+          onChange={value => {
+            const preset = PRESETS.find(p => p.label === value);
+            if (!preset) return;
+            setFrom(preset.from());
+            setTo(preset.to());
+          }}
+          options={[
+            ...PRESETS.map(preset => ({ value: preset.label, label: preset.label })),
+            { value: CUSTOM, label: 'Custom range' },
+          ]}
+        />
 
-      {/* ── The range ───────────────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-wrap items-end gap-3">
-        <Segmented>
-          {PRESETS.map(preset => {
-            const presetFrom = preset.from();
-            const presetTo = preset.to();
-            const active = from === presetFrom && to === presetTo;
-            return (
-              <SegmentedItem
-                key={preset.label}
-                active={active}
-                onClick={() => {
-                  setFrom(presetFrom);
-                  setTo(presetTo);
-                }}
-              >
-                {preset.label}
-              </SegmentedItem>
-            );
-          })}
-        </Segmented>
-
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <label className="t-label text-ink-3" htmlFor="range-from">
-              From
-            </label>
-            <Input
-              id="range-from"
-              type="date"
-              value={from}
-              max={to}
-              onChange={event => setFrom(event.target.value)}
-              className="h-9 w-[10rem]"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="t-label text-ink-3" htmlFor="range-to">
-              To
-            </label>
-            <Input
-              id="range-to"
-              type="date"
-              value={to}
-              min={from}
-              onChange={event => setTo(event.target.value)}
-              className="h-9 w-[10rem]"
-            />
-          </div>
+        {/*
+         * Not ToolbarDateRange: each bound carries min/max against the other so
+         * the browser's picker cannot produce a reversed range in the first place.
+         */}
+        <div className="flex min-w-full shrink-0 items-center gap-1 sm:min-w-0">
+          <Input
+            id="range-from"
+            type="date"
+            aria-label="From date"
+            value={from}
+            max={to}
+            onChange={event => setFrom(event.target.value)}
+            className="h-8 w-full px-2 text-xs sm:w-[128px]"
+          />
+          <span aria-hidden className="t-meta text-ink-3">
+            –
+          </span>
+          <Input
+            id="range-to"
+            type="date"
+            aria-label="To date"
+            value={to}
+            min={from}
+            onChange={event => setTo(event.target.value)}
+            className="h-8 w-full px-2 text-xs sm:w-[128px]"
+          />
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void load()}
-          disabled={loading || reversed}
-        >
-          <RefreshCw className={cn('mr-2 h-3.5 w-3.5', loading && 'animate-spin')} />
-          Refresh
-        </Button>
+        {data ? (
+          <ToolbarMeta title={`${data.from} → ${data.to}`}>
+            {`${data.days} day${data.days === 1 ? '' : 's'}`}
+          </ToolbarMeta>
+        ) : null}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void exportCsv()}
-          disabled={exporting || reversed || !data}
-        >
-          {exporting ? (
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Download className="mr-2 h-3.5 w-3.5" />
-          )}
-          CSV
-        </Button>
-      </div>
+        <ToolbarActions>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            disabled={loading || reversed}
+            className="h-8 text-xs"
+          >
+            <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', loading && 'animate-spin')} />
+            Refresh
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void exportCsv()}
+            disabled={exporting || reversed || !data}
+            className="h-8 text-xs"
+          >
+            {exporting ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            CSV
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {reversed ? <Notice tone="warning">The start date is after the end date.</Notice> : null}
 
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       {/* ── The agency's own figures for the range ──────────────────────── */}
-      <section className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="t-section text-ink">The agency</h2>
-          {data ? <p className="t-meta text-ink-3">{`${data.from} → ${data.to}`}</p> : null}
-        </div>
+      {/*
+       * No heading row: the range is already stated in the toolbar, and a
+       * "The agency" title above five self-labelled tiles only pushed the table
+       * further down.
+       */}
+      <section aria-label="The agency" className="flex min-w-0 flex-col gap-3">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
           <StatTile
             label="Calls taken"

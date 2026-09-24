@@ -58,8 +58,11 @@
  *                          federal holidays -- and not five Delivery Days.
  *   NO_OPENING_AGREEMENT   no opening rate and block were ever agreed, so there
  *                          is no price and nothing has been bought.
- *   CEILING_REACHED        the balance is spent and the day's Overrun has
- *                          reached the ceiling.
+ *   NO_CREDITS             the prepaid application credit balance is spent.
+ *                          Delivery stops at once -- no Overrun is extended
+ *                          past a zero balance -- and resumes as soon as more
+ *                          credits are added. (CEILING_REACHED, the old
+ *                          Overrun-ceiling stop, is no longer raised.)
  *
  * ── Paused is not terminated ─────────────────────────────────────────────────
  *
@@ -409,24 +412,20 @@ export async function evaluateDeliveryGate(
   }
 
   /*
-   * The balance is spent and the day's Overrun has reached the ceiling.
+   * The prepaid credit balance is spent.
    *
-   * Delivery does NOT stop when the balance alone hits zero: applications
-   * beyond the Daily Block are recorded as Overrun and billed that evening. It
-   * stops here, at the ceiling, for the rest of this Delivery Day.
+   * Agencies pay up front. Delivery stops the moment the balance reaches zero
+   * -- no Overrun is extended past it -- and resumes on the next call offered
+   * after credits are added, because the balance is read live from the ledger
+   * on every offer. A call already connected finishes normally; an application
+   * it produces is still recorded (as Overrun), since the gate never tears down
+   * a live call.
    */
-  if (balance <= 0 && overrunRemaining <= 0) {
+  if (balance <= 0) {
     return refuse(
-      DeliveryHoldReason.CEILING_REACHED,
-      overrunWithheld
-        ? disputed
-          ? 'Delivery is held at your paid balance while a disputed payment is reviewed. No ' +
-              'overrun is extended with a dispute outstanding.'
-          : 'Delivery is held at your paid balance while a settlement is unpaid. No overrun is ' +
-              'extended with a settlement outstanding.'
-        : `Today's overrun ceiling of ${overrunCeiling} applications above a Daily Block of ` +
-            `${terms.dailyBlockApplications} has been reached. Delivery resumes on the next ` +
-            'Delivery Day.'
+      DeliveryHoldReason.NO_CREDITS,
+      'You are out of application credits. Calls are paused and resume as soon as more ' +
+        'credits are added.'
     );
   }
 

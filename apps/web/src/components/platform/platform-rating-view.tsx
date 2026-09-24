@@ -3,7 +3,8 @@
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Toolbar, ToolbarActions, ToolbarMeta } from '@/components/domain';
+import { CompactPageShell } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -129,31 +130,36 @@ export function PlatformRatingView(): JSX.Element {
 
   return (
     <CompactPageShell fullHeight={false}>
-      {/* "Every agency" leads the line; see platform-delivery-view.tsx. */}
-      <CompactPageHeader
-        subtitle={`Every agency · ${overview.calendarDay} · days end 23:59:59 ${overview.timeZone} · curve v${overview.curveVersion}`}
-      >
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          <RefreshCw className="mr-2 h-3 w-3" />
-          Refresh
-        </Button>
-      </CompactPageHeader>
-
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">
-          &ldquo;Today so far&rdquo; moves all day and prices nothing. The rating window is the
-          trailing Delivery Days that actually set the rate in force.
-        </p>
-        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+      {/*
+        One row: what the table covers, the non-production toggle, refresh.
+        "Every agency" leads the line; see platform-delivery-view.tsx. The note
+        on what "today so far" means is the meta's tooltip, not a row of prose.
+      */}
+      <Toolbar>
+        <ToolbarMeta title='"Today so far" moves all day and prices nothing. The rating window is the trailing Delivery Days that actually set the rate in force.'>
+          Every agency · {overview.calendarDay}
+        </ToolbarMeta>
+        <label className="t-meta flex shrink-0 items-center gap-2 whitespace-nowrap px-1 text-ink-2">
           <input
             type="checkbox"
             checked={includeNonProduction}
             onChange={event => setIncludeNonProduction(event.target.checked)}
           />
-          Show non-production tenants
+          Non-production
           {includeNonProduction && excluded > 0 ? ` (${excluded})` : ''}
         </label>
-      </div>
+        <ToolbarActions>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            className="h-8 gap-1.5 px-3 text-xs"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       <Card>
         <CardContent className="p-0">

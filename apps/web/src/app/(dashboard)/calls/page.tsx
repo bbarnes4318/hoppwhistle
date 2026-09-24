@@ -5,7 +5,6 @@ import {
   Loader2,
   Play,
   Pause,
-  Search,
   Volume2,
   Clock,
   Activity,
@@ -17,8 +16,18 @@ import {
 import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { RedispositionPanel } from '@/components/calls/redisposition-panel';
-import { EmptyState, Notice, Panel, PanelBody } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  TOOLBAR_CELL,
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarSearch,
+  toolbarTrigger,
+} from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +63,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
-import { formatDuration, formatPhoneNumber } from '@/lib/utils';
+import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
   id: string;
@@ -838,130 +847,97 @@ export default function OperationsCallLogsPage() {
     }
   };
 
+  /*
+   * One toolbar row: search, every filter, then the ledger actions. A set
+   * filter is tinted so it is obvious at a glance what the ledger is scoped to.
+   */
+  const filterTrigger = toolbarTrigger;
+  const filterCell = TOOLBAR_CELL;
+  const hasActiveFilters =
+    search !== '' ||
+    selectedDisputeStatus !== 'all' ||
+    selectedAgentId !== 'all' ||
+    selectedDisposition !== 'all' ||
+    selectedCampaignId !== 'all' ||
+    selectedListId !== 'all' ||
+    selectedPublisherId !== 'all' ||
+    selectedBuyerId !== 'all' ||
+    datePreset !== 'All Time';
+  const clearFilters = () => {
+    setSearch('');
+    setSelectedDisputeStatus('all');
+    setSelectedAgentId('all');
+    setSelectedDisposition('all');
+    setSelectedCampaignId('all');
+    setSelectedListId('all');
+    setSelectedPublisherId('all');
+    setSelectedBuyerId('all');
+    handlePresetChange('All Time');
+  };
+
   return (
     <div className="page-canvas">
-      <PageHeader
-        description="Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center."
-        actions={
-          <>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
+      {/* Filter toolbar */}
+      <Toolbar>
+        <ToolbarSearch
+          value={search}
+          onChange={value => {
+            setSearch(value);
+            setPage(1);
+          }}
+          placeholder="Search ID, caller, notes…"
+        />
+
+        {/* Date preset */}
+        <div className={filterCell}>
+          <Select value={datePreset} onValueChange={handlePresetChange}>
+            <SelectTrigger
+              aria-label="Date range"
+              className={filterTrigger(datePreset !== 'All Time')}
             >
-              <SlidersHorizontal className="h-4 w-4" />
-              Columns
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="bg-surface border-rule text-ink min-w-[200px]"
-            align="end"
-          >
-            <DropdownMenuLabel className="text-ink-3 text-xs">
-              Configure Ledger Columns
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-rule" />
-            {columns.map(col => {
-              if (!col.canSee) return null;
-              return (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  checked={visibleColumns[col.id]}
-                  onCheckedChange={() => toggleColumn(col.id)}
-                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
-                >
-                  {col.label}
-                </DropdownMenuCheckboxItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <Button
-          onClick={handleExportCSV}
-          disabled={exporting || calls.length === 0}
-          size="sm"
-          className="gap-2"
-        >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Export CSV Ledger
-        </Button>
-          </>
-        }
-      />
-
-      {/* Filter Panel */}
-      <Panel>
-        <PanelBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-        {/* Search Box */}
-        <div className="relative min-w-0 sm:col-span-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-3" />
-          <Input
-            placeholder="Search ID / Caller / Notes..."
-            value={search}
-            onChange={e => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Dispute filter */}
-        <div>
-          <Select
-            value={selectedDisputeStatus}
-            onValueChange={val => {
-              setSelectedDisputeStatus(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Dispute Status" />
+              <SelectValue>{datePreset === 'All Time' ? 'All time' : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Disputes</SelectItem>
-              <SelectItem value="NONE">No Disputes</SelectItem>
-              <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
-              <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
-              <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
+              <SelectItem value="All Time">All Time</SelectItem>
+              <SelectItem value="Today">Today</SelectItem>
+              <SelectItem value="Yesterday">Yesterday</SelectItem>
+              <SelectItem value="This Week">This Week</SelectItem>
+              <SelectItem value="This Month">This Month</SelectItem>
+              <SelectItem value="Last Month">Last Month</SelectItem>
+              <SelectItem value="Custom">Custom Range</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Agent Filter — principals only; an agent's list is already their own */}
-        {isAdminOrOwner && agents.length > 0 && (
-          <div>
-            <Select
-              value={selectedAgentId}
-              onValueChange={val => {
-                setSelectedAgentId(val);
+        {/* Custom Date Inputs */}
+        {datePreset === 'Custom' && (
+          <div className="flex min-w-full shrink-0 items-center gap-1 sm:min-w-0">
+            <Input
+              type="date"
+              aria-label="From date"
+              value={fromDate}
+              onChange={e => {
+                setFromDate(e.target.value);
                 setPage(1);
               }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="All Agents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map(agent => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              className="h-8 w-full px-2 text-xs sm:w-[128px]"
+            />
+            <span className="t-meta text-ink-3">–</span>
+            <Input
+              type="date"
+              aria-label="To date"
+              value={toDate}
+              onChange={e => {
+                setToDate(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 w-full px-2 text-xs sm:w-[128px]"
+            />
           </div>
         )}
 
         {/* Disposition Filter */}
-        <div>
+        <div className={filterCell}>
           <Select
             value={selectedDisposition}
             onValueChange={val => {
@@ -969,8 +945,11 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="All Dispositions" />
+            <SelectTrigger
+              aria-label="Disposition"
+              className={filterTrigger(selectedDisposition !== 'all')}
+            >
+              <SelectValue>{selectedDisposition === 'all' ? 'Disposition' : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Dispositions</SelectItem>
@@ -989,8 +968,36 @@ export default function OperationsCallLogsPage() {
           </Select>
         </div>
 
+        {/* Agent Filter — principals only; an agent's list is already their own */}
+        {isAdminOrOwner && agents.length > 0 && (
+          <div className={filterCell}>
+            <Select
+              value={selectedAgentId}
+              onValueChange={val => {
+                setSelectedAgentId(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger
+                aria-label="Agent"
+                className={filterTrigger(selectedAgentId !== 'all')}
+              >
+                <SelectValue>{selectedAgentId === 'all' ? 'Agent' : undefined}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {agents.map(agent => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Campaign Filter */}
-        <div>
+        <div className={filterCell}>
           <Select
             value={selectedCampaignId}
             onValueChange={val => {
@@ -998,8 +1005,11 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="All Campaigns" />
+            <SelectTrigger
+              aria-label="Campaign"
+              className={filterTrigger(selectedCampaignId !== 'all')}
+            >
+              <SelectValue>{selectedCampaignId === 'all' ? 'Campaign' : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Campaigns</SelectItem>
@@ -1013,7 +1023,7 @@ export default function OperationsCallLogsPage() {
         </div>
 
         {/* Lead List Filter */}
-        <div>
+        <div className={filterCell}>
           <Select
             value={selectedListId}
             onValueChange={val => {
@@ -1021,8 +1031,11 @@ export default function OperationsCallLogsPage() {
               setPage(1);
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="All Lead Lists" />
+            <SelectTrigger
+              aria-label="Lead list"
+              className={filterTrigger(selectedListId !== 'all')}
+            >
+              <SelectValue>{selectedListId === 'all' ? 'Lead list' : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Lead Lists</SelectItem>
@@ -1037,7 +1050,7 @@ export default function OperationsCallLogsPage() {
 
         {/* Publisher Filter (Admin only) */}
         {isAdminOrOwner && (
-          <div>
+          <div className={filterCell}>
             <Select
               value={selectedPublisherId}
               onValueChange={val => {
@@ -1045,8 +1058,11 @@ export default function OperationsCallLogsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="All Publishers" />
+              <SelectTrigger
+                aria-label="Publisher"
+                className={filterTrigger(selectedPublisherId !== 'all')}
+              >
+                <SelectValue>{selectedPublisherId === 'all' ? 'Publisher' : undefined}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Publishers</SelectItem>
@@ -1062,7 +1078,7 @@ export default function OperationsCallLogsPage() {
 
         {/* Buyer Filter (Admin only) */}
         {isAdminOrOwner && (
-          <div>
+          <div className={filterCell}>
             <Select
               value={selectedBuyerId}
               onValueChange={val => {
@@ -1070,8 +1086,11 @@ export default function OperationsCallLogsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="All Buyers" />
+              <SelectTrigger
+                aria-label="Buyer"
+                className={filterTrigger(selectedBuyerId !== 'all')}
+              >
+                <SelectValue>{selectedBuyerId === 'all' ? 'Buyer' : undefined}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Buyers</SelectItem>
@@ -1085,48 +1104,90 @@ export default function OperationsCallLogsPage() {
           </div>
         )}
 
-        {/* Date Picker preset */}
-        <div>
-          <Select value={datePreset} onValueChange={handlePresetChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="All Time" />
+        {/* Dispute filter */}
+        <div className={filterCell}>
+          <Select
+            value={selectedDisputeStatus}
+            onValueChange={val => {
+              setSelectedDisputeStatus(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Dispute status"
+              className={filterTrigger(selectedDisputeStatus !== 'all')}
+            >
+              <SelectValue>{selectedDisputeStatus === 'all' ? 'Disputes' : undefined}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All Time">All Time</SelectItem>
-              <SelectItem value="Today">Today</SelectItem>
-              <SelectItem value="Yesterday">Yesterday</SelectItem>
-              <SelectItem value="This Week">This Week</SelectItem>
-              <SelectItem value="This Month">This Month</SelectItem>
-              <SelectItem value="Last Month">Last Month</SelectItem>
-              <SelectItem value="Custom">Custom Range</SelectItem>
+              <SelectItem value="all">All Disputes</SelectItem>
+              <SelectItem value="NONE">No Disputes</SelectItem>
+              <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
+              <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
+              <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Custom Date Inputs */}
-        {datePreset === 'Custom' && (
-          <div className="flex min-w-0 items-center gap-2 sm:col-span-2">
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={e => {
-                setFromDate(e.target.value);
-                setPage(1);
-              }}
-            />
-            <span className="t-meta text-ink-3">to</span>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={e => {
-                setToDate(e.target.value);
-                setPage(1);
-              }}
-            />
-          </div>
-        )}
-        </PanelBody>
-      </Panel>
+        {/* Ledger actions, pinned to the right end of the row */}
+        <ToolbarActions>
+          {hasActiveFilters && <ToolbarClear onClick={clearFilters} />}
+
+          <DropdownMenu>
+            <Tooltip content="Columns" align="end">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Configure columns"
+                  className="h-8 w-8 p-0"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </Tooltip>
+            <DropdownMenuContent
+              className="bg-surface border-rule text-ink min-w-[200px]"
+              align="end"
+            >
+              <DropdownMenuLabel className="text-ink-3 text-xs">
+                Configure Ledger Columns
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-rule" />
+              {columns.map(col => {
+                if (!col.canSee) return null;
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={visibleColumns[col.id]}
+                    onCheckedChange={() => toggleColumn(col.id)}
+                    className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Tooltip content="Export CSV" align="end">
+            <Button
+              onClick={handleExportCSV}
+              disabled={exporting || calls.length === 0}
+              size="sm"
+              aria-label="Export CSV"
+              className="h-8 gap-1.5 px-2 text-xs 2xl:px-3"
+            >
+              {exporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden 2xl:inline">Export</span>
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
 
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">

@@ -5,12 +5,20 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Ledger, SectionRule, count, pct } from '@/components/delivery/ledger';
-import { EmptyState, Notice, Panel, PanelBody } from '@/components/domain';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarDateRange,
+  ToolbarMeta,
+} from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { PageHeader } from '@/components/layout/page-header';
 import { PlatformSettlementsView } from '@/components/platform/platform-settlements-view';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
@@ -225,13 +233,23 @@ function AgencySettlementsPanel(): JSX.Element {
   const [derivations, setDerivations] = useState<Record<string, Derivation>>({});
   const [derivationLoading, setDerivationLoading] = useState<string | null>(null);
 
+  /*
+   * The range selects the table's rows on the server, the same way it selects
+   * the CSV's, so the screen and the file it exports never disagree.
+   */
   const load = useCallback(async () => {
-    const response = await apiClient.get<Envelope<SettlementRow[]>>('/api/v1/delivery/settlements');
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const query = params.toString();
+    const response = await apiClient.get<Envelope<SettlementRow[]>>(
+      `/api/v1/delivery/settlements${query ? `?${query}` : ''}`
+    );
     setError(response.error ? response.error.message : null);
     const settlements = payload(response);
     setRows(Array.isArray(settlements) ? settlements : []);
     setLoading(false);
-  }, []);
+  }, [from, to]);
 
   useEffect(() => {
     void load();
@@ -312,61 +330,72 @@ function AgencySettlementsPanel(): JSX.Element {
     );
   }
 
+  /*
+   * The range and the page's actions on one row. The range selects both the
+   * table's rows and what the CSV exports (the server picks the rows for both).
+   */
   const toolbar = (
-    <div className="flex flex-wrap items-end gap-2" data-print="hide">
-      <label className="t-meta text-ink-3">
-        From
-        <Input
-          type="date"
-          value={from}
-          onChange={event => setFrom(event.target.value)}
-          className="mt-1 h-9 w-36"
-        />
-      </label>
-      <label className="t-meta text-ink-3">
-        To
-        <Input
-          type="date"
-          value={to}
-          onChange={event => setTo(event.target.value)}
-          className="mt-1 h-9 w-36"
-        />
-      </label>
-      <Button variant="outline" size="sm" onClick={() => void download()} disabled={exporting}>
-        {exporting ? (
-          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-        ) : (
-          <Download className="mr-2 h-3 w-3" />
+    <Toolbar data-print="hide">
+      <ToolbarMeta>
+        {count(rows.length)} settled {rows.length === 1 ? 'day' : 'days'}
+      </ToolbarMeta>
+      <ToolbarDateRange from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+      <ToolbarActions>
+        {(from || to) && (
+          <ToolbarClear
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          />
         )}
-        CSV
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => window.print()}
-        title="Prints the ledger with the open row's derivation, without the navigation"
-      >
-        <Printer className="mr-2 h-3 w-3" />
-        Print
-      </Button>
-    </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => void download()}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+          ) : (
+            <Download className="mr-1.5 h-3 w-3" />
+          )}
+          CSV
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => window.print()}
+          title="Prints the ledger with the open row's derivation, without the navigation"
+        >
+          <Printer className="mr-1.5 h-3 w-3" />
+          Print
+        </Button>
+      </ToolbarActions>
+    </Toolbar>
   );
 
   return (
     <div className="page-canvas" data-print="page">
-      <PageHeader
-        description="One row per settled Delivery Day, exactly as it was recorded"
-        actions={toolbar}
-      />
+      {toolbar}
 
       {error && <Notice tone="error">{error}</Notice>}
 
       {rows.length === 0 ? (
         <Panel>
-          <EmptyState
-            headline="No settlements yet. One is written after the close of each Delivery Day."
-            body="Each night's settlement is recorded here after the Delivery Day closes."
-          />
+          {from || to ? (
+            <EmptyState
+              headline="No settlements in this range."
+              body="Widen the dates, or clear them to see every settled Delivery Day."
+            />
+          ) : (
+            <EmptyState
+              headline="No settlements yet. One is written after the close of each Delivery Day."
+              body="Each night's settlement is recorded here after the Delivery Day closes."
+            />
+          )}
         </Panel>
       ) : (
         <Panel className="min-w-0">

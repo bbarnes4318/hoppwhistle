@@ -13,8 +13,9 @@ import {
   dollars,
   pct,
 } from '@/components/delivery/ledger';
+import { Toolbar, ToolbarActions, ToolbarMeta } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { CompactPageShell } from '@/components/layout/compact-layout';
 import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient, payload } from '@/lib/api';
@@ -266,27 +267,29 @@ export function PlatformDeliveryView(): JSX.Element {
         on whether a platform operator has entered an agency. The only thing on
         screen that said which was the heading -- "Delivery — every agency" --
         and when that heading went, so did the distinction. It says so here
-        instead, as scope rather than as a second copy of the page's name.
+        instead, as scope rather than as a second copy of the page's name, in
+        the toolbar row the page's actions share.
       */}
-      <CompactPageHeader
-        subtitle={`Every agency · ${overview.calendarDay} · ${count(totals.agencies)} ${
-          totals.agencies === 1 ? 'agency' : 'agencies'
-        }, ${count(totals.enrolled)} enrolled`}
-      >
-        <div className="flex items-center gap-2">
-          {totals.flagged > 0 && (
-            <StatusChip
-              value="FLAGGED"
-              tone="dropped"
-              label={`${count(totals.flagged)} needing attention`}
-            />
-          )}
-          <Button variant="outline" size="sm" onClick={refresh}>
-            <RefreshCw className="mr-2 h-3 w-3" />
+      <Toolbar>
+        <ToolbarMeta>
+          {`Every agency · ${overview.calendarDay} · ${count(totals.agencies)} ${
+            totals.agencies === 1 ? 'agency' : 'agencies'
+          }, ${count(totals.enrolled)} enrolled`}
+        </ToolbarMeta>
+        {totals.flagged > 0 && (
+          <StatusChip
+            value="FLAGGED"
+            tone="dropped"
+            label={`${count(totals.flagged)} needing attention`}
+          />
+        )}
+        <ToolbarActions>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={refresh}>
+            <RefreshCw className="mr-1.5 h-3 w-3" />
             Refresh
           </Button>
-        </div>
-      </CompactPageHeader>
+        </ToolbarActions>
+      </Toolbar>
 
       {totals.disputed > 0 && (
         <Notice

@@ -12,8 +12,11 @@ import {
   PanelHeader,
   PanelTitle,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarDateRange,
+  ToolbarSelect,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -181,9 +184,8 @@ function submitted(value: string | null): string {
       });
 }
 
-const INPUT =
-  'h-9 w-full min-w-0 rounded-control border border-rule bg-surface px-3 text-sm text-ink ' +
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+/** The toolbar selects' "no filter" value; Radix Select cannot hold an empty string. */
+const ALL = 'all';
 
 export default function ApplicationsPage() {
   const [range, setRange] = useState(defaultRange);
@@ -261,20 +263,60 @@ export default function ApplicationsPage() {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description="Every application the agency submitted, however it was recorded"
-        actions={
+      {/* Range, filters and export on one row -- the first thing on the page. */}
+      <Toolbar aria-label="Application filters">
+        <ToolbarDateRange
+          from={range.from}
+          to={range.to}
+          onFromChange={from => setRange(prev => ({ ...prev, from }))}
+          onToChange={to => setRange(prev => ({ ...prev, to }))}
+        />
+        <ToolbarSelect
+          label="Carrier"
+          allLabel="All carriers"
+          value={carrier || ALL}
+          onChange={value => setCarrier(value === ALL ? '' : value)}
+          options={carriers.map(name => ({ value: name, label: name }))}
+          allValue={ALL}
+        />
+        {showAgentFilter && (
+          <ToolbarSelect
+            label="Agent"
+            allLabel="All agents"
+            value={agentId || ALL}
+            onChange={value => setAgentId(value === ALL ? '' : value)}
+            // An unattributed bucket has no id the API can filter on, so it is not an option.
+            options={agents.flatMap(agent =>
+              agent.agentId ? [{ value: agent.agentId, label: agent.agentName }] : []
+            )}
+            allValue={ALL}
+          />
+        )}
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 shrink-0 text-xs"
+          onClick={() => {
+            void load();
+          }}
+          disabled={loading}
+        >
+          {loading ? 'Loading…' : 'Apply'}
+        </Button>
+        <ToolbarActions>
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={exportCsv}
             disabled={rows.length === 0}
           >
             <Download aria-hidden className="h-3.5 w-3.5" />
             Export CSV
           </Button>
-        }
-      />
+        </ToolbarActions>
+      </Toolbar>
 
       {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -312,69 +354,6 @@ export default function ApplicationsPage() {
           sub="written in the range"
         />
       </div>
-
-      <Panel>
-        <PanelHeader>
-          <PanelTitle>Filters</PanelTitle>
-        </PanelHeader>
-        <PanelBody>
-          <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="t-label text-ink-3">From</span>
-              <input
-                type="date"
-                value={range.from}
-                onChange={e => setRange(prev => ({ ...prev, from: e.target.value }))}
-                className={INPUT}
-              />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="t-label text-ink-3">To</span>
-              <input
-                type="date"
-                value={range.to}
-                onChange={e => setRange(prev => ({ ...prev, to: e.target.value }))}
-                className={INPUT}
-              />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="t-label text-ink-3">Carrier</span>
-              <select value={carrier} onChange={e => setCarrier(e.target.value)} className={INPUT}>
-                <option value="">All carriers</option>
-                {carriers.map(name => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {showAgentFilter && (
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="t-label text-ink-3">Agent</span>
-                <select value={agentId} onChange={e => setAgentId(e.target.value)} className={INPUT}>
-                  <option value="">All agents</option>
-                  {agents.map(agent => (
-                    <option key={agent.agentId ?? 'unattributed'} value={agent.agentId ?? ''}>
-                      {agent.agentName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div>
-              <Button
-                type="button"
-                onClick={() => {
-                  void load();
-                }}
-                disabled={loading}
-              >
-                {loading ? 'Loading…' : 'Apply'}
-              </Button>
-            </div>
-          </div>
-        </PanelBody>
-      </Panel>
 
       {error && <Notice tone="error">{error}</Notice>}
 

@@ -400,7 +400,7 @@ const NO_STRIP_ROUTES = ['/call-center'];
  * agency that is not in the billing system, and NetEnroll staff across every
  * agency) and they do not all name a figure the same way.
  *
- * Absent from this map, deliberately: the projected charge and the current
+ * Absent from this map, deliberately: the app credits remaining and the current
  * rate on the agency's /delivery, and the agent's own closing percentage on
  * /delivery/me. Those are the pages' HERO figures and the strip drops them
  * there rather than repeating them -- which `MUST_NOT_APPEAR` below asserts.
@@ -409,7 +409,6 @@ const STRIP_MATCHES_PAGE = {
   '/delivery': {
     applications: ['Applications', 'Applications today'],
     calls: ['Calls answered', 'Calls today'],
-    block: ['Remaining on the block'],
     tracking: ['Tomorrow is tracking toward'],
   },
   '/delivery/me': {
@@ -425,15 +424,14 @@ const STRIP_MATCHES_PAGE = {
  * strip drops them there rather than repeating them.
  *
  * Keyed by reading and path, not by path alone, and that distinction is load
- * bearing. /delivery is two pages. The agency's own panel leads on the
- * projected charge at tonight's settlement and on the current rate, so the
- * strip drops both. The cross-agency page leads on "Settled today", which the
+ * bearing. /delivery is two pages. The agency's own panel leads on the app
+ * credits remaining and on the current rate, and the strip drops both. The cross-agency page leads on "Settled today", which the
  * strip never carries — and the platform reading has a figure of its own
  * called `tonight`, a projection across every agency, which is exactly what
  * staff came to that page for.
  */
 const MUST_NOT_APPEAR = {
-  'agency:/delivery': ['tonight', 'rate'],
+  'agency:/delivery': ['block', 'rate'],
   'agent:/delivery/me': ['closing'],
 };
 
@@ -446,7 +444,7 @@ const MUST_NOT_APPEAR = {
  * under a label reading "tonight" still tells somebody they owe an unknown
  * amount.
  */
-const BILLING_LABEL = /tonight|overrun|block|rate|debit|settlement|charge/i;
+const BILLING_LABEL = /tonight|overrun|block|credit|rate|cost|debit|settlement|charge/i;
 
 /** The strip as it was actually rendered: one entry per figure, in order. */
 async function readStrip(page) {

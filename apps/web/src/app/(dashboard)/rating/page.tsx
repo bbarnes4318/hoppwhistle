@@ -5,9 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Notice, Panel, PanelBody, PanelHeader, PanelTitle, StatTile } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { PlatformRatingView } from '@/components/platform/platform-rating-view';
-import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -225,15 +223,6 @@ function AgencyRatingPanel(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}
-        meta={
-          <Badge variant={summary.status === 'UNDER_REVIEW' ? 'destructive' : 'secondary'}>
-            {summary.status.replace('_', ' ').toLowerCase()}
-          </Badge>
-        }
-      />
-
       {summary.reviewFlag && (
         <Notice tone="warning" title="Flagged for review">
           The trailing window closed at {pct(summary.reviewFlag.closingPct)} —{' '}
@@ -250,8 +239,22 @@ function AgencyRatingPanel(): JSX.Element {
           figure={dollars(summary.currentRate)}
           sub={
             <>
+              {/*
+                The rate's status (introductory, opening block, rated, under
+                review) rides on the tile it qualifies rather than taking a
+                header row of its own above the figures.
+              */}
               <span className="block">
-                per submitted application
+                <span
+                  data-testid="rating-status"
+                  className={cn(
+                    'font-medium capitalize',
+                    summary.status === 'UNDER_REVIEW' ? 'text-ringing-ink' : 'text-ink-2'
+                  )}
+                >
+                  {summary.status.replace('_', ' ').toLowerCase()}
+                </span>
+                {' · '}per submitted application
                 {summary.currentRateCalendarDay
                   ? ` · effective ${summary.currentRateCalendarDay}`
                   : ''}
