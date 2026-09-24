@@ -1,4 +1,4 @@
---[[
+--[==[
   inbound_route.lua — FreeSWITCH Dynamic Inbound DID Routing
   
   Called from the public dialplan context for all inbound tracking DIDs.
@@ -37,7 +37,11 @@
 
   It is strictly better than what it replaces, which was no authentication at
   all on an endpoint reachable through nginx.
-]]
+
+  This header is a level-2 long comment (equals signs in its brackets) because
+  the mod_curl syntax above contains two closing brackets in a row, which end a
+  plain long comment early and made this whole script fail to load.
+]==]
 
 -- ── Configuration ───────────────────────────────────────────────────────────
 local API_URL      = os.getenv("API_URL") or "http://127.0.0.1:3001"
