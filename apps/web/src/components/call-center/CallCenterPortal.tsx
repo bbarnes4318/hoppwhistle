@@ -663,15 +663,22 @@ export function CallCenterPortal(): JSX.Element {
         ringtoneRef.current.loop = true;
       }
 
+      // Muted: play() is audible before its promise resolves, so an unmuted
+      // unlock made the first click on this page ring.
       const unlock = () => {
-        if (ringtoneRef.current) {
-          ringtoneRef.current
+        const ringtone = ringtoneRef.current;
+        if (ringtone && ringtone.paused) {
+          ringtone.muted = true;
+          ringtone
             .play()
             .then(() => {
-              ringtoneRef.current?.pause();
-              ringtoneRef.current!.currentTime = 0;
+              ringtone.pause();
+              ringtone.currentTime = 0;
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+              ringtone.muted = false;
+            });
         }
         window.removeEventListener('click', unlock);
         window.removeEventListener('keydown', unlock);
