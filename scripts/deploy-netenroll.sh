@@ -89,6 +89,7 @@ fi
 # rather than deploying code whose schema is absent, and so the order is a
 # reviewable list rather than whatever `ls` returns.
 REQUIRED_MIGRATIONS="
+20260802000000_add_campaign_agent_assignments
 20260803000000_add_lead_dial_reservations
 20260906000000_add_tenant_activation_grants
 20260907000000_add_platform_admin
@@ -287,6 +288,25 @@ migration_applied() {
       echo "SELECT COALESCE((SELECT true FROM pg_class
               WHERE relkind = 'i'
                 AND relname = 'calls_tenantId_direction_createdById_createdAt_idx'), false)" ;;
+    *_add_campaign_agent_assignments)
+      # `campaign_agents`, which GET /api/v1/agent-roster reads alongside the
+      # four things 20260920-20260922 add. Registering those five without this
+      # one moved the roster's failure from "users.availableForCalls does not
+      # exist" to "campaign_agents does not exist" and left the Team Members
+      # page just as broken.
+      #
+      # It went unlisted because scripts/ci/check-migrations-listed.sh exempts
+      # everything older than its BASELINE (20260906000000), on the assumption
+      # that older migrations were applied by hand before this script existed.
+      # That assumption did not hold here.
+      #
+      # Unlike the roster five this file is NOT idempotent and NOT wrapped in a
+      # transaction: it opens with an unguarded CREATE TYPE and ends with three
+      # foreign keys. So the probe is the LAST statement's effect -- a run that
+      # created the table and died before the keys must read false, so the next
+      # deploy retries rather than skipping a half-built table.
+      echo "SELECT COALESCE((SELECT true FROM pg_constraint
+              WHERE conname = 'campaign_agents_userId_fkey'), false)" ;;
     *_add_lead_dial_reservations)
       # Last effect: the campaignId foreign key, which is the final statement in
       # the file. Probing the TABLE would answer true for a file that created it
@@ -583,6 +603,57 @@ else
     exit 1
   fi
   GRN "  applied prisma/sql/carrier-catalog.sql"
+fi
+
+
+# ── Does the database actually have every table the code will ask for? ───────
+#
+# REQUIRED_MIGRATIONS answers "did the migrations I named get applied". It
+# cannot answer "is anything missing that I never thought to name", and twice
+# now that second question is the one that mattered:
+#
+#   insurance_carrier_applications."voidedAt"  P2022 in production
+#   users."availableForCalls" + agent_sip_credentials + agent_schedules
+#   campaign_agents
+#
+# Each was a migration sitting in the repository that no deploy applied, found
+# only when a page 500'd in front of an agency owner. The pattern is always the
+# same, so this asks the database directly, once, at the end of the step that
+# just moved it: every table schema.prisma declares via @@map, does it exist.
+#
+# It REPORTS rather than refuses. A missing table here is very likely a real
+# defect, but this list is derived from the schema by text match and the cost of
+# being wrong is a production deploy that will not start -- so it names the
+# tables loudly and lets the operator decide, rather than blocking a rollout at
+# two in the morning over a model nothing reads.
+if [ "$DRY_RUN" = "0" ]; then
+  SCHEMA="$ROOT/apps/api/prisma/schema.prisma"
+  MAPPED="$(grep -oE '@@map\("[a-z_]+"\)' "$SCHEMA" 2>/dev/null \
+            | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u | sed "s/^/('/; s/\$/')/" | paste -sd, -)"
+  if [ -z "$MAPPED" ]; then
+    YEL "  could not read table names from schema.prisma; skipping the drift check"
+  else
+    # Exit status, not output, decides. A connection error also prints text, and
+    # reporting psql's error as a list of missing tables would be worse than
+    # saying nothing.
+    if ! ABSENT="$(psql "$DATABASE_URL" -tAc \
+      "SELECT t.name FROM (VALUES $MAPPED) AS t(name)
+         WHERE to_regclass('public.' || quote_ident(t.name)) IS NULL
+         ORDER BY 1" 2>&1)"; then
+      YEL "  could not run the schema drift check: $ABSENT"
+      ABSENT=""
+      SKIPPED_DRIFT=1
+    fi
+    ABSENT="$(echo "$ABSENT" | tr -d '[:blank:]' | grep -v '^$' || true)"
+    if [ -n "$ABSENT" ]; then
+      YEL "  WARNING: schema.prisma declares tables this database does not have:"
+      echo "$ABSENT" | sed 's/^/    /' >&2
+      YEL "  Any route touching one of these will fail with a Prisma P2021."
+      YEL "  Find the migration that creates it and add it to REQUIRED_MIGRATIONS."
+    elif [ "${SKIPPED_DRIFT:-0}" = "0" ]; then
+      GRN "  schema check ok: every table schema.prisma declares exists"
+    fi
+  fi
 fi
 
 GRN "migrations applied and verified"
