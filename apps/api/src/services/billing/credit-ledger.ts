@@ -182,6 +182,11 @@ export interface PurchaseInput {
   settlementId?: string | null;
   curveVersionId?: string | null;
   curveVersion?: number | null;
+  /**
+   * A self-serve purchase's idempotency key. Unique per tenant, so the same
+   * purchase submitted twice cannot write two rows. Null for every other row.
+   */
+  idempotencyKey?: string | null;
 }
 
 /**
@@ -216,6 +221,7 @@ export async function recordPurchase(
       stripePaymentIntentId: input.stripePaymentIntentId,
       externalPaymentReference: input.externalPaymentReference ?? null,
       settlementId: input.settlementId ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
     },
     select: { id: true },
   });

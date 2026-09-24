@@ -2,7 +2,7 @@
 import { PaymentProvider } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import Fastify, { FastifyInstance } from 'fastify';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { grantPlatformAdmin } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -57,6 +57,23 @@ import { announceSkip, databaseGate } from './helpers/live-services.js';
  * "two concurrent runs produce exactly one charge" -- is not observable against
  * a real Stripe account, and a test that cannot observe it is not checking it.
  */
+
+/*
+ * The routes resolve a gateway from the agency's provider. The self-serve
+ * purchase suite below installs its fake for STRIPE agencies; everywhere else
+ * `current` is null and the real resolver answers, exactly as before.
+ */
+const gatewayOverride = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('../services/billing/payment-gateways.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../services/billing/payment-gateways.js')>();
+  return {
+    ...actual,
+    gatewayForProvider: (provider: PaymentProvider) =>
+      gatewayOverride.current && provider === 'STRIPE'
+        ? (gatewayOverride.current as PaymentGateway)
+        : actual.gatewayForProvider(provider),
+  };
+});
 
 const gate = databaseGate();
 announceSkip('Phase 3: the ledger, Overrun and daily settlement', gate);
@@ -3228,6 +3245,411 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
         where: { tenantId: big.id },
       });
       expect(entries.filter(e => e.quantity > 0)).toHaveLength(1); // the purchase only
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Self-serve credit purchases and auto-refill
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('self-serve credits', () => {
+    beforeEach(() => {
+      gatewayOverride.current = gateway;
+    });
+    afterEach(() => {
+      gatewayOverride.current = null;
+    });
+
+    let keySeq = 0;
+    const newKey = () => `test-key-${++keySeq}-${Math.random().toString(36).slice(2, 10)}`;
+
+    async function buy(
+      tenantId: string,
+      userId: string,
+      payload: Record<string, unknown>
+    ) {
+      return app.inject({
+        method: 'POST',
+        url: '/api/v1/delivery/credits/purchase',
+        headers: tokenFor(userId, tenantId),
+        payload,
+      });
+    }
+
+    async function seedAgent(tenantId: string) {
+      const role =
+        (await prisma.role.findFirst({ where: { name: 'AGENT' } })) ??
+        (await prisma.role.create({
+          data: { name: 'AGENT', description: 'AGENT role', permissions: [] },
+        }));
+      return prisma.user.create({
+        data: {
+          tenantId,
+          email: `agent-${Math.random().toString(36).slice(2, 8)}@test.local`,
+          status: 'ACTIVE',
+          roles: { create: { roleId: role.id } },
+        },
+      });
+    }
+
+    it('buys credits at the server rate, and the gate flips from NO_CREDITS to delivering', async () => {
+      await seedTerms(big.id, { dailyBlockApplications: 10 });
+      await seedOpeningAgreement(big.id, 134);
+
+      let decision = await evaluateDeliveryGate(big.id, { prisma, record: false });
+      expect(decision.allowed).toBe(false);
+      expect(decision.reason).toBe('NO_CREDITS');
+
+      const response = await buy(big.id, big.ownerId, {
+        quantity: 7,
+        idempotencyKey: newKey(),
+        // A price from the client is ignored entirely.
+        unitRate: 1,
+        amount: 7,
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      const body = response.json().data;
+      expect(body.purchase.quantity).toBe(7);
+      expect(body.purchase.unitRate).toBe(134);
+      expect(body.purchase.amount).toBe(938);
+      expect(body.purchase.charged).toBe(true);
+      expect(body.balance).toBe(7);
+      expect(body.replayed).toBe(false);
+
+      expect(gateway.achCharges).toHaveLength(1);
+      expect(gateway.achCharges[0].amountCents).toBe(93_800);
+      expect(gateway.achCharges[0].idempotencyKey).toContain('self-serve:');
+
+      const rows = await prisma.applicationCreditLedgerEntry.findMany({
+        where: { tenantId: big.id, entryType: 'PURCHASE' },
+      });
+      expect(rows).toHaveLength(1);
+      expect(Number(rows[0].unitRate)).toBe(134);
+      expect(rows[0].stripePaymentIntentId).not.toBeNull();
+      expect(rows[0].settlementId).toBeNull();
+
+      decision = await evaluateDeliveryGate(big.id, { prisma, record: false });
+      expect(decision.allowed).toBe(true);
+      expect(decision.balance).toBe(7);
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { tenantId: big.id, action: 'delivery.credits.purchase' },
+      });
+      expect(audit).not.toBeNull();
+    });
+
+    it('charges once and records once when the same key is sent twice', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+      const key = newKey();
+
+      const first = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: key });
+      const second = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: key });
+      expect(first.statusCode).toBe(201);
+      expect(second.statusCode).toBe(200);
+      expect(second.json().data.replayed).toBe(true);
+      expect(second.json().data.purchase.ledgerEntryId).toBe(
+        first.json().data.purchase.ledgerEntryId
+      );
+
+      expect(gateway.achCharges).toHaveLength(1);
+      expect(
+        await prisma.applicationCreditLedgerEntry.count({
+          where: { tenantId: big.id, entryType: 'PURCHASE' },
+        })
+      ).toBe(1);
+      expect(await creditBalance(prisma, big.id)).toBe(5);
+
+      // The same key for a different purchase is refused, not silently merged.
+      const other = await buy(big.id, big.ownerId, { quantity: 6, idempotencyKey: key });
+      expect(other.statusCode).toBe(409);
+      expect(other.json().error.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      expect(gateway.achCharges).toHaveLength(1);
+    });
+
+    it('charges once when the same key races itself', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+      gateway.latencyMs = 100;
+      const key = newKey();
+
+      const results = await Promise.all([
+        buy(big.id, big.ownerId, { quantity: 3, idempotencyKey: key }),
+        buy(big.id, big.ownerId, { quantity: 3, idempotencyKey: key }),
+      ]);
+      expect(results.map(r => r.statusCode).sort()).toEqual([200, 201]);
+      expect(gateway.achCharges).toHaveLength(1);
+      expect(await creditBalance(prisma, big.id)).toBe(3);
+    });
+
+    it('refuses an AGENT', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+      const agent = await seedAgent(big.id);
+
+      const response = await buy(big.id, agent.id, { quantity: 5, idempotencyKey: newKey() });
+      expect(response.statusCode).toBe(403);
+
+      const toggle = await app.inject({
+        method: 'PUT',
+        url: '/api/v1/delivery/credits/auto-refill',
+        headers: tokenFor(agent.id, big.id),
+        payload: { enabled: false },
+      });
+      expect(toggle.statusCode).toBe(403);
+
+      const read = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/credits',
+        headers: tokenFor(agent.id, big.id),
+      });
+      expect(read.statusCode).toBe(403);
+
+      expect(gateway.achCharges).toHaveLength(0);
+      expect((await prisma.agencyBillingProfile.findUnique({ where: { tenantId: big.id } }))?.autoRefill).toBe(true);
+    });
+
+    it('refuses an invoiced (OFFLINE or MELIO) agency with a clear code', async () => {
+      for (const provider of [PaymentProvider.OFFLINE, PaymentProvider.MELIO]) {
+        await seedTerms(big.id, { paymentProvider: provider });
+        await seedOpeningAgreement(big.id);
+
+        const response = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: newKey() });
+        expect(response.statusCode, provider).toBe(409);
+        expect(response.json().error.code).toBe('INVOICED_AGENCY');
+        expect(response.json().error.message).toMatch(/Contact NetEnroll to add credits/);
+
+        const read = await app.inject({
+          method: 'GET',
+          url: '/api/v1/delivery/credits',
+          headers: tokenFor(big.ownerId, big.id),
+        });
+        expect(read.json().data.canSelfServe).toBe(false);
+        expect(read.json().data.selfServeBlockedReason).toMatch(/Contact NetEnroll/);
+      }
+      expect(gateway.achCharges).toHaveLength(0);
+      expect(await creditBalance(prisma, big.id)).toBe(0);
+    });
+
+    it('refuses an agency with no mandate, a dry-run agency and a suspended one', async () => {
+      await seedOpeningAgreement(big.id);
+
+      await seedTerms(big.id, { mandate: false });
+      let response = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: newKey() });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('NO_PAYMENT_METHOD');
+
+      await seedTerms(big.id, { chargesEnabled: false });
+      response = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: newKey() });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('CHARGES_NOT_ENABLED');
+
+      await seedTerms(big.id);
+      await prisma.agencyBillingProfile.update({
+        where: { tenantId: big.id },
+        data: { suspendedAt: new Date(), suspensionReason: 'test' },
+      });
+      response = await buy(big.id, big.ownerId, { quantity: 5, idempotencyKey: newKey() });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('ACCOUNT_SUSPENDED');
+
+      await seedTerms(small.id, { enrolled: false });
+      response = await buy(small.id, small.ownerId, { quantity: 5, idempotencyKey: newKey() });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('NOT_ENROLLED');
+
+      expect(gateway.achCharges).toHaveLength(0);
+    });
+
+    it('validates the quantity and the key', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+
+      for (const quantity of [0, 1001, 2.5, -3, '5', null]) {
+        const response = await buy(big.id, big.ownerId, { quantity, idempotencyKey: newKey() });
+        expect(response.statusCode, String(quantity)).toBe(400);
+        expect(response.json().error.code).toBe('VALIDATION_ERROR');
+      }
+      const noKey = await buy(big.id, big.ownerId, { quantity: 5 });
+      expect(noKey.statusCode).toBe(400);
+      expect(gateway.achCharges).toHaveLength(0);
+    });
+
+    it('refuses a purchase that would pass the maximum daily debit', async () => {
+      // Block of 10 at 50%: max daily debit (10 + 5) x $134 = $2,010, so 15 credits.
+      await seedTerms(big.id, { dailyBlockApplications: 10 });
+      await seedOpeningAgreement(big.id);
+
+      const read = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/credits',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(read.json().data.maxPurchaseQuantity).toBe(15);
+
+      const tooMany = await buy(big.id, big.ownerId, { quantity: 16, idempotencyKey: newKey() });
+      expect(tooMany.statusCode).toBe(409);
+      expect(tooMany.json().error.code).toBe('EXCEEDS_DAILY_LIMIT');
+
+      expect((await buy(big.id, big.ownerId, { quantity: 10, idempotencyKey: newKey() })).statusCode).toBe(201);
+      // Today's purchases count against the same ceiling.
+      const again = await buy(big.id, big.ownerId, { quantity: 6, idempotencyKey: newKey() });
+      expect(again.statusCode).toBe(409);
+      expect(gateway.achCharges).toHaveLength(1);
+    });
+
+    it('describes what the agency can buy', async () => {
+      await seedTerms(big.id, { dailyBlockApplications: 45 });
+      await seedOpeningAgreement(big.id, 134);
+      await prisma.agencyBillingProfile.update({
+        where: { tenantId: big.id },
+        data: { achBankName: 'Test Bank', achLast4: '1234' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/credits',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toMatchObject({
+        balance: 0,
+        currentRate: 134,
+        autoRefill: true,
+        dailyBlockApplications: 45,
+        paymentMethod: { type: 'ACH', last4: '1234', bankName: 'Test Bank' },
+        canSelfServe: true,
+        selfServeBlockedReason: null,
+        maxPurchaseQuantity: 67,
+      });
+    });
+
+    it('lets the owner turn auto-refill off and on, and shows it on the live panel', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+
+      const off = await app.inject({
+        method: 'PUT',
+        url: '/api/v1/delivery/credits/auto-refill',
+        headers: tokenFor(big.ownerId, big.id),
+        payload: { enabled: false },
+      });
+      expect(off.statusCode).toBe(200);
+      expect(off.json().data.autoRefill).toBe(false);
+
+      const today = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/today',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(today.json().data.autoRefill).toBe(false);
+      expect(today.json().data.projectedNextBlockQuantity).toBe(0);
+
+      const bad = await app.inject({
+        method: 'PUT',
+        url: '/api/v1/delivery/credits/auto-refill',
+        headers: tokenFor(big.ownerId, big.id),
+        payload: { enabled: 'no' },
+      });
+      expect(bad.statusCode).toBe(400);
+
+      const on = await app.inject({
+        method: 'PUT',
+        url: '/api/v1/delivery/credits/auto-refill',
+        headers: tokenFor(big.ownerId, big.id),
+        payload: { enabled: true },
+      });
+      expect(on.json().data.autoRefill).toBe(true);
+
+      const audits = await prisma.auditLog.count({
+        where: { tenantId: big.id, action: 'delivery.credits.auto_refill' },
+      });
+      expect(audits).toBe(2);
+    });
+
+    it('defaults auto-refill on, so existing agencies settle exactly as before', async () => {
+      const profile = await seedTerms(big.id);
+      expect(profile.autoRefill).toBe(true);
+      expect((await loadAgencyTerms(big.id, { prisma })).autoRefill).toBe(true);
+    });
+
+    it('with auto-refill off, bills the overrun but sells no block', async () => {
+      await seedTerms(big.id, { dailyBlockApplications: 45 });
+      await seedOpeningAgreement(big.id);
+      await prisma.agencyBillingProfile.update({
+        where: { tenantId: big.id },
+        data: { autoRefill: false },
+      });
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_block',
+      });
+      // 440 calls and 67 applications: 15.23%, so $134, and 22 overrun.
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 440);
+      await submitApplications(big.id, CLOSED_DAY, 67);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      expect(result.overrunQuantity).toBe(22);
+      expect(result.overrunAmount).toBe(22 * 134);
+      expect(result.nextBlockQuantity).toBe(0);
+      expect(result.nextBlockAmount).toBe(0);
+      expect(result.totalCharged).toBe(22 * 134);
+      expect(result.paymentStatus).toBe('SUCCEEDED');
+      expect(gateway.achCharges).toHaveLength(1);
+      expect(gateway.achCharges[0].amountCents).toBe(294_800);
+
+      const blocks = await prisma.applicationCreditLedgerEntry.count({
+        where: { tenantId: big.id, entryType: 'PURCHASE', deliveryDay: NEXT_DAY },
+      });
+      expect(blocks).toBe(0);
+
+      const settlement = await prisma.dailySettlement.findUnique({
+        where: { tenantId_deliveryDay: { tenantId: big.id, deliveryDay: CLOSED_DAY } },
+      });
+      expect(settlement?.configuredBlockQuantity).toBe(0);
+      expect(settlement?.nextBlockQuantity).toBe(0);
+      expect(Number(settlement?.nextBlockAmount)).toBe(0);
+      expect(Number(settlement?.totalCharged)).toBe(2948);
+      expect(await creditBalance(prisma, big.id)).toBe(0);
+    });
+
+    it('with auto-refill off and nothing overrun, charges nothing at all', async () => {
+      await seedTerms(big.id, { dailyBlockApplications: 45 });
+      await seedOpeningAgreement(big.id);
+      await prisma.agencyBillingProfile.update({
+        where: { tenantId: big.id },
+        data: { autoRefill: false },
+      });
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_block',
+      });
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 300);
+      await submitApplications(big.id, CLOSED_DAY, 40);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+      expect(result.nextBlockQuantity).toBe(0);
+      expect(result.totalCharged).toBe(0);
+      expect(result.paymentStatus).toBe('NOT_CHARGED');
+      expect(gateway.achCharges).toHaveLength(0);
+      // The five unused paid applications are still the agency's.
+      expect(await creditBalance(prisma, big.id)).toBe(5);
     });
   });
 });

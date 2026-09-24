@@ -39,10 +39,12 @@ curve, the summary, the publish API and the portal. An agency's opening rate and
 opening block are agreed before its first Delivery Day and recorded per tenant;
 from the second Delivery Day the rate curve governs. See §8.
 
-**There is no self-serve purchase either.** Phase 5 removed the last of it.
-Every agency is onboarded by a platform admin after a conversation and a signed
-agreement; there is no public checkout, nothing anybody can buy, and no route
-that mints an account from a payment. See §11.
+**There is no self-serve signup.** Every agency is onboarded by a platform admin
+after a conversation and a signed agreement; there is no public checkout and no
+route that mints an account from a payment. See §11. **An enrolled agency can,
+however, buy more application credits itself** — charged to the ACH mandate or
+card already on file, at its current rate, priced by the server — and choose
+whether the nightly settlement refills it to its Daily Block. See §4b.
 
 **A chargeback is a payment event, not a billing correction, and the ledger is
 not where it is answered.** A card dispute takes money back without our consent,
@@ -1026,7 +1028,9 @@ After each Delivery Day closes, per tenant, in this order:
 3. **Bill the overrun** at that rate.
 4. **Sell the next Delivery Day's block** at that rate, in the agency's
    configured daily target quantity, reduced by whatever paid applications
-   remain unused, and omitted where the reduction takes it to zero.
+   remain unused, and omitted where the reduction takes it to zero — **or
+   omitted entirely when the agency has turned auto-refill off** (§4b). The
+   Overrun in step 3 is billed either way.
 5. **Charge both as a single off-session ACH debit.**
 6. **Write the settlement record.**
 
@@ -1140,6 +1144,93 @@ nothing, which is asserted.
 
 ---
 
+## 4b. Self-serve credits and auto-refill
+
+Agencies prepay. Delivery stops the instant the balance reaches zero
+(`NO_CREDITS`, §3) and resumes on the next call offered after credits are added.
+Credits reach an agency three ways: the opening purchase (platform admin, §0d),
+the nightly block (the settlement, §4), and — this section — the agency buying
+them itself.
+
+### Buying credits — `POST /api/v1/delivery/credits/purchase`
+
+Agency OWNER or ADMIN only (`requireAgencyPrincipal`; an AGENT is refused 403).
+The body is `{ quantity, idempotencyKey }` and **nothing else is read**: a
+`unitRate` or `amount` in the body is ignored. The price is the agency's
+current rate — the same figure the Delivery page shows as "Current rate"
+(`getRatingSummary().currentRate`: the opening rate on an opening block,
+otherwise the rate in force) — and the instrument is the one the settlement
+debits (`settlementPaymentMethodId`): ACH off-session, or the saved card
+off-session for a card-paying agency.
+
+- `quantity` is a whole number from 1 to 1,000 (`400 VALIDATION_ERROR`
+  otherwise), and the purchases of one Delivery Day may not together exceed the
+  agency's **maximum daily debit** (`409 EXCEEDS_DAILY_LIMIT` /
+  `DAILY_LIMIT_REACHED`). The cap is per day across self-serve purchases, not
+  per purchase, because the maximum daily debit is the contractual ceiling on a
+  day's debit. The nightly settlement is capped separately, as before.
+- Refused `409` with a code the page renders as the reason: `NOT_ENROLLED`;
+  `INVOICED_AGENCY` for an OFFLINE or MELIO agency ("contact NetEnroll to add
+  credits" — nothing here can debit an invoiced agency, and an invoiced agency's
+  extra credits are sold through the opening-purchase route with an
+  `externalPaymentReference`); `PAYMENT_DISPUTED`; `ACCOUNT_SUSPENDED`;
+  `CHARGES_NOT_ENABLED` (the dry run, §0b — see below); `NO_PAYMENT_METHOD`;
+  `NO_RATE`.
+- A declined charge is `402 PAYMENT_FAILED` and writes nothing.
+- Success is `201 { data: { purchase, balance, replayed: false } }`. The
+  purchase is an ordinary `PURCHASE` ledger row for today's Delivery Day, with
+  the Stripe payment intent and no settlement, audited as
+  `delivery.credits.purchase`.
+
+**Not in the dry run.** An agency whose charging is not yet enabled is refused
+(`CHARGES_NOT_ENABLED`) rather than handed unpaid credits. The dry run's own
+credits are retired at cutover (§0c) only because a DRY_RUN settlement sold
+them; a self-serve lot has no such settlement, so a free one would survive
+cutover as credit nobody paid for. (The opening purchase is unaffected: it
+always charges, dry run or not, exactly as before.)
+
+**Idempotency.** The browser generates a key per purchase attempt
+(`crypto.randomUUID()`, regenerated after a success). It is Stripe's
+idempotency key (namespaced `self-serve:<tenant>:<key>`), and it is stored on
+the ledger row under a unique `(tenantId, idempotencyKey)` index. A replay is
+answered `200` with the purchase already made (`replayed: true`) and never
+reaches the gateway; the same key with a different quantity is
+`409 IDEMPOTENCY_KEY_REUSED`. The purchase runs under a per-tenant advisory
+lock, so a double click cannot charge twice and two purchases cannot both slip
+under the daily cap.
+
+### What the agency sees — `GET /api/v1/delivery/credits`
+
+`{ balance, currentRate, autoRefill, dailyBlockApplications, paymentMethod:
+{ type, last4, bankName, brand } | null, canSelfServe, selfServeBlockedCode,
+selfServeBlockedReason, maxPurchaseQuantity }`. Every figure is the server's;
+the Buy credits dialog on `/delivery` renders them and sends only a quantity.
+
+### Auto-refill — `PUT /api/v1/delivery/credits/auto-refill`
+
+`{ enabled: boolean }`, agency OWNER or ADMIN, audited as
+`delivery.credits.auto_refill`. Stored as `agency_billing_profiles.autoRefill`,
+**default `true`**, so every agency that existed before the setting settles
+exactly as it did. It is the one billing setting an agency controls, because
+either answer can only reduce what it is charged tonight.
+
+With auto-refill **off**, the nightly settlement:
+
+- still bills the day's Overrun (calls already connected when credits hit zero),
+  at the same rate and on the same instrument;
+- sells **no block**: no `PURCHASE` row, `nextBlockQuantity = 0`,
+  `nextBlockAmount = 0`, `totalCharged = overrunAmount`;
+- records `configuredBlockQuantity = 0` on the settlement row, so
+  `nextBlockQuantity = max(0, configuredBlockQuantity − unusedPaidApplications)`
+  holds on every row; `unusedPaidApplications` is recorded as usual;
+- is `NOT_CHARGED` when there was no Overrun either.
+
+`GET /api/v1/delivery/today` carries `autoRefill`, and its
+`projectedNextBlockQuantity` is 0 when it is off. The platform agency rows carry
+`autoRefill` too.
+
+---
+
 ## 5. Payment
 
 ACH debit, off-session, against a saved mandate — for an agency on the `STRIPE`
@@ -1180,7 +1271,9 @@ Three mechanical notes on that wiring:
 nothing else. At roughly $8,978 a day on one account, card fees would run about
 $87,000 a year, so the daily debit is ACH-only. `chargeCardOnSession` exists for
 an agency's opening purchase, is named so it cannot be reached for a settlement
-by accident, and is called from exactly one route.
+by accident, and is called from exactly one place (`purchaseCredits`, source
+`PLATFORM_OPENING`). A card-paying agency's settlement and its self-serve
+purchases (§4b) use `chargeCardOffSession` against the saved card.
 
 ### The maximum daily debit is a commitment, not a guideline
 
@@ -1248,7 +1341,10 @@ than assertions about it:
 - its Overrun ceiling percentage,
 - the quantity and rate of an opening purchase that was commercially agreed.
 
-An agency OWNER is refused every one of them.
+An agency OWNER is refused every one of them. An agency does send a
+**quantity** of credits to buy (§4b) — but never a price: the rate is its
+current rate, read server-side, and the day's purchases are capped at its
+maximum daily debit.
 
 ---
 
@@ -1779,6 +1875,15 @@ Three properties of that file worth naming:
 Verified the same way as the others: applied twice as a no-op, applied from
 scratch against a database built from the pre-Phase-5 schema, and
 `prisma migrate diff` reports **no difference detected**.
+
+`20260924010000_agency_auto_refill/migration.sql` (§4b) is additive and
+idempotent: `agency_billing_profiles."autoRefill" BOOLEAN NOT NULL DEFAULT
+true` — so every existing agency keeps nightly refill — plus a nullable
+`application_credit_ledger."idempotencyKey"` and a unique index on
+`("tenantId", "idempotencyKey")`. NULLs are distinct in that index, so no
+existing row is affected, and adding a column does not touch the ledger's
+append-only trigger. It is in `REQUIRED_MIGRATIONS` with a probe on the column
+and the index.
 
 **Nothing was added to the deploy path.** In particular no
 `prisma migrate deploy`: against an empty migration history it would try to

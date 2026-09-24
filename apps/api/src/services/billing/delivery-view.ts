@@ -74,6 +74,11 @@ export interface DeliveryTodayView {
   enrolled: boolean;
   /** Whether an enrolled agency's settlements actually charge. */
   chargesEnabled: boolean;
+  /**
+   * Whether the nightly settlement refills this agency to its Daily Block. The
+   * agency's own setting; false means it buys credits itself.
+   */
+  autoRefill: boolean;
 
   /** Calls NetEnroll routed to this agency today, answered or not. */
   callsRouted: number;
@@ -175,6 +180,7 @@ const NOT_ENROLLED_VIEW: Omit<
   timeZone: 'America/New_York',
   enrolled: false,
   chargesEnabled: false,
+  autoRefill: true,
   windowClosingPct: null,
   windowDayKeys: [],
   windowDaysFound: 0,
@@ -316,8 +322,11 @@ export async function getDeliveryToday(
   const overrunAmountTonight =
     tonightRate === null ? null : Number((counts.overrun * tonightRate).toFixed(2));
 
+  const autoRefill = profile?.autoRefill !== false;
+  // No block is sold to an agency that turned auto-refill off, which is what
+  // the settlement does too.
   const projectedNextBlockQuantity =
-    rating.trackingRate === null
+    rating.trackingRate === null || !autoRefill
       ? 0
       : Math.max(0, gate.dailyBlockApplications - Math.max(0, balance));
 
@@ -337,6 +346,7 @@ export async function getDeliveryToday(
     timeZone: 'America/New_York',
     enrolled: gate.enrolled,
     chargesEnabled: profile?.chargesEnabled === true,
+    autoRefill,
     callsRouted: routed,
     callsInProgress: inProgress,
     callsAnswered: todayMeasurement.deliveredCalls,
@@ -823,6 +833,8 @@ export interface PlatformAgencyRow {
   enrolled: boolean;
   /** Whether an enrolled agency's settlements actually charge. */
   chargesEnabled: boolean;
+  /** The agency's own setting: whether the settlement refills it nightly. */
+  autoRefill: boolean;
   deliveredCalls: number;
   applications: number;
   closingPct: number | null;
@@ -1148,6 +1160,7 @@ export async function getPlatformOverview(
         isNonProduction: tenant.isNonProduction,
         enrolled: profile?.billingEnrolledAt != null,
         chargesEnabled: profile?.chargesEnabled === true,
+        autoRefill: profile?.autoRefill !== false,
         deliveredCalls: calls,
         applications: measurement.submittedApplications,
         closingPct: measurement.closingPct,
