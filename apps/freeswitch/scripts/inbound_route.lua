@@ -213,12 +213,46 @@ if AGENT_CELL_CONFIRM_FILE == "" then
     AGENT_CELL_CONFIRM_FILE = os.getenv("AGENT_CELL_CONFIRM_FILE") or "ivr/ivr-accept_reject_voicemail.wav"
 end
 
-local function agent_cell_leg_vars()
-    if not AGENT_CELL_CONFIRM then
+-- The agent's cell shows the CUSTOMER's number, so they know who is calling.
+-- Buyer legs keep presenting our DID (campaign_external_cid_fix_v1); this
+-- per-leg override applies to agent cells only. If FracTEL refuses calls that
+-- present a number we do not own, revert with no restart:
+--     fs_cli -x "global_setvar agent_cell_show_caller=false"
+local cell_caller_setting = fs_global("agent_cell_show_caller")
+if cell_caller_setting == "" then
+    cell_caller_setting = os.getenv("AGENT_CELL_SHOW_CALLER") or "true"
+end
+local AGENT_CELL_SHOW_CALLER = cell_caller_setting ~= "false"
+
+-- 1XXXXXXXXXX for a real NANP caller, or nil (withheld, anonymous, garbage).
+local function presentable_caller(caller)
+    local digits = string.gsub(caller or "", "%D", "")
+    if string.len(digits) == 10 then
+        digits = "1" .. digits
+    end
+    if string.len(digits) == 11 and string.match(digits, "^1[2-9]%d%d[2-9]") then
+        return digits
+    end
+    return nil
+end
+
+local function agent_cell_leg_vars(caller)
+    local vars = {}
+    if AGENT_CELL_CONFIRM then
+        table.insert(vars, "group_confirm_key=1")
+        table.insert(vars, "group_confirm_file=" .. AGENT_CELL_CONFIRM_FILE)
+        table.insert(vars, "group_confirm_read_timeout=10000")
+    end
+    local cid = AGENT_CELL_SHOW_CALLER and presentable_caller(caller) or nil
+    if cid then
+        table.insert(vars, "sip_from_user=" .. cid)
+        table.insert(vars, "origination_caller_id_number=" .. cid)
+        table.insert(vars, "effective_caller_id_number=" .. cid)
+    end
+    if #vars == 0 then
         return ""
     end
-    return "[group_confirm_key=1,group_confirm_file=" .. AGENT_CELL_CONFIRM_FILE ..
-        ",group_confirm_read_timeout=10000]"
+    return "[" .. table.concat(vars, ",") .. "]"
 end
 
 -- Live non-softphone channels that dialed (or came from) this ten-digit number.
@@ -664,7 +698,7 @@ for i, step in ipairs(failover_steps) do
                     bridge_body = bridge_components[1]
                 end
                 if agent_cell_components[1] then
-                    local cell_vars = agent_cell_leg_vars()
+                    local cell_vars = agent_cell_leg_vars(caller_number)
                     local alts = {}
                     for alt in string.gmatch(bridge_body, "[^|]+") do
                         table.insert(alts, cell_vars .. alt)
@@ -681,7 +715,7 @@ for i, step in ipairs(failover_steps) do
                 for idx, leg in ipairs(bridge_components) do
                     local rendered = external_first_leg[idx] or leg
                     if agent_cell_components[idx] then
-                        rendered = agent_cell_leg_vars() .. rendered
+                        rendered = agent_cell_leg_vars(caller_number) .. rendered
                     end
                     table.insert(legs, rendered)
                 end
