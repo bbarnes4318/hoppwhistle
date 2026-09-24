@@ -1,5 +1,10 @@
 <configuration name="acl.conf" description="Network Lists">
   <network-lists>
+    <!-- The internal profile's local-network-acl: nothing but this host. See
+         sip_profiles/internal.xml for why the Docker network must not count. -->
+    <list name="loopback_only" default="deny">
+      <node type="allow" cidr="127.0.0.0/8"/>
+    </list>
     <!-- Anveo Direct Signaling IPs -->
     <list name="anveo_direct" default="deny">
       <node type="allow" cidr="169.48.232.158/32"/>
