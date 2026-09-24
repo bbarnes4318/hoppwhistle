@@ -111,6 +111,7 @@ REQUIRED_MIGRATIONS="
 20260922020000_payment_provider_melio_value
 20260922020001_payment_provider_melio_default
 20260924000000_delivery_hold_no_credits
+20260924010000_agency_auto_refill
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -418,6 +419,17 @@ migration_applied() {
               JOIN pg_type ty ON ty.oid = e.enumtypid
               WHERE ty.typname = 'DeliveryHoldReason'
                 AND e.enumlabel = 'NO_CREDITS'), false)" ;;
+    *_agency_auto_refill)
+      # Two columns and an index. The index is the last statement in the file,
+      # so it is probed alongside the profile column: both present means the
+      # whole file ran.
+      echo "SELECT COALESCE((SELECT true FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'agency_billing_profiles'
+                AND column_name = 'autoRefill'), false)
+            AND COALESCE((SELECT true FROM pg_indexes
+              WHERE schemaname = 'public'
+                AND indexname = 'application_credit_ledger_tenantId_idempotencyKey_key'), false)" ;;
     *)
       echo "" ;;
   esac

@@ -4521,6 +4521,17 @@ model AgencyBillingProfile {
   /// omitted where unused paid applications remain.
   dailyBlockApplications Int @default(0)
 
+  /// Whether the nightly settlement refills this agency to its Daily Block.
+  ///
+  /// The one setting on this row the AGENCY controls (its OWNER or ADMIN, from
+  /// the Delivery page). True by default, which is the behaviour every agency
+  /// had before the setting existed: each night the settlement sells
+  /// `max(0, dailyBlockApplications - balance)` credits. False means the
+  /// settlement still bills any Overrun but sells no block, and the agency buys
+  /// credits itself when it wants them. It can only ever reduce what the
+  /// agency is charged, which is why an agency may set it.
+  autoRefill Boolean @default(true)
+
   /// ── The rate offset ───────────────────────────────────────────────────────
   ///
   /// Dollars added to whatever the curve returns, at every point on it:
@@ -4735,6 +4746,11 @@ model ApplicationCreditLedgerEntry {
   /// means nobody has paid for it.
   externalPaymentReference String?
 
+  /// PURCHASE only, and only on a purchase the agency made itself: the
+  /// idempotency key its browser sent. Unique per tenant, so a purchase
+  /// submitted twice writes one row. Null everywhere else.
+  idempotencyKey String?
+
   createdAt DateTime @default(now())
 
   tenant       Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -4748,6 +4764,8 @@ model ApplicationCreditLedgerEntry {
   /// One consumption per unit of a purchase lot. This is what makes two
   /// simultaneous consumptions spend two different credits.
   @@unique([purchaseEntryId, lotIndex])
+  /// One self-serve purchase per key per agency.
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, createdAt])
   @@index([tenantId, entryType, createdAt])
   @@index([tenantId, deliveryDay])

@@ -76,8 +76,12 @@ import {
   closeOutDryRunLots,
   creditBalance,
   previewDryRunCloseout,
-  recordPurchase,
 } from '../services/billing/credit-ledger.js';
+import {
+  loadSelfServeState,
+  purchaseCredits,
+  SELF_SERVE_MAX_QUANTITY,
+} from '../services/billing/credit-purchase.js';
 import {
   getAgentBreakdown,
   getAgentRange,
@@ -87,10 +91,7 @@ import {
   getPlatformOverview,
 } from '../services/billing/delivery-view.js';
 import { standDownDispute } from '../services/billing/disputes.js';
-import {
-  gatewayForProvider,
-  providerChargesInPlatform,
-} from '../services/billing/payment-gateways.js';
+import { providerChargesInPlatform } from '../services/billing/payment-gateways.js';
 import { runDailySettlement } from '../services/billing/settlement.js';
 import {
   enrolmentBlockersFor,
@@ -505,6 +506,214 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           verifiedAt: payingByCard
             ? (terms.profile?.cardMandateVerifiedAt ?? null)
             : (terms.profile?.achMandateVerifiedAt ?? null),
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/delivery/credits
+   *
+   * What the agency has, what a credit costs it right now, and whether it can
+   * buy more from here. Every figure is the server's: the Buy credits dialog
+   * shows these and sends back only a quantity.
+   */
+  fastify.get(
+    '/api/v1/delivery/credits',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const state = await loadSelfServeState(tenantId, { prisma });
+      const { terms } = state;
+      const payingByCard = terms.paymentMethod === AgencyPaymentMethod.CARD;
+      const last4 = payingByCard
+        ? (terms.profile?.cardLast4 ?? null)
+        : (terms.profile?.achLast4 ?? null);
+
+      return reply.send({
+        data: {
+          balance: state.balance,
+          currentRate: state.currentRate,
+          autoRefill: terms.autoRefill,
+          dailyBlockApplications: terms.dailyBlockApplications,
+          paymentMethod:
+            terms.chargesInPlatform && terms.hasValidMandate
+              ? {
+                  type: terms.paymentMethod,
+                  last4,
+                  bankName: payingByCard ? null : (terms.profile?.achBankName ?? null),
+                  brand: payingByCard ? (terms.profile?.cardBrand ?? null) : null,
+                }
+              : null,
+          canSelfServe: state.blocked === null,
+          selfServeBlockedCode: state.blocked?.code ?? null,
+          selfServeBlockedReason: state.blocked?.message ?? null,
+          maxPurchaseQuantity: state.maxPurchaseQuantity,
+        },
+      });
+    }
+  );
+
+  /**
+   * POST /api/v1/delivery/credits/purchase
+   *
+   * An agency OWNER/ADMIN buying application credits, charged to the
+   * instrument on file at the agency's CURRENT rate. The body is a quantity and
+   * an idempotency key and nothing else: a `unitRate`, `amount` or anything
+   * else a client sends is ignored, because the price is the server's.
+   *
+   * Refused (409) for an agency that is not enrolled, invoiced outside the
+   * platform (OFFLINE / MELIO), disputed, suspended, still in its dry run, has
+   * no usable instrument or no rate, or would pass its maximum daily debit.
+   * The same key sent twice charges once and returns the first purchase.
+   */
+  fastify.post<{ Body: { quantity?: unknown; idempotencyKey?: unknown } }>(
+    '/api/v1/delivery/credits/purchase',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const body = request.body ?? {};
+      const quantity = body.quantity;
+      if (
+        typeof quantity !== 'number' ||
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > SELF_SERVE_MAX_QUANTITY
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `quantity must be a whole number from 1 to ${SELF_SERVE_MAX_QUANTITY}`,
+          },
+        });
+      }
+      const idempotencyKey = body.idempotencyKey;
+      if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'idempotencyKey must be 8-100 letters, digits, dashes or underscores',
+          },
+        });
+      }
+
+      // A replay answers with the purchase it already made, before anything
+      // below could refuse it for a reason that arose from that purchase.
+      const previous = await prisma.applicationCreditLedgerEntry.findUnique({
+        where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+        select: { id: true },
+      });
+
+      let unitRate = 0;
+      if (!previous) {
+        const state = await loadSelfServeState(tenantId, { prisma });
+        if (state.blocked) {
+          return reply
+            .code(409)
+            .send({ error: { code: state.blocked.code, message: state.blocked.message } });
+        }
+        if (quantity > state.maxPurchaseQuantity) {
+          return reply.code(409).send({
+            error: {
+              code: 'EXCEEDS_DAILY_LIMIT',
+              message:
+                `${quantity} credits at $${(state.currentRate ?? 0).toFixed(2)} would take today's ` +
+                `purchases past this account's maximum daily debit of ` +
+                `$${state.terms.maxDailyDebit.toFixed(2)}. The most you can buy right now is ` +
+                `${state.maxPurchaseQuantity}.`,
+            },
+          });
+        }
+        unitRate = state.currentRate as number;
+      }
+
+      const result = await purchaseCredits(
+        {
+          tenantId,
+          quantity,
+          // Server-derived above. Unused on a replay, which answers with the
+          // row already written at the rate it was bought at.
+          unitRate,
+          idempotencyKey,
+          actor: { userId: getActingUserId(request) ?? null },
+          source: 'AGENCY_SELF_SERVE',
+        },
+        { prisma }
+      );
+
+      if (!result.ok) {
+        return reply
+          .code(result.httpStatus)
+          .send({ error: { code: result.code, message: result.message } });
+      }
+
+      return reply.code(result.replayed ? 200 : 201).send({
+        data: {
+          purchase: result.purchase,
+          balance: result.balance,
+          replayed: result.replayed,
+        },
+      });
+    }
+  );
+
+  /**
+   * PUT /api/v1/delivery/credits/auto-refill
+   *
+   * The agency's own choice of whether the nightly settlement tops it up to its
+   * Daily Block. The one billing setting an agency controls, because either
+   * answer can only reduce what it is charged tonight.
+   */
+  fastify.put<{ Body: { enabled?: unknown } }>(
+    '/api/v1/delivery/credits/auto-refill',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const enabled = request.body?.enabled;
+      if (typeof enabled !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'enabled must be true or false' },
+        });
+      }
+
+      const profile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId },
+        select: { autoRefill: true },
+      });
+      if (!profile) {
+        return reply.code(409).send({
+          error: {
+            code: 'NOT_ENROLLED',
+            message: 'This account has no billing terms, so there is nothing to refill.',
+          },
+        });
+      }
+
+      const updated = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: { autoRefill: enabled },
+        select: { autoRefill: true, dailyBlockApplications: true },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'delivery.credits.auto_refill',
+        entityType: 'agency_billing_profile',
+        entityId: tenantId,
+        changes: { autoRefill: { from: profile.autoRefill, to: enabled } },
+      });
+
+      return reply.send({
+        data: {
+          autoRefill: updated.autoRefill,
+          dailyBlockApplications: updated.dailyBlockApplications,
         },
       });
     }
@@ -1325,182 +1534,79 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           .send({ error: { code: 'VALIDATION_ERROR', message: 'deliveryDay must be YYYY-MM-DD' } });
       }
 
-      const profile = await prisma.agencyBillingProfile.findUnique({ where: { tenantId } });
-      if (!profile) {
-        return reply.code(409).send({
-          error: {
-            code: 'NO_BILLING_PROFILE',
-            message: 'Record the agency terms before selling it an opening block',
-          },
-        });
-      }
-
       const quantity = body.quantity as number;
       const unitRate = body.unitRate;
-      const amount = Number((quantity * unitRate).toFixed(2));
       const deliveryDay = body.deliveryDay ?? currentCalendarDay();
 
-      const externalReference =
-        typeof body.externalPaymentReference === 'string'
-          ? body.externalPaymentReference.trim()
-          : '';
-
       /*
-       * ── The offline branch ───────────────────────────────────────────────
+       * The charge and the ledger write live in `purchaseCredits`, shared with
+       * the agency's self-serve purchase. Its PLATFORM_OPENING path is this
+       * route's behaviour unchanged:
        *
-       * An agency that has already paid for its opening block somewhere else.
+       * ── The offline branch ─────────────────────────────────────────────────
        *
-       * Before this existed there was no way to record that: this route charges
-       * before it writes, so giving an agency the credits it had already paid
-       * for by check meant debiting it a second time for the same money. The
-       * alternatives on offer were a hand-written ledger row with no audit
-       * trail, or charging and refunding -- in a product whose first documented
-       * rule is that nothing here is ever refunded.
+       * An agency that has already paid for its opening block somewhere else is
+       * recorded against `externalPaymentReference` -- REQUIRED for it, because a
+       * ledger row saying a block was paid for outside the platform, with
+       * nothing saying where, is an assertion rather than a record -- and no
+       * debit is placed. Charging and refunding is not an option in a product
+       * whose first documented rule is that nothing here is ever refunded.
        *
-       * The reference is REQUIRED rather than optional. A ledger row saying a
-       * block was paid for outside the platform, with nothing saying where, is
-       * not a record -- it is an assertion, and the only person who could check
-       * it is the one who wrote it.
+       * A reference sent for a charging agency is refused rather than ignored:
+       * the caller believed this was already paid for, and silently debiting
+       * them anyway is the double-charge the offline branch exists to prevent.
+       *
+       * Everything else is charged: ACH off-session, or card on-session when
+       * `method` is CARD, keyed for Stripe on the day, quantity and rate.
        */
-      if (!providerChargesInPlatform(profile.paymentProvider)) {
-        if (!externalReference) {
-          return reply.code(400).send({
-            error: {
-              code: 'EXTERNAL_REFERENCE_REQUIRED',
-              message:
-                "This agency's payment provider is OFFLINE, so no debit can be placed. " +
-                'Send externalPaymentReference naming where the money was collected ' +
-                '(a check number, a wire reference, an invoice id).',
-            },
-          });
-        }
-
-        const offlineEntry = await recordPurchase(prisma, {
+      const result = await purchaseCredits(
+        {
           tenantId,
-          deliveryDay,
           quantity,
           unitRate,
-          // No Stripe payment exists. The reference below is the record.
-          stripePaymentIntentId: null,
-          externalPaymentReference: externalReference,
-          settlementId: null,
-        });
+          deliveryDay,
+          idempotencyKey: `opening:${tenantId}:${deliveryDay}:${quantity}:${unitRate}`,
+          actor: { userId: getActingUserId(request) ?? null },
+          source: 'PLATFORM_OPENING',
+          method: body.method,
+          paymentMethodId: body.paymentMethodId,
+          externalPaymentReference:
+            typeof body.externalPaymentReference === 'string'
+              ? body.externalPaymentReference
+              : undefined,
+        },
+        { prisma }
+      );
 
-        await auditLog({
-          tenantId,
-          userId: getActingUserId(request) ?? undefined,
-          action: 'platform.delivery.opening_purchase.external',
-          entityType: 'application_credit_ledger',
-          entityId: offlineEntry.id,
-          changes: {
-            quantity,
-            unitRate,
-            amount,
-            method: 'OFFLINE',
-            externalPaymentReference: externalReference,
-          },
-        });
+      if (!result.ok) {
+        return reply
+          .code(result.httpStatus)
+          .send({ error: { code: result.code, message: result.message } });
+      }
 
+      const { purchase } = result;
+      if (!purchase.charged) {
         return reply.code(201).send({
           data: {
-            ledgerEntryId: offlineEntry.id,
+            ledgerEntryId: purchase.ledgerEntryId,
             quantity,
             unitRate,
-            amount,
+            amount: purchase.amount,
             deliveryDay,
             charged: false,
-            externalPaymentReference: externalReference,
+            externalPaymentReference: purchase.externalPaymentReference,
           },
         });
       }
-
-      /*
-       * Everything below charges. A reference sent to a charging agency is
-       * refused rather than ignored: it means the caller believed this purchase
-       * was already paid for, and silently debiting them anyway is the exact
-       * double-charge the branch above exists to prevent.
-       */
-      if (externalReference) {
-        return reply.code(400).send({
-          error: {
-            code: 'EXTERNAL_REFERENCE_NOT_APPLICABLE',
-            message:
-              'externalPaymentReference applies only to an agency whose payment provider is ' +
-              'OFFLINE. This agency is charged through the platform, and this request would ' +
-              'have placed a real debit.',
-          },
-        });
-      }
-
-      const gateway = gatewayForProvider(profile.paymentProvider);
-      const paymentMethodId = body.paymentMethodId ?? profile.achPaymentMethodId;
-
-      if (!profile.stripeCustomerId || !paymentMethodId) {
-        return reply.code(409).send({
-          error: {
-            code: 'NO_PAYMENT_METHOD',
-            message: 'This agency has no Stripe customer or payment method recorded',
-          },
-        });
-      }
-
-      const idempotencyKey = `opening:${tenantId}:${deliveryDay}:${quantity}:${unitRate}`;
-      const charge =
-        body.method === 'CARD'
-          ? await gateway.chargeCardOnSession({
-              customerId: profile.stripeCustomerId,
-              paymentMethodId,
-              amountCents: Math.round(amount * 100),
-              description: `NetEnroll opening block ${deliveryDay}`,
-              idempotencyKey,
-              metadata: { tenantId, deliveryDay, kind: 'opening_purchase' },
-            })
-          : await gateway.chargeAchOffSession({
-              customerId: profile.stripeCustomerId,
-              paymentMethodId,
-              amountCents: Math.round(amount * 100),
-              description: `NetEnroll opening block ${deliveryDay}`,
-              idempotencyKey,
-              metadata: { tenantId, deliveryDay, kind: 'opening_purchase' },
-            });
-
-      if (!charge.ok) {
-        return reply.code(402).send({
-          error: {
-            code: 'PAYMENT_FAILED',
-            message: charge.failureMessage ?? 'The opening purchase was declined',
-          },
-        });
-      }
-
-      const entry = await recordPurchase(prisma, {
-        tenantId,
-        deliveryDay,
-        quantity,
-        unitRate,
-        stripePaymentIntentId: charge.paymentIntentId,
-        // No settlement sold this: it is the opening purchase, agreed before
-        // the agency's first Delivery Day.
-        settlementId: null,
-      });
-
-      await auditLog({
-        tenantId,
-        userId: getActingUserId(request) ?? undefined,
-        action: 'platform.delivery.opening_purchase',
-        entityType: 'application_credit_ledger',
-        entityId: entry.id,
-        changes: { quantity, unitRate, amount, method: body.method ?? 'ACH' },
-      });
 
       return reply.code(201).send({
         data: {
-          ledgerEntryId: entry.id,
+          ledgerEntryId: purchase.ledgerEntryId,
           quantity,
           unitRate,
-          amount,
+          amount: purchase.amount,
           deliveryDay,
-          balance: await creditBalance(prisma, tenantId),
+          balance: result.balance,
         },
       });
     }

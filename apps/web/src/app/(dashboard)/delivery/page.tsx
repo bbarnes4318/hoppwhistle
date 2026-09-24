@@ -1,10 +1,16 @@
 'use client';
 
-import { ArrowDown, ArrowUp, Gauge, Loader2, PauseCircle, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowUp, Gauge, Loader2, PauseCircle, Plus, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import {
+  AutoRefillToggle,
+  BuyCreditsDialog,
+  fetchCredits,
+  type CreditsState,
+} from '@/components/delivery/buy-credits';
 import { count, dollars, duration, pct, points } from '@/components/delivery/ledger';
 import {
   Notice,
@@ -73,8 +79,8 @@ import { cn } from '@/lib/utils';
  * delivering, which is the opposite of the truth, so the page says plainly that
  * billing does not apply and shows nothing else.
  *
- * Every figure comes from the server. Nothing on this page sends a rate, an
- * amount or a quantity anywhere.
+ * Every figure comes from the server. Nothing on this page sends a rate or an
+ * amount anywhere; buying credits sends a quantity and the server prices it.
  */
 
 interface DeliveryToday {
@@ -82,6 +88,8 @@ interface DeliveryToday {
   timeZone: string;
   enrolled: boolean;
   chargesEnabled: boolean;
+  /** Whether the nightly settlement refills to the Daily Block. */
+  autoRefill?: boolean;
   callsRouted: number;
   callsInProgress: number;
   callsAnswered: number;
@@ -219,6 +227,8 @@ function AgencyDeliveryPanel(): JSX.Element {
   /** The day's total annualized premium across the agency, served with the rows. */
   const [agencyPremium, setAgencyPremium] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [credits, setCredits] = useState<CreditsState | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('closingPct');
   /*
    * Ascending, so the agents dragging the agency's rate are at the top.
@@ -234,15 +244,19 @@ function AgencyDeliveryPanel(): JSX.Element {
     // Both routes answer `{ data: ... }`, so both are unwrapped by name. Read
     // as bare bodies these were silently undefined: the panel rendered an
     // agency as unenrolled whatever it was, and the agent table was empty.
-    const [todayResponse, agentsResponse] = await Promise.all([
+    const [todayResponse, agentsResponse, creditsState] = await Promise.all([
       apiClient.get<Envelope<DeliveryToday>>('/api/v1/delivery/today'),
       apiClient.get<Envelope<AgentBreakdown>>('/api/v1/delivery/agents'),
+      // What a credit costs and whether one can be bought here. A failure is
+      // not the page's failure: the button simply stays disabled.
+      fetchCredits().catch(() => null),
     ]);
 
     const breakdown = payload(agentsResponse);
 
     setError(todayResponse.error ? todayResponse.error.message : null);
     setToday(payload(todayResponse) ?? null);
+    setCredits(creditsState);
     setAgents(Array.isArray(breakdown?.agents) ? breakdown.agents : []);
     // The agency's own figure, served with the rows. Not summed from them: it
     // includes calls no agent is attributed on, so a client-side sum would give
@@ -405,6 +419,20 @@ function AgencyDeliveryPanel(): JSX.Element {
           <StatusChip value="PAUSED" label="Paused" tone="blocked" />
         )}
         <ToolbarActions>
+          <Button
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setBuyOpen(true)}
+            disabled={!credits}
+            title={
+              credits && !credits.canSelfServe
+                ? (credits.selfServeBlockedReason ?? undefined)
+                : undefined
+            }
+          >
+            <Plus className="mr-1.5 h-3 w-3" />
+            Buy credits
+          </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={refresh}>
             <RefreshCw className="mr-1.5 h-3 w-3" />
             Refresh
@@ -419,6 +447,18 @@ function AgencyDeliveryPanel(): JSX.Element {
         <Notice
           tone="warning"
           icon={PauseCircle}
+          action={
+            today.holdReason === 'NO_CREDITS' ? (
+              <Button
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setBuyOpen(true)}
+                disabled={!credits}
+              >
+                Buy credits
+              </Button>
+            ) : undefined
+          }
           title={
             <>
               {today.holdReason === 'NO_CREDITS'
@@ -437,6 +477,13 @@ function AgencyDeliveryPanel(): JSX.Element {
           )}
         </Notice>
       )}
+
+      <BuyCreditsDialog
+        open={buyOpen}
+        onOpenChange={setBuyOpen}
+        credits={credits}
+        onPurchased={refresh}
+      />
 
       {!today.chargesEnabled && (
         <Notice tone="info" icon={Gauge} title="Settlements are running without charging">
@@ -475,9 +522,21 @@ function AgencyDeliveryPanel(): JSX.Element {
               {count(today.applicationsRemainingOnBlock)}
             </span>
           }
-          sub={`paid for and unused · daily block ${count(
-            today.dailyBlockApplications
-          )} · calls pause at 0`}
+          sub={
+            <>
+              {`paid for and unused · daily block ${count(
+                today.dailyBlockApplications
+              )} · calls pause at 0`}
+              <AutoRefillToggle
+                className="mt-1"
+                credits={credits}
+                onChanged={autoRefill => {
+                  setCredits(current => (current ? { ...current, autoRefill } : current));
+                  refresh();
+                }}
+              />
+            </>
+          }
           data-figure-label="App credits remaining"
           data-figure-value={count(today.applicationsRemainingOnBlock)}
         />

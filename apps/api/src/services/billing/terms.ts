@@ -240,6 +240,12 @@ export interface AgencyTerms {
   chargesEnabled: boolean;
   dailyBlockApplications: number;
   /**
+   * Whether the nightly settlement sells this agency its next Daily Block.
+   * The agency's own choice; true unless it turned it off. False means the
+   * settlement bills Overrun only and the agency buys credits itself.
+   */
+  autoRefill: boolean;
+  /**
    * Dollars added to the curve rate, at every point on the curve. Zero unless a
    * platform admin agreed one. Not a fee and never itemised: see
    * `services/rating/rate-offset.ts`.
@@ -388,6 +394,7 @@ export async function loadAgencyTerms(
     enrolledAt: profile?.billingEnrolledAt ?? null,
     chargesEnabled: profile?.chargesEnabled === true,
     dailyBlockApplications,
+    autoRefill: profile?.autoRefill !== false,
     rateOffset: profile?.rateOffset == null ? 0 : toNumber(profile.rateOffset),
     paymentMethod,
     paymentProvider,

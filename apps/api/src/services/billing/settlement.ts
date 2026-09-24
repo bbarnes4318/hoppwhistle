@@ -10,7 +10,8 @@
  *   3. Bill today's Overrun at that new rate.
  *   4. Sell the next Delivery Day's block at that new rate, in the agency's
  *      configured daily target quantity, reduced or omitted where unused paid
- *      applications remain.
+ *      applications remain -- and omitted entirely when the agency has turned
+ *      auto-refill off, in which case only the Overrun is billed.
  *   5. Charge both as a single off-session debit.
  *   6. Write an immutable settlement record.
  *
@@ -325,7 +326,17 @@ export async function settleAgencyForDeliveryDay(
    */
   const balance = await creditBalance(prisma, tenantId);
   const unusedPaidApplications = Math.max(0, balance);
-  const configuredBlockQuantity = terms.dailyBlockApplications;
+  /*
+   * An agency that turned auto-refill off is sold no block at all, whatever
+   * its balance. It buys credits itself when it wants them; the settlement's
+   * only job for it tonight is the Overrun above.
+   *
+   * Recorded as a configured target of ZERO rather than as the Daily Block with
+   * the block then withheld, so the stored row stays self-consistent:
+   * `nextBlockQuantity = max(0, configuredBlockQuantity - unusedPaidApplications)`
+   * holds on every settlement row, and a reader re-deriving it gets 0.
+   */
+  const configuredBlockQuantity = terms.autoRefill ? terms.dailyBlockApplications : 0;
   const nextBlockQuantity =
     effective === null ? 0 : Math.max(0, configuredBlockQuantity - unusedPaidApplications);
   const nextBlockAmount =

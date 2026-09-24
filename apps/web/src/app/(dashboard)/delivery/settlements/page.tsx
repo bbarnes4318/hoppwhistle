@@ -498,7 +498,7 @@ function AgencySettlementsPanel(): JSX.Element {
                         <td className="num">{money(row.overrunAmount)}</td>
                         <td className="num">
                           {count(row.nextBlockQuantity)}
-                          {row.unusedPaidApplications > 0 && (
+                          {row.unusedPaidApplications > 0 && row.configuredBlockQuantity > 0 && (
                             <span
                               className="ml-1 text-ink-3"
                               title={`Reduced by ${row.unusedPaidApplications} unused paid applications from a configured block of ${row.configuredBlockQuantity}`}
