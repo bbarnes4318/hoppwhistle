@@ -15,8 +15,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { InviteAgentDialog } from '@/components/agents/invite-agent-dialog';
 import { ScheduleDialog } from '@/components/agents/schedule-dialog';
-import { EmptyState, Notice, Panel, PanelBody, PanelDescription } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarMeta,
+  ToolbarSearch,
+  ToolbarSelect,
+} from '@/components/domain';
 import {
   ReadinessCell,
   RosterLicenceCell,
@@ -216,6 +226,8 @@ export default function TeamMembersPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const [filter, setFilter] = useState<RoleFilter>('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const [inviteUserOpen, setInviteUserOpen] = useState(false);
@@ -316,7 +328,30 @@ export default function TeamMembersPage(): JSX.Element {
     return out;
   }, [activeUsers]);
 
-  const visible = activeUsers.filter(u => matchesFilter(u, filter));
+  /*
+   * The statuses actually present, so the status filter never offers a value
+   * that would empty the table. Pending accounts are not among them: they sit
+   * in the approvals panel above, not in this table.
+   */
+  const statuses = useMemo(
+    () => Array.from(new Set(activeUsers.map(u => u.status).filter(Boolean))).sort(),
+    [activeUsers]
+  );
+
+  const needle = search.trim().toLowerCase();
+  const visible = activeUsers.filter(
+    u =>
+      matchesFilter(u, filter) &&
+      (statusFilter === 'all' || u.status === statusFilter) &&
+      (needle === '' ||
+        [u.firstName, u.lastName, u.email, u.buyerName]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(needle))
+  );
+
+  const hasActiveFilters = filter !== 'all' || statusFilter !== 'all' || needle !== '';
 
   const readyCount = (roster?.agents ?? []).filter(a => !a.blockedReason).length;
   const agentTotal = roster?.agents.length ?? 0;
@@ -356,29 +391,84 @@ export default function TeamMembersPage(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={
-          agentTotal === 0
-            ? 'Everyone in your agency, and what each of them can do.'
-            : `${readyCount} of ${agentTotal} ${agentTotal === 1 ? 'agent' : 'agents'} ready to take calls.`
-        }
-        actions={
-          <>
-            <Tooltip content="Refresh">
-              <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
-                <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              </Button>
-            </Tooltip>
-            <Button variant="outline" onClick={() => setInviteUserOpen(true)}>
-              Invite user
+      {/* ── Search, filters and the page's actions: one row ─────────────── */}
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name or email…" />
+
+        {/*
+         * The role filter carries its counts in the menu, which is what the old
+         * row of tabs showed at a glance.
+         */}
+        <ToolbarSelect
+          label="Role"
+          value={filter}
+          onChange={value => setFilter(value as RoleFilter)}
+          allLabel={`Everyone (${counts.all})`}
+          options={FILTERS.filter(f => f.id !== 'all').map(f => ({
+            value: f.id,
+            label: `${f.label} (${counts[f.id]})`,
+          }))}
+        />
+
+        {statuses.length > 1 ? (
+          <ToolbarSelect
+            label="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            allLabel="Any status"
+            options={statuses.map(status => ({
+              value: status,
+              label: status.charAt(0).toUpperCase() + status.slice(1),
+            }))}
+          />
+        ) : null}
+
+        {/*
+         * Readiness is the one fact the old subtitle carried; what "ready"
+         * requires moved from a paragraph above the table into the tooltip.
+         */}
+        {agentTotal > 0 ? (
+          <Tooltip content="An agent takes calls once they have accepted their invitation, have their licensed states recorded, are assigned a campaign, and have opened the softphone once. Open a row to set those.">
+            <ToolbarMeta>{`${readyCount} of ${agentTotal} ready`}</ToolbarMeta>
+          </Tooltip>
+        ) : null}
+
+        <ToolbarActions>
+          {hasActiveFilters ? (
+            <ToolbarClear
+              onClick={() => {
+                setFilter('all');
+                setStatusFilter('all');
+                setSearch('');
+              }}
+            />
+          ) : null}
+          <Tooltip content="Refresh">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Refresh"
+              onClick={() => void load()}
+              disabled={loading}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             </Button>
-            <Button onClick={() => setInviteAgentOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Add agent
-            </Button>
-          </>
-        }
-      />
+          </Tooltip>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setInviteUserOpen(true)}
+            className="h-8 text-xs"
+          >
+            Invite user
+          </Button>
+          <Button size="sm" onClick={() => setInviteAgentOpen(true)} className="h-8 text-xs">
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add agent
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
 
@@ -394,42 +484,6 @@ export default function TeamMembersPage(): JSX.Element {
       {hasFullAccess && <PendingApprovals users={pendingUsers} onDecided={() => void load()} />}
 
       <Panel className="min-w-0">
-        <div className="px-5 pt-4 min-[1440px]:px-6">
-          <PanelDescription className="mt-0 max-w-[72ch]">
-            An agent takes calls once they have accepted their invitation, have their licensed
-            states recorded, are assigned a campaign, and have opened the softphone once. Open a row
-            to set those.
-          </PanelDescription>
-        </div>
-        <div className="mt-3 overflow-x-auto border-b border-rule px-5 min-[1440px]:px-6 [&>[role=group]]:flex-nowrap [&>[role=group]]:gap-6">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by role">
-            {FILTERS.map(f => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                aria-pressed={filter === f.id}
-                className={cn(
-                  '-mb-px inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-0.5 text-sm font-medium transition-colors duration-150 ease-out [@media(pointer:coarse)]:min-h-[44px]',
-                  filter === f.id
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-2 hover:text-ink'
-                )}
-              >
-                {f.label}
-                <span
-                  className={cn(
-                    'inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums',
-                    filter === f.id ? 'bg-brand-tint text-brand-ink' : 'bg-sunken text-ink-3'
-                  )}
-                >
-                  {counts[f.id]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <PanelBody flush className="min-w-0 overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -446,7 +500,7 @@ export default function TeamMembersPage(): JSX.Element {
             <EmptyState
               variant={activeUsers.length === 0 ? 'empty' : 'filtered'}
               headline={
-                activeUsers.length === 0 ? 'No one here yet.' : 'Nobody matches that filter.'
+                activeUsers.length === 0 ? 'No one here yet.' : 'Nobody matches those filters.'
               }
             />
           ) : (
