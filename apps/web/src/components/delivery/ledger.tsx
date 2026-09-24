@@ -90,7 +90,7 @@ export function Figure({
       <div
         className={cn(
           'mt-1 min-w-0 truncate',
-          size === 'hero' && 't-hero font-mono tabular',
+          size === 'hero' && 't-hero tabular',
           size === 'figure' && 't-figure',
           size === 'quiet' && 't-figure',
           size === 'quiet' && tone === 'ink' ? 'text-ink-2' : TONE[tone]
@@ -177,11 +177,12 @@ export function Ledger({
     <table
       className={cn(
         'w-full border-collapse text-left t-body',
-        '[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-surface',
-        '[&_thead_th]:h-8 [&_thead_th]:whitespace-nowrap [&_thead_th]:border-b [&_thead_th]:border-rule-strong [&_thead_th]:px-2 [&_thead_th]:align-middle [&_thead_th]:t-label [&_thead_th]:text-ink-3',
-        '[&_tbody_td]:h-8 [&_tbody_td]:border-b [&_tbody_td]:border-rule [&_tbody_td]:px-2 [&_tbody_td]:py-0 [&_tbody_td]:align-middle',
+        '[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-sunken',
+        '[&_thead_th]:h-10 [&_thead_th]:whitespace-nowrap [&_thead_th]:border-b [&_thead_th]:border-rule-strong [&_thead_th]:px-3 [&_thead_th]:align-middle [&_thead_th]:t-label [&_thead_th]:text-ink-3',
+        '[&_tbody_td]:h-row [&_tbody_td]:border-b [&_tbody_td]:border-rule [&_tbody_td]:px-3 [&_tbody_td]:py-0 [&_tbody_td]:align-middle',
+        '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-sunken',
         '[&_tbody_tr:last-child_td]:border-b-0',
-        '[&_.num]:text-right [&_.num]:t-data [&_.num]:text-ink',
+        '[&_.num]:text-right [&_.num]:t-num [&_.num]:text-ink',
         '[&_th.num]:t-label [&_th.num]:text-ink-3',
         className
       )}

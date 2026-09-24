@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarCheck2, Flame, Info, Trophy } from 'lucide-react';
+import { CalendarCheck2, ChevronDown, Flame, Info, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
@@ -186,7 +186,7 @@ export function Board({ data, viewerId }: BoardProps): JSX.Element {
               >
                 <td className="align-middle">
                   <span className="flex items-center gap-1.5">
-                    <span className="font-mono tabular text-ink-2">{row.rank ?? '—'}</span>
+                    <span className="font-semibold tabular-nums text-ink-2">{row.rank ?? '—'}</span>
                     {row.userId ? <Movement movement={row.movement} /> : null}
                   </span>
                 </td>
@@ -289,7 +289,7 @@ export function Records({ data }: { data: Leaderboard }): JSX.Element | null {
           <Trophy className="h-3.5 w-3.5 text-ink-3" aria-hidden />
           <span className="t-label text-ink-3">Best day</span>
           <span className="font-medium text-ink">{bestDay.name}</span>
-          <span className="font-mono tabular text-ink">{count(bestDay.applications)}</span>
+          <span className="font-semibold tabular-nums text-ink">{count(bestDay.applications)}</span>
           <span className="t-meta text-ink-3">applications on {bestDay.day}</span>
         </span>
       ) : null}
@@ -299,7 +299,7 @@ export function Records({ data }: { data: Leaderboard }): JSX.Element | null {
           <Flame className="h-3.5 w-3.5 text-ringing-ink" aria-hidden />
           <span className="t-label text-ink-3">Longest streak</span>
           <span className="font-medium text-ink">{longestStreak.name}</span>
-          <span className="font-mono tabular text-ink">{longestStreak.days}</span>
+          <span className="font-semibold tabular-nums text-ink">{longestStreak.days}</span>
           <span className="t-meta text-ink-3">days running</span>
         </span>
       ) : null}
@@ -322,13 +322,16 @@ export function ScoringNote({ data }: { data: Leaderboard }): JSX.Element {
   const { points, badges, streakBadgeDays } = data.scoring;
 
   return (
-    <details className="group rounded-card border border-rule bg-surface">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 t-label text-ink-3 hover:text-ink">
-        <Info className="h-3.5 w-3.5" aria-hidden />
+    <details className="group rounded-card border border-rule bg-surface shadow-card">
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-card px-5 py-4 t-section text-ink transition-colors duration-150 hover:bg-sunken [&::-webkit-details-marker]:hidden">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink [&>svg]:h-4 [&>svg]:w-4">
+          <Info className="h-3.5 w-3.5" aria-hidden />
+        </span>
         How points and badges work
+        <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 group-open:rotate-180 ne-motion" />
       </summary>
 
-      <div className="border-t border-rule px-3 py-3 t-body text-ink-2">
+      <div className="border-t border-rule px-5 py-4 t-body text-ink-2">
         <p className="mb-2 t-meta text-ink-3">
           Points rank the board. They price nothing: no rate, invoice or payment anywhere in this
           product is computed from them.
@@ -336,23 +339,23 @@ export function ScoringNote({ data }: { data: Leaderboard }): JSX.Element {
 
         <ul className="mb-3 space-y-0.5">
           <li>
-            <span className="font-mono tabular text-ink">+{points.perApplication}</span> per
+            <span className="font-semibold tabular-nums text-ink">+{points.perApplication}</span> per
             application submitted
           </li>
           <li>
-            <span className="font-mono tabular text-ink">+{points.perUniqueCaller}</span> per unique
+            <span className="font-semibold tabular-nums text-ink">+{points.perUniqueCaller}</span> per unique
             inbound caller worked
           </li>
           <li>
-            <span className="font-mono tabular text-ink">+{points.perOutboundConnect}</span> per
+            <span className="font-semibold tabular-nums text-ink">+{points.perOutboundConnect}</span> per
             outbound call connected
           </li>
           <li>
-            <span className="font-mono tabular text-ink">+{points.perTenMinutesTalk}</span> per ten
+            <span className="font-semibold tabular-nums text-ink">+{points.perTenMinutesTalk}</span> per ten
             minutes of connected talk time
           </li>
           <li>
-            <span className="font-mono tabular text-ink">+{points.perConversionPoint}</span> per
+            <span className="font-semibold tabular-nums text-ink">+{points.perConversionPoint}</span> per
             point of conversion rate — only once you have worked {points.conversionBonusMinCallers}{' '}
             unique callers, so one lucky call does not take the top spot
           </li>
@@ -411,13 +414,13 @@ export function YourStanding({
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-card border border-brand bg-brand-tint px-3 py-2">
       <span className="flex items-baseline gap-1.5">
         <span className="t-label text-brand-ink">Your rank</span>
-        <span className="font-mono tabular t-figure text-ink">{you.rank ?? '—'}</span>
+        <span className="t-figure tabular-nums text-ink">{you.rank ?? '—'}</span>
         <span className="t-meta text-ink-3">of {rows.filter(row => row.rank !== null).length}</span>
       </span>
 
       <span className="flex items-baseline gap-1.5">
         <span className="t-label text-ink-3">Points</span>
-        <span className="font-mono tabular t-figure text-ink">{count(you.row.points)}</span>
+        <span className="t-figure tabular-nums text-ink">{count(you.row.points)}</span>
       </span>
 
       <span className="flex items-center gap-1.5">
@@ -435,7 +438,7 @@ export function YourStanding({
       {you.row.personalBest ? (
         <span className="flex items-baseline gap-1.5">
           <span className="t-label text-ink-3">Your best day</span>
-          <span className="font-mono tabular text-ink">
+          <span className="font-semibold tabular-nums text-ink">
             {count(you.row.personalBest.applications)}
           </span>
           <span className="t-meta text-ink-3">on {you.row.personalBest.day}</span>
@@ -444,7 +447,7 @@ export function YourStanding({
 
       {gap !== null && gap > 0 ? (
         <span className="t-meta text-ink-2">
-          <span className="font-mono tabular text-ink">{count(gap)}</span> points behind{' '}
+          <span className="font-semibold tabular-nums text-ink">{count(gap)}</span> points behind{' '}
           {above?.name}
         </span>
       ) : you.rank === 1 ? (

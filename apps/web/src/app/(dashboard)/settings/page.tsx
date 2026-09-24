@@ -25,6 +25,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { AddWebhookDialog } from '@/components/webhooks/add-webhook-dialog';
 import { usePlatformContext } from '@/hooks/use-platform-context';
@@ -116,8 +117,7 @@ export default function SettingsPage() {
         <PanelHeader>
           <PanelTitle>Workspace</PanelTitle>
         </PanelHeader>
-        <PanelBody className="[&_label]:text-ink [&_p]:text-ink-3 [&_[role=alert]]:mt-3">
-          <div className="t-label mb-2 text-ink-3">Demo Mode:</div>
+        <PanelBody>
           <DemoToggle />
         </PanelBody>
       </Panel>
@@ -207,16 +207,18 @@ export default function SettingsPage() {
                             : 'Never'}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="hover:bg-dropped-tint hover:text-dropped-ink"
-                            onClick={() => handleDeleteWebhook(webhook.id)}
-                            disabled={readOnly}
-                            title={readOnlyProps.title}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <Tooltip content="Delete webhook" align="end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:bg-dropped-tint hover:text-dropped-ink"
+                              onClick={() => handleDeleteWebhook(webhook.id)}
+                              disabled={readOnly}
+                              title={readOnlyProps.title}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -258,9 +260,11 @@ export default function SettingsPage() {
                       {new Date().toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon">
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                      <Tooltip content="Copy key" align="end">
+                        <Button variant="ghost" size="icon">
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -304,13 +308,15 @@ export default function SettingsPage() {
                       <Badge variant="success">Active</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="hover:bg-dropped-tint hover:text-dropped-ink"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Tooltip content="Delete key" align="end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="hover:bg-dropped-tint hover:text-dropped-ink"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 </TableBody>

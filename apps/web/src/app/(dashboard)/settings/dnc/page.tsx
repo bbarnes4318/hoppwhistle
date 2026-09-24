@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 
@@ -155,14 +156,16 @@ export default function DncPage() {
                       {new Date(list.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="hover:bg-dropped-tint hover:text-dropped-ink"
-                        onClick={() => handleDeleteList(list.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Tooltip content="Delete list" align="end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="hover:bg-dropped-tint hover:text-dropped-ink"
+                          onClick={() => handleDeleteList(list.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -74,7 +74,7 @@ export function PeriodPicker({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="inline-flex max-w-full items-center gap-0.5 self-start overflow-x-auto rounded-control bg-sunken p-1">
         {PRESETS.map(preset => (
           <button
             key={preset.key}
@@ -82,11 +82,12 @@ export function PeriodPicker({
             disabled={disabled}
             onClick={() => onChange({ period: preset.key, from, to })}
             className={cn(
-              'rounded-control border px-2.5 py-1 t-label transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
+              'inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-[6px] px-3 text-sm font-medium',
+              'transition-[color,background-color,box-shadow] duration-150 ease-out ne-motion',
+              'disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-[40px]',
               period === preset.key
-                ? 'border-brand bg-brand text-brand-fg'
-                : 'border-rule bg-surface text-ink-2 hover:border-rule-strong hover:text-ink'
+                ? 'bg-surface text-ink shadow-card'
+                : 'text-ink-2 hover:text-ink'
             )}
           >
             {preset.label}
@@ -98,11 +99,12 @@ export function PeriodPicker({
           disabled={disabled}
           onClick={() => onChange({ period: 'CUSTOM', from, to })}
           className={cn(
-            'flex items-center gap-1.5 rounded-control border px-2.5 py-1 t-label transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
+            'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-sm font-medium',
+            'transition-[color,background-color,box-shadow] duration-150 ease-out ne-motion',
+            'disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-[40px]',
             custom
-              ? 'border-brand bg-brand text-brand-fg'
-              : 'border-rule bg-surface text-ink-2 hover:border-rule-strong hover:text-ink'
+              ? 'bg-surface text-ink shadow-card'
+              : 'text-ink-2 hover:text-ink'
           )}
         >
           <CalendarRange className="h-3.5 w-3.5" />
@@ -123,7 +125,7 @@ export function PeriodPicker({
               max={to}
               disabled={disabled}
               onChange={event => onChange({ period: 'CUSTOM', from: event.target.value, to })}
-              className="h-8 w-[10.5rem]"
+              className="h-9 w-[10.5rem]"
             />
           </div>
           <div>
@@ -137,7 +139,7 @@ export function PeriodPicker({
               min={from}
               disabled={disabled}
               onChange={event => onChange({ period: 'CUSTOM', from, to: event.target.value })}
-              className="h-8 w-[10.5rem]"
+              className="h-9 w-[10.5rem]"
             />
           </div>
           {reversed ? (

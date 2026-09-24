@@ -41,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { apiClient } from '@/lib/api';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 
@@ -227,14 +228,16 @@ function BillingPage() {
       <Panel className="min-w-0">
         <PanelHeader
           action={
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void loadTransactions()}
-              disabled={transactionsLoading || !selectedBuyerId}
-            >
-              <RefreshCw className={cn('h-4 w-4', transactionsLoading && 'animate-spin')} />
-            </Button>
+            <Tooltip content="Refresh transactions" align="end">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void loadTransactions()}
+                disabled={transactionsLoading || !selectedBuyerId}
+              >
+                <RefreshCw className={cn('h-4 w-4', transactionsLoading && 'animate-spin')} />
+              </Button>
+            </Tooltip>
           }
         >
           <PanelTitle>Buyer Transaction Ledger</PanelTitle>
@@ -443,9 +446,11 @@ function BillingPage() {
                       {formatDate(invoice.dueDate)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        <Download className="h-4 w-4" />
-                      </Button>
+                      <Tooltip content="Download invoice" align="end">
+                        <Button variant="ghost" size="sm">
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}

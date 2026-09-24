@@ -108,11 +108,11 @@ export function DemoToggle() {
  };
 
  return (
- <div className="space-y-2">
- <div className="flex items-center justify-between">
- <div className="space-y-0.5">
- <Label htmlFor="demo-mode">Demo Mode</Label>
- <p className="text-sm text-muted-foreground">
+ <div className="space-y-3">
+ <div className="flex items-center justify-between gap-4">
+ <div className="space-y-1">
+ <Label htmlFor="demo-mode" className="t-section text-ink">Demo Mode</Label>
+ <p className="t-body text-ink-2">
  Switch to demo data for presentations
  </p>
  </div>
@@ -125,8 +125,8 @@ export function DemoToggle() {
  </div>
  
  {demoMode && (
- <Alert>
- <Info className="h-4 w-4" />
+ <Alert variant="info">
+ <Info />
  <AlertDescription>
  Demo mode is active. You're viewing synthetic data generated for demonstration purposes.
  </AlertDescription>
