@@ -255,9 +255,9 @@ const SWEEP = [
     // /dashboard is the TENANT-WIDE admin dashboard: every call the agency took
     // and every application it wrote. An agent used to land on it because the
     // page destructured `isAgentOnly`, listed it in the effect's dependency
-    // array, and never branched on it. It now redirects them to /call-center,
-    // so asking for /dashboard here would fail assertion 2 ("still on the page
-    // asked for") — correctly. /call-center below is where they land.
+    // array, and never branched on it. It now redirects them to /calls ("My calls",
+    // their home), so asking for /dashboard here would fail assertion 2 ("still
+    // on the page asked for") — correctly. /calls below is where they land.
     routes: [
       '/call-center',
       '/calls',
@@ -277,14 +277,14 @@ const SWEEP = [
     // untested, and "an agent cannot reach the tenant-wide dashboard" is the
     // property, not "this file does not ask for it".
     redirects: [
-      { from: '/dashboard', to: '/call-center' },
+      { from: '/dashboard', to: '/calls' },
       /*
        * "My payroll" is switched off (MY_PAYROLL_ENABLED in
        * src/lib/feature-flags.ts) and off AGENT_NAV. Its URL sends them to
-       * /dashboard, which sends an agent on to /call-center. Move it back into
+       * /dashboard, which sends an agent on to /calls. Move it back into
        * the list above when the flag is turned on.
        */
-      { from: '/payroll', to: '/call-center' },
+      { from: '/payroll', to: '/calls' },
     ],
   },
   {
