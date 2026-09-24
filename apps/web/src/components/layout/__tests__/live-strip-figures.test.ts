@@ -88,23 +88,23 @@ describe('the agency principal reading', () => {
   it('answers the three questions, in order', () => {
     const ids = agencySlots(AGENCY_ENROLLED).map(s => s.id);
 
-    // Am I on pace; what is today costing me; where is my rate going.
-    expect(ids).toEqual([
-      'applications',
-      'calls',
-      'block',
-      'overrun',
-      'tonight',
-      'rate',
-      'tracking',
-    ]);
+    // Am I on pace; what credit is left; what an application costs.
+    expect(ids).toEqual(['applications', 'calls', 'block', 'rate', 'tracking']);
+  });
+
+  it('shows no running overrun or "tonight" debit -- agencies pay up front', () => {
+    const slots = agencySlots(AGENCY_ENROLLED);
+
+    expect(slots.map(s => s.id)).not.toContain('overrun');
+    expect(slots.map(s => s.id)).not.toContain('tonight');
+    expect(rendered(slots)).not.toMatch(/tonight|overrun|debit/i);
   });
 
   it('counts applications against the block they paid for, not against a target', () => {
     const applications = agencySlots(AGENCY_ENROLLED).find(s => s.id === 'applications');
 
     expect(applications?.value).toBe('12');
-    expect(applications?.sub).toBe('of 40 block');
+    expect(applications?.sub).toBe('of 40');
     // A percentage of a target nobody set is the thing this replaced.
     expect(applications?.value).not.toContain('%');
   });
@@ -118,8 +118,8 @@ describe('the agency principal reading', () => {
     expect(now?.value).toBe('$159.00');
     expect(tomorrow?.value).toBe('$149.00');
     expect(now?.label).not.toBe(tomorrow?.label);
-    expect(`${now?.label} ${now?.sub}`).toMatch(/now.*per application/i);
-    expect(`${tomorrow?.label} ${tomorrow?.sub}`).toMatch(/tomorrow.*if today closed now/i);
+    expect(`${now?.label} ${now?.sub}`).toMatch(/cost per app.*now/i);
+    expect(`${tomorrow?.label} ${tomorrow?.sub}`).toMatch(/tomorrow.*cost.*if today closed now/i);
 
     // Today's closing percentage is deliberately absent: a percentage beside
     // two rates is the one most likely to be read as the one that set them.
@@ -155,14 +155,14 @@ describe('an agency that is not enrolled in billing', () => {
     const slots = agencySlots(AGENCY_UNENROLLED);
 
     expect(slots.map(s => s.id)).toEqual(['applications', 'calls']);
-    expect(slots.find(s => s.id === 'applications')?.sub).toBe('submitted today');
+    expect(slots.find(s => s.id === 'applications')?.sub).toBe('today');
   });
 
   it('is shown no money at all -- not zeroes, and not em dashes either', () => {
     const text = rendered(agencySlots(AGENCY_UNENROLLED));
 
     expect(text).not.toContain('$');
-    expect(text).not.toMatch(/tonight|overrun|block|rate|debit/i);
+    expect(text).not.toMatch(/tonight|overrun|block|rate|debit|credit|cost/i);
     // An em dash under a label reading "tonight" is still a screen telling
     // somebody they owe an unknown amount, so there must be no such figure.
     expect(agencySlots(AGENCY_UNENROLLED).every(s => s.value !== null)).toBe(true);
@@ -240,12 +240,11 @@ describe('not repeating a figure the page below renders as its hero', () => {
     return slots.map(s => s.id).filter(id => !suppressed.includes(id));
   };
 
-  it('drops the projected charge and the current rate for an agency on /delivery', () => {
+  it('drops the current rate for an agency on /delivery', () => {
     expect(kept(agencySlots(AGENCY_ENROLLED), 'agency', '/delivery')).toEqual([
       'applications',
       'calls',
       'block',
-      'overrun',
       'tracking',
     ]);
   });
@@ -272,7 +271,7 @@ describe('not repeating a figure the page below renders as its hero', () => {
 
   it('drops nothing anywhere else', () => {
     expect(Object.keys(HERO_BELOW).sort()).toEqual(['agency:/delivery', 'agent:/delivery/me']);
-    expect(kept(agencySlots(AGENCY_ENROLLED), 'agency', '/dashboard')).toHaveLength(7);
+    expect(kept(agencySlots(AGENCY_ENROLLED), 'agency', '/dashboard')).toHaveLength(5);
     expect(kept(agentSlots(AGENT), 'agent', '/call-center')).toHaveLength(3);
   });
 });

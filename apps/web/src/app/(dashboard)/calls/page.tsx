@@ -5,7 +5,6 @@ import {
   Loader2,
   Play,
   Pause,
-  Search,
   Volume2,
   Clock,
   Activity,
@@ -17,7 +16,18 @@ import {
 import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { RedispositionPanel } from '@/components/calls/redisposition-panel';
-import { EmptyState, Notice, Panel, PanelBody } from '@/components/domain';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  TOOLBAR_CELL,
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarSearch,
+  toolbarTrigger,
+} from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -838,18 +848,11 @@ export default function OperationsCallLogsPage() {
   };
 
   /*
-   * One toolbar row: search, every filter, then the ledger actions. Filters
-   * share the row's width and truncate rather than wrapping onto a second
-   * line; below xl they wrap so nothing is clipped on a narrow screen. A set
+   * One toolbar row: search, every filter, then the ledger actions. A set
    * filter is tinted so it is obvious at a glance what the ledger is scoped to.
    */
-  const filterTrigger = (active: boolean) =>
-    cn(
-      'h-8 min-w-0 w-full gap-1 px-2.5 text-xs [&>span]:truncate',
-      active ? 'border-brand-ink bg-brand-tint text-brand-ink' : 'text-ink-2'
-    );
-  const filterCell =
-    'min-w-[calc(50%-4px)] flex-1 sm:min-w-[140px] xl:min-w-[64px] xl:max-w-[180px]';
+  const filterTrigger = toolbarTrigger;
+  const filterCell = TOOLBAR_CELL;
   const hasActiveFilters =
     search !== '' ||
     selectedDisputeStatus !== 'all' ||
@@ -875,20 +878,15 @@ export default function OperationsCallLogsPage() {
   return (
     <div className="page-canvas">
       {/* Filter toolbar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-card border border-rule bg-surface p-2 shadow-card xl:flex-nowrap">
-        {/* Search Box */}
-        <div className="relative min-w-full flex-[1.6] sm:min-w-[200px] xl:min-w-[140px]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
-          <Input
-            placeholder="Search ID, caller, notes…"
-            value={search}
-            onChange={e => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className={cn('h-8 pl-8 text-xs', search && 'border-brand-ink')}
-          />
-        </div>
+      <Toolbar>
+        <ToolbarSearch
+          value={search}
+          onChange={value => {
+            setSearch(value);
+            setPage(1);
+          }}
+          placeholder="Search ID, caller, notes…"
+        />
 
         {/* Date preset */}
         <div className={filterCell}>
@@ -1132,20 +1130,8 @@ export default function OperationsCallLogsPage() {
         </div>
 
         {/* Ledger actions, pinned to the right end of the row */}
-        <div className="ml-auto flex shrink-0 items-center gap-1 xl:border-l xl:border-rule xl:pl-2">
-          {hasActiveFilters && (
-            <Tooltip content="Clear all filters">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                aria-label="Clear all filters"
-                className="h-8 w-8 p-0 text-ink-3 hover:text-ink"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </Tooltip>
-          )}
+        <ToolbarActions>
+          {hasActiveFilters && <ToolbarClear onClick={clearFilters} />}
 
           <DropdownMenu>
             <Tooltip content="Columns" align="end">
@@ -1200,8 +1186,8 @@ export default function OperationsCallLogsPage() {
               <span className="hidden 2xl:inline">Export</span>
             </Button>
           </Tooltip>
-        </div>
-      </div>
+        </ToolbarActions>
+      </Toolbar>
 
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">

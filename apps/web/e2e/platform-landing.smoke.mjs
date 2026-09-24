@@ -426,14 +426,14 @@ const STRIP_MATCHES_PAGE = {
  *
  * Keyed by reading and path, not by path alone, and that distinction is load
  * bearing. /delivery is two pages. The agency's own panel leads on the
- * projected charge at tonight's settlement and on the current rate, so the
- * strip drops both. The cross-agency page leads on "Settled today", which the
+ * projected charge at tonight's settlement (which the strip never carries) and
+ * on the current rate, which the strip drops. The cross-agency page leads on "Settled today", which the
  * strip never carries — and the platform reading has a figure of its own
  * called `tonight`, a projection across every agency, which is exactly what
  * staff came to that page for.
  */
 const MUST_NOT_APPEAR = {
-  'agency:/delivery': ['tonight', 'rate'],
+  'agency:/delivery': ['rate'],
   'agent:/delivery/me': ['closing'],
 };
 
@@ -446,7 +446,7 @@ const MUST_NOT_APPEAR = {
  * under a label reading "tonight" still tells somebody they owe an unknown
  * amount.
  */
-const BILLING_LABEL = /tonight|overrun|block|rate|debit|settlement|charge/i;
+const BILLING_LABEL = /tonight|overrun|block|credit|rate|cost|debit|settlement|charge/i;
 
 /** The strip as it was actually rendered: one entry per figure, in order. */
 async function readStrip(page) {

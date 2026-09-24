@@ -87,9 +87,10 @@ const POLL_MS = 30_000;
  * carries:
  *
  *   agency on /delivery      the heroes are the projected charge at tonight's
- *                            settlement and the current rate. Both drop, and
- *                            the strip keeps applications, calls, the block,
- *                            overrun and tomorrow's tracking rate.
+ *                            settlement (never on the strip) and the current
+ *                            rate. The rate drops, and the strip keeps
+ *                            applications, calls, app credits and tomorrow's
+ *                            tracking rate.
  *   agent on /delivery/me    the hero is the agent's own closing percentage.
  *                            It drops, and the strip keeps their calls and
  *                            their applications.
@@ -103,7 +104,7 @@ const POLL_MS = 30_000;
  * A test caught exactly that.
  */
 export const HERO_BELOW: Record<string, readonly string[]> = {
-  'agency:/delivery': ['tonight', 'rate'],
+  'agency:/delivery': ['rate'],
   'agent:/delivery/me': ['closing'],
 };
 
@@ -219,11 +220,11 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
       id: 'applications',
       label: 'Applications',
       value: counted(d.applicationsSubmitted),
-      sub: billing ? `of ${count(billing.dailyBlockApplications)} block` : 'submitted today',
+      sub: billing ? `of ${count(billing.dailyBlockApplications)}` : 'today',
     },
     {
       id: 'calls',
-      label: 'Calls delivered',
+      label: 'Calls',
       value: counted(d.callsDelivered),
       sub: `${count(d.callsInProgress ?? 0)} in progress`,
       tone: (d.callsInProgress ?? 0) > 0 ? 'live' : 'ink',
@@ -234,45 +235,33 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
   // money. There is no `billing` object to render even if this wanted to.
   if (!billing) return operational;
 
+  /*
+   * Overrun and tonight's projected debit are not on the strip. Agencies buy
+   * their block up front, so a running "tonight" charge reads as a bill they
+   * do not have, and overrun is an exception the /delivery page already
+   * carries in full. The strip keeps what is read at a glance: credits left
+   * and what an application costs now and tomorrow.
+   */
   return [
     ...operational,
     {
       id: 'block',
-      label: 'Block left',
+      label: 'App Credits',
       value: counted(billing.applicationsRemainingOnBlock),
-      sub: 'paid, unused',
-    },
-    {
-      id: 'overrun',
-      label: 'Overrun',
-      value: counted(billing.overrunToday),
-      sub:
-        billing.overrunAmountTonight === null
-          ? 'tonight — no rate'
-          : `${dollars(billing.overrunAmountTonight)} tonight`,
-      tone: billing.overrunToday > 0 ? 'ringing' : 'ink',
-    },
-    {
-      id: 'tonight',
-      label: 'Tonight',
-      value: amount(billing.projectedTotalCharge),
-      sub: 'projected debit',
-      tone: 'money',
-      unavailableReason: why('projectedTotalCharge'),
+      sub: 'remaining',
     },
     {
       id: 'rate',
-      label: 'Rate now',
+      label: 'Cost per App',
       value: amount(billing.currentRate),
-      sub: 'per application',
+      sub: 'now',
       unavailableReason: why('currentRate'),
     },
     {
       id: 'tracking',
-      // Named for what it does, not for when it was measured: this is the rate
-      // tomorrow is tracking toward, and it is the one thing on the strip that
-      // has not happened yet.
-      label: 'Rate tomorrow',
+      // The rate tomorrow is tracking toward -- the one figure on the strip
+      // that has not happened yet, so the label says when it applies.
+      label: "Tomorrow's Cost",
       value: billing.trackingBelowMinimum ? 'review' : amount(billing.trackingRate),
       sub: billing.trackingBelowMinimum ? 'window below minimum' : 'if today closed now',
       tone: billing.trackingBelowMinimum ? 'ringing' : 'ink',
