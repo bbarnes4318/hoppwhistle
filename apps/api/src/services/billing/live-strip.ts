@@ -109,12 +109,21 @@ export interface AgencyStrip {
   /** Connected to an agent at this instant. About now, not about the day. */
   callsInProgress: number;
   applicationsSubmitted: number;
+  /**
+   * Applications over calls today, as a percentage. The same figure `/delivery`
+   * shows as today's closing; null before the first call is answered, because
+   * a rate of nothing is not 0%.
+   */
+  conversionPct: number | null;
 
   /** Omitted entirely when `enrolled` is false. */
   billing?: AgencyStripBilling;
 
   unavailable: UnavailableReasons;
 }
+
+const NO_CALLS_TODAY =
+  'No calls have been answered today, so there is nothing to convert yet.';
 
 const NO_RATE_IN_FORCE =
   'There is no rate in force for this agency today: it is under review, or no ' +
@@ -154,6 +163,7 @@ export async function getAgencyStrip(
     callsDelivered: today.callsAnswered,
     callsInProgress: today.callsInProgress,
     applicationsSubmitted: today.applicationsSubmitted,
+    conversionPct: today.todayClosingPct,
   };
 
   /*
@@ -161,11 +171,14 @@ export async function getAgencyStrip(
    * all, so there is no zero and no em dash anywhere on the strip implying
    * money that is not being charged.
    */
+  const noCalls: UnavailableReasons =
+    today.todayClosingPct === null ? { conversionPct: NO_CALLS_TODAY } : {};
+
   if (!today.enrolled) {
-    return { ...base, unavailable: {} };
+    return { ...base, unavailable: noCalls };
   }
 
-  const unavailable: UnavailableReasons = {};
+  const unavailable: UnavailableReasons = { ...noCalls };
   if (today.currentRate === null) unavailable.currentRate = NO_RATE_IN_FORCE;
   if (today.trackingRate === null) {
     unavailable.trackingRate = today.trackingBelowMinimum

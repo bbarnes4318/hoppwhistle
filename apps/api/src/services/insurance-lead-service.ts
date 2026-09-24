@@ -18,6 +18,7 @@ import type {
 import { createServiceLogger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
+import { notConvertedWhere } from './crm-pipeline.js';
 import { getInsuranceLeadMode } from './insurance-lead-config.js';
 import { mapToAmeriquote } from './insurance-lead-mapper.js';
 import { validateAndNormalize } from './insurance-lead-validator.js';
@@ -54,6 +55,11 @@ export interface LeadFilters {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  /**
+   * Leave out leads that became submitted applications -- the CRM's Prospects
+   * list. Computed by the route from `services/crm-pipeline.ts`.
+   */
+  excludeConverted?: { leadIds: string[]; phones: string[] };
   /**
    * Narrow the page to these states. SERVER-DERIVED ONLY.
    *
@@ -531,12 +537,20 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   if (filters.status) {
     where.status = filters.status as InsuranceLeadStatus;
   }
+  // Conditions that each need their own OR, ANDed so none overwrites `where.OR`.
+  const and: Prisma.InsuranceLeadWhereInput[] = [];
   if (filters.leadStage) {
-    where.leadStage = filters.leadStage;
+    // A lead nobody has staged yet is a new lead.
+    if (filters.leadStage === 'NEW') and.push({ OR: [{ leadStage: 'NEW' }, { leadStage: null }] });
+    else where.leadStage = filters.leadStage;
   }
   if (filters.listId) {
     where.listId = filters.listId;
   }
+  if (filters.excludeConverted) {
+    and.push(notConvertedWhere(filters.excludeConverted));
+  }
+  if (and.length > 0) where.AND = and;
 
   // CRM follow-up filter
   if (filters.followUp) {
@@ -546,7 +560,15 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    if (filters.followUp.toUpperCase() === 'OVERDUE') {
+    if (filters.followUp.toUpperCase() === 'DUE') {
+      // Today or already overdue, and not marked lost -- the CRM's
+      // "Follow-ups Due" figure, so clicking it lists exactly what it counts.
+      where.nextFollowUpAt = { lte: endOfToday };
+      where.AND = [
+        ...((where.AND as Prisma.InsuranceLeadWhereInput[] | undefined) ?? []),
+        { OR: [{ leadStage: null }, { leadStage: { not: 'CLOSED_LOST' } }] },
+      ];
+    } else if (filters.followUp.toUpperCase() === 'OVERDUE') {
       where.nextFollowUpAt = { lt: now };
       where.status = { notIn: ['LOST', 'CONVERTED'] };
     } else if (filters.followUp.toUpperCase() === 'TODAY') {
@@ -613,6 +635,7 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
       status: lead.status,
       leadStage: lead.leadStage,
       nextFollowUpAt: lead.nextFollowUpAt ? lead.nextFollowUpAt.toISOString() : null,
+      lastContactedAt: lead.lastContactedAt ? lead.lastContactedAt.toISOString() : null,
       createdAt: lead.createdAt.toISOString(),
       latestSubmission: lead.submissions[0]
         ? {

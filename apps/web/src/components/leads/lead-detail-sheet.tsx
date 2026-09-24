@@ -28,7 +28,6 @@ import {
   cancelInsuranceLeadTask,
 } from '@/lib/api/leads';
 
-import { VerticalBadge } from './leads-table';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -361,7 +360,6 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
         {/* Header */}
         <div className="flex items-center justify-between border-b border-rule px-5 py-4">
           <div className="flex items-center gap-3">
-            {lead && <VerticalBadge vertical={lead.vertical} />}
             <h2 className="text-sm font-semibold text-ink">
               {lead
                 ? lead.vertical === 'B2B'

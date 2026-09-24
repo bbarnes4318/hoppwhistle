@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  ClipboardCheck,
-  FileText,
-  Headphones,
-  Percent,
-  Phone,
-  PhoneCall,
-  PhoneIncoming,
-} from 'lucide-react';
+import { FileText, Headphones, Percent, Phone, PhoneCall } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -61,7 +53,6 @@ interface DashboardStats {
   connectedCalls: number;
   appointmentsSet: number;
   callbacksScheduled: number;
-  followUpsDue: number;
   appointmentRate: number;
   dispositions: Record<string, number>;
   dateRange: { startDate: string; endDate: string };
@@ -295,20 +286,20 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Fetch dashboard stats
-  const fetchStats = useCallback(async (preset: DatePreset, from?: string, to?: string) => {
+  /*
+   * The one range everything on this page reads: the tiles, the chart and the
+   * call history. Custom only takes effect once both ends are applied; until
+   * then the page keeps showing the last range it fetched, rather than falling
+   * back to a preset the toolbar no longer says.
+   */
+  const [range, setRange] = useState<{ startDate: string; endDate: string }>(() => {
+    const r = getDateRange('month');
+    return { startDate: r.start.toISOString(), endDate: r.end.toISOString() };
+  });
+
+  const fetchStats = useCallback(async (startDate: string, endDate: string) => {
     setLoading(true);
     try {
-      let startDate: string;
-      let endDate: string;
-      if (preset === 'custom' && from && to) {
-        startDate = new Date(from).toISOString();
-        endDate = new Date(to + 'T23:59:59').toISOString();
-      } else {
-        const range = getDateRange(preset);
-        startDate = range.start.toISOString();
-        endDate = range.end.toISOString();
-      }
       const response = await apiClient.get<DashboardStats>(
         `/api/v1/dashboard/stats?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
       );
@@ -322,12 +313,12 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Fetch recent calls for table
-  const fetchCalls = useCallback(async () => {
+  // The period's calls, for the activity chart and the history beside it.
+  const fetchCalls = useCallback(async (startDate: string, endDate: string) => {
     setCallsLoading(true);
     try {
       const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
-        '/api/v1/calls?limit=25'
+        `/api/v1/calls?limit=500&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
       );
       if (response.data) {
         setCalls(response.data.data || []);
@@ -340,21 +331,25 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    void fetchStats(activePreset);
-    void fetchCalls();
-  }, [fetchStats, fetchCalls, activePreset]);
+    void fetchStats(range.startDate, range.endDate);
+    void fetchCalls(range.startDate, range.endDate);
+  }, [fetchStats, fetchCalls, range]);
 
   const handlePresetChange = (preset: DatePreset) => {
     setActivePreset(preset);
     setShowCustom(preset === 'custom');
     if (preset !== 'custom') {
-      void fetchStats(preset);
+      const r = getDateRange(preset);
+      setRange({ startDate: r.start.toISOString(), endDate: r.end.toISOString() });
     }
   };
 
   const handleCustomApply = () => {
     if (customFrom && customTo) {
-      void fetchStats('custom', customFrom, customTo);
+      setRange({
+        startDate: new Date(`${customFrom}T00:00:00`).toISOString(),
+        endDate: new Date(`${customTo}T23:59:59.999`).toISOString(),
+      });
     }
   };
 
@@ -437,18 +432,12 @@ export default function DashboardPage() {
         </ToolbarActions>
       </Toolbar>
 
-      {/* Metric Cards (KPIs) */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      {/* Metric Cards (KPIs) -- every figure is for the period selected above. */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatTile
           label="Total Calls"
           value={stats?.totalCalls || 0}
           icon={PhoneCall}
-          loading={loading}
-        />
-        <StatTile
-          label="Delivered"
-          value={stats?.deliveredCalls || 0}
-          icon={PhoneIncoming}
           loading={loading}
         />
         <StatTile
@@ -457,26 +446,19 @@ export default function DashboardPage() {
           icon={FileText}
           loading={loading}
         />
+        {/* `??` and not `||`: a real 0% must render as 0, and only a null --
+            no calls at all in the period -- becomes the dash. */}
+        <StatTile
+          label="Conversion %"
+          value={stats?.closingPct ?? '—'}
+          unit={stats?.closingPct == null ? undefined : '%'}
+          icon={Percent}
+          loading={loading}
+        />
         <StatTile
           label="Callbacks"
           value={stats?.callbacksScheduled || 0}
           icon={Headphones}
-          loading={loading}
-        />
-        <StatTile
-          label="Follow-Ups Due"
-          value={stats?.followUpsDue || 0}
-          icon={ClipboardCheck}
-          loading={loading}
-        />
-        {/* The number that sets the agency's price. `??` and not `||`: a real
-            0% must render as 0, and only a null -- no delivered calls at all
-            -- becomes the dash. */}
-        <StatTile
-          label="Closing %"
-          value={stats?.closingPct ?? '—'}
-          unit={stats?.closingPct == null ? undefined : '%'}
-          icon={Percent}
           loading={loading}
         />
       </div>
