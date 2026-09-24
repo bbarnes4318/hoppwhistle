@@ -18,10 +18,11 @@ Go to **Elastic SIP Trunking → your trunk → Termination** and set up:
     file, for example `/root/twilio-sip.cred` with mode `600`, and pass it as
     `--auth-file`.
 
-Caller ID: Twilio's SIP trunking passes through the caller ID the campaign
-presents, including numbers Twilio doesn't host. It signs those with lower
-STIR/SHAKEN attestation, so they are more likely to be labelled spam. Twilio
-numbers in the caller-ID pool get full attestation.
+Caller ID: Twilio rejects the call with `403` and `X-Twilio-Error: 32204 Invalid
+Caller ID` unless the caller ID is a number in the Twilio account, or a Verified
+Caller ID on it (**Phone Numbers → Manage → Verified Caller IDs**). A caller-ID
+pool of numbers bought from another carrier therefore has to be ported to
+Twilio, verified one by one, or kept on that carrier's trunk.
 
 ## 2. On the host
 
