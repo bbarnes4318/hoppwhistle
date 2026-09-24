@@ -19,7 +19,7 @@ import {
   STATE_NOT_LICENSED,
   type StateAuthority,
 } from '../lib/licensed-states.js';
-import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { calendarDayBounds } from '../services/rating/calendar-day.js';
 
 
@@ -899,6 +899,149 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       }
     );
   });
+
+  // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/:id/application — Disposition a prospect as
+  // an application submitted, from the CRM
+  //
+  // The CRM's door to the same thing an "Application Submitted" disposition
+  // does on a call: one application row, written by `recordAgentApplication`,
+  // with the same form, the same idempotency key and the same credit spent.
+  //
+  // It is attached to the most recent call this agent had with the prospect's
+  // number, and that call is dispositioned "Application Submitted" too, so the
+  // CRM, Calls and the closing percentage all say the same thing. With no such
+  // call it is recorded without one, exactly as the Log Application form does.
+  //
+  // Refused with 409 when the prospect already has a submitted application:
+  // a second one would spend a second credit for the same piece of business.
+  // -----------------------------------------------------------------------
+  fastify.post<{ Params: { id: string }; Body: unknown }>(
+    '/api/v1/insurance-leads/:id/application',
+    async (request, reply) => {
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const gate = await requireReachableLead(request, reply, tenantId, request.params.id);
+      if (!gate.ok) return gate.body;
+
+      const userId = getActingUserId(request);
+      const roles = (request as FastifyRequest & { user?: { roles?: string[] } }).user?.roles ?? [];
+      if (!userId || !roles.some(role => ['AGENT', 'ADMIN', 'OWNER'].includes(role))) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only an agent, administrator or owner can record an application.',
+          },
+        };
+      }
+
+      const { ApplicationInputSchema, describeApplicationIssues } = await import(
+        '../services/applications/input-schema.js'
+      );
+      const parsed = ApplicationInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        void reply.code(400);
+        return {
+          error: { code: 'VALIDATION_ERROR', message: describeApplicationIssues(parsed.error) },
+        };
+      }
+
+      const { getPrismaClient } = await import('../lib/prisma.js');
+      const prisma = getPrismaClient();
+      const lead = await prisma.insuranceLead.findFirstOrThrow({
+        where: { id: gate.leadId, tenantId },
+        select: { id: true, phone: true, state: true },
+      });
+
+      const { lastTenDigits, leadHasSubmittedApp } = await import('../services/crm-pipeline.js');
+      if (await leadHasSubmittedApp(tenantId, lead)) {
+        void reply.code(409);
+        return {
+          error: {
+            code: 'APPLICATION_ALREADY_RECORDED',
+            message: 'This prospect already has a submitted application.',
+          },
+        };
+      }
+
+      // The last call this agent had with the prospect, either direction.
+      const last10 = lastTenDigits(lead.phone);
+      const call = last10
+        ? await prisma.call.findFirst({
+            where: {
+              tenantId,
+              answeredByUserId: userId,
+              OR: [
+                { direction: 'INBOUND', callerId: { endsWith: last10 } },
+                { direction: 'OUTBOUND', toNumber: { endsWith: last10 } },
+              ],
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          })
+        : null;
+
+      const { recordAgentApplication } = await import('../services/applications/agent-entry.js');
+      const { UnknownCallError } = await import('../services/applications/call-attribution.js');
+      const input = parsed.data;
+      const record = (callId: string | null) =>
+        recordAgentApplication({
+          tenantId,
+          createdById: userId,
+          clientRequestId: input.clientRequestId,
+          callId,
+          insuranceLeadId: lead.id,
+          carrier: input.carrier,
+          product: input.product ?? null,
+          planType: input.planType ?? null,
+          faceAmount: input.faceAmount,
+          modalPremium: input.modalPremium,
+          paymentMode: input.paymentMode,
+          carrierApplicationNumber: input.carrierApplicationNumber ?? null,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          dob: input.dob ?? null,
+          state: input.state ?? lead.state ?? null,
+          phone: input.phone || lead.phone,
+        });
+
+      let application: Record<string, unknown>;
+      let attachedCallId: string | null = call?.id ?? null;
+      try {
+        application = await record(attachedCallId);
+      } catch (err) {
+        // The call could not be attributed to this agent after all. The sale
+        // is still real; record it without a call rather than refusing it.
+        if (!(err instanceof UnknownCallError) || !attachedCallId) throw err;
+        attachedCallId = null;
+        application = await record(null);
+      }
+
+      if (attachedCallId) {
+        await prisma.call.update({
+          where: { id: attachedCallId },
+          data: { disposition: 'APPLICATION_SUBMITTED' },
+        });
+      }
+
+      const { updateLead } = await import('../services/insurance-lead-service.js');
+      await updateLead(tenantId, lead.id, {
+        status: 'CONVERTED',
+        leadStage: 'CLOSED_WON',
+        lastContactedAt: new Date(),
+      });
+
+      const { toMaskedApplicationResponse } = await import(
+        '../services/carrier-rpa/application-store.js'
+      );
+      void reply.code(201);
+      return { data: toMaskedApplicationResponse(application), callId: attachedCallId };
+    }
+  );
 
   // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/stats — Aggregate stats

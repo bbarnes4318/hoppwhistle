@@ -20,6 +20,8 @@ import { useState, useEffect } from 'react';
 
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadDetail, UserSummary } from '@/lib/api/leads';
+
+import { MarkApplicationPanel } from './mark-application-panel';
 import {
   updateInsuranceLead,
   fetchUsers,
@@ -408,6 +410,8 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
             </div>
           ) : (
             <>
+              <MarkApplicationPanel lead={lead} onRecorded={onRefresh} />
+
               {/* Contact Information */}
               <Section title="Contact Information" defaultOpen={true}>
                 <div className="grid grid-cols-2 gap-3">
