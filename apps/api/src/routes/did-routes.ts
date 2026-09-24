@@ -36,6 +36,11 @@
 import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import {
+  cellKey,
+  dialedKeyFromChannelName,
+  readCellForwardNumber,
+} from '../lib/agent-cell-forward.js';
 import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-cause.js';
 import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -549,6 +554,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     let destination = route.destination;
     let buyerId = route.buyerId || null;
     let targetId: string | null = null;
+    let agentCellKeys: string[] = [];
 
     if (route.campaignId) {
       try {
@@ -561,6 +567,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           destination = bestBuyer.endpoint;
           buyerId = bestBuyer.buyerId;
           targetId = bestBuyer.targetId || null;
+          agentCellKeys = bestBuyer.agentCellKeys ?? [];
           console.log(
             `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
           );
@@ -632,6 +639,9 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       destination: sanitized.destination,
       externalGateways: inboundCarriers.gatewaysCsv,
       externalBridgeTemplate: inboundCarriers.bridgeTemplate,
+      // Ten-digit keys of legs that are agents' own cells, comma-separated.
+      // inbound_route.lua makes those legs press 1 to accept and skips a busy one.
+      agentCellLegs: agentCellKeys.join(','),
       recordingEnabled: route.recordingEnabled,
       routeId: route.id,
       buyerId: buyerId,
@@ -867,18 +877,52 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         buyerName = route.label || null;
       }
 
-      // Resolve buyer name from buyer record if we have a buyerId
-      if (buyerId && !buyerName) {
+      // Resolve buyer name from buyer record if we have a buyerId. The id must
+      // name a real buyer: when the routed party was a campaign AGENT, routing
+      // hands back the agent's user id in this slot, and writing that to
+      // calls.buyerId violates its foreign key and loses the whole call row.
+      if (buyerId) {
         try {
           const buyer = await prisma.buyer.findUnique({
             where: { id: buyerId },
             select: { name: true },
           });
           if (buyer) {
-            buyerName = buyer.name;
+            buyerName = buyerName || buyer.name;
+          } else {
+            buyerId = null;
           }
         } catch (dbErr) {
           console.error('[FS-CDR] Failed to resolve buyer name:', dbErr);
+        }
+      }
+
+      // Credit a call answered on an agent's cell to that agent. The softphone
+      // path attributes on disposition; a cell has no disposition screen, so
+      // the bridged leg's dialed number is matched against the campaign's
+      // cell-forwarding agents here.
+      let answeredByUserId: string | null = null;
+      if (body.answeredAt && campaignId) {
+        const dialedKey = dialedKeyFromChannelName(body.bridgeChannelName);
+        if (dialedKey) {
+          try {
+            const assignments = await prisma.campaignAgent.findMany({
+              where: { tenantId, campaignId, status: 'ACTIVE' },
+              select: { userId: true, user: { select: { metadata: true } } },
+            });
+            const matches = assignments.filter(
+              a => cellKey(readCellForwardNumber(a.user.metadata)) === dialedKey
+            );
+            if (matches.length === 1) {
+              answeredByUserId = matches[0].userId;
+            } else if (matches.length > 1) {
+              console.warn(
+                `[FS-CDR] ${matches.length} agents on campaign ${campaignId} share cell ${dialedKey}; not attributing call ${body.callId}`
+              );
+            }
+          } catch (attrErr) {
+            console.error('[FS-CDR] Failed to resolve answering agent:', attrErr);
+          }
         }
       }
 
@@ -912,7 +956,16 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             body.carrierCost !== undefined && body.carrierCost !== null
               ? new Prisma.Decimal(body.carrierCost)
               : null,
-          metadata: rtbMetadata ? { rtb: rtbMetadata } : undefined,
+          answeredByUserId,
+          metadata:
+            rtbMetadata || answeredByUserId
+              ? {
+                  ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
+                  ...(answeredByUserId
+                    ? { answeredByAgentId: answeredByUserId, answeredVia: 'agent_cell' }
+                    : {}),
+                }
+              : undefined,
         },
       });
 

@@ -228,6 +228,22 @@ describe('GET /api/v1/agent-roster', () => {
     expect(agent.hasSipCredential).toBe(false);
     expect(agent.blockedReason).toMatch(/softphone/i);
   });
+
+  it('does not ask a cell-forwarding agent to open the softphone', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      agentRow({
+        metadata: { licensedStates: ['TN'], cellForwardNumber: '+18655551234' },
+        sipCredential: null,
+      }),
+    ]);
+    prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
+    const agent = (response.json() as any).data.agents[0];
+
+    expect(agent.cellForwardNumber).toBe('+18655551234');
+    expect(agent.blockedBy).toBeNull();
+  });
 });
 
 /* ── Assigning campaigns ───────────────────────────────────────────────────── */
@@ -389,6 +405,61 @@ describe('PATCH /api/v1/agent-roster/:userId', () => {
     // agency then pays for.
     expect(response.statusCode).toBe(400);
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('stores a cell-forward number normalised, merging metadata', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'u-1',
+      metadata: { licensedStates: ['TN'], maxConcurrentCalls: 2 },
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url,
+      payload: { cellForwardNumber: '(865) 555-1234' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'u-1' },
+      data: {
+        metadata: {
+          licensedStates: ['TN'],
+          maxConcurrentCalls: 2,
+          cellForwardNumber: '+18655551234',
+        },
+      },
+    });
+    expect((response.json() as any).data.cellForwardNumber).toBe('+18655551234');
+  });
+
+  it('turns cell forwarding off by removing the number', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'u-1',
+      metadata: { licensedStates: ['TN'], cellForwardNumber: '+18655551234' },
+    });
+
+    await app.inject({ method: 'PATCH', url, payload: { cellForwardNumber: '' } });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'u-1' },
+      data: { metadata: { licensedStates: ['TN'] } },
+    });
+  });
+
+  it('refuses a number that cannot be dialled', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url,
+      payload: { cellForwardNumber: '555-1234' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty update', async () => {
+    const response = await app.inject({ method: 'PATCH', url, payload: {} });
+    expect(response.statusCode).toBe(400);
   });
 
   it('refuses zero', async () => {

@@ -184,6 +184,60 @@ local function agent_channel_count(extension, contact_uri, rows, self_uuid)
 end
 -- ##AGENT_BUSY_END##
 
+-- ── Agent cell legs ─────────────────────────────────────────────────────────
+-- An agent may take calls on their own mobile instead of the softphone. The API
+-- lists those legs in `agentCellLegs` (ten-digit keys). Each such leg:
+--   * is skipped when that cell is already on one of our calls, since the
+--     agent's busy check above only sees softphone channels; and
+--   * must press 1 to accept, so a voicemail or a pocket answer cannot take
+--     the call away from agents who are really there.
+-- Kill switch for the confirmation, next call, no restart:
+--     fs_cli -x "global_setvar agent_cell_confirm=false"
+-- Prompt override: global var agent_cell_confirm_file / env AGENT_CELL_CONFIRM_FILE.
+local function ten_digit_key(value)
+    local digits = string.gsub(value or "", "%D", "")
+    if string.len(digits) > 10 then
+        digits = string.sub(digits, -10)
+    end
+    return digits
+end
+
+local cell_confirm_setting = fs_global("agent_cell_confirm")
+if cell_confirm_setting == "" then
+    cell_confirm_setting = os.getenv("AGENT_CELL_CONFIRM") or "true"
+end
+local AGENT_CELL_CONFIRM = cell_confirm_setting ~= "false"
+
+local AGENT_CELL_CONFIRM_FILE = fs_global("agent_cell_confirm_file")
+if AGENT_CELL_CONFIRM_FILE == "" then
+    AGENT_CELL_CONFIRM_FILE = os.getenv("AGENT_CELL_CONFIRM_FILE") or "ivr/ivr-accept_reject_voicemail.wav"
+end
+
+local function agent_cell_leg_vars()
+    if not AGENT_CELL_CONFIRM then
+        return ""
+    end
+    return "[group_confirm_key=1,group_confirm_file=" .. AGENT_CELL_CONFIRM_FILE ..
+        ",group_confirm_read_timeout=10000]"
+end
+
+-- Live non-softphone channels that dialed (or came from) this ten-digit number.
+local function cell_channel_count(key, rows, self_uuid)
+    local count = 0
+    for _, f in ipairs(rows) do
+        local name = f[5] or ""
+        if f[1] ~= self_uuid and not CHANNEL_TEARDOWN_STATES[f[6] or ""]
+            and not starts_with(name, "sofia/internal/") then
+            local last = string.match(name, "([^/]+)$") or ""
+            last = string.match(last, "^([^@]*)") or last
+            if ten_digit_key(last) == key then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
 -- ── Main Logic ──────────────────────────────────────────────────────────────
 local caller_number = session:getVariable("caller_id_number") or "unknown"
 local did_number    = session:getVariable("destination_number") or ""
@@ -288,6 +342,10 @@ local target_id       = json_value(response_body, "targetId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
 local no_eligible     = json_value(response_body, "noEligibleDestination")
+local agent_cell_keys = {}
+for key in string.gmatch(json_value(response_body, "agentCellLegs") or "", "[^,%s]+") do
+    agent_cell_keys[key] = true
+end
 
 -- External PSTN gateway chain for buyer/fallback legs. The API sends the
 -- current carrier chain (env INBOUND_EXTERNAL_GATEWAYS); default matches the
@@ -445,6 +503,7 @@ session:setVariable("sip_h_Identity", nil)
 session:setVariable("sip_h_Identity-Info", nil)
 
 local failover_steps = split(destination, "|")
+local answered_bridge_channel = ""
 
 for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
@@ -454,6 +513,8 @@ for i, step in ipairs(failover_steps) do
         -- carrier's own number format. Used when an external shares a step
         -- with other legs, where the full waterfall cannot be expressed.
         local external_first_leg = {}
+        -- Indexes into bridge_components that are an agent's own cell.
+        local agent_cell_components = {}
 
         -- Channel snapshot for this step only. Failover steps run seconds or
         -- minutes apart, so it is refreshed per step, and only fetched at all
@@ -532,10 +593,21 @@ for i, step in ipairs(failover_steps) do
                     if string.len(dest_digits) == 10 then
                         dest_digits = "1" .. dest_digits
                     end
-                    if string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
+                    local is_agent_cell = agent_cell_keys[ten_digit_key(dest_digits)] == true
+                    local cell_busy = 0
+                    if is_agent_cell and AGENT_BUSY_CHECK then
+                        cell_busy = cell_channel_count(ten_digit_key(dest_digits), step_channel_rows(), call_uuid)
+                    end
+                    if cell_busy >= AGENT_MAX_CONCURRENT then
+                        log("WARNING", "[AGENT-BUSY] Agent cell " .. dest_digits .. " already on " ..
+                            tostring(cell_busy) .. " call(s) — NOT ringing")
+                    elseif string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
                         table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
                         local templated = carrier_legs_for(dest_digits)
                         external_first_leg[#bridge_components] = templated and string.match(templated, "^[^|]+") or nil
+                        if is_agent_cell then
+                            agent_cell_components[#bridge_components] = true
+                        end
                     else
                         log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
                     end
@@ -591,6 +663,14 @@ for i, step in ipairs(failover_steps) do
                 else
                     bridge_body = bridge_components[1]
                 end
+                if agent_cell_components[1] then
+                    local cell_vars = agent_cell_leg_vars()
+                    local alts = {}
+                    for alt in string.gmatch(bridge_body, "[^|]+") do
+                        table.insert(alts, cell_vars .. alt)
+                    end
+                    bridge_body = table.concat(alts, "|")
+                end
             else
                 -- A mixed or ring-all step. Each external leg gets the first
                 -- carrier's rendered format -- the bare `gateway/1XXXXXXXXXX`
@@ -599,7 +679,11 @@ for i, step in ipairs(failover_steps) do
                 -- failed while the softphones rang.
                 local legs = {}
                 for idx, leg in ipairs(bridge_components) do
-                    table.insert(legs, external_first_leg[idx] or leg)
+                    local rendered = external_first_leg[idx] or leg
+                    if agent_cell_components[idx] then
+                        rendered = agent_cell_leg_vars() .. rendered
+                    end
+                    table.insert(legs, rendered)
                 end
                 bridge_body = table.concat(legs, ",")
             end
@@ -622,6 +706,8 @@ for i, step in ipairs(failover_steps) do
             end
 
             if session:answered() then
+                -- The leg that took the call; the CDR credits an agent's cell by it.
+                answered_bridge_channel = session:getVariable("bridge_channel") or answered_bridge_channel
                 log("INFO", "Call answered on step " .. tostring(i) .. ", exiting failover loop")
                 -- hangup_after_bridge is off, so release the caller here.
                 if rescue_enabled and session:ready() then
@@ -678,7 +764,7 @@ if answered_epoch and answered_epoch ~= "" and answered_epoch ~= "0" then
 end
 
 local cdr_json = string.format(
-  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","sipHangupDisposition":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s}',
+  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","sipHangupDisposition":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s,"bridgeChannelName":"%s"}',
   call_uuid,
   route_id or "",
   tenant_id or "",
@@ -696,7 +782,8 @@ local cdr_json = string.format(
   answered_at_iso,
   os.date("!%Y-%m-%dT%H:%M:%SZ", end_epoch),
   recording_path,
-  billsec
+  billsec,
+  (string.gsub(answered_bridge_channel or "", "[\"'\\]", ""))
 )
 
 -- POST CDR to API

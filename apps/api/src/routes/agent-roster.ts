@@ -38,9 +38,15 @@
  * reach into another agency's roster.
  */
 
+import type { Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import {
+  CELL_FORWARD_METADATA_KEY,
+  normalizeCellForwardNumber,
+  readCellForwardNumber,
+} from '../lib/agent-cell-forward.js';
 import { normalizeLicensedStates } from '../lib/licensed-states.js';
 import { requireAgencyPrincipal } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -81,15 +87,25 @@ const ScheduleSchema = z.object({
   endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'endTime must be HH:MM'),
 });
 
-const AgentSettingsSchema = z.object({
-  /**
-   * How many calls this agent may hold at once. Bounded at 10 because this is
-   * a human with one mouth: a larger number is a typo, and the cost of
-   * accepting it is calls delivered to somebody who cannot answer them, which
-   * the agency then pays for.
-   */
-  maxConcurrentCalls: z.number().int().min(1).max(10),
-});
+const AgentSettingsSchema = z
+  .object({
+    /**
+     * How many calls this agent may hold at once. Bounded at 10 because this is
+     * a human with one mouth: a larger number is a typo, and the cost of
+     * accepting it is calls delivered to somebody who cannot answer them, which
+     * the agency then pays for.
+     */
+    maxConcurrentCalls: z.number().int().min(1).max(10).optional(),
+    /**
+     * The agent's own mobile, when they take calls there instead of the
+     * softphone. Routing dials it as this agent's leg and the CDR credits the
+     * answered call to them. Null or an empty string turns forwarding off.
+     */
+    cellForwardNumber: z.string().max(32).nullable().optional(),
+  })
+  .refine(body => body.maxConcurrentCalls !== undefined || body.cellForwardNumber !== undefined, {
+    message: 'Nothing to update',
+  });
 
 /** One agent's live softphone status, from the key the softphone writes. */
 async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
@@ -149,6 +165,8 @@ function blocker(agent: {
   hasSipCredential: boolean;
   campaignCount: number;
   availableForCalls: boolean;
+  /** Calls go to their cell, so the softphone never has to be opened. */
+  forwardsToCell?: boolean;
 }): { code: BlockerCode; reason: string } | null {
   if (agent.status === 'PENDING') {
     return { code: 'INVITE_PENDING', reason: 'Has not accepted their invitation yet' };
@@ -162,7 +180,7 @@ function blocker(agent: {
   if (agent.campaignCount === 0) {
     return { code: 'NO_CAMPAIGN', reason: 'Not assigned to a campaign' };
   }
-  if (!agent.hasSipCredential) {
+  if (!agent.hasSipCredential && !agent.forwardsToCell) {
     return { code: 'NO_SOFTPHONE', reason: 'Has not opened the softphone yet' };
   }
   /*
@@ -265,12 +283,15 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           user.sipCredential.status === 'ACTIVE' &&
           user.sipCredential.passwordEncrypted !== null;
 
+        const cellForwardNumber = readCellForwardNumber(meta);
+
         const blocked = blocker({
           status: user.status,
           licensedStates,
           hasSipCredential,
           campaignCount: assignedCampaigns.length,
           availableForCalls: user.availableForCalls,
+          forwardsToCell: cellForwardNumber !== null,
         });
 
         return {
@@ -286,6 +307,7 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           licensedStates,
           extension: user.sipCredential?.extension ?? null,
           hasSipCredential,
+          cellForwardNumber,
           maxConcurrentCalls:
             Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_CONCURRENT,
           campaignIds: assignedCampaigns,
@@ -629,6 +651,21 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
         });
       }
 
+      const { maxConcurrentCalls, cellForwardNumber: rawCell } = parsed.data;
+      let cellForwardNumber: string | null | undefined;
+      if (rawCell !== undefined) {
+        cellForwardNumber =
+          rawCell === null || rawCell.trim() === '' ? null : normalizeCellForwardNumber(rawCell);
+        if (cellForwardNumber === null && rawCell !== null && rawCell.trim() !== '') {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'cellForwardNumber: must be a 10-digit US phone number',
+            },
+          });
+        }
+      }
+
       const { userId } = request.params;
       const agent = await prisma.user.findFirst({
         where: { id: userId, tenantId },
@@ -650,9 +687,19 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           ? (agent.metadata as Record<string, unknown>)
           : {};
 
+      const changes: Record<string, unknown> = {};
+      if (maxConcurrentCalls !== undefined) changes.maxConcurrentCalls = maxConcurrentCalls;
+      if (cellForwardNumber !== undefined) changes[CELL_FORWARD_METADATA_KEY] = cellForwardNumber;
+
+      const nextMetadata: Record<string, unknown> = { ...existing, ...changes };
+      // Off is absence, so nothing downstream has to tell null from unset.
+      if (nextMetadata[CELL_FORWARD_METADATA_KEY] === null) {
+        delete nextMetadata[CELL_FORWARD_METADATA_KEY];
+      }
+
       await prisma.user.update({
         where: { id: userId },
-        data: { metadata: { ...existing, maxConcurrentCalls: parsed.data.maxConcurrentCalls } },
+        data: { metadata: nextMetadata as Prisma.InputJsonObject },
       });
 
       await auditLog({
@@ -663,7 +710,7 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
         entityId: userId,
         resource: `/api/v1/agent-roster/${userId}`,
         method: 'PATCH',
-        changes: { maxConcurrentCalls: parsed.data.maxConcurrentCalls },
+        changes,
         ipAddress: request.ip,
         userAgent: request.headers['user-agent'],
         requestId: request.id,
@@ -671,7 +718,7 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
       });
 
       return reply.send({
-        data: { userId, maxConcurrentCalls: parsed.data.maxConcurrentCalls },
+        data: { userId, ...changes },
       });
     }
   );
