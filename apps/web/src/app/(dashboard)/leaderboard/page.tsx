@@ -12,15 +12,14 @@ import {
   PanelHeader,
   PanelTitle,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarDateRange,
+  ToolbarMeta,
+  ToolbarSelect,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Board, Records, ScoringNote, YourStanding } from '@/components/leaderboard/board';
-import {
-  PeriodPicker,
-  isSendable,
-  localDayKey,
-  periodQuery,
-} from '@/components/leaderboard/period-picker';
+import { isSendable, localDayKey, periodQuery } from '@/components/leaderboard/period-picker';
 import { Podium } from '@/components/leaderboard/podium';
 import type { Leaderboard, PeriodKey } from '@/components/leaderboard/types';
 import { Button } from '@/components/ui/button';
@@ -65,6 +64,23 @@ import { cn } from '@/lib/utils';
  * See `components/leaderboard/period-picker.tsx`. The screen renders the range
  * the server says it measured, never the one it would have computed itself.
  */
+
+/**
+ * The period menu. The same eight names and a calendar range the picker in
+ * `period-picker.tsx` offers, as one compact select so the whole control fits
+ * the toolbar row. The names still go to the server verbatim; see that file.
+ */
+const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
+  { value: 'TODAY', label: 'Today' },
+  { value: 'YESTERDAY', label: 'Yesterday' },
+  { value: 'THIS_WEEK', label: 'This week' },
+  { value: 'LAST_WEEK', label: 'Last week' },
+  { value: 'THIS_MONTH', label: 'This month' },
+  { value: 'LAST_MONTH', label: 'Last month' },
+  { value: 'THIS_YEAR', label: 'This year' },
+  { value: 'LAST_YEAR', label: 'Last year' },
+  { value: 'CUSTOM', label: 'Custom range' },
+];
 
 /** Live enough for a floor to watch, quiet enough for forty tabs. See `useLivePoll`. */
 const REFRESH_MS = 60_000;
@@ -169,57 +185,83 @@ export default function LeaderboardPage(): JSX.Element {
   if (withoutAgency) {
     return (
       <div className="page-canvas">
-        <PageHeader description="Select an agency to see its board." />
+        <Notice title="Select an agency to see its board." />
       </div>
     );
   }
 
+  const custom = period === 'CUSTOM';
+  /*
+   * Caught here as well as on the server. The server refuses a reversed range
+   * rather than silently swapping it, so without this the reader would see an
+   * error for something they could have been told about before pressing
+   * anything.
+   */
+  const reversed = custom && from > to;
+  /* The range the SERVER says it measured -- never the one the browser asked for. */
+  const resolved = data ? data.period : null;
+  const ranked = data ? data.rows.filter(row => row.rank !== null).length : null;
+
   return (
     <div className="page-canvas">
-      <PageHeader
-        description={
-          data
-            ? `${data.period.label} · ${data.rows.filter(row => row.rank !== null).length} ranked`
-            : 'Who is closing, who is dialling, and who is on a run'
-        }
-        actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => refresh()}
-              disabled={loading || !sendable}
-            >
-              <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void exportCsv()}
-              disabled={exporting || !sendable || !data}
-            >
-              {exporting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              CSV
-            </Button>
-          </>
-        }
-      />
-
-      <PeriodPicker
-        period={period}
-        from={from}
-        to={to}
-        resolved={data ? data.period : null}
-        disabled={loading && !data}
-        onChange={next => {
-          setPeriod(next.period);
-          setFrom(next.from);
-          setTo(next.to);
-        }}
-      />
+      {/* Period, the measured range and the page's actions on one row. */}
+      <Toolbar aria-label="Leaderboard period">
+        <ToolbarSelect
+          label="Period"
+          value={period}
+          allValue={null}
+          onChange={next => setPeriod(next as PeriodKey)}
+          options={PERIOD_OPTIONS}
+          className="xl:max-w-[150px]"
+        />
+        {custom ? (
+          <ToolbarDateRange
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+          />
+        ) : null}
+        {reversed ? (
+          <ToolbarMeta className="text-dropped-ink">The start date is after the end date.</ToolbarMeta>
+        ) : resolved ? (
+          <ToolbarMeta>
+            {resolved.from === resolved.to
+              ? resolved.from
+              : `${resolved.from} → ${resolved.to} · ${resolved.days} day${
+                  resolved.days === 1 ? '' : 's'
+                }`}
+            {resolved.complete ? null : ' · still open'}
+            {ranked === null ? null : ` · ${ranked} ranked`}
+          </ToolbarMeta>
+        ) : null}
+        <ToolbarActions>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => refresh()}
+            disabled={loading || !sendable}
+          >
+            <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', loading && 'animate-spin')} />
+            Refresh
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => void exportCsv()}
+            disabled={exporting || !sendable || !data}
+          >
+            {exporting ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            CSV
+          </Button>
+        </ToolbarActions>
+      </Toolbar>
 
       {error ? <Notice tone="error" title={error} /> : null}
 
