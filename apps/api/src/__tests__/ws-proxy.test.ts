@@ -72,7 +72,7 @@ describe('the committed agents.netenroll.com /ws proxy', () => {
     // proxied to 7443 in production.
     const block = wsDirectives(agents)[0];
     expect(block).toContain('proxy_pass https://127.0.0.1:7443;');
-    // FreeSWITCH's certificate is for hopwhistle.com, not 127.0.0.1.
+    // FreeSWITCH's certificate names its public host, not 127.0.0.1.
     expect(block).toContain('proxy_ssl_verify off;');
   });
 

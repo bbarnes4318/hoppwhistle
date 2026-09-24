@@ -38,7 +38,15 @@
   <bindings>
     <binding name="directory">
       <param name="gateway-url" value="http://api:3001/api/v1/freeswitch/directory?k=$${internal_key}" bindings="directory"/>
-      <param name="method" value="post"/>
+      <!--
+        UPPERCASE, and it matters. mod_xml_curl sends this string verbatim as
+        the HTTP method, and Node's parser rejects a lowercase `post` as a
+        malformed request: a 400 "Client Error" answered before the API ever
+        sees it, so nothing is logged there. FreeSWITCH then falls back to the
+        static directory with its old shared password, and every browser
+        softphone gets 403 Forbidden with the correct password.
+      -->
+      <param name="method" value="POST"/>
       <!--
         A registration waits on this fetch, so the timeout is what an agent
         experiences when the API is slow. Four seconds is long enough for a
