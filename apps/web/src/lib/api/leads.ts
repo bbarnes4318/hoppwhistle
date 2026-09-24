@@ -315,6 +315,18 @@ export async function fetchSubmittedApps(params: {
   return res.data as unknown as SubmittedAppsResponse;
 }
 
+/**
+ * Disposition a prospect as an application submitted, from the CRM. The same
+ * application form, the same credit, the same count as dispositioning a call.
+ */
+export async function markLeadApplication(
+  leadId: string,
+  application: Record<string, unknown>
+): Promise<void> {
+  const res = await apiClient.post(`/api/v1/insurance-leads/${leadId}/application`, application);
+  if (res.error) throw new Error(res.error.message || 'The application could not be recorded.');
+}
+
 export async function fetchInsuranceLeadStats(): Promise<InsuranceLeadStats> {
   const res = await apiClient.get<InsuranceLeadStats>('/api/v1/insurance-leads/stats');
   return res.data as unknown as InsuranceLeadStats;

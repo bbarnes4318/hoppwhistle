@@ -9,12 +9,18 @@
  * a PENDING carrier row is not business the agency wrote, and a voided one was
  * taken out of the measurement by NetEnroll.
  *
- * `InsuranceCarrierApplication.insuranceLeadId` is the direct link, but it is a
- * plain optional column and most applications are logged from the console
- * without it. So an application is also tied to a lead by the applicant's
- * phone number -- the one field both records always carry, normalised to its
- * last ten digits on both sides. A lead with either kind of match leaves the
- * prospect list and appears under Submitted Apps.
+ * An application exists because an agent dispositioned a call "Application
+ * Submitted" -- live, or afterwards from Calls -- or marked a prospect as an
+ * app from the CRM. Each of those writes one application row. That row is tied
+ * back to a CRM lead by, in order:
+ *
+ *   1. `insuranceLeadId`, set when the app was marked from the CRM;
+ *   2. the customer's number on the CALL the app was written on -- the caller
+ *      on an inbound call, the number dialled on an outbound one;
+ *   3. the phone typed on the application form, when there is one.
+ *
+ * All numbers are compared on their last ten digits. A lead with any match
+ * leaves the prospect list and appears under Submitted Apps.
  *
  * ── Whose rows ───────────────────────────────────────────────────────────────
  *
@@ -28,10 +34,37 @@ import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
-/** Ten digits, or null. Applications store digits only; leads store ten. */
+/** Ten digits, or null. Calls store E.164, applications digits, leads ten. */
 export function lastTenDigits(phone: string | null | undefined): string | null {
   const digits = (phone ?? '').replace(/\D/g, '');
   return digits.length >= 10 ? digits.slice(-10) : null;
+}
+
+/** The customer's side of a call: who rang in, or who was dialled. */
+function customerNumber(call: {
+  direction: string;
+  callerId: string | null;
+  toNumber: string;
+}): string | null {
+  return lastTenDigits(call.direction === 'OUTBOUND' ? call.toNumber : call.callerId);
+}
+
+/** Call id -> the customer's ten-digit number, for the calls apps were written on. */
+async function customerNumbersByCall(
+  tenantId: string,
+  callIds: string[]
+): Promise<Map<string, string>> {
+  const byCall = new Map<string, string>();
+  if (callIds.length === 0) return byCall;
+  const calls = await getPrismaClient().call.findMany({
+    where: { tenantId, id: { in: callIds } },
+    select: { id: true, direction: true, callerId: true, toNumber: true },
+  });
+  for (const call of calls) {
+    const phone = customerNumber(call);
+    if (phone) byCall.set(call.id, phone);
+  }
+  return byCall;
 }
 
 export interface PipelineScope {
@@ -77,15 +110,20 @@ export async function getConvertedLeadKeys(
   const prisma = getPrismaClient();
   const rows = await prisma.insuranceCarrierApplication.findMany({
     where: submittedApplicationWhere(scope),
-    select: { insuranceLeadId: true, phone: true },
+    select: { insuranceLeadId: true, phone: true, callId: true },
   });
+  const callPhones = await customerNumbersByCall(scope.tenantId, [
+    ...new Set(rows.map(row => row.callId).filter((id): id is string => !!id)),
+  ]);
 
   const leadIds = new Set<string>();
   const phones = new Set<string>();
   for (const row of rows) {
     if (row.insuranceLeadId) leadIds.add(row.insuranceLeadId);
-    const phone = lastTenDigits(row.phone);
-    if (phone) phones.add(phone);
+    const fromCall = row.callId ? callPhones.get(row.callId) : undefined;
+    if (fromCall) phones.add(fromCall);
+    const typed = lastTenDigits(row.phone);
+    if (typed) phones.add(typed);
   }
   return { leadIds: [...leadIds], phones: [...phones] };
 }
@@ -232,17 +270,25 @@ export async function getSubmittedApps(
         annualizedPremium: true,
         createdById: true,
         insuranceLeadId: true,
+        callId: true,
       },
     }),
     prisma.insuranceCarrierApplication.count({ where }),
   ]);
+
+  // The customer's number: the call the app was written on, else the form's.
+  const callPhones = await customerNumbersByCall(scope.tenantId, [
+    ...new Set(rows.map(row => row.callId).filter((id): id is string => !!id)),
+  ]);
+  const phoneOf = (row: { callId: string | null; phone: string | null }): string | null =>
+    (row.callId ? callPhones.get(row.callId) : undefined) ?? lastTenDigits(row.phone);
 
   // Tie each application to its CRM lead: the stored link first, then phone.
   const unlinkedPhones = [
     ...new Set(
       rows
         .filter(row => !row.insuranceLeadId)
-        .map(row => lastTenDigits(row.phone))
+        .map(phoneOf)
         .filter((p): p is string => p !== null)
     ),
   ];
@@ -271,7 +317,7 @@ export async function getSubmittedApps(
 
   return {
     data: rows.map(row => {
-      const phone = lastTenDigits(row.phone);
+      const phone = phoneOf(row);
       return {
         id: row.id,
         submittedAt: row.submittedAt?.toISOString() ?? null,
@@ -289,4 +335,18 @@ export async function getSubmittedApps(
     }),
     meta: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) },
   };
+}
+
+/**
+ * Whether this lead has already become a submitted application, by any of the
+ * three links above. Agency-wide rather than per agent: a customer another
+ * agent already wrote is not a sale this agent can record again.
+ */
+export async function leadHasSubmittedApp(
+  tenantId: string,
+  lead: { id: string; phone: string }
+): Promise<boolean> {
+  const keys = await getConvertedLeadKeys({ tenantId });
+  const phone = lastTenDigits(lead.phone);
+  return keys.leadIds.includes(lead.id) || (phone !== null && keys.phones.includes(phone));
 }

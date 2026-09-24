@@ -89,6 +89,23 @@ function installFetch(): void {
           });
         case '/api/v1/lead-lists':
           return json([]);
+        case '/api/v1/insurance-leads/lead-1':
+          return json({
+            id: 'lead-1',
+            vertical: 'FE',
+            firstName: 'Pat',
+            lastName: 'Prospect',
+            fullName: 'Pat Prospect',
+            phone: '5551234567',
+            status: 'NEW',
+            leadStage: null,
+            tags: [],
+            submissions: [],
+            activities: [],
+            tasks: [],
+            createdAt: '2026-09-01T15:00:00.000Z',
+            updatedAt: '2026-09-01T15:00:00.000Z',
+          });
         default:
           if (url.pathname.startsWith('/api/v1/platform/context')) {
             return json({ isPlatformAdmin: false, actingTenant: null });
@@ -171,5 +188,14 @@ describe('the agency CRM', () => {
     await waitFor(() => expect(screen.getByText('Sam Submitted')).toBeTruthy());
     expect(screen.getAllByText('$840.00').length).toBeGreaterThan(0);
     expect(screen.getByText('American Amicable')).toBeTruthy();
+  });
+
+  it('lets a prospect be marked as an app submitted from their record', async () => {
+    await loadCrm();
+
+    fireEvent.click(screen.getByText('Pat Prospect'));
+    fireEvent.click(await screen.findByRole('button', { name: /Mark as App Submitted/ }));
+
+    expect(await screen.findByRole('button', { name: /Save Application/ })).toBeTruthy();
   });
 });
