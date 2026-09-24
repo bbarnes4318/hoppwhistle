@@ -109,6 +109,7 @@ REQUIRED_MIGRATIONS="
 20260922010000_payment_provider_offline
 20260922020000_payment_provider_melio_value
 20260922020001_payment_provider_melio_default
+20260924000000_delivery_hold_no_credits
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -389,6 +390,14 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'agency_billing_profiles'
                 AND column_name = 'paymentProvider'), false)" ;;
+    *_delivery_hold_no_credits)
+      # One statement, one effect: the NO_CREDITS hold reason. The delivery
+      # gate raises it the moment an agency's credit balance reaches zero, and
+      # recording that hold fails without it.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type ty ON ty.oid = e.enumtypid
+              WHERE ty.typname = 'DeliveryHoldReason'
+                AND e.enumlabel = 'NO_CREDITS'), false)" ;;
     *)
       echo "" ;;
   esac
