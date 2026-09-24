@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { AddExistingNumberDialog } from '@/components/numbers/add-existing-number-dialog';
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
@@ -214,6 +215,7 @@ function NumbersPage() {
   const [routes, setRoutes] = useState<DidRoute[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(true);
   const [syncingAnveo, setSyncingAnveo] = useState(false);
+  const [addExistingOpen, setAddExistingOpen] = useState(false);
 
   useEffect(() => {
     void loadNumbers();
@@ -258,22 +260,6 @@ function NumbersPage() {
   );
 
   const carrierGroups = groupByCarrier(filteredNumbers);
-
-  const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv,.xlsx,.xls';
-    input.onchange = e => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        toast({
-          title: 'Feature Coming Soon',
-          description: `Import functionality coming soon. Selected file: ${file.name}`,
-        });
-      }
-    };
-    input.click();
-  };
 
   /**
    * Pull the Anveo account's DIDs into our inventory.
@@ -359,11 +345,12 @@ function NumbersPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={handleImport}
+          onClick={() => setAddExistingOpen(true)}
+          title="Add a number you already own at a carrier, e.g. an Anveo DID"
           className="h-8 text-xs border-rule text-muted-foreground"
         >
           <Download className="mr-2 h-3.5 w-3.5" />
-          Import
+          Add existing
         </Button>
         <Button
           variant="outline"
@@ -614,6 +601,16 @@ function NumbersPage() {
         open={bulkvsPurchaseDialogOpen}
         onOpenChange={setBulkvsPurchaseDialogOpen}
         onSuccess={handlePurchaseSuccess}
+      />
+
+      <AddExistingNumberDialog
+        open={addExistingOpen}
+        onOpenChange={setAddExistingOpen}
+        onSuccess={() => {
+          toast({ title: 'Number added', description: 'Calls to it now route to the campaign.' });
+          void loadNumbers();
+          void loadRoutes();
+        }}
       />
 
       <CreateRouteDialog

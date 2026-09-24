@@ -746,6 +746,20 @@ STEP "4/5  Deploy"
 # and the postgres volume-identity check.
 run "$ROOT/scripts/deploy.sh" --build api web
 
+# The inbound routing script is baked into the FreeSWITCH image, which this
+# deploy does not rebuild: rebuilding it restarts FreeSWITCH, dropping live
+# calls and every softphone registration. mod_lua reads the script fresh on
+# each call, so copying it into the running container takes effect on the next
+# call with nothing dropped. A later image rebuild bakes in the same file.
+FS_CONTAINER="${FS_CONTAINER:-hopwhistle-freeswitch-dev}"
+FS_SCRIPT="$ROOT/apps/freeswitch/scripts/inbound_route.lua"
+if docker ps --format '{{.Names}}' | grep -qx "$FS_CONTAINER"; then
+  run docker cp "$FS_SCRIPT" "$FS_CONTAINER:/usr/share/freeswitch/scripts/inbound_route.lua"
+  [ "$DRY_RUN" = "1" ] || GRN "inbound_route.lua updated in $FS_CONTAINER (takes effect on the next call)"
+else
+  YEL "FreeSWITCH container $FS_CONTAINER is not running; inbound_route.lua not updated"
+fi
+
 # ═══════════════════════════════════════════════════════════════════════════
 STEP "5/5  Postflight"
 # ═══════════════════════════════════════════════════════════════════════════

@@ -783,6 +783,41 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     }
   );
 
+  /**
+   * Add a number the platform already owns at a carrier (e.g. an Anveo DID) to
+   * the acting agency, optionally pointed at one of its campaigns. Buying is
+   * POST /api/v1/numbers; this is for numbers that exist already. Staff-only
+   * through the `/api/v1/numbers` prefix in lib/staff-only-endpoints.ts.
+   */
+  fastify.post<{
+    Body: { number?: string; provider?: string; campaignId?: string | null };
+  }>('/api/v1/numbers/existing', async (request, reply) => {
+    const tenantId = getActingTenantId(request);
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { addExistingNumber } = await import('../services/add-existing-number.js');
+    const result = await addExistingNumber(prisma, tenantId, {
+      number: request.body?.number ?? '',
+      provider: request.body?.provider ?? '',
+      campaignId: request.body?.campaignId ?? null,
+    });
+
+    if (!result.ok) {
+      void reply.code(result.status);
+      return { error: { code: result.code, message: result.message } };
+    }
+
+    // Creates (or repoints) the inbound DidRoute, so calls reach the campaign.
+    const { didRouteService } = await import('../services/did-route-service.js');
+    await didRouteService.syncDidRouteForNumber(result.id, tenantId);
+
+    void reply.code(result.created ? 201 : 200);
+    return { id: result.id, number: result.number, created: result.created };
+  });
+
   fastify.post<{
     Body: {
       areaCode?: string;
