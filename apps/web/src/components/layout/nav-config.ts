@@ -27,6 +27,7 @@ import {
   Wallet,
 } from 'lucide-react';
 
+import { MY_PAYROLL_ENABLED } from '@/lib/feature-flags';
 import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
 
 export interface NavItem {
@@ -297,7 +298,10 @@ export const AGENT_NAV: NavGroup[] = [
         icon: Gauge,
         title: 'Your calls, applications and closing percentage against the agency average',
       },
-      { name: 'My payroll', href: '/payroll', icon: Receipt },
+      // Switched off for now -- see lib/feature-flags.ts.
+      ...(MY_PAYROLL_ENABLED
+        ? [{ name: 'My payroll', href: '/payroll', icon: Receipt } satisfies NavItem]
+        : []),
     ],
   },
   { label: 'Build', items: [{ name: 'Settings', href: '/settings', icon: Settings }] },

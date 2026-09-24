@@ -1,6 +1,7 @@
 'use client';
 
 import { Clock, DollarSign, Calendar, Loader2, Lock, Plus, Edit2, Save, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -30,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useReadOnlyPreview } from '@/hooks/use-read-only-preview';
 import { apiClient } from '@/lib/api';
+import { MY_PAYROLL_ENABLED } from '@/lib/feature-flags';
 
 interface TimeEntry {
   id: string;
@@ -517,6 +519,16 @@ function PayrollPage() {
 }
 
 export default function GuardedPayrollPage() {
+  const router = useRouter();
+
+  // "My payroll" is switched off for now -- see lib/feature-flags.ts. An old
+  // bookmark lands on the dashboard rather than on a screen nobody links to.
+  useEffect(() => {
+    if (!MY_PAYROLL_ENABLED) router.replace('/dashboard');
+  }, [router]);
+
+  if (!MY_PAYROLL_ENABLED) return null;
+
   return (
     <RoleGuard allowedRoles={['AGENT', 'ADMIN', 'OWNER']}>
       <PayrollPage />

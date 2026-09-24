@@ -5,8 +5,9 @@ import { PhoneCall } from 'lucide-react';
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadSummary } from '@/lib/api/leads';
 
-function LeadStageBadge({ stage }: { stage: string | null }) {
-  if (!stage) return <span className="text-ink-3">—</span>;
+function LeadStageBadge({ stage: raw }: { stage: string | null }) {
+  // A lead nobody has staged yet is a new lead.
+  const stage = raw || 'NEW';
   const configs: Record<string, { className: string; label: string }> = {
     NEW: { className: 'bg-ringing-tint text-ringing-ink border-transparent', label: 'New' },
     CONTACTED: {
@@ -145,28 +146,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function VerticalBadge({ vertical }: { vertical: 'ACA' | 'FE' | 'B2B' }) {
-  if (vertical === 'ACA') {
-    return (
-      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
-        ACA
-      </span>
-    );
-  }
-  if (vertical === 'FE') {
-    return (
-      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
-        FE Customers
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-sunken text-ink-2">
-      B2B
-    </span>
-  );
-}
-
 function formatPhone(phone: string): string {
   if (phone.length === 10) {
     return `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}`;
@@ -224,7 +203,7 @@ export function LeadsTable({
       <div className="rounded-card border border-rule bg-surface overflow-hidden">
         <div className="p-8 text-center text-sm text-ink-3">
           <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-brand-ink border-t-transparent" />
-          <span className="ml-2">Loading leads…</span>
+          <span className="ml-2">Loading prospects…</span>
         </div>
       </div>
     );
@@ -234,9 +213,9 @@ export function LeadsTable({
     return (
       <div className="rounded-card border border-rule bg-surface overflow-hidden">
         <div className="p-12 text-center">
-          <div className="text-ink-3 text-sm">No leads found</div>
+          <div className="text-ink-3 text-sm">No prospects found</div>
           <div className="text-ink-3 text-xs mt-1">
-            Leads will appear here when they are received via the ingestion API.
+            Import a list or add a prospect to get started.
           </div>
         </div>
       </div>
@@ -264,12 +243,6 @@ export function LeadsTable({
                 </th>
               )}
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Received
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Type
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Name
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
@@ -279,13 +252,16 @@ export function LeadsTable({
                 Follow Up
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
+                Last Contact
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 Phone
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
                 State
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                ZIP
+                Added
               </th>
             </tr>
           </thead>
@@ -313,17 +289,6 @@ export function LeadsTable({
                     </td>
                   )}
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-xs text-ink-2">
-                      {sub ? formatDate(sub.receivedAt) : formatDate(lead.createdAt)}
-                    </div>
-                    <div className="text-[10px] text-ink-3">
-                      {sub ? formatTime(sub.receivedAt) : ''}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <VerticalBadge vertical={lead.vertical} />
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-sm text-ink font-medium">
                       {lead.fullName ||
                         `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
@@ -335,6 +300,9 @@ export function LeadsTable({
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <FollowUpBadge dateStr={lead.nextFollowUpAt} stage={lead.leadStage} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2">
+                    {lead.lastContactedAt ? formatDate(lead.lastContactedAt) : 'Never'}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2 font-mono">
                     <div className="flex items-center gap-2">
@@ -357,8 +325,13 @@ export function LeadsTable({
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2">
                     {lead.state || '—'}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-2 font-mono">
-                    {lead.zipCode || '—'}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-xs text-ink-2">
+                      {formatDate(sub ? sub.receivedAt : lead.createdAt)}
+                    </div>
+                    <div className="text-[10px] text-ink-3">
+                      {formatTime(sub ? sub.receivedAt : lead.createdAt)}
+                    </div>
                   </td>
                 </tr>
               );
@@ -370,4 +343,4 @@ export function LeadsTable({
   );
 }
 
-export { StatusBadge, VerticalBadge };
+export { StatusBadge };

@@ -20,6 +20,7 @@ import {
   type StateAuthority,
 } from '../lib/licensed-states.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { calendarDayBounds } from '../services/rating/calendar-day.js';
 
 
 /**
@@ -176,6 +177,30 @@ function parseOutcome(
     };
   }
   return { value: match };
+}
+
+const CRM_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `?from=&to=` on the CRM pipeline routes: agency calendar days, both
+ * inclusive, the same way the applications page reads them.
+ */
+function parseCrmRange(
+  from: string | undefined,
+  to: string | undefined
+): { from?: Date; to?: Date } | { error: string } {
+  for (const [name, value] of [
+    ['from', from],
+    ['to', to],
+  ] as const) {
+    if (value !== undefined && value !== '' && !CRM_DAY_PATTERN.test(value)) {
+      return { error: `${name} must be YYYY-MM-DD` };
+    }
+  }
+  return {
+    ...(from ? { from: calendarDayBounds(from).start } : {}),
+    ...(to ? { to: calendarDayBounds(to).endExclusive } : {}),
+  };
 }
 
 export function isTruthyFlag(value: string | undefined): boolean {
@@ -559,6 +584,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leadStage?: string;
       followUp?: string;
       listId?: string;
+      pipeline?: string;
       format?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
@@ -595,6 +621,15 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const stateAuthority = await resolveStateAuthority(request, tenantId);
     const licensedStates = stateAuthority.restricted ? [...stateAuthority.licensed] : undefined;
 
+    // `?pipeline=prospects` is the CRM's Prospects list: every lead that has
+    // not become a submitted application. See services/crm-pipeline.ts.
+    const excludeConverted =
+      q.pipeline?.toLowerCase() === 'prospects'
+        ? await (
+            await import('../services/crm-pipeline.js')
+          ).getConvertedLeadKeys({ tenantId, agentId: assignedToId })
+        : undefined;
+
     // An export reads the FULL record, not the grid's narrow projection. The
     // grid selects the dozen columns it renders; exporting from that read is
     // what dropped the TrustedForm certificate and the rejection reason.
@@ -617,6 +652,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         listId: q.listId,
         assignedToId,
         licensedStates,
+        excludeConverted,
       });
 
       return reply
@@ -646,6 +682,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       listId: q.listId,
       assignedToId,
       licensedStates,
+      excludeConverted,
     });
 
     return result;
@@ -789,6 +826,78 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     });
 
     return { success: true };
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /api/v1/insurance-leads/pipeline — The CRM's headline figures
+  //
+  // Prospects, follow-ups due, submitted applications and their annual
+  // premium. `from`/`to` (YYYY-MM-DD, agency calendar day) bound the
+  // submitted applications only: a prospect is a prospect until they submit.
+  // -----------------------------------------------------------------------
+  fastify.get<{ Querystring: { from?: string; to?: string } }>(
+    '/api/v1/insurance-leads/pipeline',
+    async (request, reply) => {
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const range = parseCrmRange(request.query.from, request.query.to);
+      if ('error' in range) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: range.error } };
+      }
+
+      const stateAuthority = await resolveStateAuthority(request, tenantId);
+      const { getPipelineSummary } = await import('../services/crm-pipeline.js');
+      return await getPipelineSummary(
+        {
+          tenantId,
+          agentId: agentScopeFor(request) ?? undefined,
+          licensedStates: stateAuthority.restricted ? [...stateAuthority.licensed] : undefined,
+        },
+        range
+      );
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // GET /api/v1/insurance-leads/submitted-apps — Prospects who submitted
+  //
+  // Submitted, non-voided applications with their annual premium, each tied
+  // to the CRM lead it converted where one can be found.
+  // -----------------------------------------------------------------------
+  fastify.get<{
+    Querystring: { from?: string; to?: string; search?: string; page?: string; limit?: string };
+  }>('/api/v1/insurance-leads/submitted-apps', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
+    }
+
+    const q = request.query;
+    const range = parseCrmRange(q.from, q.to);
+    if ('error' in range) {
+      void reply.code(400);
+      return { error: { code: 'VALIDATION_ERROR', message: range.error } };
+    }
+
+    const stateAuthority = await resolveStateAuthority(request, tenantId);
+    const { getSubmittedApps } = await import('../services/crm-pipeline.js');
+    return await getSubmittedApps(
+      {
+        tenantId,
+        agentId: agentScopeFor(request) ?? undefined,
+        licensedStates: stateAuthority.restricted ? [...stateAuthority.licensed] : undefined,
+      },
+      {
+        ...range,
+        search: q.search,
+        page: q.page ? parseInt(q.page) : undefined,
+        limit: q.limit ? parseInt(q.limit) : undefined,
+      }
+    );
   });
 
   // -----------------------------------------------------------------------

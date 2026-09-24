@@ -82,27 +82,24 @@ const POLL_MS = 30_000;
  * a desk and the page is read up close, and a figure in a supporting row is not
  * competing with anything.
  *
- * That is the whole rule, and these are all the places it applies, because
- * these are the only pages in the product with a hero figure the strip also
- * carries:
+ * That is the whole rule, and this is the one place it applies:
  *
- *   agency on /delivery      the heroes are the app credits remaining and the
- *                            current rate. Both drop, and the strip keeps
- *                            applications, calls and tomorrow's tracking rate.
  *   agent on /delivery/me    the hero is the agent's own closing percentage.
  *                            It drops, and the strip keeps their calls and
  *                            their applications.
  *
+ * An agency's strip is exempt, including on /delivery where its credits and
+ * rate are also the heroes: agencies asked for the same five figures, in the
+ * same order, at the top of every page, and a strip that loses two of them on
+ * one screen reads as a different strip.
+ *
  * Keyed by READING and path, not by path alone. /delivery is two pages: an
- * agency's own panel and the cross-agency view, whose hero is "Settled today"
- * -- a settled figure the strip never carries. The platform reading has a
- * figure of its own called `tonight`, and it is a projection across every
- * agency rather than the hero underneath it, so a rule keyed on the id alone
- * would silently delete the one platform figure staff came to the page for.
- * A test caught exactly that.
+ * agency's own panel and the cross-agency view, and the platform reading has a
+ * figure of its own called `tonight` that is a projection across every agency
+ * rather than the hero underneath it, so a rule keyed on the id alone would
+ * silently delete the one platform figure staff came to the page for.
  */
 export const HERO_BELOW: Record<string, readonly string[]> = {
-  'agency:/delivery': ['block', 'rate'],
   'agent:/delivery/me': ['closing'],
 };
 
@@ -123,6 +120,8 @@ export interface StripPayload {
   callsDelivered?: number;
   callsInProgress?: number;
   applicationsSubmitted?: number;
+  /** Today's applications over calls, as a percentage. Null before any call. */
+  conversionPct?: number | null;
   /** Absent entirely for an agency that is not enrolled in billing. */
   billing?: {
     dailyBlockApplications: number;
@@ -213,19 +212,32 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
   const why = (field: string): string | undefined => d.unavailable?.[field];
   const billing = d.billing;
 
+  /*
+   * The order is the order an agency reads its day in: calls in, applications
+   * out, how many of one became the other, then what is left on the block and
+   * what each application costs. Conversion is today's -- the server computes
+   * it from the same two counts beside it, so the three cannot disagree.
+   */
   const operational: LiveMetricSlot[] = [
-    {
-      id: 'applications',
-      label: 'Applications',
-      value: counted(d.applicationsSubmitted),
-      sub: billing ? `of ${count(billing.dailyBlockApplications)}` : 'today',
-    },
     {
       id: 'calls',
       label: 'Calls',
       value: counted(d.callsDelivered),
       sub: `${count(d.callsInProgress ?? 0)} in progress`,
       tone: (d.callsInProgress ?? 0) > 0 ? 'live' : 'ink',
+    },
+    {
+      id: 'applications',
+      label: 'Applications',
+      value: counted(d.applicationsSubmitted),
+      sub: 'today',
+    },
+    {
+      id: 'conversion',
+      label: 'Conversion %',
+      value: percent(d.conversionPct),
+      sub: 'apps ÷ calls',
+      unavailableReason: why('conversionPct'),
     },
   ];
 
@@ -234,11 +246,11 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
   if (!billing) return operational;
 
   /*
-   * Overrun and tonight's projected debit are not on the strip. Agencies buy
-   * their block up front, so a running "tonight" charge reads as a bill they
-   * do not have, and overrun is an exception the /delivery page already
-   * carries in full. The strip keeps what is read at a glance: credits left
-   * and what an application costs now and tomorrow.
+   * Overrun, tonight's projected debit and tomorrow's tracking rate are not on
+   * the strip. Agencies buy their block up front, so a running "tonight" charge
+   * reads as a bill they do not have, and overrun and tracking are both carried
+   * in full on /delivery. The strip keeps what is read at a glance: credits
+   * left and what an application costs now.
    */
   return [
     ...operational,
@@ -246,7 +258,7 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
       id: 'block',
       label: 'App Credits',
       value: counted(billing.applicationsRemainingOnBlock),
-      sub: 'remaining',
+      sub: `remaining of ${count(billing.dailyBlockApplications)}`,
     },
     {
       id: 'rate',
@@ -254,16 +266,6 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
       value: amount(billing.currentRate),
       sub: 'now',
       unavailableReason: why('currentRate'),
-    },
-    {
-      id: 'tracking',
-      // The rate tomorrow is tracking toward -- the one figure on the strip
-      // that has not happened yet, so the label says when it applies.
-      label: "Tomorrow's Cost",
-      value: billing.trackingBelowMinimum ? 'review' : amount(billing.trackingRate),
-      sub: billing.trackingBelowMinimum ? 'window below minimum' : 'if today closed now',
-      tone: billing.trackingBelowMinimum ? 'ringing' : 'ink',
-      unavailableReason: billing.trackingBelowMinimum ? undefined : why('trackingRate'),
     },
   ];
 }
@@ -294,7 +296,7 @@ export function agentSlots(d: StripPayload): LiveMetricSlot[] {
     },
     {
       id: 'closing',
-      label: 'Your closing',
+      label: 'Your conversion %',
       value: percent(d.closingPct),
       sub:
         d.agencyClosingPct === null || d.agencyClosingPct === undefined

@@ -22,6 +22,7 @@ export interface InsuranceLeadSummary {
   status: string;
   leadStage: string | null;
   nextFollowUpAt: string | null;
+  lastContactedAt?: string | null;
   createdAt: string;
   latestSubmission: {
     id: string;
@@ -198,6 +199,8 @@ export async function fetchInsuranceLeads(params: {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  /** `prospects` leaves out leads that became submitted applications. */
+  pipeline?: 'prospects';
 }): Promise<LeadListResponse> {
   const queryParts: string[] = [];
   if (params.page) queryParts.push(`page=${params.page}`);
@@ -213,6 +216,7 @@ export async function fetchInsuranceLeads(params: {
   if (params.leadStage) queryParts.push(`leadStage=${params.leadStage}`);
   if (params.followUp) queryParts.push(`followUp=${params.followUp}`);
   if (params.listId) queryParts.push(`listId=${params.listId}`);
+  if (params.pipeline) queryParts.push(`pipeline=${params.pipeline}`);
 
   const qs = queryParts.length ? `?${queryParts.join('&')}` : '';
   const res = await apiClient.get<LeadListResponse>(`/api/v1/insurance-leads${qs}`);
@@ -241,6 +245,74 @@ export async function retryInsuranceSubmission(
   );
   if (res.error) return { error: res.error.message };
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// CRM pipeline: prospects, and the prospects that became submitted apps
+// ---------------------------------------------------------------------------
+
+export interface CrmPipelineSummary {
+  prospects: number;
+  followUpsDue: number;
+  submittedApps: number;
+  annualPremium: number;
+  averageAnnualPremium: number | null;
+}
+
+export interface SubmittedAppRow {
+  id: string;
+  submittedAt: string | null;
+  applicant: string;
+  phone: string | null;
+  state: string | null;
+  carrier: string;
+  product: string;
+  faceAmount: number | null;
+  annualPremium: number | null;
+  agentName: string | null;
+  leadId: string | null;
+}
+
+export interface SubmittedAppsResponse {
+  data: SubmittedAppRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+function rangeQuery(params: { from?: string; to?: string }): string[] {
+  const parts: string[] = [];
+  if (params.from) parts.push(`from=${params.from}`);
+  if (params.to) parts.push(`to=${params.to}`);
+  return parts;
+}
+
+/** `from`/`to` are YYYY-MM-DD and bound the submitted applications only. */
+export async function fetchCrmPipeline(
+  params: { from?: string; to?: string } = {}
+): Promise<CrmPipelineSummary> {
+  const parts = rangeQuery(params);
+  const res = await apiClient.get<CrmPipelineSummary>(
+    `/api/v1/insurance-leads/pipeline${parts.length ? `?${parts.join('&')}` : ''}`
+  );
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as CrmPipelineSummary;
+}
+
+export async function fetchSubmittedApps(params: {
+  from?: string;
+  to?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<SubmittedAppsResponse> {
+  const parts = rangeQuery(params);
+  if (params.search) parts.push(`search=${encodeURIComponent(params.search)}`);
+  if (params.page) parts.push(`page=${params.page}`);
+  if (params.limit) parts.push(`limit=${params.limit}`);
+  const res = await apiClient.get<SubmittedAppsResponse>(
+    `/api/v1/insurance-leads/submitted-apps${parts.length ? `?${parts.join('&')}` : ''}`
+  );
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as SubmittedAppsResponse;
 }
 
 export async function fetchInsuranceLeadStats(): Promise<InsuranceLeadStats> {
@@ -484,6 +556,7 @@ export async function exportInsuranceLeadsCsv(params: {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  pipeline?: 'prospects';
 }): Promise<void> {
   const query = new URLSearchParams({ format: 'csv' });
   for (const [key, value] of Object.entries(params)) {

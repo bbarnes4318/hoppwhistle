@@ -20,6 +20,8 @@ import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
+import { notConvertedWhere } from './crm-pipeline.js';
+
 // ---------------------------------------------------------------------------
 // CSV
 // ---------------------------------------------------------------------------
@@ -658,6 +660,8 @@ export interface LeadCsvFilters {
    * agency's book from a page that only ever showed them their own.
    */
   assignedToId?: string;
+  /** The Prospects list: leave out leads that became submitted applications. */
+  excludeConverted?: { leadIds: string[]; phones: string[] };
 }
 
 export const LEADS_CSV_HEADERS = [
@@ -864,8 +868,15 @@ function buildLeadWhere(tenantId: string, filters: LeadCsvFilters): Prisma.Insur
   // `!== undefined`: `[]` means "licensed nowhere" and must match nothing.
   if (filters.licensedStates !== undefined) where.state = { in: filters.licensedStates };
   if (filters.status) where.status = filters.status as Prisma.InsuranceLeadWhereInput['status'];
-  if (filters.leadStage) where.leadStage = filters.leadStage;
+  const and: Prisma.InsuranceLeadWhereInput[] = [];
+  if (filters.leadStage) {
+    // A lead nobody has staged yet is a new lead -- the grid reads it the same way.
+    if (filters.leadStage === 'NEW') and.push({ OR: [{ leadStage: 'NEW' }, { leadStage: null }] });
+    else where.leadStage = filters.leadStage;
+  }
   if (filters.listId) where.listId = filters.listId;
+  if (filters.excludeConverted) and.push(notConvertedWhere(filters.excludeConverted));
+  if (and.length > 0) where.AND = and;
 
   if (filters.search) {
     const term = filters.search.trim();
