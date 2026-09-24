@@ -270,14 +270,22 @@ const SWEEP = [
       // this list: the comment above says "exactly AGENT_NAV" and a route that
       // drifts out of it is a page nobody loads.
       '/leaderboard',
-      '/payroll',
       '/settings',
     ],
     // Asked for, and sent somewhere else. Asserted rather than merely omitted:
     // dropping /dashboard from the list above would leave the redirect itself
     // untested, and "an agent cannot reach the tenant-wide dashboard" is the
     // property, not "this file does not ask for it".
-    redirects: [{ from: '/dashboard', to: '/call-center' }],
+    redirects: [
+      { from: '/dashboard', to: '/call-center' },
+      /*
+       * "My payroll" is switched off (MY_PAYROLL_ENABLED in
+       * src/lib/feature-flags.ts) and off AGENT_NAV. Its URL sends them to
+       * /dashboard, which sends an agent on to /call-center. Move it back into
+       * the list above when the flag is turned on.
+       */
+      { from: '/payroll', to: '/call-center' },
+    ],
   },
   {
     who: 'publisher (PUBLISHER, inside one agency)',
