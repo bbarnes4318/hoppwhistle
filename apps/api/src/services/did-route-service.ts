@@ -91,8 +91,16 @@ export class DidRouteService {
           destination = isValidPhoneDestination(extension) ? extension : '';
           label = `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`;
         } else {
-          destination = '1005,1001';
-          label = `Auto-routed Campaign (Chantal & Khallel)`;
+          // A campaign number is routed by the campaign, per call: the FreeSWITCH
+          // lookup sees `campaignId` and asks `selectBestBuyer` for the
+          // campaign's buyers. The stored destination is only the sentinel that
+          // says so. It used to be the hardcoded extensions '1005,1001', which
+          // every campaign number then displayed as its destination, and which
+          // the lookup rang whenever campaign routing threw -- two extensions of
+          // one agency, on every tenant's campaign numbers. `sanitizeDestination`
+          // drops 'Campaign', so a failed lookup now plays the no-agent prompt.
+          destination = 'Campaign';
+          label = 'Auto-routed Campaign';
         }
 
         if (!destination) {

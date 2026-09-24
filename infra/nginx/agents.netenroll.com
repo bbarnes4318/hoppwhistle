@@ -65,7 +65,9 @@ server {
     # timeouts hold the registration socket open between calls; the default 60s
     # read timeout would tear down every idle agent once a minute.
     location /ws {
-        proxy_pass http://127.0.0.1:8083;
+        proxy_pass https://127.0.0.1:7443;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
