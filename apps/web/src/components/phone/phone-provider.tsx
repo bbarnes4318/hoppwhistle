@@ -22,6 +22,46 @@ import {
 
 import type { CallRouteType as CallRouteTypeName } from '@hopwhistle/shared';
 
+/**
+ * REGISTER, and resolve only when the registrar ACCEPTS it.
+ *
+ * `Registerer.register()` resolves as soon as the request is sent. This
+ * provider treated that as registered, so a REGISTER that got no answer, or a
+ * 403, still showed the agent "connected" and available while FreeSWITCH had
+ * no contact for them and every call to them died USER_NOT_REGISTERED. The
+ * digest challenge (401) is answered inside SIP.js and does not reach the
+ * delegate; `onReject` is a final refusal.
+ */
+export function registerAndConfirm(registerer: Registerer, timeoutMs = 15000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('REGISTER got no answer from the registrar')),
+      timeoutMs
+    );
+    registerer
+      .register({
+        requestDelegate: {
+          onAccept: () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          onReject: response => {
+            clearTimeout(timer);
+            reject(
+              new Error(
+                `REGISTER refused: ${response.message.statusCode} ${response.message.reasonPhrase}`
+              )
+            );
+          },
+        },
+      })
+      .catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 // Helper to extract the actual SIP Call-ID header from a SIP.js Session object
 function getSipCallId(session: any): string {
   if (!session) return '';
@@ -1658,8 +1698,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
               setError(null);
               if (registererRef.current) {
                 console.log('[Phone] Re-registering on transport connect');
-                registererRef.current
-                  .register()
+                registerAndConfirm(registererRef.current)
                   .then(() => {
                     console.log('[Phone] Re-registration succeeded, syncing available to Redis');
                     setIsRegistered(true);
@@ -1700,8 +1739,8 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
         console.log('[Phone] SIP UA Started');
         const registerer = new Registerer(ua);
         registererRef.current = registerer;
-        await registerer.register();
-        console.log('[Phone] SIP Registered');
+        await registerAndConfirm(registerer);
+        console.log('[Phone] SIP Registered (accepted by the registrar)');
         setIsRegistered(true);
         // Registered: the budget is spent on nothing and resets, so a genuine
         // disconnection hours later gets a full five attempts of its own.
@@ -1798,7 +1837,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
         if (reg.state !== RegistererState.Registered) {
           console.warn('[Phone] Watchdog: not registered — re-registering');
           try {
-            await reg.register();
+            await registerAndConfirm(reg);
             setIsRegistered(true);
           } catch (err) {
             console.error('[Phone] Watchdog: re-register failed', err);

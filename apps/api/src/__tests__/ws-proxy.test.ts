@@ -64,8 +64,16 @@ describe('the committed agents.netenroll.com /ws proxy', () => {
     expect(blocks, 'agents.netenroll.com must proxy /ws or no softphone registers').toHaveLength(1);
   });
 
-  it('proxies to the FreeSWITCH ws binding on 127.0.0.1:8083', () => {
-    expect(wsDirectives(agents)[0]).toContain('proxy_pass http://127.0.0.1:8083;');
+  it('proxies to the FreeSWITCH WSS binding on 127.0.0.1:7443', () => {
+    // Not the plain-WS binding on 8083. SIP.js marks its Via `WSS` because the
+    // page is https; a plain-WS hop into FreeSWITCH left it unable to route a
+    // reply to a WSS Via, so REGISTER got no answer at all and every softphone
+    // sat unregistered while showing "connected". The hopwhistle host already
+    // proxied to 7443 in production.
+    const block = wsDirectives(agents)[0];
+    expect(block).toContain('proxy_pass https://127.0.0.1:7443;');
+    // FreeSWITCH's certificate is for hopwhistle.com, not 127.0.0.1.
+    expect(block).toContain('proxy_ssl_verify off;');
   });
 
   it.each([
