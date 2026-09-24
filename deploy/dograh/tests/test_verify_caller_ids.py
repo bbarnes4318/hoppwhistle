@@ -93,6 +93,33 @@ def test_failure_is_reported_and_code_still_cleared():
     assert cleared == ["8656000288"]
 
 
+def test_gives_up_early_when_the_call_never_arrives():
+    fake = FakeTwilio()
+    polls = []
+
+    def sleep(seconds):
+        polls.append(seconds)
+
+    number, outcome = verify_one(Twilio(SID, "t", opener=fake), "+12067586569", lambda k, c: None,
+                                 lambda k: None, sleep=sleep, pending=lambda key: True)
+    assert outcome.startswith("failed: no_call"), outcome
+    assert sum(polls) < 120, "must not wait out the full timeout"
+
+
+def test_answered_call_is_not_mistaken_for_no_call():
+    fake = FakeTwilio()
+    verified_after = {"polls": 0}
+
+    def sleep(seconds):
+        verified_after["polls"] += 1
+        if verified_after["polls"] == 12:  # Twilio is slow to mark it, but the call was answered
+            fake.verified.add("+12067586569")
+
+    outcome = verify_one(Twilio(SID, "t", opener=fake), "+12067586569", lambda k, c: None,
+                         lambda k: None, sleep=sleep, pending=lambda key: False)[1]
+    assert outcome == "verified"
+
+
 def test_already_verified_counts_as_verified():
     fake = FakeTwilio(already={"+18656000288"})
     assert verify_one(Twilio(SID, "t", opener=fake), "+18656000288", lambda k, c: None,
