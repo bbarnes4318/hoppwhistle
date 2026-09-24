@@ -73,3 +73,31 @@ The generated configuration was also loaded into Asterisk 20 with a stand-in
 SIP server. A test call arrived as `INVITE sip:+15551234567@…`, with the caller
 ID `+18652757300` in both From and P-Asserted-Identity, and with outbound auth
 attached.
+
+## Verifying our own numbers as Twilio caller IDs
+
+Twilio doesn't charge for Verified Caller IDs. To verify one, Twilio calls the
+number and waits for a code. Our DIDs ring into FreeSWITCH, so
+`verify_caller_ids.py` handles both sides of that. It asks Twilio to verify the
+number and passes the code to FreeSWITCH. `inbound_route.lua` answers Twilio's
+call on that DID, keys in the code and deletes it. Other calls on the number
+route as usual.
+
+This needs a FreeSWITCH image built from a checkout that includes
+`inbound_route.lua` step 0.
+
+```bash
+# AccountSid:AuthToken from the Twilio console, root-only
+printf '%s\n' 'ACxxxxxxxx:your_auth_token' > /root/twilio-api.cred && chmod 600 /root/twilio-api.cred
+
+cd /opt/hopwhistle/deploy/dograh/twilio-trunk
+python3 verify_caller_ids.py --auth-file /root/twilio-api.cred --from-dograh                    # counts only
+python3 verify_caller_ids.py --auth-file /root/twilio-api.cred --from-dograh --apply --limit 1  # one number
+python3 verify_caller_ids.py --auth-file /root/twilio-api.cred --from-dograh --apply --limit 5000 --concurrency 4
+```
+
+It skips numbers that are already verified, so you can stop it and run it again
+at any point.
+
+Verified numbers that Twilio doesn't host are signed with STIR/SHAKEN
+attestation B, not A.
