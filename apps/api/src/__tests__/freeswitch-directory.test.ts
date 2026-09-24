@@ -190,9 +190,9 @@ describe('a directory hit', () => {
     const body = lookupBody({
       tag_name: 'domain',
       key_name: 'name',
-      key_value: 'hopwhistle.com',
+      key_value: DOMAIN,
       user: '1000',
-      domain: 'hopwhistle.com',
+      domain: DOMAIN,
       action: 'sip_auth',
     });
 
