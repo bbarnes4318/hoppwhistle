@@ -33,6 +33,29 @@ CARRIER_IPS=(
   74.201.72.62
 )
 
+# Additional carriers allowed to deliver INBOUND calls to FreeSWITCH's external
+# profile (5080) only. They are not allowed onto Dograh Asterisk (5062), which
+# stays FracTEL-only. Entries may be single IPs or CIDR ranges.
+#
+# Anveo Direct signaling IPs (https://www.anveodirect.com/about/faq). Anveo
+# does not proxy media, so RTP arrives from arbitrary carrier IPs -- the RTP
+# range is intentionally left unfiltered below.
+ANVEO_SIP_SOURCES=(
+  169.48.232.158
+  204.216.109.55
+  176.9.39.206
+  72.9.149.25
+)
+
+# Twilio Elastic SIP Trunking signaling ranges (North America). Re-check
+# against https://www.twilio.com/docs/sip-trunking/ip-addresses before relying
+# on Twilio inbound; a missing range shows up as dropped Twilio INVITEs.
+TWILIO_SIP_SOURCES=(
+  54.172.60.0/30
+  54.244.51.0/30
+  168.86.128.0/18
+)
+
 # ---------------------------------------------------------------------------
 # Docker-published Hopwhistle telephony ports (IPv4)
 # ---------------------------------------------------------------------------
@@ -53,6 +76,11 @@ for ip in "${CARRIER_IPS[@]}"; do
   # Carrier signaling may reach only FreeSWITCH's external profile.
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$ip/32" -p udp --dport 5080 -j RETURN
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$ip/32" -p tcp --dport 5080 -j RETURN
+done
+
+for src in "${ANVEO_SIP_SOURCES[@]}" "${TWILIO_SIP_SOURCES[@]}"; do
+  iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p udp --dport 5080 -j RETURN
+  iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p tcp --dport 5080 -j RETURN
 done
 
 # ESL is available only to internal Docker workloads.
