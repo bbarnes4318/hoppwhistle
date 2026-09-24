@@ -211,6 +211,25 @@ if caller_normalized ~= "unknown" and not string.match(caller_normalized, "^%+")
   end
 end
 
+-- ── Step 0: Twilio caller-ID verification ───────────────────────────────────
+-- deploy/dograh/twilio-trunk/verify_caller_ids.py asks Twilio to verify one of
+-- our DIDs, stores Twilio's code with `hash insert/twverify/<10 digits>/<code>`
+-- and Twilio then calls that DID. Answer that one call, key in the code, and
+-- clear it. With no code stored for the DID, nothing here runs.
+local twverify_did = string.sub(string.gsub(did_number, "%D", ""), -10)
+local twverify_code = api:executeString("hash select/twverify/" .. twverify_did) or ""
+twverify_code = string.gsub(twverify_code, "%s", "")
+if string.match(twverify_code, "^%d+$") then
+  log("INFO", "Twilio caller-ID verification call for " .. twverify_did .. ": answering and sending the code")
+  session:answer()
+  session:sleep(4000)
+  session:execute("send_dtmf", twverify_code .. "@200")
+  session:sleep(8000)
+  api:executeString("hash delete/twverify/" .. twverify_did)
+  if session:ready() then session:hangup() end
+  return
+end
+
 -- ── Step 1: Lookup route via API ────────────────────────────────────────────
 local function url_encode_plus(val)
     return string.gsub(val or "", "%+", "%%2B")
