@@ -17,15 +17,18 @@ import {
   Notice,
   Panel,
   PanelBody,
-  PanelDescription,
   PanelHeader,
   PanelTitle,
   StatTile,
+  TOOLBAR_CELL,
+  Toolbar,
+  ToolbarActions,
+  ToolbarClear,
+  ToolbarDateRange,
+  toolbarTrigger,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -186,7 +189,6 @@ function BillingPage() {
   if (loading) {
     return (
       <div className="page-canvas">
-        <PageHeader description="Manage invoices, balances, and payouts" />
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-ink-3" />
         </div>
@@ -196,8 +198,7 @@ function BillingPage() {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Manage invoices, balances, and payouts" />
-
+      {/* No header row: the page title is already in the topbar. */}
       {error && <Notice tone="error">Error: {error}</Notice>}
 
       {/* Balance Cards */}
@@ -226,67 +227,73 @@ function BillingPage() {
 
       {/* Buyer Transaction Ledger */}
       <Panel className="min-w-0">
-        <PanelHeader
-          action={
+        {/*
+          The ledger's title, filters and refresh share one flat toolbar row
+          across the top of the panel. The buyer select has no "all" entry:
+          the endpoint is per buyer, so it reads "Buyer" until one is picked.
+        */}
+        <Toolbar className="rounded-none border-0 shadow-none">
+          <PanelTitle className="shrink-0 px-1">Buyer Transaction Ledger</PanelTitle>
+          <div className={TOOLBAR_CELL}>
+            <Select
+              value={selectedBuyerId}
+              onValueChange={id => {
+                setSelectedBuyerId(id);
+                setTransactionPage(1);
+              }}
+            >
+              <SelectTrigger aria-label="Buyer" className={toolbarTrigger(!!selectedBuyerId)}>
+                <SelectValue placeholder="Buyer" />
+              </SelectTrigger>
+              <SelectContent>
+                {buyers.map(buyer => (
+                  <SelectItem key={buyer.id} value={buyer.id}>
+                    {buyer.name} ({buyer.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ToolbarDateRange
+            from={startDate}
+            to={endDate}
+            onFromChange={value => {
+              setStartDate(value);
+              setTransactionPage(1);
+            }}
+            onToChange={value => {
+              setEndDate(value);
+              setTransactionPage(1);
+            }}
+          />
+          <ToolbarActions>
+            {(startDate || endDate) && (
+              <ToolbarClear
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                  setTransactionPage(1);
+                }}
+              />
+            )}
             <Tooltip content="Refresh transactions" align="end">
               <Button
                 variant="outline"
-                size="icon"
+                size="sm"
+                aria-label="Refresh transactions"
+                className="h-8 w-8 p-0"
                 onClick={() => void loadTransactions()}
                 disabled={transactionsLoading || !selectedBuyerId}
               >
                 <RefreshCw className={cn('h-4 w-4', transactionsLoading && 'animate-spin')} />
               </Button>
             </Tooltip>
-          }
-        >
-          <PanelTitle>Buyer Transaction Ledger</PanelTitle>
-          <PanelDescription>View credit and debit history for Upfront buyers</PanelDescription>
-        </PanelHeader>
-        <PanelBody className="flex flex-col gap-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="w-full sm:w-64">
-              <Select
-                value={selectedBuyerId}
-                onValueChange={id => {
-                  setSelectedBuyerId(id);
-                  setTransactionPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a buyer..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {buyers.map(buyer => (
-                    <SelectItem key={buyer.id} value={buyer.id}>
-                      {buyer.name} ({buyer.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="w-40"
-                placeholder="Start Date"
-              />
-              <span className="t-body text-ink-3">to</span>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="w-40"
-                placeholder="End Date"
-              />
-            </div>
-          </div>
+          </ToolbarActions>
+        </Toolbar>
 
-          {/* Buyer Info */}
-          {buyerInfo && (
+        {/* Buyer Info */}
+        {buyerInfo && (
+          <PanelBody>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-control border border-rule bg-sunken p-3">
               <div>
                 <div className="t-label text-ink-3">Buyer</div>
@@ -309,8 +316,8 @@ function BillingPage() {
                 </Badge>
               </div>
             </div>
-          )}
-        </PanelBody>
+          </PanelBody>
+        )}
 
         {/* Transactions Table */}
         {!selectedBuyerId ? (
@@ -405,7 +412,6 @@ function BillingPage() {
       <Panel className="min-w-0">
         <PanelHeader>
           <PanelTitle>Invoices</PanelTitle>
-          <PanelDescription>View and download your invoices</PanelDescription>
         </PanelHeader>
         {invoices.length === 0 ? (
           <EmptyState

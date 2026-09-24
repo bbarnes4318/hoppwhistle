@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ChevronDown,
   ClipboardCheck,
   FileText,
   Headphones,
@@ -30,14 +29,15 @@ import {
   PanelDescription,
   PanelHeader,
   PanelTitle,
-  Segmented,
-  SegmentedItem,
   StatTile,
+  Toolbar,
+  ToolbarActions,
+  ToolbarDateRange,
+  ToolbarMeta,
+  ToolbarSelect,
 } from '@/components/domain';
-import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
@@ -394,62 +394,48 @@ export default function DashboardPage() {
 
   return (
     <div className="page-canvas">
-      <PageHeader
-        description="Final expense call center performance"
-        actions={
-          <span className="inline-flex items-center gap-2 rounded-full border border-rule bg-surface px-3 py-1.5 shadow-card">
-            <span className="relative flex h-2 w-2">
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
-            </span>
-            <span className="t-meta font-medium text-ink-2">Live Connect</span>
-            <span className="t-meta tabular-nums text-ink-3">{liveClock}</span>
-          </span>
-        }
-      />
-
-      {/* Date Range Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmented>
-          {presets.map(p => (
-            <SegmentedItem
-              key={p.key}
-              active={activePreset === p.key}
-              onClick={() => handlePresetChange(p.key)}
-            >
-              {p.label}
-              {p.key === 'custom' && <ChevronDown className="h-3.5 w-3.5" />}
-            </SegmentedItem>
-          ))}
-        </Segmented>
+      {/*
+        Period and live status on one toolbar row, KPI tiles straight under it.
+        The page title is already in the topbar, so there is no header row of
+        its own. The custom range only fetches on Apply: both ends have to be
+        set before a range means anything, and fetching on every keystroke of
+        a date input would fire half-typed ranges at the API.
+      */}
+      <Toolbar>
+        <ToolbarSelect
+          label="Period"
+          value={activePreset}
+          onChange={value => handlePresetChange(value as DatePreset)}
+          options={presets.map(p => ({ value: p.key, label: p.label }))}
+          allValue={null}
+        />
         {showCustom && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              type="date"
-              value={customFrom}
-              onChange={e => setCustomFrom(e.target.value)}
-              className="h-9 w-40"
-              id="custom-from"
-              name="custom-from"
-            />
-            <span className="t-meta text-ink-3">to</span>
-            <Input
-              type="date"
-              value={customTo}
-              onChange={e => setCustomTo(e.target.value)}
-              className="h-9 w-40"
-              id="custom-to"
-              name="custom-to"
+          <>
+            <ToolbarDateRange
+              from={customFrom}
+              to={customTo}
+              onFromChange={setCustomFrom}
+              onToChange={setCustomTo}
             />
             <Button
               size="sm"
               variant="outline"
               onClick={handleCustomApply}
+              disabled={!customFrom || !customTo}
+              className="h-8 text-xs"
             >
               Apply
             </Button>
-          </div>
+          </>
         )}
-      </div>
+        <ToolbarActions>
+          <ToolbarMeta className="inline-flex items-center gap-2">
+            <span aria-hidden className="inline-flex h-2 w-2 rounded-full bg-live" />
+            <span className="font-medium text-ink-2">Live Connect</span>
+            <span>{liveClock}</span>
+          </ToolbarMeta>
+        </ToolbarActions>
+      </Toolbar>
 
       {/* Metric Cards (KPIs) */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
