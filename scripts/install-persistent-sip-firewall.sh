@@ -34,8 +34,9 @@ CARRIER_IPS=(
 )
 
 # Additional carriers allowed to deliver INBOUND calls to FreeSWITCH's external
-# profile (5080) only. They are not allowed onto Dograh Asterisk (5062), which
-# stays FracTEL-only. Entries may be single IPs or CIDR ranges.
+# profile (5080). Of these, only Twilio may also reach Dograh Asterisk (5062),
+# for in-dialog requests on outbound AI calls; see the host chain below.
+# Entries may be single IPs or CIDR ranges.
 #
 # Anveo Direct signaling IPs (https://www.anveodirect.com/about/faq). Anveo
 # does not proxy media, so RTP arrives from arbitrary carrier IPs -- the RTP
@@ -120,6 +121,19 @@ done
 for ip in "${CARRIER_IPS[@]}"; do
   iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$ip/32" -p udp --dport 5062 -j RETURN
   iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$ip/32" -p tcp --dport 5062 -j RETURN
+done
+
+# Twilio carries Dograh's outbound AI calls on the `twilio` PJSIP trunk
+# (deploy/dograh/twilio-trunk). Its in-dialog requests -- the BYE when the
+# callee hangs up, session-timer re-INVITEs -- can arrive after the UDP
+# conntrack entry has expired, and from a different Twilio edge IP than the
+# one Asterisk dialled, so they are not covered by ESTABLISHED above. Without
+# this, a callee hangup is dropped and the AI keeps talking to dead air.
+# New inbound calls from Twilio are still refused: the trunk's context is
+# `twilio-no-inbound`, which hangs up.
+for src in "${TWILIO_SIP_SOURCES[@]}"; do
+  iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$src" -p udp --dport 5062 -j RETURN
+  iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$src" -p tcp --dport 5062 -j RETURN
 done
 
 iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -p udp --dport 5062 -j DROP
