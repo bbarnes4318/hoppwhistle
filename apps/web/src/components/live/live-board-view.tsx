@@ -166,11 +166,13 @@ export function LiveBoardView({
                         A live dot, and only when something is actually up. A
                         permanent indicator beside every row would be
                         decoration; this one is the thing the eye is looking for.
+                        An idle row keeps an 8px transparent spacer in its place
+                        so the names stay aligned.
                       */}
                       <span
                         className={cn(
                           'h-2 w-2 shrink-0 rounded-full',
-                          row.callsInFlight > 0 ? 'bg-live animate-pulse' : 'bg-rule'
+                          row.callsInFlight > 0 && 'bg-live animate-pulse'
                         )}
                         aria-hidden="true"
                       />

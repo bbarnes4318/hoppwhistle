@@ -429,8 +429,7 @@ export default function DashboardPage() {
         <ToolbarActions>
           <ToolbarMeta className="inline-flex items-center gap-2">
             <span aria-hidden className="inline-flex h-2 w-2 rounded-full bg-live" />
-            <span className="font-medium text-ink-2">Live Connect</span>
-            <span>{liveClock}</span>
+            <span className="font-medium text-ink-2">Live · {liveClock}</span>
           </ToolbarMeta>
         </ToolbarActions>
       </Toolbar>
@@ -468,7 +467,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Main Grid: Call Activity (2/3) & Call History (1/3) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <Panel className="min-w-0 lg:col-span-2">
           <PanelHeader
             action={
@@ -562,73 +561,78 @@ export default function DashboardPage() {
                 icon={Phone}
               />
             ) : (
-              <div className="max-h-[420px] overflow-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 z-10 bg-sunken">
-                    <tr className="border-b border-rule">
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Time</th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">From/To</th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Duration</th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Result</th>
+              /*
+                Three columns and nothing wider than the panel: a one-third
+                panel at 1366px has about 350px, so the call's two numbers
+                stack in one cell, the time may break after its date, and the
+                result sits under the time. It grows with its rows rather than
+                scrolling inside the card.
+              */
+              <table className="w-full text-left text-sm">
+                <thead className="bg-sunken">
+                  <tr className="border-b border-rule">
+                    <th className="t-label h-10 whitespace-nowrap pl-5 pr-2 text-ink-3">Call</th>
+                    <th className="t-label h-10 whitespace-nowrap px-2 text-ink-3">Time</th>
+                    <th className="t-label h-10 whitespace-nowrap pl-2 pr-5 text-right text-ink-3">
+                      Duration
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-rule">
+                  {callsLoading ? (
+                    <tr>
+                      <td colSpan={3} className="t-meta py-8 text-center text-ink-3">
+                        Loading calls...
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-rule">
-                    {callsLoading ? (
-                      <tr>
-                        <td colSpan={4} className="t-meta py-8 text-center text-ink-3">
-                          Loading calls...
-                        </td>
-                      </tr>
-                    ) : (
-                      calls.slice(0, 15).map(call => {
-                        const result = getCallResult(call);
-                        return (
-                          <tr
-                            key={call.id}
-                            className="transition-colors duration-150 ease-out hover:bg-sunken"
-                          >
-                            <td className="t-data whitespace-nowrap px-3 py-2.5 text-ink-3">
+                  ) : (
+                    calls.slice(0, 15).map(call => {
+                      const result = getCallResult(call);
+                      return (
+                        <tr
+                          key={call.id}
+                          className="align-top transition-colors duration-150 ease-out hover:bg-sunken"
+                        >
+                          <td className="py-2.5 pl-5 pr-2">
+                            <div className="t-data whitespace-nowrap text-ink">
+                              {formatPhoneNumber(call.callerId || call.fromNumber?.number || '') ||
+                                '—'}
+                            </div>
+                            {/* Still Plex Mono: a phone number is .t-data at any size. */}
+                            <div className="t-meta whitespace-nowrap font-mono text-ink-3">
+                              {formatPhoneNumber(
+                                call.toNumber || call.targetNumber || call.did || ''
+                              ) || '—'}
+                            </div>
+                          </td>
+                          <td className="min-w-0 px-2 py-2.5">
+                            <div className="t-data text-ink-2">
                               {formatTableDateTime(call.createdAt)}
-                            </td>
-                            <td className="t-data whitespace-nowrap px-3 py-2.5 text-ink">
-                              <div className="flex flex-col">
-                                <span>
-                                  {formatPhoneNumber(
-                                    call.callerId || call.fromNumber?.number || '—'
-                                  )}
-                                </span>
-                                <span className="text-meta text-ink-3">
-                                  {formatPhoneNumber(
-                                    call.toNumber || call.targetNumber || call.did || '—'
-                                  )}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="t-num whitespace-nowrap px-3 py-2.5 text-ink-2">
-                              {(() => {
-                                const dur = call.connectedDuration || call.duration;
-                                if (dur) return formatDuration(dur);
-                                return '—';
-                              })()}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  'whitespace-nowrap rounded-full',
-                                  getResultColor(result)
-                                )}
-                              >
-                                {result}
-                              </Badge>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              title={result}
+                              className={cn(
+                                'mt-1 h-5 max-w-full rounded-full px-2 text-[11px]',
+                                getResultColor(result)
+                              )}
+                            >
+                              <span className="truncate">{result}</span>
+                            </Badge>
+                          </td>
+                          <td className="t-num whitespace-nowrap py-2.5 pl-2 pr-5 text-right text-ink-2">
+                            {(() => {
+                              const dur = call.connectedDuration || call.duration;
+                              if (dur) return formatDuration(dur);
+                              return '—';
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             )}
           </PanelBody>
         </Panel>

@@ -302,7 +302,7 @@ export default function LeaderboardPage(): JSX.Element {
                 figure={pct(data.agency.closingPct, 1)}
                 data-figure-label="Closing"
                 data-figure-value={pct(data.agency.closingPct, 1)}
-                sub="of every delivered call — the priced figure"
+                sub="applications ÷ delivered calls"
                 title="Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
               />
               <StatTile

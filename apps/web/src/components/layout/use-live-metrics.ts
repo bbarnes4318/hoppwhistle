@@ -238,7 +238,11 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
       id: 'conversion',
       label: 'Conversion %',
       value: percent(d.conversionPct),
-      sub: 'apps ÷ calls',
+      // A null rate with no reason from the server is a day with no calls to
+      // convert yet. A null WITH a reason is a figure that could not be
+      // sourced, and the reason says so; "no calls yet" would be a false claim.
+      sub:
+        d.conversionPct == null && !why('conversionPct') ? 'no calls yet' : 'applications ÷ calls',
       unavailableReason: why('conversionPct'),
     },
   ];
@@ -280,7 +284,7 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
       id: 'rate',
       label: 'Cost per App',
       value: amount(billing.currentRate),
-      sub: 'now',
+      sub: 'current rate',
       unavailableReason: why('currentRate'),
     },
   ];

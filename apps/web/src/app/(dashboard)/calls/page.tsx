@@ -21,7 +21,6 @@ import {
   Notice,
   Panel,
   PanelBody,
-  TOOLBAR_CELL,
   Toolbar,
   ToolbarActions,
   ToolbarClear,
@@ -846,11 +845,17 @@ export default function OperationsCallLogsPage() {
   };
 
   /*
-   * One toolbar row: search, every filter, then the ledger actions. A set
-   * filter is tinted so it is obvious at a glance what the ledger is scoped to.
+   * Search, every filter, then the ledger actions. A set filter is tinted so
+   * it is obvious at a glance what the ledger is scoped to.
+   *
+   * The row wraps rather than squeezing: with eight filters on one line the
+   * shared cell rule cut the category names to "Disposi…" and "Campa…". Each
+   * trigger is sized to its full label instead, and only a long CHOSEN value
+   * (a campaign name) truncates, at 240px.
    */
-  const filterTrigger = toolbarTrigger;
-  const filterCell = TOOLBAR_CELL;
+  const filterTrigger = (active: boolean) =>
+    cn(toolbarTrigger(active), 'w-auto max-w-full whitespace-nowrap');
+  const filterCell = 'shrink-0 max-w-[240px]';
   const hasActiveFilters =
     search !== '' ||
     selectedDisputeStatus !== 'all' ||
@@ -876,7 +881,7 @@ export default function OperationsCallLogsPage() {
   return (
     <div className="page-canvas">
       {/* Filter toolbar */}
-      <Toolbar>
+      <Toolbar className="flex-wrap gap-2 xl:flex-wrap">
         <ToolbarSearch
           value={search}
           onChange={value => {
@@ -1319,7 +1324,7 @@ export default function OperationsCallLogsPage() {
                              * empty chair, or the one an agent never wrote up.
                              */
                             <span
-                              className="text-ink-3 italic"
+                              className="text-ink-3"
                               title="No agent is recorded as having answered this call"
                             >
                               Unattributed
@@ -1751,7 +1756,7 @@ export default function OperationsCallLogsPage() {
                           <span className="t-meta block text-ink-3">Answered by</span>
                           <p className="mt-0.5 text-sm font-medium text-ink">
                             {detailCall.agentName ?? (
-                              <span className="italic text-ink-3">Unattributed</span>
+                              <span className="text-ink-3">Unattributed</span>
                             )}
                           </p>
                         </div>

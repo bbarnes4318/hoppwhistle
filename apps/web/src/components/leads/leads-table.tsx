@@ -1,7 +1,8 @@
 'use client';
 
-import { PhoneCall } from 'lucide-react';
+import { PhoneCall, SearchX, Users } from 'lucide-react';
 
+import { EmptyState } from '@/components/domain/empty-state';
 import { formatPhone } from '@/components/domain/phone-cell';
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadSummary } from '@/lib/api/leads';
@@ -105,6 +106,11 @@ interface LeadsTableProps {
   onSelectLead: (id: string) => void;
   selectedLeadIds?: string[];
   onSelectLeadsChange?: (ids: string[]) => void;
+  /** True when any filter or search is narrowing the list. */
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  onImport?: () => void;
+  onAddProspect?: () => void;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -163,6 +169,10 @@ export function LeadsTable({
   onSelectLead,
   selectedLeadIds = [],
   onSelectLeadsChange,
+  filtered = false,
+  onClearFilters,
+  onImport,
+  onAddProspect,
 }: LeadsTableProps) {
   const { makeCall } = usePhone();
 
@@ -206,12 +216,25 @@ export function LeadsTable({
   if (!leads.length) {
     return (
       <div className="rounded-card border border-rule bg-surface overflow-hidden">
-        <div className="p-12 text-center">
-          <div className="text-ink-3 text-sm">No prospects found</div>
-          <div className="text-ink-3 text-xs mt-1">
-            Import a list or add a prospect to get started.
-          </div>
-        </div>
+        {filtered ? (
+          <EmptyState
+            variant="filtered"
+            icon={SearchX}
+            headline="No prospects match these filters"
+            action={
+              onClearFilters ? { label: 'Clear filters', onClick: onClearFilters } : undefined
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            headline="No prospects yet"
+            body="Import a list or add your first prospect."
+            // Add prospect is the page header's primary too; Import is secondary there.
+            action={onAddProspect ? { label: 'Add prospect', onClick: onAddProspect } : undefined}
+            secondaryAction={onImport ? { label: 'Import', onClick: onImport } : undefined}
+          />
+        )}
       </div>
     );
   }

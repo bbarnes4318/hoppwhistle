@@ -17,7 +17,14 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { Panel, PanelBody, Toolbar, ToolbarActions, ToolbarSearch } from '@/components/domain';
+import {
+  EmptyState,
+  Panel,
+  PanelBody,
+  Toolbar,
+  ToolbarActions,
+  ToolbarSearch,
+} from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -644,9 +651,7 @@ function BuyersPage() {
     }
     const value = stats ? stats[field] : 0;
     return (
-      <span className="font-mono text-xs">
-        ${typeof value === 'number' ? value.toLocaleString() : '0'}
-      </span>
+      <span className="t-num">${typeof value === 'number' ? value.toLocaleString() : '0'}</span>
     );
   };
 
@@ -688,315 +693,333 @@ function BuyersPage() {
 
       <Panel className="min-w-0 overflow-hidden">
         <PanelBody flush>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8 pl-5"></TableHead>
-                <TableHead>Company Name</TableHead>
-                <TableHead>Sub ID</TableHead>
-                <TableHead className="text-center">Pause</TableHead>
-                <TableHead className="text-center">Caps</TableHead>
-                <TableHead className="text-center">Dispute</TableHead>
-                <TableHead className="text-right">Hour</TableHead>
-                <TableHead className="text-right">Day</TableHead>
-                <TableHead className="text-right">Month</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="pr-5 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
+          {!loading && filteredBuyers.length === 0 ? (
+            search.trim() ? (
+              <EmptyState
+                variant="filtered"
+                headline="No buyers match your search"
+                action={{ label: 'Clear search', onClick: () => setSearch('') }}
+              />
+            ) : (
+              <EmptyState
+                headline="No buyers yet"
+                body="Add a buyer to route calls your agents can't take."
+                action={{ label: 'Add buyer', onClick: () => setCreateBuyerOpen(true) }}
+              />
+            )
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto text-ink-3" />
-                  </TableCell>
+                  <TableHead className="w-8 pl-5"></TableHead>
+                  <TableHead>Company Name</TableHead>
+                  <TableHead>Sub ID</TableHead>
+                  <TableHead className="text-center">Pause</TableHead>
+                  <TableHead className="text-center">Caps</TableHead>
+                  <TableHead className="text-center">Dispute</TableHead>
+                  <TableHead className="text-right">Hour</TableHead>
+                  <TableHead className="text-right">Day</TableHead>
+                  <TableHead className="text-right">Month</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="pr-5 text-right">Actions</TableHead>
                 </TableRow>
-              ) : filteredBuyers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-ink-3">
-                    No buyers found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredBuyers.map(buyer => (
-                  <>
-                    {/* Buyer Row */}
-                    <TableRow
-                      key={buyer.id}
-                      className={cn('cursor-pointer', expandedBuyerId === buyer.id && 'bg-sunken')}
-                      onClick={() => toggleExpand(buyer.id)}
-                    >
-                      <TableCell className="w-8 pl-5">
-                        {expandedBuyerId === buyer.id ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto text-ink-3" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredBuyers.map(buyer => (
+                    <>
+                      {/* Buyer Row */}
+                      <TableRow
+                        key={buyer.id}
+                        className={cn(
+                          'cursor-pointer',
+                          expandedBuyerId === buyer.id && 'bg-sunken'
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{buyer.name}</div>
-                        <div className="t-data text-ink-3">{buyer.code}</div>
-                      </TableCell>
-                      <TableCell className="text-ink-3">{buyer.subId || '—'}</TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canPauseTargets}
-                          onCheckedChange={() =>
-                            void handleTogglePermission(buyer, 'canPauseTargets')
-                          }
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canSetCaps}
-                          onCheckedChange={() => void handleTogglePermission(buyer, 'canSetCaps')}
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canDisputeConversions}
-                          onCheckedChange={() =>
-                            void handleTogglePermission(buyer, 'canDisputeConversions')
-                          }
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueHour" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueDay" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueMonth" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueTotal" />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <div
-                            className={cn(
-                              'w-2 h-2 rounded-full',
-                              buyer.status === 'ACTIVE' && 'bg-live',
-                              buyer.status === 'PAUSED' && 'bg-ringing',
-                              buyer.status === 'INACTIVE' && 'bg-ink-3'
-                            )}
+                        onClick={() => toggleExpand(buyer.id)}
+                      >
+                        <TableCell className="w-8 pl-5">
+                          {expandedBuyerId === buyer.id ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{buyer.name}</div>
+                          <div className="t-data text-ink-3">{buyer.code}</div>
+                        </TableCell>
+                        <TableCell className="text-ink-3">{buyer.subId || '—'}</TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canPauseTargets}
+                            onCheckedChange={() =>
+                              void handleTogglePermission(buyer, 'canPauseTargets')
+                            }
+                            className="scale-75"
                           />
-                          <span className="capitalize">{buyer.status.toLowerCase()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="pr-5 text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-end gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => openEditBuyerDialog(buyer)}
-                            title="Edit"
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => void handleToggleBuyerStatus(buyer)}
-                            title={buyer.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                          >
-                            {buyer.status === 'ACTIVE' ? (
-                              <Pause className="h-3.5 w-3.5 text-ringing-ink" />
-                            ) : (
-                              <Play className="h-3.5 w-3.5 text-live-ink" />
-                            )}
-                          </Button>
-                          {buyer.billingType === 'UPFRONT' && (
+                        </TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canSetCaps}
+                            onCheckedChange={() => void handleTogglePermission(buyer, 'canSetCaps')}
+                            className="scale-75"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canDisputeConversions}
+                            onCheckedChange={() =>
+                              void handleTogglePermission(buyer, 'canDisputeConversions')
+                            }
+                            className="scale-75"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueHour" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueDay" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueMonth" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueTotal" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={cn(
+                                'w-2 h-2 rounded-full',
+                                buyer.status === 'ACTIVE' && 'bg-live',
+                                buyer.status === 'PAUSED' && 'bg-ringing',
+                                buyer.status === 'INACTIVE' && 'bg-ink-3'
+                              )}
+                            />
+                            <span className="capitalize">{buyer.status.toLowerCase()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="pr-5 text-right" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-end gap-0.5">
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => openCreditsDialog(buyer)}
-                              title="Add Credits"
+                              onClick={() => openEditBuyerDialog(buyer)}
+                              title="Edit"
                             >
-                              <Wallet className="h-3.5 w-3.5 text-money-ink" />
+                              <Edit className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Expanded Targets Row */}
-                    {expandedBuyerId === buyer.id && (
-                      <TableRow key={`${buyer.id}-targets`}>
-                        <TableCell colSpan={12} className="p-0 bg-sunken">
-                          <div className="p-4">
-                            {/* Targets Header */}
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="font-semibold text-sm">
-                                Targets for {expandedBuyer?.name}
-                              </h3>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => void handleToggleBuyerStatus(buyer)}
+                              title={buyer.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                            >
+                              {buyer.status === 'ACTIVE' ? (
+                                <Pause className="h-3.5 w-3.5 text-ringing-ink" />
+                              ) : (
+                                <Play className="h-3.5 w-3.5 text-live-ink" />
+                              )}
+                            </Button>
+                            {buyer.billingType === 'UPFRONT' && (
                               <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => setCreateTargetOpen(true)}
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openCreditsDialog(buyer)}
+                                title="Add Credits"
                               >
-                                <Plus className="mr-1 h-3 w-3" />
-                                Add Target
+                                <Wallet className="h-3.5 w-3.5 text-money-ink" />
                               </Button>
-                            </div>
-
-                            {/* Targets Table */}
-                            {targetsLoading ? (
-                              <div className="flex justify-center py-4">
-                                <RefreshCw className="h-5 w-5 animate-spin text-ink-3" />
-                              </div>
-                            ) : targets.length === 0 ? (
-                              <div className="text-center py-4 text-ink-3 text-sm">
-                                No targets configured. Add one to start routing calls.
-                              </div>
-                            ) : (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Destination</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Geo</TableHead>
-                                    <TableHead>Cap Settings</TableHead>
-                                    <TableHead>Concurrency</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {targets.map(target => {
-                                    const liveCalls = getLiveCallsForTarget(target.id);
-                                    const capPercent =
-                                      target.maxCap > 0
-                                        ? Math.min(
-                                            100,
-                                            ((statsMap.get(buyer.id)?.capConsumedToday || 0) /
-                                              target.maxCap) *
-                                              100
-                                          )
-                                        : 0;
-
-                                    return (
-                                      <TableRow key={target.id}>
-                                        <TableCell className="font-medium">{target.name}</TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-1.5">
-                                            {target.type === 'SIP' ? (
-                                              <Globe className="h-3.5 w-3.5 text-money-ink" />
-                                            ) : (
-                                              <Phone className="h-3.5 w-3.5 text-live-ink" />
-                                            )}
-                                            <span className="t-data truncate max-w-[150px]">
-                                              {target.destination}
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="outline" className="t-meta">
-                                            {target.type}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          {target.isNational ||
-                                          target.acceptedStates?.length === 0 ? (
-                                            <Badge
-                                              variant="secondary"
-                                              className="t-meta bg-live-tint text-live-ink"
-                                            >
-                                              <Globe className="h-3 w-3 mr-1" />
-                                              National
-                                            </Badge>
-                                          ) : (
-                                            <Badge
-                                              variant="outline"
-                                              className="t-meta"
-                                              title={target.acceptedStates?.join(', ')}
-                                            >
-                                              <MapPin className="h-3 w-3 mr-1" />
-                                              {target.acceptedStates?.length} states
-                                            </Badge>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          {target.maxCap > 0 ? (
-                                            <div className="flex items-center gap-2">
-                                              <Progress value={capPercent} className="w-16 h-1.5" />
-                                              <span className="t-meta text-ink-3">
-                                                {Math.round(capPercent)}%
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-ink-3">No cap</span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          {liveStatusLoading ? (
-                                            <Skeleton className="h-4 w-12" />
-                                          ) : (
-                                            <span
-                                              className={cn(
-                                                'font-mono',
-                                                liveCalls !== null &&
-                                                  liveCalls >= target.maxConcurrency &&
-                                                  'text-dropped-ink font-bold'
-                                              )}
-                                            >
-                                              {liveCalls ?? 0}/{target.maxConcurrency}
-                                            </span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Switch
-                                            checked={target.status === 'ACTIVE'}
-                                            onCheckedChange={() =>
-                                              void handleToggleTargetStatus(target)
-                                            }
-                                            className="scale-75"
-                                          />
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <div className="flex justify-end gap-0.5">
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-6 w-6"
-                                              onClick={() => openEditTargetDialog(target)}
-                                            >
-                                              <Edit className="h-3 w-3" />
-                                            </Button>
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-6 w-6 text-dropped-ink"
-                                              onClick={() => void handleDeleteTarget(target)}
-                                            >
-                                              <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  })}
-                                </TableBody>
-                              </Table>
                             )}
                           </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </>
-                ))
-              )}
-            </TableBody>
-          </Table>
+
+                      {/* Expanded Targets Row */}
+                      {expandedBuyerId === buyer.id && (
+                        <TableRow key={`${buyer.id}-targets`}>
+                          <TableCell colSpan={12} className="p-0 bg-sunken">
+                            <div className="p-4">
+                              {/* Targets Header */}
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-semibold text-sm">
+                                  Targets for {expandedBuyer?.name}
+                                </h3>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => setCreateTargetOpen(true)}
+                                >
+                                  <Plus className="mr-1 h-3 w-3" />
+                                  Add Target
+                                </Button>
+                              </div>
+
+                              {/* Targets Table */}
+                              {targetsLoading ? (
+                                <div className="flex justify-center py-4">
+                                  <RefreshCw className="h-5 w-5 animate-spin text-ink-3" />
+                                </div>
+                              ) : targets.length === 0 ? (
+                                <div className="text-center py-4 text-ink-3 text-sm">
+                                  No targets configured. Add one to start routing calls.
+                                </div>
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Name</TableHead>
+                                      <TableHead>Destination</TableHead>
+                                      <TableHead>Type</TableHead>
+                                      <TableHead>Geo</TableHead>
+                                      <TableHead>Cap Settings</TableHead>
+                                      <TableHead>Concurrency</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {targets.map(target => {
+                                      const liveCalls = getLiveCallsForTarget(target.id);
+                                      const capPercent =
+                                        target.maxCap > 0
+                                          ? Math.min(
+                                              100,
+                                              ((statsMap.get(buyer.id)?.capConsumedToday || 0) /
+                                                target.maxCap) *
+                                                100
+                                            )
+                                          : 0;
+
+                                      return (
+                                        <TableRow key={target.id}>
+                                          <TableCell className="font-medium">
+                                            {target.name}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-1.5">
+                                              {target.type === 'SIP' ? (
+                                                <Globe className="h-3.5 w-3.5 text-money-ink" />
+                                              ) : (
+                                                <Phone className="h-3.5 w-3.5 text-live-ink" />
+                                              )}
+                                              <span className="t-data truncate max-w-[150px]">
+                                                {target.destination}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="outline" className="t-meta">
+                                              {target.type}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            {target.isNational ||
+                                            target.acceptedStates?.length === 0 ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="t-meta bg-live-tint text-live-ink"
+                                              >
+                                                <Globe className="h-3 w-3 mr-1" />
+                                                National
+                                              </Badge>
+                                            ) : (
+                                              <Badge
+                                                variant="outline"
+                                                className="t-meta"
+                                                title={target.acceptedStates?.join(', ')}
+                                              >
+                                                <MapPin className="h-3 w-3 mr-1" />
+                                                {target.acceptedStates?.length} states
+                                              </Badge>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            {target.maxCap > 0 ? (
+                                              <div className="flex items-center gap-2">
+                                                <Progress
+                                                  value={capPercent}
+                                                  className="w-16 h-1.5"
+                                                />
+                                                <span className="t-meta text-ink-3">
+                                                  {Math.round(capPercent)}%
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-ink-3">No cap</span>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            {liveStatusLoading ? (
+                                              <Skeleton className="h-4 w-12" />
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  't-num',
+                                                  liveCalls !== null &&
+                                                    liveCalls >= target.maxConcurrency &&
+                                                    'text-dropped-ink font-bold'
+                                                )}
+                                              >
+                                                {liveCalls ?? 0}/{target.maxConcurrency}
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Switch
+                                              checked={target.status === 'ACTIVE'}
+                                              onCheckedChange={() =>
+                                                void handleToggleTargetStatus(target)
+                                              }
+                                              className="scale-75"
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-right">
+                                            <div className="flex justify-end gap-0.5">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                onClick={() => openEditTargetDialog(target)}
+                                              >
+                                                <Edit className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 text-dropped-ink"
+                                                onClick={() => void handleDeleteTarget(target)}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

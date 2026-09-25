@@ -10,6 +10,7 @@ import {
   PanelDescription,
   PanelHeader,
   PanelTitle,
+  StatusChip,
   Toolbar,
   ToolbarSearch,
 } from '@/components/domain';
@@ -20,7 +21,6 @@ import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
 import { EditRouteDialog } from '@/components/numbers/edit-route-dialog';
 import { FractelPurchaseDialog } from '@/components/numbers/fractel-purchase-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -34,7 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { formatDisplayDate } from '@/lib/format-time';
-import { formatPhoneNumber } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 interface PhoneNumber {
   id: string;
@@ -135,13 +135,14 @@ function NumberCard({
         <div className="space-y-0.5">
           <div className="t-data font-semibold text-ink">{formatPhoneNumber(number.number)}</div>
           <div className="flex items-center gap-1.5">
-            <Badge variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}>
-              {number.status}
-            </Badge>
+            <StatusChip value={number.status} size="sm" />
             {number.poolType === 'POOL' && (
-              <Badge variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}>
-                RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
-              </Badge>
+              <StatusChip
+                value={number.poolStatus ?? 'ASSIGNED'}
+                tone={number.poolStatus === 'AVAILABLE' ? 'live' : 'ringing'}
+                label={`RTB: ${number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}`}
+                size="sm"
+              />
             )}
           </div>
         </div>
@@ -149,30 +150,31 @@ function NumberCard({
           variant="ghost"
           size="icon"
           className="h-6 w-6 rounded-full"
+          aria-label="Edit number"
           onClick={() => onEdit(number)}
         >
           <Edit2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      <div className="mt-2 border-t border-rule pt-2 space-y-1.5 t-meta">
+      <div className="mt-2 border-t border-rule pt-2 space-y-1.5">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="t-label text-ink-3">Carrier</div>
-            <div className="font-medium truncate text-ink" title={carrierLabel(number)}>
+            <div className="t-body truncate text-ink" title={carrierLabel(number)}>
               {carrierLabel(number)}
             </div>
           </div>
           <div>
             <div className="t-label text-ink-3">Purchased</div>
-            <div className="font-medium text-ink">{formatDisplayDate(number.purchasedAt)}</div>
+            <div className="t-body text-ink">{formatDisplayDate(number.purchasedAt)}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="t-label text-ink-3">Campaign</div>
             <div
-              className="font-medium truncate text-ink"
+              className={cn('t-body truncate', number.campaign?.name ? 'text-ink' : 'text-ink-3')}
               title={number.campaign?.name || 'Unassigned'}
             >
               {number.campaign?.name || 'Unassigned'}
@@ -181,7 +183,7 @@ function NumberCard({
           <div>
             <div className="t-label text-ink-3">Assigned Agent</div>
             <div
-              className="font-medium truncate text-ink"
+              className={cn('t-body truncate', number.user?.name ? 'text-ink' : 'text-ink-3')}
               title={number.user?.name || 'Unassigned'}
             >
               {number.user?.name || 'Unassigned'}
@@ -392,12 +394,8 @@ function NumbersPage() {
 
       <Tabs defaultValue="numbers" className="w-full">
         <TabsList className="mb-0 self-start">
-          <TabsTrigger value="numbers" className="text-xs h-8">
-            Phone Numbers
-          </TabsTrigger>
-          <TabsTrigger value="routing" className="text-xs h-8">
-            Inbound Routes
-          </TabsTrigger>
+          <TabsTrigger value="numbers">Phone Numbers</TabsTrigger>
+          <TabsTrigger value="routing">Inbound Routes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="numbers" className="flex flex-col gap-4">
@@ -421,9 +419,11 @@ function NumbersPage() {
                           list made that impossible to see. */}
                       <div className="flex items-center gap-2 mb-2 pb-1 border-b border-rule">
                         <div className="t-label text-ink-3">{group.carrier}</div>
-                        <Badge variant="secondary">{group.numbers.length}</Badge>
+                        <span className="t-meta rounded-full bg-sunken px-2 text-ink-2 tabular-nums">
+                          {group.numbers.length}
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
                         {group.numbers.map(number => (
                           <NumberCard key={number.id} number={number} onEdit={handleEdit} />
                         ))}
@@ -462,7 +462,7 @@ function NumbersPage() {
               ) : filteredRoutes.length === 0 ? (
                 <div className="t-meta py-12 text-center text-ink-3">No routing rules found</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
                   {filteredRoutes.map(route => (
                     <div
                       key={route.id}
@@ -474,23 +474,30 @@ function NumbersPage() {
                             {formatPhoneNumber(route.did)}
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <Badge variant={route.status === 'ACTIVE' ? 'success' : 'secondary'}>
-                              {route.status}
-                            </Badge>
-                            {route.recordingEnabled && <Badge variant="info">REC</Badge>}
+                            <StatusChip value={route.status} enumName="DidRouteStatus" size="sm" />
+                            {route.recordingEnabled && (
+                              <StatusChip
+                                value="REC"
+                                tone="neutral"
+                                label="REC"
+                                dot={false}
+                                size="sm"
+                              />
+                            )}
                           </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 rounded-full"
+                          aria-label="Edit route"
                           onClick={() => handleEditRoute(route)}
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
 
-                      <div className="space-y-2 border-t border-rule pt-2 t-meta mt-2">
+                      <div className="space-y-2 border-t border-rule pt-2 mt-2">
                         <div>
                           <div className="t-label flex items-center gap-1 text-ink-3">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
@@ -504,7 +511,10 @@ function NumbersPage() {
                           <div>
                             <div className="t-label text-ink-3">Label / Buyer</div>
                             <div
-                              className="font-medium truncate text-ink"
+                              className={cn(
+                                't-body truncate',
+                                route.label || route.buyer?.name ? 'text-ink' : 'text-ink-3'
+                              )}
                               title={route.label || route.buyer?.name || 'Unassigned'}
                             >
                               {route.label || route.buyer?.name || 'Unassigned'}
@@ -512,7 +522,7 @@ function NumbersPage() {
                           </div>
                           <div>
                             <div className="t-label text-ink-3">Created</div>
-                            <div className="font-medium text-ink">
+                            <div className="t-body text-ink">
                               {formatDisplayDate(route.createdAt)}
                             </div>
                           </div>
