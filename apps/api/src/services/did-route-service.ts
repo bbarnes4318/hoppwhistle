@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -6,7 +8,7 @@ import { getPrismaClient } from '../lib/prisma.js';
  * (as opposed to a UUID or other non-phone identifier).
  * A valid destination contains at least 10 digits, or is a short extension (3-6 digits).
  */
-function isValidPhoneDestination(value: string | null | undefined): boolean {
+function isValidPhoneDestination(value: string | null | undefined): value is string {
   if (!value) return false;
   // UUIDs match this pattern — reject them
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
@@ -15,6 +17,11 @@ function isValidPhoneDestination(value: string | null | undefined): boolean {
   // Must contain digits and look like a phone number or extension
   const digits = value.replace(/\D/g, '');
   return digits.length >= 3;
+}
+
+/** The part of a user's JSON `metadata` column this service reads. */
+interface UserExtensionMetadata {
+  extension?: string | null;
 }
 
 export class DidRouteService {
@@ -40,7 +47,8 @@ export class DidRouteService {
         const campaignId = phoneNumber.campaignId || null;
 
         if (phoneNumber.userId) {
-          let extension = (phoneNumber.user?.metadata as any)?.extension;
+          let extension = (phoneNumber.user?.metadata as UserExtensionMetadata | null | undefined)
+            ?.extension;
 
           // If user has no extension, dynamically assign a free one from 1000-1019
           if (!isValidPhoneDestination(extension) && phoneNumber.user) {
@@ -49,9 +57,9 @@ export class DidRouteService {
             });
             const usedExtensions = new Set<string>();
             for (const u of allUsers) {
-              const ext = (u.metadata as any)?.extension;
+              const ext = (u.metadata as Prisma.JsonObject | null)?.extension;
               if (ext) {
-                usedExtensions.add(ext.toString().trim());
+                usedExtensions.add(String(ext).trim());
               }
             }
 
@@ -65,7 +73,7 @@ export class DidRouteService {
             }
 
             if (availableExtension) {
-              const currentMetadata = (phoneNumber.user.metadata as Record<string, any>) || {};
+              const currentMetadata = (phoneNumber.user.metadata as Prisma.JsonObject | null) || {};
               const updatedMetadata = {
                 ...currentMetadata,
                 extension: availableExtension,

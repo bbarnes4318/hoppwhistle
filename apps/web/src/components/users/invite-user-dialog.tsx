@@ -63,9 +63,9 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  // Fetch buyers when role is BUYER and not creating new
  useEffect(() => {
  if (formData.role === 'BUYER' && !createNewBuyer && buyers.length === 0) {
- loadBuyers();
+ void loadBuyers();
  }
- }, [formData.role, createNewBuyer]);
+ }, [formData.role, createNewBuyer, buyers.length]);
 
  useEffect(() => {
  if (open) {
@@ -350,7 +350,7 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  Cancel
  </Button>
  <Button
- onClick={handleInvite}
+ onClick={() => void handleInvite()}
  disabled={
  loading ||
  !formData.email.trim() ||

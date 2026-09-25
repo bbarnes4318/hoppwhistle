@@ -68,7 +68,7 @@ export function CreateCampaignDialog({
  status: 'ACTIVE',
  });
  setError(null);
- loadInitialData();
+ void loadInitialData();
  }
  }, [open]);
 
@@ -304,7 +304,7 @@ export function CreateCampaignDialog({
  Cancel
  </Button>
  <Button
- onClick={handleCreate}
+ onClick={() => void handleCreate()}
  disabled={loading || loadingData || !formData.name.trim() || !formData.publisherId}
  >
  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -245,6 +245,7 @@ async function syncManualLeadToInsuranceCrm(
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must return a promise
 export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: ProspectIntakePayload }>(
     '/api/v1/prospects/intake',

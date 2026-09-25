@@ -9,7 +9,11 @@ const prisma = {
 };
 
 const add = (input: { number: string; provider: string; campaignId?: string | null }) =>
-  addExistingNumber(prisma as any, 'agency-a', input);
+  addExistingNumber(
+    prisma as unknown as Parameters<typeof addExistingNumber>[0],
+    'agency-a',
+    input
+  );
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,7 +51,7 @@ describe('addExistingNumber', () => {
           provider: 'anveo',
           status: 'ACTIVE',
           campaignId: 'c-1',
-        }),
+        }) as unknown,
       })
     );
   });
@@ -106,7 +110,7 @@ describe('addExistingNumber', () => {
     await add({ number: '8655551234', provider: 'fractel' });
     expect(prisma.campaign.findFirst).not.toHaveBeenCalled();
     expect(prisma.phoneNumber.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ campaignId: null }) })
+      expect.objectContaining({ data: expect.objectContaining({ campaignId: null }) as unknown })
     );
   });
 });

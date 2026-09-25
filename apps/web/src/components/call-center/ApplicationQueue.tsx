@@ -1,4 +1,4 @@
-import { Phone, RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2 } from 'lucide-react';
 import React from 'react';
 
 import type { ApplicationData } from './types';
@@ -84,7 +84,7 @@ export function ApplicationQueue({
                   </td>
                   <td className="px-4 py-2 text-xs font-mono text-ink-2">{app.phone || 'N/A'}</td>
                   <td className="px-4 py-2 text-xs font-mono text-ink-2 uppercase">
-                    {app.carrier || 'N/A'}
+                    {(app.carrier as React.ReactNode) || 'N/A'}
                   </td>
                   <td className="px-4 py-2 text-xs font-mono text-ink text-right">
                     ${(app.faceAmount || 0).toLocaleString()}

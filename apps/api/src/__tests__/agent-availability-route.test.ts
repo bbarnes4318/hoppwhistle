@@ -47,14 +47,14 @@ vi.mock('../lib/tenant-context.js', () => ({
 }));
 
 vi.mock('../services/event-bus.js', () => ({
-  eventBus: { publish: vi.fn(async () => undefined) },
+  eventBus: { publish: vi.fn(() => Promise.resolve(undefined)) },
 }));
 
 vi.mock('../services/redis.js', () => ({
   getRedisClient: () => ({
-    get: vi.fn(async () => null),
-    setex: vi.fn(async () => 'OK'),
-    del: vi.fn(async () => 1),
+    get: vi.fn(() => Promise.resolve(null)),
+    setex: vi.fn(() => Promise.resolve('OK')),
+    del: vi.fn(() => Promise.resolve(1)),
   }),
 }));
 
@@ -63,7 +63,7 @@ vi.mock('../services/call-state.js', () => ({ callStateService: {} }));
 vi.mock('../services/lead-service.js', () => ({ leadService: {} }));
 vi.mock('../services/tcpa-validation-service.js', () => ({ tcpaValidationService: {} }));
 vi.mock('../services/billing/delivery-gate.js', () => ({
-  isDeliveryAllowed: vi.fn(async () => ({ allowed: true })),
+  isDeliveryAllowed: vi.fn(() => Promise.resolve({ allowed: true })),
 }));
 
 import { registerAgentPhoneRoutes } from '../routes/agent-phone.js';
@@ -131,7 +131,7 @@ describe('GET /api/v1/agent/availability', () => {
      * tell an agent their phone is off while it carries on ringing -- the one
      * failure mode this whole feature exists to remove.
      */
-    expect((response.json() as any).availableForCalls).toBe(true);
+    expect(response.json().availableForCalls).toBe(true);
   });
 
   it('refuses an unauthenticated caller rather than guessing an agent', async () => {
@@ -153,7 +153,7 @@ describe('PUT /api/v1/agent/availability', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect((response.json() as any).availableForCalls).toBe(false);
+    expect(response.json().availableForCalls).toBe(false);
     expect(prisma.user.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'agent-1', tenantId: 'agency-a' },

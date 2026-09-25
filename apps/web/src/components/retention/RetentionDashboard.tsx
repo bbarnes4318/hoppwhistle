@@ -3,13 +3,10 @@
 import {
   AlertTriangle,
   Check,
-  ChevronRight,
   Clock,
   FileCheck,
-  Phone,
   Plus,
   Search,
-  User,
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -21,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
 
 import { GuaranteedIssueModal } from './GuaranteedIssueModal';
 import { PolicyCard } from './PolicyCard';

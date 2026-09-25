@@ -1,6 +1,8 @@
 'use client';
 
+import { Loader2, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,7 +25,11 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
-import { Loader2, Trash2 } from 'lucide-react';
+
+interface RequestError {
+  response?: { data?: { error?: string } };
+  message?: string;
+}
 
 interface Buyer {
   id: string;
@@ -141,11 +147,11 @@ export function EditRouteDialog({
       });
       onSuccess();
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to update route:', err);
       toast({
         title: 'Failed to update route',
-        description: err.response?.data?.error || err.message,
+        description: (err as RequestError).response?.data?.error || (err as RequestError).message,
         variant: 'destructive',
       });
     } finally {
@@ -167,11 +173,11 @@ export function EditRouteDialog({
       });
       onSuccess();
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to delete route:', err);
       toast({
         title: 'Failed to delete route',
-        description: err.response?.data?.error || err.message,
+        description: (err as RequestError).response?.data?.error || (err as RequestError).message,
         variant: 'destructive',
       });
     } finally {
@@ -190,7 +196,7 @@ export function EditRouteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+        <form onSubmit={e => void handleSubmit(e)} className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="edit-routeType">Route Type</Label>
             <Select
@@ -278,7 +284,7 @@ export function EditRouteDialog({
             <Button
               variant="destructive"
               type="button"
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
               disabled={saving || deleting}
             >
               {deleting ? (

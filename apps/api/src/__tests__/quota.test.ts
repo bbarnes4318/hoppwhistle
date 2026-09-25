@@ -38,7 +38,9 @@ describe('Quota Service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (getPrismaClient as any).mockReturnValue(mockPrisma);
+    vi.mocked(getPrismaClient).mockReturnValue(
+      mockPrisma as unknown as ReturnType<typeof getPrismaClient>
+    );
   });
 
   describe('checkConcurrentCalls', () => {

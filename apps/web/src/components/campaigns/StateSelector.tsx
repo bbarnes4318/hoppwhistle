@@ -180,7 +180,6 @@ export function StateSelector({ value, onChange, className }: StateSelectorProps
  {!isNational && value.length > 0 && (
  <div className="flex flex-wrap gap-1">
  {value.slice(0, 10).map(code => {
- const state = US_STATES.find(s => s.code === code);
  return (
  <Badge key={code} variant="secondary" className="gap-1 pr-1">
  {code}

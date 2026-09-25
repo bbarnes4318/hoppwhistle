@@ -20,12 +20,12 @@ import { authenticate } from '../middleware/auth.js';
  * and reading its numbers is a platform operation. Gated at the plugin level so
  * a route added here later cannot ship open.
  */
-export async function registerDemoRoutes(fastify: FastifyInstance) {
+export function registerDemoRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.addHook('onRequest', authenticate);
   fastify.addHook('preHandler', requirePlatformAdmin);
 
   // Get demo mode status
-  fastify.get('/api/v1/demo/status', async (request, reply) => {
+  fastify.get('/api/v1/demo/status', async (_request, _reply) => {
     const demoTenant = await getPrismaClient().tenant.findUnique({
       where: { slug: 'demo' },
     });
@@ -39,7 +39,7 @@ export async function registerDemoRoutes(fastify: FastifyInstance) {
   // Toggle demo mode (for UI)
   fastify.post('/api/v1/demo/toggle', async (request, reply) => {
     const body = request.body as { enabled: boolean };
-    const user = (request as any).user;
+    const user = request.user;
 
     // Store demo mode preference in user metadata or session
     // For now, return the demo tenant ID if enabled
@@ -49,7 +49,7 @@ export async function registerDemoRoutes(fastify: FastifyInstance) {
       });
 
       if (!demoTenant) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'DEMO_NOT_FOUND', message: 'Demo tenant not found. Run db:seed:demo first.' } };
       }
 
@@ -68,14 +68,14 @@ export async function registerDemoRoutes(fastify: FastifyInstance) {
   });
 
   // Get demo statistics
-  fastify.get('/api/v1/demo/stats', async (request, reply) => {
+  fastify.get('/api/v1/demo/stats', async (_request, reply) => {
     const prisma = getPrismaClient();
     const demoTenant = await prisma.tenant.findUnique({
       where: { slug: 'demo' },
     });
 
     if (!demoTenant) {
-      reply.code(404);
+      void reply.code(404);
       return { error: { code: 'DEMO_NOT_FOUND', message: 'Demo tenant not found' } };
     }
 
@@ -93,9 +93,9 @@ export async function registerDemoRoutes(fastify: FastifyInstance) {
       prisma.publisher.count({ where: { tenantId: demoTenant.id } }),
       prisma.buyer.count({ where: { tenantId: demoTenant.id } }),
       prisma.campaign.count({ where: { tenantId: demoTenant.id } }),
-      prisma.invoice.count({ where: { tenantId: demoTenant.id } }),
+      prisma.invoice.count({ where: { billingAccount: { tenantId: demoTenant.id } } }),
       prisma.invoice.aggregate({
-        where: { tenantId: demoTenant.id },
+        where: { billingAccount: { tenantId: demoTenant.id } },
         _sum: { total: true },
       }),
     ]);
@@ -113,5 +113,7 @@ export async function registerDemoRoutes(fastify: FastifyInstance) {
       revenue: Number(totalRevenue._sum.total || 0),
     };
   });
+
+  return Promise.resolve();
 }
 

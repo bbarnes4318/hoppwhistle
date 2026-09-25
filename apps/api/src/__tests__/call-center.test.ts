@@ -1,5 +1,6 @@
+import Fastify, { type FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import Fastify from 'fastify';
+
 import { registerCallCenterRoutes } from '../routes/call-center.js';
 
 // Define the mock client
@@ -22,15 +23,28 @@ vi.mock('../lib/prisma.js', () => ({
   getPrismaClient: () => mockPrisma,
 }));
 
+interface LookupRecord {
+  id: string;
+  recordType: string;
+  routingNumber?: string;
+  accountNumber?: string;
+}
+
+interface LookupBody {
+  customer: LookupRecord | null;
+  duplicates: LookupRecord[];
+}
+
 describe('Call Center Lookup API', () => {
-  let app: any;
+  let app: FastifyInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
     app = Fastify();
     
     // Setup simple auth decorator
-    app.addHook('onRequest', async (request: any) => {
+    app.addHook('onRequest', async (request) => {
+      await Promise.resolve();
       request.user = { tenantId: 'test-tenant-id' };
     });
     
@@ -49,7 +63,7 @@ describe('Call Center Lookup API', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
+    const body = JSON.parse(response.body) as LookupBody;
     expect(body.customer).toBeNull();
     
     // Verify last-10-digit matching was passed to prisma
@@ -58,7 +72,7 @@ describe('Call Center Lookup API', () => {
         tenantId: 'test-tenant-id',
         phone: { endsWith: '5550199988' },
       },
-      include: expect.any(Object),
+      include: expect.any(Object) as unknown,
     });
   });
 
@@ -101,10 +115,10 @@ describe('Call Center Lookup API', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
+    const body = JSON.parse(response.body) as LookupBody;
     expect(body.customer).not.toBeNull();
-    expect(body.customer.id).toBe('lead-1');
-    expect(body.customer.recordType).toBe('InsuranceLead');
+    expect(body.customer!.id).toBe('lead-1');
+    expect(body.customer!.recordType).toBe('InsuranceLead');
     
     // Duplicate includes the prospect intake
     expect(body.duplicates).toHaveLength(1);
@@ -136,10 +150,10 @@ describe('Call Center Lookup API', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.customer.recordType).toBe('ProspectIntake');
+    const body = JSON.parse(response.body) as LookupBody;
+    expect(body.customer!.recordType).toBe('ProspectIntake');
     // Banking details should not be in the returned customer record
-    expect(body.customer.routingNumber).toBeUndefined();
-    expect(body.customer.accountNumber).toBeUndefined();
+    expect(body.customer!.routingNumber).toBeUndefined();
+    expect(body.customer!.accountNumber).toBeUndefined();
   });
 });

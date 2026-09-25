@@ -49,27 +49,30 @@ vi.mock('../../lib/geo.js', () => ({
 }));
 
 vi.mock('../buyer-live-status-service.js', () => ({
-  liveStatusService: { getTargetsLiveStatus: vi.fn(async () => new Map()) },
+  liveStatusService: { getTargetsLiveStatus: vi.fn(() => Promise.resolve(new Map())) },
 }));
 
 vi.mock('../redis.js', () => ({
-  getRedisClient: () => ({ get: vi.fn(async () => null) }),
+  getRedisClient: () => ({ get: vi.fn(() => Promise.resolve(null)) }),
 }));
 
 vi.mock('../telephony/sip-registrations.js', () => ({
   // Registration is its own gate with its own suite; here it never filters.
-  getRegisteredExtensions: vi.fn(async () => null),
+  getRegisteredExtensions: vi.fn(() => Promise.resolve(null)),
 }));
 
-const agencyClock = vi.hoisted(() => vi.fn());
+const agencyClock = vi.hoisted(() => vi.fn<Parameters<AgencyClock>, ReturnType<AgencyClock>>());
 vi.mock('../telephony/agent-schedule.js', async importOriginal => {
   // The real `isWithinSchedule`, because its behaviour IS what is being wired;
   // only the clock is pinned, so these tests do not depend on the wall time.
   const actual = await importOriginal<typeof import('../telephony/agent-schedule.js')>();
-  return { ...actual, agencyClock: (...args: unknown[]) => agencyClock(...(args as [])) };
+  return { ...actual, agencyClock: (...args: Parameters<AgencyClock>) => agencyClock(...args) };
 });
 
 import { RoutingService } from '../routing.js';
+import type { agencyClock as realAgencyClock } from '../telephony/agent-schedule.js';
+
+type AgencyClock = typeof realAgencyClock;
 
 function assignment(extension: string) {
   return {

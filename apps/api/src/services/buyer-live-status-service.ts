@@ -138,19 +138,19 @@ class DatabaseLiveStatusProvider implements LiveStatusProvider {
  * Redis implementation stub - for future high-scale deployment
  */
 class RedisLiveStatusProvider implements LiveStatusProvider {
-  async getTargetConcurrency(_targetId: string): Promise<number> {
+  getTargetConcurrency(_targetId: string): Promise<number> {
     // TODO: Implement Redis SCARD on target:${targetId}:active_calls
-    throw new Error('Redis provider not implemented');
+    return Promise.reject(new Error('Redis provider not implemented'));
   }
 
-  async getBuyerLiveStatus(_buyerId: string): Promise<BuyerLiveStatus> {
+  getBuyerLiveStatus(_buyerId: string): Promise<BuyerLiveStatus> {
     // TODO: Implement Redis multi-key lookup
-    throw new Error('Redis provider not implemented');
+    return Promise.reject(new Error('Redis provider not implemented'));
   }
 
-  async getTargetsLiveStatus(_targetIds: string[]): Promise<Map<string, number>> {
+  getTargetsLiveStatus(_targetIds: string[]): Promise<Map<string, number>> {
     // TODO: Implement Redis MGET
-    throw new Error('Redis provider not implemented');
+    return Promise.reject(new Error('Redis provider not implemented'));
   }
 }
 

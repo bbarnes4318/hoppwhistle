@@ -1,5 +1,3 @@
-import { RecordingStorageTier } from '@prisma/client';
-
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { getStorageService } from './storage.js';
@@ -116,8 +114,6 @@ export class RecordingLifecycleService {
       return;
     }
 
-    const storage = getStorageService();
-    
     try {
       // In production, use S3 copy with storage class change
       // For now, we'll just update the database
@@ -192,7 +188,7 @@ export class RecordingLifecycleService {
   /**
    * Get lifecycle policy for tenant
    */
-  private async getLifecyclePolicy(tenantId: string): Promise<LifecyclePolicy | null> {
+  private getLifecyclePolicy(tenantId: string): Promise<LifecyclePolicy | null> {
     // In production, store policies in database
     // For now, use defaults or environment variables
     const defaultPolicy: LifecyclePolicy = {
@@ -203,7 +199,7 @@ export class RecordingLifecycleService {
       enabled: process.env.RECORDING_LIFECYCLE_ENABLED !== 'false',
     };
 
-    return defaultPolicy;
+    return Promise.resolve(defaultPolicy);
   }
 
   /**

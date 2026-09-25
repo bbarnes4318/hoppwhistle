@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-import { secrets } from '../../secrets.js';
 import { BandwidthAdapter } from '../adapters/bandwidth-adapter.js';
 import { TelnyxAdapter } from '../adapters/telnyx-adapter.js';
 
@@ -32,9 +31,8 @@ vi.mock('../../secrets.js', () => ({
 }));
 
 // Mock global fetch
-const globalFetch = global.fetch;
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+const mockFetch = vi.fn<Parameters<typeof fetch>, Promise<unknown>>();
+global.fetch = mockFetch as unknown as typeof fetch;
 
 describe('Provisioning Adapters', () => {
   beforeEach(() => {
@@ -55,18 +53,19 @@ describe('Provisioning Adapters', () => {
     it('should list numbers', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [
-            {
-              id: '123',
-              phone_number: '+15551234567',
-              status: 'active',
-              connection_id: 'conn-1',
-              tags: ['voice'],
-              created_at: '2023-01-01T00:00:00Z',
-            },
-          ],
-        }),
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: '123',
+                phone_number: '+15551234567',
+                status: 'active',
+                connection_id: 'conn-1',
+                tags: ['voice'],
+                created_at: '2023-01-01T00:00:00Z',
+              },
+            ],
+          }),
         headers: new Headers(),
       });
 
@@ -80,29 +79,31 @@ describe('Provisioning Adapters', () => {
       // Mock search response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [
-            {
-              phone_number: '+15559998888',
-              region_information: { region_name: 'NY' },
-            },
-          ],
-        }),
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                phone_number: '+15559998888',
+                region_information: { region_name: 'NY' },
+              },
+            ],
+          }),
         headers: new Headers(),
       });
 
       // Mock purchase response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: {
-            id: 'new-id',
-            phone_number: '+15559998888',
-            status: 'active',
-            connection_id: 'conn-1',
-            created_at: '2023-01-01T00:00:00Z',
-          },
-        }),
+        json: () =>
+          Promise.resolve({
+            data: {
+              id: 'new-id',
+              phone_number: '+15559998888',
+              status: 'active',
+              connection_id: 'conn-1',
+              created_at: '2023-01-01T00:00:00Z',
+            },
+          }),
         headers: new Headers(),
       });
 
@@ -131,19 +132,20 @@ describe('Provisioning Adapters', () => {
     it('should list numbers', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          {
-            City: 'RALEIGH',
-            Lata: '426',
-            RateCenter: 'RALEIGH',
-            State: 'NC',
-            TelephoneNumber: '5551112222',
-            id: 'bw-123',
-            accountId: '123',
-            applicationId: 'app-1',
-            siteId: 'site-1',
-          },
-        ],
+        json: () =>
+          Promise.resolve([
+            {
+              City: 'RALEIGH',
+              Lata: '426',
+              RateCenter: 'RALEIGH',
+              State: 'NC',
+              TelephoneNumber: '5551112222',
+              id: 'bw-123',
+              accountId: '123',
+              applicationId: 'app-1',
+              siteId: 'site-1',
+            },
+          ]),
         headers: new Headers(),
       });
 
@@ -157,32 +159,34 @@ describe('Provisioning Adapters', () => {
       // Mock search response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          {
-            City: 'DENVER',
-            Lata: '656',
-            RateCenter: 'DENVER',
-            State: 'CO',
-            TelephoneNumber: '5553334444',
-            national_number: '5553334444',
-          },
-        ],
+        json: () =>
+          Promise.resolve([
+            {
+              City: 'DENVER',
+              Lata: '656',
+              RateCenter: 'DENVER',
+              State: 'CO',
+              TelephoneNumber: '5553334444',
+              national_number: '5553334444',
+            },
+          ]),
         headers: new Headers(),
       });
 
       // Mock order response
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          Order: {
-            id: 'order-1',
-            OrderType: 'new_number_orders',
-            OrderStatus: 'COMPLETE',
-            CompletedNumbers: {
-              TelephoneNumber: ['5553334444'],
+        json: () =>
+          Promise.resolve({
+            Order: {
+              id: 'order-1',
+              OrderType: 'new_number_orders',
+              OrderStatus: 'COMPLETE',
+              CompletedNumbers: {
+                TelephoneNumber: ['5553334444'],
+              },
             },
-          },
-        }),
+          }),
         headers: new Headers(),
       });
 

@@ -34,12 +34,14 @@ vi.mock('../lib/prisma.js', () => ({
   getPrismaClient: () => mockPrisma,
 }));
 
-const mockLookup = vi.fn();
+type Lookup = typeof lookupDirectoryPrincipal;
+const mockLookup = vi.fn<Parameters<Lookup>, ReturnType<Lookup>>();
 vi.mock('../services/telephony/agent-sip-credential.js', () => ({
-  lookupDirectoryPrincipal: (...args: unknown[]) => mockLookup(...args),
+  lookupDirectoryPrincipal: (...args: Parameters<Lookup>) => mockLookup(...args),
 }));
 
 import { registerFreeswitchDirectoryRoutes } from '../routes/freeswitch-directory.js';
+import type { lookupDirectoryPrincipal } from '../services/telephony/agent-sip-credential.js';
 
 const INTERNAL_KEY = 'test-internal-key';
 const DOMAIN = 'sip.example.test';

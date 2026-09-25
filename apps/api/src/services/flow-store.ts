@@ -1,5 +1,26 @@
-import type { Flow, ExecutionPlan } from '@hopwhistle/routing-dsl';
+import type {
+  Flow,
+  ExecutionPlan,
+  EntryNode,
+  IVRNode,
+  IfNode,
+  QueueNode,
+  BuyerNode,
+  RecordNode,
+  TagNode,
+  WhisperNode,
+  TimeoutNode,
+  FallbackNode,
+  HangupNode,
+} from '@hopwhistle/routing-dsl';
 import { parseFlow, createExecutionPlan } from '@hopwhistle/routing-dsl';
+import type {
+  Edge as DbEdge,
+  FlowVersion as DbFlowVersion,
+  Node as DbNode,
+  NodeType,
+  Prisma,
+} from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -13,6 +34,47 @@ export interface FlowVersion {
   publishedAt?: string;
   createdAt: string;
   createdBy?: string;
+}
+
+/** Shape of the `FlowVersion.metadata` JSON column written by storeFlow. */
+interface FlowVersionMetadata {
+  flow?: Flow;
+  plan?: ExecutionPlan;
+  createdBy?: string;
+}
+
+/**
+ * Shape of the `Node.config` JSON column: the fields extractNodeConfig copies
+ * from a flow node (every node kind's fields except `id`/`type`), plus the
+ * entry node's `target`.
+ */
+type StoredNodeConfig = Partial<
+  Omit<EntryNode, 'id' | 'type'> &
+    Omit<IVRNode, 'id' | 'type'> &
+    Omit<IfNode, 'id' | 'type'> &
+    Omit<QueueNode, 'id' | 'type'> &
+    Omit<BuyerNode, 'id' | 'type'> &
+    Omit<RecordNode, 'id' | 'type'> &
+    Omit<TagNode, 'id' | 'type'> &
+    Omit<WhisperNode, 'id' | 'type'> &
+    Omit<TimeoutNode, 'id' | 'type'> &
+    Omit<FallbackNode, 'id' | 'type'> &
+    Omit<HangupNode, 'id' | 'type'>
+>;
+
+/** A flow version row loaded with its nodes and edges (and optionally the flow's name). */
+type DbFlowVersionWithGraph = DbFlowVersion & {
+  nodes: DbNode[];
+  edges: DbEdge[];
+  flow?: { name: string } | null;
+};
+
+function readVersionMetadata(metadata: Prisma.JsonValue): FlowVersionMetadata | null {
+  return metadata as unknown as FlowVersionMetadata | null;
+}
+
+function readNodeConfig(config: Prisma.JsonValue): StoredNodeConfig | null {
+  return config as unknown as StoredNodeConfig | null;
 }
 
 /**
@@ -76,7 +138,7 @@ class FlowStore {
             flow: flow,
             plan: plan,
             createdBy: createdBy,
-          },
+          } as unknown as Prisma.InputJsonObject,
           updatedAt: new Date(),
         },
       });
@@ -116,7 +178,7 @@ class FlowStore {
             flow: flow,
             plan: plan,
             createdBy: createdBy,
-          },
+          } as unknown as Prisma.InputJsonObject,
         },
       });
 
@@ -164,7 +226,7 @@ class FlowStore {
           flowVersionId,
           type: this.mapNodeType(flowNode.type),
           name: flowNode.type.charAt(0).toUpperCase() + flowNode.type.slice(1),
-          config: this.extractNodeConfig(flowNode),
+          config: this.extractNodeConfig(flowNode) as Prisma.InputJsonObject,
           position: { x: 0, y: 0 }, // Will be updated by UI
         },
       });
@@ -371,8 +433,8 @@ class FlowStore {
     return edges;
   }
 
-  private mapNodeType(type: Flow['nodes'][number]['type']): string {
-    const mapping: Record<string, string> = {
+  private mapNodeType(type: Flow['nodes'][number]['type']): NodeType {
+    const mapping: Record<string, NodeType> = {
       'ivr': 'IVR',
       'if': 'CONDITIONAL',
       'queue': 'QUEUE',
@@ -429,7 +491,7 @@ class FlowStore {
     }
 
     const flow = this.reconstructFlow(dbVersion);
-    const plan = (dbVersion.metadata as any)?.plan || createExecutionPlan(flow);
+    const plan = readVersionMetadata(dbVersion.metadata)?.plan || createExecutionPlan(flow);
 
     return {
       id: dbVersion.id,
@@ -440,18 +502,18 @@ class FlowStore {
       published: dbVersion.isActive,
       publishedAt: dbVersion.isActive ? dbVersion.updatedAt.toISOString() : undefined,
       createdAt: dbVersion.createdAt.toISOString(),
-      createdBy: (dbVersion.metadata as any)?.createdBy,
+      createdBy: readVersionMetadata(dbVersion.metadata)?.createdBy,
     };
   }
 
-  private reconstructFlow(dbVersion: any): Flow {
+  private reconstructFlow(dbVersion: DbFlowVersionWithGraph): Flow {
     // Reconstruct Flow from database nodes and edges
     const nodes = dbVersion.nodes;
     const edges = dbVersion.edges;
 
     if (!nodes || nodes.length === 0) {
       // Fallback to metadata if nodes not loaded
-      const flowFromMetadata = (dbVersion.metadata)?.flow;
+      const flowFromMetadata = readVersionMetadata(dbVersion.metadata)?.flow;
       if (flowFromMetadata) {
         return flowFromMetadata;
       }
@@ -459,17 +521,17 @@ class FlowStore {
     }
 
     // Find entry node (node with type IVR and name 'Entry', or first node)
-    const entryNode = nodes.find((n: any) => n.name === 'Entry') || nodes[0];
+    const entryNode = nodes.find(n => n.name === 'Entry') || nodes[0];
     
     // Build node map (db node id -> db node)
-    const nodeMap = new Map<string, any>();
-    nodes.forEach((node: any) => {
+    const nodeMap = new Map<string, DbNode>();
+    nodes.forEach(node => {
       nodeMap.set(node.id, node);
     });
 
     // Build edge map (fromNodeId -> edges[])
-    const edgeMap = new Map<string, any[]>();
-    edges.forEach((edge: any) => {
+    const edgeMap = new Map<string, DbEdge[]>();
+    edges.forEach(edge => {
       if (!edgeMap.has(edge.fromNodeId)) {
         edgeMap.set(edge.fromNodeId, []);
       }
@@ -479,21 +541,21 @@ class FlowStore {
     // Create node ID mapping (we'll use db node IDs as flow node IDs for now)
     // In a real implementation, you might want to store original flow node IDs
     const nodeIdMap = new Map<string, string>();
-    nodes.forEach((node: any) => {
+    nodes.forEach(node => {
       nodeIdMap.set(node.id, node.id); // For now, use same ID
     });
 
     // Reconstruct flow nodes (all except entry)
     const flowNodes = nodes
-      .filter((n: any) => n.id !== entryNode.id)
-      .map((node: any) => this.reconstructFlowNode(node, edgeMap, nodeIdMap));
+      .filter(n => n.id !== entryNode.id)
+      .map(node => this.reconstructFlowNode(node, edgeMap, nodeIdMap));
 
     // Reconstruct entry
     const entryEdges = edgeMap.get(entryNode.id) || [];
-    const entryTarget = entryNode.config?.target || (entryEdges[0] ? entryEdges[0].toNodeId : null) || (flowNodes[0]?.id || '');
+    const entryTarget = readNodeConfig(entryNode.config)?.target || (entryEdges[0] ? entryEdges[0].toNodeId : null) || (flowNodes[0]?.id || '');
 
     // Get flow name from Flow table or metadata
-    const flowName = (dbVersion.metadata)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
+    const flowName = readVersionMetadata(dbVersion.metadata)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
 
     return {
       id: dbVersion.flowId,
@@ -508,15 +570,15 @@ class FlowStore {
     };
   }
 
-  private reconstructFlowNode(dbNode: any, edgeMap: Map<string, any[]>, nodeIdMap: Map<string, string>): Flow['nodes'][number] {
-    const config = dbNode.config || {};
+  private reconstructFlowNode(dbNode: DbNode, edgeMap: Map<string, DbEdge[]>, nodeIdMap: Map<string, string>): Flow['nodes'][number] {
+    const config: StoredNodeConfig = readNodeConfig(dbNode.config) || {};
     const outgoingEdges = edgeMap.get(dbNode.id) || [];
 
     // Map node type back
     const nodeType = this.mapDbNodeTypeToFlowType(dbNode.type);
 
     // Helper to get target node ID from edge
-    const getTargetId = (edge: any) => {
+    const getTargetId = (edge: DbEdge) => {
       const targetDbNodeId = edge.toNodeId;
       // Find the original flow node ID from the nodeIdMap (reverse lookup)
       for (const [flowNodeId, dbNodeId] of nodeIdMap.entries()) {
@@ -530,12 +592,12 @@ class FlowStore {
     switch (nodeType) {
       case 'ivr': {
         const choices = outgoingEdges
-          .filter((e: any) => e.condition)
-          .map((e: any) => ({
+          .filter(e => e.condition)
+          .map(e => ({
             digits: e.condition || '',
             target: getTargetId(e),
           }));
-        const defaultEdge = outgoingEdges.find((e: any) => !e.condition);
+        const defaultEdge = outgoingEdges.find(e => !e.condition);
         
         return {
           id: dbNode.id,
@@ -550,8 +612,8 @@ class FlowStore {
         };
       }
       case 'if': {
-        const thenEdge = outgoingEdges.find((e: any) => e.condition === 'true');
-        const elseEdge = outgoingEdges.find((e: any) => e.condition === 'false');
+        const thenEdge = outgoingEdges.find(e => e.condition === 'true');
+        const elseEdge = outgoingEdges.find(e => e.condition === 'false');
         
         return {
           id: dbNode.id,
@@ -562,9 +624,9 @@ class FlowStore {
         };
       }
       case 'queue': {
-        const onConnectEdge = outgoingEdges.find((e: any) => e.condition === 'connected');
-        const onTimeoutEdge = outgoingEdges.find((e: any) => e.condition === 'timeout');
-        const onFullEdge = outgoingEdges.find((e: any) => e.condition === 'full');
+        const onConnectEdge = outgoingEdges.find(e => e.condition === 'connected');
+        const onTimeoutEdge = outgoingEdges.find(e => e.condition === 'timeout');
+        const onFullEdge = outgoingEdges.find(e => e.condition === 'full');
         
         return {
           id: dbNode.id,
@@ -579,9 +641,9 @@ class FlowStore {
         };
       }
       case 'buyer': {
-        const nextEdge = outgoingEdges.find((e: any) => !e.condition);
-        const onNoBuyersEdge = outgoingEdges.find((e: any) => e.condition === 'no-buyers');
-        const onAllBusyEdge = outgoingEdges.find((e: any) => e.condition === 'all-busy');
+        const nextEdge = outgoingEdges.find(e => !e.condition);
+        const onNoBuyersEdge = outgoingEdges.find(e => e.condition === 'no-buyers');
+        const onAllBusyEdge = outgoingEdges.find(e => e.condition === 'all-busy');
         
         return {
           id: dbNode.id,
@@ -594,8 +656,8 @@ class FlowStore {
         };
       }
       case 'record': {
-        const onCompleteEdge = outgoingEdges.find((e: any) => e.condition === 'complete');
-        const onErrorEdge = outgoingEdges.find((e: any) => e.condition === 'error');
+        const onCompleteEdge = outgoingEdges.find(e => e.condition === 'complete');
+        const onErrorEdge = outgoingEdges.find(e => e.condition === 'error');
         
         return {
           id: dbNode.id,
@@ -608,7 +670,7 @@ class FlowStore {
         };
       }
       case 'tag': {
-        const nextEdge = outgoingEdges.find((e: any) => !e.condition);
+        const nextEdge = outgoingEdges.find(e => !e.condition);
         
         return {
           id: dbNode.id,
@@ -618,8 +680,8 @@ class FlowStore {
         };
       }
       case 'whisper': {
-        const onAcceptEdge = outgoingEdges.find((e: any) => e.condition === 'accept');
-        const onRejectEdge = outgoingEdges.find((e: any) => e.condition === 'reject');
+        const onAcceptEdge = outgoingEdges.find(e => e.condition === 'accept');
+        const onRejectEdge = outgoingEdges.find(e => e.condition === 'reject');
         
         return {
           id: dbNode.id,
@@ -632,7 +694,7 @@ class FlowStore {
         };
       }
       case 'timeout': {
-        const nextEdge = outgoingEdges.find((e: any) => !e.condition);
+        const nextEdge = outgoingEdges.find(e => !e.condition);
         
         return {
           id: dbNode.id,
@@ -643,9 +705,9 @@ class FlowStore {
       }
       case 'fallback': {
         const targets = outgoingEdges
-          .filter((e: any) => !e.condition || e.condition !== 'all-failed')
-          .map((e: any) => getTargetId(e));
-        const onAllFailedEdge = outgoingEdges.find((e: any) => e.condition === 'all-failed');
+          .filter(e => !e.condition || e.condition !== 'all-failed')
+          .map(e => getTargetId(e));
+        const onAllFailedEdge = outgoingEdges.find(e => e.condition === 'all-failed');
         
         return {
           id: dbNode.id,
@@ -695,7 +757,7 @@ class FlowStore {
 
     return dbVersions.map(v => {
       const flow = this.reconstructFlow(v);
-      const plan = (v.metadata as any)?.plan || createExecutionPlan(flow);
+      const plan = readVersionMetadata(v.metadata)?.plan || createExecutionPlan(flow);
       return {
         id: v.id,
         flowId: v.flowId,
@@ -705,7 +767,7 @@ class FlowStore {
         published: v.isActive,
         publishedAt: v.isActive ? v.updatedAt.toISOString() : undefined,
         createdAt: v.createdAt.toISOString(),
-        createdBy: (v.metadata as any)?.createdBy,
+        createdBy: readVersionMetadata(v.metadata)?.createdBy,
       };
     });
   }
@@ -743,7 +805,7 @@ class FlowStore {
     }
 
     const flow = this.reconstructFlow(dbVersion);
-    const plan = (dbVersion.metadata as any)?.plan || createExecutionPlan(flow);
+    const plan = readVersionMetadata(dbVersion.metadata)?.plan || createExecutionPlan(flow);
 
     return {
       id: dbVersion.id,
@@ -754,7 +816,7 @@ class FlowStore {
       published: true,
       publishedAt: dbVersion.updatedAt.toISOString(),
       createdAt: dbVersion.createdAt.toISOString(),
-      createdBy: (dbVersion.metadata as any)?.createdBy,
+      createdBy: readVersionMetadata(dbVersion.metadata)?.createdBy,
     };
   }
 
@@ -800,7 +862,7 @@ class FlowStore {
     });
 
     const flow = this.reconstructFlow(dbVersion);
-    const plan = (dbVersion.metadata as any)?.plan || createExecutionPlan(flow);
+    const plan = readVersionMetadata(dbVersion.metadata)?.plan || createExecutionPlan(flow);
 
     return {
       id: dbVersion.id,
@@ -811,7 +873,7 @@ class FlowStore {
       published: true,
       publishedAt: dbVersion.updatedAt.toISOString(),
       createdAt: dbVersion.createdAt.toISOString(),
-      createdBy: (dbVersion.metadata as any)?.createdBy,
+      createdBy: readVersionMetadata(dbVersion.metadata)?.createdBy,
     };
   }
 
@@ -827,7 +889,7 @@ class FlowStore {
    */
   async parseAndStore(data: unknown, createdBy?: string, tenantId?: string): Promise<FlowVersion> {
     const flow = parseFlow(data);
-    const extractedTenantId = (flow as any).tenantId || tenantId;
+    const extractedTenantId = (flow as Flow & { tenantId?: string }).tenantId || tenantId;
     return this.storeFlow(flow, createdBy, extractedTenantId);
   }
 
@@ -837,7 +899,7 @@ class FlowStore {
   async listFlows(tenantId?: string): Promise<string[]> {
     const prisma = getPrismaClient();
     
-    const where: any = {};
+    const where: Prisma.FlowWhereInput = {};
     if (tenantId) {
       where.tenantId = tenantId;
     }

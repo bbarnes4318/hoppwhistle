@@ -1,3 +1,5 @@
+import type { PhoneNumber, PhoneNumberStatus, Prisma } from '@prisma/client';
+
 import { logger } from '../../../lib/logger.js';
 import { getPrismaClient } from '../../../lib/prisma.js';
 import type {
@@ -27,13 +29,13 @@ export class LocalAdapter implements ProvisioningAdapter {
   async listNumbers(options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
     const prisma = getPrismaClient();
 
-    const where: any = {
+    const where: Prisma.PhoneNumberWhereInput = {
       provider: 'local',
     };
 
     if (options?.status) {
       // Map provisioning status to Prisma status
-      const statusMap: Record<string, string> = {
+      const statusMap: Record<string, PhoneNumberStatus> = {
         available: 'ACTIVE',
         assigned: 'ACTIVE',
         released: 'INACTIVE',
@@ -140,7 +142,7 @@ export class LocalAdapter implements ProvisioningAdapter {
     await prisma.phoneNumber.update({
       where: { id: providerId },
       data: {
-        capabilities: features,
+        capabilities: features as Prisma.InputJsonObject,
       },
     });
 
@@ -162,7 +164,7 @@ export class LocalAdapter implements ProvisioningAdapter {
   /**
    * Map Prisma PhoneNumber to ProvisionedNumber
    */
-  private mapToProvisionedNumber(dbNumber: any): ProvisionedNumber {
+  private mapToProvisionedNumber(dbNumber: PhoneNumber): ProvisionedNumber {
     const metadata = (dbNumber.metadata || {}) as Record<string, unknown>;
 
     return {

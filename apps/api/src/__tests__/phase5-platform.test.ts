@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return -- assertions run over parsed JSON responses, which are dynamically typed */
 import { createHmac } from 'node:crypto';
 
 import { hash } from 'bcryptjs';
@@ -66,71 +66,71 @@ class FakeGateway implements PaymentGateway {
   readonly achCharges: ChargeRequest[] = [];
   readonly cardCharges: ChargeRequest[] = [];
 
-  async chargeAchOffSession(request: ChargeRequest) {
+  chargeAchOffSession(request: ChargeRequest) {
     this.achCharges.push(request);
-    return {
+    return Promise.resolve({
       ok: true,
       paymentIntentId: `pi_ach_${this.achCharges.length}`,
       status: 'processing',
       failureCode: null,
       failureMessage: null,
-    };
+    });
   }
 
-  async chargeCardOffSession(request: ChargeRequest) {
+  chargeCardOffSession(request: ChargeRequest) {
     this.cardCharges.push(request);
-    return {
+    return Promise.resolve({
       ok: true,
       paymentIntentId: `pi_card_${this.cardCharges.length}`,
       status: 'succeeded',
       failureCode: null,
       failureMessage: null,
-    };
+    });
   }
 
-  async chargeCardOnSession(request: ChargeRequest) {
+  chargeCardOnSession(request: ChargeRequest) {
     this.cardCharges.push(request);
-    return {
+    return Promise.resolve({
       ok: true,
       paymentIntentId: `pi_open_${this.cardCharges.length}`,
       status: 'succeeded',
       failureCode: null,
       failureMessage: null,
-    };
+    });
   }
 
-  async ensureCustomer() {
-    return 'cus_fake';
+  ensureCustomer() {
+    return Promise.resolve('cus_fake');
   }
 
-  async createAchSetupIntent() {
-    return { id: 'seti_fake', clientSecret: 'seti_fake_secret' };
+  createAchSetupIntent() {
+    return Promise.resolve({ id: 'seti_fake', clientSecret: 'seti_fake_secret' });
   }
 
-  async describeAchMandate() {
-    return {
+  describeAchMandate() {
+    return Promise.resolve({
       setupIntentStatus: 'succeeded',
       paymentMethodId: 'pm_fake',
       usable: true,
       bankName: 'Test Bank',
       last4: '6789',
       customerId: 'cus_fake',
-    };
+    });
   }
 
-  async createCardSetupIntent() {
-    return { id: 'seti_card', clientSecret: 'seti_card_secret' };
+  createCardSetupIntent() {
+    return Promise.resolve({ id: 'seti_card', clientSecret: 'seti_card_secret' });
   }
 
-  async describeCardMandate() {
-    return {
+  describeCardMandate() {
+    return Promise.resolve({
       setupIntentStatus: 'succeeded',
       paymentMethodId: 'pm_card',
       usable: true,
       brand: 'visa',
       last4: '4242',
       customerId: 'cus_fake',
-    };
+    });
   }
 
   constructWebhookEvent() {

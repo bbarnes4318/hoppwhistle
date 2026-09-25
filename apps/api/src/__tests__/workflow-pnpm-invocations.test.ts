@@ -149,7 +149,7 @@ function select(selector: string, manifests: Map<string, PackageManifest>): Pack
           .replace(/[.+^${}()|[\]\\]/g, '\\$&')
           .replace(/\*\*/g, '\u0000')
           .replace(/\*/g, '[^/]*')
-          .replace(/\u0000/g, '.*')
+          .replaceAll('\u0000', '.*')
       )
       .join('/')}$`
   );

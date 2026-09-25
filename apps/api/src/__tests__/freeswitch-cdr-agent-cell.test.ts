@@ -16,14 +16,18 @@ const prisma = vi.hoisted(() => ({
   didRoute: { findUnique: vi.fn(), updateMany: vi.fn() },
   buyer: { findUnique: vi.fn() },
   campaignAgent: { findMany: vi.fn() },
-  call: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+  call: {
+    create: vi.fn<[args: { data: Record<string, unknown> }], Promise<Record<string, unknown>>>(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+  },
   phoneNumber: { updateMany: vi.fn() },
 }));
 
 vi.mock('../lib/prisma.js', () => ({ getPrismaClient: () => prisma }));
 vi.mock('../lib/internal-auth.js', () => ({ requireInternalKey: async () => {} }));
 vi.mock('../services/number-pool-service.js', () => ({
-  numberPoolService: { getRouteInfo: vi.fn(async () => null) },
+  numberPoolService: { getRouteInfo: vi.fn(() => Promise.resolve(null)) },
 }));
 vi.mock('../services/carrier-routing.js', () => ({
   getInboundCarrierChain: vi.fn(),
@@ -84,10 +88,12 @@ beforeEach(async () => {
     { userId: AGENT_ID, user: { metadata: { cellForwardNumber: '+18655551234' } } },
     { userId: 'u-softphone', user: { metadata: {} } },
   ]);
-  prisma.call.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'call-1',
-    ...data,
-  }));
+  prisma.call.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+    Promise.resolve({
+      id: 'call-1',
+      ...data,
+    })
+  );
   prisma.call.findUnique.mockResolvedValue(null);
 
   app = Fastify();
@@ -99,7 +105,7 @@ async function post(body: Record<string, unknown>) {
   return app.inject({ method: 'POST', url: '/api/v1/freeswitch/cdr', payload: body });
 }
 
-function createdCall(): Record<string, any> {
+function createdCall(): Record<string, unknown> {
   return prisma.call.create.mock.calls[0][0].data;
 }
 

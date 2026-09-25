@@ -197,11 +197,13 @@ export function FractelPurchaseDialog({
                   onChange={e => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
                   className="pl-10"
                   maxLength={3}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') void handleSearch();
+                  }}
                 />
               </div>
               <Button
-                onClick={handleSearch}
+                onClick={() => void handleSearch()}
                 disabled={loading || (numberType === 'local' && areaCode.length !== 3)}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
@@ -353,7 +355,7 @@ export function FractelPurchaseDialog({
               <Button variant="outline" onClick={() => setStep('search')} disabled={loading}>
                 Back
               </Button>
-              <Button onClick={handleAdd} disabled={loading}>
+              <Button onClick={() => void handleAdd()} disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm Number
               </Button>

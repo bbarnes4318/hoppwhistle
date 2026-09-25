@@ -9,8 +9,12 @@
  *   4. Press 9 or timeout -> Hangup, mark lead as NOT_INTERESTED
  */
 import * as net from 'net';
+
+import type { LeadStatus } from '@prisma/client';
 import modesl from 'modesl';
+import type { Event as ESLEvent } from 'modesl';
 const { Connection: ESLConnection } = modesl;
+type ESLConnection = InstanceType<typeof ESLConnection>;
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -81,7 +85,7 @@ export class FronterBotService {
     const conn = new ESLConnection(socket);
 
     conn.on('esl::ready', () => {
-      this.handleCall(conn).catch(err => {
+      this.handleCall(conn).catch((err: unknown) => {
         logger.error({ msg: 'Error handling call', error: err });
         try {
           conn.execute('hangup', 'NORMAL_CLEARING');
@@ -227,7 +231,8 @@ export class FronterBotService {
       let resolved = false;
 
       // Set up DTMF event listener
-      const dtmfHandler = (event: { getHeader: (name: string) => string | undefined }) => {
+      const dtmfHandler = (...args: unknown[]) => {
+        const event = args[0] as ESLEvent;
         if (resolved) return;
         const digit = event.getHeader('DTMF-Digit');
         if (digit) {
@@ -280,7 +285,9 @@ export class FronterBotService {
     try {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: { status },
+        // NOTE: callers pass values (IN_CALL, TRANSFERRED, FAILED, ...) that are not
+        // LeadStatus members, so Prisma rejects them at runtime and the catch below logs it.
+        data: { status: status as LeadStatus },
       });
     } catch (error) {
       logger.error({ msg: 'Failed to update lead status', leadId, status, error });

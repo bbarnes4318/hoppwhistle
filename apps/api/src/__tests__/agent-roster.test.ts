@@ -44,11 +44,11 @@ const prisma = vi.hoisted(() => ({
 vi.mock('../lib/prisma.js', () => ({ getPrismaClient: () => prisma }));
 
 vi.mock('../middleware/auth.js', () => ({
-  authenticate: vi.fn(async () => undefined),
+  authenticate: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 vi.mock('../lib/platform-context.js', () => ({
-  requireAgencyPrincipal: vi.fn(async () => undefined),
+  requireAgencyPrincipal: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 const resolveTenant = vi.hoisted(() => vi.fn(() => 'agency-a'));
@@ -57,13 +57,13 @@ vi.mock('../lib/tenant-context.js', () => ({
   getActingUserId: () => 'owner-1',
 }));
 
-vi.mock('../services/audit.js', () => ({ auditLog: vi.fn(async () => undefined) }));
+vi.mock('../services/audit.js', () => ({ auditLog: vi.fn(() => Promise.resolve(undefined)) }));
 
 const publish = vi.hoisted(() => vi.fn());
 vi.mock('../services/event-bus.js', () => ({ eventBus: { publish } }));
 
 vi.mock('../services/redis.js', () => ({
-  getRedisClient: () => ({ mget: vi.fn(async () => []) }),
+  getRedisClient: () => ({ mget: vi.fn(() => Promise.resolve([])) }),
 }));
 
 import { registerAgentRosterRoutes } from '../routes/agent-roster.js';
@@ -134,7 +134,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const agent = (response.json() as any).data.agents[0];
+    const agent = response.json().data.agents[0];
 
     expect(agent.blockedReason).toBeNull();
     expect(agent.extension).toBe('1042');
@@ -150,7 +150,7 @@ describe('GET /api/v1/agent-roster', () => {
 
     // Granting a campaign to an unlicensed agent changes nothing, so sending
     // somebody to do that first wastes the trip.
-    expect((response.json() as any).data.agents[0].blockedReason).toMatch(/licensed states/i);
+    expect(response.json().data.agents[0].blockedReason).toMatch(/licensed states/i);
   });
 
   it('names the campaign once the licence exists', async () => {
@@ -158,7 +158,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    expect((response.json() as any).data.agents[0].blockedReason).toMatch(/campaign/i);
+    expect(response.json().data.agents[0].blockedReason).toMatch(/campaign/i);
   });
 
   it("names the agent's own switch once every setup blocker is clear", async () => {
@@ -171,7 +171,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const agent = (response.json() as any).data.agents[0];
+    const agent = response.json().data.agents[0];
 
     expect(agent.blockedBy).toBe('UNAVAILABLE');
     expect(agent.blockedReason).toMatch(/phone off/i);
@@ -186,7 +186,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const agent = (response.json() as any).data.agents[0];
+    const agent = response.json().data.agents[0];
 
     // The campaign is the owner's to fix and will still be missing when the
     // agent comes back. Reporting the break instead sends nobody to fix it.
@@ -205,7 +205,7 @@ describe('GET /api/v1/agent-roster', () => {
     // Routing rings an agent it has not been told to stop ringing. A roster
     // that showed them as off would describe a state the dialer does not act
     // on, and send an owner looking for a problem that is not there.
-    expect((response.json() as any).data.agents[0].blockedBy).toBeNull();
+    expect(response.json().data.agents[0].blockedBy).toBeNull();
   });
 
   it('names the invitation before anything else', async () => {
@@ -214,7 +214,7 @@ describe('GET /api/v1/agent-roster', () => {
     ]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    expect((response.json() as any).data.agents[0].blockedReason).toMatch(/invitation/i);
+    expect(response.json().data.agents[0].blockedReason).toMatch(/invitation/i);
   });
 
   it('treats a RESERVATION as not yet provisioned', async () => {
@@ -226,7 +226,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const agent = (response.json() as any).data.agents[0];
+    const agent = response.json().data.agents[0];
 
     // A reservation has no password, so it cannot register and cannot ring.
     expect(agent.hasSipCredential).toBe(false);
@@ -243,7 +243,7 @@ describe('GET /api/v1/agent-roster', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const agent = (response.json() as any).data.agents[0];
+    const agent = response.json().data.agents[0];
 
     expect(agent.cellForwardNumber).toBe('+18655551234');
     expect(agent.blockedBy).toBeNull();
@@ -301,7 +301,7 @@ describe('PUT /api/v1/agent-roster/:userId/campaigns', () => {
     // The other direction of the same defect: this agency's agent must not be
     // written into another agency's call pool.
     expect(response.statusCode).toBe(400);
-    expect((response.json() as any).error.code).toBe('UNKNOWN_CAMPAIGN');
+    expect(response.json().error.code).toBe('UNKNOWN_CAMPAIGN');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -311,7 +311,7 @@ describe('PUT /api/v1/agent-roster/:userId/campaigns', () => {
     const response = await app.inject({ method: 'PUT', url, payload: { campaignIds: [] } });
 
     expect(response.statusCode).toBe(400);
-    expect((response.json() as any).error.code).toBe('NOT_AN_AGENT');
+    expect(response.json().error.code).toBe('NOT_AN_AGENT');
   });
 
   it('replaces the set in ONE transaction', async () => {
@@ -360,7 +360,7 @@ describe('PUT /api/v1/agent-roster/:userId/campaigns', () => {
   it('rejects a body that is not a list of campaign ids', async () => {
     const response = await app.inject({ method: 'PUT', url, payload: { campaignIds: 'c-1' } });
     expect(response.statusCode).toBe(400);
-    expect((response.json() as any).error.code).toBe('VALIDATION_ERROR');
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
   });
 });
 
@@ -434,7 +434,7 @@ describe('PATCH /api/v1/agent-roster/:userId', () => {
         },
       },
     });
-    expect((response.json() as any).data.cellForwardNumber).toBe('+18655551234');
+    expect(response.json().data.cellForwardNumber).toBe('+18655551234');
   });
 
   it('turns cell forwarding off by removing the number', async () => {
@@ -502,7 +502,7 @@ describe('PUT /api/v1/agent-roster/:userId/availability', () => {
       'call.*',
       expect.objectContaining({ event: 'agent.availability.changed', tenantId: 'agency-a' })
     );
-    expect((response.json() as any).data.availableForCalls).toBe(true);
+    expect(response.json().data.availableForCalls).toBe(true);
   });
 
   it('turns the agent off', async () => {
@@ -563,7 +563,7 @@ describe('the roster read', () => {
     prisma.campaignAgent.findMany.mockResolvedValue([{ userId: 'u-1', campaignId: 'c-1' }]);
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
-    const body = (response.json() as any).data;
+    const body = response.json().data;
 
     expect(body.agents[0].schedule).toEqual({
       days: ['MON', 'TUE'],
@@ -584,7 +584,7 @@ describe('the roster read', () => {
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/agent-roster' });
     // Null, not an empty schedule: the two mean opposite things to routing.
-    expect((response.json() as any).data.agents[0].schedule).toBeNull();
+    expect(response.json().data.agents[0].schedule).toBeNull();
   });
 });
 

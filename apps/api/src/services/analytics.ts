@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 import { logger } from '../lib/logger.js';
 
@@ -206,7 +206,7 @@ export class AnalyticsService {
   }
 
   private async getMetricsFromPostgres(filters: AnalyticsFilters): Promise<MetricsResult> {
-    const where: any = {
+    const where: Prisma.CdrWhereInput = {
       tenantId: filters.tenantId,
       createdAt: {
         gte: filters.startDate,
@@ -215,15 +215,16 @@ export class AnalyticsService {
     };
 
     if (filters.campaignId || filters.publisherId || filters.buyerId) {
-      where.call = {};
+      const callWhere: Prisma.CallWhereInput = {};
+      where.call = callWhere;
       if (filters.campaignId) {
-        where.call.campaignId = filters.campaignId;
+        callWhere.campaignId = filters.campaignId;
       }
       if (filters.publisherId) {
-        where.call.publisherId = filters.publisherId;
+        callWhere.publisherId = filters.publisherId;
       }
       if (filters.buyerId) {
-        where.call.buyerId = filters.buyerId;
+        callWhere.buyerId = filters.buyerId;
       }
     }
 

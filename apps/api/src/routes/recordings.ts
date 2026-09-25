@@ -1,4 +1,5 @@
-import { FastifyInstance } from 'fastify';
+import type { Call, Prisma, RecordingStatus } from '@prisma/client';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
@@ -7,7 +8,7 @@ import { RecordingService } from '../services/recording-service.js';
 const recordingService = new RecordingService();
 const prisma = getPrismaClient();
 
-function getPublicApiBaseUrl(request: any): string {
+function getPublicApiBaseUrl(request: FastifyRequest): string {
   const envUrl = process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL;
   if (envUrl) {
     return envUrl.replace(/\/api\/?$/, '');
@@ -20,6 +21,7 @@ function getPublicApiBaseUrl(request: any): string {
 /**
  * Recording management routes
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must return a promise
 export async function registerRecordingManagementRoutes(fastify: FastifyInstance) {
   // Upload recording callback from FreeSWITCH
   fastify.post<{
@@ -94,7 +96,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       if (!resolvedCallId) {
-        reply.code(400);
+        void reply.code(400);
         return {
           error: {
             code: 'MISSING_CALL_ID',
@@ -131,7 +133,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
           request.log.error({ error: markErr, callId: resolvedCallId }, 'Failed to mark recording as failed');
         }
       }
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'UPLOAD_ERROR',
@@ -142,7 +144,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   });
 
   // Helper to get authenticated user profile (role, buyerId, publisherId, accessToRecordings)
-  async function getUserProfile(request: any) {
+  async function getUserProfile(request: FastifyRequest) {
     const user = request.user;
     let userRoles: string[] = [];
     let buyerId: string | null = null;
@@ -156,9 +158,12 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         include: { roles: { include: { role: true } } },
       });
       if (userRecord) {
-        userRoles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+        userRoles = userRecord.roles.map(ur => ur.role.name) || [];
         buyerId = userRecord.buyerId || null;
-        publisherId = userRecord.publisherId || (userRecord.metadata as any)?.publisherId || null;
+        publisherId =
+          userRecord.publisherId ||
+          (userRecord.metadata as { publisherId?: string } | null)?.publisherId ||
+          null;
       }
     }
 
@@ -181,11 +186,13 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         where: { id: buyerId },
         select: { metadata: true },
       });
-      buyerAccessToRecordings = !!(buyer?.metadata as any)?.accessToRecordings;
+      buyerAccessToRecordings = !!(
+        buyer?.metadata as { accessToRecordings?: unknown } | null | undefined
+      )?.accessToRecordings;
     }
 
     const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
-                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+                           (user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER') ?? false);
 
     return {
       isAdminOrOwner,
@@ -198,7 +205,12 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   }
 
   // Helper to verify recording access permissions
-  async function checkRecordingAccess(recording: any, profile: any, tenantId: string, userId?: string): Promise<boolean> {
+  async function checkRecordingAccess(
+    recording: { call: Call | null },
+    profile: Awaited<ReturnType<typeof getUserProfile>>,
+    tenantId: string,
+    userId?: string
+  ): Promise<boolean> {
     if (profile.isAdminOrOwner) {
       return true;
     }
@@ -261,8 +273,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
 
     const profile = await getUserProfile(request);
 
-    const where: any = {
-      call: { tenantId },
+    const callWhere: Prisma.CallWhereInput = { tenantId };
+    const where: Prisma.RecordingWhereInput = {
+      call: callWhere,
       deletedAt: null,
     };
 
@@ -271,7 +284,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
 
     if (status) {
-      where.status = status;
+      where.status = status as RecordingStatus;
     }
 
     if (!profile.isAdminOrOwner) {
@@ -287,7 +300,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
             },
           };
         }
-        where.call.publisherId = profile.publisherId;
+        callWhere.publisherId = profile.publisherId;
       } else if (profile.userRoles.includes('BUYER')) {
         if (!profile.buyerAccessToRecordings) {
           return {
@@ -300,11 +313,11 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
             },
           };
         }
-        where.call.buyerId = profile.buyerId;
+        callWhere.buyerId = profile.buyerId;
       } else if (profile.userRoles.includes('AGENT')) {
         // Fetch agent's phone numbers
         const fetchedNumbers = await prisma.phoneNumber.findMany({
-          where: { tenantId, userId: (request as any).user?.userId },
+          where: { tenantId, userId: request.user?.userId },
           select: { number: true },
         });
         const userNumbers = fetchedNumbers.map(n => n.number);
@@ -322,9 +335,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
             numberFormats.push('1' + num);
           }
         }
-        where.call.OR = [
-          { createdById: (request as any).user?.userId },
-          { fromNumber: { userId: (request as any).user?.userId } },
+        callWhere.OR = [
+          { createdById: request.user?.userId },
+          { fromNumber: { userId: request.user?.userId } },
           { callerId: { in: numberFormats } },
           { toNumber: { in: numberFormats } },
           { did: { in: numberFormats } },
@@ -405,7 +418,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       });
 
       if (!recording) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -415,10 +428,10 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       const profile = await getUserProfile(request);
-      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, (request as any).user?.userId);
+      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
 
       if (!isAllowed) {
-        reply.code(403);
+        void reply.code(403);
         return { error: { code: 'FORBIDDEN', message: 'Access denied to this recording' } };
       }
 
@@ -466,23 +479,23 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       });
 
       if (!recording) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
       }
 
       const profile = await getUserProfile(request);
-      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, (request as any).user?.userId);
+      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
 
       if (!isAllowed) {
-        reply.code(403);
+        void reply.code(403);
         return { error: { code: 'FORBIDDEN', message: 'Access denied to this recording' } };
       }
 
-      const token = await (reply as any).jwtSign(
+      const token = await reply.jwtSign(
         {
           tenantId,
-          userId: (request as any).user?.userId,
-          email: (request as any).user?.email,
+          userId: request.user?.userId,
+          email: request.user?.email,
         },
         { expiresIn: '1h' }
       );
@@ -496,7 +509,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
       };
     } catch (error) {
-      reply.code(404);
+      void reply.code(404);
       return {
         error: {
           code: 'NOT_FOUND',
@@ -530,15 +543,15 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         });
 
         if (!recording) {
-          reply.code(404);
+          void reply.code(404);
           return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
         }
 
         const profile = await getUserProfile(request);
-        const isAllowed = await checkRecordingAccess(recording, profile, tenantId, (request as any).user?.userId);
+        const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
 
         if (!isAllowed) {
-          reply.code(403);
+          void reply.code(403);
           return { error: { code: 'FORBIDDEN', message: 'Access denied to this recording' } };
         }
 
@@ -550,7 +563,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
         return reply.send(stream);
       } catch (error) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -598,7 +611,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
           message: 'Metadata backfilled successfully',
         };
       } catch (error) {
-        reply.code(400);
+        void reply.code(400);
         return {
           error: {
             code: 'BACKFILL_ERROR',

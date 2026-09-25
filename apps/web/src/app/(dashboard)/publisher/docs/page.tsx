@@ -4,7 +4,6 @@ import {
   BookOpen,
   Code,
   ExternalLink,
-  FileCode2,
   HelpCircle,
   Mail,
   ShieldCheck,
@@ -40,7 +39,7 @@ function PublisherDocsPage() {
               Send lead details (ZIP code, state, etc.) using a two-step Ping/Post protocol to
               receive instant dynamic bids.
             </p>
-            <Button size="xs" variant="outline" asChild className="text-xs mt-2">
+            <Button size={null} variant="outline" asChild className="text-xs mt-2">
               <a href="/publisher/api-setup" className="flex items-center gap-1">
                 View API Keys & Specifications <ExternalLink className="h-3 w-3" />
               </a>
@@ -60,7 +59,7 @@ function PublisherDocsPage() {
               Use our built-in API tester to simulate lead requests using your active API key and
               campaign triggers.
             </p>
-            <Button size="xs" variant="outline" asChild className="text-xs mt-2">
+            <Button size={null} variant="outline" asChild className="text-xs mt-2">
               <a href="/publisher/tester" className="flex items-center gap-1">
                 Open Sandbox Tester <ExternalLink className="h-3 w-3" />
               </a>
@@ -104,7 +103,7 @@ function PublisherDocsPage() {
             If you accept the bid, submit a POST request to{' '}
             <code className="bg-sunken text-ink rounded-control font-mono">/api/v1/post</code> with
             the <code className="bg-sunken text-ink rounded-control font-mono">pingId</code> and the
-            lead's contact information (first name, last name, phone number). The system validates
+            lead&apos;s contact information (first name, last name, phone number). The system validates
             the details and returns a{' '}
             <code className="bg-sunken text-ink rounded-control font-mono">routingNumber</code>.
           </p>
@@ -119,7 +118,7 @@ function PublisherDocsPage() {
             Initiate a telephony call transfer to the returned{' '}
             <code className="bg-sunken text-ink rounded-control font-mono">routingNumber</code>.
             Ensure the caller ID matches the phone number posted in Step 2. Once the call duration
-            exceeds the campaign's billable threshold (usually 60 seconds), the call will mark as
+            exceeds the campaign&apos;s billable threshold (usually 60 seconds), the call will mark as
             billable and credit to your earnings.
           </p>
         </CardContent>

@@ -70,6 +70,7 @@ export default function CampaignGeoIntelligenceMap() {
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all');
   const [liveMode, setLiveMode] = useState<boolean>(true);
   const [compareMode] = useState<boolean>(false);
+  const [, setComparisonPoint] = useState<GeoMetricPoint | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showLegend, setShowLegend] = useState<boolean>(true);
 
@@ -88,7 +89,15 @@ export default function CampaignGeoIntelligenceMap() {
   });
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<{
+    remove: () => void;
+    jumpTo: (options: {
+      center: [number, number];
+      zoom: number;
+      pitch: number;
+      bearing: number;
+    }) => void;
+  } | null>(null);
 
   // Initialize MapLibre GL base map
   useEffect(() => {
@@ -396,7 +405,7 @@ export default function CampaignGeoIntelligenceMap() {
         stroked: true,
         pickable: true,
         opacity: 0.85,
-        onHover: (info: any) => {
+        onHover: (info: { object?: GeoMetricPoint | null; x: number; y: number }) => {
           if (info.object) {
             setHoveredPoint(info.object);
             setHoverInfo({ x: info.x, y: info.y });
@@ -405,17 +414,18 @@ export default function CampaignGeoIntelligenceMap() {
             setHoverInfo(null);
           }
         },
-        onClick: (info: any) => {
-          if (info.object) {
+        onClick: (info: { object?: GeoMetricPoint | null }) => {
+          const point = info.object;
+          if (point) {
             if (compareMode) {
-              setComparisonPoint(info.object);
+              setComparisonPoint(point);
             } else {
-              setInspectedPoint(info.object);
+              setInspectedPoint(point);
               // Gently pan camera closer to clicked point
               setViewState(prev => ({
                 ...prev,
-                latitude: info.object.latitude - 0.2, // offset slightly so side panel doesn't hide it
-                longitude: info.object.longitude,
+                latitude: point.latitude - 0.2, // offset slightly so side panel doesn't hide it
+                longitude: point.longitude,
                 zoom: Math.max(prev.zoom, 7),
               }));
             }
@@ -434,10 +444,10 @@ export default function CampaignGeoIntelligenceMap() {
         new ScatterplotLayer({
           id: 'live-pulses',
           data: pulses,
-          getPosition: (d: any) => [d.lng, d.lat],
-          getRadius: (d: any) => d.size * 900,
+          getPosition: (d: (typeof pulses)[number]) => [d.lng, d.lat],
+          getRadius: (d: (typeof pulses)[number]) => d.size * 900,
           getFillColor: [0, 0, 0, 0],
-          getLineColor: (d: any) => [...d.color, Math.max(0, 255 - d.size * 4.2)],
+          getLineColor: (d: (typeof pulses)[number]) => [...d.color, Math.max(0, 255 - d.size * 4.2)],
           lineWidthMinPixels: 1.5,
           stroked: true,
           pickable: false,
@@ -708,10 +718,10 @@ export default function CampaignGeoIntelligenceMap() {
               {/* DeckGL canvas drawing WebGL visualization layer overlays on top */}
               <DeckGL
                 viewState={viewState}
-                onViewStateChange={(e: any) => setViewState(e.viewState)}
+                onViewStateChange={(e: { viewState: typeof viewState }) => setViewState(e.viewState)}
                 controller={{ doubleClickZoom: false, dragRotate: true }}
                 layers={deckLayers}
-                getCursor={({ isHovering }: any) => (isHovering ? 'pointer' : 'default')}
+                getCursor={({ isHovering }: { isHovering: boolean }) => (isHovering ? 'pointer' : 'default')}
                 style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto' }}
               />
             </div>

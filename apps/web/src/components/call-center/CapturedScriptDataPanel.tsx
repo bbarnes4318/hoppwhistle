@@ -56,10 +56,10 @@ export function CapturedScriptDataPanel({
     {
       label: 'Height',
       value: activeCallData.heightFeet
-        ? `${activeCallData.heightFeet} ft ${activeCallData.heightInches || 0} in`
+        ? `${activeCallData.heightFeet as string} ft ${(activeCallData.heightInches as string) || 0} in`
         : '—',
     },
-    { label: 'Weight', value: activeCallData.weight ? `${activeCallData.weight} lbs` : '—' },
+    { label: 'Weight', value: activeCallData.weight ? `${activeCallData.weight as string} lbs` : '—' },
     { label: 'Citizenship', value: activeCallData.citizenship || '—' },
     { label: 'Birth State', value: activeCallData.birthState || '—' },
   ];
@@ -74,21 +74,6 @@ export function CapturedScriptDataPanel({
   const beneficiaryInfo = [
     { label: 'Beneficiary Name', value: activeCallData.beneficiaryName || '—' },
     { label: 'Relationship', value: activeCallData.beneficiaryRelation || '—' },
-  ];
-
-  const quoteInfo = [
-    { label: 'Selected Carrier', value: activeCallData.selectedCarrier || '—', highlight: true },
-    { label: 'Plan Type', value: activeCallData.selectedPlanType || '—' },
-    {
-      label: 'Coverage Amount',
-      value: formatCurrency(activeCallData.selectedCoverage),
-      highlight: true,
-    },
-    {
-      label: 'Monthly Premium',
-      value: formatCurrency(activeCallData.selectedPremium),
-      highlight: true,
-    },
   ];
 
   const bankInfo = [
@@ -211,7 +196,7 @@ export function CapturedScriptDataPanel({
 
   const renderGridSection = (
     title: string,
-    items: Array<{ label: string; value: any; highlight?: boolean }>,
+    items: Array<{ label: string; value: unknown; highlight?: boolean }>,
     icon: React.ReactNode
   ) => {
     return (
@@ -250,7 +235,7 @@ export function CapturedScriptDataPanel({
             Carrier
           </span>
           <span className="text-xl font-bold font-mono tracking-wide text-ink mt-2">
-            {activeCallData.selectedCarrier || 'Not Selected'}
+            {(activeCallData.selectedCarrier as React.ReactNode) || 'Not Selected'}
           </span>
         </div>
         <div className="bg-brand-tint border border-brand rounded-card p-4 flex flex-col justify-between">
@@ -274,7 +259,7 @@ export function CapturedScriptDataPanel({
             Plan Type
           </span>
           <span className="text-xl font-bold font-mono tracking-wide text-ink mt-2">
-            {activeCallData.selectedPlanType || 'Level'}
+            {(activeCallData.selectedPlanType as React.ReactNode) || 'Level'}
           </span>
         </div>
       </div>
@@ -316,7 +301,7 @@ export function CapturedScriptDataPanel({
           doctorInfo,
           <User className="w-4 h-4 text-brand-ink" />
         )}
-        {activeCallData.hospitalizationReason && (
+        {(activeCallData.hospitalizationReason as React.ReactNode) && (
           <div className="bg-surface border border-rule rounded-card p-5 space-y-2">
             <h3 className="text-xs font-mono uppercase tracking-widest font-bold text-ink pb-2 border-b border-rule">
               Hospitalization Reason

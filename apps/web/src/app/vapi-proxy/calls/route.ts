@@ -42,7 +42,9 @@ export async function POST(request: Request) {
       });
       if (pnRes.ok) {
         const phoneNumbers = await pnRes.json();
-        const matched = phoneNumbers.find((pn: any) => pn.number === finalPhoneNumberId);
+        const matched = phoneNumbers.find(
+          (pn: { id: string; number: string }) => pn.number === finalPhoneNumberId
+        );
         if (matched) {
           const original = finalPhoneNumberId;
           finalPhoneNumberId = matched.id;

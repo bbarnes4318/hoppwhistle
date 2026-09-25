@@ -734,7 +734,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const recordingEnabled = callMetadata.recordingEnabled !== false;
       const answeredAt = call.answeredAt || new Date();
 
-      const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+      const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
       const recordingDebug = {
         ...existingRecordingDebug,
         answerNotifiedAt: answeredAt.toISOString(),
@@ -920,7 +920,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
     // Add metadata.endReason
     const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
-    const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       hangupNotifiedAt: endedAt.toISOString(),
@@ -1457,7 +1457,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
                   queueName,
                   tcpaResult,
                   blockedAt: new Date().toISOString(),
-                } as Prisma.JsonObject,
+                } as unknown as Prisma.InputJsonObject,
                 startedAt: new Date(),
                 endedAt: new Date(),
               },

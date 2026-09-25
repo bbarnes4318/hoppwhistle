@@ -51,10 +51,10 @@ export type RecordingAnalysisItem = {
   sourceUrl?: string | null;
   storageKey?: string | null;
   filename?: string | null;
-  selectedFields: any;
+  selectedFields: unknown;
   status: string;
   transcript?: string | null;
-  extracted?: any | null;
+  extracted?: Record<string, unknown> | null;
   error?: string | null;
   createdAt: string;
   updatedAt: string;

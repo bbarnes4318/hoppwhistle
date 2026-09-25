@@ -93,4 +93,4 @@ Options:
   }
 }
 
-main();
+void main();

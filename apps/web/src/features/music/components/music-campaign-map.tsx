@@ -24,18 +24,30 @@ import {
 } from 'lucide-react';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import {
   generateMusicCampaignGeoMetrics,
   musicCampaigns,
 } from '../data/music-campaign-geo-metrics';
 import { formatCompactNumber, formatCurrency } from '../lib/utils';
 
-import { cn } from '@/lib/utils';
-
 // Client-only lazy loaders for map dependencies to ensure Next.js SSR builds don't crash
-let DeckGL: any = null;
-let ScatterplotLayer: any = null;
-let maplibregl: any = null;
+// Typed to the slices of each library this component actually touches.
+interface BaseMap {
+  remove(): void;
+  jumpTo(options: { center: [number, number]; zoom: number; pitch: number; bearing: number }): void;
+}
+interface PickInfo<T> {
+  object?: T;
+  x: number;
+  y: number;
+}
+type LivePulse = { id: string; lat: number; lng: number; size: number; color: number[] };
+
+let DeckGL: React.ComponentType<Record<string, unknown>> | null = null;
+let ScatterplotLayer: (new (props: Record<string, unknown>) => unknown) | null = null;
+let maplibregl: { Map: new (options: Record<string, unknown>) => BaseMap } | null = null;
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 if (typeof window !== 'undefined') {
@@ -79,7 +91,7 @@ export default function MusicCampaignMap() {
   });
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<BaseMap | null>(null);
 
   // Sync MapLibre base style layer with viewport camera updates
   useEffect(() => {
@@ -216,9 +228,7 @@ export default function MusicCampaignMap() {
   }, [bestMarketPoint]);
 
   // Animated live radar pulse triggers
-  const [pulses, setPulses] = useState<
-    Array<{ id: string; lat: number; lng: number; size: number; color: number[] }>
-  >([]);
+  const [pulses, setPulses] = useState<LivePulse[]>([]);
   const pulseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -336,7 +346,7 @@ export default function MusicCampaignMap() {
 
   // Construct Deck.gl scatter layers
   const deckLayers = useMemo(() => {
-    if (!DeckGL) return [];
+    if (!DeckGL || !ScatterplotLayer) return [];
 
     const layersList = [];
 
@@ -362,7 +372,7 @@ export default function MusicCampaignMap() {
         stroked: true,
         pickable: true,
         opacity: 0.85,
-        onHover: (info: any) => {
+        onHover: (info: PickInfo<GeoMetricPoint>) => {
           if (info.object) {
             setHoveredPoint(info.object);
             setHoverInfo({ x: info.x, y: info.y });
@@ -371,14 +381,15 @@ export default function MusicCampaignMap() {
             setHoverInfo(null);
           }
         },
-        onClick: (info: any) => {
-          if (info.object) {
-            setInspectedPoint(info.object);
+        onClick: (info: PickInfo<GeoMetricPoint>) => {
+          const picked = info.object;
+          if (picked) {
+            setInspectedPoint(picked);
             setSidebarOpen(true);
             setViewState(prev => ({
               ...prev,
-              latitude: info.object.latitude - 0.15,
-              longitude: info.object.longitude,
+              latitude: picked.latitude - 0.15,
+              longitude: picked.longitude,
               zoom: Math.max(prev.zoom, 7),
             }));
           }
@@ -396,10 +407,10 @@ export default function MusicCampaignMap() {
         new ScatterplotLayer({
           id: 'fan-live-pulses',
           data: pulses,
-          getPosition: (d: any) => [d.lng, d.lat],
-          getRadius: (d: any) => d.size * 850,
+          getPosition: (d: LivePulse) => [d.lng, d.lat],
+          getRadius: (d: LivePulse) => d.size * 850,
           getFillColor: [0, 0, 0, 0],
-          getLineColor: (d: any) => [...d.color, Math.max(0, 255 - d.size * 5)],
+          getLineColor: (d: LivePulse) => [...d.color, Math.max(0, 255 - d.size * 5)],
           lineWidthMinPixels: 1.5,
           stroked: true,
           pickable: false,
@@ -531,10 +542,12 @@ export default function MusicCampaignMap() {
             {/* WebGL DeckGL layers overlay */}
             <DeckGL
               viewState={viewState}
-              onViewStateChange={(e: any) => setViewState(e.viewState)}
+              onViewStateChange={(e: { viewState: typeof viewState }) => setViewState(e.viewState)}
               controller={{ doubleClickZoom: false, dragRotate: true }}
               layers={deckLayers}
-              getCursor={({ isHovering }: any) => (isHovering ? 'pointer' : 'default')}
+              getCursor={({ isHovering }: { isHovering: boolean }) =>
+                isHovering ? 'pointer' : 'default'
+              }
               style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto' }}
             />
           </div>

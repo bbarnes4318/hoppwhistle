@@ -23,8 +23,12 @@ import { createLivePoller, jittered } from '../use-live-poll';
  */
 
 describe('createLivePoller', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   /** Deterministic jitter, so a tick is exactly the interval. */
   const noJitter = () => 0.5;

@@ -20,7 +20,7 @@ export function DashboardPreview() {
             What you see when you sign in.
           </h2>
           <p className="text-base sm:text-lg text-slate-400">
-            Today's delivery, what is left on the block, which agents are on calls, and the
+            Today&apos;s delivery, what is left on the block, which agents are on calls, and the
             settlement building behind it.
           </p>
         </div>

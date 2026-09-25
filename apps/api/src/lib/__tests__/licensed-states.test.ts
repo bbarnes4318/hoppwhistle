@@ -14,7 +14,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockPrisma = {
   user: { findFirst: vi.fn() },
   insuranceLead: { findFirst: vi.fn() },
-  lead: { findFirst: vi.fn() },
+  lead: {
+    findFirst: vi.fn<[args: { where: { tenantId: string } }], Promise<{ state: string } | null>>(),
+  },
 };
 
 vi.mock('../prisma.js', () => ({

@@ -12,6 +12,7 @@ import * as timeTrackingService from '../services/time-tracking-service.js';
 // Type alias for clarity in route handlers
 type AuthRequest = FastifyRequest;
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must return a promise
 export async function registerPayrollRoutes(fastify: FastifyInstance) {
   // ============================================================================
   // User Endpoints - Time Entries

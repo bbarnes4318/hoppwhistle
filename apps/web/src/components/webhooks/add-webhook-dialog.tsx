@@ -191,7 +191,7 @@ export function AddWebhookDialog({
  >
  Cancel
  </Button>
- <Button onClick={handleSubmit} disabled={loading || !formData.url.trim() || formData.events.length === 0}>
+ <Button onClick={() => void handleSubmit()} disabled={loading || !formData.url.trim() || formData.events.length === 0}>
  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
  Add Webhook
  </Button>

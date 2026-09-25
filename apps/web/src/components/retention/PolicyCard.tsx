@@ -3,12 +3,12 @@
 import { ChevronRight, Phone, User } from 'lucide-react';
 import Link from 'next/link';
 
-import type { RetentionPolicy, StatusConfig } from './RetentionDashboard';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn, formatPhoneNumber, formatCurrency } from '@/lib/utils';
+
+import type { RetentionPolicy, StatusConfig } from './RetentionDashboard';
 
 // ============================================================================
 // Types

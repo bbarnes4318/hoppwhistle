@@ -243,7 +243,7 @@ export function PurchaseNumberDialog({ open, onOpenChange, onSuccess }: Purchase
  <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
  Cancel
  </Button>
- <Button onClick={handlePurchase} disabled={loading}>
+ <Button onClick={() => void handlePurchase()} disabled={loading}>
  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
  Purchase Number
  </Button>

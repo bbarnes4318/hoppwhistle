@@ -68,7 +68,7 @@ export function Step2RoutingNumbers({
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                When a lead qualifies, they'll be transferred to this number in real-time.
+                When a lead qualifies, they&apos;ll be transferred to this number in real-time.
               </p>
             )}
           </div>

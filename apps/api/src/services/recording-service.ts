@@ -1,4 +1,7 @@
 import { Readable } from 'stream';
+import type { ReadableStream as NodeReadableStream } from 'stream/web';
+
+import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -102,8 +105,8 @@ export class RecordingService {
       where: { id: data.callId },
       select: { metadata: true }
     });
-    const callMetadata = (existingCall?.metadata as any) || {};
-    const existingRecordingDebug = callMetadata.recordingDebug || {};
+    const callMetadata = (existingCall?.metadata as Prisma.JsonObject | null) || {};
+    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       uploadAttemptedAt: new Date().toISOString(),
@@ -121,7 +124,7 @@ export class RecordingService {
         metadata: {
           ...callMetadata,
           recordingDebug,
-        } as any,
+        },
       },
     });
 
@@ -160,8 +163,8 @@ export class RecordingService {
       where: { id: callId },
       select: { metadata: true }
     });
-    const callMetadata = (existingCall?.metadata as any) || {};
-    const existingRecordingDebug = callMetadata.recordingDebug || {};
+    const callMetadata = (existingCall?.metadata as Prisma.JsonObject | null) || {};
+    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       uploadAttemptedAt: new Date().toISOString(),
@@ -176,7 +179,7 @@ export class RecordingService {
         metadata: {
           ...callMetadata,
           recordingDebug,
-        } as any,
+        },
       },
     });
 
@@ -388,7 +391,7 @@ export class RecordingService {
         const response = await fetch(recording.url);
         if (response.ok && response.body) {
           return {
-            stream: Readable.fromWeb(response.body as any),
+            stream: Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>),
             contentType: response.headers.get('content-type') || 'audio/wav',
           };
         }

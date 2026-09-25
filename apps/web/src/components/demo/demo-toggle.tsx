@@ -119,7 +119,7 @@ export function DemoToggle() {
  <Switch
  id="demo-mode"
  checked={demoMode}
- onCheckedChange={handleToggle}
+ onCheckedChange={checked => void handleToggle(checked)}
  disabled={loading}
  />
  </div>
@@ -128,7 +128,7 @@ export function DemoToggle() {
  <Alert variant="info">
  <Info />
  <AlertDescription>
- Demo mode is active. You're viewing synthetic data generated for demonstration purposes.
+ Demo mode is active. You&apos;re viewing synthetic data generated for demonstration purposes.
  </AlertDescription>
  </Alert>
  )}

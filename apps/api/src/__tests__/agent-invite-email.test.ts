@@ -26,7 +26,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sendMail = vi.fn();
+const sendMail = vi.fn<[message: unknown], Promise<{ accepted: string[] }>>();
 const createTransport = vi.fn(() => ({ sendMail }));
 
 vi.mock('nodemailer', () => ({
@@ -72,7 +72,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];
-    else process.env[key] = saved[key] as string;
+    else process.env[key] = saved[key];
   }
 });
 

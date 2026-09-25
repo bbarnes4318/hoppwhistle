@@ -61,7 +61,7 @@ export function TopPerformers() {
       });
 
       const [metricsResp, campaignsResp] = await Promise.all([
-        apiClient.get<MetricsApiResponse>(`/api/v1/reporting/metrics?${params}`),
+        apiClient.get<MetricsApiResponse>(`/api/v1/reporting/metrics?${params.toString()}`),
         apiClient.get<CampaignsApiResponse>('/api/v1/campaigns?limit=5'),
       ]);
 
@@ -125,7 +125,7 @@ export function TopPerformers() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   return (

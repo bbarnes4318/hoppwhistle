@@ -138,7 +138,6 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
 
   const canProceedStep1 = name.trim() && publisherId;
   const canProceedStep2 = true; // Buyers are optional
-  const canFinish = true; // Number assignment is optional
 
   const handleNext = async () => {
     if (currentStep === 1 && canProceedStep1) {
@@ -438,7 +437,7 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
 
             {currentStep < 3 ? (
               <Button
-                onClick={handleNext}
+                onClick={() => void handleNext()}
                 disabled={
                   saving ||
                   (currentStep === 1 && !canProceedStep1) ||
@@ -458,7 +457,7 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
                 )}
               </Button>
             ) : (
-              <Button onClick={handleFinish} disabled={saving}>
+              <Button onClick={() => void handleFinish()} disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -383,10 +383,10 @@ export default function MusicVoicePage() {
         category: 'custom',
       });
       void fetchAgents();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create voice agent',
+        description: (error as { message?: string }).message || 'Failed to create voice agent',
         variant: 'destructive',
       });
     } finally {
@@ -411,10 +411,10 @@ export default function MusicVoicePage() {
         setSelectedAgent(null);
       }
       void fetchAgents();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to delete agent',
+        description: (error as { message?: string }).message || 'Failed to delete agent',
         variant: 'destructive',
       });
     }
@@ -564,7 +564,7 @@ export default function MusicVoicePage() {
 
               {selectedAgent && (
                 <button
-                  onClick={() => handleDeleteAgent(selectedAgent.id)}
+                  onClick={() => void handleDeleteAgent(selectedAgent.id)}
                   className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-600 px-2 py-1 rounded border border-red-200 bg-red-50/50 hover:bg-red-50 transition-all font-semibold"
                   title="Delete selected voice agent"
                 >
@@ -674,7 +674,7 @@ export default function MusicVoicePage() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreateAgent}
+                  onClick={() => void handleCreateAgent()}
                   disabled={creating}
                   className="px-3 py-1.5 rounded text-white bg-[var(--m-accent)] hover:bg-[#008be5] text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
                 >

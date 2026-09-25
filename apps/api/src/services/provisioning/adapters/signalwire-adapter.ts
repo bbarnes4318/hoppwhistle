@@ -70,9 +70,9 @@ export class SignalWireAdapter implements ProvisioningAdapter {
 
       if (!response.ok) {
         const errorText = await response.text();
-        let errorData;
+        let errorData: { message?: string };
         try {
-          errorData = JSON.parse(errorText);
+          errorData = JSON.parse(errorText) as { message?: string };
         } catch {
           errorData = { message: errorText };
         }
@@ -95,7 +95,7 @@ export class SignalWireAdapter implements ProvisioningAdapter {
         );
       }
 
-      return await response.json();
+      return (await response.json()) as T;
     } catch (error) {
       if (error instanceof Error) {
         throw error;

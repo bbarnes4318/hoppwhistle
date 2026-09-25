@@ -22,12 +22,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const executeApi = vi.fn();
+const executeApi = vi.fn<[command: string, args: string], Promise<string>>();
 vi.mock('../services/freeswitch-service.js', () => ({
-  freeswitchService: { executeApi: (...args: unknown[]) => executeApi(...(args as [])) },
+  freeswitchService: {
+    executeApi: (...args: [command: string, args: string]) => executeApi(...args),
+  },
 }));
 
-const redis = vi.hoisted(() => ({ get: vi.fn(), setex: vi.fn() }));
+const redis = vi.hoisted(() => ({
+  get: vi.fn<[key: string], Promise<string | null>>(),
+  setex: vi.fn<[key: string, seconds: number, value: string], Promise<string>>(),
+}));
 vi.mock('../services/redis.js', () => ({ getRedisClient: () => redis }));
 
 vi.mock('../lib/logger.js', () => ({
@@ -181,7 +186,7 @@ describe('getRegisteredExtensions', () => {
       expect.any(Number),
       expect.stringContaining('1042')
     );
-    const ttl = redis.setex.mock.calls[0][1] as number;
+    const ttl = redis.setex.mock.calls[0][1];
     // Short enough that a newly-registered agent is not left waiting.
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(30);

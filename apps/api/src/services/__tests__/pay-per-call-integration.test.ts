@@ -3,6 +3,10 @@ import { Prisma } from '@prisma/client';
 import Fastify from 'fastify';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+import {
+  internalKeyHeaders,
+  useTestInternalKey,
+} from '../../__tests__/helpers/internal-key.js';
 import { announceSkip, databaseGate, redisGate } from '../../__tests__/helpers/live-services.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { registerAuthRoutes } from '../../routes/auth.js';
@@ -19,10 +23,6 @@ import { BillingService } from '../billing-service.js';
 import { BuyerBillingService } from '../buyer-billing-service.js';
 import { postService } from '../post-service.js';
 import { getRedisClient } from '../redis.js';
-import {
-  internalKeyHeaders,
-  useTestInternalKey,
-} from '../../__tests__/helpers/internal-key.js';
 
 // Truncates real tables and uses real Redis. Runs only against services
 // explicitly nominated as disposable — never DATABASE_URL/REDIS_URL, which

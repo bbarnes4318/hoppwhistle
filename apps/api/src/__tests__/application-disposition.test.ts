@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses */
+import { randomUUID } from 'node:crypto';
+
 import { RoleName } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
+import type { JwtPayload } from '../types/fastify.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
 
@@ -102,7 +104,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       userId: s.agentId,
       email: s.agentEmail,
       roles: ['AGENT'],
-    })}`,
+    } as JwtPayload)}`,
   });
 
   async function cleanDatabase() {
@@ -195,7 +197,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       const response = await saveDisposition({ callId, disposition: 'APPLICATION_SUBMITTED' });
 
       expect(response.statusCode).toBe(400);
-      expect((response.json() as any).error.code).toBe('APPLICATION_REQUIRED');
+      expect(response.json().error.code).toBe('APPLICATION_REQUIRED');
     });
 
     it('leaves the call unmarked when it refuses', async () => {
@@ -227,7 +229,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect((response.json() as any).error.code).toBe('VALIDATION_ERROR');
+      expect(response.json().error.code).toBe('VALIDATION_ERROR');
 
       const call = await prisma.call.findUnique({ where: { id: callId } });
       expect(call?.disposition).toBeNull();
@@ -245,7 +247,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       // Dropping it silently loses business the agent believed they recorded;
       // recording it puts a sale against a call marked "not interested".
       expect(response.statusCode).toBe(400);
-      expect((response.json() as any).error.code).toBe('APPLICATION_NOT_EXPECTED');
+      expect(response.json().error.code).toBe('APPLICATION_NOT_EXPECTED');
     });
   });
 
@@ -340,7 +342,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       });
 
       expect(response.statusCode).toBe(201);
-      const createdId = (response.json() as any).id;
+      const createdId = response.json().id;
 
       const call = await prisma.call.findUnique({ where: { id: createdId } });
       expect(call?.disposition).toBe('APPLICATION_SUBMITTED');
@@ -359,7 +361,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
         application: applicationBody(),
       });
 
-      const call = await prisma.call.findUnique({ where: { id: (response.json() as any).id } });
+      const call = await prisma.call.findUnique({ where: { id: response.json().id } });
 
       /*
        * `answeredAt` is what makes a call DELIVERED, and delivered calls are the
@@ -467,7 +469,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       const response = await patchDisposition(callId, { disposition: 'APPLICATION_SUBMITTED' });
 
       expect(response.statusCode).toBe(400);
-      expect((response.json() as any).error.code).toBe('APPLICATION_REQUIRED');
+      expect(response.json().error.code).toBe('APPLICATION_REQUIRED');
 
       const call = await prisma.call.findUnique({ where: { id: callId } });
       // Not relabelled. A call reading as a sale the numerator never saw is the
@@ -529,7 +531,7 @@ describe.skipIf(!gate.available)('Application-submitted dispositions', () => {
       // intend. A couple insuring together is two applications and belongs on
       // the live path, each with its own form instance.
       expect(response.statusCode).toBe(409);
-      expect((response.json() as any).error.code).toBe('APPLICATION_ALREADY_RECORDED');
+      expect(response.json().error.code).toBe('APPLICATION_ALREADY_RECORDED');
     });
 
     it('treats a voided application as no application at all', async () => {

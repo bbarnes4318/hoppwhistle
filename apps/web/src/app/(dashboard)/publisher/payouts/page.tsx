@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  DollarSign,
-  FileSpreadsheet,
-  FileText,
-  Loader2,
-  RefreshCw,
-  TrendingUp,
-} from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -119,7 +112,7 @@ function PublisherPayoutsPage() {
             Monitor your earnings settlements, payout history, and payment processing status.
           </p>
         </div>
-        <Button onClick={loadData} variant="outline" size="sm">
+        <Button onClick={() => void loadData()} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>

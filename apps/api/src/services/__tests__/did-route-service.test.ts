@@ -52,7 +52,7 @@ describe('syncDidRouteForNumber for a campaign number', () => {
         campaignId: 'camp-1',
         destination: 'Campaign',
         label: 'Auto-routed Campaign',
-      }),
+      }) as unknown,
     });
   });
 
@@ -71,7 +71,7 @@ describe('syncDidRouteForNumber for a campaign number', () => {
         campaignId: 'camp-1',
         destination: 'Campaign',
         label: 'Auto-routed Campaign',
-      }),
+      }) as unknown,
     });
   });
 });

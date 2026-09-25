@@ -73,7 +73,7 @@ type StepId =
 interface StepOption {
   label: string;
   nextStep: StepId;
-  color?: 'emerald' | 'red' | 'blue' | 'amber';
+  color?: 'emerald' | 'red' | 'blue' | 'amber' | 'orange';
   action?: () => void;
 }
 

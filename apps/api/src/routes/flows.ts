@@ -1,9 +1,11 @@
+import type { Flow } from '@hopwhistle/routing-dsl';
 import { parseFlow } from '@hopwhistle/routing-dsl';
 import { FastifyInstance } from 'fastify';
 
+import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
+import type { AuthenticatedUser } from '../middleware/auth.js';
 import { FlowEngine } from '../services/flow-engine.js';
 import { flowStore } from '../services/flow-store.js';
-import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 
 // Store active flow engines by call ID
 const activeEngines = new Map<string, FlowEngine>();
@@ -11,11 +13,12 @@ const activeEngines = new Map<string, FlowEngine>();
 /**
  * Flow management routes (DSL flows)
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin: registered via server.register(), which expects an async function
 export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
   // Create/update a flow version
-  fastify.post('/api/v1/flows', async (request, reply) => {
+  fastify.post<{ Body: Record<string, unknown> }>('/api/v1/flows', async (request, reply) => {
     try {
-      const user = (request as any).user;
+      const user = request.user;
       const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
@@ -30,11 +33,11 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
 
       const flowVersion = await flowStore.parseAndStore(
         flowData,
-        user?.userId || user?.id,
+        user?.userId || (user as (AuthenticatedUser & { id?: string }) | undefined)?.id,
         tenantId
       );
 
-      reply.code(201);
+      void reply.code(201);
       return {
         id: flowVersion.id,
         flowId: flowVersion.flowId,
@@ -43,7 +46,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         createdAt: flowVersion.createdAt,
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'INVALID_FLOW',
@@ -73,15 +76,17 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         
         // Filter by tenant ID if stored in flow metadata
         const firstVersion = versions[0];
-        if (firstVersion?.flow && (firstVersion.flow as any).tenantId) {
-          if ((firstVersion.flow as any).tenantId !== tenantId) {
+        const storedTenantId = (firstVersion?.flow as (Flow & { tenantId?: string }) | undefined)
+          ?.tenantId;
+        if (firstVersion?.flow && storedTenantId) {
+          if (storedTenantId !== tenantId) {
             return null; // Skip flows from other tenants
           }
         }
         
         return {
           id: flowId,
-          name: (firstVersion?.flow as any)?.name || flowId,
+          name: firstVersion?.flow?.name || flowId,
           publishedVersion: published?.version || null,
           versions: versions.map(v => ({
             version: v.version,
@@ -113,7 +118,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
       );
 
       if (!flowVersion) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -153,7 +158,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
     const published = await flowStore.getPublishedFlow(request.params.flowId);
 
     if (!published) {
-      reply.code(404);
+      void reply.code(404);
       return {
         error: {
           code: 'NOT_FOUND',
@@ -191,7 +196,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
           publishedAt: flowVersion.publishedAt,
         };
       } catch (error) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -221,7 +226,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
           message: 'Flow rolled back successfully',
         };
       } catch (error) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -243,7 +248,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         );
 
         if (!deleted) {
-          reply.code(404);
+          void reply.code(404);
           return {
             error: {
               code: 'NOT_FOUND',
@@ -252,10 +257,10 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
           };
         }
 
-        reply.code(204);
+        void reply.code(204);
         return;
       } catch (error) {
-        reply.code(400);
+        void reply.code(400);
         return {
           error: {
             code: 'INVALID_OPERATION',
@@ -270,7 +275,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
   fastify.post('/api/v1/flows/validate', async (request, reply) => {
     try {
       const flow = parseFlow(request.body);
-      reply.code(200);
+      void reply.code(200);
       return {
         valid: true,
         flowId: flow.id,
@@ -278,7 +283,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         nodeCount: flow.nodes.length,
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         valid: false,
         error: {
@@ -303,7 +308,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         if (version) {
           const flowVersion = await flowStore.getFlowVersion(flowId, version);
           if (!flowVersion) {
-            reply.code(404);
+            void reply.code(404);
             return {
               error: {
                 code: 'NOT_FOUND',
@@ -315,7 +320,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         } else {
           const published = await flowStore.getPublishedFlow(flowId);
           if (!published) {
-            reply.code(404);
+            void reply.code(404);
             return {
               error: {
                 code: 'NOT_FOUND',
@@ -343,7 +348,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
           currentNodeId: engine.getContext().currentNodeId,
         };
       } catch (error) {
-        reply.code(400);
+        void reply.code(400);
         return {
           error: {
             code: 'EXECUTION_ERROR',
@@ -363,7 +368,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
         const engine = activeEngines.get(callId);
 
         if (!engine) {
-          reply.code(404);
+          void reply.code(404);
           return {
             error: {
               code: 'NOT_FOUND',
@@ -384,7 +389,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
           currentNodeId: engine.getContext().currentNodeId,
         };
       } catch (error) {
-        reply.code(400);
+        void reply.code(400);
         return {
           error: {
             code: 'INVALID_EVENT',

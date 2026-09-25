@@ -1,8 +1,6 @@
 'use client';
 
-import { CALL_SOURCE_LABELS } from '@hopwhistle/shared';
 import {
-  Calendar,
   Download,
   Loader2,
   Play,
@@ -10,14 +8,13 @@ import {
   Search,
   Volume2,
   AlertCircle,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -258,7 +255,7 @@ function PublisherCallsPage() {
           </p>
         </div>
         <Button
-          onClick={handleExportCSV}
+          onClick={() => void handleExportCSV()}
           disabled={exporting || calls.length === 0}
           className="bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium gap-2 self-start md:self-auto"
         >
@@ -294,7 +291,7 @@ function PublisherCallsPage() {
               <Select
                 value={billableFilter}
                 onValueChange={val => {
-                  setBillableFilter(val as any);
+                  setBillableFilter(val as 'all' | 'billable' | 'non-billable');
                   setPage(1);
                 }}
               >

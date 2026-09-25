@@ -336,13 +336,13 @@ vi.mock('../event-bus.js', () => ({
 }));
 
 // Imports after mocking
-import { registerDidRouteRoutes } from '../../routes/did-routes.js';
-import { auctionService } from '../auction-service.js';
-import { postService } from '../post-service.js';
 import {
   internalKeyHeaders,
   useTestInternalKey,
 } from '../../__tests__/helpers/internal-key.js';
+import { registerDidRouteRoutes } from '../../routes/did-routes.js';
+import { auctionService } from '../auction-service.js';
+import { postService } from '../post-service.js';
 
 describe('End-to-End RTB Call Flow Path Test', () => {
   let app: any;

@@ -138,7 +138,7 @@ async function vapiRequest<T>(method: string, path: string, body?: unknown): Pro
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await response.json();
+  const data = (await response.json()) as unknown;
 
   if (!response.ok) {
     throw new Error(`Vapi API ${response.status}: ${JSON.stringify(data).substring(0, 300)}`);

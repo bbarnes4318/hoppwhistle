@@ -11,9 +11,9 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { provisioningService } from '../services/provisioning/provisioning-service.js';
-import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 

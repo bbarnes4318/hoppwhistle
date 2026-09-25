@@ -222,7 +222,7 @@ describe.skipIf(!gate.available)('the API response contract, through the real we
       expect(Array.isArray(viaPayload)).toBe(true);
     });
 
-    it('leaves the list empty rather than throwing when the body is not an envelope', async () => {
+    it('leaves the list empty rather than throwing when the body is not an envelope', () => {
       // `payload()` is the guard as well as the accessor: an unexpected shape
       // must produce "nothing to show", never an exception in a layout.
       expect(payload({ data: undefined } as any)).toBeUndefined();

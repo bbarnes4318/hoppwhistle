@@ -1,7 +1,11 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 
 import { logger } from '../lib/logger.js';
-import { quotaService } from '../services/quota-service.js';
+import {
+  quotaService,
+  type BudgetCheckResult,
+  type QuotaCheckResult,
+} from '../services/quota-service.js';
 
 /**
  * Quota Middleware
@@ -10,61 +14,66 @@ import { quotaService } from '../services/quota-service.js';
  */
 export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes' | 'phone_numbers' | 'budget') {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = (request as any).user;
+    const user = request.user;
     if (!user || !user.tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
     const overrideToken = request.headers['x-quota-override'] as string | undefined;
 
     try {
-      let result;
+      let result: QuotaCheckResult | BudgetCheckResult;
+      const body = request.body as { estimatedMinutes?: number; estimatedCost?: number } | undefined;
 
       switch (quotaType) {
         case 'concurrent_calls':
           result = await quotaService.checkConcurrentCalls(user.tenantId, overrideToken);
           break;
 
-        case 'daily_minutes':
-          const estimatedMinutes = (request.body as any)?.estimatedMinutes || 1;
+        case 'daily_minutes': {
+          const estimatedMinutes = body?.estimatedMinutes || 1;
           result = await quotaService.checkDailyMinutes(user.tenantId, estimatedMinutes, overrideToken);
           break;
+        }
 
         case 'phone_numbers':
           result = await quotaService.checkPhoneNumberQuota(user.tenantId, overrideToken);
           break;
 
-        case 'budget':
-          const estimatedCost = (request.body as any)?.estimatedCost || 0;
+        case 'budget': {
+          const estimatedCost = body?.estimatedCost || 0;
           result = await quotaService.checkBudget(user.tenantId, estimatedCost, overrideToken);
           break;
+        }
 
         default:
-          reply.code(400);
+          void reply.code(400);
           return { error: { code: 'INVALID_QUOTA_TYPE', message: 'Invalid quota type' } };
       }
 
       if (!result.allowed) {
-        reply.code(403);
+        void reply.code(403);
         return {
           error: {
             code: 'QUOTA_EXCEEDED',
             message: result.reason || 'Quota exceeded',
             current: result.current,
             limit: result.limit,
-            remaining: result.remaining,
+            remaining: 'remaining' in result ? result.remaining : undefined,
           },
         };
       }
 
       // Add quota info to request for downstream use
-      (request as any).quotaCheck = result;
+      (request as FastifyRequest & { quotaCheck?: QuotaCheckResult | BudgetCheckResult }).quotaCheck =
+        result;
     } catch (error) {
       logger.error({ msg: 'Quota check failed', error, tenantId: user.tenantId });
-      reply.code(500);
+      void reply.code(500);
       return { error: { code: 'QUOTA_CHECK_FAILED', message: 'Failed to check quota' } };
     }
+    return undefined;
   };
 }
 

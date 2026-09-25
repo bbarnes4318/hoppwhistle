@@ -1,5 +1,6 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
+import type { Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
@@ -7,7 +8,6 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
-import { quotaService } from '../services/quota-service.js';
 
 /**
  * Quota Management Routes.
@@ -74,7 +74,31 @@ import { quotaService } from '../services/quota-service.js';
  * agency learns the number the moment a call is refused for concurrency or a
  * hard stop lands. It only meant the agency had to find out by being cut off.
  */
-export async function registerQuotaRoutes(fastify: FastifyInstance) {
+/** A decimal as it arrives in a JSON body, or as Prisma stores it. */
+type DecimalInput = Prisma.Decimal | number | string;
+
+/** Body of PATCH .../quota. Absent leaves a ceiling alone; null clears it. */
+interface QuotaPatchBody {
+  maxConcurrentCalls?: number | null;
+  maxMinutesPerDay?: number | null;
+  maxRecordingRetentionDays?: number | null;
+  maxPhoneNumbers?: number | null;
+  maxStorageGB?: DecimalInput | null;
+  enabled?: boolean;
+}
+
+/** Body of PATCH .../budget. Absent leaves a cap alone; null clears it. */
+interface BudgetPatchBody {
+  monthlyBudget?: DecimalInput | null;
+  dailyBudget?: DecimalInput | null;
+  alertThreshold?: DecimalInput;
+  alertEmails?: string[];
+  alertSlackWebhook?: string | null;
+  hardStopEnabled?: boolean;
+  enabled?: boolean;
+}
+
+export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
   // ==========================================================================
   // Agency-scoped, read-only
   // ==========================================================================
@@ -164,7 +188,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       });
 
       if (!quota) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Quota not found' } };
       }
 
@@ -176,11 +200,11 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/quota',
     { preHandler: [authenticate, requirePlatformAdmin] },
-    async (request, reply) => {
+    async (request, _reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
-      const body = request.body as any;
-      const user = (request as any).user;
+      const body = request.body as QuotaPatchBody;
+      const user = request.user;
 
       const before = await prisma.tenantQuota.findUnique({
         where: { tenantId },
@@ -208,7 +232,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
           {
             userId: user?.userId,
             ipAddress: request.ip,
-            requestId: (request as any).id,
+            requestId: request.id,
           }
         );
 
@@ -249,7 +273,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
@@ -276,7 +300,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       });
 
       if (!budget) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Budget not found' } };
       }
 
@@ -288,11 +312,11 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/budget',
     { preHandler: [authenticate, requirePlatformAdmin] },
-    async (request, reply) => {
+    async (request, _reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
-      const body = request.body as any;
-      const user = (request as any).user;
+      const body = request.body as BudgetPatchBody;
+      const user = request.user;
 
       const before = await prisma.tenantBudget.findUnique({
         where: { tenantId },
@@ -320,7 +344,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
           {
             userId: user?.userId,
             ipAddress: request.ip,
-            requestId: (request as any).id,
+            requestId: request.id,
           }
         );
 
@@ -357,7 +381,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
@@ -373,14 +397,14 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
       const body = request.body as { expiresInHours?: number };
-      const user = (request as any).user;
+      const user = request.user;
 
       const budget = await prisma.tenantBudget.findUnique({
         where: { tenantId },
       });
 
       if (!budget) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Budget not found' } };
       }
 
@@ -409,7 +433,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
@@ -425,10 +449,10 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/admin/api/v1/tenants/:tenantId/budget/override-token',
     { preHandler: [authenticate, requirePlatformAdmin] },
-    async (request, reply) => {
+    async (request, _reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
-      const user = (request as any).user;
+      const user = request.user;
 
       await prisma.tenantBudget.update({
         where: { tenantId },
@@ -448,7 +472,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
@@ -466,7 +490,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       const reading = await readQuotaAndUsage(tenantId);
 
       if (!reading) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Tenant not found' } };
       }
 
@@ -487,7 +511,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         reason: string;
         expiresInHours?: number;
       };
-      const user = (request as any).user;
+      const user = request.user;
 
       const expiresAt = body.expiresInHours
         ? new Date(Date.now() + body.expiresInHours * 60 * 60 * 1000)
@@ -512,11 +536,11 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
-      reply.code(201);
+      void reply.code(201);
       return override;
     }
   );
@@ -525,7 +549,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota/overrides',
     { preHandler: [authenticate, requirePlatformAdmin] },
-    async (request, reply) => {
+    async (request, _reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
 
@@ -551,7 +575,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId, overrideId } = request.params as { tenantId: string; overrideId: string };
-      const user = (request as any).user;
+      const user = request.user;
 
       // Scoped to the tenant named in the path. Deleting by override id alone
       // let a mismatched path delete another tenant's override while writing
@@ -574,13 +598,15 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
         {
           userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
       return { success: true };
     }
   );
+
+  return Promise.resolve();
 }
 
 /**

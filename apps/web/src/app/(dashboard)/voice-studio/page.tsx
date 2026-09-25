@@ -407,7 +407,7 @@ export default function VoiceStudioPage() {
                     {selectedVoice.title || voiceId(selectedVoice)}
                   </span>
                   <code className="rounded bg-muted px-1 text-xs">{voiceId(selectedVoice)}</code>
-                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={copyVoiceId}>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => void copyVoiceId()}>
                     {copiedId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                     <span className="ml-1 text-xs">{copiedId ? 'Copied' : 'Copy id'}</span>
                   </Button>
@@ -444,7 +444,7 @@ export default function VoiceStudioPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={runPreview} disabled={previewing || !script.trim()}>
+              <Button onClick={() => void runPreview()} disabled={previewing || !script.trim()}>
                 {previewing ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -989,7 +989,7 @@ function CloneVoiceCard({ onCloned }: { onCloned: () => void }) {
 
         <Button
           className="w-full"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={submitting || !title.trim() || files.length === 0}
         >
           {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -49,14 +49,14 @@ vi.mock('../../lib/geo.js', () => ({
 }));
 
 vi.mock('../buyer-live-status-service.js', () => ({
-  liveStatusService: { getTargetsLiveStatus: vi.fn(async () => new Map()) },
+  liveStatusService: { getTargetsLiveStatus: vi.fn(() => Promise.resolve(new Map())) },
 }));
 
 vi.mock('../redis.js', () => ({
-  getRedisClient: () => ({ get: vi.fn(async () => null) }),
+  getRedisClient: () => ({ get: vi.fn(() => Promise.resolve(null)) }),
 }));
 
-const getRegisteredExtensions = vi.hoisted(() => vi.fn());
+const getRegisteredExtensions = vi.hoisted(() => vi.fn<[], Promise<Set<string> | null>>());
 vi.mock('../telephony/sip-registrations.js', () => ({
   getRegisteredExtensions: () => getRegisteredExtensions(),
 }));

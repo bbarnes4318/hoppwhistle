@@ -3,9 +3,7 @@
 import { ChevronDown, ChevronUp, PhoneCall, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 
 interface LiveMonitoringDrawerProps {
   isVisible: boolean;

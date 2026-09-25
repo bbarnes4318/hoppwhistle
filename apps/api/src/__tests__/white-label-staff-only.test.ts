@@ -128,11 +128,12 @@ describe('the staff-only hook, for the white-label tier', () => {
     principal = undefined;
     app.addHook('onRequest', async request => {
       if (principal) (request as { user?: unknown }).user = principal;
+      await Promise.resolve();
     });
     registerReadOnlyPreview(app);
     registerStaffOnly(app);
 
-    const ok = async () => ({ ok: true });
+    const ok = () => Promise.resolve({ ok: true });
     for (const [method, path] of [...ALLOWED_REQUESTS, ...STILL_STAFF_ONLY]) {
       app.route({ method: method as 'GET', url: path, handler: ok });
     }
@@ -210,7 +211,7 @@ describe('the staff-only hook, for the white-label tier', () => {
     for (const [method, path] of ALLOWED_REQUESTS.filter(([method]) => method !== 'GET')) {
       const res = await send(method, path);
       expect(res.statusCode, `${method} ${path}`).toBe(403);
-      expect(res.json().error.code).toBe(PREVIEW_READ_ONLY.code);
+      expect(res.json<{ error: { code: string } }>().error.code).toBe(PREVIEW_READ_ONLY.code);
     }
     expect((await send('GET', '/api/v1/numbers')).statusCode).toBe(200);
   });

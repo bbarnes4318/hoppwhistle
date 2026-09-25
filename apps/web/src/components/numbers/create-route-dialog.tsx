@@ -127,11 +127,12 @@ export function CreateRouteDialog({
       
       onSuccess();
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to create route:', err);
+      const failure = err as { response?: { data?: { error?: string } }; message?: string };
       toast({
         title: 'Failed to create route',
-        description: err.response?.data?.error || err.message,
+        description: failure.response?.data?.error || failure.message,
         variant: 'destructive',
       });
     } finally {
@@ -145,11 +146,11 @@ export function CreateRouteDialog({
         <DialogHeader>
           <DialogTitle>Create Inbound Route</DialogTitle>
           <DialogDescription>
-            Map one of your purchased DIDs to a buyer's destination number or campaign.
+            Map one of your purchased DIDs to a buyer&apos;s destination number or campaign.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={e => void handleSubmit(e)} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="phoneNumber">NetEnroll DID</Label>
             <Select value={phoneNumberId} onValueChange={setPhoneNumberId} disabled={loading}>

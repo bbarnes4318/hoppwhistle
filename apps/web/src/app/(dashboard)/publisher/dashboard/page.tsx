@@ -2,17 +2,12 @@
 
 import {
   Activity,
-  ArrowUpRight,
-  BarChart3,
-  Calendar,
-  ChevronDown,
   DollarSign,
   Download,
   Loader2,
   Phone,
   PhoneCall,
   PhoneIncoming,
-  Play,
   Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useMemo } from 'react';
@@ -27,7 +22,6 @@ import {
 } from 'recharts';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { KPICard } from '@/components/dashboard/kpi-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -266,14 +260,14 @@ function PublisherDashboard() {
                 onChange={e => setEndDate(e.target.value)}
                 className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              <Button size="sm" onClick={fetchStats} className="h-7 px-2 text-xs">
+              <Button size="sm" onClick={() => void fetchStats()} className="h-7 px-2 text-xs">
                 Apply
               </Button>
             </div>
           )}
 
           <Button
-            onClick={handleExportCSV}
+            onClick={() => void handleExportCSV()}
             disabled={exporting || !stats?.totalCalls}
             className="gap-2 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium"
           >

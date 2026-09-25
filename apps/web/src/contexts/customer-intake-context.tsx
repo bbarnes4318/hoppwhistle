@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+
 import { CustomerIntakeData, DEFAULT_INTAKE_DATA } from '@/types/customer-intake-types';
 
 // ============================================================================

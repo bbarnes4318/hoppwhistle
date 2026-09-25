@@ -8,13 +8,11 @@ import {
   Loader2,
   FileText,
   HelpCircle,
-  TrendingDown,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -88,11 +86,7 @@ function PublisherEarningsPage() {
   // Derived financials
   const lifetimeEarnings = stats?.payout || 0;
 
-  // Calculate paid and pending based on earnings table
-  const paidEarnings = earnings
-    .filter(c => c.publisherPayoutStatus === 'PAID')
-    .reduce((sum, c) => sum + (c.payout ? Number(c.payout) : 0), 0);
-
+  // Calculate pending based on earnings table
   const pendingEarnings = earnings
     .filter(c => c.publisherPayoutStatus === 'PENDING' || !c.publisherPayoutStatus)
     .reduce((sum, c) => sum + (c.payout ? Number(c.payout) : 0), 0);

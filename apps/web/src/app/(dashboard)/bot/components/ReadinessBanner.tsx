@@ -2,8 +2,6 @@
 
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-
 interface ReadinessBannerProps {
   isReady: boolean;
   blockingIssues: string[];

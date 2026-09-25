@@ -46,10 +46,12 @@ async function importNumbers(options: ImportOptions) {
   const fileContent = readFileSync(options.file, 'utf-8');
 
   // Parse CSV
+  // Rows are header-keyed objects when `columns` is on, plain arrays otherwise;
+  // both are indexable by string key.
   const records = parse(fileContent, {
     skip_empty_lines: true,
     columns: options.skipHeader !== false,
-  });
+  }) as Array<Record<string, string>>;
 
   console.log(`Found ${records.length} records to import`);
 
@@ -63,7 +65,7 @@ async function importNumbers(options: ImportOptions) {
     const batch = records.slice(i, i + batchSize);
 
     await Promise.all(
-      batch.map(async (record: any, index: number) => {
+      batch.map(async (record, index) => {
         const rowNum = i + index + 1;
         try {
           // Extract fields

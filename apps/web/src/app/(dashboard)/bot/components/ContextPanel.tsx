@@ -4,7 +4,6 @@ import { ChevronRight, ChevronLeft, HelpCircle, Lightbulb, AlertCircle } from 'l
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 interface ContextPanelProps {
   currentStep: number;

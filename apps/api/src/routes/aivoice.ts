@@ -92,6 +92,7 @@ function resolveWorkspace(user: HopwhistleUser): Promise<{ dograhUserId: string;
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must return a promise
 export async function registerAiVoiceRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/aivoice/session', async (request: FastifyRequest, reply) => {
     const user = (request.user || {}) as HopwhistleUser;

@@ -168,7 +168,7 @@ describe('POST /api/v1/insurance-leads/:id/application', () => {
     });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe('APPLICATION_ALREADY_RECORDED');
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('APPLICATION_ALREADY_RECORDED');
     expect(recordAgentApplication).not.toHaveBeenCalled();
   });
 

@@ -382,13 +382,88 @@ export async function fetchUsers(): Promise<{ data: UserSummary[] }> {
   return res.data as unknown as { data: UserSummary[] };
 }
 
+export interface CustomerLookupInsurance {
+  carrier?: string | null;
+  product?: string | null;
+  monthlyPremium?: string | number | null;
+  coverageAmount?: string | number | null;
+  faceAmount?: string | number | null;
+  lifeType?: string | null;
+  riskType?: string | null;
+  smoker?: string | null;
+}
+
+export interface CustomerLookupCustomer {
+  id: string;
+  recordType: string;
+  phone: string;
+  vertical?: string | null;
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  county?: string | null;
+  gender?: string | null;
+  age?: string | number | null;
+  birthDate?: string | null;
+  company?: string | null;
+  repName?: string | null;
+  industry?: string | null;
+  revenue?: string | number | null;
+  yearEstablished?: string | number | null;
+  status?: string | null;
+  priority?: string | null;
+  assignedToId?: string | null;
+  source?: string | null;
+  notes?: string | null;
+  doNotCall?: boolean | null;
+  insurance?: CustomerLookupInsurance | null;
+  compliance?: { trustedFormUrl?: string | null; leadidToken?: string | null } | null;
+  list?: { name?: string | null } | null;
+  [key: string]: unknown;
+}
+
+export interface CustomerLookupTask {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueAt?: string | null;
+}
+
+export interface CustomerLookupActivity {
+  id: string;
+  title: string;
+  description?: string | null;
+  createdAt: string;
+}
+
+export interface CustomerLookupSubmission {
+  id: string;
+  postMode: string;
+  receivedAt: string;
+  validationStatus: string;
+}
+
+export interface CustomerLookupDuplicate {
+  id: string;
+  phone: string;
+  recordType: string;
+  fullName?: string | null;
+  status?: string | null;
+}
+
 export interface CustomerLookupResponse {
-  customer: Record<string, any> | null;
-  recentCalls: any[];
-  activities: any[];
-  tasks: any[];
-  submissions: any[];
-  duplicates: any[];
+  customer: CustomerLookupCustomer | null;
+  recentCalls: Array<Record<string, unknown>>;
+  activities: CustomerLookupActivity[];
+  tasks: CustomerLookupTask[];
+  submissions: CustomerLookupSubmission[];
+  duplicates: CustomerLookupDuplicate[];
 }
 
 export async function fetchCustomerLookup(phone: string): Promise<CustomerLookupResponse> {

@@ -43,7 +43,7 @@ export default function WebhooksPage() {
   const [addWebhookOpen, setAddWebhookOpen] = useState(false);
 
   useEffect(() => {
-    loadWebhooks();
+    void loadWebhooks();
   }, []);
 
   const loadWebhooks = async () => {
@@ -68,7 +68,7 @@ export default function WebhooksPage() {
     try {
       const response = await apiClient.delete(`/api/v1/webhooks/${webhookId}`);
       if (!response.error) {
-        loadWebhooks();
+        void loadWebhooks();
       } else {
         toast({
           variant: 'destructive',
@@ -160,7 +160,7 @@ export default function WebhooksPage() {
                           variant="ghost"
                           size="icon"
                           className="hover:bg-dropped-tint hover:text-dropped-ink"
-                          onClick={() => handleDeleteWebhook(webhook.id)}
+                          onClick={() => void handleDeleteWebhook(webhook.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -177,7 +177,7 @@ export default function WebhooksPage() {
       <AddWebhookDialog
         open={addWebhookOpen}
         onOpenChange={setAddWebhookOpen}
-        onSuccess={loadWebhooks}
+        onSuccess={() => void loadWebhooks()}
       />
     </div>
   );

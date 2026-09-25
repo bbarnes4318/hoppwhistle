@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -59,7 +59,7 @@ export function EditNumberDialog({
  currentUserId,
  currentCapabilities = {},
  currentPoolType,
- currentPoolStatus,
+ currentPoolStatus: _currentPoolStatus,
  onSuccess,
 }: EditNumberDialogProps) {
  const { isPlatformAdmin: canUsePool } = useAuth();
@@ -89,6 +89,34 @@ export function EditNumberDialog({
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
 
+ const loadUsers = useCallback(async () => {
+ setLoadingUsers(true);
+ try {
+ const response = await apiClient.get<{ data: User[] }>('/api/v1/users');
+ if (response.data?.data) {
+ setUsers(response.data.data);
+ }
+ } catch (err) {
+ console.error('Failed to load users:', err);
+ } finally {
+ setLoadingUsers(false);
+ }
+ }, []);
+
+ const loadCampaigns = useCallback(async () => {
+ setLoadingCampaigns(true);
+ try {
+ const response = await apiClient.get<{ data: Campaign[] }>('/api/v1/campaigns');
+ if (response.data?.data) {
+ setCampaigns(response.data.data);
+ }
+ } catch (err) {
+ console.error('Failed to load campaigns:', err);
+ } finally {
+ setLoadingCampaigns(false);
+ }
+ }, []);
+
  useEffect(() => {
  if (open) {
  const caps = typeof currentCapabilities === 'string' ? JSON.parse(currentCapabilities as string) : (currentCapabilities || {});
@@ -104,38 +132,19 @@ export function EditNumberDialog({
  },
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
- loadCampaigns();
- loadUsers();
+ void loadCampaigns();
+ void loadUsers();
  }
- }, [open, currentStatus, currentCampaignId, currentUserId, currentCapabilities, currentPoolType]);
-
- const loadUsers = async () => {
- setLoadingUsers(true);
- try {
- const response = await apiClient.get<{ data: User[] }>('/api/v1/users');
- if (response.data?.data) {
- setUsers(response.data.data);
- }
- } catch (err) {
- console.error('Failed to load users:', err);
- } finally {
- setLoadingUsers(false);
- }
- };
-
- const loadCampaigns = async () => {
- setLoadingCampaigns(true);
- try {
- const response = await apiClient.get<{ data: Campaign[] }>('/api/v1/campaigns');
- if (response.data?.data) {
- setCampaigns(response.data.data);
- }
- } catch (err) {
- console.error('Failed to load campaigns:', err);
- } finally {
- setLoadingCampaigns(false);
- }
- };
+ }, [
+ open,
+ currentStatus,
+ currentCampaignId,
+ currentUserId,
+ currentCapabilities,
+ currentPoolType,
+ loadCampaigns,
+ loadUsers,
+ ]);
 
  const handleRtbToggle = (enabled: boolean) => {
  if (enabled) {
@@ -365,7 +374,7 @@ export function EditNumberDialog({
  <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
  Cancel
  </Button>
- <Button onClick={handleSave} disabled={loading}>
+ <Button onClick={() => void handleSave()} disabled={loading}>
  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
  Save Changes
  </Button>

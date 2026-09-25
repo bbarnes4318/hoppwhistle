@@ -815,6 +815,10 @@ vi.mock('../secrets.js', () => ({
 // ────────────────────────────────────────────────────────────────────────────
 // Imports after Mocking
 // ────────────────────────────────────────────────────────────────────────────
+import {
+  internalKeyHeaders,
+  useTestInternalKey,
+} from '../../__tests__/helpers/internal-key.js';
 import { registerAuthRoutes } from '../../routes/auth.js';
 import { registerDidRouteRoutes } from '../../routes/did-routes.js';
 import {
@@ -828,10 +832,6 @@ import { auctionService } from '../auction-service.js';
 import { BillingService } from '../billing-service.js';
 import { BuyerBillingService } from '../buyer-billing-service.js';
 import { postService } from '../post-service.js';
-import {
-  internalKeyHeaders,
-  useTestInternalKey,
-} from '../../__tests__/helpers/internal-key.js';
 
 describe('Pay-Per-Call System End-to-End Integration Suite', () => {
   let app: any;

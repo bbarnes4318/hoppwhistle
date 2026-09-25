@@ -9,6 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import {
@@ -21,16 +30,6 @@ import {
 } from './api';
 import type { RecordingAnalysisItem, Vertical } from './types';
 import { FIELDS_BY_VERTICAL, VERTICALS } from './types';
-
-import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 function cn(...c: Array<string | false | null | undefined>) {
   return c.filter(Boolean).join(' ');
@@ -62,16 +61,19 @@ function toPct(n: number) {
  * - extracted.confidence: { key: number }
  * - extracted[key + "_confidence"]
  */
-function getFieldConfidence(extracted: any, key: string): number | null {
+function getFieldConfidence(
+  extracted: Record<string, unknown> | null | undefined,
+  key: string
+): number | null {
   if (!extracted) return null;
 
   const k = String(key);
   const lower = k.toLowerCase();
 
-  const c1 = extracted?._confidence?.[k];
+  const c1 = (extracted?._confidence as Record<string, unknown> | null | undefined)?.[k];
   if (typeof c1 === 'number') return clamp01(c1);
 
-  const c2 = extracted?.confidence?.[k];
+  const c2 = (extracted?.confidence as Record<string, unknown> | null | undefined)?.[k];
   if (typeof c2 === 'number') return clamp01(c2);
 
   const c3 = extracted?.[`${k}_confidence`];
@@ -94,10 +96,14 @@ function StatusPill({ status }: { status: string }) {
           ? 'secondary'
           : 'outline';
 
-  return <Badge variant={variant as any}>{status}</Badge>;
+  return <Badge variant={variant}>{status}</Badge>;
 }
 
-function BillableBadge({ extracted }: { extracted: any }) {
+function BillableBadge({
+  extracted,
+}: {
+  extracted: Record<string, unknown> | null | undefined;
+}) {
   const billable =
     extracted?.['Billable'] ??
     extracted?.['Billable (Y/N)'] ??
@@ -240,24 +246,26 @@ export function RecordingAnalyzer() {
         setPolling(false);
         return;
       }
-    } catch (e: any) {
+    } catch (e) {
       setPolling(false);
-      setError(e?.message || 'Failed to fetch batch');
+      setError((e as { message?: string } | null)?.message || 'Failed to fetch batch');
       return;
     }
 
-    const interval = setInterval(async () => {
-      try {
-        const done = await refresh(bId);
-        if (done) {
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          const done = await refresh(bId);
+          if (done) {
+            clearInterval(interval);
+            setPolling(false);
+          }
+        } catch (e) {
           clearInterval(interval);
           setPolling(false);
+          setError((e as { message?: string } | null)?.message || 'Failed to fetch batch');
         }
-      } catch (e: any) {
-        clearInterval(interval);
-        setPolling(false);
-        setError(e?.message || 'Failed to fetch batch');
-      }
+      })();
     }, 1500);
   }
 
@@ -300,8 +308,8 @@ export function RecordingAnalyzer() {
       setBatchId(resp.batchId);
       setItems([]);
       await startPolling(resp.batchId);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to start analysis');
+    } catch (e) {
+      setError((e as { message?: string } | null)?.message || 'Failed to start analysis');
     } finally {
       setIsSubmitting(false);
     }
@@ -313,7 +321,7 @@ export function RecordingAnalyzer() {
     // Default rerun selection:
     // - use whatever was selected previously if present
     // - else use defaults for current vertical
-    const prev = Array.isArray(it.selectedFields) ? (it.selectedFields as any as string[]) : [];
+    const prev = Array.isArray(it.selectedFields) ? (it.selectedFields as string[]) : [];
     const nextSet = new Set<string>(prev.length ? prev : Array.from(defaultSelected));
     setRerunSelected(nextSet);
     setRerunOpen(true);
@@ -343,8 +351,8 @@ export function RecordingAnalyzer() {
       setBatchId(newBatch.batchId);
       setItems([]);
       await startPolling(newBatch.batchId);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to re-run');
+    } catch (e) {
+      setError((e as { message?: string } | null)?.message || 'Failed to re-run');
     } finally {
       setRerunBusy(false);
     }
@@ -366,8 +374,8 @@ export function RecordingAnalyzer() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setError(e?.message || 'CSV export failed');
+    } catch (e) {
+      setError((e as { message?: string } | null)?.message || 'CSV export failed');
     }
   }
 
@@ -392,7 +400,7 @@ export function RecordingAnalyzer() {
           )}
           {polling && <Badge variant="secondary">Live updating…</Badge>}
 
-          <Button variant="outline" onClick={exportCsv} disabled={!batchId}>
+          <Button variant="outline" onClick={() => void exportCsv()} disabled={!batchId}>
             Export CSV
           </Button>
         </div>
@@ -536,7 +544,7 @@ export function RecordingAnalyzer() {
                 Selected: <span className="font-mono">{selected.size}</span>
               </div>
 
-              <Button onClick={handleSubmit} disabled={isSubmitting} className="min-w-[180px]">
+              <Button onClick={() => void handleSubmit()} disabled={isSubmitting} className="min-w-[180px]">
                 {isSubmitting ? 'Starting…' : 'Analyze Recordings'}
               </Button>
             </div>
@@ -643,9 +651,11 @@ export function RecordingAnalyzer() {
                   <audio controls className="w-full">
                     <source src={activeItem.sourceUrl} />
                   </audio>
-                ) : activeItem.playbackUrl ? (
+                ) : (activeItem as RecordingAnalysisItem & { playbackUrl?: string }).playbackUrl ? (
                   <audio controls className="w-full">
-                    <source src={activeItem.playbackUrl} />
+                    <source
+                      src={(activeItem as RecordingAnalysisItem & { playbackUrl?: string }).playbackUrl}
+                    />
                   </audio>
                 ) : (
                   <div className="text-sm text-muted-foreground">
@@ -757,7 +767,7 @@ export function RecordingAnalyzer() {
               <Button variant="outline" onClick={() => setRerunOpen(false)} disabled={rerunBusy}>
                 Cancel
               </Button>
-              <Button onClick={submitRerun} disabled={rerunBusy}>
+              <Button onClick={() => void submitRerun()} disabled={rerunBusy}>
                 {rerunBusy ? 'Re-running…' : 'Re-run'}
               </Button>
             </div>

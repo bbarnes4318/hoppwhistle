@@ -185,7 +185,7 @@ export function ManualLeadEntryForm(): JSX.Element {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={e => void handleSubmit(e)} className="space-y-6">
       <section className="rounded-card border border-rule bg-surface p-5">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-ink">Manual CRM Lead Entry</h2>

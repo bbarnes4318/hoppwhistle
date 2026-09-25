@@ -34,12 +34,14 @@ async function importDnc(options: ImportOptions) {
 
   if (options.format === 'csv' || options.file.endsWith('.csv')) {
     // Parse CSV
+    // Rows are header-keyed objects when `columns` is on, plain arrays otherwise;
+    // both are indexable by string key.
     const records = parse(fileContent, {
       skip_empty_lines: true,
       columns: options.skipHeader !== false,
-    });
+    }) as Array<Record<string, string>>;
 
-    entries = records.map((record: any) => {
+    entries = records.map(record => {
       const phoneNumber =
         options.phoneColumn !== undefined
           ? record[Object.keys(record)[options.phoneColumn]]

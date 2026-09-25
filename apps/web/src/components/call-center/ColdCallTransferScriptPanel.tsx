@@ -5,11 +5,9 @@ import {
   ChevronRight,
   RotateCcw,
   CheckCircle2,
-  PhoneForwarded,
   HelpCircle,
   ChevronLeft,
   UserCheck,
-  AlertTriangle,
   Clock,
 } from 'lucide-react';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -17,8 +15,16 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
 
+/** The parts of the active call's prospect record this script reads. */
+interface ColdCallProspectData {
+  state?: string;
+  stateCode?: string;
+  customFields?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
 interface ColdCallTransferScriptPanelProps {
-  prospectData?: any;
+  prospectData?: ColdCallProspectData | null;
   leadId?: string | null;
   onDataUpdate?: (data: Record<string, unknown>) => void;
   setSelectedDisposition?: (disp: string) => void;
@@ -92,6 +98,7 @@ interface ScriptNode {
     | 'discovery_question'
     | 'clarifying_question'
     | 'bridge'
+    | 'explanation'
     | 'education_bridge'
     | 'reassurance'
     | 'beneficiary_discovery'
@@ -148,7 +155,7 @@ const SCRIPT_NODES: Record<NodeId, ScriptNode> = {
   },
   age_explanation: {
     text: 'Most of these final expense plans are designed around age, state, and basic health. I’m just checking if it makes sense to have a licensed agent review options with you.',
-    type: 'explanation' as any,
+    type: 'explanation',
     options: {
       'Yes, makes sense': 'coverage_check',
       'No, not interested': 'polite_exit',
@@ -754,7 +761,7 @@ export function ColdCallTransferScriptPanel({
       ];
       const initial: Record<string, string> = {};
       keys.forEach(k => {
-        if (prospectData.customFields[k]) {
+        if (prospectData.customFields?.[k]) {
           initial[k] = String(prospectData.customFields[k]);
         }
       });
@@ -1183,7 +1190,7 @@ export function ColdCallTransferScriptPanel({
           </div>
           <ul className="text-[11px] text-ringing-ink space-y-1 font-sans leading-relaxed list-disc pl-4">
             <li>
-              <strong>Do not</strong> say "God forbid".
+              <strong>Do not</strong> say &quot;God forbid&quot;.
             </li>
             <li>
               <strong>Do not</strong> tell the prospect we do not have their name.

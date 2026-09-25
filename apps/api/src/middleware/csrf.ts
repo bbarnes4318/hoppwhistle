@@ -69,7 +69,7 @@ export async function csrfProtection(
       error: 'Missing session ID',
     });
 
-    reply.code(403).send({
+    void reply.code(403).send({
       error: {
         code: 'FORBIDDEN',
         message: 'CSRF protection: Missing session',
@@ -95,7 +95,7 @@ export async function csrfProtection(
       error: 'Missing CSRF token',
     });
 
-    reply.code(403).send({
+    void reply.code(403).send({
       error: {
         code: 'FORBIDDEN',
         message: 'CSRF protection: Missing token',
@@ -105,7 +105,8 @@ export async function csrfProtection(
   }
 
   // Verify token
-  if (!verifyCsrfToken(csrfToken, sessionId)) {
+  const sessionIdValue = Array.isArray(sessionId) ? sessionId.join(',') : sessionId;
+  if (!verifyCsrfToken(csrfToken, sessionIdValue)) {
     await auditLog({
       tenantId: request.user?.tenantId ?? null,
       userId: request.user?.userId,
@@ -120,7 +121,7 @@ export async function csrfProtection(
       error: 'Invalid CSRF token',
     });
 
-    reply.code(403).send({
+    void reply.code(403).send({
       error: {
         code: 'FORBIDDEN',
         message: 'CSRF protection: Invalid token',

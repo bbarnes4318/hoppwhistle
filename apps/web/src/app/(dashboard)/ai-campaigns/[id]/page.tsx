@@ -92,6 +92,31 @@ interface CallRecord {
   cost: number | null;
 }
 
+interface RestartPreview {
+  totalContacts: number;
+  humanReachedExcluded: number;
+  assistantEndedExcluded?: number;
+  unknownExcluded?: number;
+  dncExcluded: number;
+  wrongNumberExcluded: number;
+  activeCallExcluded: number;
+  neverAttemptedEligible: number;
+  noAnswerEligible: number;
+  busyEligible: number;
+  voicemailEligible: number;
+  failedOrSilenceEligible: number;
+  totalEligible: number;
+}
+
+interface RestartResult {
+  totalEligible?: number;
+}
+
+interface ContactUploadResult {
+  imported?: number;
+  skipped?: number;
+}
+
 const statusColors: Record<string, string> = {
   DRAFT: 'bg-secondary text-muted-foreground border-border',
   READY: 'bg-money-tint text-money-ink border-money/40',
@@ -128,7 +153,7 @@ export default function CampaignDetailPage() {
   const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [restartLoading, setRestartLoading] = useState(false);
-  const [previewData, setPreviewData] = useState<any | null>(null);
+  const [previewData, setPreviewData] = useState<RestartPreview | null>(null);
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -240,11 +265,11 @@ export default function CampaignDetailPage() {
   const fetchRestartPreview = async () => {
     setPreviewLoading(true);
     try {
-      const res = await apiClient.get<any>(
+      const res = await apiClient.get<RestartPreview>(
         `/api/v1/ai-campaigns/${campaignId}/restart-unreached/preview`
       );
       if (res.error) throw new Error(res.error.message);
-      setPreviewData(res.data);
+      setPreviewData(res.data ?? null);
     } catch (error) {
       console.error('Error fetching restart preview:', error);
       toast({
@@ -265,7 +290,7 @@ export default function CampaignDetailPage() {
   const handleExecuteRestart = async () => {
     setRestartLoading(true);
     try {
-      const res = await apiClient.post<any>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached`);
+      const res = await apiClient.post<RestartResult>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached`);
       if (res.error) throw new Error(res.error.message);
       toast({
         title: 'Campaign Restarted',
@@ -321,7 +346,7 @@ export default function CampaignDetailPage() {
         })
         .filter(c => c.phoneNumber);
 
-      const res = await apiClient.post<any>(`/api/v1/ai-campaigns/${campaignId}/contacts`, {
+      const res = await apiClient.post<ContactUploadResult>(`/api/v1/ai-campaigns/${campaignId}/contacts`, {
         contacts: parsedContacts,
       });
 

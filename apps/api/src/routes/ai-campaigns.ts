@@ -10,7 +10,7 @@ import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { resolveTenant } from '../lib/tenant-context.js';
 import * as AICampaignService from '../services/ai-campaign-service.js';
 
-export async function registerAICampaignRoutes(
+export function registerAICampaignRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
 ): Promise<void> {
@@ -331,13 +331,15 @@ export async function registerAICampaignRoutes(
       return reply.status(500).send({ error: 'Failed to list calls' });
     }
   });
+
+  return Promise.resolve();
 }
 
 // ============================================================================
 // Vapi Webhook Handler (separate - no auth required)
 // ============================================================================
 
-export async function registerVapiWebhookRoutes(
+export function registerVapiWebhookRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
 ): Promise<void> {
@@ -357,4 +359,6 @@ export async function registerVapiWebhookRoutes(
       return reply.send({ received: true, error: 'Processing error' });
     }
   });
+
+  return Promise.resolve();
 }

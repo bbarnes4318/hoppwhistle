@@ -46,7 +46,7 @@ export function AvatarStage({
     return () => {
       cancelled = true;
       room.off(RoomEvent.TrackSubscribed, onSub);
-      room.disconnect();
+      void room.disconnect();
     };
   }, [url, token]);
 

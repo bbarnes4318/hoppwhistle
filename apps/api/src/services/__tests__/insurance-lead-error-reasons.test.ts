@@ -16,7 +16,10 @@ vi.mock('../insurance-lead-config.js', () => ({
   AMERIQUOTE_TIMEOUT_MS: 15000,
 }));
 
-import { groupFailureReasons } from '../insurance-lead-bulk-delivery.js';
+import {
+  groupFailureReasons,
+  type BulkDeliveryLeadResult,
+} from '../insurance-lead-bulk-delivery.js';
 import { parseAmeriquoteResponseForTest } from '../insurance-lead-poster.js';
 
 describe('parsing an Ameriquote rejection', () => {
@@ -96,7 +99,7 @@ describe('grouping a batch of failures', () => {
       phone: '3125556085',
       name: 'Jane Doe',
       ...overrides,
-    }) as any;
+    }) as BulkDeliveryLeadResult;
 
   it('collapses the same rejection across leads into one counted reason', () => {
     const reasons = groupFailureReasons([

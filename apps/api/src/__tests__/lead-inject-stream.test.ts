@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
 import { createHash } from 'node:crypto';
-import { get as httpGet, IncomingMessage } from 'node:http';
+import { get as httpGet } from 'node:http';
 import { AddressInfo } from 'node:net';
 
 import Fastify, { FastifyInstance } from 'fastify';
@@ -118,7 +118,7 @@ function openStream(baseUrl: string, headers: Record<string, string>): Promise<S
         },
         close: () => {
           request.destroy();
-          (res as IncomingMessage).destroy();
+          res.destroy();
         },
       });
     });
@@ -159,7 +159,7 @@ describe.skipIf(!gate.available)('Lead injection stream', () => {
     app.post(
       '/api/v1/lead-inject/__read_only_guard_probe',
       { preHandler: [authenticateFromSessionCookie] },
-      async () => ({ reached: true })
+      () => Promise.resolve({ reached: true })
     );
 
     await app.listen({ port: 0, host: '127.0.0.1' });

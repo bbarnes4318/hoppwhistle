@@ -14,8 +14,17 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 
 import { apiClient } from '@/lib/api';
 
+/** The parts of the active call's prospect record this script reads. */
+interface CallbackProspectData {
+  carrier?: string;
+  insurance?: { carrier?: string } | null;
+  customFields?: Record<string, unknown> | null;
+  existingCompanyName?: string;
+  [key: string]: unknown;
+}
+
 interface BetterPlanCallbackScriptPanelProps {
-  prospectData?: any;
+  prospectData?: CallbackProspectData | null;
   leadId?: string | null;
   onDataUpdate?: (data: Record<string, unknown>) => void;
   setSelectedDisposition?: (disp: string) => void;
@@ -518,13 +527,13 @@ export function BetterPlanCallbackScriptPanel({
   // Try to resolve Carrier name from prospect data. It could be stored in a few places:
   const carrierName = useMemo(() => {
     if (!prospectData) return '[Carrier]';
-    return (
+    return String(
       prospectData.carrier ||
-      prospectData.insurance?.carrier ||
-      prospectData.customFields?.carrier ||
-      prospectData.customFields?.currentCarrier ||
-      prospectData.existingCompanyName ||
-      '[Carrier]'
+        prospectData.insurance?.carrier ||
+        prospectData.customFields?.carrier ||
+        prospectData.customFields?.currentCarrier ||
+        prospectData.existingCompanyName ||
+        '[Carrier]'
     );
   }, [prospectData]);
 
@@ -534,7 +543,7 @@ export function BetterPlanCallbackScriptPanel({
       const keys = ['callbackTime'];
       const initial: Record<string, string> = {};
       keys.forEach(k => {
-        if (prospectData.customFields[k]) {
+        if (prospectData.customFields?.[k]) {
           initial[k] = String(prospectData.customFields[k]);
         }
       });

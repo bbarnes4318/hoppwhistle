@@ -1,16 +1,16 @@
+import { Prisma, RoleName } from '@prisma/client';
 // eslint-disable-next-line import/default
 import bcrypt from 'bcryptjs';
 // eslint-disable-next-line import/no-named-as-default-member
 const { compare, hash } = bcrypt;
-import { RoleName } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
-import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { loadTenantWhiteLabel } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
+import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { createSession, generateCsrfToken } from '../middleware/session.js';
 import { auditLog } from '../services/audit.js';
 import { verifyGoogleToken } from '../services/google-auth.js';
@@ -1313,7 +1313,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
-      const currentMetadata = (user.metadata as Record<string, any>) || {};
+      const currentMetadata = (user.metadata as Prisma.JsonObject | null) || {};
       const newMetadata = {
         ...currentMetadata,
       };

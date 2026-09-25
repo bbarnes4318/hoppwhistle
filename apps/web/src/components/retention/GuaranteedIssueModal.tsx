@@ -176,14 +176,14 @@ export function GuaranteedIssueModal({ policy, onClose }: GuaranteedIssueModalPr
           <div className="flex items-center gap-3">
             <Button
               variant="secondary"
-              onClick={handleLogCall}
+              onClick={() => void handleLogCall()}
               disabled={isSubmitting}
               className="gap-2"
             >
               <FileCheck className="w-4 h-4" />
               Log Call Attempt
             </Button>
-            <Button onClick={handleConvertToGI} disabled={isSubmitting} className="gap-2">
+            <Button onClick={() => void handleConvertToGI()} disabled={isSubmitting} className="gap-2">
               <DollarSign className="w-4 h-4" />
               Convert to GI Policy
             </Button>

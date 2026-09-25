@@ -19,11 +19,6 @@ import { Save, Download, Loader2 } from 'lucide-react';
 import { useCallback, useState, useRef, useEffect } from 'react';
 
 import '@xyflow/react/dist/style.css';
-import { CustomNode } from './custom-node';
-import { EdgeConfigPanel } from './edge-config-panel';
-import { FlowSerializer } from './flow-serializer';
-import { FlowSimulator } from './flow-simulator';
-import { NodePalette } from './node-palette';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +33,12 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
+
+import { CustomNode } from './custom-node';
+import { EdgeConfigPanel } from './edge-config-panel';
+import { FlowSerializer } from './flow-serializer';
+import { FlowSimulator } from './flow-simulator';
+import { NodePalette } from './node-palette';
 
 const nodeTypes: NodeTypes = {
  entry: CustomNode,
@@ -369,7 +370,7 @@ export function FlowBuilder() {
  />
  </div>
  <div className="flex items-center gap-1.5 flex-shrink-0">
- <Button onClick={handleSaveFlow} variant="default" disabled={saving || loading} size="sm" className="h-8">
+ <Button onClick={() => void handleSaveFlow()} variant="default" disabled={saving || loading} size="sm" className="h-8">
  {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
  Save
  </Button>

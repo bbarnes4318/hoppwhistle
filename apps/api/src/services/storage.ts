@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
-import { Readable } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 import {
   S3Client,
@@ -76,8 +76,9 @@ export class StorageService {
     try {
       try {
         await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-      } catch (headErr: any) {
-        if (headErr.name === 'NotFound' || headErr.$metadata?.httpStatusCode === 404) {
+      } catch (headErr: unknown) {
+        const s3Err = headErr as { name?: string; $metadata?: { httpStatusCode?: number } };
+        if (s3Err.name === 'NotFound' || s3Err.$metadata?.httpStatusCode === 404) {
           console.log(`Bucket '${this.bucket}' not found. Creating it...`);
           await this.s3Client.send(new CreateBucketCommand({ Bucket: this.bucket }));
           console.log(`Bucket '${this.bucket}' created successfully.`);

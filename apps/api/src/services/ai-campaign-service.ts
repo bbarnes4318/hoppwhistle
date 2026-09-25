@@ -28,6 +28,7 @@
 import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
+
 import type { VoipCarrier } from './vapi-carrier-service.js';
 
 // Vapi API configuration

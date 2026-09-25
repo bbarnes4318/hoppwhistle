@@ -96,9 +96,9 @@ export class BudgetAlertService {
   /**
    * Send email alert
    */
-  private async sendEmailAlert(
+  private sendEmailAlert(
     emails: string[],
-    tenantId: string,
+    _tenantId: string,
     type: BudgetAlertType,
     data: AlertData,
     tenantName: string
@@ -121,6 +121,7 @@ export class BudgetAlertService {
     //   subject,
     //   html: body,
     // });
+    return Promise.resolve();
   }
 
   /**
