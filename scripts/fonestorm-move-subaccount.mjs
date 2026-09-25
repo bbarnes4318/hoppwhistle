@@ -109,16 +109,15 @@ function subaccountValues(r) {
   return out;
 }
 
-async function listAll(query) {
-  const all = [];
-  const limit = 500;
-  for (let offset = 0; ; offset += limit) {
-    const page = asList(await api('GET', '/fonenumbers', undefined, { ...query, limit, offset }));
-    all.push(...page);
-    if (page.length < limit) break;
-    if (offset > 100000) break;
+// GET /fonenumbers takes no filter or paging params, so fetch it once and
+// filter locally.
+async function listAll() {
+  const data = await api('GET', '/fonenumbers');
+  if (!Array.isArray(data)) {
+    const keys = Object.entries(data ?? {}).map(([k, v]) => `${k}${Array.isArray(v) ? `[${v.length}]` : ''}`);
+    console.log('Response keys:', keys.join(', '));
   }
-  return all;
+  return asList(data);
 }
 
 async function resolveDevice() {
@@ -139,13 +138,8 @@ async function resolveDevice() {
 async function main() {
   await auth();
 
-  // Ask the API to filter, then filter locally too in case the param is ignored.
-  let numbers = await listAll({ sub_account: FROM });
-  let matched = numbers.filter((r) => subaccountValues(r).includes(FROM));
-  if (!matched.length) {
-    numbers = await listAll({});
-    matched = numbers.filter((r) => subaccountValues(r).includes(FROM));
-  }
+  const numbers = await listAll();
+  const matched = numbers.filter((r) => subaccountValues(r).includes(FROM));
 
   console.log(`Scanned ${numbers.length} numbers; ${matched.length} on subaccount ${FROM}.`);
   if (!matched.length) {
