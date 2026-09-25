@@ -173,6 +173,11 @@ const SWEEP = [
       '/billing',
       '/settings',
       '/settings/users',
+      // The agency's own live board, and its campaigns read-only. /campaigns
+      // used to be in the redirects below; it left STAFF_ONLY_ROUTES when
+      // agencies were given a view-only campaigns page.
+      '/live',
+      '/campaigns',
     ],
     /*
      * NetEnroll's own screens, asked for by an agency principal.
@@ -181,8 +186,8 @@ const SWEEP = [
      * was PLATFORM_NAV with two hrefs filtered out. They are not an agency's:
      * the call marketplace it buys from, the routing and voice-AI authoring
      * that configures the platform, and the Tools group. `STAFF_ONLY_ROUTES`
-     * in src/lib/staff-only-routes.ts is the list, and it is what the sidebar,
-     * this redirect and the palette all read.
+     * in src/lib/staff-only-routes.ts is the list this redirect reads; the
+     * sidebar shows several of them as locked upgrades that never navigate.
      *
      * Asserted here rather than merely deleted, for the reason the agent's
      * /dashboard entry gives below: dropping a route from the sweep leaves the
@@ -198,7 +203,6 @@ const SWEEP = [
      * these two rows are the only coverage that component has.
      */
     redirects: [
-      { from: '/campaigns', to: '/dashboard' },
       { from: '/publishers', to: '/dashboard' },
       { from: '/buyers', to: '/dashboard' },
       { from: '/numbers', to: '/dashboard' },

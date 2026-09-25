@@ -17,17 +17,11 @@ import {
 } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-import {
-  AGENCY_OWNER_NAV,
-  AGENT_NAV,
-  allNavItems,
-  buyerNav,
-  PLATFORM_NAV,
-  publisherNav,
-} from './nav-config';
+import { allNavItems, navFor, PLATFORM_NAV } from './nav-config';
 
 /**
  * Global command palette, cmd-K / ctrl-K.
@@ -97,17 +91,16 @@ export function CommandPalette({
   const [results, setResults] = React.useState<Results>(EMPTY);
   const [loading, setLoading] = React.useState(false);
 
+  const platform = usePlatformContext();
+  const previewing = platform.previewRole != null || auth.user?.previewRole != null;
+
   const pages = React.useMemo(() => {
-    // Same order as the sidebar, for the same reason: staff inside an agency
-    // hold ADMIN and OWNER, so `hasFullAccess` tested first would offer them the
-    // agency's pages instead of the platform's. See sidebar.tsx.
-    if (auth.isPlatformAdmin) return allNavItems(PLATFORM_NAV);
-    if (auth.hasFullAccess) return allNavItems(AGENCY_OWNER_NAV);
-    if (auth.isPublisherOnly) return allNavItems(publisherNav(auth.canViewRecordings));
-    if (auth.isBuyerOnly) return allNavItems(buyerNav(auth.canViewRecordings));
-    if (auth.isAgentOnly) return allNavItems(AGENT_NAV);
+    // The sidebar's own answer, from the same function, so the palette never
+    // offers a page the sidebar does not -- including under a role preview.
+    const groups = navFor({ ...auth, previewing });
+    if (groups.length > 0) return allNavItems(groups);
     return allNavItems(PLATFORM_NAV).filter(i => i.href === '/dashboard');
-  }, [auth]);
+  }, [auth, previewing]);
 
   /**
    * Whether this viewer's own navigation has a given destination in it.

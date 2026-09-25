@@ -1,19 +1,20 @@
 'use client';
 
+import { Lock } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { Logo } from '@/components/brand/logo';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { cn } from '@/lib/utils';
 
 import {
-  AGENCY_OWNER_NAV,
-  AGENT_NAV,
-  buyerNav,
-  PLATFORM_NAV,
-  publisherNav,
+  FIRST_UPGRADE_GROUP,
+  isLockedGroup,
+  navFor,
   type NavGroup,
   type NavItem,
 } from './nav-config';
@@ -37,11 +38,13 @@ import {
  *   isPlatformAdmin → PLATFORM_NAV      NetEnroll staff
  *   hasFullAccess   → AGENCY_OWNER_NAV  an agency principal
  *
- * A platform operator PREVIEWING an agency as OWNER or AGENT lands correctly
- * here without a branch of its own: the API replaces their roles with exactly
- * the previewed one, `/api/auth/me` answers with it, so `isPlatformAdmin` is
- * still true for the banner but the nav they get is the one under preview. That
- * is the whole reason the preview replaces rather than merges.
+ * A platform operator PREVIEWING an agency as OWNER or AGENT gets the nav under
+ * preview: the API replaces their roles with exactly the previewed one, and
+ * `navFor` skips the staff branch while a preview is on. It used to claim this
+ * happened on its own, but `isPlatformAdmin` stays true for the whole preview
+ * (the banner needs it), so testing it first handed the previewing operator
+ * PLATFORM_NAV. See `navFor` in nav-config.ts, which the command palette reads
+ * too.
  */
 
 /*
@@ -60,7 +63,9 @@ function activeHrefFor(pathname: string | null, groups: NavGroup[]): string | nu
   let bestLength = -1;
   for (const group of groups) {
     for (const item of group.items) {
-      if (item.pending || !isItemActive(pathname, item.href)) continue;
+      // A locked item never navigates, so it is never where the person is --
+      // even on /call-center, which an owner can still reach by URL.
+      if (item.pending || item.locked || !isItemActive(pathname, item.href)) continue;
       const length = item.href.split('?')[0].length;
       if (length > bestLength) {
         best = item.href;
@@ -80,8 +85,144 @@ function isItemActive(pathname: string | null, href: string): boolean {
   return pathname.startsWith(`${path}/`);
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+/**
+ * An upgrade in the sidebar: shown, explained, never navigated to.
+ *
+ * A button rather than a link, with `aria-disabled`, so it is reachable by
+ * keyboard and announced as unavailable, and there is no href for a middle
+ * click or a long-press to open. Hover on a pointer device, or a tap on a
+ * touch one, opens a card saying what the feature is and who turns it on.
+ *
+ * It has to read as deliberate. The grey "Soon" chip `pending` uses says "not
+ * built"; this says "not on your plan", in the brand colour, with a lock.
+ */
+function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
   const Icon = item.icon;
+  const [open, setOpen] = React.useState(false);
+  const hovering = React.useRef(false);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  // A short grace period, so moving the pointer from the item onto the card
+  // does not close the card on the way.
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  React.useEffect(() => cancelClose, []);
+
+  // Hover only for a real mouse. On touch, pointerenter fires just before the
+  // click, and opening on both would open-then-close on a single tap.
+  const onPointerEnter = (event: React.PointerEvent) => {
+    if (event.pointerType !== 'mouse') return;
+    hovering.current = true;
+    cancelClose();
+    setOpen(true);
+  };
+  const onPointerLeave = (event: React.PointerEvent) => {
+    if (event.pointerType !== 'mouse') return;
+    hovering.current = false;
+    closeSoon();
+  };
+
+  // A click while the pointer is already over the item would otherwise toggle
+  // the card hover just opened straight back shut.
+  const onOpenChange = (next: boolean) => {
+    if (!next && hovering.current) return;
+    setOpen(next);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-disabled="true"
+          aria-haspopup="dialog"
+          aria-label={`${item.name} — upgrade required`}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
+          className={cn(
+            'group flex h-9 w-full items-center gap-3 rounded-control pl-3 pr-1.5 text-left text-sm font-medium text-ink-3',
+            // The label-to-pill gap is the flex gap; `ml-auto` only pushes.
+            '[@media(pointer:coarse)]:h-10',
+            'transition-colors duration-150 ease-out ne-motion hover:bg-sunken',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            open && 'bg-sunken'
+          )}
+        >
+          <Icon className="h-[18px] w-[18px] shrink-0 opacity-60" />
+          {/*
+            Two tight lines rather than an ellipsis for the longest names --
+            "VOIP Carrier Routing" and "Onboard an Agency" do not fit beside the
+            pill in a 248px rail, and 2 x 1.2 x 14px still sits inside the h-9
+            row, so the item keeps a normal item's height.
+          */}
+          <span className="line-clamp-2 min-w-0 break-words leading-[1.2] opacity-80">
+            {item.name}
+          </span>
+          {/*
+            The lock rides inside the pill rather than beside the label: the
+            rail is 248px, and a lock of its own cost the label the room it
+            needed -- "Publishers" read "Publish…".
+          */}
+          <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-brand-tint px-1.5 py-0.5 text-[11px] font-semibold leading-none text-brand-ink">
+            <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+            Upgrade
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side={drawer ? 'bottom' : 'right'}
+        align="start"
+        sideOffset={8}
+        onPointerEnter={cancelClose}
+        onPointerLeave={event => {
+          if (event.pointerType === 'mouse') closeSoon();
+        }}
+        // The card explains; it does not take focus away from the menu.
+        onOpenAutoFocus={event => event.preventDefault()}
+        onEscapeKeyDown={() => {
+          hovering.current = false;
+          setOpen(false);
+        }}
+        className="w-72 max-w-[calc(100vw-32px)] p-4"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink">
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 font-semibold text-ink">
+              {item.name}
+              <Lock className="h-3 w-3 text-ink-3" aria-hidden="true" />
+            </p>
+            <p className="mt-1 t-body text-ink-2">{item.locked?.blurb}</p>
+          </div>
+        </div>
+        <p className="mt-3 border-t border-rule pt-3 t-meta text-ink-3">
+          Ask your NetEnroll account manager to turn this on for your agency.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NavLink({
+  item,
+  active,
+  drawer = false,
+}: {
+  item: NavItem;
+  active: boolean;
+  drawer?: boolean;
+}) {
+  const Icon = item.icon;
+
+  if (item.locked) return <LockedNavItem item={item} drawer={drawer} />;
 
   if (item.pending) {
     return (
@@ -206,7 +347,12 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     canViewRecordings,
     status,
     hasResolvedNoRole,
+    user,
   } = useAuth();
+  const platform = usePlatformContext();
+  // Either source answers; the platform context is the one the preview banner
+  // renders from. See `navFor` for why this matters to the nav.
+  const previewing = platform.previewRole != null || user?.previewRole != null;
 
   /*
    * Three states that used to look identical, and one of them was the incident.
@@ -223,42 +369,29 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
    * has actually answered does the role dispatch run, and "answered with no
    * roles" gets its own message rather than a nav that implies one page.
    */
-  const groups: NavGroup[] = React.useMemo(() => {
-    if (isPlatformAdmin) return PLATFORM_NAV;
-    if (hasFullAccess) return AGENCY_OWNER_NAV;
-    if (isPublisherOnly) return publisherNav(canViewRecordings);
-    if (isBuyerOnly) return buyerNav(canViewRecordings);
-    if (isAgentOnly) return AGENT_NAV;
-    if (isReadonlyOnly) {
-      /*
-       * Dashboard alone.
-       *
-       * This used to add /reports when the account held `reports:read`, and
-       * that link now goes somewhere they are sent straight back from:
-       * /reports joined STAFF_ONLY_ROUTES, and the dashboard layout redirects
-       * a read-only account off every route on that list -- staff bypass the
-       * dispatch entirely, a read-only account does not. Leaving the entry in
-       * would have put a link in the sidebar whose only behaviour is to bounce.
-       *
-       * The capability is untouched: `reports:read` still means what it meant
-       * and the API still answers it. What has gone is a menu item pointing at
-       * a screen this principal can no longer open.
-       */
-      return [{ items: [PLATFORM_NAV[0].items[0]] }];
-    }
-    // Reached only once the server has answered and named no role we render a
-    // nav for. `NoRoleNotice` is what the person sees; an empty list here keeps
-    // a stale Dashboard link from sitting under it.
-    return [];
-  }, [
-    isPlatformAdmin,
-    hasFullAccess,
-    isPublisherOnly,
-    isBuyerOnly,
-    isAgentOnly,
-    isReadonlyOnly,
-    canViewRecordings,
-  ]);
+  const groups: NavGroup[] = React.useMemo(
+    () =>
+      navFor({
+        isPlatformAdmin,
+        previewing,
+        hasFullAccess,
+        isPublisherOnly,
+        isBuyerOnly,
+        isAgentOnly,
+        isReadonlyOnly,
+        canViewRecordings,
+      }),
+    [
+      isPlatformAdmin,
+      previewing,
+      hasFullAccess,
+      isPublisherOnly,
+      isBuyerOnly,
+      isAgentOnly,
+      isReadonlyOnly,
+      canViewRecordings,
+    ]
+  );
 
   const drawer = variant === 'drawer';
   const activeHref = activeHrefFor(pathname, groups);
@@ -293,24 +426,47 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           {/* Whose product this is, said at the top of the column. An agency
             principal gets one for the same reason a publisher does: the screen
             they are on is an agency's, not NetEnroll's. */}
-          {!isPlatformAdmin && hasFullAccess ? <PortalBadge label="Agency portal" /> : null}
+          {(!isPlatformAdmin || previewing) && hasFullAccess ? (
+            <PortalBadge label="Agency portal" />
+          ) : null}
           {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
           {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
           {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
 
           {groups.map((group, gi) => (
-            <div key={group.label ?? `group-${gi}`} className={cn(gi > 0 && 'mt-5')}>
-              {group.label ? (
-                <h2 className="px-3 pb-1.5 t-label text-ink-3">{group.label}</h2>
+            <React.Fragment key={group.label ?? `group-${gi}`}>
+              {/*
+                The line between what the agency has and what it could turn
+                on. Everything below it is locked, so the working menu reads as
+                complete on its own.
+              */}
+              {group.label === FIRST_UPGRADE_GROUP ? (
+                <div className="mt-6 border-t border-rule px-3 pt-4">
+                  <p className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-brand-ink">
+                    Unlock more
+                  </p>
+                </div>
               ) : null}
-              <ul className="space-y-0.5">
-                {group.items.map(item => (
-                  <li key={`${item.name}-${item.href}`}>
-                    <NavLink item={item} active={item.href === activeHref} />
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <div
+                className={cn(gi > 0 && (group.label === FIRST_UPGRADE_GROUP ? 'mt-3' : 'mt-5'))}
+              >
+                {group.label ? (
+                  <h2 className="flex items-center gap-1.5 px-3 pb-1.5 t-label text-ink-3">
+                    {group.label}
+                    {isLockedGroup(group) ? (
+                      <Lock className="h-3 w-3 opacity-70" aria-label="Upgrade required" />
+                    ) : null}
+                  </h2>
+                ) : null}
+                <ul className="space-y-0.5">
+                  {group.items.map(item => (
+                    <li key={`${item.name}-${item.href}`}>
+                      <NavLink item={item} active={item.href === activeHref} drawer={drawer} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </React.Fragment>
           ))}
         </div>
       </nav>
