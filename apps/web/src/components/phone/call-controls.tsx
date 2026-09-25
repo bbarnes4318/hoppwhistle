@@ -1,316 +1,99 @@
 'use client';
 
-import {
-  Grid,
-  Merge,
-  Mic,
-  MicOff,
-  Pause,
-  PhoneForwarded,
-  PhoneOff,
-  Play,
-  UserPlus,
-} from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { cn } from '@/lib/utils';
-
-import { AddCallDialog } from './add-call-dialog';
-import { CallTransferDialog } from './call-transfer-dialog';
 import { usePhone } from './phone-provider';
-
+import { ActiveCallView } from './softphone/active-call-view';
+import { isDialing, knownCallerName } from './softphone/format';
+import { useElapsedSeconds, useKeypadKeyboard, useSinceTrue } from './softphone/hooks';
+import { Keypad } from './softphone/keypad';
 
 // ============================================================================
-// Call Controls Component
+// Call Controls — the connected / on-hold call card, fed from the provider
 // ============================================================================
 
-export function CallControls(): JSX.Element {
-  const {
-    currentCall,
-    toggleMute,
-    toggleHold,
-    hangupCall,
-    hasHeldCalls,
-    mergeCalls,
-    addThirdParty,
-  } = usePhone();
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [showKeypad, setShowKeypad] = useState(false);
-  const [showAddCall, setShowAddCall] = useState(false);
-
-  const isMuted = currentCall?.isMuted ?? false;
-  const isOnHold = currentCall?.isOnHold ?? false;
-
-  // Handle mute toggle
-  const handleMute = useCallback(() => {
-    toggleMute();
-  }, [toggleMute]);
-
-  // Handle hold toggle
-  const handleHold = useCallback(() => {
-    void toggleHold();
-  }, [toggleHold]);
-
-  // Handle hangup
-  const handleHangup = useCallback(() => {
-    void hangupCall();
-  }, [hangupCall]);
-
-  // Handle transfer
-  const handleTransfer = useCallback(() => {
-    setShowTransfer(true);
-  }, []);
-
-  // Handle merge
-  const handleMerge = useCallback(() => {
-    void mergeCalls();
-  }, [mergeCalls]);
-
-  // Handle add call
-  const handleAddCall = useCallback(() => {
-    setShowAddCall(true);
-  }, []);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 'm':
-          handleMute();
-          break;
-        case 'h':
-          handleHold();
-          break;
-        case 't':
-          handleTransfer();
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMute, handleHold, handleTransfer]);
-
-  if (!currentCall) return <></>;
-
-  return (
-    <>
-      {/* Transfer Dialog */}
-      {showTransfer && <CallTransferDialog onClose={() => setShowTransfer(false)} />}
-
-      {/* Add Call Dialog */}
-      {showAddCall && (
-        <AddCallDialog
-          onClose={() => setShowAddCall(false)}
-          onAddCall={(phoneNumber: string) => {
-            void addThirdParty(phoneNumber);
-            setShowAddCall(false);
-          }}
-        />
-      )}
-
-      {/* Controls Grid */}
-      <div className="space-y-4">
-        {/* Main Controls */}
-        <div className="flex items-center justify-center gap-4">
-          {/* Mute Button */}
-          <button
-            onClick={handleMute}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isMuted
-                  ? 'bg-blocked-tint border-2 border-blocked'
-                  : 'bg-sunken border-2 border-transparent hover:bg-rule'
-              )}
-            >
-              {isMuted ? (
-                <MicOff className="w-6 h-6 text-blocked-ink" />
-              ) : (
-                <Mic className="w-6 h-6 text-ink" />
-              )}
-            </div>
-            <span className="text-xs text-ink-3">{isMuted ? 'Unmute' : 'Mute'}</span>
-          </button>
-
-          {/* Hold Button */}
-          <button
-            onClick={handleHold}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isOnHold
-                  ? 'bg-ringing-tint border-2 border-ringing'
-                  : 'bg-sunken border-2 border-transparent hover:bg-rule'
-              )}
-            >
-              {isOnHold ? (
-                <Play className="w-6 h-6 text-ringing-ink" />
-              ) : (
-                <Pause className="w-6 h-6 text-ink" />
-              )}
-            </div>
-            <span className="text-xs text-ink-3">{isOnHold ? 'Resume' : 'Hold'}</span>
-          </button>
-
-          {/* Transfer Button */}
-          <button
-            onClick={handleTransfer}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'bg-sunken border-2 border-transparent hover:bg-rule',
-                'transition-all duration-200'
-              )}
-            >
-              <PhoneForwarded className="w-6 h-6 text-ink" />
-            </div>
-            <span className="text-xs text-ink-3">Transfer</span>
-          </button>
-
-          {/* Keypad Button */}
-          <button
-            onClick={() => setShowKeypad(!showKeypad)}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                showKeypad
-                  ? 'bg-brand-tint border-2 border-brand'
-                  : 'bg-sunken border-2 border-transparent hover:bg-rule'
-              )}
-            >
-              <Grid className="w-6 h-6 text-ink" />
-            </div>
-            <span className="text-xs text-ink-3">Keypad</span>
-          </button>
-
-          {/* Add Call Button */}
-          <button
-            onClick={handleAddCall}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'bg-sunken border-2 border-transparent hover:bg-rule',
-                'transition-all duration-200'
-              )}
-            >
-              <UserPlus className="w-6 h-6 text-ink" />
-            </div>
-            <span className="text-xs text-ink-3">Add Call</span>
-          </button>
-
-          {/* Merge Button (Only appears when there is a held call) */}
-          {hasHeldCalls && (
-            <button
-              onClick={handleMerge}
-              className={cn(
-                'group relative flex flex-col items-center gap-1.5',
-                'transition-transform hover:scale-105 active:scale-95'
-              )}
-            >
-              <div
-                className={cn(
-                  'w-14 h-14 rounded-full flex items-center justify-center',
-                  'bg-brand-tint border-2 border-brand',
-                  'transition-all duration-200'
-                )}
-              >
-                <Merge className="w-6 h-6 text-brand-ink" />
-              </div>
-              <span className="text-xs text-ink-3">Merge</span>
-            </button>
-          )}
-        </div>
-
-        {/* In-Call Keypad */}
-        {showKeypad && <InCallKeypad />}
-
-        {/* End Call Button */}
-        <button
-          onClick={handleHangup}
-          className={cn(
-            'w-full py-4 rounded-xl flex items-center justify-center gap-3',
-            'bg-dropped',
-            'shadow-lg',
-            'transition-all duration-200',
-            'active:scale-98'
-          )}
-        >
-          <PhoneOff className="w-6 h-6 text-white" />
-          <span className="text-white font-semibold">End Call</span>
-        </button>
-
-        {/* Keyboard Hints */}
-        <div className="text-center">
-          <p className="text-ink-3 text-xs">
-            <kbd className="px-1 py-0.5 bg-sunken rounded text-ink-3">M</kbd> Mute{' '}
-            <kbd className="px-1 py-0.5 bg-sunken rounded text-ink-3">H</kbd> Hold{' '}
-            <kbd className="px-1 py-0.5 bg-sunken rounded text-ink-3">T</kbd> Transfer
-          </p>
-        </div>
-      </div>
-    </>
-  );
+export interface CallControlsProps {
+  /** "Tampa, FL" from the prospect match, when there is one. */
+  location?: string | null;
+  keypadOpen: boolean;
+  onKeypadToggle: () => void;
+  onTransfer: () => void;
+  onAddCall: () => void;
+  /** Prospect details under the controls. */
+  children?: ReactNode;
 }
 
-// ============================================================================
-// In-Call Keypad Component
-// ============================================================================
+export function CallControls({
+  location,
+  keypadOpen,
+  onKeypadToggle,
+  onTransfer,
+  onAddCall,
+  children,
+}: CallControlsProps): JSX.Element | null {
+  const { currentCall, toggleMute, toggleHold, hangupCall, hasHeldCalls, mergeCalls, sendDTMF } =
+    usePhone();
 
-function InCallKeypad(): JSX.Element {
-  const { sendDTMF } = usePhone();
+  const isOnHold = currentCall?.isOnHold ?? false;
+  const holdSeconds = useElapsedSeconds(useSinceTrue(isOnHold));
 
-  const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
+  // The tones sent on this call, so the agent can check an IVR choice.
+  const [sent, setSent] = useState('');
+  const callId = currentCall?.callId;
+  useEffect(() => {
+    setSent('');
+  }, [callId]);
+
+  const handleDigit = useCallback(
+    (digit: string) => {
+      sendDTMF(digit);
+      setSent(prev => (prev + digit).slice(-24));
+    },
+    [sendDTMF]
+  );
+
+  const pressedKey = useKeypadKeyboard(keypadOpen && Boolean(currentCall), {
+    onDigit: handleDigit,
+    onBackspace: () => {},
+    onEnter: () => {},
+  });
+
+  if (!currentCall) return null;
+
+  const dialing = isDialing(currentCall);
 
   return (
-    <div className="grid grid-cols-3 gap-2 p-4 bg-sunken rounded-card">
-      {digits.map(digit => (
-        <button
-          key={digit}
-          onClick={() => sendDTMF(digit)}
-          className={cn(
-            'h-12 rounded-lg flex items-center justify-center',
-            'bg-surface hover:bg-sunken active:bg-brand-tint',
-            'text-ink text-lg font-medium',
-            'transition-all duration-150 active:scale-95'
-          )}
-        >
-          {digit}
-        </button>
-      ))}
-    </div>
+    <ActiveCallView
+      callerName={knownCallerName(currentCall.callerName)}
+      phoneNumber={currentCall.phoneNumber}
+      source={currentCall.queueName ?? currentCall.prospectData?.campaignName ?? null}
+      location={location}
+      callSeconds={currentCall.duration}
+      dialing={dialing}
+      isMuted={currentCall.isMuted}
+      isOnHold={isOnHold}
+      holdSeconds={holdSeconds}
+      keypadOpen={keypadOpen}
+      hasHeldCalls={hasHeldCalls}
+      onMute={toggleMute}
+      onHold={() => void toggleHold()}
+      onKeypad={onKeypadToggle}
+      onTransfer={onTransfer}
+      onAddCall={onAddCall}
+      onMerge={() => void mergeCalls()}
+      onHangup={() => void hangupCall()}
+      keypad={
+        <Keypad
+          mode="dtmf"
+          size="compact"
+          value={sent}
+          onDigit={handleDigit}
+          pressedKey={pressedKey}
+        />
+      }
+    >
+      {children}
+    </ActiveCallView>
   );
 }
 

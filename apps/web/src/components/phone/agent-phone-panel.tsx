@@ -1,40 +1,103 @@
-/* eslint-disable */
 'use client';
 
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Keyboard,
-  Pause,
-  Phone,
-  PhoneForwarded,
-  PhoneOff,
-  Settings,
-  User,
-  X,
-} from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useCustomerIntake } from '@/contexts/customer-intake-context';
+import {
+  DEFAULT_INTAKE_DATA,
+  type Beneficiary,
+  type CustomerIntakeData,
+} from '@/types/customer-intake-types';
+
+import { AddCallDialog } from './add-call-dialog';
 import { AgentStatusSelector } from './agent-status-selector';
 import { AvailabilitySwitch } from './availability-switch';
 import { CallControls } from './call-controls';
+import { CallTransferDialog } from './call-transfer-dialog';
 import { CustomerDetailsPanel } from './CustomerDetailsPanel';
 import { DialPad } from './dial-pad';
 import { IncomingCallModal } from './incoming-call-modal';
-import { usePhone, type AgentStatus, type CallInfo } from './phone-provider';
+import { usePhone } from './phone-provider';
 import { ScreenPop } from './screen-pop';
 import { ScreenPopSettings } from './screen-pop-settings';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { useCustomerIntake } from '@/contexts/customer-intake-context';
-import { cn } from '@/lib/utils';
+import { ConnectionNotice } from './softphone/connection-notice';
+import {
+  AGENT_STATUS_LABEL,
+  deriveSoftphoneState,
+  formatPhoneNumber,
+  isDialing,
+  knownCallerName,
+  mergeRecentCalls,
+  type ApiCallRow,
+} from './softphone/format';
+import { useMicPermission, useRingingTitle, useSoftphoneShortcuts } from './softphone/hooks';
+import { CallerIdSelect, DeviceSettings, IdleView, type IdleTab } from './softphone/idle-view';
+import { SoftphoneLauncher } from './softphone/launcher';
+import { RecentCallsList } from './softphone/recent-calls';
+import { SoftphoneShell } from './softphone/shell';
+import type { ShortcutAction } from './softphone/shortcuts';
+import { ShortcutsSheet } from './softphone/shortcuts-sheet';
 
 // ============================================================================
-// Agent Phone Panel - Main Softphone Component
+// Agent Phone Panel — the floating softphone
 // ============================================================================
+
+/*
+ * This file is the wiring: it reads the provider, keeps the panel's own UI
+ * state (tab, dialogs, minimised) and hands values to the presentational
+ * pieces in ./softphone. Everything visual lives there, which is what lets
+ * /design-preview render every state from mock data with no SIP behind it.
+ */
+
+interface MatchedProspect {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  phone: string;
+  email?: string;
+  dob?: string;
+  city?: string;
+  state?: string;
+  carrier?: string;
+  policyType?: string;
+  coverageAmount?: number;
+  monthlyPremium?: number;
+  beneficiaries?: Array<{ name: string; relationship: string }>;
+  bankName?: string;
+  accountType?: string;
+}
+
+const extractDigits = (phone: string): string => phone.replace(/\D/g, '');
+
+/**
+ * The API prospect in the intake form's shape, for CustomerDetailsPanel. The
+ * API's strings are not narrowed to the form's unions, hence the casts; the
+ * panel only displays them.
+ */
+function prospectToIntake(p: MatchedProspect): CustomerIntakeData {
+  return {
+    ...DEFAULT_INTAKE_DATA,
+    firstName: p.firstName || '',
+    lastName: p.lastName || '',
+    phone: p.phone || '',
+    email: p.email || '',
+    dateOfBirth: p.dob ? new Date(p.dob).toISOString().split('T')[0] : '',
+    city: p.city || '',
+    state: p.state || '',
+    carrier: (p.carrier || '') as CustomerIntakeData['carrier'],
+    policyType: (p.policyType || '') as CustomerIntakeData['policyType'],
+    coverage: p.coverageAmount || 0,
+    monthlyPremium: p.monthlyPremium || 0,
+    bankName: p.bankName || '',
+    accountType: (p.accountType || '') as CustomerIntakeData['accountType'],
+    primaryBeneficiaries: (p.beneficiaries || []).map((b, i) => ({
+      id: `api-${i}`,
+      name: b.name,
+      relationship: b.relationship as Beneficiary['relationship'],
+    })),
+  };
+}
 
 export function AgentPhonePanel(): JSX.Element | null {
   const {
@@ -45,7 +108,6 @@ export function AgentPhonePanel(): JSX.Element | null {
     phoneAttempts,
     reconnectPhone,
     closePhonePanel,
-    togglePhonePanel,
     openPhonePanel,
     setDialerNumber,
     error,
@@ -53,21 +115,35 @@ export function AgentPhonePanel(): JSX.Element | null {
     userNumbers,
     selectedCallerId,
     setSelectedCallerId,
+    pendingDispositionCall,
+    answerCall,
+    hangupCall,
+    toggleMute,
+    toggleHold,
   } = usePhone();
 
   // Customer Intake Context - shares data with CustomerIntakeForm
   const { formData } = useCustomerIntake();
 
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dialpad' | 'history' | 'settings'>('dialpad');
-  const [showSettings, setShowSettings] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [activeTab, setActiveTab] = useState<IdleTab>('dialpad');
+  const [showScreenPopSettings, setShowScreenPopSettings] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [dialog, setDialog] = useState<'transfer' | 'add' | null>(null);
+  const [keypadOpen, setKeypadOpen] = useState(false);
   const [customerDetailsExpanded, setCustomerDetailsExpanded] = useState(false);
   const [intakeMatchDetected, setIntakeMatchDetected] = useState(false);
+  const [matchedProspect, setMatchedProspect] = useState<MatchedProspect | null>(null);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Helper: Extract digits from phone number
-  // ─────────────────────────────────────────────────────────────────────────
-  const extractDigits = (phone: string): string => phone.replace(/\D/g, '');
+  const micPermission = useMicPermission();
+
+  const state = deriveSoftphoneState({
+    phoneStatus,
+    agentStatus,
+    currentCall,
+    hasPendingDisposition: Boolean(pendingDispositionCall),
+  });
+  const onCall = state === 'connected' || state === 'hold';
 
   // Check if intake form phone is valid (10 digits)
   const intakePhoneDigits = useMemo(() => extractDigits(formData?.phone || ''), [formData?.phone]);
@@ -78,37 +154,25 @@ export function AgentPhonePanel(): JSX.Element | null {
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isIntakePhoneValid && !isPhonePanelOpen) {
-      // Auto-open the phone panel when a valid phone number is entered
       openPhonePanel?.();
-      // Pre-fill the dialer with the intake phone number
       setDialerNumber?.(intakePhoneDigits);
     }
   }, [isIntakePhoneValid, isPhonePanelOpen, openPhonePanel, setDialerNumber, intakePhoneDigits]);
 
-  // Incoming Call Matching: Check if incoming number matches stored prospect data
   // ─────────────────────────────────────────────────────────────────────────
-
-  // State for API-fetched prospect data
-  const [matchedProspect, setMatchedProspect] = useState<{
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    phone: string;
-    email?: string;
-    dob?: string;
-    city?: string;
-    state?: string;
-    carrier?: string;
-    policyType?: string;
-    coverageAmount?: number;
-    monthlyPremium?: number;
-    beneficiaries?: Array<{ name: string; relationship: string }>;
-    bankName?: string;
-    accountType?: string;
-  } | null>(null);
-
+  // Incoming call matching: does the ringing number belong to a known prospect
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const lookupProspect = async (phoneNumber: string) => {
+    const matchIntake = (digits: string): void => {
+      if (isIntakePhoneValid && digits.slice(-10) === intakePhoneDigits) {
+        setIntakeMatchDetected(true);
+        setCustomerDetailsExpanded(true);
+        setMinimized(false);
+        openPhonePanel?.();
+      }
+    };
+
+    const lookupProspect = async (phoneNumber: string): Promise<void> => {
       const digits = extractDigits(phoneNumber);
       if (digits.length < 10) return;
 
@@ -118,35 +182,21 @@ export function AgentPhonePanel(): JSX.Element | null {
             ? window.location.origin
             : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
         const response = await fetch(`${apiUrl}/api/v1/prospects/by-phone/${digits}`);
-        const data = await response.json();
+        const data = (await response.json()) as { found?: boolean; prospect?: MatchedProspect };
 
         if (data.found && data.prospect) {
-          console.log('[AgentPhonePanel] Matched prospect:', data.prospect);
           setMatchedProspect(data.prospect);
           setIntakeMatchDetected(true);
           setCustomerDetailsExpanded(true);
-          setIsExpanded(true);
+          setMinimized(false);
           openPhonePanel?.();
         } else {
           // No database match, check context as fallback
-          const incomingLast10 = digits.slice(-10);
-          if (isIntakePhoneValid && incomingLast10 === intakePhoneDigits) {
-            setIntakeMatchDetected(true);
-            setCustomerDetailsExpanded(true);
-            setIsExpanded(true);
-            openPhonePanel?.();
-          }
+          matchIntake(digits);
         }
-      } catch (error) {
-        console.error('[AgentPhonePanel] Prospect lookup error:', error);
-        // Fallback to context matching on API error
-        const incomingLast10 = digits.slice(-10);
-        if (isIntakePhoneValid && incomingLast10 === intakePhoneDigits) {
-          setIntakeMatchDetected(true);
-          setCustomerDetailsExpanded(true);
-          setIsExpanded(true);
-          openPhonePanel?.();
-        }
+      } catch (err) {
+        console.error('[AgentPhonePanel] Prospect lookup error:', err);
+        matchIntake(digits);
       }
     };
 
@@ -159,33 +209,85 @@ export function AgentPhonePanel(): JSX.Element | null {
     }
   }, [currentCall, intakePhoneDigits, isIntakePhoneValid, openPhonePanel]);
 
-  // Format duration as MM:SS
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Get status color
-  const getStatusColor = (status: AgentStatus): string => {
-    switch (status) {
-      case 'available':
-        return 'bg-live';
-      case 'on-call':
-        return 'bg-ringing';
-      case 'away':
-        return 'bg-dropped';
-      case 'dnd':
-        return 'bg-blocked';
-      case 'offline':
-        return 'bg-ink-3';
-      default:
-        return 'bg-ink-3';
+  // A new call starts with the keypad closed and no dialog left over.
+  useEffect(() => {
+    if (!onCall) {
+      setKeypadOpen(false);
+      setDialog(null);
     }
-  };
+  }, [onCall]);
+
+  // An incoming call always shows in full, even if the panel was minimised.
+  useEffect(() => {
+    if (state === 'incoming') setMinimized(false);
+  }, [state]);
+
+  const prospectName = matchedProspect
+    ? [matchedProspect.firstName, matchedProspect.lastName].filter(Boolean).join(' ') || null
+    : null;
+  const ringingLabel = currentCall
+    ? knownCallerName(currentCall.callerName) ||
+      prospectName ||
+      formatPhoneNumber(currentCall.phoneNumber)
+    : '';
+  useRingingTitle(state === 'incoming', ringingLabel || 'Unknown caller');
+
+  const handleShortcut = useCallback(
+    (action: ShortcutAction) => {
+      switch (action) {
+        case 'answer':
+          answerCall();
+          break;
+        case 'decline':
+          hangupCall();
+          break;
+        case 'mute':
+          toggleMute();
+          break;
+        case 'hold':
+          toggleHold();
+          break;
+        case 'keypad':
+          if (!isPhonePanelOpen) openPhonePanel();
+          setMinimized(false);
+          if (onCall) setKeypadOpen(open => !open);
+          else setActiveTab('dialpad');
+          break;
+        case 'close':
+          if (showShortcuts) setShowShortcuts(false);
+          else if (isPhonePanelOpen) closePhonePanel();
+          break;
+        case 'help':
+          if (!isPhonePanelOpen) openPhonePanel();
+          setMinimized(false);
+          setShowShortcuts(true);
+          break;
+        default:
+          break;
+      }
+    },
+    [
+      answerCall,
+      hangupCall,
+      toggleMute,
+      toggleHold,
+      isPhonePanelOpen,
+      openPhonePanel,
+      closePhonePanel,
+      onCall,
+      showShortcuts,
+    ]
+  );
+
+  // Off while a dialog with its own fields is up: its Esc and letters are its own.
+  useSoftphoneShortcuts(
+    state,
+    phoneStatus !== 'disabled' && dialog === null && !showScreenPopSettings,
+    handleShortcut
+  );
 
   // ============================================================================
-  // Floating Phone Button (when panel is closed)
+  // Closed: the launcher
   // ============================================================================
 
   /*
@@ -195,369 +297,223 @@ export function AgentPhonePanel(): JSX.Element | null {
    */
   if (phoneStatus === 'disabled') return null;
 
-  /*
-   * The phone is not working, and the launcher says so.
-   *
-   * This is the whole of the "no visible indication" problem. The launcher is
-   * the one piece of the softphone that is on screen at all times, and it
-   * showed the agent's status -- "Available", in green -- whether or not the
-   * phone had ever registered. An agent whose SIP init was failing saw a
-   * healthy-looking control while calls went nowhere, and the only evidence
-   * anywhere was a console line they were never going to read.
-   */
-  if (!isPhonePanelOpen && (phoneStatus === 'retrying' || phoneStatus === 'failed')) {
+  if (!isPhonePanelOpen) {
+    /*
+     * The launcher says when the phone is not working. It is the one piece of
+     * the softphone on screen at all times, and it used to show a green
+     * "Available" whether or not the phone had ever registered.
+     */
     return (
-      <button
-        onClick={phoneStatus === 'failed' ? reconnectPhone : togglePhonePanel}
-        className={cn(
-          'fixed bottom-6 right-6 z-50',
-          'flex items-center gap-3 px-5 py-3 rounded-full',
-          'bg-dropped text-white font-medium shadow-sm',
-          'border border-rule transition-all duration-300 ease-out hover:scale-105'
-        )}
-        aria-label={
-          phoneStatus === 'failed' ? 'Phone disconnected. Try again.' : 'Phone reconnecting'
+      <SoftphoneLauncher
+        state={state}
+        statusLabel={AGENT_STATUS_LABEL[agentStatus]}
+        callSeconds={currentCall?.duration ?? 0}
+        attempts={phoneAttempts}
+        failed={phoneStatus === 'failed'}
+        onOpen={openPhonePanel}
+        onReconnect={reconnectPhone}
+      />
+    );
+  }
+
+  // ============================================================================
+  // Open: the panel
+  // ============================================================================
+
+  const notices = (
+    <>
+      {phoneStatus === 'failed' ? (
+        <ConnectionNotice kind="failed" onReconnect={reconnectPhone} />
+      ) : null}
+      {phoneStatus === 'retrying' ? (
+        <ConnectionNotice kind="retrying" attempts={phoneAttempts} />
+      ) : null}
+      {micPermission === 'denied' ? <ConnectionNotice kind="mic-denied" /> : null}
+      {error && phoneStatus !== 'retrying' && phoneStatus !== 'failed' ? (
+        <ConnectionNotice
+          kind="error"
+          error={error}
+          onReconnect={reconnectPhone}
+          onDismiss={clearError}
+        />
+      ) : null}
+    </>
+  );
+  const hasNotices =
+    phoneStatus === 'failed' ||
+    phoneStatus === 'retrying' ||
+    micPermission === 'denied' ||
+    Boolean(error);
+
+  const customerData: CustomerIntakeData | null = matchedProspect
+    ? prospectToIntake(matchedProspect)
+    : formData && (formData.firstName || formData.lastName || formData.phone)
+      ? formData
+      : null;
+
+  const customerDetails = customerData ? (
+    <CustomerDetailsPanel
+      formData={customerData}
+      isExpanded={customerDetailsExpanded}
+      onToggle={() => setCustomerDetailsExpanded(!customerDetailsExpanded)}
+    />
+  ) : null;
+
+  const matchBadge = intakeMatchDetected ? (
+    <div className="flex items-center gap-2 border-b border-rule bg-sunken px-4 py-2">
+      <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-ink" aria-hidden />
+      <span className="truncate text-xs font-medium text-ink">
+        {matchedProspect
+          ? `Matched to a saved prospect${prospectName ? `: ${prospectName}` : ''}`
+          : 'Matched to the intake form'}
+      </span>
+    </div>
+  ) : null;
+
+  let body: JSX.Element;
+  if (state === 'incoming' && currentCall) {
+    body = (
+      <IncomingCallModal
+        call={currentCall}
+        prospectName={prospectName}
+        city={matchedProspect?.city}
+        state={matchedProspect?.state}
+      >
+        {currentCall.prospectData ? (
+          <ScreenPop data={currentCall.prospectData} variant="modal" />
+        ) : null}
+      </IncomingCallModal>
+    );
+  } else if (onCall && currentCall) {
+    body = (
+      <>
+        {matchBadge}
+        <CallControls
+          location={
+            matchedProspect
+              ? [matchedProspect.city, matchedProspect.state].filter(Boolean).join(', ') || null
+              : null
+          }
+          keypadOpen={keypadOpen}
+          onKeypadToggle={() => setKeypadOpen(open => !open)}
+          onTransfer={() => setDialog('transfer')}
+          onAddCall={() => setDialog('add')}
+        >
+          {currentCall.prospectData || customerDetails ? (
+            <div className="space-y-3">
+              {currentCall.prospectData ? <ScreenPop data={currentCall.prospectData} /> : null}
+              {customerDetails ? (
+                <div className="overflow-hidden rounded-card border border-rule">
+                  {customerDetails}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </CallControls>
+      </>
+    );
+  } else {
+    body = (
+      <IdleView
+        tab={activeTab}
+        onTabChange={setActiveTab}
+        lead={
+          <>
+            {matchBadge}
+            {customerDetails}
+          </>
         }
       >
-        <PhoneOff className="w-5 h-5" />
-        <span>
-          {phoneStatus === 'failed'
-            ? 'Phone disconnected — try again'
-            : `Phone reconnecting (${phoneAttempts})`}
-        </span>
-        <span className="w-2.5 h-2.5 rounded-full bg-surface/80" />
-      </button>
-    );
-  }
-
-  if (!isPhonePanelOpen) {
-    return (
-      <button
-        onClick={togglePhonePanel}
-        className={cn(
-          'fixed bottom-6 right-6 z-50',
-          'flex items-center gap-3 px-5 py-3 rounded-full',
-          'bg-brand',
-          'text-ink font-medium shadow-sm',
-          'transition-all duration-300 ease-out',
-          'hover:scale-105 hover:bg-brand-ink hover:text-surface',
-          'border border-rule',
-          currentCall?.state === 'ringing' && 'animate-pulse'
+        {activeTab === 'dialpad' ? (
+          <DialPad
+            compact
+            captureKeyboard={!showShortcuts}
+            header={
+              <CallerIdSelect
+                numbers={userNumbers}
+                value={selectedCallerId}
+                onChange={setSelectedCallerId}
+              />
+            }
+          />
+        ) : activeTab === 'history' ? (
+          <CallHistory onOpenKeypad={() => setActiveTab('dialpad')} />
+        ) : (
+          <PhoneSettings onConfigureScreenPop={() => setShowScreenPopSettings(true)} />
         )}
-        aria-label="Open phone"
-      >
-        <div className="relative">
-          <Phone className="w-5 h-5" />
-          {currentCall?.state === 'ringing' && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-ringing rounded-full animate-ping" />
-          )}
-        </div>
-        <span className="capitalize">{agentStatus === 'on-call' ? 'On Call' : agentStatus}</span>
-        <span className={cn('w-2.5 h-2.5 rounded-full', getStatusColor(agentStatus))} />
-      </button>
+      </IdleView>
     );
   }
-
-  // ============================================================================
-  // Main Phone Panel
-  // ============================================================================
 
   return (
     <>
-      {/* Incoming Call Modal */}
-      {currentCall?.state === 'ringing' && currentCall.direction === 'inbound' && (
-        <IncomingCallModal call={currentCall} />
+      {showScreenPopSettings && (
+        <ScreenPopSettings onClose={() => setShowScreenPopSettings(false)} />
       )}
+      {dialog === 'transfer' && <CallTransferDialog onClose={() => setDialog(null)} />}
+      {dialog === 'add' && <AddCallDialog onClose={() => setDialog(null)} />}
 
-      {/* Screen Pop Settings Modal */}
-      {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
-
-      {/* Phone Panel */}
-      <Card
-        className={cn(
-          'fixed bottom-4 right-4 z-40',
-          'w-[340px] overflow-hidden flex flex-col',
-          'bg-surface border border-rule',
-          'shadow-lg',
-          'transition-all duration-300 ease-out',
-          isExpanded ? 'h-[500px] max-h-[calc(100vh-32px)]' : 'h-[44px]'
-        )}
+      <SoftphoneShell
+        state={state}
+        label={
+          state === 'connecting' && phoneAttempts > 1
+            ? `Reconnecting (${phoneAttempts})`
+            : isDialing(currentCall)
+              ? 'Calling'
+              : undefined
+        }
+        statusSlot={
+          <>
+            {/*
+              Two different facts, deliberately side by side. The selector
+              reports what the SOFTPHONE is doing; the switch is what the
+              AGENT decided, and it is the one routing obeys.
+            */}
+            <AgentStatusSelector />
+            <AvailabilitySwitch />
+          </>
+        }
+        callSeconds={currentCall?.duration}
+        notices={hasNotices ? notices : null}
+        minimized={minimized}
+        onToggleMinimized={() => setMinimized(m => !m)}
+        onClose={closePhonePanel}
+        onSettings={() => {
+          setMinimized(false);
+          setActiveTab('settings');
+        }}
+        onShortcuts={() => setShowShortcuts(true)}
+        overlay={showShortcuts ? <ShortcutsSheet onClose={() => setShowShortcuts(false)} /> : null}
       >
-        {/* Header */}
-        <CardHeader className="p-2 flex flex-row items-center justify-between border-b border-rule space-y-0 flex-shrink-0 bg-sunken">
-          <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                'w-7 h-7 rounded flex items-center justify-center bg-primary/10 border border-primary/20'
-              )}
-            >
-              <Phone className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            </div>
-            <div>
-              <h3 className="font-bold text-ink text-xs leading-none">Softphone</h3>
-              <div className="flex items-center gap-2 mt-0.5">
-                {/*
-                  Two different facts, deliberately side by side. The selector
-                  reports what the SOFTPHONE is doing; the switch is what the
-                  AGENT decided, and it is the one routing obeys.
-                */}
-                <AgentStatusSelector />
-                <AvailabilitySwitch />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            {currentCall?.state === 'active' && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-live-tint rounded mr-1">
-                <span className="w-1.5 h-1.5 bg-live rounded-full animate-pulse" />
-                <span className="text-live-ink text-[10px] font-mono leading-none">
-                  {formatDuration(currentCall.duration)}
-                </span>
-              </div>
-            )}
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-ink-3 hover:text-ink"
-              onClick={() => setShowSettings(true)}
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-ink-3 hover:text-ink"
-              onClick={() => setIsExpanded(!isExpanded)}
-            >
-              {isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronUp className="w-3.5 h-3.5" />
-              )}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-ink-3 hover:text-ink"
-              onClick={closePhonePanel}
-            >
-              <X className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </CardHeader>
-
-        {/* Connection state, and the way back from a failed one. */}
-        {(phoneStatus === 'retrying' || phoneStatus === 'failed') && (
-          <div className="px-4 py-2 bg-dropped-tint border-b border-dropped/40">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-dropped-ink text-xs">
-                {phoneStatus === 'failed'
-                  ? 'The phone is not connected. Calls will not reach you.'
-                  : `Reconnecting the phone (attempt ${phoneAttempts})…`}
-              </span>
-              {phoneStatus === 'failed' && (
-                <button
-                  onClick={reconnectPhone}
-                  className="shrink-0 rounded border border-dropped/40 px-2 py-0.5 text-xs text-dropped-ink hover:opacity-80"
-                >
-                  Try again
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Error Banner */}
-        {error && phoneStatus !== 'retrying' && phoneStatus !== 'failed' && (
-          <div className="px-4 py-2 bg-dropped-tint border-b border-dropped/40">
-            <div className="flex items-center justify-between">
-              <span className="text-dropped-ink text-xs">{error}</span>
-              <button onClick={clearError} className="text-dropped-ink hover:opacity-80">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Intake Match Badge */}
-        {intakeMatchDetected && (
-          <div className="px-4 py-2 bg-live-tint border-b border-live/40">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-live-ink" />
-              <span className="text-live-ink text-xs font-medium">
-                {matchedProspect ? 'Matched to Database Record' : 'Matched to Intake Form'}
-              </span>
-              {matchedProspect && (
-                <span className="text-live-ink/70 text-xs">
-                  ({matchedProspect.firstName} {matchedProspect.lastName})
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {isExpanded && (
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {/* Customer Details Panel - Shows API prospect data or context form data */}
-            {(matchedProspect ||
-              (formData && (formData.firstName || formData.lastName || formData.phone))) && (
-              <CustomerDetailsPanel
-                formData={
-                  matchedProspect
-                    ? {
-                        firstName: matchedProspect.firstName || '',
-                        lastName: matchedProspect.lastName || '',
-                        phone: matchedProspect.phone || '',
-                        email: matchedProspect.email || '',
-                        dateOfBirth: matchedProspect.dob
-                          ? new Date(matchedProspect.dob).toISOString().split('T')[0]
-                          : '',
-                        city: matchedProspect.city || '',
-                        state: matchedProspect.state || '',
-                        carrier: matchedProspect.carrier || '',
-                        policyType: matchedProspect.policyType || '',
-                        coverage: matchedProspect.coverageAmount || 0,
-                        monthlyPremium: matchedProspect.monthlyPremium || 0,
-                        bankName: matchedProspect.bankName || '',
-                        accountType: matchedProspect.accountType || '',
-                        primaryBeneficiaries: (matchedProspect.beneficiaries || []).map((b, i) => ({
-                          id: `api-${i}`,
-                          name: b.name,
-                          relationship: b.relationship as
-                            | 'spouse'
-                            | 'child'
-                            | 'parent'
-                            | 'sibling'
-                            | 'other',
-                        })),
-                        // Fill in other defaults for context data shape
-                        stateOfBirth: '',
-                        address: '',
-                        zip: '',
-                        tobaccoUser: false,
-                        ssPayment: false,
-                        ssPayDay: '',
-                        firstPayDay: 0,
-                        futurePayDay: 0,
-                        secondaryBeneficiaryName: '',
-                        secondaryBeneficiaryRelationship: 'spouse',
-                        nameOnAccount: '',
-                        routingNumber: '',
-                        accountNumber: '',
-                        ssn: '',
-                      }
-                    : formData
-                }
-                isExpanded={customerDetailsExpanded}
-                onToggle={() => setCustomerDetailsExpanded(!customerDetailsExpanded)}
-              />
-            )}
-
-            <CardContent className="p-0">
-              {/* Active Call View */}
-              {currentCall && currentCall.state !== 'ringing' && currentCall.state !== 'ended' && (
-                <div className="p-4 space-y-4">
-                  {/* Screen Pop */}
-                  {currentCall.prospectData && <ScreenPop data={currentCall.prospectData} />}
-
-                  {/* Caller Info */}
-                  <div className="text-center py-4">
-                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary flex items-center justify-center border border-brand/30">
-                      <User className="w-8 h-8 text-ink" />
-                    </div>
-                    <h4 className="text-ink font-semibold text-lg">
-                      {currentCall.callerName || 'Unknown Caller'}
-                    </h4>
-                    <p className="text-ink-3 text-sm">{currentCall.phoneNumber}</p>
-                    {currentCall.queueName && (
-                      <p className="text-brand-ink text-xs mt-1">From: {currentCall.queueName}</p>
-                    )}
-                  </div>
-
-                  {/* Call Status Indicator */}
-                  {currentCall.isOnHold && (
-                    <div className="flex items-center justify-center gap-2 py-2 bg-ringing-tint rounded-lg">
-                      <Pause className="w-4 h-4 text-ringing-ink" />
-                      <span className="text-ringing-ink text-sm">Call On Hold</span>
-                    </div>
-                  )}
-
-                  {/* Call Controls */}
-                  <CallControls />
-                </div>
-              )}
-
-              {/* Idle View - Dialpad & Tabs */}
-              {(!currentCall || currentCall.state === 'ended') && (
-                <div className="p-4 space-y-4">
-                  {/* Tab Navigation */}
-                  <div className="flex gap-1 p-1 bg-sunken rounded-lg">
-                    {(['dialpad', 'history', 'settings'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                          'flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all',
-                          activeTab === tab
-                            ? 'bg-brand text-brand-fg'
-                            : 'text-ink-3 hover:text-ink hover:bg-sunken'
-                        )}
-                      >
-                        {tab === 'dialpad' && <Keyboard className="w-3.5 h-3.5 inline mr-1.5" />}
-                        {tab === 'history' && <Clock className="w-3.5 h-3.5 inline mr-1.5" />}
-                        {tab === 'settings' && <Settings className="w-3.5 h-3.5 inline mr-1.5" />}
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Tab Content */}
-                  {activeTab === 'dialpad' && (
-                    <>
-                      <CallerIdSelector />
-                      <DialPad compact={true} />
-                    </>
-                  )}
-                  {activeTab === 'history' && <CallHistory />}
-                  {activeTab === 'settings' && <PhoneSettings />}
-                </div>
-              )}
-            </CardContent>
-          </div>
-        )}
-      </Card>
+        {body}
+      </SoftphoneShell>
     </>
   );
 }
 
 // ============================================================================
-// Call History Component
+// Recent calls
 // ============================================================================
 
-function CallHistory(): JSX.Element {
+function CallHistory({ onOpenKeypad }: { onOpenKeypad: () => void }): JSX.Element {
   const { callHistory, makeCall } = usePhone();
-  const [apiCalls, setApiCalls] = useState<
-    Array<{
-      id: string;
-      direction: string;
-      phoneNumber?: string;
-      callerNumber?: string;
-      destinationNumber?: string;
-      callerName?: string;
-      duration?: number;
-      status?: string;
-      startedAt?: string;
-      createdAt?: string;
-    }>
-  >([]);
+  const [apiCalls, setApiCalls] = useState<ApiCallRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [now, setNow] = useState(() => new Date());
+
+  // "3m ago" should not stay "3m ago" for an hour.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
-    const fetchCalls = async () => {
+    let active = true;
+    const fetchCalls = async (): Promise<void> => {
+      setLoading(true);
+      setFailed(false);
       try {
         const apiUrl = typeof window !== 'undefined' ? window.location.origin : '';
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -571,264 +527,71 @@ function CallHistory(): JSX.Element {
           }
         }
         const response = await fetch(`${apiUrl}/api/v1/calls?limit=20`, { headers });
-        if (response.ok) {
-          const data = await response.json();
-          const callsArray = Array.isArray(data.data)
+        if (!response.ok) throw new Error(`calls ${response.status}`);
+        const data = (await response.json()) as
+          | ApiCallRow[]
+          | { data?: ApiCallRow[]; calls?: ApiCallRow[] };
+        const callsArray = Array.isArray(data)
+          ? data
+          : Array.isArray(data.data)
             ? data.data
-            : Array.isArray(data)
-              ? data
-              : data.calls || [];
-          setApiCalls(callsArray);
-        }
+            : data.calls || [];
+        if (active) setApiCalls(callsArray);
       } catch (err) {
         console.error('[CallHistory] Failed to fetch calls:', err);
+        if (active) setFailed(true);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchCalls();
-  }, []);
+    void fetchCalls();
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
 
-  const formatTime = (dateStr?: string | Date): string => {
-    if (!dateStr) return '';
-    const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const handleCallClick = (phoneNumber: string) => {
-    void makeCall(phoneNumber);
-  };
-
-  // Merge: session calls + API calls, deduped
-  const apiCallIds = new Set(apiCalls.map(c => c.id));
-  const sessionCalls = callHistory.filter(c => !apiCallIds.has(c.callId));
-
-  if (loading) {
-    return (
-      <div className="text-center py-8">
-        <Clock className="w-10 h-10 mx-auto mb-3 text-ink-3 animate-pulse" />
-        <p className="text-ink-3 text-sm">Loading calls...</p>
-      </div>
-    );
-  }
-
-  if (apiCalls.length === 0 && sessionCalls.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <Clock className="w-10 h-10 mx-auto mb-3 text-ink-3" />
-        <p className="text-ink-3 text-sm">No recent calls</p>
-      </div>
-    );
-  }
+  const items = useMemo(() => mergeRecentCalls(callHistory, apiCalls), [callHistory, apiCalls]);
 
   return (
-    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-      {/* Current session calls not yet in DB */}
-      {sessionCalls.map((call: CallInfo, index: number) => {
-        const isInbound = call.direction === 'inbound';
-        return (
-          <button
-            key={`s-${call.callId}-${index}`}
-            onClick={() => handleCallClick(call.phoneNumber)}
-            className={cn(
-              'w-full p-3 rounded-lg text-left transition-all',
-              'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center',
-                    isInbound ? 'bg-ringing-tint text-ringing-ink' : 'bg-money-tint text-money-ink'
-                  )}
-                >
-                  {isInbound ? (
-                    <Phone className="w-4 h-4" />
-                  ) : (
-                    <PhoneForwarded className="w-4 h-4" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-ink text-sm font-medium">
-                    {call.callerName || call.phoneNumber}
-                  </p>
-                  <p className="text-ink-3 text-xs">
-                    {isInbound ? 'Incoming' : 'Outgoing'}
-                    {call.duration > 0 &&
-                      ` • ${Math.floor(call.duration / 60)}m ${call.duration % 60}s`}
-                  </p>
-                </div>
-              </div>
-              <span className="text-ink-3 text-xs">{formatTime(call.startTime)}</span>
-            </div>
-          </button>
-        );
-      })}
-      {/* API-backed calls from database */}
-      {apiCalls.map(call => {
-        const isInbound = call.direction === 'INBOUND';
-        const phone = isInbound
-          ? call.callerId || call.callerNumber || call.phoneNumber || ''
-          : call.toNumber || call.destinationNumber || call.phoneNumber || '';
-        const dur = call.duration || 0;
-        return (
-          <button
-            key={call.id}
-            onClick={() => handleCallClick(phone)}
-            className={cn(
-              'w-full p-3 rounded-lg text-left transition-all',
-              'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center',
-                    isInbound ? 'bg-ringing-tint text-ringing-ink' : 'bg-money-tint text-money-ink'
-                  )}
-                >
-                  {isInbound ? (
-                    <Phone className="w-4 h-4" />
-                  ) : (
-                    <PhoneForwarded className="w-4 h-4" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-ink text-sm font-medium">{phone || 'Unknown'}</p>
-                  <p className="text-ink-3 text-xs">
-                    {isInbound ? 'Incoming' : 'Outgoing'}
-                    {dur > 0 && ` • ${Math.floor(dur / 60)}m ${dur % 60}s`}
-                  </p>
-                </div>
-              </div>
-              <span className="text-ink-3 text-xs">
-                {formatTime(call.startedAt || call.createdAt)}
-              </span>
-            </div>
-          </button>
-        );
-      })}
-    </div>
+    <RecentCallsList
+      items={items}
+      loading={loading && items.length === 0}
+      error={failed}
+      now={now}
+      onRedial={number => void makeCall(number)}
+      onRetry={() => setAttempt(a => a + 1)}
+      onOpenKeypad={onOpenKeypad}
+    />
   );
 }
 
 // ============================================================================
-// Phone Settings Component
+// Settings
 // ============================================================================
 
-function PhoneSettings(): JSX.Element {
+function PhoneSettings({
+  onConfigureScreenPop,
+}: {
+  onConfigureScreenPop: () => void;
+}): JSX.Element {
   const { audioDevices, selectedAudioInput, selectedAudioOutput, setAudioInput, setAudioOutput } =
     usePhone();
 
-  const inputDevices = audioDevices.filter(d => d.kind === 'audioinput');
-  const outputDevices = audioDevices.filter(d => d.kind === 'audiooutput');
+  const toOption = (d: MediaDeviceInfo, fallback: string): { deviceId: string; label: string } => ({
+    deviceId: d.deviceId,
+    label: d.label || `${fallback} ${d.deviceId.slice(0, 8)}`,
+  });
 
   return (
-    <div className="space-y-4">
-      {/* Microphone Selection */}
-      <div>
-        <label className="block text-xs text-ink-3 mb-2">Microphone</label>
-        <select
-          value={selectedAudioInput ?? ''}
-          onChange={e => setAudioInput(e.target.value)}
-          className={cn(
-            'w-full px-3 py-2 rounded-lg text-sm',
-            'bg-surface border border-rule',
-            'text-ink focus:border-brand-ink focus:ring-1 focus:ring-brand-ink',
-            'outline-none transition-all'
-          )}
-        >
-          {inputDevices.map(device => (
-            <option key={device.deviceId} value={device.deviceId}>
-              {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Speaker Selection */}
-      <div>
-        <label className="block text-xs text-ink-3 mb-2">Speaker</label>
-        <select
-          value={selectedAudioOutput ?? ''}
-          onChange={e => setAudioOutput(e.target.value)}
-          className={cn(
-            'w-full px-3 py-2 rounded-lg text-sm',
-            'bg-surface border border-rule',
-            'text-ink focus:border-brand-ink focus:ring-1 focus:ring-brand-ink',
-            'outline-none transition-all'
-          )}
-        >
-          {outputDevices.map(device => (
-            <option key={device.deviceId} value={device.deviceId}>
-              {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Screen Pop Configuration Link */}
-      <div className="pt-2 border-t border-rule">
-        <p className="text-ink-3 text-xs mb-2">
-          Configure which prospect fields appear during incoming calls.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full border-rule text-ink-2 hover:bg-sunken"
-        >
-          <Settings className="w-4 h-4 mr-2" />
-          Configure Screen Pop Fields
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Caller ID Selector Component
-// ============================================================================
-
-function CallerIdSelector(): JSX.Element | null {
-  const { userNumbers, selectedCallerId, setSelectedCallerId } = usePhone();
-
-  // Format phone number for display
-  const formatPhone = (num: string): string => {
-    const digits = num.replace(/\D/g, '');
-    const d = digits.length === 11 ? digits.slice(1) : digits;
-    if (d.length === 10) {
-      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-    }
-    return num;
-  };
-
-  if (userNumbers.length === 0) return null;
-
-  return (
-    <div className="mb-1.5">
-      <label className="flex items-center gap-1.5 text-[10px] text-ink-3 mb-1">
-        <Phone className="w-2.5 h-2.5 text-primary" />
-        Calling from:
-      </label>
-      <select
-        value={selectedCallerId || ''}
-        onChange={e => setSelectedCallerId(e.target.value)}
-        className={cn(
-          'w-full px-2 py-1 rounded text-xs',
-          'bg-surface border border-rule',
-          'text-ink focus:border-primary focus:ring-1 focus:ring-primary',
-          'outline-none transition-all cursor-pointer'
-        )}
-      >
-        {userNumbers.map(num => (
-          <option key={num.id} value={num.number}>
-            {formatPhone(num.number)}
-          </option>
-        ))}
-      </select>
-    </div>
+    <DeviceSettings
+      inputs={audioDevices.filter(d => d.kind === 'audioinput').map(d => toOption(d, 'Microphone'))}
+      outputs={audioDevices.filter(d => d.kind === 'audiooutput').map(d => toOption(d, 'Speaker'))}
+      input={selectedAudioInput}
+      output={selectedAudioOutput}
+      onInputChange={setAudioInput}
+      onOutputChange={setAudioOutput}
+      onConfigureScreenPop={onConfigureScreenPop}
+    />
   );
 }
 

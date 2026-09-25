@@ -1,11 +1,5 @@
 'use client';
 
-import {
-  DISPOSITIONS,
-  DISPOSITION_LABELS,
-  DISPOSITION_COLORS,
-  FOLLOW_UP_DISPOSITIONS,
-} from '@hopwhistle/shared';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -14,25 +8,16 @@ import type { ApplicationLogPayload } from '@/components/call-center/Application
 import { apiClient } from '@/lib/api';
 
 import { usePhone } from './phone-provider';
-
-// Build button list from shared constants
-const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
-  value,
-  label: DISPOSITION_LABELS[value],
-}));
-
-// Button-specific colors (slightly different border weight for modal buttons)
-const MODAL_DISPOSITION_COLORS: Record<string, string> = Object.fromEntries(
-  DISPOSITIONS.map(d => [
-    d,
-    DISPOSITION_COLORS[d].replace(/border-\S+\/30/g, m => m.replace('/30', '/40')),
-  ])
-);
+import { knownCallerName } from './softphone/format';
+import { WrapUpView } from './softphone/wrap-up-view';
 
 /**
  * Global Disposition Modal — renders as a fixed overlay when a softphone call
  * ends OUTSIDE of the Call Center Portal. Uses pendingDispositionCall from
  * PhoneProvider (not currentCall, which is cleared immediately on call end).
+ *
+ * This component owns the wrap-up: its fields, what is required, and the one
+ * save request. WrapUpView only draws them.
  */
 export function GlobalDispositionModal() {
   const pathname = usePathname();
@@ -198,7 +183,6 @@ export function GlobalDispositionModal() {
 
   if (!open || !pendingDispositionCall) return null;
 
-  const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
   const isRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
   const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
   const canSave =
@@ -207,148 +191,39 @@ export function GlobalDispositionModal() {
     (!wroteApplication || !!application);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-card border border-border rounded-card shadow-lg overflow-hidden">
-        {saved ? (
-          <div className="p-12 flex flex-col items-center justify-center">
-            <div className="w-3 h-3 bg-primary rounded-full mb-4 animate-pulse" />
-            <h3 className="text-sm font-mono uppercase tracking-widest text-primary mb-1">
-              Disposition Logged
-            </h3>
-            <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-              Returning to workspace
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="px-6 py-4 border-b border-border">
-              <h2 className="text-sm font-mono uppercase tracking-widest text-foreground">
-                Call Disposition
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">
-                {pendingDispositionCall.phoneNumber} &bull;{' '}
-                {pendingDispositionCall.direction === 'inbound' ? 'Inbound' : 'Outbound'} &bull;{' '}
-                {pendingDispositionCall.duration}s
-              </p>
-            </div>
-
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-              {/* Error banner */}
-              {saveError && (
-                <div className="bg-dropped-tint border border-dropped/40 rounded p-3 text-xs text-dropped-ink font-mono">
-                  ✕ {saveError}
-                </div>
-              )}
-
-              {/* Disposition buttons */}
-              <div className="space-y-2">
-                {DISPOSITION_BUTTONS.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setSelectedDisposition(value)}
-                    className={
-                      'w-full p-3 rounded text-left text-xs font-mono uppercase tracking-widest transition-all border ' +
-                      (selectedDisposition === value
-                        ? MODAL_DISPOSITION_COLORS[value] ||
-                          'bg-primary/10 border-primary text-primary'
-                        : 'bg-background border-border text-muted-foreground hover:bg-muted')
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Follow-up date/time */}
-              {needsFollowUp && (
-                <div className="bg-background border border-border rounded p-4 space-y-3">
-                  <h4 className="text-xs font-mono uppercase tracking-widest text-foreground pb-2 border-b border-border flex items-center gap-2">
-                    {selectedDisposition === 'SET_APPOINTMENT'
-                      ? '📅 Appointment Details'
-                      : selectedDisposition === 'SET_CALLBACK'
-                        ? '📞 Callback Schedule'
-                        : '📋 Follow-Up Schedule'}
-                    {isRequired && (
-                      <span className="text-[10px] text-ringing-ink normal-case tracking-normal">
-                        (required)
-                      </span>
-                    )}
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
-                        Date
-                      </label>
-                      <input
-                        type="date"
-                        value={followUpDate}
-                        onChange={e => setFollowUpDate(e.target.value)}
-                        className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
-                        Time
-                      </label>
-                      <input
-                        type="time"
-                        value={followUpTime}
-                        onChange={e => setFollowUpTime(e.target.value)}
-                        className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {selectedDisposition && (
-                <div>
-                  <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1 block">
-                    Notes
-                  </label>
-                  <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Add call notes..."
-                    rows={3}
-                    className="w-full bg-muted border border-border rounded px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary resize-none"
-                  />
-                </div>
-              )}
-
-              {/* The application the agent wrote, on any carrier. */}
-              {wroteApplication && (
-                <ApplicationLogForm
-                  prefill={{ phone: pendingDispositionCall.phoneNumber }}
-                  onChange={setApplication}
-                  error={applicationError}
-                  disabled={saving}
-                />
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-border space-y-2">
-              <button
-                onClick={() => {
-                  void handleSave();
-                }}
-                disabled={!canSave || saving}
-                className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
-              >
-                {saving ? 'Saving...' : applicationError ? 'Retry save' : 'Save Disposition'}
-              </button>
-              <button
-                onClick={handleSkip}
-                disabled={saving}
-                className="w-full py-2 text-muted-foreground font-mono uppercase tracking-widest text-xs hover:text-foreground transition-colors"
-              >
-                Skip
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <WrapUpView
+      call={{
+        phoneNumber: pendingDispositionCall.phoneNumber,
+        callerName: knownCallerName(pendingDispositionCall.callerName),
+        direction: pendingDispositionCall.direction,
+        duration: pendingDispositionCall.duration || 0,
+      }}
+      selected={selectedDisposition}
+      onSelect={setSelectedDisposition}
+      notes={notes}
+      onNotesChange={setNotes}
+      followUpDate={followUpDate}
+      followUpTime={followUpTime}
+      onFollowUpDateChange={setFollowUpDate}
+      onFollowUpTimeChange={setFollowUpTime}
+      canSave={canSave}
+      saving={saving}
+      saved={saved}
+      saveError={saveError}
+      retry={Boolean(applicationError)}
+      onSave={() => {
+        void handleSave();
+      }}
+      onSkip={handleSkip}
+      applicationSlot={
+        /* The application the agent wrote, on any carrier. */
+        <ApplicationLogForm
+          prefill={{ phone: pendingDispositionCall.phoneNumber }}
+          onChange={setApplication}
+          error={applicationError}
+          disabled={saving}
+        />
+      }
+    />
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { ChevronDown, ChevronUp, User, Shield, Heart, CreditCard } from 'lucide-react';
-import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CustomerIntakeData, maskSSN } from '@/types/customer-intake-types';
@@ -24,18 +23,20 @@ export function CustomerDetailsPanel({
   return (
     <div className="border-b border-rule">
       {/* Summary Header - Always Visible */}
-      <div className="p-3 ">
+      <div className="px-4 py-3">
         {formData.firstName || formData.lastName ? (
           <>
-            <div className="text-lg font-bold text-ink">
+            <div className="t-section text-ink">
               {formData.firstName} {formData.lastName}
             </div>
             <div className="text-sm text-ink-2">
               {formData.carrier && formData.policyType ? (
                 <>
                   <span className="text-brand-ink">{formData.carrier}</span>
-                  <span className="mx-2">•</span>
-                  <span className="text-live-ink">{formData.policyType}</span>
+                  <span className="mx-2" aria-hidden>
+                    ·
+                  </span>
+                  <span className="text-ink-2">{formData.policyType}</span>
                 </>
               ) : (
                 <span className="text-ink-3 italic">No policy selected</span>
@@ -43,7 +44,7 @@ export function CustomerDetailsPanel({
             </div>
           </>
         ) : (
-          <div className="text-ink-3 italic">No customer data</div>
+          <div className="text-sm text-ink-3">No customer details yet</div>
         )}
 
         {/* Toggle Button */}
@@ -51,17 +52,18 @@ export function CustomerDetailsPanel({
           variant="ghost"
           size="sm"
           onClick={onToggle}
-          className="mt-2 w-full text-ink-3 hover:text-ink"
+          aria-expanded={isExpanded}
+          className="mt-2 w-full text-ink-2 hover:text-ink [@media(pointer:coarse)]:min-h-[44px]"
         >
           {isExpanded ? (
             <>
               <ChevronUp className="h-4 w-4 mr-2" />
-              Hide Details
+              Hide details
             </>
           ) : (
             <>
               <ChevronDown className="h-4 w-4 mr-2" />
-              View Details
+              View details
             </>
           )}
         </Button>

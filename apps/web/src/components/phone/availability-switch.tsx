@@ -131,13 +131,44 @@ export function AvailabilitySwitch({
   if (available === null) return null;
 
   return (
+    <AvailabilityToggle
+      available={available}
+      saving={saving}
+      error={error}
+      onToggle={() => void toggle()}
+      className={className}
+    />
+  );
+}
+
+export interface AvailabilityToggleProps {
+  available: boolean;
+  saving?: boolean;
+  /** The last write failed and was reverted. */
+  error?: boolean;
+  onToggle: () => void;
+  className?: string;
+}
+
+/**
+ * The switch itself, with no request behind it, so /design-preview can show
+ * it without an agent session.
+ */
+export function AvailabilityToggle({
+  available,
+  saving = false,
+  error = false,
+  onToggle,
+  className,
+}: AvailabilityToggleProps): JSX.Element {
+  return (
     <div className={cn('flex items-center gap-1.5', className)}>
       <button
         type="button"
         role="switch"
         aria-checked={available}
         aria-label={available ? 'Taking calls. Turn off.' : 'Not taking calls. Turn on.'}
-        onClick={() => void toggle()}
+        onClick={onToggle}
         disabled={saving}
         title={
           available
@@ -145,40 +176,47 @@ export function AvailabilitySwitch({
             : 'You are off the queue. No calls will ring your phone.'
         }
         className={cn(
-          'relative inline-flex h-4 w-7 flex-shrink-0 items-center rounded-full transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
-          available ? 'bg-live' : 'bg-ink-3',
+          'relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full',
+          'transition-colors duration-150 ease-out ne-motion',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+          // The hit area grows to 44px on touch screens; the track stays small.
+          'before:absolute before:-inset-3 before:content-[""] [@media(pointer:fine)]:before:hidden',
+          available ? 'bg-live' : 'bg-rule-strong',
           saving && 'opacity-60'
         )}
       >
         <span
           className={cn(
-            'inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform',
-            available ? 'translate-x-3.5' : 'translate-x-0.5'
+            'inline-block h-4 w-4 transform rounded-full bg-surface shadow-card',
+            'transition-transform duration-150 ease-out ne-motion',
+            available ? 'translate-x-[18px]' : 'translate-x-0.5'
           )}
         />
       </button>
 
       <span
         className={cn(
-          'text-[10px] font-medium leading-none',
-          available ? 'text-live-ink' : 'text-ink-3'
+          'text-xs font-medium leading-none',
+          available ? 'text-live-ink' : 'text-ink-2'
         )}
       >
         {saving ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <Loader2
+            className="h-3 w-3 animate-spin motion-reduce:animate-none"
+            aria-label="Saving"
+          />
         ) : available ? (
           'Taking calls'
         ) : (
           <span className="inline-flex items-center gap-1">
-            <PhoneOff className="h-3 w-3" />
-            Off
+            <PhoneOff className="h-3 w-3" aria-hidden />
+            Not taking calls
           </span>
         )}
       </span>
 
       {error ? (
-        <span className="text-[10px] font-medium text-destructive" role="alert">
+        <span className="text-xs font-medium text-dropped-ink" role="alert">
           Could not save
         </span>
       ) : null}

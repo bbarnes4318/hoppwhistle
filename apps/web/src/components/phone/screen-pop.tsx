@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
 
 import { usePhone, type ProspectData, type ScreenPopField } from './phone-provider';
 
-
 // ============================================================================
 // Screen Pop Component
 // ============================================================================
@@ -49,8 +48,21 @@ const fieldIcons: Record<string, FC<{ className?: string }>> = {
   website: Globe,
 };
 
-export function ScreenPop({ data, variant = 'panel', className }: ScreenPopProps): JSX.Element {
+export function ScreenPop(props: ScreenPopProps): JSX.Element {
   const { screenPopFields } = usePhone();
+  return <ScreenPopView {...props} fields={screenPopFields} />;
+}
+
+/**
+ * The prospect card with its fields passed in, so /design-preview can render
+ * it without a PhoneProvider.
+ */
+export function ScreenPopView({
+  data,
+  variant = 'panel',
+  className,
+  fields: screenPopFields,
+}: ScreenPopProps & { fields: ScreenPopField[] }): JSX.Element {
   const [isExpanded, setIsExpanded] = useState(variant === 'modal');
 
   // Get enabled fields sorted by order
@@ -98,17 +110,12 @@ export function ScreenPop({ data, variant = 'panel', className }: ScreenPopProps
 
     return (
       <div key={field.id} className="flex items-start gap-3 py-2">
-        <div
-          className={cn(
-            'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0',
-            'bg-brand-tint'
-          )}
-        >
-          <IconComponent className={cn('w-4 h-4', 'text-brand-ink')} />
+        <div className="w-7 h-7 rounded-control flex items-center justify-center flex-shrink-0 bg-surface border border-rule">
+          <IconComponent className="w-3.5 h-3.5 text-ink-2" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-ink-3 text-xs mb-0.5">{field.label}</p>
-          <p className={cn('text-sm break-words', 'text-ink')}>{value}</p>
+          <p className="text-sm break-words text-ink">{value}</p>
         </div>
       </div>
     );
@@ -123,7 +130,7 @@ export function ScreenPop({ data, variant = 'panel', className }: ScreenPopProps
     return (
       <div className={cn('p-4 rounded-card text-center', 'bg-sunken', className)}>
         <FileText className="w-8 h-8 mx-auto mb-2 text-ink-3" />
-        <p className="text-ink-3 text-sm">No prospect data available</p>
+        <p className="text-ink-3 text-sm">No details on file for this caller</p>
       </div>
     );
   }
@@ -135,17 +142,10 @@ export function ScreenPop({ data, variant = 'panel', className }: ScreenPopProps
   return (
     <div className={cn('rounded-card overflow-hidden', 'bg-sunken border border-rule', className)}>
       {/* Header */}
-      <div
-        className={cn(
-          'px-4 py-3 flex items-center justify-between',
-          variant === 'modal'
-            ? 'bg-primary border-b border-rule'
-            : 'bg-surface border-b border-rule'
-        )}
-      >
+      <div className="px-4 py-2.5 flex items-center justify-between bg-surface border-b border-rule">
         <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-brand-ink" />
-          <span className={cn('font-medium text-sm', 'text-ink')}>Prospect Information</span>
+          <User className="w-4 h-4 text-brand-ink" aria-hidden />
+          <span className="font-medium text-sm text-ink">Prospect</span>
         </div>
         <span className="text-xs text-ink-3">
           {visibleFields.length} field{visibleFields.length !== 1 ? 's' : ''}
@@ -162,23 +162,27 @@ export function ScreenPop({ data, variant = 'panel', className }: ScreenPopProps
       {/* Expand/Collapse Button */}
       {hasMore && (
         <button
+          type="button"
           onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
           className={cn(
             'w-full px-4 py-2 flex items-center justify-center gap-2',
-            'text-xs text-ink-3 hover:text-ink',
-            'border-t border-rule hover:bg-rule',
-            'transition-colors'
+            'text-xs font-medium text-ink-2 hover:text-ink',
+            'border-t border-rule hover:bg-surface',
+            'transition-colors duration-150 ne-motion',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+            '[@media(pointer:coarse)]:min-h-[44px]'
           )}
         >
           {isExpanded ? (
             <>
               <ChevronUp className="w-4 h-4" />
-              Show Less
+              Show less
             </>
           ) : (
             <>
               <ChevronDown className="w-4 h-4" />
-              Show {visibleFields.length - collapsedCount} More
+              Show {visibleFields.length - collapsedCount} more
             </>
           )}
         </button>
