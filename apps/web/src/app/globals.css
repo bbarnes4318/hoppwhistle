@@ -316,62 +316,149 @@
 
 /* ==========================================================================
    AGENCY BRAND THEMES
-   A white-labelled agency's portal is this portal with the brand tokens
-   swapped. `data-brand` is set on <html> by <BrandThemeSync> from what
-   /api/auth/me says -- the server resolves it from the signed-in principal,
-   never from anything the browser supplies -- and removed when there is none.
+   A white-labelled agency's portal is this portal, re-skinned. `data-brand` is
+   set on <html> by <BrandThemeSync> from what /api/auth/me says -- the server
+   resolves it from the signed-in principal, never from anything the browser
+   supplies -- and removed when there is none.
 
-   A theme overrides the BRAND tokens and nothing else: --brand*, and the two
-   shadcn aliases derived from them (--primary, --ring). The surfaces, ink,
-   rules, shadows and radii are the product's. The call-state signals
-   (--live, --ringing, --dropped, --blocked, --money and every variant) are
-   NEVER overridden: a connected call is the same green in every agency's
-   portal, and theme-tokens.test.ts fails if a brand block names one.
+   A theme is a complete look, not an accent swap: its own neutrals, type
+   treatment, radii and elevation, a navy navigation column, and its brand
+   blues. What it NEVER touches are the call-state signals (--live, --ringing,
+   --dropped, --blocked, --money and every variant): a connected call is the
+   same green in every agency's portal, and theme-tokens.test.ts fails if a
+   brand block names one.
 
    Each block is written twice over: on <html> itself, and on a nested
    [data-theme] scope inside it. A scope redeclares every token, so without
    the second selector a light drawer or the dark live board would drop back
-   to the NetEnroll green inside a branded page.
+   to NetEnroll's values inside a branded page.
    ========================================================================== */
 
 @layer base {
   /*
-   * Life Leads Plus — light. The logo's blues. The logo red (#FC0102) is not a
-   * UI colour here: next to the dropped/error signal it would read as one, so
-   * it appears only inside the logo artwork.
+   * Life Leads Plus — light. Enterprise: cool slate neutrals, crisp 8px
+   * cards with a hairline and almost no shadow, one confident blue for
+   * action. The logo red (#FC0102) is not a UI colour: next to the
+   * dropped/error signal it would read as one, so it appears only inside the
+   * logo artwork.
    *
-   *   llp brand-ink  on surface      6.58:1
-   *   llp brand-ink  on paper        6.08:1
-   *   llp brand-ink  on sunken       5.76:1
-   *   llp brand-ink  on brand-tint   5.85:1   (active nav, selected row)
-   *   llp white on brand-strong      5.42:1   (the primary button)
-   *   llp white on brand-strong-hover 13.03:1
-   *   llp brand-fg   on brand        4.57:1
+   *   llp brand-ink  on surface      6.72:1
+   *   llp brand-ink  on paper        6.21:1
+   *   llp brand-ink  on sunken       5.93:1
+   *   llp brand-ink  on brand-tint   5.97:1   (active tab, selected row)
+   *   llp white on brand-strong      5.97:1   (the primary button)
+   *   llp white on brand-strong-hover 8.47:1
+   *   llp brand-fg   on brand        4.60:1
+   *   llp ink-3      on paper        5.02:1
+   *   llp ink-3      on sunken       4.78:1
    */
   :root:not([data-theme='dark'])[data-brand='life-leads-plus'],
   [data-brand='life-leads-plus'] [data-theme='light'] {
+    --paper: #f4f6fa;
+    --surface: #ffffff;
+    --sunken: #edf1f6;
+
+    --ink: #0f172a;
+    --ink-2: #3f4d63;
+    --ink-3: #5b6b82;
+
+    --rule: #e1e7ef;
+    --rule-strong: #cbd5e1;
+
     --brand: #0081f1; /* logo primary blue */
-    --brand-ink: #0058c4;
-    --brand-tint: #e8f3fe;
-    --brand-fg: #101828;
-    --brand-strong: #0066d6; /* primary button fill, white text */
-    --brand-strong-hover: #012f69; /* logo deep blue */
-    --primary: 208 100% 47%; /* brand */
-    --ring: 213 100% 38%; /* brand-ink */
+    --brand-ink: #0a56c2;
+    --brand-tint: #eaf2fe;
+    --brand-fg: #0f172a;
+    --brand-strong: #0b5cd6; /* primary button fill, white text */
+    --brand-strong-hover: #0a47a8;
+
+    --radius-card: 8px;
+    --radius-control: 6px;
+
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-raised: 0 4px 12px -2px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+    --shadow-pop: 0 16px 32px -8px rgba(15, 23, 42, 0.18), 0 4px 8px -4px rgba(15, 23, 42, 0.08);
+
+    /* shadcn aliases, derived from the values above */
+    --background: 220 37% 97%; /* paper */
+    --foreground: 222 47% 11%; /* ink */
+    --card-foreground: 222 47% 11%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 216 90% 44%; /* brand-strong */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 33% 95%; /* sunken */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 213 33% 95%;
+    --muted-foreground: 215 18% 43%; /* ink-3 */
+    --accent: 213 33% 95%;
+    --accent-foreground: 222 47% 11%;
+    --border: 214 30% 91%; /* rule */
+    --input: 213 27% 84%; /* rule-strong: inputs read as inputs */
+    --ring: 215 90% 40%; /* brand-ink */
+    --radius: 0.5rem;
   }
 
   /*
-   * Life Leads Plus — dark. One lifted blue for the fill and the button;
-   * everything else in the dark palette is the dark palette's own.
+   * Life Leads Plus — dark. The brand blue lifted for a dark ground; the
+   * button fill stays deep enough to carry white text.
    *   llp dark brand on paper        6.58:1
    *   llp dark brand on surface      6.07:1
+   *   llp dark white on brand-strong 5.67:1
    */
   [data-theme='dark'][data-brand='life-leads-plus'],
   [data-brand='life-leads-plus'] [data-theme='dark'] {
     --brand: #3d9bff;
-    --brand-strong: #3d9bff;
+    --brand-ink: #7ab8ff;
+    --brand-strong: #2563c9;
+    --brand-strong-hover: #1d4fa3;
     --brand-fg: #121110; /* paper (dark) */
     --primary: 211 100% 62%; /* brand */
+    --ring: 213 100% 74%; /* brand-ink */
+  }
+
+  /*
+   * The navigation column, in the brand's navy.
+   *
+   * The same tokens every nav component already reads, re-declared for this
+   * one subtree, so the sidebar turns navy without a single component knowing
+   * it: text-ink is white here, bg-brand-tint is the active item's lifted
+   * blue, border-rule a hairline of white. Anything portalled out of it (the
+   * upgrade card) is outside the subtree and keeps the page's light tokens.
+   *
+   *   llp nav text   on navy         11.97:1
+   *   llp nav icon   on navy          7.37:1
+   *   llp nav label  on navy          5.49:1
+   *   llp nav bar    on navy          5.67:1   (the active item's marker)
+   */
+  [data-brand='life-leads-plus'] [data-brand-nav] {
+    --surface: #0b1f44;
+    --paper: #0b1f44;
+    --ink: #ffffff;
+    --ink-2: #d5deec;
+    --ink-3: #9db0ce;
+    --rule: rgba(255, 255, 255, 0.08);
+    --rule-strong: rgba(255, 255, 255, 0.16);
+    --sunken: rgba(255, 255, 255, 0.07);
+    --brand: #3d9bff;
+    --brand-ink: #ffffff;
+    --brand-tint: rgba(61, 155, 255, 0.2);
+    background-image: linear-gradient(180deg, #0d2550 0%, #0b1f44 55%, #0a1a3a 100%);
+    color-scheme: dark;
+  }
+}
+
+/*
+ * Figures, times and phone numbers in Inter with tabular figures rather than
+ * the monospace face: aligned in a column, without reading as a developer
+ * tool. Code (API keys, payloads) keeps `font-mono`.
+ */
+@layer components {
+  [data-brand='life-leads-plus'] .t-data,
+  [data-brand='life-leads-plus'] :is(td, th) .font-mono,
+  [data-brand='life-leads-plus'] td.font-mono {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
   }
 }
 

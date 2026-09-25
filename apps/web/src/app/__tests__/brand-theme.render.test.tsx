@@ -124,13 +124,24 @@ describe('the agency brand theme in the authenticated shell', () => {
       await mountShell();
 
       const logo = await screen.findByTestId('brand-logo');
-      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/logo.png');
+      // The wordmark reversed out for the navy rail, beside the icon tile.
+      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/wordmark-on-dark.png');
       expect(logo.getAttribute('alt')).toBe('Life Leads Plus');
+      expect(
+        document.querySelector('img[src="/brands/life-leads-plus/mark-128.png"]')
+      ).toBeTruthy();
 
       expect(document.querySelector('[data-testid="logo"]')).toBeNull();
       expect(document.querySelector('img[src="/netenroll-logo.png"]')).toBeNull();
       expect(screen.queryByLabelText('NetEnroll home')).toBeNull();
       expect(screen.getByLabelText('Life Leads Plus home')).toBeTruthy();
+    });
+
+    it('draws the navigation rail in the brand navy', async () => {
+      await mountShell();
+      await screen.findByTestId('brand-logo');
+      const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
+      expect(rail?.hasAttribute('data-brand-nav')).toBe(true);
     });
 
     it('sets data-brand on <html>, the icons and the title', async () => {
@@ -192,6 +203,7 @@ describe('the agency brand theme in the authenticated shell', () => {
   describe('with no brand', () => {
     it('renders the NetEnroll logo, and no brand logo', async () => {
       await mountShell();
+      expect(document.querySelector('[data-brand-nav]')).toBeNull();
 
       const logo = await screen.findByTestId('logo');
       expect(logo.querySelector('img')?.getAttribute('src')).toBe('/netenroll-logo.png');
