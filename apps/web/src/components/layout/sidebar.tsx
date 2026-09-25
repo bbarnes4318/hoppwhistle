@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
+import { BrandLockup } from '@/components/brand/brand-lockup';
 import { Logo } from '@/components/brand/logo';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/use-auth';
@@ -406,6 +407,12 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         'flex h-full min-h-0 flex-col bg-surface',
         drawer ? 'w-full' : 'sticky top-0 w-[248px] shrink-0 border-r border-rule'
       )}
+      /*
+       * An agency brand draws the rail in its navy. The attribute re-scopes the
+       * design tokens for this subtree (globals.css), so nothing below it needs
+       * to know. The drawer stays light: it opens inside a light panel.
+       */
+      data-brand-nav={brand && !drawer ? '' : undefined}
     >
       {/* In the drawer the panel already has a header, so the NetEnroll brand
           row would be a second one. An agency's own logo is the exception: it
@@ -413,35 +420,24 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           the drawer carries it too, sized down. */}
       {drawer ? (
         brand ? (
-          <div className="flex shrink-0 items-center justify-center border-b border-rule px-5 py-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={brand.logo}
-              alt={brand.name}
-              className="max-h-[40px] w-auto object-contain"
-              draggable={false}
-              data-testid="brand-logo"
-            />
+          <div className="flex shrink-0 items-center border-b border-rule px-4 py-3">
+            <BrandLockup brand={brand} tone="light" size="sm" />
           </div>
         ) : null
       ) : brand ? (
-        /* An agency's lockup is near-square (640x446), not a wide wordmark, so
-           it gets a taller block than NetEnroll's; the "Agency portal" eyebrow
-           at the top of the nav still sits directly under it. */
-        <div className="flex h-[112px] shrink-0 items-center justify-center border-b border-rule px-5">
+        /*
+         * The agency's lockup, with room: an app-icon tile and the wordmark,
+         * both cut from the supplied artwork (see BrandLockup). The block is
+         * taller than the topbar on purpose -- the navy column is its own
+         * surface, so its rule does not have to meet the topbar's.
+         */
+        <div className="flex h-[88px] shrink-0 items-center border-b border-rule px-5">
           <Link
             href="/dashboard"
-            className="flex h-full items-center justify-center rounded-control"
+            className="flex items-center rounded-control"
             aria-label={`${brand.name} home`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={brand.logo}
-              alt={brand.name}
-              className="max-h-[96px] w-auto object-contain"
-              draggable={false}
-              data-testid="brand-logo"
-            />
+            <BrandLockup brand={brand} tone="dark" />
           </Link>
         </div>
       ) : (

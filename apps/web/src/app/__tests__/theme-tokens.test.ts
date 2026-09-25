@@ -246,115 +246,111 @@ describe('the call-state signals', () => {
 /*
  * ── Agency brand themes ──────────────────────────────────────────────────────
  *
- * A white-labelled agency's palette is a `[data-brand]` block that overrides
- * the brand tokens and nothing else. These recompute each stated ratio from the
- * block's hex values, against the product's own surfaces, and hold the rule
- * that makes a theme safe to add: no signal token, surface, ink or rule ever
- * changes with the brand.
+ * A white-labelled agency's portal is a complete re-skin: its own neutrals,
+ * radii, elevation, a navy navigation column and its brand blues. These
+ * recompute every stated ratio from the stylesheet's hex values and hold the
+ * one rule that makes a theme safe to add: no call-state signal ever changes
+ * with the brand.
  */
 describe('the Life Leads Plus brand theme', () => {
-  const llpLight = tokens(/:root:not\(\[data-theme='dark'\]\)\[data-brand='life-leads-plus'\]/);
-  const llpDark = tokens(/\[data-theme='dark'\]\[data-brand='life-leads-plus'\]/);
+  const LIGHT = /:root:not\(\[data-theme='dark'\]\)\[data-brand='life-leads-plus'\]/;
+  const DARK = /\[data-theme='dark'\]\[data-brand='life-leads-plus'\]/;
+  const NAV = /\[data-brand='life-leads-plus'\] \[data-brand-nav\]/;
+  const llp = tokens(LIGHT);
+  const llpDark = tokens(DARK);
   const round = (n: number) => Math.round(n * 100) / 100;
 
-  /** The raw text of a block, for the HSL aliases the hex parser skips. */
+  /** The raw text of a block, for values the hex parser skips (rgba, HSL). */
   function blockText(selector: RegExp): string {
     const start = CSS.search(selector);
+    if (start < 0) throw new Error(`selector not found: ${selector}`);
     return CSS.slice(CSS.indexOf('{', start), CSS.indexOf('}', start));
   }
+  /** The navy column's hex tokens. Its translucent ones are checked by name. */
+  const nav = tokens(NAV);
 
   it('is the specified palette', () => {
-    expect(llpLight).toEqual({
+    expect(llp).toMatchObject({
+      paper: '#f4f6fa',
+      surface: '#ffffff',
+      sunken: '#edf1f6',
+      ink: '#0f172a',
+      'ink-2': '#3f4d63',
+      'ink-3': '#5b6b82',
       brand: '#0081f1',
-      'brand-ink': '#0058c4',
-      'brand-tint': '#e8f3fe',
-      'brand-fg': '#101828',
-      'brand-strong': '#0066d6',
-      'brand-strong-hover': '#012f69',
+      'brand-ink': '#0a56c2',
+      'brand-tint': '#eaf2fe',
+      'brand-fg': '#0f172a',
+      'brand-strong': '#0b5cd6',
+      'brand-strong-hover': '#0a47a8',
     });
-    const light = blockText(/:root:not\(\[data-theme='dark'\]\)\[data-brand='life-leads-plus'\]/);
-    expect(light).toMatch(/--primary:\s*208 100% 47%;/);
-    expect(light).toMatch(/--ring:\s*213 100% 38%;/);
-  });
-
-  it('is measured against the product surfaces it assumes', () => {
-    // The ratios below were specified against these. If the product's
-    // surfaces move, the ratios must be recomputed, not left to drift.
-    expect(light.surface).toBe('#ffffff');
-    expect(light.paper).toBe('#f5f6f8');
-    expect(light.sunken).toBe('#eef0f3');
+    const text = blockText(LIGHT);
+    expect(text).toMatch(/--primary:\s*216 90% 44%;/);
+    expect(text).toMatch(/--ring:\s*215 90% 40%;/);
   });
 
   it.each([
-    ['brand-ink on surface', () => contrast(llpLight['brand-ink'], light.surface), 6.58],
-    ['brand-ink on paper', () => contrast(llpLight['brand-ink'], light.paper), 6.08],
-    ['brand-ink on sunken', () => contrast(llpLight['brand-ink'], light.sunken), 5.76],
-    [
-      'brand-ink on brand-tint',
-      () => contrast(llpLight['brand-ink'], llpLight['brand-tint']),
-      5.85,
-    ],
-    ['white on brand-strong', () => contrast('#ffffff', llpLight['brand-strong']), 5.42],
-    [
-      'white on brand-strong-hover',
-      () => contrast('#ffffff', llpLight['brand-strong-hover']),
-      13.03,
-    ],
-    ['brand-fg on brand', () => contrast(llpLight['brand-fg'], llpLight.brand), 4.57],
-  ])('light: %s is %s:1', (_label, ratio, expected) => {
-    expect(round(ratio())).toBe(expected);
+    ['brand-ink  on surface', () => contrast(llp['brand-ink'], llp.surface)],
+    ['brand-ink  on paper', () => contrast(llp['brand-ink'], llp.paper)],
+    ['brand-ink  on sunken', () => contrast(llp['brand-ink'], llp.sunken)],
+    ['brand-ink  on brand-tint', () => contrast(llp['brand-ink'], llp['brand-tint'])],
+    ['white on brand-strong', () => contrast('#ffffff', llp['brand-strong'])],
+    ['white on brand-strong-hover', () => contrast('#ffffff', llp['brand-strong-hover'])],
+    ['brand-fg   on brand', () => contrast(llp['brand-fg'], llp.brand)],
+    ['ink-3      on paper', () => contrast(llp['ink-3'], llp.paper)],
+    ['ink-3      on sunken', () => contrast(llp['ink-3'], llp.sunken)],
+  ])('light: %s clears 4.5:1 and is stated in the stylesheet', (label, ratio) => {
     expect(ratio()).toBeGreaterThanOrEqual(4.5);
+    const m = new RegExp(`llp ${label}\\s+(\\d+\\.\\d+):1`).exec(CSS);
+    if (!m) throw new Error(`no stated ratio for "llp ${label}" in globals.css`);
+    expect(Number(m[1])).toBe(round(ratio()));
   });
 
-  it('states its light ratios in the stylesheet, to the value actually computed', () => {
-    const stated = (label: string): number => {
-      const m = new RegExp(`llp ${label}\\s+(\\d+\\.\\d+):1`).exec(CSS);
-      if (!m) throw new Error(`no stated ratio for "llp ${label}" in globals.css`);
-      return Number(m[1]);
-    };
-    expect(stated('brand-ink  on surface')).toBe(
-      round(contrast(llpLight['brand-ink'], light.surface))
-    );
-    expect(stated('white on brand-strong')).toBe(
-      round(contrast('#ffffff', llpLight['brand-strong']))
-    );
-    expect(stated('brand-fg   on brand')).toBe(
-      round(contrast(llpLight['brand-fg'], llpLight.brand))
-    );
-  });
-
-  it('dark: the lifted blue clears 4.5:1 on the dark paper and surface', () => {
-    expect(llpDark.brand).toBe('#3d9bff');
-    expect(llpDark['brand-strong']).toBe('#3d9bff');
-    expect(contrast(llpDark.brand, dark.paper)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(llpDark.brand, dark.surface)).toBeGreaterThanOrEqual(4.5);
-    // brand-fg is the dark theme's own paper, and clears 4.5:1 on the fill.
-    expect(llpDark['brand-fg']).toBe(dark.paper);
-    expect(contrast(llpDark['brand-fg'], llpDark.brand)).toBeGreaterThanOrEqual(4.5);
-    expect(blockText(/\[data-theme='dark'\]\[data-brand='life-leads-plus'\]/)).toMatch(
-      /--primary:\s*211 100% 62%;/
-    );
-  });
-
-  it('overrides the brand tokens and nothing else, in both themes', () => {
-    const ALLOWED = /^(brand(-ink|-tint|-fg|-strong|-strong-hover)?|primary|ring)$/;
-    for (const selector of [
-      /:root:not\(\[data-theme='dark'\]\)\[data-brand='life-leads-plus'\]/,
-      /\[data-theme='dark'\]\[data-brand='life-leads-plus'\]/,
-    ]) {
-      const names = [...blockText(selector).matchAll(/--([a-z0-9-]+)\s*:/g)].map(m => m[1]);
-      expect(names.length).toBeGreaterThan(0);
-      for (const name of names) expect(name, `${selector} overrides --${name}`).toMatch(ALLOWED);
+  it('light: ink and ink-2 clear 4.5:1 on every light surface', () => {
+    for (const fg of ['ink', 'ink-2'] as const) {
+      for (const bg of ['surface', 'paper', 'sunken'] as const) {
+        expect(contrast(llp[fg], llp[bg]), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
-  it('never touches a signal, in any brand block', () => {
+  it('the navy column: text, icons, labels and the active marker clear 4.5:1', () => {
+    expect(nav.surface).toBe('#0b1f44');
+    for (const fg of ['ink', 'ink-2', 'ink-3', 'brand'] as const) {
+      expect(contrast(nav[fg], nav.surface), `nav ${fg} on navy`).toBeGreaterThanOrEqual(4.5);
+    }
+    // The active item's text is brand-ink, which in the column is white.
+    expect(nav['brand-ink']).toBe('#ffffff');
+    for (const [label, fg] of [
+      ['nav text', nav['ink-2']],
+      ['nav icon', nav['ink-3']],
+      ['nav bar', nav.brand],
+    ] as const) {
+      const m = new RegExp(`llp ${label}\\s+on navy\\s+(\\d+\\.\\d+):1`).exec(CSS);
+      if (!m) throw new Error(`no stated ratio for "llp ${label}"`);
+      expect(Number(m[1])).toBe(round(contrast(fg, nav.surface)));
+    }
+  });
+
+  it('dark: the lifted blue reads on the dark grounds, and the button carries white', () => {
+    expect(llpDark.brand).toBe('#3d9bff');
+    expect(contrast(llpDark.brand, dark.paper)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(llpDark.brand, dark.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(llpDark['brand-ink'], dark.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#ffffff', llpDark['brand-strong'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#ffffff', llpDark['brand-strong-hover'])).toBeGreaterThanOrEqual(4.5);
+    expect(llpDark['brand-fg']).toBe(dark.paper);
+    expect(contrast(llpDark['brand-fg'], llpDark.brand)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('never touches a call-state signal, in any brand block', () => {
     // Every block keyed on data-brand, however many themes are added later.
     const blocks = [...CSS.matchAll(/\[data-brand=[^\]]+\][^{]*\{([^}]*)\}/g)].map(m => m[1]);
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    expect(blocks.length).toBeGreaterThanOrEqual(3);
     for (const block of blocks) {
       expect(block).not.toMatch(/--(live|ringing|dropped|blocked|money)[a-z-]*\s*:/);
-      expect(block).not.toMatch(/--(paper|surface|sunken|ink|rule|shadow|radius)[a-z0-9-]*\s*:/);
+      expect(block).not.toMatch(/--chart-\d\s*:/);
+      expect(block).not.toMatch(/--destructive[a-z-]*\s*:/);
       // The logo red is artwork, not a UI colour.
       expect(block.toLowerCase()).not.toContain('#fc0102');
     }

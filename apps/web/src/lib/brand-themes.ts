@@ -26,6 +26,12 @@ export interface BrandTheme {
   logo: string;
   /** Icon only, square, no wordmark. Any collapsed or icon-sized slot. */
   mark: string;
+  /** The icon, trimmed and small: the app-icon tile beside the wordmark. */
+  markSmall: string;
+  /** The wordmark alone, in the artwork's own colours, for a light ground. */
+  wordmark: string;
+  /** The wordmark reversed out for a dark ground: the navy navigation column. */
+  wordmarkOnDark: string;
   favicon: string;
   appleTouchIcon: string;
 }
@@ -35,6 +41,9 @@ export const BRAND_THEMES: Record<BrandThemeKey, BrandTheme> = {
     name: 'Life Leads Plus',
     logo: '/brands/life-leads-plus/logo.png',
     mark: '/brands/life-leads-plus/mark.png',
+    markSmall: '/brands/life-leads-plus/mark-128.png',
+    wordmark: '/brands/life-leads-plus/wordmark.png',
+    wordmarkOnDark: '/brands/life-leads-plus/wordmark-on-dark.png',
     favicon: '/brands/life-leads-plus/favicon-32.png',
     appleTouchIcon: '/brands/life-leads-plus/apple-touch-icon.png',
   },
