@@ -91,6 +91,16 @@ interface CallRecord {
 
 type DatePreset = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 
+/** The period in words, for the line under each figure. */
+const PERIOD_PHRASE: Record<DatePreset, string> = {
+  day: 'Today',
+  week: 'This week',
+  month: 'This month',
+  quarter: 'This quarter',
+  year: 'This year',
+  custom: 'Selected range',
+};
+
 /* ─── Helpers ──────────────────────────────────────────────────── */
 function getDateRange(preset: DatePreset): { start: Date; end: Date } {
   const now = new Date();
@@ -399,7 +409,12 @@ export default function DashboardPage() {
         set before a range means anything, and fetching on every keystroke of
         a date input would fire half-typed ranges at the API.
       */}
-      <Toolbar>
+      {/*
+        Unboxed. As a card this was a full-width panel holding one select and a
+        clock -- a whole row of chrome around two controls. Bare, it is the
+        period control sitting directly over the figures it scopes.
+      */}
+      <Toolbar className="border-0 bg-transparent p-0 shadow-none">
         <ToolbarSelect
           label="Period"
           value={activePreset}
@@ -441,12 +456,16 @@ export default function DashboardPage() {
           value={stats?.totalCalls || 0}
           icon={PhoneCall}
           loading={loading}
+          sub={PERIOD_PHRASE[activePreset]}
+          className="p-4"
         />
         <StatTile
           label="Applications"
           value={stats?.submittedApplications || 0}
           icon={FileText}
           loading={loading}
+          sub="Submitted"
+          className="p-4"
         />
         {/* A rate with no denominator is not 0%. A real 0% -- calls, and no
             applications from them -- renders as 0; no calls at all in the
@@ -457,214 +476,267 @@ export default function DashboardPage() {
           unit={conversionPct == null ? undefined : '%'}
           icon={Percent}
           loading={loading}
+          sub="Applications ÷ calls"
+          className="p-4"
         />
         <StatTile
           label="Callbacks"
           value={stats?.callbacksScheduled || 0}
           icon={Headphones}
           loading={loading}
+          sub="Scheduled"
+          className="p-4"
         />
       </div>
 
-      {/* Main Grid: Call Activity (2/3) & Call History (1/3) */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-        <Panel className="min-w-0 lg:col-span-2">
-          <PanelHeader
-            action={
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-brand" />
-                  <span className="t-meta text-ink-2">Inbound</span>
+      {/*
+        Main grid. Left, two-thirds: call activity with the disposition
+        breakdown under it. Right, one-third: the call history, pinned to the
+        height of the left column and scrolling inside itself.
+
+        It used to grow with its fifteen rows, which made the row as tall as
+        the ledger and left a chart-sized hole under Call Activity -- with the
+        disposition breakdown pushed below all of it as a full-width card that
+        usually held two chips. On a phone the columns stack and the ledger is
+        capped instead.
+      */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+          <Panel className="min-w-0">
+            <PanelHeader
+              action={
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-brand" />
+                    <span className="t-meta text-ink-2">Inbound</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-money" />
+                    <span className="t-meta text-ink-2">Outbound</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-money" />
-                  <span className="t-meta text-ink-2">Outbound</span>
-                </div>
+              }
+            >
+              <PanelTitle>Call Activity</PanelTitle>
+              <PanelDescription>Inbound vs. outbound call volume</PanelDescription>
+            </PanelHeader>
+            <PanelBody>
+              <div className="relative h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="inboundGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="var(--rule)" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      tick={{
+                        fill: 'var(--ink-3)',
+                        fontSize: 12,
+                        fontFamily: 'Inter, sans-serif',
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fill: 'var(--ink-3)',
+                        fontSize: 12,
+                        fontFamily: 'Inter, sans-serif',
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      content={<ChartTooltip />}
+                      cursor={{ stroke: 'var(--rule-strong)', strokeWidth: 1 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="outbound"
+                      stroke="var(--money)"
+                      strokeWidth={2}
+                      fill="none"
+                      dot={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="inbound"
+                      stroke="var(--brand)"
+                      strokeWidth={2}
+                      fill="url(#inboundGrad)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+                {chartData.length === 0 && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <p className="t-meta text-ink-3">No call activity in this period</p>
+                  </div>
+                )}
               </div>
-            }
-          >
-            <PanelTitle>Call Activity</PanelTitle>
-            <PanelDescription>Inbound vs. outbound call volume</PanelDescription>
-          </PanelHeader>
-          <PanelBody>
-            <div className="relative h-[280px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="inboundGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.18} />
-                      <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} stroke="var(--rule)" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="time"
-                    tick={{
-                      fill: 'var(--ink-3)',
-                      fontSize: 12,
-                      fontFamily: 'Inter, sans-serif',
-                    }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{
-                      fill: 'var(--ink-3)',
-                      fontSize: 12,
-                      fontFamily: 'Inter, sans-serif',
-                    }}
-                    axisLine={false}
-                    tickLine={false}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    content={<ChartTooltip />}
-                    cursor={{ stroke: 'var(--rule-strong)', strokeWidth: 1 }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="outbound"
-                    stroke="var(--money)"
-                    strokeWidth={2}
-                    fill="none"
-                    dot={false}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="inbound"
-                    stroke="var(--brand)"
-                    strokeWidth={2}
-                    fill="url(#inboundGrad)"
-                    dot={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-              {chartData.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <p className="t-meta text-ink-3">No call activity in this period</p>
-                </div>
-              )}
-            </div>
-          </PanelBody>
-        </Panel>
+            </PanelBody>
+          </Panel>
+
+          <DispositionBreakdown dispositions={stats?.dispositions} />
+        </div>
 
         {/* Call History Ledger */}
-        <Panel className="flex min-w-0 flex-col lg:col-span-1">
-          <PanelHeader>
-            <PanelTitle>Call History</PanelTitle>
-          </PanelHeader>
-          <PanelBody flush className="min-h-0 flex-1">
-            {!callsLoading && calls.length === 0 ? (
-              <EmptyState
-                headline="No calls found."
-                body="Calls show up here as soon as your agents take one."
-                icon={Phone}
-              />
-            ) : (
-              /*
+        <div className="relative min-w-0 lg:col-span-1">
+          <Panel className="flex max-h-[560px] min-w-0 flex-col lg:absolute lg:inset-0 lg:max-h-none">
+            <PanelHeader>
+              <PanelTitle>Call History</PanelTitle>
+            </PanelHeader>
+            <PanelBody flush className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+              {!callsLoading && calls.length === 0 ? (
+                <EmptyState
+                  headline="No calls found."
+                  body="Calls show up here as soon as your agents take one."
+                  icon={Phone}
+                />
+              ) : (
+                /*
                 Three columns and nothing wider than the panel: a one-third
                 panel at 1366px has about 350px, so the call's two numbers
                 stack in one cell, the time may break after its date, and the
-                result sits under the time. It grows with its rows rather than
-                scrolling inside the card.
+                result sits under the time. It never scrolls sideways; it
+                scrolls down inside the card, whose height the left column sets.
               */
-              <table className="w-full table-fixed text-left text-sm">
-                <colgroup>
-                  <col className="w-[140px]" />
-                  <col />
-                  <col className="w-[92px]" />
-                </colgroup>
-                <thead className="bg-sunken">
-                  <tr className="border-b border-rule">
-                    <th className="t-label h-10 whitespace-nowrap pl-5 pr-2 text-ink-3">Call</th>
-                    <th className="t-label h-10 whitespace-nowrap px-2 text-ink-3">Time</th>
-                    <th className="t-label h-10 whitespace-nowrap pl-2 pr-5 text-right text-ink-3">
-                      Duration
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-rule">
-                  {callsLoading ? (
-                    <tr>
-                      <td colSpan={3} className="t-meta py-8 text-center text-ink-3">
-                        Loading calls...
-                      </td>
+                <table className="w-full table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[140px]" />
+                    <col />
+                    <col className="w-[92px]" />
+                  </colgroup>
+                  <thead className="sticky top-0 z-[1] bg-sunken">
+                    <tr className="border-b border-rule">
+                      <th className="t-label h-10 whitespace-nowrap pl-5 pr-2 text-ink-3">Call</th>
+                      <th className="t-label h-10 whitespace-nowrap px-2 text-ink-3">Time</th>
+                      <th className="t-label h-10 whitespace-nowrap pl-2 pr-5 text-right text-ink-3">
+                        Duration
+                      </th>
                     </tr>
-                  ) : (
-                    calls.slice(0, 15).map(call => {
-                      const result = getCallResult(call);
-                      return (
-                        <tr
-                          key={call.id}
-                          className="align-top transition-colors duration-150 ease-out hover:bg-sunken"
-                        >
-                          <td className="py-2.5 pl-5 pr-2">
-                            <div className="t-data whitespace-nowrap text-ink">
-                              {formatPhoneNumber(call.callerId || call.fromNumber?.number || '') ||
-                                '—'}
-                            </div>
-                            {/* Still Plex Mono: a phone number is .t-data at any size. */}
-                            <div className="t-meta whitespace-nowrap font-mono text-ink-3">
-                              {formatPhoneNumber(
-                                call.toNumber || call.targetNumber || call.did || ''
-                              ) || '—'}
-                            </div>
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <div className="t-data break-words text-ink-2">
-                              {formatTableDateTime(call.createdAt)}
-                            </div>
-                            <Badge
-                              variant="outline"
-                              title={result}
-                              className={cn(
-                                'mt-1 h-5 max-w-full overflow-hidden rounded-full px-2 text-[11px]',
-                                getResultColor(result)
-                              )}
-                            >
-                              <span className="truncate">{result}</span>
-                            </Badge>
-                          </td>
-                          <td className="t-num whitespace-nowrap py-2.5 pl-2 pr-5 text-right text-ink-2">
-                            {(() => {
-                              const dur = call.connectedDuration || call.duration;
-                              if (dur) return formatDuration(dur);
-                              return '—';
-                            })()}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            )}
-          </PanelBody>
-        </Panel>
+                  </thead>
+                  <tbody className="divide-y divide-rule">
+                    {callsLoading ? (
+                      <tr>
+                        <td colSpan={3} className="t-meta py-8 text-center text-ink-3">
+                          Loading calls...
+                        </td>
+                      </tr>
+                    ) : (
+                      calls.slice(0, 25).map(call => {
+                        const result = getCallResult(call);
+                        return (
+                          <tr
+                            key={call.id}
+                            className="align-top transition-colors duration-150 ease-out hover:bg-sunken"
+                          >
+                            <td className="py-2.5 pl-5 pr-2">
+                              <div className="t-data whitespace-nowrap text-ink">
+                                {formatPhoneNumber(
+                                  call.callerId || call.fromNumber?.number || ''
+                                ) || '—'}
+                              </div>
+                              {/* Still Plex Mono: a phone number is .t-data at any size. */}
+                              <div className="t-meta whitespace-nowrap font-mono text-ink-3">
+                                {formatPhoneNumber(
+                                  call.toNumber || call.targetNumber || call.did || ''
+                                ) || '—'}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <div className="t-data break-words text-ink-2">
+                                {formatTableDateTime(call.createdAt)}
+                              </div>
+                              <Badge
+                                variant="outline"
+                                title={result}
+                                className={cn(
+                                  'mt-1 h-5 max-w-full overflow-hidden rounded-full px-2 text-[11px]',
+                                  getResultColor(result)
+                                )}
+                              >
+                                <span className="truncate">{result}</span>
+                              </Badge>
+                            </td>
+                            <td className="t-num whitespace-nowrap py-2.5 pl-2 pr-5 text-right text-ink-2">
+                              {(() => {
+                                const dur = call.connectedDuration || call.duration;
+                                if (dur) return formatDuration(dur);
+                                return '—';
+                              })()}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </PanelBody>
+          </Panel>
+        </div>
       </div>
-
-      {stats?.dispositions && Object.keys(stats.dispositions).length > 0 && (
-        <Panel>
-          <PanelHeader>
-            <PanelTitle>Disposition Breakdown</PanelTitle>
-          </PanelHeader>
-          <PanelBody>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {Object.entries(stats.dispositions).map(([key, count]) => (
-                <div
-                  key={key}
-                  className="flex min-w-0 items-center justify-between gap-3 rounded-control border border-rule bg-sunken px-3 py-2.5"
-                >
-                  <span className="t-meta truncate font-medium text-ink-2">
-                    {DISPOSITION_LABELS[key] || key}
-                  </span>
-                  <span className="t-num font-semibold text-ink">{count}</span>
-                </div>
-              ))}
-            </div>
-          </PanelBody>
-        </Panel>
-      )}
     </div>
+  );
+}
+
+/**
+ * How the period's calls were dispositioned, as ranked bars.
+ *
+ * It was a full-width card of equal chips at the bottom of the page, which
+ * gave "No Answer 1" the same weight as a disposition with four hundred calls
+ * and usually sat nearly empty. Ranked bars read at a glance -- what most
+ * calls ended as, and by how much -- and fit under the chart.
+ */
+function DispositionBreakdown({
+  dispositions,
+}: {
+  dispositions: Record<string, number> | undefined;
+}): JSX.Element | null {
+  const rows = Object.entries(dispositions ?? {})
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (rows.length === 0) return null;
+
+  const total = rows.reduce((sum, [, count]) => sum + count, 0);
+  const max = rows[0][1];
+
+  return (
+    <Panel className="min-w-0">
+      <PanelHeader action={<span className="t-meta text-ink-3">{total} dispositioned</span>}>
+        <PanelTitle>Disposition Breakdown</PanelTitle>
+      </PanelHeader>
+      <PanelBody>
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-2.5 md:grid-cols-2">
+          {rows.map(([key, count]) => (
+            <li key={key} className="min-w-0">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="t-meta truncate font-medium text-ink-2">
+                  {(DISPOSITION_LABELS as Record<string, string>)[key] || key}
+                </span>
+                <span className="t-num shrink-0 text-sm font-semibold text-ink">
+                  {count}
+                  <span className="ml-1.5 font-normal text-ink-3">
+                    {Math.round((count / total) * 100)}%
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
+                <div
+                  className="h-full rounded-full bg-brand"
+                  style={{ width: `${Math.max(4, (count / max) * 100)}%` }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </PanelBody>
+    </Panel>
   );
 }
