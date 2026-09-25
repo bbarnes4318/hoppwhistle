@@ -112,6 +112,7 @@ REQUIRED_MIGRATIONS="
 20260922020001_payment_provider_melio_default
 20260924000000_delivery_hold_no_credits
 20260924010000_agency_auto_refill
+20260925000000_tenant_brand_theme
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -430,6 +431,13 @@ migration_applied() {
             AND COALESCE((SELECT true FROM pg_indexes
               WHERE schemaname = 'public'
                 AND indexname = 'application_credit_ledger_tenantId_idempotencyKey_key'), false)" ;;
+    *_tenant_brand_theme)
+      # One ALTER TABLE adding two nullable columns, so it is atomic; both are
+      # probed anyway, so a hand-applied half cannot read as done.
+      echo "SELECT (SELECT count(*) FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'tenants'
+                AND column_name IN ('brandTheme', 'brandName')) = 2" ;;
     *)
       echo "" ;;
   esac
