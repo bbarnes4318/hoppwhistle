@@ -1,7 +1,7 @@
-import dotenv from 'dotenv-flow';
+import { config } from 'dotenv-flow';
 import esl from 'modesl';
 
-dotenv.config();
+config();
 
 const FREESWITCH_HOST: string = process.env.FREESWITCH_ESL_HOST || 'freeswitch';
 const FREESWITCH_PORT: number = parseInt(process.env.FREESWITCH_ESL_PORT || '8021');
