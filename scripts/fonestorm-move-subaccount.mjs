@@ -98,26 +98,42 @@ function asList(data) {
 const tnOf = (r) =>
   String(r.fonenumber ?? r.FoneNumber ?? r.foneNumber ?? r.number ?? r.tn ?? r.did ?? '').replace(/\D/g, '').slice(-10);
 
-// Any field that looks like a subaccount reference, flattened to strings.
-function subaccountValues(r) {
+// Any field (at any depth) that looks like a subaccount reference, as strings.
+function subaccountValues(r, inMatch = false) {
   const out = [];
+  if (r == null) return out;
+  if (typeof r !== 'object') return inMatch ? [String(r)] : out;
   for (const [k, v] of Object.entries(r)) {
-    if (!/sub_?account|^account/i.test(k)) continue;
-    if (v && typeof v === 'object') out.push(...Object.values(v).map(String));
-    else if (v != null) out.push(String(v));
+    out.push(...subaccountValues(v, inMatch || /sub_?account/i.test(k)));
   }
   return out;
 }
 
-// GET /fonenumbers takes no filter or paging params, so fetch it once and
-// filter locally.
+// GET /fonenumbers /{tn} may wrap the record, e.g. { fonenumber: {...} }.
+function unwrap(data) {
+  if (data?.fonenumber && typeof data.fonenumber === 'object') return data.fonenumber;
+  const first = asList(data)[0];
+  return first && typeof first === 'object' ? first : data;
+}
+
+// GET /fonenumbers returns only the numbers (no filter or paging params), so
+// fetch each number's record to see its subaccount.
 async function listAll() {
-  const data = await api('GET', '/fonenumbers');
-  if (!Array.isArray(data)) {
-    const keys = Object.entries(data ?? {}).map(([k, v]) => `${k}${Array.isArray(v) ? `[${v.length}]` : ''}`);
-    console.log('Response keys:', keys.join(', '));
+  const list = asList(await api('GET', '/fonenumbers'));
+  const out = [];
+  for (const item of list) {
+    if (item && typeof item === 'object') {
+      out.push(item);
+      continue;
+    }
+    const tn = String(item).replace(/\D/g, '').slice(-10);
+    try {
+      out.push({ fonenumber: tn, ...unwrap(await api('GET', `/fonenumbers/${tn}`)) });
+    } catch (e) {
+      console.warn(`Could not read ${tn}: ${e.message}`);
+    }
   }
-  return asList(data);
+  return out;
 }
 
 async function resolveDevice() {
@@ -164,7 +180,7 @@ async function main() {
     try {
       await api(METHOD, `/fonenumbers/${tn}`, body);
       const after = await api('GET', `/fonenumbers/${tn}`).catch(() => ({}));
-      const rec = asList(after)[0] ?? after.fonenumber ?? after;
+      const rec = unwrap(after);
       const subs = subaccountValues(rec);
       const ok = subs.includes(TO);
       console.log(`${ok ? 'OK  ' : 'CHECK'} ${tn}  subaccount=${subs.join('/') || '?'}  device=${JSON.stringify(rec[DEVICE_FIELD] ?? rec.device_id ?? '?')}`);
