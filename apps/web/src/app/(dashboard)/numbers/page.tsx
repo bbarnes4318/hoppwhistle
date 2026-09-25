@@ -33,6 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
+import { formatDisplayDate } from '@/lib/format-time';
 import { formatPhoneNumber } from '@/lib/utils';
 
 interface PhoneNumber {
@@ -132,9 +133,7 @@ function NumberCard({
     <div className="flex flex-col rounded-card border border-rule bg-surface p-3 transition-shadow hover:border-rule-strong hover:shadow-raised">
       <div className="flex items-start justify-between mb-2">
         <div className="space-y-0.5">
-          <div className="font-mono text-sm font-semibold tracking-tight text-ink">
-            {formatPhoneNumber(number.number)}
-          </div>
+          <div className="t-data font-semibold text-ink">{formatPhoneNumber(number.number)}</div>
           <div className="flex items-center gap-1.5">
             <Badge variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}>
               {number.status}
@@ -166,9 +165,7 @@ function NumberCard({
           </div>
           <div>
             <div className="t-label text-ink-3">Purchased</div>
-            <div className="font-medium text-ink">
-              {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : 'N/A'}
-            </div>
+            <div className="font-medium text-ink">{formatDisplayDate(number.purchasedAt)}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -473,7 +470,7 @@ function NumbersPage() {
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="space-y-0.5">
-                          <div className="font-mono text-sm font-semibold tracking-tight text-brand-ink">
+                          <div className="t-data font-semibold text-brand-ink">
                             {formatPhoneNumber(route.did)}
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -498,7 +495,7 @@ function NumbersPage() {
                           <div className="t-label flex items-center gap-1 text-ink-3">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
                           </div>
-                          <div className="font-mono text-xs text-ink">
+                          <div className="t-data text-ink">
                             {formatPhoneNumber(route.destination)}
                           </div>
                         </div>
@@ -516,9 +513,7 @@ function NumbersPage() {
                           <div>
                             <div className="t-label text-ink-3">Created</div>
                             <div className="font-medium text-ink">
-                              {route.createdAt
-                                ? new Date(route.createdAt).toLocaleDateString()
-                                : 'N/A'}
+                              {formatDisplayDate(route.createdAt)}
                             </div>
                           </div>
                         </div>

@@ -2,6 +2,7 @@
 
 import { PhoneCall } from 'lucide-react';
 
+import { formatPhone } from '@/components/domain/phone-cell';
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadSummary } from '@/lib/api/leads';
 
@@ -144,13 +145,6 @@ function StatusBadge({ status }: { status: string }) {
       {config.label}
     </span>
   );
-}
-
-function formatPhone(phone: string): string {
-  if (phone.length === 10) {
-    return `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}`;
-  }
-  return phone;
 }
 
 function formatDate(iso: string): string {

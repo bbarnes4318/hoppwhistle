@@ -4,6 +4,7 @@ import { BarChart3, Check, Copy, Edit, Pause, Play, Plus, RefreshCw, Trash2 } fr
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { pct } from '@/components/delivery/ledger';
 import { Panel, PanelBody, Toolbar, ToolbarActions, ToolbarSearch } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
@@ -345,9 +346,9 @@ function PublishersPage() {
                         {pubStats?.billableCalls.toLocaleString() ?? 0}
                       </TableCell>
 
-                      {/* Conversion % */}
+                      {/* Conversion % -- no calls, no rate: a dash, not 0.0%. */}
                       <TableCell className="text-right tabular-nums">
-                        {pubStats?.conversionRate.toFixed(1) ?? '0.0'}%
+                        {pct(pubStats?.totalCalls ? pubStats.conversionRate : null, 1)}
                       </TableCell>
 
                       {/* Missed Calls */}

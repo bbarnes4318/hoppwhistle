@@ -174,9 +174,7 @@ export function LiveBoardView({
                         )}
                         aria-hidden="true"
                       />
-                      <span className={cn('font-medium', row.pinLast && 'italic')}>
-                        {row.name}
-                      </span>
+                      <span className={cn('font-medium', row.pinLast && 'italic')}>{row.name}</span>
                       {row.tag ? (
                         <span className="rounded-control bg-sunken px-1 t-meta text-ink-3">
                           {row.tag}
@@ -184,16 +182,12 @@ export function LiveBoardView({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right t-num">
                     {row.callsInFlight > 0 ? count(row.callsInFlight) : '—'}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {count(row.deliveredToday)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {count(row.applicationsToday)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right t-num">{count(row.deliveredToday)}</TableCell>
+                  <TableCell className="text-right t-num">{count(row.applicationsToday)}</TableCell>
+                  <TableCell className="text-right t-num">
                     {row.closingPct === null ? '—' : pct(row.closingPct)}
                   </TableCell>
                 </TableRow>

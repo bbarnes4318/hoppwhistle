@@ -5,16 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatPhoneNumber(phone: string): string {
-  // Format E.164 to readable format
-  if (phone.startsWith('+1')) {
-    const cleaned = phone.slice(2);
-    if (cleaned.length === 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-    }
-  }
-  return phone;
-}
+/**
+ * Kept as a name for older call sites. It is the same function as the domain
+ * layer's formatPhone (components/domain/phone-cell): one display format for a
+ * phone number across the product.
+ */
+export { formatPhone as formatPhoneNumber } from './format-phone';
 
 export function formatCurrency(amount: number, currency: string = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
@@ -43,4 +39,3 @@ export function formatDate(date: Date | string): string {
     minute: '2-digit',
   }).format(new Date(date));
 }
-

@@ -13,7 +13,6 @@ import {
   YAxis,
 } from 'recharts';
 
-
 import {
   EmptyState,
   Panel,
@@ -34,6 +33,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
 import { hasLeftConsole } from '@/lib/console-exit';
+import { formatClock, formatTableDateTime } from '@/lib/format-time';
 import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
 
 /* ─── Types ────────────────────────────────────────────────────── */
@@ -274,12 +274,15 @@ export default function DashboardPage() {
   const [customTo, setCustomTo] = useState('');
   const [showCustom, setShowCustom] = useState(false);
 
+  // Conversion has no meaning without a call to convert.
+  const conversionPct = stats?.totalCalls ? (stats.closingPct ?? null) : null;
+
   // Live clock
   const [liveClock, setLiveClock] = useState('');
   useEffect(() => {
     const tick = () => {
       const now = new Date();
-      setLiveClock(now.toLocaleTimeString('en-US', { hour12: false }));
+      setLiveClock(formatClock(now, { seconds: true }));
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -446,12 +449,13 @@ export default function DashboardPage() {
           icon={FileText}
           loading={loading}
         />
-        {/* `??` and not `||`: a real 0% must render as 0, and only a null --
-            no calls at all in the period -- becomes the dash. */}
+        {/* A rate with no denominator is not 0%. A real 0% -- calls, and no
+            applications from them -- renders as 0; no calls at all in the
+            period, or no figure from the server, is the dash. */}
         <StatTile
           label="Conversion %"
-          value={stats?.closingPct ?? '—'}
-          unit={stats?.closingPct == null ? undefined : '%'}
+          value={conversionPct ?? '—'}
+          unit={conversionPct == null ? undefined : '%'}
           icon={Percent}
           loading={loading}
         />
@@ -562,18 +566,10 @@ export default function DashboardPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="sticky top-0 z-10 bg-sunken">
                     <tr className="border-b border-rule">
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">
-                        Time
-                      </th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">
-                        From/To
-                      </th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">
-                        Duration
-                      </th>
-                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">
-                        Result
-                      </th>
+                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Time</th>
+                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">From/To</th>
+                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Duration</th>
+                      <th className="t-label h-10 whitespace-nowrap px-3 text-ink-3">Result</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-rule">
@@ -592,18 +588,14 @@ export default function DashboardPage() {
                             className="transition-colors duration-150 ease-out hover:bg-sunken"
                           >
                             <td className="t-data whitespace-nowrap px-3 py-2.5 text-ink-3">
-                              {new Date(call.createdAt).toLocaleString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: false,
-                              })}
+                              {formatTableDateTime(call.createdAt)}
                             </td>
                             <td className="t-data whitespace-nowrap px-3 py-2.5 text-ink">
                               <div className="flex flex-col">
                                 <span>
-                                  {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
+                                  {formatPhoneNumber(
+                                    call.callerId || call.fromNumber?.number || '—'
+                                  )}
                                 </span>
                                 <span className="text-meta text-ink-3">
                                   {formatPhoneNumber(
@@ -622,7 +614,10 @@ export default function DashboardPage() {
                             <td className="px-3 py-2.5">
                               <Badge
                                 variant="outline"
-                                className={cn('whitespace-nowrap rounded-full', getResultColor(result))}
+                                className={cn(
+                                  'whitespace-nowrap rounded-full',
+                                  getResultColor(result)
+                                )}
                               >
                                 {result}
                               </Badge>

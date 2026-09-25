@@ -65,14 +65,6 @@ interface StatsResponse {
   data: CampaignStats[];
 }
 
-// Country flag emoji helper
-function getCountryFlag(countryCode: string): string {
-  const code = countryCode.toUpperCase();
-  if (code.length !== 2) return '🌐';
-  const offset = 127397;
-  return String.fromCodePoint(...[...code].map(c => c.charCodeAt(0) + offset));
-}
-
 // Status badge component
 function StatusBadge({ status }: { status: Campaign['status'] }) {
   const config = {
@@ -346,8 +338,10 @@ function CampaignsPage() {
                       <TableCell className="text-ink-3">{campaign.offerName || '—'}</TableCell>
 
                       {/* Country */}
-                      <TableCell className="text-center text-lg">
-                        {getCountryFlag(campaign.country)}
+                      {/* The code, not a flag emoji: Windows renders regional
+                          indicators as the bare letters. */}
+                      <TableCell className="t-body text-center text-ink-2">
+                        {campaign.country ? campaign.country.toUpperCase() : '—'}
                       </TableCell>
 
                       {/* Recording */}

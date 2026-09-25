@@ -3,6 +3,7 @@
 import { Check, Copy } from 'lucide-react';
 import * as React from 'react';
 
+import { formatPhone } from '@/lib/format-phone';
 import { cn } from '@/lib/utils';
 
 import { StatusChip } from './status-chip';
@@ -17,7 +18,7 @@ import { StatusChip } from './status-chip';
  */
 
 export interface PhoneCellProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
-  /** E.164 preferred, e.g. +14155550142. Anything else renders verbatim. */
+  /** E.164 preferred, e.g. +14155550142; bare 10- and 11-digit NANP numbers also format. */
   number: string | null | undefined;
   /** Optional state rendered beside the number. */
   status?: { value: string; enumName?: string };
@@ -26,24 +27,12 @@ export interface PhoneCellProps extends Omit<React.HTMLAttributes<HTMLDivElement
   placeholder?: string;
 }
 
-/** +14155550142 → +1 (415) 555-0142. Non-NANP numbers are grouped loosely. */
-export function formatPhone(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith('+')) return trimmed;
-  const digits = trimmed.slice(1);
-
-  if (digits.length === 11 && digits.startsWith('1')) {
-    const n = digits.slice(1);
-    return `+1 (${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`;
-  }
-  if (digits.length === 10) {
-    return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  // Unknown plan: group from the right in 3s so it stays scannable.
-  const groups: string[] = [];
-  for (let i = digits.length; i > 0; i -= 3) groups.unshift(digits.slice(Math.max(0, i - 3), i));
-  return `+${groups.join(' ')}`;
-}
+/**
+ * The display formatter for a phone number: (415) 555-0142. It lives in
+ * lib/format-phone so lib/utils can re-export it without importing a client
+ * component; this is the name pages reach for.
+ */
+export { formatPhone };
 
 export function PhoneCell({
   number,

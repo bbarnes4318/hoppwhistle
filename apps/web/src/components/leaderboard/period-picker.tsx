@@ -4,6 +4,7 @@ import { CalendarRange } from 'lucide-react';
 import * as React from 'react';
 
 import { Input } from '@/components/ui/input';
+import { formatDayLabel, formatDayRange } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 
 import type { PeriodKey } from './types';
@@ -102,9 +103,7 @@ export function PeriodPicker({
             'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-sm font-medium',
             'transition-[color,background-color,box-shadow] duration-150 ease-out ne-motion',
             'disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-[40px]',
-            custom
-              ? 'bg-surface text-ink shadow-card'
-              : 'text-ink-2 hover:text-ink'
+            custom ? 'bg-surface text-ink shadow-card' : 'text-ink-2 hover:text-ink'
           )}
         >
           <CalendarRange className="h-3.5 w-3.5" />
@@ -150,9 +149,10 @@ export function PeriodPicker({
 
       {resolved ? (
         <p className="t-meta text-ink-3">
+          {/* Display only: `onChange` still carries the YYYY-MM-DD labels. */}
           {resolved.from === resolved.to
-            ? resolved.from
-            : `${resolved.from} → ${resolved.to} · ${resolved.days} day${
+            ? formatDayLabel(resolved.from)
+            : `${formatDayRange(resolved.from, resolved.to)} · ${resolved.days} day${
                 resolved.days === 1 ? '' : 's'
               }`}
           {resolved.complete ? null : ' · still open'}

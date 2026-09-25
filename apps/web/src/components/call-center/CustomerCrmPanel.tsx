@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import React, { useState } from 'react';
 
+import { formatPhone } from '@/components/domain/phone-cell';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
 import {
   completeInsuranceLeadTask,
@@ -135,16 +136,6 @@ export function CustomerCrmPanel({
     } finally {
       setIsSaving(false);
     }
-  };
-
-  // Format phone number for display
-  const formatPhone = (num: string) => {
-    const digits = num.replace(/\D/g, '');
-    const d = digits.length === 11 ? digits.slice(1) : digits;
-    if (d.length === 10) {
-      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-    }
-    return num;
   };
 
   const handleCompleteTask = async (taskId: string) => {

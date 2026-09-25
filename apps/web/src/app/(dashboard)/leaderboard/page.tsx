@@ -27,6 +27,7 @@ import { useLivePoll } from '@/hooks/use-live-poll';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
+import { formatDayLabel, formatDayRange } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 
 /**
@@ -215,20 +216,18 @@ export default function LeaderboardPage(): JSX.Element {
           className="xl:max-w-[150px]"
         />
         {custom ? (
-          <ToolbarDateRange
-            from={from}
-            to={to}
-            onFromChange={setFrom}
-            onToChange={setTo}
-          />
+          <ToolbarDateRange from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
         ) : null}
         {reversed ? (
-          <ToolbarMeta className="text-dropped-ink">The start date is after the end date.</ToolbarMeta>
+          <ToolbarMeta className="text-dropped-ink">
+            The start date is after the end date.
+          </ToolbarMeta>
         ) : resolved ? (
           <ToolbarMeta>
+            {/* Display only: the day labels sent to the server are unchanged. */}
             {resolved.from === resolved.to
-              ? resolved.from
-              : `${resolved.from} → ${resolved.to} · ${resolved.days} day${
+              ? formatDayLabel(resolved.from)
+              : `${formatDayRange(resolved.from, resolved.to)} · ${resolved.days} day${
                   resolved.days === 1 ? '' : 's'
                 }`}
             {resolved.complete ? null : ' · still open'}

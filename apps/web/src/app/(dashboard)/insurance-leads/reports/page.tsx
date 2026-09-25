@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   EmptyState,
+  formatPhone,
   Notice,
   Panel,
   PanelBody,
@@ -99,12 +100,6 @@ function formatDateTime(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '').slice(-10);
-  if (digits.length !== 10) return phone;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function SummaryTile({
