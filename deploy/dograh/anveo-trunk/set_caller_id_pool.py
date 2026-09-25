@@ -23,6 +23,12 @@ DATABASE_URL), the same way as import_state_caller_ids.py:
   docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --tcid 1 --campaign-id 7
   docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --tcid 1 --campaign-id 7 --apply
   docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --restore /tmp/anveo-pool-backup.json --apply
+
+Any carrier works the same way, e.g. a Telnyx configuration:
+
+  docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --list-configs
+  docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --tcid 2 --pool-tag telnyx \\
+      --label "Telnyx CID" --backup /tmp/telnyx-pool-backup.json --numbers +19592222235 ...
 """
 
 from __future__ import annotations
@@ -36,7 +42,6 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 DEFAULT_NUMBERS = ["+18652809894", "+18652809893", "+18652809892"]
-POOL_TAG = "anveo"
 
 
 def to_e164(raw: str) -> Optional[str]:
@@ -156,7 +161,7 @@ async def apply_pool(args) -> int:
                 backup["deactivated_ids"].append(r["id"])
             for e164, action, row in plan:
                 if action == "activate":
-                    meta = {**as_dict(row["extra_metadata"]), "pool": POOL_TAG}
+                    meta = {**as_dict(row["extra_metadata"]), "pool": args.pool_tag}
                     await conn.execute(
                         "update telephony_phone_numbers set is_active=true, extra_metadata=$2::json, "
                         "updated_at=$3 where id=$1",
@@ -170,8 +175,8 @@ async def apply_pool(args) -> int:
                         "address_type, country_code, label, is_active, is_default_caller_id, "
                         "extra_metadata, created_at, updated_at) values "
                         "($1,$2,$3,$3,'pstn','US',$4,true,false,$5::json,$6,$6) returning id",
-                        args.org_id, args.tcid, e164, "Anveo CID",
-                        json.dumps({"pool": POOL_TAG, "npa": e164[2:5]}), now,
+                        args.org_id, args.tcid, e164, args.label,
+                        json.dumps({"pool": args.pool_tag, "npa": e164[2:5]}), now,
                     )
                     backup["inserted_ids"].append(new_id)
             if campaign:
@@ -197,6 +202,39 @@ async def apply_pool(args) -> int:
             args.org_id, args.tcid,
         )
         print("Active caller IDs now:", ", ".join(r["address_normalized"] for r in active_now))
+    finally:
+        await conn.close()
+    return 0
+
+
+SAFE_CONFIG_COLUMNS = ["organization_id", "name", "label", "provider", "provider_type", "type", "is_default"]
+
+
+async def list_configs(args) -> int:
+    """Telephony configurations and their active caller-ID counts. Credential
+    columns are never selected."""
+    conn = await connect()
+    try:
+        cols = {
+            r["column_name"]
+            for r in await conn.fetch(
+                "select column_name from information_schema.columns where table_name='telephony_configurations'"
+            )
+        }
+        shown = ["id"] + [c for c in SAFE_CONFIG_COLUMNS if c in cols]
+        rows = await conn.fetch(
+            f"select {', '.join(shown)} from telephony_configurations order by id"
+        )
+        counts = {
+            r["tcid"]: r["n"]
+            for r in await conn.fetch(
+                "select telephony_configuration_id as tcid, count(*) as n from telephony_phone_numbers "
+                "where is_active group by 1"
+            )
+        }
+        for r in rows:
+            desc = "  ".join(f"{c}={r[c]}" for c in shown)
+            print(f"{desc}  active_caller_ids={counts.get(r['id'], 0)}")
     finally:
         await conn.close()
     return 0
@@ -249,8 +287,13 @@ def main() -> int:
     p.add_argument("--max-concurrency", type=int, default=3, help="campaign concurrent calls (default 3)")
     p.add_argument("--backup", default="/tmp/anveo-pool-backup.json")
     p.add_argument("--restore", metavar="BACKUP_JSON")
+    p.add_argument("--pool-tag", default="anveo", help="extra_metadata.pool for inserted numbers")
+    p.add_argument("--label", default="Anveo CID", help="label for inserted numbers")
+    p.add_argument("--list-configs", action="store_true", help="list telephony configurations and exit")
     p.add_argument("--apply", action="store_true")
     args = p.parse_args()
+    if args.list_configs:
+        return asyncio.run(list_configs(args))
     if args.rate < 1 or args.max_concurrency < 1:
         raise SystemExit("--rate and --max-concurrency must be at least 1")
     return asyncio.run(restore(args) if args.restore else apply_pool(args))

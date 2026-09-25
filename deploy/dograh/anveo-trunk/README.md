@@ -79,6 +79,30 @@ docker exec dograh-api-1 grep -c HOPWHISTLE_ARI_DIAL_PREFIX_V2 /app/api/services
 Run one campaign call and watch it:
 `docker logs -f dograh-asterisk 2>&1 | grep -i anveo`.
 
+## Telnyx caller IDs
+
+The same script sets the caller IDs for Dograh's Telnyx telephony
+configuration. Find that configuration's id first. This lists every
+configuration, never its credentials:
+
+```bash
+docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --list-configs
+```
+
+Then run it with that id (`TELNYX_ID` below), as a dry run first:
+
+```bash
+docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --tcid TELNYX_ID \
+  --pool-tag telnyx --label "Telnyx CID" --backup /tmp/telnyx-pool-backup.json \
+  --numbers +19592222235 +19792325093 +19362766091 +18395009524 +18395009511 \
+            +18283889161 +18283761225 +17275584088 +16563338182 +16083966390 +16083966279
+```
+
+Add `--apply` to write it, then run
+`docker cp dograh-api-1:/tmp/telnyx-pool-backup.json /root/`. Leave out
+`--campaign-id` unless you also want that campaign slowed to 1/s with 3 calls at
+once.
+
 ## Rollback
 
 ```bash
