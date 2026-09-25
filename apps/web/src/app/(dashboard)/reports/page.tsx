@@ -369,7 +369,7 @@ function ReportsPage() {
 
   if (isAgent || (!showProfitability && !showPublisherRevenue && !showBuyerCosts)) {
     return (
-      <div className="flex items-center justify-center p-8 text-center">
+      <div className="page-canvas items-center text-center">
         <p className="t-body max-w-md text-ink-3">
           You do not have the required roles to view billing and financial reports. Please contact
           your system administrator.

@@ -568,7 +568,12 @@ export default function DashboardPage() {
                 result sits under the time. It grows with its rows rather than
                 scrolling inside the card.
               */
-              <table className="w-full text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[140px]" />
+                  <col />
+                  <col className="w-[92px]" />
+                </colgroup>
                 <thead className="bg-sunken">
                   <tr className="border-b border-rule">
                     <th className="t-label h-10 whitespace-nowrap pl-5 pr-2 text-ink-3">Call</th>
@@ -605,15 +610,15 @@ export default function DashboardPage() {
                               ) || '—'}
                             </div>
                           </td>
-                          <td className="min-w-0 px-2 py-2.5">
-                            <div className="t-data text-ink-2">
+                          <td className="px-2 py-2.5">
+                            <div className="t-data break-words text-ink-2">
                               {formatTableDateTime(call.createdAt)}
                             </div>
                             <Badge
                               variant="outline"
                               title={result}
                               className={cn(
-                                'mt-1 h-5 max-w-full rounded-full px-2 text-[11px]',
+                                'mt-1 h-5 max-w-full overflow-hidden rounded-full px-2 text-[11px]',
                                 getResultColor(result)
                               )}
                             >
