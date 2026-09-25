@@ -11,7 +11,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ari-trunk"))
 
-from apply_ari_trunk_patch import MARKER, PatchError, patch_file, patch_source  # noqa: E402
+from apply_ari_trunk_patch import MARKER, MARKER_V2, PatchError, patch_file, patch_source, patch_v1  # noqa: E402
 
 # The shape of the deployed provider.py around lines 86-94 and 410-426.
 STAND_IN = '''"""ARI provider."""
@@ -106,6 +106,45 @@ def test_file_apply_writes_backup():
         assert patch_file(path, apply=True).changed
         assert open(path + ".bak-ari-trunk").read() == STAND_IN
         assert not patch_file(path, apply=True).changed
+
+
+def test_dial_prefix_applies_to_outbound_nanp_only():
+    saved = with_env(DOGRAH_ARI_TRUNK="anveo", DOGRAH_ARI_DIAL_PREFIX="012345", DOGRAH_ARI_TRANSFER_TRUNK=None)
+    try:
+        p = load(patch_source(STAND_IN))
+        assert p.outbound("+15551234567")["endpoint"] == "PJSIP/01234515551234567@anveo"
+        assert p.outbound("5551234567")["endpoint"] == "PJSIP/01234515551234567@anveo"
+        # International and SIP-URI style destinations are left alone.
+        assert p.outbound("+442071234567")["endpoint"] == "PJSIP/+442071234567@anveo"
+        assert p.outbound("+15551234567@sbc")["endpoint"] == "PJSIP/+15551234567@sbc"
+        # Transfers never carry the carrier prefix.
+        assert p.transfer("+14233398241")["endpoint"] == "PJSIP/+14233398241@anveo"
+    finally:
+        restore(saved)
+
+
+def test_no_prefix_by_default():
+    saved = with_env(DOGRAH_ARI_TRUNK=None, DOGRAH_ARI_DIAL_PREFIX=None)
+    try:
+        p = load(patch_source(STAND_IN))
+        assert p.outbound("+15551234567")["endpoint"] == "PJSIP/+15551234567@fractel"
+    finally:
+        restore(saved)
+
+
+def test_v1_file_is_upgraded_and_keeps_original_backup():
+    v1 = patch_v1(STAND_IN)
+    assert MARKER in v1 and MARKER_V2 not in v1
+    both = patch_source(v1)
+    assert MARKER_V2 in both and patch_source(both) == both
+    assert both == patch_source(STAND_IN)
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "provider.py")
+        open(path, "w").write(v1)
+        open(path + ".bak-ari-trunk", "w").write(STAND_IN)
+        assert patch_file(path, apply=True).changed
+        assert open(path + ".bak-ari-trunk").read() == STAND_IN
+        assert open(path + ".bak-ari-trunk-v2").read() == v1
 
 
 if __name__ == "__main__":
