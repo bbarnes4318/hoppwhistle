@@ -44,6 +44,15 @@ Place a test call to your own phone, using a caller ID Twilio will accept:
 python3 deploy/dograh/twilio-trunk/install_twilio_trunk.py --test-call +1YOURCELL --caller-id +1CALLERID
 ```
 
+Then reinstall the host firewall so Twilio can reach Dograh's Asterisk on
+5062 for in-dialog requests (the callee's BYE, re-INVITEs). Without it a callee
+hangup can be dropped once the call's conntrack entry has aged out, and the AI
+keeps talking to dead air. New inbound calls from Twilio are still refused.
+
+```bash
+sudo bash scripts/install-persistent-sip-firewall.sh
+```
+
 ## 3. In Dograh
 
 In the ARI telephony configuration that the campaign uses, set the dial template
@@ -55,6 +64,22 @@ PJSIP/{number}@twilio
 
 To run Twilio alongside FracTEL, create a second ARI configuration with this
 template and assign the campaigns you want on Twilio to it.
+
+## Inbound calls on Twilio numbers
+
+Inbound calls land on FreeSWITCH, not Dograh, and are routed by
+`inbound_route.lua` like any other DID (Twilio sends `+1XXXXXXXXXX`, which the
+`public` dialplan and the Lua script both accept).
+
+1. **Twilio → your trunk → Origination**: add the URI `sip:<PUBLIC_IP>:5080`.
+2. Attach the numbers to that trunk. Numbers bought from the dashboard are
+   attached automatically when `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (or
+   `TWILIO_API_KEY`/`TWILIO_API_SECRET`) and `TWILIO_TRUNK_SID` are in the
+   host `.env`; purchases are refused without a trunk SID.
+3. Install the firewall (above). It lets Twilio's signaling ranges reach 5080;
+   anything else on 5080 is dropped.
+4. Give the number a route in Hopwhistle, then call it. `fs_cli -x "sofia
+   status profile external"` and the FreeSWITCH log show the INVITE.
 
 ## Rollback
 
