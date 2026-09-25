@@ -78,6 +78,9 @@ const DATABASE_BACKED = [
   // fixtures -- eleven failures whose text points at Prisma rather than at the
   // race that caused them.
   '**/src/__tests__/quota-summary.test.ts',
+  // Truncates `tenants`, `roles`, `calls`, `buyers` and `campaigns` to seed two
+  // agencies with their own buyers, traffic and applications.
+  '**/src/__tests__/agency-live-board.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',

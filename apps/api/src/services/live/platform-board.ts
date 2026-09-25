@@ -46,10 +46,10 @@ import { deliveredCallWhere, submittedApplicationWhere } from '../rating/measure
  */
 
 /** Matches the strip's window. A call with no end time from hours ago is a stuck row. */
-const IN_FLIGHT_WINDOW_MS = 4 * 60 * 60 * 1000;
+export const IN_FLIGHT_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 /** Still up: dialling, ringing or connected, with no end time recorded. */
-const IN_FLIGHT_STATUSES = ['INITIATED', 'RINGING', 'ANSWERED'] as const;
+export const IN_FLIGHT_STATUSES = ['INITIATED', 'RINGING', 'ANSWERED'] as const;
 
 export interface LiveBoardAgency {
   tenantId: string;
@@ -103,7 +103,7 @@ function tally(
  * operator has to be able to tell it from an agency that has not been sent a
  * call yet. The same distinction `measureClosing` draws, for the same reason.
  */
-function closing(applications: number, delivered: number): number | null {
+export function closing(applications: number, delivered: number): number | null {
   if (delivered <= 0) return null;
   return Math.round((applications / delivered) * 10000) / 100;
 }

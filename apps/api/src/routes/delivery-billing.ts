@@ -68,7 +68,12 @@ import type { FastifyInstance } from 'fastify';
 
 import { requireAgencyPrincipal, requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingTenantId, getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import {
+  getActingTenantId,
+  getActingUserId,
+  resolveTenant,
+  sendTenantRefusal,
+} from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 import { paymentGateway } from '../services/billing/ach.js';
@@ -99,6 +104,7 @@ import {
   maxDailyDebitFor,
   overrunCeilingApplications,
 } from '../services/billing/terms.js';
+import { getAgencyLiveBoard } from '../services/live/agency-board.js';
 import { getLiveBoard } from '../services/live/platform-board.js';
 import { currentCalendarDay } from '../services/rating/calendar-day.js';
 import { toNumber } from '../services/rating/rate-curve.js';
@@ -139,6 +145,28 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       if (!tenantId) return;
 
       return reply.send({ data: await getDeliveryToday(tenantId, { prisma }) });
+    }
+  );
+
+  /**
+   * GET /api/v1/delivery/live-board
+   *
+   * The agency's own floor, right now: calls up this second, delivered calls
+   * and submitted applications so far today, by buyer, with the agency's
+   * totals across the top. The agency counterpart of
+   * `/api/v1/platform/live/board`, which stays staff-only and cross-agency.
+   *
+   * The tenant is the acting tenant on the session and nothing else. No
+   * parameter names an agency, so there is nothing to tamper with.
+   */
+  fastify.get(
+    '/api/v1/delivery/live-board',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) return sendTenantRefusal(request, reply);
+
+      return reply.send({ data: await getAgencyLiveBoard(tenantId, { prisma }) });
     }
   );
 
