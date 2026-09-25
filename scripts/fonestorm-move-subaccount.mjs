@@ -15,6 +15,7 @@
  *   --sub-field <name>     body field for the subaccount (default: sub_account)
  *   --device-field <name>  body field for the device    (default: device)
  *   --method <PUT|PATCH>   update method                 (default: PUT)
+ *   --discover             print the login's account, subaccounts and devices, then exit
  *
  * Auth and error handling mirror apps/api/src/services/provisioning/adapters/fractel-adapter.ts.
  */
@@ -31,13 +32,14 @@ const SUB_FIELD = opt('sub-field', 'sub_account');
 const DEVICE_FIELD = opt('device-field', 'device');
 const METHOD = opt('method', 'PUT').toUpperCase();
 const APPLY = args.includes('--apply');
+const DISCOVER = args.includes('--discover');
 
 const BASE = (process.env.FONESTORM_BASE_URL || 'https://api.fonestorm.com/v2').replace(/\/$/, '');
 const USER = process.env.FONESTORM_USERNAME;
 const PASS = process.env.FONESTORM_PASSWORD;
 
-if (!FROM || !TO || !DEVICE) {
-  console.error('Usage: --from <subaccount> --to <subaccount> --device <device> [--apply]');
+if (!DISCOVER && (!FROM || !TO || !DEVICE)) {
+  console.error('Usage: --from <subaccount> --to <subaccount> --device <device> [--apply]  |  --discover');
   process.exit(1);
 }
 if (!USER || !PASS) {
@@ -151,8 +153,26 @@ async function resolveDevice() {
   return DEVICE;
 }
 
+// Show which account the login is, plus its subaccounts and devices.
+async function discover() {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    console.log('Logged in as account:', JSON.stringify(payload, null, 2));
+  } catch {
+    console.log('Could not decode token payload.');
+  }
+  for (const path of ['/subaccounts', '/devices']) {
+    try {
+      console.log(`\n${path}:\n`, JSON.stringify(await api('GET', path), null, 2));
+    } catch (e) {
+      console.log(`\n${path}: ${e.message}`);
+    }
+  }
+}
+
 async function main() {
   await auth();
+  if (DISCOVER) return discover();
 
   const numbers = await listAll();
   const matched = numbers.filter((r) => subaccountValues(r).includes(FROM));
