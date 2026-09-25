@@ -249,6 +249,89 @@ export const ENUM_TONE: Record<string, Record<string, StatusTone>> = {
 
   // Task lifecycle, not call health.
   InsuranceTaskStatus: { OPEN: 'ringing', COMPLETED: 'live', CANCELLED: 'neutral' },
+
+  // ── Kinds, not states ────────────────────────────────────────────────────
+  // Where a tenant came from, how a call was routed or attributed, who hung
+  // up, how a carrier wants numbers written, which rail money moves on: these
+  // describe, they do not warn. All neutral.
+  TenantActivationSource: {
+    STRIPE_CHECKOUT: 'neutral',
+    ADMIN_INVITE: 'neutral',
+    PLATFORM_INVITE: 'neutral',
+  },
+  CarrierCallerIdStrategy: { PRESERVE: 'neutral', FIXED: 'neutral' },
+  CallTerminationParty: { CALLER: 'neutral', CALLEE: 'neutral', UNKNOWN: 'neutral' },
+  CallAttribution: { CLIENT: 'neutral', INFERRED: 'neutral' },
+  CarrierNumberFormat: { E164: 'neutral', NANP11: 'neutral', NANP10: 'neutral' },
+  CallRouteType: {
+    CC_MANUAL: 'neutral',
+    CC_POWER_DIALER: 'neutral',
+    SOFTPHONE_MANUAL: 'neutral',
+    PREDICTIVE_DIALER: 'neutral',
+    DOGRAH_AI: 'neutral',
+  },
+  AgencyPaymentMethod: { ACH: 'neutral', CARD: 'neutral' },
+  PaymentProvider: { STRIPE: 'neutral', OFFLINE: 'neutral', MELIO: 'neutral' },
+
+  // A lead waiting on a person, like a pending approval: owed a next step.
+  InsurancePostStatus: { MANUAL_REVIEW: 'ringing' },
+
+  // An agency's rate lifecycle. Under review there is no rate -- held on
+  // purpose, not failed.
+  AgencyRatingStatus: {
+    INTRODUCTORY: 'neutral',
+    OPENING_BLOCK: 'neutral',
+    RATED: 'live',
+    UNDER_REVIEW: 'blocked',
+  },
+  RateChangeStatus: { APPLIED: 'live', BELOW_MINIMUM: 'blocked', NO_DATA: 'neutral' },
+
+  // Ledger movements are money in and out of the block, not health.
+  CreditLedgerEntryType: {
+    PURCHASE: 'money',
+    DRY_RUN_CLOSEOUT: 'neutral',
+    CONSUMPTION: 'money',
+    OVERRUN: 'money',
+  },
+  // A charge that went through is money; one the system refused to take on
+  // purpose (a debit cap, no mandate) is blocked; nothing owed is neutral.
+  SettlementPaymentStatus: {
+    DRY_RUN: 'neutral',
+    SUCCEEDED: 'money',
+    NOT_CHARGED: 'neutral',
+    EXTERNAL: 'neutral',
+    HALTED_MAX_DEBIT: 'blocked',
+    HALTED_NO_MANDATE: 'blocked',
+  },
+  AchMandateStatus: { PENDING_VERIFICATION: 'ringing' },
+
+  // Every hold is delivery stopped on purpose -- the definition of violet.
+  DeliveryHoldReason: {
+    NO_CREDITS: 'blocked',
+    CEILING_REACHED: 'blocked',
+    PAYMENT_DISPUTED: 'blocked',
+    BELOW_MINIMUM_CLOSING: 'blocked',
+    SETTLEMENT_UNPAID: 'blocked',
+    NO_MANDATE: 'blocked',
+    ADMIN_SUSPENDED: 'blocked',
+    NO_OPENING_AGREEMENT: 'blocked',
+  },
+
+  // Notification kinds: a failure is red, a deliberate stop violet, anything
+  // that needs someone to act amber, and a routine notice neutral.
+  BillingNotificationKind: {
+    SETTLEMENT_FAILED: 'dropped',
+    SETTLEMENT_UNPAID_GRACE_EXPIRED: 'blocked',
+    MAX_DAILY_DEBIT_EXCEEDED: 'blocked',
+    CEILING_REACHED: 'blocked',
+    DELIVERY_PAUSED: 'blocked',
+    MANDATE_MISSING: 'ringing',
+    SETTLEMENT_RUN_FAILED: 'dropped',
+    SETTLEMENT_PAYABLE_EXTERNALLY: 'neutral',
+    PAYMENT_DISPUTE_OPENED: 'ringing',
+    PAYMENT_DISPUTE_UPDATED: 'ringing',
+  },
+  SettlementDisputeStatus: { UNDER_REVIEW: 'ringing', WITHDRAWN: 'neutral' },
 };
 
 /** Values that render with their acronym intact rather than title-cased. */
