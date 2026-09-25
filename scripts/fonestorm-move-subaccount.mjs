@@ -24,7 +24,7 @@
  * Once they have been moved to --to, route just those numbers with:
  *   --from 2005555185 --device Trunk-1-178.156.223.97 --only fonestorm-2005555318-numbers.txt --apply
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -142,9 +142,15 @@ async function main() {
     return;
   }
 
+  // Record each number's current routing before changing it, so it can be undone.
+  const backupFile = `fonestorm-${FROM}-routing-backup.jsonl`;
+  console.log(`Saving previous routing to ${backupFile}`);
   const failed = [];
   for (const tn of numbers) {
     try {
+      const before = await call(fromToken, 'GET', `/fonenumbers/${tn}`);
+      const prev = (before.fonenumber ?? before).call_options?.receive ?? null;
+      appendFileSync(backupFile, JSON.stringify({ fonenumber: tn, receive: prev }) + '\n');
       await call(fromToken, 'PUT', `/fonenumbers/${tn}`, body);
       const after = await call(fromToken, 'GET', `/fonenumbers/${tn}`);
       const recv = (after.fonenumber ?? after).call_options?.receive ?? {};
