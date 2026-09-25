@@ -1,5 +1,6 @@
 'use client';
 
+import type { Flow } from '@hopwhistle/routing-dsl';
 import {
  ReactFlow,
  Node,
@@ -238,7 +239,7 @@ export function FlowBuilder() {
  ? `/api/v1/flows/${flowIdToLoad}/versions/${version}`
  : `/api/v1/flows/${flowIdToLoad}`;
  
- const response = await apiClient.get<{ flow: { name?: string; [key: string]: unknown }; version: string; flowId: string }>(url);
+ const response = await apiClient.get<{ flow: Flow; version: string; flowId: string }>(url);
  
  if (response.data?.flow) {
  const serializer = new FlowSerializer();
