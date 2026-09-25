@@ -49,6 +49,9 @@ const DATABASE_BACKED = [
   '**/src/__tests__/carrier-catalog.test.ts',
   // Truncates `tenants`, `roles` and `users` to seed one account per role.
   '**/src/__tests__/me-capabilities.test.ts',
+  // Truncates `tenants`, `roles`, `users` and `audit_logs` to seed a branded
+  // and an unbranded agency and a platform operator.
+  '**/src/__tests__/tenant-brand.test.ts',
   // Truncates `tenants`, `roles`, `users` and `audit_logs`, and suspends its
   // own agent mid-suite.
   '**/src/__tests__/session-expiry.test.ts',

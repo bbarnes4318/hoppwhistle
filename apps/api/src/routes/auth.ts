@@ -6,6 +6,7 @@ import { RoleName } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { brandForTenant } from '../lib/tenant-brand.js';
 import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
@@ -1222,6 +1223,20 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         )
       );
 
+      /*
+       * The agency's white-label brand, for the tenant this principal is
+       * inside -- resolved here, from the principal, and from nothing the
+       * browser sent.
+       *
+       * A platform operator gets the brand of the agency they have ENTERED
+       * (so the operator sees the portal the agency sees, preview included),
+       * and none in the cross-agency view. Everybody else gets their own
+       * tenant's, off the user row, exactly as `tenantId` below is.
+       */
+      const brand = await brandForTenant(
+        isPlatformPrincipal ? (principal.actingTenantId ?? null) : user.tenantId
+      );
+
       return reply.send({
         id: user.id,
         email: user.email,
@@ -1230,6 +1245,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         roles: effectiveRoles,
         permissions,
         tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
+        /** `{ theme, name }` for a white-labelled agency, null for the default look. */
+        brand,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,
