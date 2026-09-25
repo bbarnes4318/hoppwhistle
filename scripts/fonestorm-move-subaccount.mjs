@@ -37,12 +37,13 @@ const DEVICE = opt('device');
 const APPLY = args.includes('--apply');
 const ONLY = opt('only');
 const RESTORE = opt('restore');
+const AUDIT = opt('audit');
 
 const BASE = (process.env.FONESTORM_BASE_URL || 'https://api.fonestorm.com/v2').replace(/\/$/, '');
 const USER = process.env.FONESTORM_USERNAME;
 const PASS = process.env.FONESTORM_PASSWORD;
 
-if (!FROM || (!DEVICE && !RESTORE)) {
+if (!FROM || (!DEVICE && !RESTORE && !AUDIT)) {
   console.error('Usage: --from <subaccount> [--to <subaccount>] --device <device name, id or host IP> [--apply]\n       --from <subaccount> --restore <routing-backup.jsonl> [--apply]');
   process.exit(1);
 }
@@ -113,6 +114,20 @@ async function restore(token) {
   if (failed.length) process.exit(3);
 }
 
+// List the subaccount's numbers whose calls currently go to device --audit <id>.
+async function audit(token) {
+  const numbers = firstArray(await call(token, 'GET', '/fonenumbers')).map((n) => tenDigit(typeof n === 'object' ? n.fonenumber : n));
+  const hits = [];
+  for (const [i, tn] of numbers.entries()) {
+    const rec = await call(token, 'GET', `/fonenumbers/${tn}`).catch(() => ({}));
+    const recv = (rec.fonenumber ?? rec).call_options?.receive ?? {};
+    if (String(recv.id ?? recv.value) === AUDIT) hits.push(tn);
+    if ((i + 1) % 250 === 0) console.log(`  checked ${i + 1}/${numbers.length}...`);
+  }
+  console.log(`\n${hits.length} of ${numbers.length} numbers on ${FROM} still route to ${AUDIT}${hits.length ? ':' : '.'}`);
+  for (const tn of hits) console.log('  ', tn);
+}
+
 async function main() {
   const parent = findToken(await call(null, 'POST', '/auth', { username: USER, password: PASS, expires: 3600 }));
   if (!parent) throw new Error('FoneStorm auth returned no token');
@@ -124,6 +139,7 @@ async function main() {
 
   const fromToken = await subToken(FROM);
   if (RESTORE) return restore(fromToken);
+  if (AUDIT) return audit(fromToken);
   let numbers = firstArray(await call(fromToken, 'GET', '/fonenumbers')).map((n) =>
     tenDigit(typeof n === 'object' ? n.fonenumber ?? n.number : n)
   );
