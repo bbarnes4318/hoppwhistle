@@ -11,7 +11,10 @@ import { cn } from '@/lib/utils';
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-x-auto rounded-card">
+    // overflow-y is pinned to hidden: `overflow-x: auto` alone computes
+    // overflow-y to auto as well, and sub-pixel rounding under display scaling
+    // then draws a vertical scrollbar inside a one-row table.
+    <div className="relative w-full overflow-x-auto overflow-y-hidden rounded-card">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )

@@ -1191,7 +1191,7 @@ export default function OperationsCallLogsPage() {
 
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">
-        <PanelBody flush className="overflow-x-auto">
+        <PanelBody flush>
           <Table>
             <TableHeader>
               <TableRow>

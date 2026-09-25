@@ -15,6 +15,7 @@ import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
 import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
+import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   const pathname = usePathname();
@@ -287,7 +288,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Signature 2 — below the topbar, above the page, on every screen. */}
             <LiveStripMount />
           </div>
-          <main className="flex-1 bg-paper flex flex-col min-h-0 overflow-y-auto">
+          <main
+            className={cn(
+              'flex-1 bg-paper flex flex-col min-h-0 overflow-y-auto',
+              // The collapsed softphone floats 48px tall over the bottom-right
+              // corner. 96px of runway lets every page's last element scroll
+              // clear of it instead of ending underneath.
+              showFloatingDialer && 'pb-24'
+            )}
+          >
             {/*
               A page that throws loses the page, not the shell. Before this, an
               uncaught render error anywhere under the layout unmounted the
