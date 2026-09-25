@@ -21,7 +21,6 @@ import {
   Notice,
   Panel,
   PanelBody,
-  TOOLBAR_CELL,
   Toolbar,
   ToolbarActions,
   ToolbarClear,
@@ -63,6 +62,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
+import { formatFullDateTime, formatTableDateTime } from '@/lib/format-time';
 import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
@@ -831,10 +831,7 @@ export default function OperationsCallLogsPage() {
       case 'PENDING':
       case 'UNDER_REVIEW':
         return (
-          <Badge
-            variant="outline"
-            className="bg-dropped-tint text-dropped-ink border-dropped/40"
-          >
+          <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
             Disputed - Review
           </Badge>
         );
@@ -848,11 +845,17 @@ export default function OperationsCallLogsPage() {
   };
 
   /*
-   * One toolbar row: search, every filter, then the ledger actions. A set
-   * filter is tinted so it is obvious at a glance what the ledger is scoped to.
+   * Search, every filter, then the ledger actions. A set filter is tinted so
+   * it is obvious at a glance what the ledger is scoped to.
+   *
+   * The row wraps rather than squeezing: with eight filters on one line the
+   * shared cell rule cut the category names to "Disposi…" and "Campa…". Each
+   * trigger is sized to its full label instead, and only a long CHOSEN value
+   * (a campaign name) truncates, at 240px.
    */
-  const filterTrigger = toolbarTrigger;
-  const filterCell = TOOLBAR_CELL;
+  const filterTrigger = (active: boolean) =>
+    cn(toolbarTrigger(active), 'w-auto max-w-full whitespace-nowrap');
+  const filterCell = 'shrink-0 max-w-[240px]';
   const hasActiveFilters =
     search !== '' ||
     selectedDisputeStatus !== 'all' ||
@@ -878,7 +881,7 @@ export default function OperationsCallLogsPage() {
   return (
     <div className="page-canvas">
       {/* Filter toolbar */}
-      <Toolbar>
+      <Toolbar className="flex-wrap gap-2 xl:flex-wrap">
         <ToolbarSearch
           value={search}
           onChange={value => {
@@ -1191,43 +1194,21 @@ export default function OperationsCallLogsPage() {
 
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">
-        <PanelBody flush className="overflow-x-auto">
+        <PanelBody flush>
           <Table>
             <TableHeader>
               <TableRow>
-                {visibleColumns.time && (
-                  <TableHead className="pl-5">Time</TableHead>
-                )}
-                {visibleColumns.agentName && (
-                  <TableHead>Agent</TableHead>
-                )}
-                {visibleColumns.publisherName && isAdminOrOwner && (
-                  <TableHead>Publisher</TableHead>
-                )}
-                {visibleColumns.buyerName && isAdminOrOwner && (
-                  <TableHead>Buyer</TableHead>
-                )}
-                {visibleColumns.campaignName && (
-                  <TableHead>Campaign</TableHead>
-                )}
-                {visibleColumns.callerId && (
-                  <TableHead>Customer Phone</TableHead>
-                )}
-                {visibleColumns.did && !isBuyer && (
-                  <TableHead>DID (DNIS)</TableHead>
-                )}
-                {visibleColumns.toNumber && !isPublisher && (
-                  <TableHead>Destination</TableHead>
-                )}
-                {visibleColumns.duration && (
-                  <TableHead>Duration</TableHead>
-                )}
-                {visibleColumns.connectedDuration && (
-                  <TableHead>Connected</TableHead>
-                )}
-                {visibleColumns.billable && (
-                  <TableHead>Billable</TableHead>
-                )}
+                {visibleColumns.time && <TableHead className="pl-5">Time</TableHead>}
+                {visibleColumns.agentName && <TableHead>Agent</TableHead>}
+                {visibleColumns.publisherName && isAdminOrOwner && <TableHead>Publisher</TableHead>}
+                {visibleColumns.buyerName && isAdminOrOwner && <TableHead>Buyer</TableHead>}
+                {visibleColumns.campaignName && <TableHead>Campaign</TableHead>}
+                {visibleColumns.callerId && <TableHead>Customer Phone</TableHead>}
+                {visibleColumns.did && !isBuyer && <TableHead>DID (DNIS)</TableHead>}
+                {visibleColumns.toNumber && !isPublisher && <TableHead>Destination</TableHead>}
+                {visibleColumns.duration && <TableHead>Duration</TableHead>}
+                {visibleColumns.connectedDuration && <TableHead>Connected</TableHead>}
+                {visibleColumns.billable && <TableHead>Billable</TableHead>}
                 {/* Financial Fields */}
                 {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
                   <TableHead className="text-right">Charge</TableHead>
@@ -1244,15 +1225,9 @@ export default function OperationsCallLogsPage() {
                 {visibleColumns.margin && isAdminOrOwner && (
                   <TableHead className="text-right">Margin</TableHead>
                 )}
-                {visibleColumns.status && (
-                  <TableHead className="text-center">Status</TableHead>
-                )}{' '}
-                {visibleColumns.disposition && (
-                  <TableHead>Disposition</TableHead>
-                )}
-                {visibleColumns.dispositionNotes && (
-                  <TableHead>Call Notes</TableHead>
-                )}
+                {visibleColumns.status && <TableHead className="text-center">Status</TableHead>}{' '}
+                {visibleColumns.disposition && <TableHead>Disposition</TableHead>}
+                {visibleColumns.dispositionNotes && <TableHead>Call Notes</TableHead>}
                 {visibleColumns.recording && (
                   <TableHead className="text-center">Recording</TableHead>
                 )}
@@ -1286,11 +1261,7 @@ export default function OperationsCallLogsPage() {
                           : 'Could not load the call ledger'
                       }
                       action={
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void fetchCalls()}
-                        >
+                        <Button variant="outline" size="sm" onClick={() => void fetchCalls()}>
                           Try again
                         </Button>
                       }
@@ -1337,12 +1308,7 @@ export default function OperationsCallLogsPage() {
                     >
                       {visibleColumns.time && (
                         <TableCell className="t-data whitespace-nowrap pl-5 text-ink">
-                          {new Date(call.createdAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatTableDateTime(call.createdAt)}
                         </TableCell>
                       )}
                       {visibleColumns.agentName && (
@@ -1358,7 +1324,7 @@ export default function OperationsCallLogsPage() {
                              * empty chair, or the one an agent never wrote up.
                              */
                             <span
-                              className="text-ink-3 italic"
+                              className="text-ink-3"
                               title="No agent is recorded as having answered this call"
                             >
                               Unattributed
@@ -1511,7 +1477,8 @@ export default function OperationsCallLogsPage() {
                                     void handlePlayRecording(call.primaryRecordingId || call.id)
                                   }
                                   disabled={
-                                    audioLoading && playingId === (call.primaryRecordingId || call.id)
+                                    audioLoading &&
+                                    playingId === (call.primaryRecordingId || call.id)
                                   }
                                   className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
                                 >
@@ -1641,31 +1608,11 @@ export default function OperationsCallLogsPage() {
               ) : (
                 <Tabs defaultValue="overview" className="w-full h-full flex flex-col">
                   <TabsList className="mb-6 flex-shrink-0">
-                    <TabsTrigger
-                      value="overview"
-                    >
-                      Overview
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="timeline"
-                    >
-                      Timeline
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="billing"
-                    >
-                      Billing
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="rtb"
-                    >
-                      Ping/Post
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="admin"
-                    >
-                      Ledger
-                    </TabsTrigger>
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                    <TabsTrigger value="billing">Billing</TabsTrigger>
+                    <TabsTrigger value="rtb">Ping/Post</TabsTrigger>
+                    <TabsTrigger value="admin">Ledger</TabsTrigger>
                   </TabsList>
 
                   {/* TAB 1: OVERVIEW */}
@@ -1711,17 +1658,13 @@ export default function OperationsCallLogsPage() {
                     {/* Metadata grids */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="rounded-card bg-sunken p-3 space-y-1">
-                        <span className="t-label block text-ink-3">
-                          Caller Number
-                        </span>
+                        <span className="t-label block text-ink-3">Caller Number</span>
                         <p className="t-data font-medium text-ink">
                           {detailCall.callerId ? formatPhoneNumber(detailCall.callerId) : '—'}
                         </p>
                       </div>
                       <div className="rounded-card bg-sunken p-3 space-y-1">
-                        <span className="t-label block text-ink-3">
-                          Destination Number
-                        </span>
+                        <span className="t-label block text-ink-3">Destination Number</span>
                         <p className="t-data font-medium text-ink">
                           {detailCall.toNumber && detailCall.toNumber !== 'Masked'
                             ? formatPhoneNumber(detailCall.toNumber)
@@ -1732,25 +1675,19 @@ export default function OperationsCallLogsPage() {
 
                     <div className="grid grid-cols-3 gap-4">
                       <div className="rounded-card bg-sunken p-3 space-y-0.5">
-                        <span className="t-label block text-ink-3">
-                          Campaign
-                        </span>
+                        <span className="t-label block text-ink-3">Campaign</span>
                         <p className="truncate text-sm font-medium text-ink">
                           {detailCall.campaignName || '—'}
                         </p>
                       </div>
                       <div className="rounded-card bg-sunken p-3 space-y-0.5">
-                        <span className="t-label block text-ink-3">
-                          Publisher
-                        </span>
+                        <span className="t-label block text-ink-3">Publisher</span>
                         <p className="truncate text-sm font-medium text-ink">
                           {detailCall.publisherName || '—'}
                         </p>
                       </div>
                       <div className="rounded-card bg-sunken p-3 space-y-0.5">
-                        <span className="t-label block text-ink-3">
-                          Buyer
-                        </span>
+                        <span className="t-label block text-ink-3">Buyer</span>
                         <p className="truncate text-sm font-medium text-ink">
                           {detailCall.buyerName || '—'}
                         </p>
@@ -1760,9 +1697,7 @@ export default function OperationsCallLogsPage() {
                     {/* Financial Performance snapshot */}
                     {canSeeFinance && (
                       <div className="space-y-3">
-                        <h3 className="t-label text-brand-ink">
-                          Financial Summary
-                        </h3>
+                        <h3 className="t-label text-brand-ink">Financial Summary</h3>
                         <div className="grid grid-cols-3 gap-4">
                           <div className="rounded-card bg-sunken p-3">
                             <span className="t-meta block text-ink-3">Buyer Charge</span>
@@ -1794,9 +1729,7 @@ export default function OperationsCallLogsPage() {
 
                     {/* Who took it, and how they wrote it up */}
                     <div className="rounded-card bg-sunken p-4 space-y-3">
-                      <h4 className="t-label text-ink-3">
-                        Agent Notes / Outcome
-                      </h4>
+                      <h4 className="t-label text-ink-3">Agent Notes / Outcome</h4>
                       {/*
                         Writing the call up, from here.
 
@@ -1823,7 +1756,7 @@ export default function OperationsCallLogsPage() {
                           <span className="t-meta block text-ink-3">Answered by</span>
                           <p className="mt-0.5 text-sm font-medium text-ink">
                             {detailCall.agentName ?? (
-                              <span className="italic text-ink-3">Unattributed</span>
+                              <span className="text-ink-3">Unattributed</span>
                             )}
                           </p>
                         </div>
@@ -1846,9 +1779,7 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 2: TIMELINE */}
                   <TabsContent value="timeline" className="space-y-4">
-                    <h3 className="t-label mb-4 text-brand-ink">
-                      Call Event Timeline
-                    </h3>
+                    <h3 className="t-label mb-4 text-brand-ink">Call Event Timeline</h3>
                     {detailCall.legs && detailCall.legs.length > 0 ? (
                       <div className="relative border-l border-rule pl-6 ml-2 space-y-6">
                         {detailCall.legs.map((leg, idx) => (
@@ -1871,14 +1802,12 @@ export default function OperationsCallLogsPage() {
                               </div>
                               <div className="t-meta space-y-0.5 font-mono text-ink-3">
                                 {leg.startedAt && (
-                                  <p>Initiated: {new Date(leg.startedAt).toLocaleString()}</p>
+                                  <p>Initiated: {formatFullDateTime(leg.startedAt)}</p>
                                 )}
                                 {leg.answeredAt && (
-                                  <p>Answered: {new Date(leg.answeredAt).toLocaleString()}</p>
+                                  <p>Answered: {formatFullDateTime(leg.answeredAt)}</p>
                                 )}
-                                {leg.endedAt && (
-                                  <p>Ended: {new Date(leg.endedAt).toLocaleString()}</p>
-                                )}
+                                {leg.endedAt && <p>Ended: {formatFullDateTime(leg.endedAt)}</p>}
                                 {leg.duration && <p>Duration: {leg.duration}s</p>}
                               </div>
                             </div>
@@ -1896,9 +1825,7 @@ export default function OperationsCallLogsPage() {
                   {/* TAB 3: BILLING */}
                   <TabsContent value="billing" className="space-y-6">
                     <div className="space-y-4">
-                      <h3 className="t-label text-brand-ink">
-                        Billing Snapshot Rules
-                      </h3>
+                      <h3 className="t-label text-brand-ink">Billing Snapshot Rules</h3>
                       <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -1942,23 +1869,15 @@ export default function OperationsCallLogsPage() {
                     {/* Accruals ledger lists (Admin only) */}
                     {isAdminOrOwner && (
                       <div className="space-y-3">
-                        <h3 className="t-label text-brand-ink">
-                          Accruals Ledger Entries
-                        </h3>
+                        <h3 className="t-label text-brand-ink">Accruals Ledger Entries</h3>
                         {detailCall.accruals && detailCall.accruals.length > 0 ? (
                           <div className="overflow-hidden rounded-card border border-rule">
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>
-                                    Type
-                                  </TableHead>
-                                  <TableHead>
-                                    Description
-                                  </TableHead>
-                                  <TableHead className="text-right">
-                                    Amount
-                                  </TableHead>
+                                  <TableHead>Type</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Amount</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -1989,9 +1908,7 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 4: PING/POST BIDS */}
                   <TabsContent value="rtb" className="space-y-6">
-                    <h3 className="t-label text-brand-ink">
-                      Lead Auction Details
-                    </h3>
+                    <h3 className="t-label text-brand-ink">Lead Auction Details</h3>
                     {detailCall.pingRequest ? (
                       <div className="space-y-4">
                         <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
@@ -2019,23 +1936,15 @@ export default function OperationsCallLogsPage() {
 
                         {/* Bids list */}
                         <div className="space-y-2">
-                          <h4 className="t-label text-ink-3">
-                            Auction Bids
-                          </h4>
+                          <h4 className="t-label text-ink-3">Auction Bids</h4>
                           {detailCall.pingRequest.bids && detailCall.pingRequest.bids.length > 0 ? (
                             <div className="overflow-hidden rounded-card border border-rule">
                               <Table>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead>
-                                      Buyer
-                                    </TableHead>
-                                    <TableHead>
-                                      Status
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                      Bid Amount
-                                    </TableHead>
+                                    <TableHead>Buyer</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Bid Amount</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -2085,9 +1994,7 @@ export default function OperationsCallLogsPage() {
                   <TabsContent value="admin" className="space-y-6">
                     {/* Disputes note */}
                     <div className="space-y-3">
-                      <h3 className="t-label text-brand-ink">
-                        Dispute Review
-                      </h3>
+                      <h3 className="t-label text-brand-ink">Dispute Review</h3>
                       <div className="rounded-card bg-sunken p-4 space-y-2 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-ink-3 font-medium">Dispute Status</span>
@@ -2102,33 +2009,23 @@ export default function OperationsCallLogsPage() {
 
                     {/* Manual Adjustments log */}
                     <div className="space-y-3">
-                      <h3 className="t-label text-brand-ink">
-                        Manual adjustments history
-                      </h3>
+                      <h3 className="t-label text-brand-ink">Manual adjustments history</h3>
                       {detailCall.buyerTransactions && detailCall.buyerTransactions.length > 0 ? (
                         <div className="overflow-hidden rounded-card border border-rule">
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>
-                                  Date
-                                </TableHead>
-                                <TableHead>
-                                  Type
-                                </TableHead>
-                                <TableHead>
-                                  Description
-                                </TableHead>
-                                <TableHead className="text-right">
-                                  Amount
-                                </TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {detailCall.buyerTransactions.map(tx => (
                                 <TableRow key={tx.id} className="border-rule">
                                   <TableCell className="t-data whitespace-nowrap text-ink-2">
-                                    {new Date(tx.createdAt).toLocaleDateString()}
+                                    {formatTableDateTime(tx.createdAt)}
                                   </TableCell>
                                   <TableCell className="t-meta font-medium uppercase text-ink">
                                     {tx.type}

@@ -6,14 +6,29 @@ import {
   ChevronRight,
   Download,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -23,6 +38,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -63,6 +80,12 @@ interface AgencyRow {
   tenantId: string;
   name: string;
   slug: string;
+  /**
+   * A demo, fixture or test tenant rather than a real agency. The overview only
+   * returns these rows when asked with `?includeNonProduction=true`, and always
+   * leaves them out of the platform totals.
+   */
+  isNonProduction: boolean;
   enrolled: boolean;
   chargesEnabled: boolean;
   deliveredCalls: number;
@@ -143,11 +166,26 @@ export default function PlatformAgenciesPage(): JSX.Element {
   const [enrolmentBusy, setEnrolmentBusy] = useState(false);
   const [enrolmentNote, setEnrolmentNote] = useState<string | null>(null);
 
+  /*
+   * Test agencies, off by default -- the same toggle, and the same words, as
+   * the live board. Without it a row marked as a test agency would vanish from
+   * this table with no way to find it again and mark it back.
+   */
+  const [showTestAgencies, setShowTestAgencies] = useState(false);
+
+  /** The agency whose test/production marking is being confirmed. */
+  const [marking, setMarking] = useState<AgencyRow | null>(null);
+  const [markingNote, setMarkingNote] = useState('');
+  const [markingBusy, setMarkingBusy] = useState(false);
+
   const load = useCallback(async () => {
-    const query = day ? `?day=${encodeURIComponent(day)}` : '';
-    const response = await apiClient.get<
-      Envelope<{ calendarDay: string; agencies: AgencyRow[] }>
-    >(`/api/v1/platform/delivery/overview${query}`);
+    const params = new URLSearchParams();
+    if (day) params.set('day', day);
+    if (showTestAgencies) params.set('includeNonProduction', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await apiClient.get<Envelope<{ calendarDay: string; agencies: AgencyRow[] }>>(
+      `/api/v1/platform/delivery/overview${query}`
+    );
 
     /*
      * Unwrapped by name. Read as a bare body this was `undefined`, so the table
@@ -159,7 +197,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
     setRows(Array.isArray(overview?.agencies) ? overview.agencies : []);
     if (!day && overview?.calendarDay) setDay(overview.calendarDay);
     setLoading(false);
-  }, [day]);
+  }, [day, showTestAgencies]);
 
   useEffect(() => {
     void load();
@@ -305,6 +343,47 @@ export default function PlatformAgenciesPage(): JSX.Element {
     }
   }
 
+  function openMarking(row: AgencyRow): void {
+    setMarking(row);
+    setMarkingNote('');
+  }
+
+  /**
+   * Mark an agency as a test agency, or back as production.
+   *
+   * Deletes, suspends and un-enrols nothing: the server only changes what the
+   * platform screens list and total. The same call reverses it, and it is
+   * audited in both directions, note included.
+   */
+  async function confirmMarking(): Promise<void> {
+    if (!marking) return;
+    const next = !marking.isNonProduction;
+    const note = markingNote.trim();
+    setMarkingBusy(true);
+    try {
+      const response = await apiClient.put(
+        `/api/v1/platform/tenants/${marking.tenantId}/non-production`,
+        { isNonProduction: next, ...(note ? { note } : {}) }
+      );
+      if (response.error) {
+        toast.error('Could not update agency', response.error.message);
+        return;
+      }
+      toast.success(
+        next ? 'Marked as test agency' : 'Marked as production',
+        next
+          ? `${marking.name} is now hidden unless "Show test agencies" is on.`
+          : `${marking.name} is counted in platform figures again.`
+      );
+      setMarking(null);
+      await load();
+    } catch (err) {
+      toast.error('Could not update agency', err instanceof Error ? err.message : undefined);
+    } finally {
+      setMarkingBusy(false);
+    }
+  }
+
   // Flagged first, then enrolled, then the rest. An unenrolled agency needs
   // nothing from this screen and should not sit above one that does.
   const sorted = [...rows].sort(
@@ -313,49 +392,62 @@ export default function PlatformAgenciesPage(): JSX.Element {
       Number(b.enrolled) - Number(a.enrolled) ||
       a.name.localeCompare(b.name)
   );
-  const needingAction = sorted.filter(row => flagCount(row) > 0);
+  // Test agencies are left out of the banner, as the server leaves them out of
+  // its own flagged count: they are listed only so they can be found.
+  const needingAction = sorted.filter(row => !row.isNonProduction && flagCount(row) > 0);
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas">
+        <div className="flex items-center justify-center py-12 text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading agencies
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Cross-agency delivery, revenue and settlement status">
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={day}
-            onChange={event => setDay(event.target.value)}
-            className="h-8 w-40"
-          />
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCw className="mr-2 h-3 w-3" />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => void runSettlement()} disabled={running}>
-            {running && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-            Run settlement
-          </Button>
-        </div>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Cross-agency delivery, revenue and settlement status"
+        actions={
+          <>
+            <Input
+              type="date"
+              value={day}
+              onChange={event => setDay(event.target.value)}
+              className="h-8 w-40"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTestAgencies(v => !v)}
+              aria-pressed={showTestAgencies}
+            >
+              {showTestAgencies ? 'Hide test agencies' : 'Show test agencies'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={() => void runSettlement()} disabled={running}>
+              {running && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+              Run settlement
+            </Button>
+          </>
+        }
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-sm text-dropped-ink">{error}</p>}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Export settlement records</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Export settlement records</PanelTitle>
+        </PanelHeader>
+        <PanelBody>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               From
               <Input
                 type="date"
@@ -364,7 +456,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 className="mt-1 h-8 w-40"
               />
             </label>
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               To
               <Input
                 type="date"
@@ -373,14 +465,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 className="mt-1 h-8 w-40"
               />
             </label>
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               Mode
               <select
                 value={exportMode}
                 onChange={event =>
                   setExportMode(event.target.value as 'ALL' | 'DRY_RUN' | 'CHARGED')
                 }
-                className="mt-1 block h-8 rounded border bg-background px-2 text-sm"
+                className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm"
               >
                 <option value="ALL">All settlements</option>
                 <option value="DRY_RUN">Dry run — nothing was charged</option>
@@ -400,64 +492,64 @@ export default function PlatformAgenciesPage(): JSX.Element {
               )}
               Download CSV
             </Button>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-3">
               Every figure from the settlement record — counts, closing percentage, rate, curve
               version, overrun, block and total. Defaults to the day shown above.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
       {needingAction.length > 0 && (
-        <div className="flex items-start gap-2 rounded border border-ringing bg-ringing-tint p-3 text-sm">
+        <div className="flex items-start gap-2 rounded-card border border-ringing bg-ringing-tint p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
           <div>
             <p className="font-medium">
               {needingAction.length} agenc{needingAction.length === 1 ? 'y needs' : 'ies need'}{' '}
               action
             </p>
-            <p className="text-muted-foreground">
-              {needingAction.map(row => row.name).join(', ')}
-            </p>
+            <p className="text-ink-3">{needingAction.map(row => row.name).join(', ')}</p>
           </div>
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Per agency — {day}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8" />
-                  <TableHead>Agency</TableHead>
-                  <TableHead>Billing</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Applications</TableHead>
-                  <TableHead className="text-right">Closing</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Call cost</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                  <TableHead className="text-right">Rev / call</TableHead>
-                  <TableHead className="text-right">Cost / call</TableHead>
-                  <TableHead>Settlement</TableHead>
-                  <TableHead>Flags</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.map(row => (
-                  <Fragment key={row.tenantId}>
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelHeader>
+          <PanelTitle>Per agency — {day}</PanelTitle>
+        </PanelHeader>
+        <PanelBody flush>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8" />
+                <TableHead>Agency</TableHead>
+                <TableHead>Billing</TableHead>
+                <TableHead className="text-right">Calls</TableHead>
+                <TableHead className="text-right">Applications</TableHead>
+                <TableHead className="text-right">Closing</TableHead>
+                <TableHead className="text-right">Rate</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">Call cost</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
+                <TableHead className="text-right">Rev / call</TableHead>
+                <TableHead className="text-right">Cost / call</TableHead>
+                <TableHead>Settlement</TableHead>
+                <TableHead>Flags</TableHead>
+                <TableHead className="w-10">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map(row => (
+                <Fragment key={row.tenantId}>
                   <TableRow>
                     <TableCell className="align-middle">
                       <button
                         type="button"
                         aria-expanded={openAgency === row.tenantId}
                         aria-label={`Enrolment controls for ${row.name}`}
-                        className="text-muted-foreground"
+                        className="text-ink-3"
                         onClick={() => void openEnrolment(row.tenantId)}
                       >
                         {openAgency === row.tenantId ? (
@@ -467,7 +559,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         )}
                       </button>
                     </TableCell>
-                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{row.name}</span>
+                        {row.isNonProduction && (
+                          <StatusChip value="TEST" label="Test" tone="neutral" size="sm" />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {!row.enrolled ? (
                         <Badge
@@ -498,15 +597,15 @@ export default function PlatformAgenciesPage(): JSX.Element {
                     <TableCell
                       className={cn(
                         'text-right font-medium tabular-nums',
-                        row.margin !== null && row.margin < 0 && 'text-destructive'
+                        row.margin !== null && row.margin < 0 && 'text-dropped-ink'
                       )}
                     >
                       {money(row.margin)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-ink-3">
                       {money(row.revenuePerCall, 4)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-ink-3">
                       {money(row.costPerCall, 4)}
                     </TableCell>
                     <TableCell>
@@ -592,11 +691,30 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         )}
                       </div>
                     </TableCell>
+                    <TableCell className="text-right align-middle">
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            aria-label={`More actions for ${row.name}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => openMarking(row)}>
+                            {row.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
 
                   {openAgency === row.tenantId && (
-                    <TableRow className="bg-sunken hover:bg-sunken">
-                      <TableCell colSpan={14} className="p-4">
+                    <TableRow className="bg-sunken">
+                      <TableCell colSpan={15} className="p-4">
                         <EnrolmentPanel
                           row={row}
                           status={enrolment}
@@ -608,14 +726,54 @@ export default function PlatformAgenciesPage(): JSX.Element {
                       </TableCell>
                     </TableRow>
                   )}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </Table>
+                </Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </PanelBody>
+      </Panel>
+
+      <Dialog
+        open={marking !== null}
+        onOpenChange={open => {
+          if (!open && !markingBusy) setMarking(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {marking?.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+            </DialogTitle>
+            <DialogDescription>
+              {marking?.isNonProduction
+                ? `${marking?.name ?? ''} will be listed on the platform screens and counted in the platform totals again.`
+                : `${marking?.name ?? ''} will be hidden from this page, the live board and the other platform screens unless "Show test agencies" is on, and left out of the platform totals.`}{' '}
+              Nothing is deleted, and its delivery and billing are unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label htmlFor="agency-marking-note" className="t-label text-ink-2">
+              Note (optional)
+            </label>
+            <Textarea
+              id="agency-marking-note"
+              value={markingNote}
+              onChange={event => setMarkingNote(event.target.value)}
+              rows={3}
+            />
           </div>
-        </CardContent>
-      </Card>
-    </CompactPageShell>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarking(null)} disabled={markingBusy}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmMarking()} disabled={markingBusy}>
+              {markingBusy && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+              {marking?.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -693,7 +851,7 @@ function EnrolmentPanel({
 }): JSX.Element {
   if (!status) {
     return (
-      <p className="flex items-center text-sm text-muted-foreground">
+      <p className="flex items-center text-sm text-ink-3">
         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
         Reading this agency&rsquo;s enrolment
       </p>
@@ -704,25 +862,29 @@ function EnrolmentPanel({
     <div className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
         <span className="font-medium">{row.name}</span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           {status.enrolled ? 'Enrolled in billing' : 'Not enrolled in billing'}
           {status.enrolled && (status.chargesEnabled ? ' · charging' : ' · not charging')}
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           Balance <span className="tabular-nums">{status.balance}</span> paid applications
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           Mandate {status.mandate.valid ? 'valid' : status.mandate.status.toLowerCase()}
-          {status.mandate.last4 ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}` : ''}
+          {status.mandate.last4
+            ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}`
+            : ''}
         </span>
       </div>
 
       {note && (
-        <p className="rounded border border-ringing bg-ringing-tint p-2 text-[13px]">{note}</p>
+        <p className="rounded-control border border-ringing bg-ringing-tint p-2 text-[13px]">
+          {note}
+        </p>
       )}
 
       {!status.enrolled && status.blockers.length > 0 && (
-        <p className="text-muted-foreground">
+        <p className="text-ink-3">
           Not ready to enrol. Still needed:{' '}
           <span className="font-medium">
             {status.blockers.map(code => BLOCKER_TEXT[code] ?? code).join(', ')}
@@ -732,7 +894,7 @@ function EnrolmentPanel({
       )}
 
       {status.enrolled && status.pendingDryRunCloseout.credits > 0 && (
-        <p className="text-muted-foreground">
+        <p className="text-ink-3">
           Turning charging on will retire {status.pendingDryRunCloseout.credits} credits from{' '}
           {status.pendingDryRunCloseout.lots}{' '}
           {status.pendingDryRunCloseout.lots === 1 ? 'dry-run block' : 'dry-run blocks'}, so the
@@ -789,7 +951,7 @@ function EnrolmentPanel({
           </Button>
         )}
 
-        <span className="ml-2 text-xs text-muted-foreground">Overrun ceiling:</span>
+        <span className="ml-2 text-xs text-ink-3">Overrun ceiling:</span>
         <Button
           variant="outline"
           size="sm"
@@ -809,13 +971,13 @@ function EnrolmentPanel({
           Back to schedule
         </Button>
 
-        {busy && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        {busy && <Loader2 className="h-3 w-3 animate-spin text-ink-3" />}
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Each of these is recorded in the audit log against your account. Un-enrolling stops
-        gating, metering and settling immediately, and leaves the ledger and every settlement
-        already written exactly as they are.
+      <p className="text-[11px] text-ink-3">
+        Each of these is recorded in the audit log against your account. Un-enrolling stops gating,
+        metering and settling immediately, and leaves the ledger and every settlement already
+        written exactly as they are.
       </p>
     </div>
   );

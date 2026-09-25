@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { formatPhone } from '@/components/domain/phone-cell';
 import { usePhone } from '@/components/phone/phone-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,15 +56,6 @@ export function DialerControls({
     } else {
       setInternalPhoneNumber(value);
     }
-  };
-
-  // Format phone number for display
-  const formatPhoneNumber = (num: string): string => {
-    const cleaned = num.replace(/\D/g, '');
-    if (cleaned.length >= 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-    }
-    return num;
   };
 
   // Format duration as MM:SS
@@ -120,7 +112,7 @@ export function DialerControls({
             </div>
             <div>
               <p className="text-ink font-medium">
-                {currentCall.callerName || formatPhoneNumber(currentCall.phoneNumber)}
+                {currentCall.callerName || formatPhone(currentCall.phoneNumber)}
               </p>
               <p className="text-ink-2 text-sm capitalize">
                 {currentCall.state === 'ringing' ? 'Ringing...' : currentCall.state}

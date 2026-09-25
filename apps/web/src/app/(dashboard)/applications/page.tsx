@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
+import { formatDayRange } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 
 /**
@@ -326,7 +327,7 @@ export default function ApplicationsPage() {
           data-figure-label="Applications"
           data-figure-value={count(summary?.count)}
           icon={FileText}
-          sub={`${range.from} to ${range.to}`}
+          sub={formatDayRange(range.from, range.to)}
         />
         <StatTile
           label="Annualized premium"
@@ -358,7 +359,11 @@ export default function ApplicationsPage() {
       {error && <Notice tone="error">{error}</Notice>}
 
       <Panel className="min-w-0">
-        <PanelHeader action={<span className="t-meta tabular-nums text-ink-3">{`${count(rows.length)} shown`}</span>}>
+        <PanelHeader
+          action={
+            <span className="t-meta tabular-nums text-ink-3">{`${count(rows.length)} shown`}</span>
+          }
+        >
           <PanelTitle>Applications</PanelTitle>
         </PanelHeader>
         <PanelBody flush>
@@ -420,13 +425,17 @@ export default function ApplicationsPage() {
                             : undefined
                         }
                       >
-                        <td className="t-data whitespace-nowrap !text-ink-2">{submitted(row.submittedAt)}</td>
+                        <td className="t-data whitespace-nowrap !text-ink-2">
+                          {submitted(row.submittedAt)}
+                        </td>
                         <td className="font-medium text-ink">{row.carrier}</td>
                         <td className="!text-ink-2">
                           {row.planType ? (PLAN_LABELS[row.planType] ?? row.planType) : '—'}
                         </td>
                         <td className="!text-ink-2">{row.applicant}</td>
-                        <td className="t-data !text-ink-2">{row.carrierApplicationNumber || '—'}</td>
+                        <td className="t-data !text-ink-2">
+                          {row.carrierApplicationNumber || '—'}
+                        </td>
                         <td className="num">
                           {row.faceAmount === null ? '—' : `$${row.faceAmount.toLocaleString()}`}
                         </td>
@@ -434,7 +443,9 @@ export default function ApplicationsPage() {
                           {dollars(row.modalPremium)}
                         </td>
                         <td className="num">{dollars(row.annualizedPremium)}</td>
-                        <td className="max-w-[12rem] truncate !text-ink-2">{row.agentName ?? '—'}</td>
+                        <td className="max-w-[12rem] truncate !text-ink-2">
+                          {row.agentName ?? '—'}
+                        </td>
                         <td>
                           {/*
                             A label, and only a label. Both paths count identically

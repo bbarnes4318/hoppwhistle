@@ -1,13 +1,32 @@
 'use client';
 
-import { BarChart3, Copy, Edit, Pause, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import {
+  BarChart3,
+  Copy,
+  Edit,
+  MoreHorizontal,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { CreateCampaignWizard } from '@/components/campaigns/create-campaign-wizard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  EmptyState,
+  Panel,
+  PanelBody,
+  StatusChip,
+  Toolbar,
+  ToolbarActions,
+  ToolbarSearch,
+  type StatusTone,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -25,6 +50,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
@@ -65,44 +91,15 @@ interface StatsResponse {
   data: CampaignStats[];
 }
 
-// Country flag emoji helper
-function getCountryFlag(countryCode: string): string {
-  const code = countryCode.toUpperCase();
-  if (code.length !== 2) return '🌐';
-  const offset = 127397;
-  return String.fromCodePoint(...[...code].map(c => c.charCodeAt(0) + offset));
-}
-
-// Status badge component
-function StatusBadge({ status }: { status: Campaign['status'] }) {
-  const config = {
-    ACTIVE: {
-      label: 'Live',
-      bg: 'bg-live-tint',
-      text: 'text-live-ink',
-      dot: 'bg-live',
-    },
-    PAUSED: { label: 'Paused', bg: 'bg-ringing-tint', text: 'text-ringing-ink', dot: 'bg-ringing' },
-    ARCHIVED: {
-      label: 'Setup',
-      bg: 'bg-sunken',
-      text: 'text-ink-2',
-      dot: 'bg-ink-3',
-    },
-  };
-  const c = config[status] || config.ARCHIVED;
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
-        c.bg,
-        c.text
-      )}
-    >
-      <span className={cn('h-1.5 w-1.5 rounded-full', c.dot)} />
-      {c.label}
-    </span>
-  );
+/*
+ * CampaignStatus is not in the StatusChip tone map, and the by-name default
+ * for PAUSED is `blocked`; a hand-paused campaign has always read amber here,
+ * so the tone is passed explicitly.
+ */
+function campaignStatusChip(status: Campaign['status']): { label: string; tone: StatusTone } {
+  if (status === 'ACTIVE') return { label: 'Live', tone: 'live' };
+  if (status === 'PAUSED') return { label: 'Paused', tone: 'ringing' };
+  return { label: 'Setup', tone: 'neutral' };
 }
 
 function CampaignsPage() {
@@ -253,269 +250,255 @@ function CampaignsPage() {
   );
 
   return (
-    <CompactPageShell>
-      <CompactPageHeader
-        subtitle={
+    <div className="page-canvas">
+      <PageHeader
+        description={
           canManage
             ? 'Configure campaigns and track performance'
             : 'The campaigns sending your agency calls, and how many each is sending'
         }
-      >
-        {canManage ? (
-          <Button onClick={() => setWizardOpen(true)} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Campaign
-          </Button>
-        ) : null}
-      </CompactPageHeader>
+        actions={
+          canManage ? (
+            <Button onClick={() => setWizardOpen(true)} size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Campaign
+            </Button>
+          ) : null
+        }
+      />
 
-      {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Campaigns
-              </CardTitle>
-              <CardDescription className="text-[10px]">
-                {canManage ? 'View and manage all campaigns' : 'View only'}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search campaigns..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 border-rule text-muted-foreground"
-                onClick={() => {
-                  void fetchCampaigns();
-                  void fetchStats();
-                }}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
-          <Table className="table-dense">
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow className="border-b border-border">
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Name
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Status
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Offer Name
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
-                  Country
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
-                  Recording
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Live
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Hour
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Day
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Month
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Total
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search campaigns..." />
+        <ToolbarActions>
+          <Tooltip content="Refresh" align="end">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Refresh"
+              className="h-8 w-8 p-0"
+              onClick={() => {
+                void fetchCampaigns();
+                void fetchStats();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
+
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
+          {!loading && filteredCampaigns.length === 0 ? (
+            search ? (
+              <EmptyState
+                variant="filtered"
+                headline="No campaigns match your search"
+                secondaryAction={{ label: 'Clear search', onClick: () => setSearch('') }}
+              />
+            ) : (
+              <EmptyState
+                headline="No campaigns yet"
+                action={
+                  canManage
+                    ? { label: 'Create campaign', onClick: () => setWizardOpen(true) }
+                    : undefined
+                }
+              />
+            )
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8">
-                    <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
+                  <TableHead className="pl-5">Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Offer Name</TableHead>
+                  <TableHead className="text-center">Country</TableHead>
+                  <TableHead className="text-center">Recording</TableHead>
+                  <TableHead className="text-right">Live</TableHead>
+                  <TableHead className="text-right">Hour</TableHead>
+                  <TableHead className="text-right">Day</TableHead>
+                  <TableHead className="text-right">Month</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="pr-5 text-right">Actions</TableHead>
                 </TableRow>
-              ) : filteredCampaigns.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={11}
-                    className="text-center py-8 text-muted-foreground text-sm"
-                  >
-                    No campaigns found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredCampaigns.map(campaign => {
-                  const campaignStats = stats.get(campaign.id);
-                  return (
-                    <TableRow key={campaign.id} className="hover:bg-sunken border-b border-border">
-                      {/* Name */}
-                      <TableCell className="py-2 px-3">
-                        <a
-                          href={`/campaigns/${campaign.id}`}
-                          className="font-medium text-brand-ink hover:opacity-80 hover:underline text-sm"
-                        >
-                          {campaign.name}
-                        </a>
-                      </TableCell>
-
-                      {/* Status */}
-                      <TableCell className="py-2 px-3">
-                        <StatusBadge status={campaign.status} />
-                      </TableCell>
-
-                      {/* Offer Name */}
-                      <TableCell className="py-2 px-3 text-sm text-muted-foreground">
-                        {campaign.offerName || '—'}
-                      </TableCell>
-
-                      {/* Country */}
-                      <TableCell className="py-2 px-3 text-center text-lg">
-                        {getCountryFlag(campaign.country)}
-                      </TableCell>
-
-                      {/* Recording */}
-                      <TableCell className="py-2 px-3 text-center text-sm text-muted-foreground">
-                        {campaign.recordingEnabled ? 'Yes' : 'No'}
-                      </TableCell>
-
-                      {/* Live */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-live-ink">
-                        {campaignStats?.liveCount ?? 0}
-                      </TableCell>
-
-                      {/* Hour */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {campaignStats?.hourCount ?? 0}
-                      </TableCell>
-
-                      {/* Day */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {campaignStats?.dayCount ?? 0}
-                      </TableCell>
-
-                      {/* Month */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {campaignStats?.monthCount ?? 0}
-                      </TableCell>
-
-                      {/* Total */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium">
-                        {campaignStats?.totalCount ?? 0}
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="py-2 px-3 text-right">
-                        <div className="flex justify-end gap-0.5">
-                          {canManage ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
-                              title="Edit"
-                            >
-                              <Edit className="h-3.5 w-3.5 text-muted-foreground" />
-                            </Button>
-                          ) : null}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() =>
-                              (window.location.href = `/dashboard?campaignId=${campaign.id}`)
-                            }
-                            title="View Reports"
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-8">
+                      <RefreshCw className="h-5 w-5 animate-spin mx-auto text-ink-3" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredCampaigns.map(campaign => {
+                    const campaignStats = stats.get(campaign.id);
+                    return (
+                      <TableRow key={campaign.id}>
+                        {/* Name */}
+                        <TableCell className="pl-5">
+                          <a
+                            href={`/campaigns/${campaign.id}`}
+                            className="font-medium text-brand-ink hover:opacity-80 hover:underline"
                           >
-                            <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                          {canManage ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleDuplicate(campaign)}
-                                title="Duplicate"
-                              >
-                                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleToggleStatus(campaign)}
-                                title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                              >
-                                {campaign.status === 'ACTIVE' ? (
-                                  <Pause className="h-3.5 w-3.5 text-ringing-ink" />
-                                ) : (
-                                  <Play className="h-3.5 w-3.5 text-live-ink" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => openDeleteDialog(campaign)}
-                                title="Delete"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-dropped-ink" />
-                              </Button>
-                            </>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                            {campaign.name}
+                          </a>
+                        </TableCell>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
+                        {/* Status */}
+                        <TableCell>
+                          <StatusChip
+                            value={campaign.status}
+                            enumName="CampaignStatus"
+                            {...campaignStatusChip(campaign.status)}
+                          />
+                        </TableCell>
+
+                        {/* Offer Name */}
+                        <TableCell className="text-ink-3">{campaign.offerName || '—'}</TableCell>
+
+                        {/* Country */}
+                        {/* The code, not a flag emoji: Windows renders regional
+                          indicators as the bare letters. */}
+                        <TableCell className="t-body text-center text-ink-2">
+                          {campaign.country ? campaign.country.toUpperCase() : '—'}
+                        </TableCell>
+
+                        {/* Recording */}
+                        <TableCell className="text-center text-ink-3">
+                          {campaign.recordingEnabled ? 'Yes' : 'No'}
+                        </TableCell>
+
+                        {/* Live */}
+                        <TableCell className="text-right tabular-nums font-medium text-live-ink">
+                          {campaignStats?.liveCount ?? 0}
+                        </TableCell>
+
+                        {/* Hour */}
+                        <TableCell className="text-right tabular-nums">
+                          {campaignStats?.hourCount ?? 0}
+                        </TableCell>
+
+                        {/* Day */}
+                        <TableCell className="text-right tabular-nums">
+                          {campaignStats?.dayCount ?? 0}
+                        </TableCell>
+
+                        {/* Month */}
+                        <TableCell className="text-right tabular-nums">
+                          {campaignStats?.monthCount ?? 0}
+                        </TableCell>
+
+                        {/* Total */}
+                        <TableCell className="text-right tabular-nums font-medium">
+                          {campaignStats?.totalCount ?? 0}
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell className="pr-5 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            {canManage ? (
+                              <Tooltip content="Edit campaign" align="end">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label={`Edit ${campaign.name}`}
+                                  onClick={() =>
+                                    (window.location.href = `/campaigns/${campaign.id}`)
+                                  }
+                                >
+                                  <Edit className="h-3.5 w-3.5 text-ink-3" />
+                                </Button>
+                              </Tooltip>
+                            ) : null}
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label={`More actions for ${campaign.name}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4 text-ink-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    (window.location.href = `/dashboard?campaignId=${campaign.id}`)
+                                  }
+                                >
+                                  <BarChart3 className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                  View stats
+                                </DropdownMenuItem>
+                                {canManage ? (
+                                  <>
+                                    <DropdownMenuItem
+                                      onSelect={() => void handleDuplicate(campaign)}
+                                    >
+                                      <Copy className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                      Duplicate
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onSelect={() => void handleToggleStatus(campaign)}
+                                    >
+                                      {campaign.status === 'ACTIVE' ? (
+                                        <Pause className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                      ) : (
+                                        <Play className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                      )}
+                                      {campaign.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-dropped-ink focus:text-dropped-ink"
+                                      onSelect={() => openDeleteDialog(campaign)}
+                                    >
+                                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 border-t border-rule py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-ink-3">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </Panel>
 
       {/* Create Campaign Wizard */}
       {canManage ? (
@@ -533,7 +516,7 @@ function CampaignsPage() {
           <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <DialogContent className="max-w-sm">
               <DialogHeader>
-                <DialogTitle>Delete Campaign?</DialogTitle>
+                <DialogTitle>Delete “{selectedCampaign?.name}”?</DialogTitle>
                 <DialogDescription>
                   Are you sure you want to delete <strong>{selectedCampaign?.name}</strong>? This
                   action cannot be undone.
@@ -543,7 +526,11 @@ function CampaignsPage() {
                 <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                >
                   {deleting ? 'Deleting...' : 'Delete'}
                 </Button>
               </DialogFooter>
@@ -551,7 +538,7 @@ function CampaignsPage() {
           </Dialog>
         </>
       ) : null}
-    </CompactPageShell>
+    </div>
   );
 }
 

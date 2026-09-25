@@ -5,19 +5,27 @@ import {
   Check,
   Copy,
   Edit,
+  MoreHorizontal,
   Pause,
   Play,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { pct } from '@/components/delivery/ledger';
+import {
+  EmptyState,
+  Panel,
+  PanelBody,
+  Toolbar,
+  ToolbarActions,
+  ToolbarSearch,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +34,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -37,6 +52,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -248,246 +264,246 @@ function PublishersPage() {
   );
 
   return (
-    <CompactPageShell>
-      <CompactPageHeader subtitle="Configure publisher accounts and track performance">
-        <Button onClick={() => setCreateDialogOpen(true)} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Publisher
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Configure publisher accounts and track performance"
+        actions={
+          <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Publisher
+          </Button>
+        }
+      />
 
-      {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2.5 px-3 border-b border-rule">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Publishers
-              </CardTitle>
-              <CardDescription className="text-[10px]">
-                View and manage all publisher accounts
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search publishers..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 border-rule text-muted-foreground"
-                onClick={() => {
-                  void fetchPublishers();
-                  void fetchStats();
-                }}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow min-h-0 overflow-auto p-0">
-          <Table className="table-dense">
-            <TableHeader className="sticky top-0 bg-sunken z-10">
-              <TableRow className="border-b border-rule">
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Name
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Publisher ID
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Total Calls
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Billable
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Conversion %
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Missed
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
-                  Status
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ) : filteredPublishers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                    No publishers found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredPublishers.map(publisher => {
-                  const pubStats = stats.get(publisher.id);
-                  return (
-                    <TableRow key={publisher.id} className="hover:bg-sunken border-b border-rule">
-                      {/* Name */}
-                      <TableCell className="py-2 px-3">
-                        <button
-                          onClick={() => openEditDialog(publisher)}
-                          className="font-medium text-brand-ink hover:opacity-80 hover:underline text-sm"
-                        >
-                          {publisher.name}
-                        </button>
-                      </TableCell>
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search publishers..." />
+        <ToolbarActions>
+          <Tooltip content="Refresh" align="end">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Refresh"
+              className="h-8 w-8 p-0"
+              onClick={() => {
+                void fetchPublishers();
+                void fetchStats();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
 
-                      {/* Publisher ID (monospace, copyable) */}
-                      <TableCell className="py-2 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <code className="font-mono text-xs text-ink-2 bg-sunken px-1.5 py-0.5 rounded">
-                            {publisher.code}
-                          </code>
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
+          {!loading && filteredPublishers.length === 0 ? (
+            search ? (
+              <EmptyState
+                variant="filtered"
+                headline="No publishers match your search"
+                secondaryAction={{ label: 'Clear search', onClick: () => setSearch('') }}
+              />
+            ) : (
+              <EmptyState
+                headline="No publishers yet"
+                action={{ label: 'Add publisher', onClick: () => setCreateDialogOpen(true) }}
+              />
+            )
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-5">Name</TableHead>
+                  <TableHead>Publisher ID</TableHead>
+                  <TableHead className="text-right">Total Calls</TableHead>
+                  <TableHead className="text-right">Billable</TableHead>
+                  <TableHead className="text-right">Conversion %</TableHead>
+                  <TableHead className="text-right">Missed</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="pr-5 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <RefreshCw className="h-5 w-5 animate-spin mx-auto text-ink-3" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPublishers.map(publisher => {
+                    const pubStats = stats.get(publisher.id);
+                    return (
+                      <TableRow key={publisher.id}>
+                        {/* Name */}
+                        <TableCell className="pl-5">
                           <button
-                            onClick={() => {
-                              void copyToClipboard(publisher.code);
-                            }}
-                            className="text-muted-foreground hover:text-ink transition-colors"
-                            title="Copy to clipboard"
-                          >
-                            {copiedId === publisher.code ? (
-                              <Check className="h-3.5 w-3.5 text-live-ink" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </TableCell>
-
-                      {/* Total Calls */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {pubStats?.totalCalls.toLocaleString() ?? 0}
-                      </TableCell>
-
-                      {/* Billable Calls */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {pubStats?.billableCalls.toLocaleString() ?? 0}
-                      </TableCell>
-
-                      {/* Conversion % */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {pubStats?.conversionRate.toFixed(1) ?? '0.0'}%
-                      </TableCell>
-
-                      {/* Missed Calls */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
-                        {pubStats?.missedCalls.toLocaleString() ?? 0}
-                      </TableCell>
-
-                      {/* Status */}
-                      <TableCell className="py-2 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span
-                            className={cn(
-                              'h-2 w-2 rounded-full',
-                              publisher.status === 'ACTIVE' ? 'bg-live' : 'bg-ringing'
-                            )}
-                          />
-                          <span className="text-xs text-ink-3">
-                            {publisher.status === 'ACTIVE' ? 'Active' : 'Paused'}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="py-2 px-3 text-right">
-                        <div className="flex justify-end gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
                             onClick={() => openEditDialog(publisher)}
-                            title="Edit"
+                            className="font-medium text-brand-ink hover:opacity-80 hover:underline"
                           >
-                            <Edit className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() =>
-                              (window.location.href = `/dashboard?publisherId=${publisher.id}`)
-                            }
-                            title="View Reports"
-                          >
-                            <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleToggleStatus(publisher)}
-                            title={publisher.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                          >
-                            {publisher.status === 'ACTIVE' ? (
-                              <Pause className="h-3.5 w-3.5 text-ringing-ink" />
-                            ) : (
-                              <Play className="h-3.5 w-3.5 text-live-ink" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => openDeleteDialog(publisher)}
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-dropped-ink" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                            {publisher.name}
+                          </button>
+                        </TableCell>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
+                        {/* Publisher ID (monospace, copyable) */}
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {/* The full id is 32 hex characters; eight tell rows
+                              apart, the tooltip and the copy button carry the rest. */}
+                            <Tooltip content={publisher.code}>
+                              <code
+                                tabIndex={0}
+                                className="t-data rounded bg-sunken px-1.5 py-0.5 text-ink-2"
+                              >
+                                {publisher.code.length > 8
+                                  ? `${publisher.code.slice(0, 8)}…`
+                                  : publisher.code}
+                              </code>
+                            </Tooltip>
+                            <button
+                              onClick={() => {
+                                void copyToClipboard(publisher.code);
+                              }}
+                              className="text-ink-3 hover:text-ink transition-colors"
+                              title="Copy to clipboard"
+                              aria-label={`Copy publisher ID for ${publisher.name}`}
+                            >
+                              {copiedId === publisher.code ? (
+                                <Check className="h-3.5 w-3.5 text-live-ink" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </TableCell>
+
+                        {/* Total Calls */}
+                        <TableCell className="text-right tabular-nums">
+                          {pubStats?.totalCalls.toLocaleString() ?? 0}
+                        </TableCell>
+
+                        {/* Billable Calls */}
+                        <TableCell className="text-right tabular-nums">
+                          {pubStats?.billableCalls.toLocaleString() ?? 0}
+                        </TableCell>
+
+                        {/* Conversion % -- no calls, no rate: a dash, not 0.0%. */}
+                        <TableCell className="text-right tabular-nums">
+                          {pct(pubStats?.totalCalls ? pubStats.conversionRate : null, 1)}
+                        </TableCell>
+
+                        {/* Missed Calls */}
+                        <TableCell className="text-right tabular-nums">
+                          {pubStats?.missedCalls.toLocaleString() ?? 0}
+                        </TableCell>
+
+                        {/* Status */}
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span
+                              className={cn(
+                                'h-2 w-2 rounded-full',
+                                publisher.status === 'ACTIVE' ? 'bg-live' : 'bg-ringing'
+                              )}
+                            />
+                            <span className="text-xs text-ink-3">
+                              {publisher.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell className="pr-5 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Tooltip content="Edit publisher" align="end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label={`Edit ${publisher.name}`}
+                                onClick={() => openEditDialog(publisher)}
+                              >
+                                <Edit className="h-3.5 w-3.5 text-ink-3" />
+                              </Button>
+                            </Tooltip>
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label={`More actions for ${publisher.name}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4 text-ink-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    (window.location.href = `/dashboard?publisherId=${publisher.id}`)
+                                  }
+                                >
+                                  <BarChart3 className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                  View stats
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => void handleToggleStatus(publisher)}
+                                >
+                                  {publisher.status === 'ACTIVE' ? (
+                                    <Pause className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                  ) : (
+                                    <Play className="mr-2 h-3.5 w-3.5 text-ink-3" />
+                                  )}
+                                  {publisher.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-dropped-ink focus:text-dropped-ink"
+                                  onSelect={() => openDeleteDialog(publisher)}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 border-t border-rule py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-ink-3">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </Panel>
 
       {/* Create Publisher Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -515,16 +531,12 @@ function PublishersPage() {
                 onChange={e => setFormData(f => ({ ...f, email: e.target.value }))}
                 placeholder="publisher@example.com"
               />
-              <p className="text-xs text-muted-foreground">
-                A welcome email will be sent to this address
-              </p>
+              <p className="text-xs text-ink-3">A welcome email will be sent to this address</p>
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="recordings">Access to Recordings</Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow publisher to access call recordings
-                </p>
+                <p className="text-xs text-ink-3">Allow publisher to access call recordings</p>
               </div>
               <Switch
                 id="recordings"
@@ -539,7 +551,7 @@ function PublishersPage() {
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={saving || !formData.name.trim()}>
+            <Button onClick={() => void handleCreate()} disabled={saving || !formData.name.trim()}>
               {saving ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -575,9 +587,7 @@ function PublishersPage() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="edit-recordings">Access to Recordings</Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow publisher to access call recordings
-                </p>
+                <p className="text-xs text-ink-3">Allow publisher to access call recordings</p>
               </div>
               <Switch
                 id="edit-recordings"
@@ -588,7 +598,7 @@ function PublishersPage() {
               />
             </div>
             {selectedPublisher && (
-              <div className="text-xs text-muted-foreground border-t pt-4 mt-2">
+              <div className="text-xs text-ink-3 border-t border-rule pt-4 mt-2">
                 <p>
                   <strong>Publisher ID:</strong>{' '}
                   <code className="font-mono bg-sunken px-1 rounded text-ink-2">
@@ -602,7 +612,7 @@ function PublishersPage() {
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEdit} disabled={saving || !formData.name.trim()}>
+            <Button onClick={() => void handleEdit()} disabled={saving || !formData.name.trim()}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
@@ -613,7 +623,7 @@ function PublishersPage() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete Publisher?</DialogTitle>
+            <DialogTitle>Delete “{selectedPublisher?.name}”?</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete <strong>{selectedPublisher?.name}</strong>? This
               action cannot be undone.
@@ -623,16 +633,15 @@ function PublishersPage() {
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={saving}>
+            <Button variant="destructive" onClick={() => void handleDelete()} disabled={saving}>
               {saving ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CompactPageShell>
+    </div>
   );
 }
-
 
 export default function GuardedPublishersPage() {
   return (

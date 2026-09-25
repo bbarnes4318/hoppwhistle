@@ -11,17 +11,23 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  EmptyState,
+  Panel,
+  PanelBody,
+  Toolbar,
+  ToolbarActions,
+  ToolbarSearch,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -50,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -644,9 +651,7 @@ function BuyersPage() {
     }
     const value = stats ? stats[field] : 0;
     return (
-      <span className="font-mono text-xs">
-        ${typeof value === 'number' ? value.toLocaleString() : '0'}
-      </span>
+      <span className="t-num">${typeof value === 'number' ? value.toLocaleString() : '0'}</span>
     );
   };
 
@@ -654,367 +659,371 @@ function BuyersPage() {
   // RENDER
   // -------------------------------------------------------------------------
   return (
-    <CompactPageShell>
-      <CompactPageHeader subtitle="Configure buyer billing, permissions, and targets">
-        <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Buyer
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Configure buyer billing, permissions, and targets"
+        actions={
+          <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Buyer
+          </Button>
+        }
+      />
 
-      {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2.5 px-3 border-b border-rule">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Buyers
-              </CardTitle>
-              <CardDescription className="text-[10px]">
-                Manage buyer accounts, permissions, and nested targets
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search buyers..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 border-rule text-muted-foreground"
-                onClick={() => {
-                  void fetchBuyers();
-                  void fetchStats();
-                }}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search buyers..." />
+        <ToolbarActions>
+          <Tooltip content="Refresh" align="end">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              aria-label="Refresh"
+              onClick={() => {
+                void fetchBuyers();
+                void fetchStats();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
 
-        <CardContent className="flex-grow min-h-0 overflow-auto p-0">
-          <Table className="table-dense">
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow className="text-xs">
-                <TableHead className="w-8"></TableHead>
-                <TableHead>Company Name</TableHead>
-                <TableHead>Sub ID</TableHead>
-                <TableHead className="text-center">Pause</TableHead>
-                <TableHead className="text-center">Caps</TableHead>
-                <TableHead className="text-center">Dispute</TableHead>
-                <TableHead className="text-right">Hour</TableHead>
-                <TableHead className="text-right">Day</TableHead>
-                <TableHead className="text-right">Month</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
+          {!loading && filteredBuyers.length === 0 ? (
+            search.trim() ? (
+              <EmptyState
+                variant="filtered"
+                headline="No buyers match your search"
+                action={{ label: 'Clear search', onClick: () => setSearch('') }}
+              />
+            ) : (
+              <EmptyState
+                headline="No buyers yet"
+                body="Add a buyer to route calls your agents can't take."
+                action={{ label: 'Add buyer', onClick: () => setCreateBuyerOpen(true) }}
+              />
+            )
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
+                  <TableHead className="w-8 pl-5"></TableHead>
+                  <TableHead>Company Name</TableHead>
+                  <TableHead>Sub ID</TableHead>
+                  <TableHead className="text-center">Pause</TableHead>
+                  <TableHead className="text-center">Caps</TableHead>
+                  <TableHead className="text-center">Dispute</TableHead>
+                  <TableHead className="text-right">Hour</TableHead>
+                  <TableHead className="text-right">Day</TableHead>
+                  <TableHead className="text-right">Month</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="pr-5 text-right">Actions</TableHead>
                 </TableRow>
-              ) : filteredBuyers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                    No buyers found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredBuyers.map(buyer => (
-                  <>
-                    {/* Buyer Row */}
-                    <TableRow
-                      key={buyer.id}
-                      className={cn(
-                        'text-xs cursor-pointer hover:bg-sunken',
-                        expandedBuyerId === buyer.id && 'bg-sunken'
-                      )}
-                      onClick={() => toggleExpand(buyer.id)}
-                    >
-                      <TableCell className="w-8 p-2">
-                        {expandedBuyerId === buyer.id ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto text-ink-3" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredBuyers.map(buyer => (
+                    <>
+                      {/* Buyer Row */}
+                      <TableRow
+                        key={buyer.id}
+                        className={cn(
+                          'cursor-pointer',
+                          expandedBuyerId === buyer.id && 'bg-sunken'
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{buyer.name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {buyer.code}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{buyer.subId || '—'}</TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canPauseTargets}
-                          onCheckedChange={() => handleTogglePermission(buyer, 'canPauseTargets')}
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canSetCaps}
-                          onCheckedChange={() => handleTogglePermission(buyer, 'canSetCaps')}
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                        <Switch
-                          checked={buyer.canDisputeConversions}
-                          onCheckedChange={() =>
-                            handleTogglePermission(buyer, 'canDisputeConversions')
-                          }
-                          className="scale-75"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueHour" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueDay" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueMonth" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <RevenueCell buyerId={buyer.id} field="revenueTotal" />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <div
-                            className={cn(
-                              'w-2 h-2 rounded-full',
-                              buyer.status === 'ACTIVE' && 'bg-live',
-                              buyer.status === 'PAUSED' && 'bg-ringing',
-                              buyer.status === 'INACTIVE' && 'bg-ink-3'
-                            )}
+                        onClick={() => toggleExpand(buyer.id)}
+                      >
+                        <TableCell className="w-8 pl-5">
+                          {expandedBuyerId === buyer.id ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{buyer.name}</div>
+                          <div className="t-data text-ink-3">{buyer.code}</div>
+                        </TableCell>
+                        <TableCell className="text-ink-3">{buyer.subId || '—'}</TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canPauseTargets}
+                            onCheckedChange={() =>
+                              void handleTogglePermission(buyer, 'canPauseTargets')
+                            }
+                            className="scale-75"
                           />
-                          <span className="capitalize text-xs">{buyer.status.toLowerCase()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-end gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => openEditBuyerDialog(buyer)}
-                            title="Edit"
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleToggleBuyerStatus(buyer)}
-                            title={buyer.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                          >
-                            {buyer.status === 'ACTIVE' ? (
-                              <Pause className="h-3.5 w-3.5 text-ringing-ink" />
-                            ) : (
-                              <Play className="h-3.5 w-3.5 text-live-ink" />
-                            )}
-                          </Button>
-                          {buyer.billingType === 'UPFRONT' && (
+                        </TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canSetCaps}
+                            onCheckedChange={() => void handleTogglePermission(buyer, 'canSetCaps')}
+                            className="scale-75"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Switch
+                            checked={buyer.canDisputeConversions}
+                            onCheckedChange={() =>
+                              void handleTogglePermission(buyer, 'canDisputeConversions')
+                            }
+                            className="scale-75"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueHour" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueDay" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueMonth" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RevenueCell buyerId={buyer.id} field="revenueTotal" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={cn(
+                                'w-2 h-2 rounded-full',
+                                buyer.status === 'ACTIVE' && 'bg-live',
+                                buyer.status === 'PAUSED' && 'bg-ringing',
+                                buyer.status === 'INACTIVE' && 'bg-ink-3'
+                              )}
+                            />
+                            <span className="capitalize">{buyer.status.toLowerCase()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="pr-5 text-right" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-end gap-0.5">
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => openCreditsDialog(buyer)}
-                              title="Add Credits"
+                              onClick={() => openEditBuyerDialog(buyer)}
+                              title="Edit"
                             >
-                              <Wallet className="h-3.5 w-3.5 text-money-ink" />
+                              <Edit className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Expanded Targets Row */}
-                    {expandedBuyerId === buyer.id && (
-                      <TableRow key={`${buyer.id}-targets`}>
-                        <TableCell colSpan={12} className="p-0 bg-sunken">
-                          <div className="p-4">
-                            {/* Targets Header */}
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="font-semibold text-sm">
-                                Targets for {expandedBuyer?.name}
-                              </h3>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => void handleToggleBuyerStatus(buyer)}
+                              title={buyer.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                            >
+                              {buyer.status === 'ACTIVE' ? (
+                                <Pause className="h-3.5 w-3.5 text-ringing-ink" />
+                              ) : (
+                                <Play className="h-3.5 w-3.5 text-live-ink" />
+                              )}
+                            </Button>
+                            {buyer.billingType === 'UPFRONT' && (
                               <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => setCreateTargetOpen(true)}
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openCreditsDialog(buyer)}
+                                title="Add Credits"
                               >
-                                <Plus className="mr-1 h-3 w-3" />
-                                Add Target
+                                <Wallet className="h-3.5 w-3.5 text-money-ink" />
                               </Button>
-                            </div>
-
-                            {/* Targets Table */}
-                            {targetsLoading ? (
-                              <div className="flex justify-center py-4">
-                                <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
-                              </div>
-                            ) : targets.length === 0 ? (
-                              <div className="text-center py-4 text-muted-foreground text-sm">
-                                No targets configured. Add one to start routing calls.
-                              </div>
-                            ) : (
-                              <Table className="table-dense">
-                                <TableHeader>
-                                  <TableRow className="text-xs">
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Destination</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Geo</TableHead>
-                                    <TableHead>Cap Settings</TableHead>
-                                    <TableHead>Concurrency</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {targets.map(target => {
-                                    const liveCalls = getLiveCallsForTarget(target.id);
-                                    const capPercent =
-                                      target.maxCap > 0
-                                        ? Math.min(
-                                            100,
-                                            ((statsMap.get(buyer.id)?.capConsumedToday || 0) /
-                                              target.maxCap) *
-                                              100
-                                          )
-                                        : 0;
-
-                                    return (
-                                      <TableRow key={target.id} className="text-xs">
-                                        <TableCell className="font-medium">{target.name}</TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-1.5">
-                                            {target.type === 'SIP' ? (
-                                              <Globe className="h-3.5 w-3.5 text-money-ink" />
-                                            ) : (
-                                              <Phone className="h-3.5 w-3.5 text-live-ink" />
-                                            )}
-                                            <span className="font-mono text-[10px] truncate max-w-[150px]">
-                                              {target.destination}
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="outline" className="text-[10px]">
-                                            {target.type}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          {target.isNational ||
-                                          target.acceptedStates?.length === 0 ? (
-                                            <Badge
-                                              variant="secondary"
-                                              className="text-[10px] bg-live-tint text-live-ink"
-                                            >
-                                              <Globe className="h-3 w-3 mr-1" />
-                                              National
-                                            </Badge>
-                                          ) : (
-                                            <Badge
-                                              variant="outline"
-                                              className="text-[10px]"
-                                              title={target.acceptedStates?.join(', ')}
-                                            >
-                                              <MapPin className="h-3 w-3 mr-1" />
-                                              {target.acceptedStates?.length} states
-                                            </Badge>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          {target.maxCap > 0 ? (
-                                            <div className="flex items-center gap-2">
-                                              <Progress value={capPercent} className="w-16 h-1.5" />
-                                              <span className="text-[10px] text-muted-foreground">
-                                                {Math.round(capPercent)}%
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-muted-foreground">No cap</span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          {liveStatusLoading ? (
-                                            <Skeleton className="h-4 w-12" />
-                                          ) : (
-                                            <span
-                                              className={cn(
-                                                'font-mono',
-                                                liveCalls !== null &&
-                                                  liveCalls >= target.maxConcurrency &&
-                                                  'text-dropped-ink font-bold'
-                                              )}
-                                            >
-                                              {liveCalls ?? 0}/{target.maxConcurrency}
-                                            </span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Switch
-                                            checked={target.status === 'ACTIVE'}
-                                            onCheckedChange={() => handleToggleTargetStatus(target)}
-                                            className="scale-75"
-                                          />
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <div className="flex justify-end gap-0.5">
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-6 w-6"
-                                              onClick={() => openEditTargetDialog(target)}
-                                            >
-                                              <Edit className="h-3 w-3" />
-                                            </Button>
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-6 w-6 text-dropped-ink"
-                                              onClick={() => handleDeleteTarget(target)}
-                                            >
-                                              <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  })}
-                                </TableBody>
-                              </Table>
                             )}
                           </div>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </>
-                ))
-              )}
-            </TableBody>
-          </Table>
+
+                      {/* Expanded Targets Row */}
+                      {expandedBuyerId === buyer.id && (
+                        <TableRow key={`${buyer.id}-targets`}>
+                          <TableCell colSpan={12} className="p-0 bg-sunken">
+                            <div className="p-4">
+                              {/* Targets Header */}
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-semibold text-sm">
+                                  Targets for {expandedBuyer?.name}
+                                </h3>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => setCreateTargetOpen(true)}
+                                >
+                                  <Plus className="mr-1 h-3 w-3" />
+                                  Add Target
+                                </Button>
+                              </div>
+
+                              {/* Targets Table */}
+                              {targetsLoading ? (
+                                <div className="flex justify-center py-4">
+                                  <RefreshCw className="h-5 w-5 animate-spin text-ink-3" />
+                                </div>
+                              ) : targets.length === 0 ? (
+                                <div className="text-center py-4 text-ink-3 text-sm">
+                                  No targets configured. Add one to start routing calls.
+                                </div>
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Name</TableHead>
+                                      <TableHead>Destination</TableHead>
+                                      <TableHead>Type</TableHead>
+                                      <TableHead>Geo</TableHead>
+                                      <TableHead>Cap Settings</TableHead>
+                                      <TableHead>Concurrency</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {targets.map(target => {
+                                      const liveCalls = getLiveCallsForTarget(target.id);
+                                      const capPercent =
+                                        target.maxCap > 0
+                                          ? Math.min(
+                                              100,
+                                              ((statsMap.get(buyer.id)?.capConsumedToday || 0) /
+                                                target.maxCap) *
+                                                100
+                                            )
+                                          : 0;
+
+                                      return (
+                                        <TableRow key={target.id}>
+                                          <TableCell className="font-medium">
+                                            {target.name}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-1.5">
+                                              {target.type === 'SIP' ? (
+                                                <Globe className="h-3.5 w-3.5 text-money-ink" />
+                                              ) : (
+                                                <Phone className="h-3.5 w-3.5 text-live-ink" />
+                                              )}
+                                              <span className="t-data truncate max-w-[150px]">
+                                                {target.destination}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="outline" className="t-meta">
+                                              {target.type}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            {target.isNational ||
+                                            target.acceptedStates?.length === 0 ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="t-meta bg-live-tint text-live-ink"
+                                              >
+                                                <Globe className="h-3 w-3 mr-1" />
+                                                National
+                                              </Badge>
+                                            ) : (
+                                              <Badge
+                                                variant="outline"
+                                                className="t-meta"
+                                                title={target.acceptedStates?.join(', ')}
+                                              >
+                                                <MapPin className="h-3 w-3 mr-1" />
+                                                {target.acceptedStates?.length} states
+                                              </Badge>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            {target.maxCap > 0 ? (
+                                              <div className="flex items-center gap-2">
+                                                <Progress
+                                                  value={capPercent}
+                                                  className="w-16 h-1.5"
+                                                />
+                                                <span className="t-meta text-ink-3">
+                                                  {Math.round(capPercent)}%
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-ink-3">No cap</span>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            {liveStatusLoading ? (
+                                              <Skeleton className="h-4 w-12" />
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  't-num',
+                                                  liveCalls !== null &&
+                                                    liveCalls >= target.maxConcurrency &&
+                                                    'text-dropped-ink font-bold'
+                                                )}
+                                              >
+                                                {liveCalls ?? 0}/{target.maxConcurrency}
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Switch
+                                              checked={target.status === 'ACTIVE'}
+                                              onCheckedChange={() =>
+                                                void handleToggleTargetStatus(target)
+                                              }
+                                              className="scale-75"
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-right">
+                                            <div className="flex justify-end gap-0.5">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                onClick={() => openEditTargetDialog(target)}
+                                              >
+                                                <Edit className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 text-dropped-ink"
+                                                onClick={() => void handleDeleteTarget(target)}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-4 border-t">
+            <div className="flex items-center justify-center gap-2 py-4 border-t border-rule">
               <Button
                 variant="outline"
                 size="sm"
@@ -1023,7 +1032,7 @@ function BuyersPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-ink-3">
                 Page {page} of {totalPages}
               </span>
               <Button
@@ -1036,8 +1045,8 @@ function BuyersPage() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
       {/* Create Buyer Dialog */}
       <Dialog open={createBuyerOpen} onOpenChange={setCreateBuyerOpen}>
@@ -1129,7 +1138,7 @@ function BuyersPage() {
                 />
               </div>
             </div>
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <Label className="text-sm font-medium mb-3 block">Permissions</Label>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1174,7 +1183,7 @@ function BuyersPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleCreateBuyer}
+              onClick={() => void handleCreateBuyer()}
               disabled={saving || !buyerForm.name || !buyerForm.code || !buyerForm.publisherId}
             >
               {saving ? 'Creating...' : 'Create Buyer'}
@@ -1268,7 +1277,7 @@ function BuyersPage() {
                 />
               </div>
             </div>
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <Label className="text-sm font-medium mb-3 block">Permissions</Label>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1312,7 +1321,7 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setEditBuyerOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditBuyer} disabled={saving}>
+            <Button onClick={() => void handleEditBuyer()} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
@@ -1328,10 +1337,10 @@ function BuyersPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="text-center py-4">
-              <div className="text-sm text-muted-foreground mb-1">Current Balance</div>
+              <div className="text-sm text-ink-3 mb-1">Current Balance</div>
               <div className="text-3xl font-bold">
                 {selectedBuyer?.leadsRemaining.toLocaleString() ?? 0}
-                <span className="text-lg font-normal text-muted-foreground ml-2">leads</span>
+                <span className="text-lg font-normal text-ink-3 ml-2">leads</span>
               </div>
             </div>
             <div className="grid gap-2">
@@ -1344,9 +1353,9 @@ function BuyersPage() {
                 min={1}
               />
             </div>
-            <div className="text-center text-sm text-muted-foreground">
+            <div className="text-center text-sm text-ink-3">
               New balance will be:{' '}
-              <span className="font-semibold text-foreground">
+              <span className="font-semibold text-ink">
                 {((selectedBuyer?.leadsRemaining ?? 0) + creditsAmount).toLocaleString()} leads
               </span>
             </div>
@@ -1355,7 +1364,7 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setCreditsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddCredits} disabled={saving || creditsAmount < 1}>
+            <Button onClick={() => void handleAddCredits()} disabled={saving || creditsAmount < 1}>
               {saving ? 'Adding...' : `Add ${creditsAmount} Credits`}
             </Button>
           </DialogFooter>
@@ -1467,7 +1476,7 @@ function BuyersPage() {
               </div>
             </div>
             {/* State Filtering Section */}
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <div className="flex items-center gap-2 mb-3">
                 <MapPin className="h-4 w-4" />
                 <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
@@ -1477,7 +1486,7 @@ function BuyersPage() {
                   <Label htmlFor="isNational" className="font-normal">
                     National (Accept All States)
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-3">
                     When enabled, this target accepts calls from all states
                   </p>
                 </div>
@@ -1496,12 +1505,12 @@ function BuyersPage() {
               </div>
               {targetForm.acceptedStates.length > 0 || !targetForm.acceptedStates.length ? (
                 <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">
+                  <Label className="text-xs text-ink-3">
                     {targetForm.acceptedStates.length === 0
                       ? 'National: Accepts calls from ALL states'
                       : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
                   </Label>
-                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border border-rule rounded-md p-2">
                     {US_STATES.map(state => (
                       <Button
                         key={state.code}
@@ -1560,7 +1569,7 @@ function BuyersPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleCreateTarget}
+              onClick={() => void handleCreateTarget()}
               disabled={saving || !targetForm.name || !targetForm.destination}
             >
               {saving ? 'Creating...' : 'Create Target'}
@@ -1688,7 +1697,7 @@ function BuyersPage() {
               </Select>
             </div>
             {/* State Filtering Section */}
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <div className="flex items-center gap-2 mb-3">
                 <MapPin className="h-4 w-4" />
                 <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
@@ -1698,7 +1707,7 @@ function BuyersPage() {
                   <Label htmlFor="edit-isNational" className="font-normal">
                     National (Accept All States)
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-3">
                     When enabled, this target accepts calls from all states
                   </p>
                 </div>
@@ -1713,12 +1722,12 @@ function BuyersPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-xs text-ink-3">
                   {targetForm.acceptedStates.length === 0
                     ? 'National: Accepts calls from ALL states'
                     : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
                 </Label>
-                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border border-rule rounded-md p-2">
                   {US_STATES.map(state => (
                     <Button
                       key={state.code}
@@ -1772,16 +1781,15 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setEditTargetOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditTarget} disabled={saving}>
+            <Button onClick={() => void handleEditTarget()} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CompactPageShell>
+    </div>
   );
 }
-
 
 export default function GuardedBuyersPage() {
   return (

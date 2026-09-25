@@ -13,10 +13,10 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -369,8 +369,8 @@ function ReportsPage() {
 
   if (isAgent || (!showProfitability && !showPublisherRevenue && !showBuyerCosts)) {
     return (
-      <div className="h-full flex items-center justify-center p-8 text-center">
-        <p className="text-muted-foreground text-sm max-w-md">
+      <div className="page-canvas items-center text-center">
+        <p className="t-body max-w-md text-ink-3">
           You do not have the required roles to view billing and financial reports. Please contact
           your system administrator.
         </p>
@@ -379,38 +379,34 @@ function ReportsPage() {
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Analyze publisher revenue, buyer costs, and campaign profit margins.">
-        <Button
-          onClick={() => void handleCsvExport()}
-          disabled={exporting || loading}
-          size="sm"
-          className="h-8 text-xs bg-brand hover:bg-brand-ink text-ink"
-        >
-          {exporting ? (
-            <>
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              Generating CSV...
-            </>
-          ) : (
-            <>
-              <Download className="mr-2 h-3.5 w-3.5" />
-              Export CSV
-            </>
-          )}
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Analyze publisher revenue, buyer costs, and campaign profit margins."
+        actions={
+          <Button onClick={() => void handleCsvExport()} disabled={exporting || loading} size="sm">
+            {exporting ? (
+              <>
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                Generating CSV...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-3.5 w-3.5" />
+                Export CSV
+              </>
+            )}
+          </Button>
+        }
+      />
 
       {/* Date & Filter Controls Bar */}
-      <div className="bg-card border border-rule rounded-lg p-2 flex flex-col gap-2.5 md:flex-row md:items-center justify-between flex-shrink-0">
+      <div className="bg-surface border border-rule rounded-card shadow-card p-2 flex flex-col gap-2.5 md:flex-row md:items-center justify-between flex-shrink-0">
         <div className="flex flex-wrap gap-3 items-center flex-1">
           {/* Start Date */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-              Start:
-            </span>
+            <span className="t-label text-ink-3">Start:</span>
             <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
               <Input
                 type="date"
                 value={startDate}
@@ -418,16 +414,16 @@ function ReportsPage() {
                   setStartDate(e.target.value);
                   setDatePreset('custom');
                 }}
-                className="pl-8 h-7 text-xs w-32 bg-background border-rule text-foreground"
+                className="pl-8 h-7 text-xs w-32 border-rule text-ink"
               />
             </div>
           </div>
 
           {/* End Date */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase font-semibold">End:</span>
+            <span className="t-label text-ink-3">End:</span>
             <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
               <Input
                 type="date"
                 value={endDate}
@@ -435,21 +431,19 @@ function ReportsPage() {
                   setEndDate(e.target.value);
                   setDatePreset('custom');
                 }}
-                className="pl-8 h-7 text-xs w-32 bg-background border-rule text-foreground"
+                className="pl-8 h-7 text-xs w-32 border-rule text-ink"
               />
             </div>
           </div>
 
           {/* Campaign Select */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-              Campaign:
-            </span>
+            <span className="t-label text-ink-3">Campaign:</span>
             <Select
               value={campaignId || 'all-campaigns'}
               onValueChange={val => setCampaignId(val === 'all-campaigns' ? '' : val)}
             >
-              <SelectTrigger className="h-7 text-xs w-40 bg-background border-rule text-foreground">
+              <SelectTrigger className="h-7 text-xs w-40 border-rule text-ink">
                 <SelectValue placeholder="All Campaigns" />
               </SelectTrigger>
               <SelectContent className="bg-surface border-rule text-ink text-xs">
@@ -473,10 +467,8 @@ function ReportsPage() {
                 type="button"
                 onClick={() => handlePresetSelect(p)}
                 className={cn(
-                  'px-2 py-0.5 text-[10px] font-semibold rounded capitalize transition-colors',
-                  datePreset === p
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                  't-meta px-2 py-0.5 font-medium rounded capitalize transition-colors',
+                  datePreset === p ? 'bg-surface text-ink shadow-card' : 'text-ink-3 hover:text-ink'
                 )}
               >
                 {p.replace('-', ' ')}
@@ -487,7 +479,8 @@ function ReportsPage() {
           <Button
             variant="outline"
             size="icon"
-            className="h-7 w-7 border-rule text-muted-foreground"
+            className="h-7 w-7 border-rule text-ink-3"
+            aria-label="Refresh report"
             onClick={() => void fetchReport()}
             disabled={loading}
           >
@@ -521,8 +514,8 @@ function ReportsPage() {
           <TabsContent value="campaign-profitability" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-shrink-0">
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3 flex items-center justify-between">
                   <span>Total Revenue</span>
                   <DollarSign className="h-3 w-3 text-live-ink" />
                 </div>
@@ -537,8 +530,8 @@ function ReportsPage() {
                 </div>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3 flex items-center justify-between">
                   <span>Publisher Payout</span>
                   <Users className="h-3 w-3 text-ringing-ink" />
                 </div>
@@ -553,8 +546,8 @@ function ReportsPage() {
                 </div>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3 flex items-center justify-between">
                   <span>Routing Cost</span>
                   <Phone className="h-3 w-3 text-dropped-ink" />
                 </div>
@@ -569,8 +562,8 @@ function ReportsPage() {
                 </div>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3 flex items-center justify-between">
                   <span>Net Profit</span>
                   <TrendingUp className="h-3 w-3 text-live-ink" />
                 </div>
@@ -587,7 +580,7 @@ function ReportsPage() {
                   <Badge
                     variant="outline"
                     className={cn(
-                      'text-[8px] px-1.5 py-0 border-none',
+                      't-meta px-1.5 py-0 border-none',
                       profitReport && profitReport.totals.margin >= 0
                         ? 'text-live-ink bg-live-tint'
                         : 'text-dropped-ink bg-dropped-tint'
@@ -600,16 +593,14 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="w-full bg-card border-rule shadow-sm">
-              <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Profit & Margin Ledger
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table className="table-dense">
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow className="border-b border-rule">
+            <Panel className="min-w-0 overflow-hidden">
+              <PanelHeader>
+                <PanelTitle>Profit & Margin Ledger</PanelTitle>
+              </PanelHeader>
+              <PanelBody flush>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       <TableHead>Campaign</TableHead>
                       <TableHead className="text-right">Total Calls</TableHead>
                       <TableHead className="text-right">Connected</TableHead>
@@ -629,29 +620,26 @@ function ReportsPage() {
                     {loading ? (
                       <TableRow>
                         <TableCell colSpan={13} className="text-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-ink-3" />
                         </TableCell>
                       </TableRow>
                     ) : !profitReport || profitReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell
-                          colSpan={13}
-                          className="text-center py-8 text-muted-foreground text-xs"
-                        >
+                        <TableCell colSpan={13} className="t-meta text-center py-8 text-ink-3">
                           No profit report records found.
                         </TableCell>
                       </TableRow>
                     ) : (
                       <>
                         {profitReport.rows.map(row => (
-                          <TableRow key={row.campaignId} className="hover:bg-sunken">
+                          <TableRow key={row.campaignId}>
                             <TableCell className="font-semibold text-ink">
                               {row.campaignName}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {row.totalCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                            <TableCell className="text-right tabular-nums text-ink-3">
                               {row.connectedCalls}
                             </TableCell>
                             <TableCell className="text-right tabular-nums text-money-ink font-medium">
@@ -666,7 +654,7 @@ function ReportsPage() {
                             <TableCell className="text-right tabular-nums text-dropped-ink">
                               ${Number(row.callCost).toFixed(2)}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                            <TableCell className="text-right tabular-nums text-ink-3">
                               ${Number(row.otherCosts).toFixed(2)}
                             </TableCell>
                             <TableCell
@@ -681,7 +669,7 @@ function ReportsPage() {
                               <Badge
                                 variant="outline"
                                 className={cn(
-                                  'font-mono text-[9px] px-1 py-0 border-none',
+                                  't-meta tabular px-1 py-0 border-none',
                                   row.margin >= 0
                                     ? 'text-live-ink bg-live-tint'
                                     : 'text-dropped-ink bg-dropped-tint'
@@ -717,7 +705,7 @@ function ReportsPage() {
                           </TableRow>
                         ))}
                         {/* Totals Row */}
-                        <TableRow className="bg-sunken font-bold border-t-2 border-rule hover:bg-sunken text-ink">
+                        <TableRow className="bg-sunken font-bold border-t-2 border-rule text-ink">
                           <TableCell>Report Totals</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {profitReport.totals.totalCalls}
@@ -737,7 +725,7 @@ function ReportsPage() {
                           <TableCell className="text-right tabular-nums text-dropped-ink">
                             ${Number(profitReport.totals.callCost).toFixed(2)}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                          <TableCell className="text-right tabular-nums text-ink-3">
                             ${Number(profitReport.totals.otherCosts).toFixed(2)}
                           </TableCell>
                           <TableCell
@@ -754,7 +742,7 @@ function ReportsPage() {
                             <Badge
                               variant="outline"
                               className={cn(
-                                'font-mono text-[9px] px-1.5 py-0 border-none',
+                                't-meta tabular px-1.5 py-0 border-none',
                                 profitReport.totals.margin >= 0
                                   ? 'text-live-ink bg-live-tint'
                                   : 'text-dropped-ink bg-dropped-tint'
@@ -778,7 +766,7 @@ function ReportsPage() {
                           </TableCell>
                           <TableCell
                             className={cn(
-                              'text-right tabular-nums text-sm font-extrabold',
+                              'text-right tabular-nums font-extrabold',
                               Number(profitReport.totals.netPayableReceivable) >= 0
                                 ? 'text-live-ink'
                                 : 'text-dropped-ink'
@@ -791,8 +779,8 @@ function ReportsPage() {
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </PanelBody>
+            </Panel>
           </TabsContent>
         )}
 
@@ -801,27 +789,23 @@ function ReportsPage() {
           <TabsContent value="publisher-revenue" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Total Inbound Calls
-                </div>
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3">Total Inbound Calls</div>
                 <div className="text-base font-bold text-ink mt-1">
                   {pubReport ? pubReport.totals.totalCalls.toLocaleString() : '0'}
                 </div>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2 flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Billable Calls
-                  </div>
+                  <div className="t-label text-ink-3">Billable Calls</div>
                   <div className="text-base font-bold text-live-ink mt-1">
                     {pubReport ? pubReport.totals.billableCalls.toLocaleString() : '0'}
                   </div>
                 </div>
                 <Badge
                   variant="outline"
-                  className="text-[8px] px-1 py-0 border-none text-live-ink bg-live-tint font-mono"
+                  className="t-meta tabular px-1 py-0 border-none text-live-ink bg-live-tint"
                 >
                   {pubReport && pubReport.totals.totalCalls > 0
                     ? (
@@ -833,10 +817,8 @@ function ReportsPage() {
                 </Badge>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Total Earnings
-                </div>
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3">Total Earnings</div>
                 <div className="text-base font-bold text-live-ink mt-1">
                   $
                   {pubReport
@@ -850,16 +832,14 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="w-full bg-card border-rule shadow-sm">
-              <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Publisher Revenue Ledger
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table className="table-dense">
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow className="border-b border-rule">
+            <Panel className="min-w-0 overflow-hidden">
+              <PanelHeader>
+                <PanelTitle>Publisher Revenue Ledger</PanelTitle>
+              </PanelHeader>
+              <PanelBody flush>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       <TableHead>Publisher Name</TableHead>
                       <TableHead>Campaign Name</TableHead>
                       <TableHead className="text-right">Total Calls</TableHead>
@@ -876,41 +856,33 @@ function ReportsPage() {
                     {loading ? (
                       <TableRow>
                         <TableCell colSpan={10} className="text-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-ink-3" />
                         </TableCell>
                       </TableRow>
                     ) : !pubReport || pubReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell
-                          colSpan={10}
-                          className="text-center py-8 text-muted-foreground text-xs"
-                        >
+                        <TableCell colSpan={10} className="t-meta text-center py-8 text-ink-3">
                           No publisher revenue records found.
                         </TableCell>
                       </TableRow>
                     ) : (
                       <>
                         {pubReport.rows.map((row, idx) => (
-                          <TableRow
-                            key={`${row.publisherId}-${row.campaignId}-${idx}`}
-                            className="hover:bg-sunken"
-                          >
+                          <TableRow key={`${row.publisherId}-${row.campaignId}-${idx}`}>
                             <TableCell className="font-semibold text-ink">
                               {row.publisherName}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {row.campaignName}
-                            </TableCell>
+                            <TableCell className="text-xs text-ink-3">{row.campaignName}</TableCell>
                             <TableCell className="text-right tabular-nums">
                               {row.totalCalls}
                             </TableCell>
                             <TableCell className="text-right tabular-nums text-live-ink font-medium">
                               {row.billableCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                            <TableCell className="text-right tabular-nums text-ink-3">
                               {row.nonBillableCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-mono text-xs text-muted-foreground">
+                            <TableCell className="text-right tabular-nums font-mono text-xs text-ink-3">
                               ${Number(row.payoutRate).toFixed(2)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-bold text-live-ink">
@@ -928,7 +900,7 @@ function ReportsPage() {
                           </TableRow>
                         ))}
                         {/* Totals Row */}
-                        <TableRow className="bg-sunken font-bold border-t-2 border-rule hover:bg-sunken text-ink">
+                        <TableRow className="bg-sunken font-bold border-t-2 border-rule text-ink">
                           <TableCell colSpan={2}>Report Totals</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {pubReport.totals.totalCalls}
@@ -936,7 +908,7 @@ function ReportsPage() {
                           <TableCell className="text-right tabular-nums text-live-ink">
                             {pubReport.totals.billableCalls}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                          <TableCell className="text-right tabular-nums text-ink-3">
                             {pubReport.totals.nonBillableCalls}
                           </TableCell>
                           <TableCell className="text-right">—</TableCell>
@@ -957,8 +929,8 @@ function ReportsPage() {
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </PanelBody>
+            </Panel>
           </TabsContent>
         )}
 
@@ -967,27 +939,23 @@ function ReportsPage() {
           <TabsContent value="buyer-costs" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Total Inbound Calls
-                </div>
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3">Total Inbound Calls</div>
                 <div className="text-base font-bold text-ink mt-1">
                   {buyerReport ? buyerReport.totals.totalCalls.toLocaleString() : '0'}
                 </div>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2 flex items-center justify-between">
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Billable Calls
-                  </div>
+                  <div className="t-label text-ink-3">Billable Calls</div>
                   <div className="text-base font-bold text-live-ink mt-1">
                     {buyerReport ? buyerReport.totals.billableCalls.toLocaleString() : '0'}
                   </div>
                 </div>
                 <Badge
                   variant="outline"
-                  className="text-[8px] px-1 py-0 border-none text-live-ink bg-live-tint font-mono"
+                  className="t-meta tabular px-1 py-0 border-none text-live-ink bg-live-tint"
                 >
                   {buyerReport && buyerReport.totals.totalCalls > 0
                     ? (
@@ -999,10 +967,8 @@ function ReportsPage() {
                 </Badge>
               </div>
 
-              <div className="rounded border border-rule bg-card p-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Total Buyer Cost
-                </div>
+              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
+                <div className="t-label text-ink-3">Total Buyer Cost</div>
                 <div className="text-base font-bold text-dropped-ink mt-1">
                   $
                   {buyerReport
@@ -1016,16 +982,14 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="w-full bg-card border-rule shadow-sm">
-              <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Buyer Costs Ledger
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table className="table-dense">
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow className="border-b border-rule">
+            <Panel className="min-w-0 overflow-hidden">
+              <PanelHeader>
+                <PanelTitle>Buyer Costs Ledger</PanelTitle>
+              </PanelHeader>
+              <PanelBody flush>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
                       <TableHead>Buyer Name</TableHead>
                       <TableHead>Campaign Name</TableHead>
                       <TableHead>Destination DID</TableHead>
@@ -1045,34 +1009,24 @@ function ReportsPage() {
                     {loading ? (
                       <TableRow>
                         <TableCell colSpan={13} className="text-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-ink-3" />
                         </TableCell>
                       </TableRow>
                     ) : !buyerReport || buyerReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell
-                          colSpan={13}
-                          className="text-center py-8 text-muted-foreground text-xs"
-                        >
+                        <TableCell colSpan={13} className="t-meta text-center py-8 text-ink-3">
                           No buyer cost records found.
                         </TableCell>
                       </TableRow>
                     ) : (
                       <>
                         {buyerReport.rows.map((row, idx) => (
-                          <TableRow
-                            key={`${row.buyerId}-${row.campaignId}-${idx}`}
-                            className="hover:bg-sunken"
-                          >
+                          <TableRow key={`${row.buyerId}-${row.campaignId}-${idx}`}>
                             <TableCell className="font-semibold text-ink">
                               {row.buyerName}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {row.campaignName}
-                            </TableCell>
-                            <TableCell className="font-mono text-[10px] font-semibold">
-                              {row.destinationNumber}
-                            </TableCell>
+                            <TableCell className="text-xs text-ink-3">{row.campaignName}</TableCell>
+                            <TableCell className="t-data">{row.destinationNumber}</TableCell>
                             <TableCell className="text-right tabular-nums">
                               {row.totalCalls}
                             </TableCell>
@@ -1082,10 +1036,10 @@ function ReportsPage() {
                             <TableCell className="text-right tabular-nums text-xs">
                               {(row.billableRate * 100).toFixed(0)}%
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                            <TableCell className="text-right tabular-nums text-xs text-ink-3">
                               {Math.round(row.averageDuration)}s
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-mono text-xs text-muted-foreground">
+                            <TableCell className="text-right tabular-nums font-mono text-xs text-ink-3">
                               ${Number(row.pricePerBillableCall).toFixed(2)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-bold text-dropped-ink">
@@ -1106,7 +1060,7 @@ function ReportsPage() {
                           </TableRow>
                         ))}
                         {/* Totals Row */}
-                        <TableRow className="bg-sunken font-bold border-t-2 border-rule hover:bg-sunken text-ink">
+                        <TableRow className="bg-sunken font-bold border-t-2 border-rule text-ink">
                           <TableCell colSpan={3}>Report Totals</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {buyerReport.totals.totalCalls}
@@ -1146,15 +1100,14 @@ function ReportsPage() {
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </PanelBody>
+            </Panel>
           </TabsContent>
         )}
       </Tabs>
-    </CompactPageShell>
+    </div>
   );
 }
-
 
 export default function GuardedReportsPage() {
   return (

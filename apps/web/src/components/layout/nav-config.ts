@@ -1,30 +1,43 @@
 import {
-  AudioLines,
+  AudioWaveform,
+  BadgeDollarSign,
   BarChart3,
   Bot,
+  Briefcase,
   Building2,
   Contact,
   CreditCard,
   Disc3,
+  FileBarChart,
+  FileCheck2,
   FileText,
   Gauge,
   GitBranch,
   Globe,
+  HandCoins,
+  Handshake,
+  Hash,
   Headphones,
   LayoutDashboard,
   Megaphone,
+  Mic,
   MonitorPlay,
   PhoneCall,
   PhoneForwarded,
+  PieChart,
+  Radio,
   Receipt,
+  ReceiptText,
   Settings,
   Shield,
+  ShieldBan,
   Telescope,
   TrendingUp,
   Trophy,
   UserCog,
-  Users,
+  UsersRound,
   Wallet,
+  Webhook,
 } from 'lucide-react';
 
 import { MY_PAYROLL_ENABLED } from '@/lib/feature-flags';
@@ -67,8 +80,8 @@ export const PLATFORM_NAV: NavGroup[] = [
         title: 'Every agency right now: calls up, delivered and applications so far today',
       },
       { name: 'Power Dialer', href: '/call-center', icon: Headphones },
-      { name: 'Calls', href: '/calls', icon: AudioLines },
-      { name: 'Applications', href: '/applications', icon: FileText },
+      { name: 'Calls', href: '/calls', icon: PhoneCall },
+      { name: 'Applications', href: '/applications', icon: FileCheck2 },
       {
         name: 'Leaderboard',
         href: '/leaderboard',
@@ -79,7 +92,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       {
         name: 'CRM reports',
         href: '/insurance-leads/reports',
-        icon: BarChart3,
+        icon: PieChart,
         title: 'Which leads Ameriquote accepted, which it refused, and why',
       },
     ],
@@ -88,9 +101,9 @@ export const PLATFORM_NAV: NavGroup[] = [
     label: 'Market',
     items: [
       { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-      { name: 'Publishers', href: '/publishers', icon: Users },
-      { name: 'Buyers', href: '/buyers', icon: Users },
-      { name: 'Numbers', href: '/numbers', icon: PhoneCall },
+      { name: 'Publishers', href: '/publishers', icon: Radio },
+      { name: 'Buyers', href: '/buyers', icon: Briefcase },
+      { name: 'Numbers', href: '/numbers', icon: Hash },
     ],
   },
   {
@@ -106,18 +119,18 @@ export const PLATFORM_NAV: NavGroup[] = [
       {
         name: 'Team',
         href: '/delivery/team',
-        icon: BarChart3,
+        icon: UsersRound,
         title: 'What the team produced over a week, a month, a pay period',
       },
       {
         name: 'Settlements',
         href: '/delivery/settlements',
-        icon: Receipt,
+        icon: ReceiptText,
         title: 'One row per settled Delivery Day, downloadable as CSV',
       },
       { name: 'Billing', href: '/billing', icon: CreditCard },
-      { name: 'Payouts', href: '/payouts', icon: Wallet, pending: true },
-      { name: 'Reports', href: '/reports', icon: BarChart3 },
+      { name: 'Payouts', href: '/payouts', icon: HandCoins, pending: true },
+      { name: 'Reports', href: '/reports', icon: FileBarChart },
     ],
   },
   {
@@ -139,7 +152,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       {
         name: 'Voice studio',
         href: '/voice-studio',
-        icon: AudioLines,
+        icon: Mic,
         title: 'Clone Fish Audio voices, preview scripts, tune delivery',
       },
     ],
@@ -147,7 +160,7 @@ export const PLATFORM_NAV: NavGroup[] = [
   {
     label: 'Tools',
     items: [
-      { name: 'Recording analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
+      { name: 'Recording analyzer', href: '/tools/recording-analyzer', icon: AudioWaveform },
       { name: 'Campaign map', href: '/tools/campaign-map', icon: Globe },
       {
         name: 'Industry research',
@@ -181,11 +194,11 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: UserCog,
         title: 'Everyone in the agency, and whether each agent can take a call',
       },
-      { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
-      { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
+      { name: 'Webhooks', href: '/settings/webhooks', icon: Webhook },
+      { name: 'DNC Lists', href: '/settings/dnc', icon: ShieldBan },
       { name: 'VOIP Carrier Routing', href: '/settings/carriers', icon: PhoneForwarded },
       { name: 'Quotas & Budgets', href: '/settings/quotas', icon: Wallet },
-      { name: 'Payroll Admin', href: '/admin/payroll', icon: Receipt },
+      { name: 'Payroll Admin', href: '/admin/payroll', icon: BadgeDollarSign },
       {
         name: 'Agencies',
         href: '/admin/agencies',
@@ -195,7 +208,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       {
         name: 'Onboard an agency',
         href: '/admin/onboarding',
-        icon: Building2,
+        icon: Handshake,
         title: 'Take an agency from nothing to enrolled, in the runbook order',
       },
     ],
@@ -205,7 +218,7 @@ export const PLATFORM_NAV: NavGroup[] = [
 export function publisherNav(canViewRecordings: boolean): NavGroup[] {
   const items: NavItem[] = [
     { name: 'Dashboard', href: '/publisher/dashboard', icon: LayoutDashboard },
-    { name: 'Calls', href: '/publisher/calls', icon: AudioLines },
+    { name: 'Calls', href: '/publisher/calls', icon: PhoneCall },
     { name: 'Earnings', href: '/publisher/earnings', icon: Receipt },
     { name: 'Payouts', href: '/publisher/payouts', icon: Wallet },
   ];
@@ -221,7 +234,7 @@ export function publisherNav(canViewRecordings: boolean): NavGroup[] {
 export function buyerNav(canViewRecordings: boolean): NavGroup[] {
   const items: NavItem[] = [
     { name: 'Dashboard', href: '/buyer/dashboard', icon: LayoutDashboard },
-    { name: 'Calls', href: '/buyer/calls', icon: AudioLines },
+    { name: 'Calls', href: '/buyer/calls', icon: PhoneCall },
     { name: 'Spend', href: '/buyer/spend', icon: BarChart3 },
     { name: 'Targeting', href: '/buyer/targeting', icon: Globe },
     { name: 'Billing', href: '/buyer/billing', icon: Receipt },
@@ -412,14 +425,14 @@ export const AGENT_NAV: NavGroup[] = [
       {
         name: 'My calls',
         href: '/calls',
-        icon: AudioLines,
+        icon: PhoneCall,
         title: 'Your calls. Narrowed server-side to the ones you took.',
       },
       { name: 'Power Dialer', href: '/call-center', icon: Headphones },
       {
         name: 'My applications',
         href: '/applications',
-        icon: FileText,
+        icon: FileCheck2,
         title: 'The applications you wrote',
       },
       {

@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { count } from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { LiveBoardLoading, LiveBoardView, formatAsOf } from '@/components/live/live-board-view';
 import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
@@ -75,17 +75,17 @@ export default function AgencyLiveBoardPage(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <LiveBoardLoading />
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (!board) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <p className="t-body text-ink-3">{error ?? 'No live data yet.'}</p>
-      </CompactPageShell>
+      </div>
     );
   }
 
@@ -94,13 +94,16 @@ export default function AgencyLiveBoardPage(): JSX.Element {
   const working = buyers.filter(row => row.callsInFlight > 0 || row.deliveredToday > 0).length;
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle={`Your agency · ${board.day} · as of ${asOf} ${board.timeZone}`}>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          <RefreshCw className="mr-2 h-3 w-3" />
-          Refresh
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description={`Your agency · ${board.day} · as of ${asOf} ${board.timeZone}`}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="mr-2 h-3 w-3" />
+            Refresh
+          </Button>
+        }
+      />
 
       <LiveBoardView
         totals={board.totals}
@@ -133,6 +136,6 @@ export default function AgencyLiveBoardPage(): JSX.Element {
           </>
         }
       />
-    </CompactPageShell>
+    </div>
   );
 }

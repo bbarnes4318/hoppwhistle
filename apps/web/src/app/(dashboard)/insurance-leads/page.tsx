@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -164,6 +165,7 @@ interface LeadList {
 
 export default function CrmPage() {
   const { makeCall } = usePhone();
+  const router = useRouter();
 
   const [view, setView] = useState<View>('prospects');
   const [period, setPeriod] = useState<Period>('all');
@@ -313,6 +315,11 @@ export default function CrmPage() {
     (filters.search ? 1 : 0) +
     (['leadStage', 'followUp', 'listId'] as const).filter(k => filters[k] !== 'all').length;
 
+  const clearFilters = () => {
+    setFilters(EMPTY_PROSPECT_FILTERS);
+    setProspectPage(1);
+  };
+
   const handleDeleteList = async () => {
     const list = leadLists.find(l => l.id === filters.listId);
     if (!list) return;
@@ -407,7 +414,7 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('prospects')}
-          className="text-left"
+          className="rounded-card text-left transition-shadow hover:shadow-raised"
           aria-pressed={view === 'prospects'}
         >
           <StatTile
@@ -416,7 +423,7 @@ export default function CrmPage() {
             sub="not yet submitted"
             icon={Users}
             loading={summaryLoading}
-            className={view === 'prospects' ? 'ring-2 ring-brand' : undefined}
+            className={view === 'prospects' ? 'ring-2 ring-brand-ink' : undefined}
           />
         </button>
         <button
@@ -425,7 +432,7 @@ export default function CrmPage() {
             setView('prospects');
             setFilter('followUp', 'DUE');
           }}
-          className="text-left"
+          className="rounded-card text-left transition-shadow hover:shadow-raised"
         >
           <StatTile
             label="Follow-ups Due"
@@ -438,7 +445,7 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('submitted')}
-          className="text-left"
+          className="rounded-card text-left transition-shadow hover:shadow-raised"
           aria-pressed={view === 'submitted'}
         >
           <StatTile
@@ -447,10 +454,14 @@ export default function CrmPage() {
             sub={periodLabel}
             icon={FileCheck2}
             loading={summaryLoading}
-            className={view === 'submitted' ? 'ring-2 ring-brand' : undefined}
+            className={view === 'submitted' ? 'ring-2 ring-brand-ink' : undefined}
           />
         </button>
-        <button type="button" onClick={() => setView('submitted')} className="text-left">
+        <button
+          type="button"
+          onClick={() => setView('submitted')}
+          className="rounded-card text-left transition-shadow hover:shadow-raised"
+        >
           <StatTile
             label="Annual Premium"
             figure={<MoneyCell amount={summary?.annualPremium ?? 0} unit="major" size="figure" />}
@@ -528,14 +539,7 @@ export default function CrmPage() {
                 </button>
               </Tooltip>
             )}
-            {activeFilterCount > 0 && (
-              <ToolbarClear
-                onClick={() => {
-                  setFilters(EMPTY_PROSPECT_FILTERS);
-                  setProspectPage(1);
-                }}
-              />
-            )}
+            {activeFilterCount > 0 && <ToolbarClear onClick={clearFilters} />}
             <ToolbarActions>
               <ToolbarMeta className="tabular-nums">
                 {prospectTotal.toLocaleString()} prospect{prospectTotal === 1 ? '' : 's'}
@@ -550,6 +554,10 @@ export default function CrmPage() {
               onSelectLead={setSelectedLeadId}
               selectedLeadIds={selectedLeadIds}
               onSelectLeadsChange={setSelectedLeadIds}
+              filtered={activeFilterCount > 0}
+              onClearFilters={clearFilters}
+              onImport={() => setIsImportOpen(true)}
+              onAddProspect={() => router.push('/intake')}
             />
           </div>
 

@@ -166,7 +166,7 @@ describe('the agency principal reading', () => {
     const now = slots.find(s => s.id === 'rate');
 
     expect(now?.value).toBe('$159.00');
-    expect(`${now?.label} ${now?.sub}`).toMatch(/cost per app.*now/i);
+    expect(`${now?.label} ${now?.sub}`).toMatch(/cost per app.*current rate/i);
     expect(slots.map(s => s.id)).not.toContain('tracking');
     expect(rendered(slots)).not.toMatch(/tomorrow/i);
   });

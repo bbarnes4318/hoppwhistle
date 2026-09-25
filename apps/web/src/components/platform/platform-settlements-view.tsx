@@ -13,7 +13,6 @@ import {
   ToolbarSelect,
 } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageShell } from '@/components/layout/compact-layout';
 import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -189,7 +188,7 @@ export function PlatformSettlementsView(): JSX.Element {
   }
 
   return (
-    <CompactPageShell fullHeight={false} data-print="page">
+    <div className="page-canvas" data-print="page">
       {/*
         "Every agency" leads the line; see platform-delivery-view.tsx. The
         filters and the export share that one row: they are controls, not
@@ -237,12 +236,12 @@ export function PlatformSettlementsView(): JSX.Element {
       {error && <p className="t-body text-dropped-ink">{error}</p>}
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center py-12 t-body text-ink-3">
+        <div className="flex items-center justify-center py-12 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading settlements
         </div>
       ) : (
-        <div className="overflow-auto rounded-card border border-rule bg-surface">
+        <div className="overflow-x-auto rounded-card border border-rule bg-surface">
           <Ledger>
             <thead>
               <tr>
@@ -291,7 +290,7 @@ export function PlatformSettlementsView(): JSX.Element {
                 </tr>
               )}
               {rows.map(row => (
-                <tr key={row.id} className="hover:bg-sunken">
+                <tr key={row.id}>
                   <td className="max-w-[16rem]">
                     <span className="truncate font-medium text-ink">
                       {row.agency ?? row.tenantId}
@@ -345,6 +344,6 @@ export function PlatformSettlementsView(): JSX.Element {
         * rate includes an agreed offset above the curve; hover for the two halves. Enter an agency
         in the switcher to narrow this page to it; leaving returns here.
       </p>
-    </CompactPageShell>
+    </div>
   );
 }

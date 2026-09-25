@@ -166,17 +166,17 @@ export function LiveBoardView({
                         A live dot, and only when something is actually up. A
                         permanent indicator beside every row would be
                         decoration; this one is the thing the eye is looking for.
+                        An idle row keeps an 8px transparent spacer in its place
+                        so the names stay aligned.
                       */}
                       <span
                         className={cn(
                           'h-2 w-2 shrink-0 rounded-full',
-                          row.callsInFlight > 0 ? 'bg-live animate-pulse' : 'bg-rule'
+                          row.callsInFlight > 0 && 'bg-live animate-pulse'
                         )}
                         aria-hidden="true"
                       />
-                      <span className={cn('font-medium', row.pinLast && 'italic')}>
-                        {row.name}
-                      </span>
+                      <span className={cn('font-medium', row.pinLast && 'italic')}>{row.name}</span>
                       {row.tag ? (
                         <span className="rounded-control bg-sunken px-1 t-meta text-ink-3">
                           {row.tag}
@@ -184,16 +184,12 @@ export function LiveBoardView({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right t-num">
                     {row.callsInFlight > 0 ? count(row.callsInFlight) : '—'}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {count(row.deliveredToday)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {count(row.applicationsToday)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right t-num">{count(row.deliveredToday)}</TableCell>
+                  <TableCell className="text-right t-num">{count(row.applicationsToday)}</TableCell>
+                  <TableCell className="text-right t-num">
                     {row.closingPct === null ? '—' : pct(row.closingPct)}
                   </TableCell>
                 </TableRow>

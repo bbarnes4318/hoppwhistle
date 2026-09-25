@@ -580,18 +580,7 @@ export function isValidRoutingNumber(routing: string): boolean {
 }
 
 /**
- * Format phone number for display
+ * Format phone number for display. The product's one display formatter; see
+ * lib/format-phone.
  */
-export function formatPhone(phone: string): string {
-  if (!phone) return '';
-  const digits = phone.replace(/\D/g, '');
-
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-
-  return phone;
-}
+export { formatPhone } from '@/lib/format-phone';
