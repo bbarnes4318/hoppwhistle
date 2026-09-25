@@ -4,7 +4,8 @@ import { Activity, Clock, History, Keyboard, Settings } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { KPICard } from '@/components/dashboard/kpi-card';
-import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { usePhone, type CallInfo } from '@/components/phone';
 import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
 import { AvailabilitySwitch } from '@/components/phone/availability-switch';
@@ -66,37 +67,48 @@ export default function PhonePage(): JSX.Element {
   const recent = useMemo(() => mergeRecentCalls(callHistory, []), [callHistory]);
 
   return (
-    <CompactPageShell>
+    <div className="page-canvas">
       {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
 
-      <CompactPageHeader subtitle="Place calls, set your status and look back over today's calls">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-control border border-rule bg-surface px-2.5 py-1">
-            <StateDot tone={meta.tone} />
-            <span className={cn('text-xs font-semibold', TONE_TEXT[meta.tone])}>{meta.label}</span>
-          </span>
-          <AgentStatusSelector />
-          {/*
-           * Beside it, not inside it: the selector reports what the softphone
-           * is doing, this is what the agent decided, and it is the one
-           * routing obeys.
-           */}
-          <AvailabilitySwitch className="rounded-control border border-rule bg-surface px-2.5 py-1" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(true)}
-            className="gap-1.5"
-          >
-            <Settings className="h-3.5 w-3.5" aria-hidden />
-            Screen pop fields
-          </Button>
-        </div>
-      </CompactPageHeader>
+      <PageHeader
+        description="Place calls, set your status and look back over today's calls"
+        actions={
+          <>
+            <span className="inline-flex items-center gap-2 rounded-control border border-rule bg-surface px-2.5 py-1">
+              <StateDot tone={meta.tone} />
+              <span className={cn('text-xs font-semibold', TONE_TEXT[meta.tone])}>
+                {meta.label}
+              </span>
+            </span>
+            <AgentStatusSelector />
+            {/*
+             * Beside it, not inside it: the selector reports what the softphone
+             * is doing, this is what the agent decided, and it is the one
+             * routing obeys.
+             */}
+            <AvailabilitySwitch className="rounded-control border border-rule bg-surface px-2.5 py-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="gap-1.5"
+            >
+              <Settings className="h-3.5 w-3.5" aria-hidden />
+              Screen pop fields
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-3">
-        <div className="flex min-h-0 flex-col lg:col-span-1">
-          <DenseCard title="Keypad" icon={Keyboard} className="min-h-0 flex-1">
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <Panel className="lg:col-span-1">
+          <PanelHeader>
+            <PanelTitle className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4 text-ink-3" aria-hidden />
+              Keypad
+            </PanelTitle>
+          </PanelHeader>
+          <PanelBody>
             {/*
              * The floating softphone has its own keypad, and both listening
              * to the keyboard would type every digit twice. This one listens
@@ -113,11 +125,11 @@ export default function PhonePage(): JSX.Element {
                 />
               }
             />
-          </DenseCard>
-        </div>
+          </PanelBody>
+        </Panel>
 
-        <div className="flex min-h-0 flex-col gap-4 overflow-hidden lg:col-span-2">
-          <div className="grid flex-shrink-0 gap-4 sm:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <KPICard
               title="Calls today"
               value={todaysCalls.length}
@@ -133,11 +145,23 @@ export default function PhonePage(): JSX.Element {
             />
           </div>
 
-          <DenseCard title="Recent calls" icon={History} className="min-h-0 flex-1">
-            <RecentCallsList items={recent} now={now} onRedial={number => void makeCall(number)} />
-          </DenseCard>
+          <Panel className="min-w-0">
+            <PanelHeader>
+              <PanelTitle className="flex items-center gap-2">
+                <History className="h-4 w-4 text-ink-3" aria-hidden />
+                Recent calls
+              </PanelTitle>
+            </PanelHeader>
+            <PanelBody>
+              <RecentCallsList
+                items={recent}
+                now={now}
+                onRedial={number => void makeCall(number)}
+              />
+            </PanelBody>
+          </Panel>
         </div>
       </div>
-    </CompactPageShell>
+    </div>
   );
 }

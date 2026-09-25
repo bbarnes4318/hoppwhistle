@@ -10,10 +10,10 @@ import {
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -145,9 +145,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
   const load = useCallback(async () => {
     const query = day ? `?day=${encodeURIComponent(day)}` : '';
-    const response = await apiClient.get<
-      Envelope<{ calendarDay: string; agencies: AgencyRow[] }>
-    >(`/api/v1/platform/delivery/overview${query}`);
+    const response = await apiClient.get<Envelope<{ calendarDay: string; agencies: AgencyRow[] }>>(
+      `/api/v1/platform/delivery/overview${query}`
+    );
 
     /*
      * Unwrapped by name. Read as a bare body this was `undefined`, so the table
@@ -317,45 +317,48 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas">
+        <div className="flex items-center justify-center py-12 text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading agencies
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Cross-agency delivery, revenue and settlement status">
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={day}
-            onChange={event => setDay(event.target.value)}
-            className="h-8 w-40"
-          />
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCw className="mr-2 h-3 w-3" />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => void runSettlement()} disabled={running}>
-            {running && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-            Run settlement
-          </Button>
-        </div>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Cross-agency delivery, revenue and settlement status"
+        actions={
+          <>
+            <Input
+              type="date"
+              value={day}
+              onChange={event => setDay(event.target.value)}
+              className="h-8 w-40"
+            />
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={() => void runSettlement()} disabled={running}>
+              {running && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+              Run settlement
+            </Button>
+          </>
+        }
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-sm text-dropped-ink">{error}</p>}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Export settlement records</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Export settlement records</PanelTitle>
+        </PanelHeader>
+        <PanelBody>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               From
               <Input
                 type="date"
@@ -364,7 +367,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 className="mt-1 h-8 w-40"
               />
             </label>
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               To
               <Input
                 type="date"
@@ -373,14 +376,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 className="mt-1 h-8 w-40"
               />
             </label>
-            <label className="text-xs text-muted-foreground">
+            <label className="text-xs text-ink-3">
               Mode
               <select
                 value={exportMode}
                 onChange={event =>
                   setExportMode(event.target.value as 'ALL' | 'DRY_RUN' | 'CHARGED')
                 }
-                className="mt-1 block h-8 rounded border bg-background px-2 text-sm"
+                className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm"
               >
                 <option value="ALL">All settlements</option>
                 <option value="DRY_RUN">Dry run — nothing was charged</option>
@@ -400,64 +403,61 @@ export default function PlatformAgenciesPage(): JSX.Element {
               )}
               Download CSV
             </Button>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-3">
               Every figure from the settlement record — counts, closing percentage, rate, curve
               version, overrun, block and total. Defaults to the day shown above.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
       {needingAction.length > 0 && (
-        <div className="flex items-start gap-2 rounded border border-ringing bg-ringing-tint p-3 text-sm">
+        <div className="flex items-start gap-2 rounded-card border border-ringing bg-ringing-tint p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
           <div>
             <p className="font-medium">
               {needingAction.length} agenc{needingAction.length === 1 ? 'y needs' : 'ies need'}{' '}
               action
             </p>
-            <p className="text-muted-foreground">
-              {needingAction.map(row => row.name).join(', ')}
-            </p>
+            <p className="text-ink-3">{needingAction.map(row => row.name).join(', ')}</p>
           </div>
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Per agency — {day}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8" />
-                  <TableHead>Agency</TableHead>
-                  <TableHead>Billing</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Applications</TableHead>
-                  <TableHead className="text-right">Closing</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Call cost</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                  <TableHead className="text-right">Rev / call</TableHead>
-                  <TableHead className="text-right">Cost / call</TableHead>
-                  <TableHead>Settlement</TableHead>
-                  <TableHead>Flags</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.map(row => (
-                  <Fragment key={row.tenantId}>
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelHeader>
+          <PanelTitle>Per agency — {day}</PanelTitle>
+        </PanelHeader>
+        <PanelBody flush>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8" />
+                <TableHead>Agency</TableHead>
+                <TableHead>Billing</TableHead>
+                <TableHead className="text-right">Calls</TableHead>
+                <TableHead className="text-right">Applications</TableHead>
+                <TableHead className="text-right">Closing</TableHead>
+                <TableHead className="text-right">Rate</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">Call cost</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
+                <TableHead className="text-right">Rev / call</TableHead>
+                <TableHead className="text-right">Cost / call</TableHead>
+                <TableHead>Settlement</TableHead>
+                <TableHead>Flags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map(row => (
+                <Fragment key={row.tenantId}>
                   <TableRow>
                     <TableCell className="align-middle">
                       <button
                         type="button"
                         aria-expanded={openAgency === row.tenantId}
                         aria-label={`Enrolment controls for ${row.name}`}
-                        className="text-muted-foreground"
+                        className="text-ink-3"
                         onClick={() => void openEnrolment(row.tenantId)}
                       >
                         {openAgency === row.tenantId ? (
@@ -498,15 +498,15 @@ export default function PlatformAgenciesPage(): JSX.Element {
                     <TableCell
                       className={cn(
                         'text-right font-medium tabular-nums',
-                        row.margin !== null && row.margin < 0 && 'text-destructive'
+                        row.margin !== null && row.margin < 0 && 'text-dropped-ink'
                       )}
                     >
                       {money(row.margin)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-ink-3">
                       {money(row.revenuePerCall, 4)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-ink-3">
                       {money(row.costPerCall, 4)}
                     </TableCell>
                     <TableCell>
@@ -595,7 +595,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                   </TableRow>
 
                   {openAgency === row.tenantId && (
-                    <TableRow className="bg-sunken hover:bg-sunken">
+                    <TableRow className="bg-sunken">
                       <TableCell colSpan={14} className="p-4">
                         <EnrolmentPanel
                           row={row}
@@ -608,14 +608,13 @@ export default function PlatformAgenciesPage(): JSX.Element {
                       </TableCell>
                     </TableRow>
                   )}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </CompactPageShell>
+                </Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </PanelBody>
+      </Panel>
+    </div>
   );
 }
 
@@ -693,7 +692,7 @@ function EnrolmentPanel({
 }): JSX.Element {
   if (!status) {
     return (
-      <p className="flex items-center text-sm text-muted-foreground">
+      <p className="flex items-center text-sm text-ink-3">
         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
         Reading this agency&rsquo;s enrolment
       </p>
@@ -704,25 +703,29 @@ function EnrolmentPanel({
     <div className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
         <span className="font-medium">{row.name}</span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           {status.enrolled ? 'Enrolled in billing' : 'Not enrolled in billing'}
           {status.enrolled && (status.chargesEnabled ? ' · charging' : ' · not charging')}
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           Balance <span className="tabular-nums">{status.balance}</span> paid applications
         </span>
-        <span className="text-muted-foreground">
+        <span className="text-ink-3">
           Mandate {status.mandate.valid ? 'valid' : status.mandate.status.toLowerCase()}
-          {status.mandate.last4 ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}` : ''}
+          {status.mandate.last4
+            ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}`
+            : ''}
         </span>
       </div>
 
       {note && (
-        <p className="rounded border border-ringing bg-ringing-tint p-2 text-[13px]">{note}</p>
+        <p className="rounded-control border border-ringing bg-ringing-tint p-2 text-[13px]">
+          {note}
+        </p>
       )}
 
       {!status.enrolled && status.blockers.length > 0 && (
-        <p className="text-muted-foreground">
+        <p className="text-ink-3">
           Not ready to enrol. Still needed:{' '}
           <span className="font-medium">
             {status.blockers.map(code => BLOCKER_TEXT[code] ?? code).join(', ')}
@@ -732,7 +735,7 @@ function EnrolmentPanel({
       )}
 
       {status.enrolled && status.pendingDryRunCloseout.credits > 0 && (
-        <p className="text-muted-foreground">
+        <p className="text-ink-3">
           Turning charging on will retire {status.pendingDryRunCloseout.credits} credits from{' '}
           {status.pendingDryRunCloseout.lots}{' '}
           {status.pendingDryRunCloseout.lots === 1 ? 'dry-run block' : 'dry-run blocks'}, so the
@@ -789,7 +792,7 @@ function EnrolmentPanel({
           </Button>
         )}
 
-        <span className="ml-2 text-xs text-muted-foreground">Overrun ceiling:</span>
+        <span className="ml-2 text-xs text-ink-3">Overrun ceiling:</span>
         <Button
           variant="outline"
           size="sm"
@@ -809,13 +812,13 @@ function EnrolmentPanel({
           Back to schedule
         </Button>
 
-        {busy && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        {busy && <Loader2 className="h-3 w-3 animate-spin text-ink-3" />}
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Each of these is recorded in the audit log against your account. Un-enrolling stops
-        gating, metering and settling immediately, and leaves the ledger and every settlement
-        already written exactly as they are.
+      <p className="text-[11px] text-ink-3">
+        Each of these is recorded in the audit log against your account. Un-enrolling stops gating,
+        metering and settling immediately, and leaves the ledger and every settlement already
+        written exactly as they are.
       </p>
     </div>
   );

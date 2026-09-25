@@ -1,10 +1,19 @@
 'use client';
 
-import { ArrowRightLeft, Download, Edit2, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
+import { ArrowRightLeft, Download, Edit2, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  Toolbar,
+  ToolbarSearch,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { AddExistingNumberDialog } from '@/components/numbers/add-existing-number-dialog';
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
@@ -13,7 +22,6 @@ import { EditRouteDialog } from '@/components/numbers/edit-route-dialog';
 import { FractelPurchaseDialog } from '@/components/numbers/fractel-purchase-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +30,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
@@ -122,24 +129,18 @@ function NumberCard({
   onEdit: (number: PhoneNumber) => void;
 }) {
   return (
-    <div className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm">
+    <div className="flex flex-col rounded-card border border-rule bg-surface p-3 transition-shadow hover:border-rule-strong hover:shadow-raised">
       <div className="flex items-start justify-between mb-2">
         <div className="space-y-0.5">
           <div className="font-mono text-sm font-semibold tracking-tight text-ink">
             {formatPhoneNumber(number.number)}
           </div>
           <div className="flex items-center gap-1.5">
-            <Badge
-              variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}
-              className="text-[8px] px-1 py-0"
-            >
+            <Badge variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}>
               {number.status}
             </Badge>
             {number.poolType === 'POOL' && (
-              <Badge
-                variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}
-                className="text-[8px] px-1 py-0"
-              >
+              <Badge variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}>
                 RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
               </Badge>
             )}
@@ -155,18 +156,16 @@ function NumberCard({
         </Button>
       </div>
 
-      <div className="mt-2 border-t border-rule pt-2 space-y-1.5 text-[11px]">
+      <div className="mt-2 border-t border-rule pt-2 space-y-1.5 t-meta">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">Carrier</div>
+            <div className="t-label text-ink-3">Carrier</div>
             <div className="font-medium truncate text-ink" title={carrierLabel(number)}>
               {carrierLabel(number)}
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-              Purchased
-            </div>
+            <div className="t-label text-ink-3">Purchased</div>
             <div className="font-medium text-ink">
               {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : 'N/A'}
             </div>
@@ -174,9 +173,7 @@ function NumberCard({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-              Campaign
-            </div>
+            <div className="t-label text-ink-3">Campaign</div>
             <div
               className="font-medium truncate text-ink"
               title={number.campaign?.name || 'Unassigned'}
@@ -185,9 +182,7 @@ function NumberCard({
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-              Assigned Agent
-            </div>
+            <div className="t-label text-ink-3">Assigned Agent</div>
             <div
               className="font-medium truncate text-ink"
               title={number.user?.name || 'Unassigned'}
@@ -340,60 +335,65 @@ function NumbersPage() {
   );
 
   return (
-    <CompactPageShell>
-      <CompactPageHeader subtitle="Manage your phone numbers and inbound call routes">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAddExistingOpen(true)}
-          title="Add a number you already own at a carrier, e.g. an Anveo DID"
-          className="h-8 text-xs border-rule text-muted-foreground"
-        >
-          <Download className="mr-2 h-3.5 w-3.5" />
-          Add existing
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void handleSyncAnveo()}
-          disabled={syncingAnveo}
-          title="Import DIDs bought directly in the Anveo portal"
-          className="h-8 text-xs border-rule text-muted-foreground"
-        >
-          {syncingAnveo ? (
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-          )}
-          Sync Anveo
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" className="h-8 text-xs">
-              <Plus className="mr-2 h-3.5 w-3.5" />
-              Buy Number
+    <div className="page-canvas">
+      <PageHeader
+        description="Manage your phone numbers and inbound call routes"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddExistingOpen(true)}
+              title="Add a number you already own at a carrier, e.g. an Anveo DID"
+            >
+              <Download className="mr-2 h-3.5 w-3.5" />
+              Add existing
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-surface border-rule text-ink">
-            <DropdownMenuLabel className="text-xs text-ink-3">Select Provider</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-rule" />
-            <DropdownMenuItem
-              onClick={handleBuyFractelNumber}
-              className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleSyncAnveo()}
+              disabled={syncingAnveo}
+              title="Import DIDs bought directly in the Anveo portal"
             >
-              Buy from FracTEL (local &amp; toll-free)
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleBuyBulkvsNumber}
-              className="focus:bg-brand-tint focus:text-brand-ink text-xs"
-            >
-              Buy from NetEnroll
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CompactPageHeader>
+              {syncingAnveo ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              )}
+              Sync Anveo
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  Buy Number
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-surface border-rule text-ink">
+                <DropdownMenuLabel className="text-xs text-ink-3">
+                  Select Provider
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-rule" />
+                <DropdownMenuItem
+                  onClick={handleBuyFractelNumber}
+                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                >
+                  Buy from FracTEL (local &amp; toll-free)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleBuyBulkvsNumber}
+                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                >
+                  Buy from NetEnroll
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
 
-      <Tabs defaultValue="numbers" className="w-full flex-1 min-h-0 flex flex-col gap-3">
+      <Tabs defaultValue="numbers" className="w-full">
         <TabsList className="mb-0 self-start">
           <TabsTrigger value="numbers" className="text-xs h-8">
             Phone Numbers
@@ -403,40 +403,18 @@ function NumbersPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="numbers" className="m-0 flex-1 min-h-0 overflow-hidden">
-          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Phone Numbers
-                  </CardTitle>
-                  <CardDescription className="text-[10px]">
-                    Search and manage your numbers
-                  </CardDescription>
-                </div>
-                <div className="relative w-48">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="numbers-search"
-                    name="numbers-search"
-                    placeholder="Search numbers..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="pl-8 h-7 text-xs bg-background border-rule text-foreground"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-grow min-h-0 overflow-auto p-3">
+        <TabsContent value="numbers" className="flex flex-col gap-4">
+          <Toolbar>
+            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search numbers..." />
+          </Toolbar>
+          <Panel className="min-w-0">
+            <PanelBody>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
                 </div>
               ) : filteredNumbers.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-xs">
-                  No phone numbers found
-                </div>
+                <div className="t-meta py-12 text-center text-ink-3">No phone numbers found</div>
               ) : (
                 <div className="space-y-4">
                   {carrierGroups.map(group => (
@@ -445,12 +423,8 @@ function NumbersPage() {
                           can attest on which trunk, and where a gap is. The flat
                           list made that impossible to see. */}
                       <div className="flex items-center gap-2 mb-2 pb-1 border-b border-rule">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          {group.carrier}
-                        </div>
-                        <Badge variant="secondary" className="text-[8px] px-1 py-0">
-                          {group.numbers.length}
-                        </Badge>
+                        <div className="t-label text-ink-3">{group.carrier}</div>
+                        <Badge variant="secondary">{group.numbers.length}</Badge>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {group.numbers.map(number => (
@@ -461,60 +435,41 @@ function NumbersPage() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
-        <TabsContent value="routing" className="m-0 flex-1 min-h-0 overflow-hidden">
-          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Inbound Routes
-                  </CardTitle>
-                  <CardDescription className="text-[10px]">
-                    Map your DIDs to buyer destinations for inbound calls
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative w-48">
-                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="routes-search"
-                      name="routes-search"
-                      placeholder="Search routes..."
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      className="pl-8 h-7 text-xs bg-background border-rule text-foreground"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => setCreateRouteOpen(true)}
-                    size="sm"
-                    className="h-7 text-xs"
-                  >
-                    <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
-                    Create Route
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-grow min-h-0 overflow-auto p-3">
+        <TabsContent value="routing" className="flex flex-col gap-4">
+          <Toolbar>
+            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search routes..." />
+          </Toolbar>
+          <Panel className="min-w-0">
+            <PanelHeader
+              action={
+                <Button onClick={() => setCreateRouteOpen(true)} size="sm">
+                  <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
+                  Create Route
+                </Button>
+              }
+            >
+              <PanelTitle>Inbound Routes</PanelTitle>
+              <PanelDescription>
+                Map your DIDs to buyer destinations for inbound calls
+              </PanelDescription>
+            </PanelHeader>
+            <PanelBody>
               {loadingRoutes ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
                 </div>
               ) : filteredRoutes.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-xs">
-                  No routing rules found
-                </div>
+                <div className="t-meta py-12 text-center text-ink-3">No routing rules found</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {filteredRoutes.map(route => (
                     <div
                       key={route.id}
-                      className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm"
+                      className="flex flex-col rounded-card border border-rule bg-surface p-3 transition-shadow hover:border-rule-strong hover:shadow-raised"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="space-y-0.5">
@@ -522,20 +477,10 @@ function NumbersPage() {
                             {formatPhoneNumber(route.did)}
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <Badge
-                              variant={route.status === 'ACTIVE' ? 'success' : 'secondary'}
-                              className="text-[8px] px-1 py-0"
-                            >
+                            <Badge variant={route.status === 'ACTIVE' ? 'success' : 'secondary'}>
                               {route.status}
                             </Badge>
-                            {route.recordingEnabled && (
-                              <Badge
-                                variant="outline"
-                                className="text-[8px] px-1 py-0 border-money/40 text-money-ink bg-money-tint animate-none"
-                              >
-                                REC
-                              </Badge>
-                            )}
+                            {route.recordingEnabled && <Badge variant="info">REC</Badge>}
                           </div>
                         </div>
                         <Button
@@ -548,9 +493,9 @@ function NumbersPage() {
                         </Button>
                       </div>
 
-                      <div className="space-y-2 border-t border-rule pt-2 text-[11px] mt-2">
+                      <div className="space-y-2 border-t border-rule pt-2 t-meta mt-2">
                         <div>
-                          <div className="text-muted-foreground text-[9px] uppercase tracking-wider flex items-center gap-1">
+                          <div className="t-label flex items-center gap-1 text-ink-3">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
                           </div>
                           <div className="font-mono text-xs text-ink">
@@ -560,9 +505,7 @@ function NumbersPage() {
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-                              Label / Buyer
-                            </div>
+                            <div className="t-label text-ink-3">Label / Buyer</div>
                             <div
                               className="font-medium truncate text-ink"
                               title={route.label || route.buyer?.name || 'Unassigned'}
@@ -571,9 +514,7 @@ function NumbersPage() {
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-                              Created
-                            </div>
+                            <div className="t-label text-ink-3">Created</div>
                             <div className="font-medium text-ink">
                               {route.createdAt
                                 ? new Date(route.createdAt).toLocaleDateString()
@@ -586,8 +527,8 @@ function NumbersPage() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
       </Tabs>
 
@@ -617,7 +558,7 @@ function NumbersPage() {
         open={createRouteOpen}
         onOpenChange={setCreateRouteOpen}
         availableNumbers={numbers as any}
-        onSuccess={loadRoutes}
+        onSuccess={() => void loadRoutes()}
       />
 
       {selectedNumber && (
@@ -641,10 +582,10 @@ function NumbersPage() {
           open={editRouteOpen}
           onOpenChange={setEditRouteOpen}
           route={selectedRoute}
-          onSuccess={loadRoutes}
+          onSuccess={() => void loadRoutes()}
         />
       )}
-    </CompactPageShell>
+    </div>
   );
 }
 

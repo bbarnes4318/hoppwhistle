@@ -3,11 +3,9 @@
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Toolbar, ToolbarActions, ToolbarMeta } from '@/components/domain';
-import { CompactPageShell } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, Toolbar, ToolbarActions, ToolbarMeta } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -109,27 +107,27 @@ export function PlatformRatingView(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas">
+        <div className="flex items-center justify-center py-12 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading every agency&rsquo;s rate
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (error || !overview) {
     return (
-      <CompactPageShell>
-        <p className="text-sm text-muted-foreground">{error ?? 'No rating data yet.'}</p>
-      </CompactPageShell>
+      <div className="page-canvas">
+        <p className="t-body text-ink-3">{error ?? 'No rating data yet.'}</p>
+      </div>
     );
   }
 
   const excluded = overview.agencies.filter(row => row.isNonProduction).length;
 
   return (
-    <CompactPageShell fullHeight={false}>
+    <div className="page-canvas">
       {/*
         One row: what the table covers, the non-production toggle, refresh.
         "Every agency" leads the line; see platform-delivery-view.tsx. The note
@@ -161,8 +159,8 @@ export function PlatformRatingView(): JSX.Element {
         </ToolbarActions>
       </Toolbar>
 
-      <Card>
-        <CardContent className="p-0">
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
           <Table>
             <TableHeader>
               <TableRow>
@@ -177,7 +175,7 @@ export function PlatformRatingView(): JSX.Element {
             <TableBody>
               {overview.agencies.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-ink-3">
                     No agencies.
                   </TableCell>
                 </TableRow>
@@ -199,17 +197,17 @@ export function PlatformRatingView(): JSX.Element {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium">{row.name}</span>
                         {row.isNonProduction && (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="t-meta">
                             non-production
                           </Badge>
                         )}
                         {row.underReview && (
-                          <Badge variant="destructive" className="text-[10px]">
+                          <Badge variant="destructive" className="t-meta">
                             under review
                           </Badge>
                         )}
                         {row.status === 'OPENING_BLOCK' && (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="t-meta">
                             opening block
                           </Badge>
                         )}
@@ -217,7 +215,7 @@ export function PlatformRatingView(): JSX.Element {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <span>{pct(row.todayClosingPct)}</span>
-                      <span className="ml-1 text-[10px] text-muted-foreground">
+                      <span className="ml-1 t-meta text-ink-3">
                         {row.todaySubmittedApplications}/{row.todayDeliveredCalls}
                       </span>
                     </TableCell>
@@ -233,7 +231,7 @@ export function PlatformRatingView(): JSX.Element {
                         anything to a settlement.
                       */}
                       {row.rateOffset > 0 && (
-                        <span className="ml-1 text-[10px] text-muted-foreground">
+                        <span className="ml-1 t-meta text-ink-3">
                           (curve {dollars(row.curveRate)} + {dollars(row.rateOffset)})
                         </span>
                       )}
@@ -244,14 +242,14 @@ export function PlatformRatingView(): JSX.Element {
                       the current rate believes an agency is paying something it
                       is not.
                     */}
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-ink-3">
                       {row.trackingBelowMinimum ? (
                         <span className="text-ringing-ink">review</span>
                       ) : (
                         dollars(row.trackingRate)
                       )}
                     </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
+                    <TableCell className="t-meta text-ink-3">
                       {row.windowDayKeys.length > 0
                         ? row.windowDayKeys.join(', ')
                         : 'not yet rated'}
@@ -260,12 +258,12 @@ export function PlatformRatingView(): JSX.Element {
                 ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="t-meta text-ink-3">
         Enter an agency in the switcher to narrow this page to it. Leaving returns here.
       </p>
-    </CompactPageShell>
+    </div>
   );
 }

@@ -11,17 +11,16 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Search,
   Trash2,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, Toolbar, ToolbarActions, ToolbarSearch } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -50,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -654,57 +654,44 @@ function BuyersPage() {
   // RENDER
   // -------------------------------------------------------------------------
   return (
-    <CompactPageShell>
-      <CompactPageHeader subtitle="Configure buyer billing, permissions, and targets">
-        <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Buyer
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Configure buyer billing, permissions, and targets"
+        actions={
+          <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Buyer
+          </Button>
+        }
+      />
 
-      {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2.5 px-3 border-b border-rule">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Buyers
-              </CardTitle>
-              <CardDescription className="text-[10px]">
-                Manage buyer accounts, permissions, and nested targets
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search buyers..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 border-rule text-muted-foreground"
-                onClick={() => {
-                  void fetchBuyers();
-                  void fetchStats();
-                }}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search buyers..." />
+        <ToolbarActions>
+          <Tooltip content="Refresh" align="end">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              aria-label="Refresh"
+              onClick={() => {
+                void fetchBuyers();
+                void fetchStats();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
 
-        <CardContent className="flex-grow min-h-0 overflow-auto p-0">
-          <Table className="table-dense">
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow className="text-xs">
-                <TableHead className="w-8"></TableHead>
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8 pl-5"></TableHead>
                 <TableHead>Company Name</TableHead>
                 <TableHead>Sub ID</TableHead>
                 <TableHead className="text-center">Pause</TableHead>
@@ -715,19 +702,19 @@ function BuyersPage() {
                 <TableHead className="text-right">Month</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="pr-5 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={12} className="text-center py-8">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto text-ink-3" />
                   </TableCell>
                 </TableRow>
               ) : filteredBuyers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-ink-3">
                     No buyers found
                   </TableCell>
                 </TableRow>
@@ -737,13 +724,10 @@ function BuyersPage() {
                     {/* Buyer Row */}
                     <TableRow
                       key={buyer.id}
-                      className={cn(
-                        'text-xs cursor-pointer hover:bg-sunken',
-                        expandedBuyerId === buyer.id && 'bg-sunken'
-                      )}
+                      className={cn('cursor-pointer', expandedBuyerId === buyer.id && 'bg-sunken')}
                       onClick={() => toggleExpand(buyer.id)}
                     >
-                      <TableCell className="w-8 p-2">
+                      <TableCell className="w-8 pl-5">
                         {expandedBuyerId === buyer.id ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
@@ -752,22 +736,22 @@ function BuyersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{buyer.name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {buyer.code}
-                        </div>
+                        <div className="t-data text-ink-3">{buyer.code}</div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{buyer.subId || '—'}</TableCell>
+                      <TableCell className="text-ink-3">{buyer.subId || '—'}</TableCell>
                       <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                         <Switch
                           checked={buyer.canPauseTargets}
-                          onCheckedChange={() => handleTogglePermission(buyer, 'canPauseTargets')}
+                          onCheckedChange={() =>
+                            void handleTogglePermission(buyer, 'canPauseTargets')
+                          }
                           className="scale-75"
                         />
                       </TableCell>
                       <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                         <Switch
                           checked={buyer.canSetCaps}
-                          onCheckedChange={() => handleTogglePermission(buyer, 'canSetCaps')}
+                          onCheckedChange={() => void handleTogglePermission(buyer, 'canSetCaps')}
                           className="scale-75"
                         />
                       </TableCell>
@@ -775,7 +759,7 @@ function BuyersPage() {
                         <Switch
                           checked={buyer.canDisputeConversions}
                           onCheckedChange={() =>
-                            handleTogglePermission(buyer, 'canDisputeConversions')
+                            void handleTogglePermission(buyer, 'canDisputeConversions')
                           }
                           className="scale-75"
                         />
@@ -802,10 +786,10 @@ function BuyersPage() {
                               buyer.status === 'INACTIVE' && 'bg-ink-3'
                             )}
                           />
-                          <span className="capitalize text-xs">{buyer.status.toLowerCase()}</span>
+                          <span className="capitalize">{buyer.status.toLowerCase()}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                      <TableCell className="pr-5 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-end gap-0.5">
                           <Button
                             variant="ghost"
@@ -820,7 +804,7 @@ function BuyersPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => handleToggleBuyerStatus(buyer)}
+                            onClick={() => void handleToggleBuyerStatus(buyer)}
                             title={buyer.status === 'ACTIVE' ? 'Pause' : 'Activate'}
                           >
                             {buyer.status === 'ACTIVE' ? (
@@ -867,16 +851,16 @@ function BuyersPage() {
                             {/* Targets Table */}
                             {targetsLoading ? (
                               <div className="flex justify-center py-4">
-                                <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                                <RefreshCw className="h-5 w-5 animate-spin text-ink-3" />
                               </div>
                             ) : targets.length === 0 ? (
-                              <div className="text-center py-4 text-muted-foreground text-sm">
+                              <div className="text-center py-4 text-ink-3 text-sm">
                                 No targets configured. Add one to start routing calls.
                               </div>
                             ) : (
-                              <Table className="table-dense">
+                              <Table>
                                 <TableHeader>
-                                  <TableRow className="text-xs">
+                                  <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Destination</TableHead>
                                     <TableHead>Type</TableHead>
@@ -901,7 +885,7 @@ function BuyersPage() {
                                         : 0;
 
                                     return (
-                                      <TableRow key={target.id} className="text-xs">
+                                      <TableRow key={target.id}>
                                         <TableCell className="font-medium">{target.name}</TableCell>
                                         <TableCell>
                                           <div className="flex items-center gap-1.5">
@@ -910,13 +894,13 @@ function BuyersPage() {
                                             ) : (
                                               <Phone className="h-3.5 w-3.5 text-live-ink" />
                                             )}
-                                            <span className="font-mono text-[10px] truncate max-w-[150px]">
+                                            <span className="t-data truncate max-w-[150px]">
                                               {target.destination}
                                             </span>
                                           </div>
                                         </TableCell>
                                         <TableCell>
-                                          <Badge variant="outline" className="text-[10px]">
+                                          <Badge variant="outline" className="t-meta">
                                             {target.type}
                                           </Badge>
                                         </TableCell>
@@ -925,7 +909,7 @@ function BuyersPage() {
                                           target.acceptedStates?.length === 0 ? (
                                             <Badge
                                               variant="secondary"
-                                              className="text-[10px] bg-live-tint text-live-ink"
+                                              className="t-meta bg-live-tint text-live-ink"
                                             >
                                               <Globe className="h-3 w-3 mr-1" />
                                               National
@@ -933,7 +917,7 @@ function BuyersPage() {
                                           ) : (
                                             <Badge
                                               variant="outline"
-                                              className="text-[10px]"
+                                              className="t-meta"
                                               title={target.acceptedStates?.join(', ')}
                                             >
                                               <MapPin className="h-3 w-3 mr-1" />
@@ -945,12 +929,12 @@ function BuyersPage() {
                                           {target.maxCap > 0 ? (
                                             <div className="flex items-center gap-2">
                                               <Progress value={capPercent} className="w-16 h-1.5" />
-                                              <span className="text-[10px] text-muted-foreground">
+                                              <span className="t-meta text-ink-3">
                                                 {Math.round(capPercent)}%
                                               </span>
                                             </div>
                                           ) : (
-                                            <span className="text-muted-foreground">No cap</span>
+                                            <span className="text-ink-3">No cap</span>
                                           )}
                                         </TableCell>
                                         <TableCell>
@@ -972,7 +956,9 @@ function BuyersPage() {
                                         <TableCell>
                                           <Switch
                                             checked={target.status === 'ACTIVE'}
-                                            onCheckedChange={() => handleToggleTargetStatus(target)}
+                                            onCheckedChange={() =>
+                                              void handleToggleTargetStatus(target)
+                                            }
                                             className="scale-75"
                                           />
                                         </TableCell>
@@ -990,7 +976,7 @@ function BuyersPage() {
                                               variant="ghost"
                                               size="icon"
                                               className="h-6 w-6 text-dropped-ink"
-                                              onClick={() => handleDeleteTarget(target)}
+                                              onClick={() => void handleDeleteTarget(target)}
                                             >
                                               <Trash2 className="h-3 w-3" />
                                             </Button>
@@ -1014,7 +1000,7 @@ function BuyersPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-4 border-t">
+            <div className="flex items-center justify-center gap-2 py-4 border-t border-rule">
               <Button
                 variant="outline"
                 size="sm"
@@ -1023,7 +1009,7 @@ function BuyersPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-ink-3">
                 Page {page} of {totalPages}
               </span>
               <Button
@@ -1036,8 +1022,8 @@ function BuyersPage() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
 
       {/* Create Buyer Dialog */}
       <Dialog open={createBuyerOpen} onOpenChange={setCreateBuyerOpen}>
@@ -1129,7 +1115,7 @@ function BuyersPage() {
                 />
               </div>
             </div>
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <Label className="text-sm font-medium mb-3 block">Permissions</Label>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1174,7 +1160,7 @@ function BuyersPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleCreateBuyer}
+              onClick={() => void handleCreateBuyer()}
               disabled={saving || !buyerForm.name || !buyerForm.code || !buyerForm.publisherId}
             >
               {saving ? 'Creating...' : 'Create Buyer'}
@@ -1268,7 +1254,7 @@ function BuyersPage() {
                 />
               </div>
             </div>
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <Label className="text-sm font-medium mb-3 block">Permissions</Label>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1312,7 +1298,7 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setEditBuyerOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditBuyer} disabled={saving}>
+            <Button onClick={() => void handleEditBuyer()} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
@@ -1328,10 +1314,10 @@ function BuyersPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="text-center py-4">
-              <div className="text-sm text-muted-foreground mb-1">Current Balance</div>
+              <div className="text-sm text-ink-3 mb-1">Current Balance</div>
               <div className="text-3xl font-bold">
                 {selectedBuyer?.leadsRemaining.toLocaleString() ?? 0}
-                <span className="text-lg font-normal text-muted-foreground ml-2">leads</span>
+                <span className="text-lg font-normal text-ink-3 ml-2">leads</span>
               </div>
             </div>
             <div className="grid gap-2">
@@ -1344,9 +1330,9 @@ function BuyersPage() {
                 min={1}
               />
             </div>
-            <div className="text-center text-sm text-muted-foreground">
+            <div className="text-center text-sm text-ink-3">
               New balance will be:{' '}
-              <span className="font-semibold text-foreground">
+              <span className="font-semibold text-ink">
                 {((selectedBuyer?.leadsRemaining ?? 0) + creditsAmount).toLocaleString()} leads
               </span>
             </div>
@@ -1355,7 +1341,7 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setCreditsDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddCredits} disabled={saving || creditsAmount < 1}>
+            <Button onClick={() => void handleAddCredits()} disabled={saving || creditsAmount < 1}>
               {saving ? 'Adding...' : `Add ${creditsAmount} Credits`}
             </Button>
           </DialogFooter>
@@ -1467,7 +1453,7 @@ function BuyersPage() {
               </div>
             </div>
             {/* State Filtering Section */}
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <div className="flex items-center gap-2 mb-3">
                 <MapPin className="h-4 w-4" />
                 <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
@@ -1477,7 +1463,7 @@ function BuyersPage() {
                   <Label htmlFor="isNational" className="font-normal">
                     National (Accept All States)
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-3">
                     When enabled, this target accepts calls from all states
                   </p>
                 </div>
@@ -1496,12 +1482,12 @@ function BuyersPage() {
               </div>
               {targetForm.acceptedStates.length > 0 || !targetForm.acceptedStates.length ? (
                 <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground">
+                  <Label className="text-xs text-ink-3">
                     {targetForm.acceptedStates.length === 0
                       ? 'National: Accepts calls from ALL states'
                       : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
                   </Label>
-                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border border-rule rounded-md p-2">
                     {US_STATES.map(state => (
                       <Button
                         key={state.code}
@@ -1560,7 +1546,7 @@ function BuyersPage() {
               Cancel
             </Button>
             <Button
-              onClick={handleCreateTarget}
+              onClick={() => void handleCreateTarget()}
               disabled={saving || !targetForm.name || !targetForm.destination}
             >
               {saving ? 'Creating...' : 'Create Target'}
@@ -1688,7 +1674,7 @@ function BuyersPage() {
               </Select>
             </div>
             {/* State Filtering Section */}
-            <div className="border-t pt-4">
+            <div className="border-t border-rule pt-4">
               <div className="flex items-center gap-2 mb-3">
                 <MapPin className="h-4 w-4" />
                 <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
@@ -1698,7 +1684,7 @@ function BuyersPage() {
                   <Label htmlFor="edit-isNational" className="font-normal">
                     National (Accept All States)
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-3">
                     When enabled, this target accepts calls from all states
                   </p>
                 </div>
@@ -1713,12 +1699,12 @@ function BuyersPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-xs text-ink-3">
                   {targetForm.acceptedStates.length === 0
                     ? 'National: Accepts calls from ALL states'
                     : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
                 </Label>
-                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border border-rule rounded-md p-2">
                   {US_STATES.map(state => (
                     <Button
                       key={state.code}
@@ -1772,16 +1758,15 @@ function BuyersPage() {
             <Button variant="outline" onClick={() => setEditTargetOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditTarget} disabled={saving}>
+            <Button onClick={() => void handleEditTarget()} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CompactPageShell>
+    </div>
   );
 }
-
 
 export default function GuardedBuyersPage() {
   return (

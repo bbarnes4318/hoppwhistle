@@ -110,6 +110,16 @@ describe('the pages that were fixed render no title of their own', () => {
     'settings/dnc',
     'settings/quotas',
     'admin/payroll',
+    // Moved off CompactPageShell onto page-canvas + PageHeader.
+    'campaigns',
+    'publishers',
+    'buyers',
+    'numbers',
+    'live',
+    'phone',
+    'settings/carriers',
+    'admin/agencies',
+    'admin/onboarding',
   ];
 
   it.each(CONVERTED)('%s/page.tsx has no <h1>', page => {
@@ -121,19 +131,21 @@ describe('the pages that were fixed render no title of their own', () => {
    * The shared header no longer carries a title either, which is what made the
    * fix one edit rather than twenty-four. A `title` prop reaching it again
    * would put the second heading back on every page at once.
+   *
+   * This guarded CompactPageHeader until every page moved onto PageHeader and
+   * the compact shell was deleted; it now guards the header they all share.
    */
-  it('CompactPageHeader renders no heading and takes no title', () => {
-    const source = readFileSync(join(__dirname, '..', 'compact-layout.tsx'), 'utf8');
+  it('PageHeader renders no heading and takes no title', () => {
+    const source = readFileSync(join(__dirname, '..', 'page-header.tsx'), 'utf8');
 
-    const start = source.indexOf('export function CompactPageHeader');
-    const body = source.slice(start, source.indexOf('\ninterface', start));
-    expect(body).not.toContain('<h1');
+    const start = source.indexOf('export function PageHeader');
+    expect(source.slice(start)).not.toMatch(/<h[1-6]/);
 
-    // The interface body alone. The doc comment above the function legitimately
-    // uses the word "title" to explain why it no longer takes one.
-    const declStart = source.indexOf('interface CompactPageHeaderProps');
-    const props = source.slice(declStart, source.indexOf('}', declStart));
+    // The props interface alone: `title` is omitted from the HTML attributes
+    // and not declared back.
+    const declStart = source.indexOf('export interface PageHeaderProps');
+    const props = source.slice(declStart, source.indexOf('\n}', declStart));
+    expect(props).toContain("Omit<React.HTMLAttributes<HTMLDivElement>, 'title'>");
     expect(props).not.toMatch(/^\s*title\??:/m);
-    expect(props).not.toMatch(/^\s*icon\??:/m);
   });
 });

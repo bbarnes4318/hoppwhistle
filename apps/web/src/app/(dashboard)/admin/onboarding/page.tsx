@@ -3,10 +3,10 @@
 import { Check, ChevronRight, Loader2, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -76,8 +76,7 @@ const STEP_TITLES: Record<StepId, { title: string; blurb: string }> = {
   },
   OWNER: {
     title: 'Owner',
-    blurb:
-      'One single-use activation link for the agency principal, bound to their email address.',
+    blurb: 'One single-use activation link for the agency principal, bound to their email address.',
   },
   ENROL: {
     title: 'Enrol',
@@ -109,8 +108,9 @@ export default function OnboardingPage(): JSX.Element {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const response =
-      await apiClient.get<Envelope<OnboardingState[]>>('/api/v1/platform/onboarding/agencies');
+    const response = await apiClient.get<Envelope<OnboardingState[]>>(
+      '/api/v1/platform/onboarding/agencies'
+    );
     setError(response.error ? response.error.message : null);
     const rows = payload(response);
     setAgencies(Array.isArray(rows) ? rows : []);
@@ -122,59 +122,58 @@ export default function OnboardingPage(): JSX.Element {
   }, [load]);
 
   /** Re-read one agency's state after a step, so the screen shows the truth. */
-  const refreshSelected = useCallback(async (tenantId: string) => {
-    const response = await apiClient.get<Envelope<OnboardingState>>(
-      `/api/v1/platform/onboarding/agencies/${tenantId}`
-    );
-    const state = payload(response);
-    if (state) setSelected(state);
-    await load();
-  }, [load]);
+  const refreshSelected = useCallback(
+    async (tenantId: string) => {
+      const response = await apiClient.get<Envelope<OnboardingState>>(
+        `/api/v1/platform/onboarding/agencies/${tenantId}`
+      );
+      const state = payload(response);
+      if (state) setSelected(state);
+      await load();
+    },
+    [load]
+  );
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <div className="page-canvas">
+        <div className="flex items-center justify-center py-12 text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading onboarding
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Internal. Every agency is onboarded by NetEnroll after a signed agreement." />
+    <div className="page-canvas">
+      <PageHeader description="Internal. Every agency is onboarded by NetEnroll after a signed agreement." />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+      {error && <p className="text-sm text-dropped-ink">{error}</p>}
+      {notice && <p className="text-sm text-ink-3">{notice}</p>}
 
       {activationLink && (
-        <Card className="border-live bg-live-tint">
-          <CardContent className="pt-6">
+        <Panel className="border-live bg-live-tint">
+          <PanelBody>
             <p className="text-sm font-medium">The owner&rsquo;s activation token</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Shown once. It is stored only as a hash and cannot be read back — if it is lost,
-              issue a new one. Send it to the address it was issued for; it works for no other.
+            <p className="mt-1 text-[11px] text-ink-3">
+              Shown once. It is stored only as a hash and cannot be read back — if it is lost, issue
+              a new one. Send it to the address it was issued for; it works for no other.
             </p>
-            <code className="mt-2 block break-all rounded bg-sunken p-2 text-xs">
+            <code className="mt-2 block break-all rounded-control bg-sunken p-2 text-xs">
               {activationLink}
             </code>
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </Panel>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Agencies
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 p-2">
-            {agencies.length === 0 && (
-              <p className="p-2 text-sm text-muted-foreground">No agencies yet.</p>
-            )}
+        <Panel className="lg:col-span-1">
+          <PanelHeader>
+            <PanelTitle>Agencies</PanelTitle>
+          </PanelHeader>
+          <PanelBody className="space-y-1 p-2 min-[1440px]:p-2">
+            {agencies.length === 0 && <p className="p-2 text-sm text-ink-3">No agencies yet.</p>}
             {agencies.map(agency => (
               <button
                 key={agency.tenantId}
@@ -190,7 +189,7 @@ export default function OnboardingPage(): JSX.Element {
                 )}
               >
                 <span className="flex-1 truncate">{agency.name}</span>
-                <Badge variant={agency.complete ? 'secondary' : 'outline'} className="text-[10px]">
+                <Badge variant={agency.complete ? 'secondary' : 'outline'} className="t-meta">
                   {agency.complete
                     ? 'enrolled'
                     : `step ${agency.steps.findIndex(s => s.state !== 'COMPLETE') + 1}/5`}
@@ -211,8 +210,8 @@ export default function OnboardingPage(): JSX.Element {
                 New agency
               </button>
             </div>
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </Panel>
 
         <div className="space-y-4 lg:col-span-2">
           {selected === null ? (
@@ -249,7 +248,7 @@ export default function OnboardingPage(): JSX.Element {
           )}
         </div>
       </div>
-    </CompactPageShell>
+    </div>
   );
 }
 
@@ -277,7 +276,7 @@ function NewAgencyForm({
   function field(key: keyof typeof form, label: string, props: Record<string, unknown> = {}) {
     return (
       <div>
-        <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor={key}>
+        <label className="mb-1 block text-[11px] text-ink-3" htmlFor={key}>
           {label}
         </label>
         <Input
@@ -291,12 +290,12 @@ function NewAgencyForm({
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">1. Agency</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-[11px] text-muted-foreground">{STEP_TITLES.TENANT.blurb}</p>
+    <Panel>
+      <PanelHeader>
+        <PanelTitle>1. Agency</PanelTitle>
+      </PanelHeader>
+      <PanelBody className="space-y-3">
+        <p className="text-[11px] text-ink-3">{STEP_TITLES.TENANT.blurb}</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {field('name', 'Display name')}
           {field('legalName', 'Legal name on the agreement')}
@@ -311,7 +310,7 @@ function NewAgencyForm({
         </div>
 
         <div>
-          <p className="mb-1 text-[11px] text-muted-foreground">Delivery days</p>
+          <p className="mb-1 text-[11px] text-ink-3">Delivery days</p>
           <div className="flex flex-wrap gap-2">
             {DAYS.map(day => (
               <label key={day} className="flex items-center gap-1 text-xs">
@@ -345,8 +344,8 @@ function NewAgencyForm({
         >
           {busy ? 'Recording…' : 'Record the agency'}
         </Button>
-      </CardContent>
-    </Card>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -443,29 +442,33 @@ function AgencySteps({
   }): JSX.Element {
     const step = stepById(id);
     return (
-      <Card className={cn(step.state === 'BLOCKED' && 'opacity-60')}>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+      <Panel className={cn(step.state === 'BLOCKED' && 'opacity-60')}>
+        <PanelHeader>
+          <PanelTitle className="flex items-center gap-2">
             {step.state === 'COMPLETE' ? (
               <Check className="h-4 w-4 text-live-ink" />
             ) : step.state === 'BLOCKED' ? (
-              <Lock className="h-4 w-4 text-muted-foreground" />
+              <Lock className="h-4 w-4 text-ink-3" />
             ) : (
               <ChevronRight className="h-4 w-4" />
             )}
             {index}. {STEP_TITLES[id].title}
             <Badge
               variant={
-                step.state === 'COMPLETE' ? 'secondary' : step.state === 'READY' ? 'outline' : 'outline'
+                step.state === 'COMPLETE'
+                  ? 'secondary'
+                  : step.state === 'READY'
+                    ? 'outline'
+                    : 'outline'
               }
-              className="text-[10px]"
+              className="t-meta"
             >
               {step.state.toLowerCase()}
             </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-[11px] text-muted-foreground">{STEP_TITLES[id].blurb}</p>
+          </PanelTitle>
+        </PanelHeader>
+        <PanelBody className="space-y-3">
+          <p className="text-[11px] text-ink-3">{STEP_TITLES[id].blurb}</p>
           {/*
             Every blocker at once, never one per attempt. An operator working
             down this screen should not discover the requirements one rejected
@@ -479,8 +482,8 @@ function AgencySteps({
             </ul>
           )}
           {step.state !== 'BLOCKED' && children}
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </Panel>
     );
   }
 
@@ -489,7 +492,7 @@ function AgencySteps({
       <p className="text-sm font-medium">{state.name}</p>
 
       <StepShell id="TENANT" index={1}>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           {String(stepById('TENANT').summary?.legalName ?? '')} ·{' '}
           {String(stepById('TENANT').summary?.state ?? '')} ·{' '}
           {String(stepById('TENANT').summary?.licensedAgentCount ?? '')} licensed agents
@@ -499,7 +502,7 @@ function AgencySteps({
       <StepShell id="TERMS" index={2}>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">Opening rate</label>
+            <label className="mb-1 block text-[11px] text-ink-3">Opening rate</label>
             <Input
               type="number"
               value={terms.openingRate}
@@ -507,7 +510,7 @@ function AgencySteps({
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">Rate offset</label>
+            <label className="mb-1 block text-[11px] text-ink-3">Rate offset</label>
             <Input
               type="number"
               value={terms.rateOffset}
@@ -518,12 +521,12 @@ function AgencySteps({
               fee. It is added to whatever the curve returns, at every point on
               the curve, and nothing is itemised separately anywhere.
             */}
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="mt-1 t-meta text-ink-3">
               Dollars added to the curve rate at every point on the curve. Part of the price.
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">Opening block</label>
+            <label className="mb-1 block text-[11px] text-ink-3">Opening block</label>
             <Input
               type="number"
               value={terms.openingBlockApplications}
@@ -531,9 +534,7 @@ function AgencySteps({
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">
-              Daily application target
-            </label>
+            <label className="mb-1 block text-[11px] text-ink-3">Daily application target</label>
             <Input
               type="number"
               value={terms.dailyBlockApplications}
@@ -541,9 +542,7 @@ function AgencySteps({
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">
-              Overrun ceiling %
-            </label>
+            <label className="mb-1 block text-[11px] text-ink-3">Overrun ceiling %</label>
             <Input
               type="number"
               value={terms.ceilingPct}
@@ -551,9 +550,7 @@ function AgencySteps({
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">
-              Maximum daily debit
-            </label>
+            <label className="mb-1 block text-[11px] text-ink-3">Maximum daily debit</label>
             <Input
               type="number"
               placeholder={computedMax > 0 ? String(computedMax) : ''}
@@ -563,11 +560,11 @@ function AgencySteps({
           </div>
         </div>
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           ({block} block + {ceilingQuantity} ceiling) × {dollars(effectiveRate)} ={' '}
-          <span className="font-medium">{dollars(computedMax)}</span>. Stored as an explicit
-          figure — it is a commitment on the Insertion Order, not something recomputed when a
-          charge is placed. Leave the field blank to store this computation.
+          <span className="font-medium">{dollars(computedMax)}</span>. Stored as an explicit figure
+          — it is a commitment on the Insertion Order, not something recomputed when a charge is
+          placed. Leave the field blank to store this computation.
         </p>
 
         <Button
@@ -590,7 +587,7 @@ function AgencySteps({
       <StepShell id="PAYMENT_METHOD" index={3}>
         <div className="flex items-end gap-3">
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">Payment method</label>
+            <label className="mb-1 block text-[11px] text-ink-3">Payment method</label>
             <select
               value={paymentMethod}
               onChange={e => setPaymentMethod(e.target.value)}
@@ -624,9 +621,7 @@ function AgencySteps({
         */}
         <div className="flex items-end gap-3 border-t border-rule pt-3">
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">
-              Payment provider
-            </label>
+            <label className="mb-1 block text-[11px] text-ink-3">Payment provider</label>
             <select
               value={paymentProvider}
               onChange={e => setPaymentProvider(e.target.value)}
@@ -651,21 +646,21 @@ function AgencySteps({
             Record
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           <strong>Melio</strong> and <strong>offline</strong> agencies are never debited by this
           platform &mdash; Melio cannot pull a bank debit on our schedule, so both are invoiced.
-          Their calls, credits, rate and Overrun ceiling work exactly as any other
-          agency&rsquo;s; each night&rsquo;s settlement is computed in full and recorded as
-          payable, for you to raise the invoice from. Their opening block is recorded with the
-          reference the money arrived against, and they need no mandate below. Pick{' '}
-          <strong>Stripe</strong> only for an agency this platform should debit directly.
+          Their calls, credits, rate and Overrun ceiling work exactly as any other agency&rsquo;s;
+          each night&rsquo;s settlement is computed in full and recorded as payable, for you to
+          raise the invoice from. Their opening block is recorded with the reference the money
+          arrived against, and they need no mandate below. Pick <strong>Stripe</strong> only for an
+          agency this platform should debit directly.
         </p>
         {/*
           Stated because it is the question this step raises: choosing CARD does
           not price the agency differently by itself. The offset above is a
           separate, agreed number.
         */}
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           Card-paying agencies get a lower overrun ceiling — 25% above the daily block, and it does
           not rise with settlement history, because a card payment can be taken back. It does not
           change the price by itself: that is the rate offset above, and it is agreed, not derived.
@@ -675,9 +670,7 @@ function AgencySteps({
       <StepShell id="OWNER" index={4}>
         <div className="flex items-end gap-3">
           <div className="flex-1">
-            <label className="mb-1 block text-[11px] text-muted-foreground">
-              Owner email address
-            </label>
+            <label className="mb-1 block text-[11px] text-ink-3">Owner email address</label>
             <Input
               type="email"
               value={ownerEmail}
@@ -702,10 +695,10 @@ function AgencySteps({
             Issue activation link
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           Single-use, expires in seven days, and works only for the address it was issued for. The
-          owner can then invite their own agents from inside the agency — agents only, and only
-          into their own agency.
+          owner can then invite their own agents from inside the agency — agents only, and only into
+          their own agency.
         </p>
       </StepShell>
 
@@ -723,7 +716,7 @@ function AgencySteps({
         >
           {busy ? 'Enrolling…' : 'Enrol'}
         </Button>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-ink-3">
           Takes effect on the next call offered. Charging is a second switch and stays off, so the
           first settlements compute in full and take no money.
         </p>

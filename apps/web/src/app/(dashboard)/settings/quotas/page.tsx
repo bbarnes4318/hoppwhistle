@@ -50,11 +50,17 @@
 import { AlertCircle, CheckCircle2, Building2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { StatTile } from '@/components/domain/stat-tile';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import {
+  Panel,
+  PanelBody,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+} from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -336,10 +342,10 @@ export default function QuotasPage() {
   // ── The cross-agency state: no request, and a way out ──────────────────────
   if (withoutAgency) {
     return (
-      <CompactPageShell fullHeight={false}>
-        <CompactPageHeader subtitle="Call ceilings and spend caps, per agency" />
-        <Card className="border-rule">
-          <CardContent className="flex items-start gap-3 p-4">
+      <div className="page-canvas">
+        <PageHeader description="Call ceilings and spend caps, per agency" />
+        <Panel>
+          <PanelBody className="flex items-start gap-3">
             <Building2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-ink-3" />
             <div>
               <div className="t-section text-ink">A quota belongs to one agency</div>
@@ -349,9 +355,9 @@ export default function QuotasPage() {
                 to see and set its limits.
               </p>
             </div>
-          </CardContent>
-        </Card>
-      </CompactPageShell>
+          </PanelBody>
+        </Panel>
+      </div>
     );
   }
 
@@ -362,9 +368,9 @@ export default function QuotasPage() {
   const spend = summary?.budget ?? null;
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader
-        subtitle={
+    <div className="page-canvas">
+      <PageHeader
+        description={
           administering
             ? `Limits and spend caps for ${administering.name ?? 'this agency'}`
             : 'Your agency’s limits and spend, set by NetEnroll'
@@ -429,19 +435,19 @@ export default function QuotasPage() {
         <TabsList className="h-9 w-full justify-start gap-6 border-b border-rule bg-transparent p-0">
           <TabsTrigger
             value="quotas"
-            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent"
+            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-ink-3 data-[state=active]:border-brand data-[state=active]:bg-transparent data-[state=active]:text-ink"
           >
             Quotas
           </TabsTrigger>
           <TabsTrigger
             value="budget"
-            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent"
+            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-ink-3 data-[state=active]:border-brand data-[state=active]:bg-transparent data-[state=active]:text-ink"
           >
             Budget
           </TabsTrigger>
           <TabsTrigger
             value="overrides"
-            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent"
+            className="h-9 rounded-none border-b-2 border-transparent px-1 text-xs font-semibold text-ink-3 data-[state=active]:border-brand data-[state=active]:bg-transparent data-[state=active]:text-ink"
           >
             Overrides
           </TabsTrigger>
@@ -449,17 +455,17 @@ export default function QuotasPage() {
 
         {/* ── Quotas ─────────────────────────────────────────────────────── */}
         <TabsContent value="quotas" className="mt-3">
-          <Card className="border-rule">
-            <CardHeader className="border-b border-rule/60 p-3 pb-2">
-              <CardTitle className="t-label text-ink-3">Quota settings</CardTitle>
-              <CardDescription className="t-meta text-ink-3">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Quota settings</PanelTitle>
+              <PanelDescription>
                 {administering
                   ? 'Ceilings enforced on every call this agency places.'
                   : 'Ceilings enforced on every call you place. NetEnroll sets these.'}
-              </CardDescription>
-            </CardHeader>
+              </PanelDescription>
+            </PanelHeader>
 
-            <CardContent className="space-y-3 p-3">
+            <PanelBody className="space-y-3">
               {administering ? (
                 <>
                   <div className="flex items-center justify-between">
@@ -533,21 +539,21 @@ export default function QuotasPage() {
                   ]}
                 />
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
 
         {/* ── Budget ─────────────────────────────────────────────────────── */}
         <TabsContent value="budget" className="mt-3 space-y-3">
-          <Card className="border-rule">
-            <CardHeader className="border-b border-rule/60 p-3 pb-2">
-              <CardTitle className="t-label text-ink-3">Budget settings</CardTitle>
-              <CardDescription className="t-meta text-ink-3">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Budget settings</PanelTitle>
+              <PanelDescription>
                 Spend caps, the threshold alerts fire at, and whether the cap stops calls.
-              </CardDescription>
-            </CardHeader>
+              </PanelDescription>
+            </PanelHeader>
 
-            <CardContent className="space-y-3 p-3">
+            <PanelBody className="space-y-3">
               {administering ? (
                 <>
                   <div className="flex items-center justify-between">
@@ -662,19 +668,19 @@ export default function QuotasPage() {
                   ]}
                 />
               )}
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
 
           {/* The token bypasses the hard stop, so only staff may mint one. */}
           {administering && (
-            <Card className="border-rule">
-              <CardHeader className="border-b border-rule/60 p-3 pb-2">
-                <CardTitle className="t-label text-ink-3">Override token</CardTitle>
-                <CardDescription className="t-meta text-ink-3">
+            <Panel>
+              <PanelHeader>
+                <PanelTitle>Override token</PanelTitle>
+                <PanelDescription>
                   Lets this agency keep dialling past its hard stop for 24 hours.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 p-3">
+                </PanelDescription>
+              </PanelHeader>
+              <PanelBody className="space-y-2">
                 {overrideToken ? (
                   <>
                     <Alert className="py-2">
@@ -709,28 +715,28 @@ export default function QuotasPage() {
                     Generate override token
                   </Button>
                 )}
-              </CardContent>
-            </Card>
+              </PanelBody>
+            </Panel>
           )}
         </TabsContent>
 
         {/* ── Overrides ──────────────────────────────────────────────────── */}
         <TabsContent value="overrides" className="mt-3">
-          <Card className="border-rule">
-            <CardHeader className="border-b border-rule/60 p-3 pb-2">
-              <CardTitle className="t-label text-ink-3">Quota overrides</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Quota overrides</PanelTitle>
+            </PanelHeader>
+            <PanelBody>
               <p className="t-body text-ink-3">
                 {administering
                   ? 'A quota override raises one limit temporarily, with a reason and an expiry. They are created through the platform API.'
                   : 'A quota override raises one of your limits temporarily. NetEnroll grants them; ask your account contact if you need one.'}
               </p>
-            </CardContent>
-          </Card>
+            </PanelBody>
+          </Panel>
         </TabsContent>
       </Tabs>
-    </CompactPageShell>
+    </div>
   );
 }
 
@@ -783,7 +789,7 @@ function Readings({ rows, loading }: { rows: Array<[string, string]>; loading: b
   }
 
   return (
-    <dl className="divide-y divide-rule/60">
+    <dl className="divide-y divide-rule">
       {rows.map(([term, value]) => (
         <div key={term} className="flex items-baseline justify-between gap-4 py-2">
           <dt className="t-body text-ink-3">{term}</dt>

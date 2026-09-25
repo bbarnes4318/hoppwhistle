@@ -15,7 +15,6 @@ import {
 } from '@/components/delivery/ledger';
 import { Toolbar, ToolbarActions, ToolbarMeta } from '@/components/domain';
 import { StatusChip } from '@/components/domain/status-chip';
-import { CompactPageShell } from '@/components/layout/compact-layout';
 import { Button } from '@/components/ui/button';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient, payload } from '@/lib/api';
@@ -241,27 +240,27 @@ export function PlatformDeliveryView(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
-        <div className="flex flex-1 items-center justify-center t-body text-ink-3">
+      <div className="page-canvas">
+        <div className="flex items-center justify-center py-12 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading every agency
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (error || !overview) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <p className="t-body text-ink-3">{error ?? 'No delivery data yet.'}</p>
-      </CompactPageShell>
+      </div>
     );
   }
 
   const { totals } = overview;
 
   return (
-    <CompactPageShell fullHeight={false}>
+    <div className="page-canvas">
       {/*
         "Every agency" leads the line, and it is load-bearing.
 
@@ -359,7 +358,7 @@ export function PlatformDeliveryView(): JSX.Element {
         </span>
       </SectionRule>
 
-      <div className="overflow-auto rounded-card border border-rule bg-surface">
+      <div className="overflow-x-auto rounded-card border border-rule bg-surface">
         <Ledger>
           <thead>
             <tr>
@@ -411,7 +410,6 @@ export function PlatformDeliveryView(): JSX.Element {
                 <tr
                   key={row.tenantId}
                   className={cn(
-                    'hover:bg-sunken',
                     // A 2px mark at the left edge, in the tone of the worst
                     // flag, so a flagged row is findable from across the room
                     // without tinting the whole row and burying its numbers.
@@ -543,6 +541,6 @@ export function PlatformDeliveryView(): JSX.Element {
         * rate includes an agreed offset above the curve; hover for the two halves. Enter an agency
         in the switcher to narrow this page to it; leaving returns here.
       </p>
-    </CompactPageShell>
+    </div>
   );
 }

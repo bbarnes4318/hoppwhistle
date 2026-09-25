@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 import { count } from '@/components/delivery/ledger';
-import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PageHeader } from '@/components/layout/page-header';
 import { LiveBoardLoading, LiveBoardView, formatAsOf } from '@/components/live/live-board-view';
 import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
@@ -114,43 +114,46 @@ export default function LiveBoardPage(): JSX.Element {
 
   if (loading) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <LiveBoardLoading />
-      </CompactPageShell>
+      </div>
     );
   }
 
   if (!board) {
     return (
-      <CompactPageShell>
+      <div className="page-canvas">
         <p className="t-body text-ink-3">{error ?? 'No live data yet.'}</p>
-      </CompactPageShell>
+      </div>
     );
   }
 
   const asOf = formatAsOf(board.generatedAt);
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle={`Every agency · ${board.day} · as of ${asOf} ${board.timeZone}`}>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowNonProduction(v => !v)}
-            aria-pressed={showNonProduction}
-          >
-            {showNonProduction ? 'Hide test agencies' : 'Show test agencies'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCw className="mr-2 h-3 w-3" />
-            Refresh
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/delivery">Delivery</Link>
-          </Button>
-        </div>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description={`Every agency · ${board.day} · as of ${asOf} ${board.timeZone}`}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowNonProduction(v => !v)}
+              aria-pressed={showNonProduction}
+            >
+              {showNonProduction ? 'Hide test agencies' : 'Show test agencies'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/delivery">Delivery</Link>
+            </Button>
+          </>
+        }
+      />
 
       <LiveBoardView
         totals={board.totals}
@@ -172,13 +175,13 @@ export default function LiveBoardPage(): JSX.Element {
         asOf={asOf}
         footnote={
           <>
-            Delivered calls and submitted applications are the figures the nightly settlement
-            bills from, so this board and an agency&rsquo;s invoice can never disagree. Closing is
-            blank until a call has been delivered — an agency that has taken calls and written
-            nothing reads 0%, which is a different thing from a quiet morning.
+            Delivered calls and submitted applications are the figures the nightly settlement bills
+            from, so this board and an agency&rsquo;s invoice can never disagree. Closing is blank
+            until a call has been delivered — an agency that has taken calls and written nothing
+            reads 0%, which is a different thing from a quiet morning.
           </>
         }
       />
-    </CompactPageShell>
+    </div>
   );
 }

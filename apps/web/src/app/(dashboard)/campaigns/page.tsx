@@ -1,13 +1,13 @@
 'use client';
 
-import { BarChart3, Copy, Edit, Pause, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { BarChart3, Copy, Edit, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { CreateCampaignWizard } from '@/components/campaigns/create-campaign-wizard';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, Toolbar, ToolbarActions, ToolbarSearch } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -25,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
@@ -253,111 +253,72 @@ function CampaignsPage() {
   );
 
   return (
-    <CompactPageShell>
-      <CompactPageHeader
-        subtitle={
+    <div className="page-canvas">
+      <PageHeader
+        description={
           canManage
             ? 'Configure campaigns and track performance'
             : 'The campaigns sending your agency calls, and how many each is sending'
         }
-      >
-        {canManage ? (
-          <Button onClick={() => setWizardOpen(true)} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Campaign
-          </Button>
-        ) : null}
-      </CompactPageHeader>
+        actions={
+          canManage ? (
+            <Button onClick={() => setWizardOpen(true)} size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Campaign
+            </Button>
+          ) : null
+        }
+      />
 
-      {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
-        <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Campaigns
-              </CardTitle>
-              <CardDescription className="text-[10px]">
-                {canManage ? 'View and manage all campaigns' : 'View only'}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search campaigns..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-8 w-48 h-7 text-xs bg-background border-rule text-foreground"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 border-rule text-muted-foreground"
-                onClick={() => {
-                  void fetchCampaigns();
-                  void fetchStats();
-                }}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
-          <Table className="table-dense">
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow className="border-b border-border">
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Name
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Status
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
-                  Offer Name
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
-                  Country
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
-                  Recording
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Live
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Hour
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Day
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Month
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Total
-                </TableHead>
-                <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
-                  Actions
-                </TableHead>
+      <Toolbar>
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search campaigns..." />
+        <ToolbarActions>
+          <Tooltip content="Refresh" align="end">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Refresh"
+              className="h-8 w-8 p-0"
+              onClick={() => {
+                void fetchCampaigns();
+                void fetchStats();
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </Button>
+          </Tooltip>
+        </ToolbarActions>
+      </Toolbar>
+
+      <Panel className="min-w-0 overflow-hidden">
+        <PanelBody flush>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-5">Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Offer Name</TableHead>
+                <TableHead className="text-center">Country</TableHead>
+                <TableHead className="text-center">Recording</TableHead>
+                <TableHead className="text-right">Live</TableHead>
+                <TableHead className="text-right">Hour</TableHead>
+                <TableHead className="text-right">Day</TableHead>
+                <TableHead className="text-right">Month</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="pr-5 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center py-8">
-                    <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                    <RefreshCw className="h-5 w-5 animate-spin mx-auto text-ink-3" />
                   </TableCell>
                 </TableRow>
               ) : filteredCampaigns.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={11}
-                    className="text-center py-8 text-muted-foreground text-sm"
-                  >
+                  <TableCell colSpan={11} className="text-center py-8 text-ink-3">
                     No campaigns found
                   </TableCell>
                 </TableRow>
@@ -365,64 +326,62 @@ function CampaignsPage() {
                 filteredCampaigns.map(campaign => {
                   const campaignStats = stats.get(campaign.id);
                   return (
-                    <TableRow key={campaign.id} className="hover:bg-sunken border-b border-border">
+                    <TableRow key={campaign.id}>
                       {/* Name */}
-                      <TableCell className="py-2 px-3">
+                      <TableCell className="pl-5">
                         <a
                           href={`/campaigns/${campaign.id}`}
-                          className="font-medium text-brand-ink hover:opacity-80 hover:underline text-sm"
+                          className="font-medium text-brand-ink hover:opacity-80 hover:underline"
                         >
                           {campaign.name}
                         </a>
                       </TableCell>
 
                       {/* Status */}
-                      <TableCell className="py-2 px-3">
+                      <TableCell>
                         <StatusBadge status={campaign.status} />
                       </TableCell>
 
                       {/* Offer Name */}
-                      <TableCell className="py-2 px-3 text-sm text-muted-foreground">
-                        {campaign.offerName || '—'}
-                      </TableCell>
+                      <TableCell className="text-ink-3">{campaign.offerName || '—'}</TableCell>
 
                       {/* Country */}
-                      <TableCell className="py-2 px-3 text-center text-lg">
+                      <TableCell className="text-center text-lg">
                         {getCountryFlag(campaign.country)}
                       </TableCell>
 
                       {/* Recording */}
-                      <TableCell className="py-2 px-3 text-center text-sm text-muted-foreground">
+                      <TableCell className="text-center text-ink-3">
                         {campaign.recordingEnabled ? 'Yes' : 'No'}
                       </TableCell>
 
                       {/* Live */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-live-ink">
+                      <TableCell className="text-right tabular-nums font-medium text-live-ink">
                         {campaignStats?.liveCount ?? 0}
                       </TableCell>
 
                       {/* Hour */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                      <TableCell className="text-right tabular-nums">
                         {campaignStats?.hourCount ?? 0}
                       </TableCell>
 
                       {/* Day */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                      <TableCell className="text-right tabular-nums">
                         {campaignStats?.dayCount ?? 0}
                       </TableCell>
 
                       {/* Month */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums">
+                      <TableCell className="text-right tabular-nums">
                         {campaignStats?.monthCount ?? 0}
                       </TableCell>
 
                       {/* Total */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium">
+                      <TableCell className="text-right tabular-nums font-medium">
                         {campaignStats?.totalCount ?? 0}
                       </TableCell>
 
                       {/* Actions */}
-                      <TableCell className="py-2 px-3 text-right">
+                      <TableCell className="pr-5 text-right">
                         <div className="flex justify-end gap-0.5">
                           {canManage ? (
                             <Button
@@ -432,7 +391,7 @@ function CampaignsPage() {
                               onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
                               title="Edit"
                             >
-                              <Edit className="h-3.5 w-3.5 text-muted-foreground" />
+                              <Edit className="h-3.5 w-3.5 text-ink-3" />
                             </Button>
                           ) : null}
                           <Button
@@ -444,7 +403,7 @@ function CampaignsPage() {
                             }
                             title="View Reports"
                           >
-                            <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                            <BarChart3 className="h-3.5 w-3.5 text-ink-3" />
                           </Button>
                           {canManage ? (
                             <>
@@ -452,16 +411,16 @@ function CampaignsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                onClick={() => handleDuplicate(campaign)}
+                                onClick={() => void handleDuplicate(campaign)}
                                 title="Duplicate"
                               >
-                                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                <Copy className="h-3.5 w-3.5 text-ink-3" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                onClick={() => handleToggleStatus(campaign)}
+                                onClick={() => void handleToggleStatus(campaign)}
                                 title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
                               >
                                 {campaign.status === 'ACTIVE' ? (
@@ -489,33 +448,33 @@ function CampaignsPage() {
               )}
             </TableBody>
           </Table>
+        </PanelBody>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 border-t border-rule py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-ink-3">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </Panel>
 
       {/* Create Campaign Wizard */}
       {canManage ? (
@@ -543,7 +502,11 @@ function CampaignsPage() {
                 <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                >
                   {deleting ? 'Deleting...' : 'Delete'}
                 </Button>
               </DialogFooter>
@@ -551,7 +514,7 @@ function CampaignsPage() {
           </Dialog>
         </>
       ) : null}
-    </CompactPageShell>
+    </div>
   );
 }
 

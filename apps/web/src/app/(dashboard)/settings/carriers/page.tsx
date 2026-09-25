@@ -26,11 +26,11 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
@@ -231,37 +231,40 @@ export default function CarrierRoutingPage() {
 
   if (loading) {
     return (
-      <CompactPageShell fullHeight={false}>
-        <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
+      <div className="page-canvas">
+        <div className="flex items-center gap-2 py-12 text-sm text-ink-3">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading carrier routing…
         </div>
-      </CompactPageShell>
+      </div>
     );
   }
 
   const routeByType = new Map((overview?.routes ?? []).map(r => [r.callType, r]));
 
   return (
-    <CompactPageShell fullHeight={false}>
-      <CompactPageHeader subtitle="Set the order carriers are tried for each kind of call. Changes take effect on the next call.">
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          <RotateCcw className="mr-2 h-3.5 w-3.5" />
-          Refresh
-        </Button>
-      </CompactPageHeader>
+    <div className="page-canvas">
+      <PageHeader
+        description="Set the order carriers are tried for each kind of call. Changes take effect on the next call."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RotateCcw className="mr-2 h-3.5 w-3.5" />
+            Refresh
+          </Button>
+        }
+      />
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {SECTIONS.map(section => (
-        <div key={section.title} className="mb-6">
-          <h2 className="text-sm font-semibold tracking-tight">{section.title}</h2>
-          <p className="mb-3 text-xs text-muted-foreground">{section.description}</p>
+        <div key={section.title}>
+          <h2 className="t-section text-ink">{section.title}</h2>
+          <p className="t-meta mb-3 mt-1 text-ink-3">{section.description}</p>
 
           <div className="space-y-3">
             {section.callTypes.map(callType => {
@@ -283,7 +286,7 @@ export default function CarrierRoutingPage() {
           </div>
         </div>
       ))}
-    </CompactPageShell>
+    </div>
   );
 }
 
@@ -314,37 +317,36 @@ function WaterfallCard({
   const unused = carriers.filter(c => !inWaterfall.has(c.id));
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm">{route.label}</CardTitle>
-            <CardDescription className="text-xs">
-              Tried top to bottom. The first carrier that connects wins.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+    <Panel>
+      <PanelHeader
+        action={
+          <>
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-3" />}
             {activeCount === 0 ? (
-              <Badge variant="destructive" className="text-[10px]">
+              <Badge variant="destructive" className="t-meta">
                 No carrier enabled
               </Badge>
             ) : activeCount === 1 ? (
-              <Badge variant="outline" className="text-[10px] border-ringing/40 text-ringing-ink">
+              <Badge variant="outline" className="t-meta border-ringing text-ringing-ink">
                 No fallback
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-[10px] border-live/40 text-live-ink">
+              <Badge variant="outline" className="t-meta border-live text-live-ink">
                 {activeCount} carriers
               </Badge>
             )}
-          </div>
-        </div>
-      </CardHeader>
+          </>
+        }
+      >
+        <PanelTitle>{route.label}</PanelTitle>
+        <PanelDescription>
+          Tried top to bottom. The first carrier that connects wins.
+        </PanelDescription>
+      </PanelHeader>
 
-      <CardContent className="space-y-3">
+      <PanelBody className="space-y-3">
         {activeCount === 1 && (
-          <Alert className="border-ringing/40 py-2">
+          <Alert className="border-ringing py-2">
             <AlertTriangle className="h-3.5 w-3.5" />
             <AlertDescription className="text-xs">
               Only one carrier is enabled for this path. If it stops connecting calls, these calls
@@ -355,7 +357,7 @@ function WaterfallCard({
 
         {route.callType !== 'INBOUND' &&
           route.steps.some(s => s.enabled && s.callerIdUnattestable) && (
-            <Alert className="border-ringing/40 py-2">
+            <Alert className="border-ringing py-2">
               <AlertTriangle className="h-3.5 w-3.5" />
               <AlertDescription className="text-xs">
                 <strong>
@@ -403,7 +405,7 @@ function WaterfallCard({
                   </Button>
                 </div>
 
-                <span className="w-14 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span className="t-label w-16 shrink-0 text-ink-3">
                   {index === 0 ? 'Primary' : `Backup ${index}`}
                 </span>
 
@@ -411,12 +413,12 @@ function WaterfallCard({
                   <div className="flex items-center gap-2">
                     <span className="truncate text-xs font-medium">{step.carrierName}</span>
                     {step.carrierStatus === 'INACTIVE' && (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="t-meta">
                         Carrier inactive
                       </Badge>
                     )}
                     {demoted.length > 0 && (
-                      <Badge variant="destructive" className="text-[10px]">
+                      <Badge variant="destructive" className="t-meta">
                         {demoted.length} demoted
                       </Badge>
                     )}
@@ -427,7 +429,7 @@ function WaterfallCard({
                     {step.callerIdUnattestable ? (
                       <Badge
                         variant="outline"
-                        className="border-ringing/40 text-[10px] text-ringing-ink"
+                        className="t-meta border-ringing text-ringing-ink"
                         title={`No DIDs are registered to ${step.carrierName}, so calls on this leg present a number it did not issue and cannot attest to. Expect low STIR/SHAKEN attestation and spam labeling. Buy or port numbers to ${step.carrierName} to fix.`}
                       >
                         no caller ID of its own
@@ -435,7 +437,7 @@ function WaterfallCard({
                     ) : step.callerIdStrategy === 'POOL' ? (
                       <Badge
                         variant="outline"
-                        className="border-live/40 text-[10px] text-live-ink"
+                        className="t-meta border-live text-live-ink"
                         title={`Presents one of ${step.callerIdCount} DIDs registered to ${step.carrierName}, so it can attest to the call.`}
                       >
                         {step.callerIdCount} own DIDs
@@ -444,7 +446,7 @@ function WaterfallCard({
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     {step.gateways.length === 0 ? (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="t-meta text-ink-3">
                         No gateways configured — this carrier will be skipped
                       </span>
                     ) : (
@@ -468,9 +470,7 @@ function WaterfallCard({
 
         {unused.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Not on this waterfall
-            </span>
+            <span className="t-label text-ink-3">Not on this waterfall</span>
             {unused.map(carrier => (
               <Button
                 key={carrier.id}
@@ -488,25 +488,23 @@ function WaterfallCard({
           </div>
         )}
 
-        <div className="flex items-start gap-2 rounded bg-sunken px-3 py-2">
-          <PhoneForwarded className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <div className="flex items-start gap-2 rounded-control bg-sunken px-3 py-2">
+          <PhoneForwarded className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3" />
           <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Now dialing, in this order
-            </p>
+            <p className="t-label text-ink-3">Now dialing, in this order</p>
             <p className="break-all font-mono text-[11px]">
               {route.effectiveChain.join(' → ') || '(nothing)'}
             </p>
             {route.effectiveSource === 'fallback' && (
-              <p className="mt-1 text-[10px] text-ringing-ink">
+              <p className="t-meta mt-1 text-ringing-ink">
                 This is the built-in emergency chain, not your configuration — no enabled carrier
                 with a working gateway was found for this path.
               </p>
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -543,11 +541,11 @@ function GatewayChip({
     <span
       title={title}
       className={[
-        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px]',
+        't-meta inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono',
         !gateway.enabled
-          ? 'border-rule text-muted-foreground line-through'
+          ? 'border-rule text-ink-3 line-through'
           : gateway.circuitOpen
-            ? 'border-dropped/40 text-dropped-ink'
+            ? 'border-dropped text-dropped-ink'
             : 'border-rule',
       ].join(' ')}
     >
