@@ -112,8 +112,13 @@ function CampaignsPage() {
    * (STAFF_ONLY_AREAS on the API side), so for them the controls that would
    * only ever answer 403 are not drawn at all: create, edit, duplicate,
    * pause/activate and delete.
+   *
+   * A white-label agency's OWNER and ADMIN are the exception: they run a call
+   * network of their own, the API lets their campaign writes through
+   * (WHITE_LABEL_ALLOWED), and they get every control staff do.
    */
-  const { isPlatformAdmin: canManage } = useAuth();
+  const { isPlatformAdmin, isWhiteLabel } = useAuth();
+  const canManage = isPlatformAdmin || isWhiteLabel;
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());

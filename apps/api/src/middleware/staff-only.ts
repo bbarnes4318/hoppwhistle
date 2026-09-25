@@ -34,7 +34,8 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { isStaffOnlyEndpoint } from '../lib/staff-only-endpoints.js';
+import { isStaffOnlyEndpoint, isWhiteLabelAllowed } from '../lib/staff-only-endpoints.js';
+import { isWhiteLabelOperator, type WhiteLabelPrincipal } from '../lib/white-label.js';
 
 export const STAFF_ONLY = {
   code: 'STAFF_ONLY',
@@ -52,12 +53,25 @@ export function enforceStaffOnly(request: FastifyRequest, reply: FastifyReply): 
   if (!isStaffOnlyEndpoint(request.method, request.url)) return false;
 
   // Unauthenticated: leave it to the refusal it already gets. See the header.
-  const principal = request.user as { isPlatformAdmin?: boolean } | undefined;
+  const principal = request.user as
+    | (WhiteLabelPrincipal & { isPlatformAdmin?: boolean })
+    | undefined;
   if (!principal) return false;
 
   // The capability, and only the capability. Not a role: every agency has an
   // OWNER, and the whole point is that an agency's OWNER is not staff.
   if (principal.isPlatformAdmin === true) return false;
+
+  /*
+   * The white-label tier: an agency that also sells calls runs its own call
+   * network, so its OWNER and ADMIN pass on exactly WHITE_LABEL_ALLOWED. Both
+   * halves are needed -- the tier, read from the tenant this principal
+   * resolved to, and the role. An AGENT of a white-label agency, and any API
+   * key, is refused here like everybody else.
+   */
+  if (isWhiteLabelOperator(principal) && isWhiteLabelAllowed(request.method, request.url)) {
+    return false;
+  }
 
   void reply.code(403).send({ error: STAFF_ONLY });
   return true;

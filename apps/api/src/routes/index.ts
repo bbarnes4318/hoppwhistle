@@ -6,6 +6,11 @@ import { Prisma } from '@prisma/client';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import {
+  didActiveElsewhere,
+  extensionsOutsideTenant,
+  isPlatformPrincipal,
+} from '../lib/tenant-scope-guards.js';
+import {
   getActingTenantId,
   replyTenantRefusal,
   resolveTenant,
@@ -21,6 +26,12 @@ import {
 } from '../services/applications/input-schema.js';
 import type { ApplicationInput } from '../services/applications/input-schema.js';
 import { deliveredCallWhere, submittedApplicationWhere } from '../services/rating/measurement.js';
+import {
+  loadCallMoneyLedger,
+  marginOf,
+  summariseCallMoney,
+  type MoneyBucket,
+} from '../services/reporting/call-money.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -240,6 +251,21 @@ function buildCallWhere(params: {
  * access the same way; this is a security boundary and a second copy of it
  * would be a second thing to get wrong.
  */
+/**
+ * Each campaign's name, as the first of its calls in the set recorded it -- the
+ * name the profitability report has always shown for the group.
+ */
+function campaignNamesOf(
+  calls: ReadonlyArray<{ campaignId: string | null; campaignName: string | null }>
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const call of calls) {
+    const id = call.campaignId || 'unknown';
+    if (!names.has(id)) names.set(id, call.campaignName || 'Unknown Campaign');
+  }
+  return names;
+}
+
 export async function getUserProfile(request: any, prisma: any) {
   const user = request.user;
   let userRoles: string[] = [];
@@ -1009,6 +1035,52 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         }
       }
 
+      /*
+       * An agency editing its own number -- a white-label owner, since this
+       * route is otherwise staff's -- may point it only at its own people, may
+       * not move it in or out of the platform-wide RTB pool, and may not
+       * switch it on over a DID another agency is taking calls on. Staff keep
+       * every one of these. See `lib/tenant-scope-guards.ts`.
+       */
+      if (!isPlatformPrincipal(request)) {
+        if (body.userId !== undefined && body.userId !== null) {
+          const assignee = await prisma.user.findFirst({
+            where: { id: body.userId, tenantId },
+            select: { id: true },
+          });
+          if (!assignee) {
+            void reply.code(404);
+            return { error: { code: 'NOT_FOUND', message: 'User not found' } };
+          }
+        }
+
+        const poolChanged =
+          (body.poolType !== undefined && body.poolType !== existingNumber.poolType) ||
+          (body.poolStatus !== undefined && body.poolStatus !== existingNumber.poolStatus);
+        if (poolChanged) {
+          void reply.code(403);
+          return {
+            error: {
+              code: 'STAFF_ONLY',
+              message: 'The RTB number pool is shared across the platform and is set by NetEnroll.',
+            },
+          };
+        }
+
+        if (
+          body.status === 'ACTIVE' &&
+          (await didActiveElsewhere(prisma, tenantId, existingNumber.number))
+        ) {
+          void reply.code(409);
+          return {
+            error: {
+              code: 'DID_IN_USE',
+              message: 'This number is active in another account.',
+            },
+          };
+        }
+      }
+
       // Update number
       const updateData: Record<string, unknown> = {};
       if (body.status !== undefined) {
@@ -1567,6 +1639,36 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (body.flowId !== undefined) updateData.flowId = body.flowId;
       if (body.callerIdPoolId !== undefined) updateData.callerIdPoolId = body.callerIdPoolId;
 
+      /*
+       * The flow and the caller-ID pool are foreign keys the database does not
+       * tie to a tenant. Create checks both; this route did not, which staff
+       * never needed and an agency must not have: a white-label owner could
+       * otherwise run their calls on another agency's flow and numbers. Staff
+       * keep what they had.
+       */
+      if (!isPlatformPrincipal(request)) {
+        if (body.flowId) {
+          const flow = await prisma.flow.findFirst({
+            where: { id: body.flowId, tenantId },
+            select: { id: true },
+          });
+          if (!flow) {
+            void reply.code(404);
+            return { error: { code: 'NOT_FOUND', message: 'Flow not found' } };
+          }
+        }
+        if (body.callerIdPoolId) {
+          const pool = await prisma.callerIdPool.findFirst({
+            where: { id: body.callerIdPoolId, tenantId },
+            select: { id: true },
+          });
+          if (!pool) {
+            void reply.code(404);
+            return { error: { code: 'NOT_FOUND', message: 'Caller ID pool not found' } };
+          }
+        }
+      }
+
       if (body.billableDurationSeconds !== undefined) {
         if (body.billableDurationSeconds < 0) {
           void reply.code(400);
@@ -2007,6 +2109,13 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
 
     if (/^\d{4}$/.test(normalizedDestination)) {
       isPstn = false;
+      // An extension is platform-wide; an agency rings only its own agents.
+      if (
+        !isPlatformPrincipal(request) &&
+        (await extensionsOutsideTenant(prisma, tenantId, normalizedDestination)).length > 0
+      ) {
+        return reply.code(400).send({ error: 'That extension is not one of your agents' });
+      }
     }
 
     if (isPstn) {
@@ -2109,6 +2218,14 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
 
     if (/^\d{4}$/.test(normalizedDestination)) {
       isPstn = false;
+      // An extension is platform-wide; an agency rings only its own agents.
+      if (
+        destinationNumber !== undefined &&
+        !isPlatformPrincipal(request) &&
+        (await extensionsOutsideTenant(prisma, tenantId, normalizedDestination)).length > 0
+      ) {
+        return reply.code(400).send({ error: 'That extension is not one of your agents' });
+      }
     }
 
     if (isPstn && destinationNumber !== undefined) {
@@ -7004,187 +7121,54 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       },
     });
 
-    const callIds = calls.map(c => c.id);
-    const ledgerEntries =
-      callIds.length > 0
-        ? await prisma.accrualLedger.findMany({
-            where: {
-              callId: { in: callIds },
-              tenantId,
-              type: {
-                in: [
-                  'ADJUSTMENT',
-                  'RECORDING_FEE',
-                  'CONNECTION_FEE',
-                  'DISPUTE_HOLD',
-                  'DISPUTE_REVERSAL',
-                ],
-              },
-            },
-            select: {
-              callId: true,
-              type: true,
-              amount: true,
-            },
-          })
-        : [];
+    /*
+     * The per-call arithmetic lives in `services/reporting/call-money.ts`, which
+     * `/api/v1/call-sales/summary` runs on too, so the two cannot disagree.
+     * `__tests__/call-money.test.ts` pins this response byte for byte to what it
+     * answered before the move.
+     */
+    const ledgerEntries = await loadCallMoneyLedger(
+      prisma,
+      tenantId,
+      calls.map(c => c.id)
+    );
+    const money = summariseCallMoney(calls, ledgerEntries, call => call.campaignId || 'unknown');
+    const campaignNames = campaignNamesOf(calls);
 
-    const callToCampaignMap = new Map<string, string>();
-    for (const call of calls) {
-      callToCampaignMap.set(call.id, call.campaignId || 'unknown');
-    }
+    const rows = [...money.groups].map(([campaignId, g]) => ({
+      campaignId,
+      campaignName: campaignNames.get(campaignId)!,
+      totalCalls: g.totalCalls,
+      connectedCalls: g.connectedCalls,
+      billableCalls: g.billableCalls,
+      buyerRevenue: g.revenue.toFixed(4),
+      publisherPayout: g.payout.toFixed(4),
+      callCost: g.callCost.toFixed(4),
+      otherCosts: g.otherCosts.toFixed(4),
+      profit: g.profit.toFixed(4),
+      margin: marginOf(g),
+      disputes: g.disputes.toFixed(4),
+      disputesCount: g.disputesCount,
+      adjustments: g.adjustments.toFixed(4),
+      netPayableReceivable: g.netPayableReceivable.toFixed(4),
+    }));
 
-    const campaignLedgerMap = new Map<
-      string,
-      { otherCosts: Prisma.Decimal; adjustments: Prisma.Decimal; disputes: Prisma.Decimal }
-    >();
-    for (const entry of ledgerEntries) {
-      if (!entry.callId) continue;
-      const campId = callToCampaignMap.get(entry.callId);
-      if (!campId) continue;
-
-      if (!campaignLedgerMap.has(campId)) {
-        campaignLedgerMap.set(campId, {
-          otherCosts: new Prisma.Decimal(0),
-          adjustments: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-        });
-      }
-
-      const ledgerObj = campaignLedgerMap.get(campId)!;
-      const amt = new Prisma.Decimal(entry.amount);
-      if (entry.type === 'RECORDING_FEE' || entry.type === 'CONNECTION_FEE') {
-        ledgerObj.otherCosts = ledgerObj.otherCosts.plus(amt);
-      } else if (entry.type === 'ADJUSTMENT') {
-        ledgerObj.adjustments = ledgerObj.adjustments.plus(amt);
-      } else if (entry.type === 'DISPUTE_HOLD' || entry.type === 'DISPUTE_REVERSAL') {
-        ledgerObj.disputes = ledgerObj.disputes.plus(amt);
-      }
-    }
-
-    const groupsMap = new Map<string, any>();
-    let totalCalls = 0;
-    let connectedCalls = 0;
-    let billableCalls = 0;
-    let totalRev = new Prisma.Decimal(0);
-    let totalPayout = new Prisma.Decimal(0);
-    let totalCallCost = new Prisma.Decimal(0);
-    let totalOtherCosts = new Prisma.Decimal(0);
-    let totalDisputes = new Prisma.Decimal(0);
-    let totalDisputesCount = 0;
-    let totalAdjustments = new Prisma.Decimal(0);
-    let totalProfit = new Prisma.Decimal(0);
-    let totalNetPayableReceivable = new Prisma.Decimal(0);
-
-    for (const call of calls) {
-      const campId = call.campaignId || 'unknown';
-      const campName = call.campaignName || 'Unknown Campaign';
-
-      totalCalls++;
-      if (call.connectedDuration && call.connectedDuration > 0) connectedCalls++;
-      if (call.billable) billableCalls++;
-
-      const rev = call.buyerBillableAmount
-        ? new Prisma.Decimal(call.buyerBillableAmount)
-        : new Prisma.Decimal(0);
-      const pay = call.publisherPayoutAmount
-        ? new Prisma.Decimal(call.publisherPayoutAmount)
-        : new Prisma.Decimal(0);
-      const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
-
-      totalRev = totalRev.plus(rev);
-      totalPayout = totalPayout.plus(pay);
-      totalCallCost = totalCallCost.plus(callCost);
-
-      if (call.disputeStatus) {
-        totalDisputes = totalDisputes.plus(rev);
-        totalDisputesCount++;
-      }
-
-      if (!groupsMap.has(campId)) {
-        groupsMap.set(campId, {
-          campaignId: campId,
-          campaignName: campName,
-          totalCalls: 0,
-          connectedCalls: 0,
-          billableCalls: 0,
-          buyerRevenue: new Prisma.Decimal(0),
-          publisherPayout: new Prisma.Decimal(0),
-          callCost: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-          disputesCount: 0,
-        });
-      }
-
-      const g = groupsMap.get(campId);
-      g.totalCalls++;
-      if (call.connectedDuration && call.connectedDuration > 0) g.connectedCalls++;
-      if (call.billable) g.billableCalls++;
-      g.buyerRevenue = g.buyerRevenue.plus(rev);
-      g.publisherPayout = g.publisherPayout.plus(pay);
-      g.callCost = g.callCost.plus(callCost);
-      if (call.disputeStatus) {
-        g.disputes = g.disputes.plus(rev);
-        g.disputesCount++;
-      }
-    }
-
-    const rows = [...groupsMap.values()].map(g => {
-      const ledger = campaignLedgerMap.get(g.campaignId) || {
-        otherCosts: new Prisma.Decimal(0),
-        adjustments: new Prisma.Decimal(0),
-        disputes: new Prisma.Decimal(0),
-      };
-
-      const otherCosts = ledger.otherCosts;
-      const adjustments = ledger.adjustments;
-
-      totalOtherCosts = totalOtherCosts.plus(otherCosts);
-      totalAdjustments = totalAdjustments.plus(adjustments);
-
-      const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost).minus(otherCosts);
-      const margin = g.buyerRevenue.gt(0) ? profit.dividedBy(g.buyerRevenue).toNumber() : 0;
-      const netPayableReceivable = profit.plus(adjustments);
-
-      totalProfit = totalProfit.plus(profit);
-      totalNetPayableReceivable = totalNetPayableReceivable.plus(netPayableReceivable);
-
-      return {
-        campaignId: g.campaignId,
-        campaignName: g.campaignName,
-        totalCalls: g.totalCalls,
-        connectedCalls: g.connectedCalls,
-        billableCalls: g.billableCalls,
-        buyerRevenue: g.buyerRevenue.toFixed(4),
-        publisherPayout: g.publisherPayout.toFixed(4),
-        callCost: g.callCost.toFixed(4),
-        otherCosts: otherCosts.toFixed(4),
-        profit: profit.toFixed(4),
-        margin,
-        disputes: g.disputes.toFixed(4),
-        disputesCount: g.disputesCount,
-        adjustments: adjustments.toFixed(4),
-        netPayableReceivable: netPayableReceivable.toFixed(4),
-      };
-    });
-
-    const overallMargin = totalRev.gt(0) ? totalProfit.dividedBy(totalRev).toNumber() : 0;
-
+    const t = money.totals;
     return {
       totals: {
-        totalCalls,
-        connectedCalls,
-        billableCalls,
-        buyerRevenue: totalRev.toFixed(4),
-        publisherPayout: totalPayout.toFixed(4),
-        callCost: totalCallCost.toFixed(4),
-        otherCosts: totalOtherCosts.toFixed(4),
-        profit: totalProfit.toFixed(4),
-        margin: overallMargin,
-        disputes: totalDisputes.toFixed(4),
-        disputesCount: totalDisputesCount,
-        adjustments: totalAdjustments.toFixed(4),
-        netPayableReceivable: totalNetPayableReceivable.toFixed(4),
+        totalCalls: t.totalCalls,
+        connectedCalls: t.connectedCalls,
+        billableCalls: t.billableCalls,
+        buyerRevenue: t.revenue.toFixed(4),
+        publisherPayout: t.payout.toFixed(4),
+        callCost: t.callCost.toFixed(4),
+        otherCosts: t.otherCosts.toFixed(4),
+        profit: t.profit.toFixed(4),
+        margin: marginOf(t),
+        disputes: t.disputes.toFixed(4),
+        disputesCount: t.disputesCount,
+        adjustments: t.adjustments.toFixed(4),
+        netPayableReceivable: t.netPayableReceivable.toFixed(4),
       },
       rows,
     };
@@ -7239,180 +7223,48 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       },
     });
 
-    const callIds = calls.map(c => c.id);
-    const ledgerEntries =
-      callIds.length > 0
-        ? await prisma.accrualLedger.findMany({
-            where: {
-              callId: { in: callIds },
-              tenantId,
-              type: {
-                in: [
-                  'ADJUSTMENT',
-                  'RECORDING_FEE',
-                  'CONNECTION_FEE',
-                  'DISPUTE_HOLD',
-                  'DISPUTE_REVERSAL',
-                ],
-              },
-            },
-            select: {
-              callId: true,
-              type: true,
-              amount: true,
-            },
-          })
-        : [];
+    // The same arithmetic as the JSON report above, from the same module.
+    const ledgerEntries = await loadCallMoneyLedger(
+      prisma,
+      tenantId,
+      calls.map(c => c.id)
+    );
+    const money = summariseCallMoney(calls, ledgerEntries, call => call.campaignId || 'unknown');
+    const campaignNames = campaignNamesOf(calls);
+    const marginText = (bucket: MoneyBucket) =>
+      bucket.revenue.gt(0) ? (marginOf(bucket) * 100).toFixed(2) + '%' : '0.00%';
 
-    const callToCampaignMap = new Map<string, string>();
-    for (const call of calls) {
-      callToCampaignMap.set(call.id, call.campaignId || 'unknown');
-    }
+    const rows: Array<Array<string | number>> = [...money.groups].map(([campaignId, g]) => [
+      campaignNames.get(campaignId)!,
+      g.totalCalls,
+      g.connectedCalls,
+      g.billableCalls,
+      g.revenue.toFixed(4),
+      g.payout.toFixed(4),
+      g.callCost.toFixed(4),
+      g.otherCosts.toFixed(4),
+      g.profit.toFixed(4),
+      marginText(g),
+      g.disputes.toFixed(4),
+      g.adjustments.toFixed(4),
+      g.netPayableReceivable.toFixed(4),
+    ]);
 
-    const campaignLedgerMap = new Map<
-      string,
-      { otherCosts: Prisma.Decimal; adjustments: Prisma.Decimal; disputes: Prisma.Decimal }
-    >();
-    for (const entry of ledgerEntries) {
-      if (!entry.callId) continue;
-      const campId = callToCampaignMap.get(entry.callId);
-      if (!campId) continue;
-
-      if (!campaignLedgerMap.has(campId)) {
-        campaignLedgerMap.set(campId, {
-          otherCosts: new Prisma.Decimal(0),
-          adjustments: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-        });
-      }
-
-      const ledgerObj = campaignLedgerMap.get(campId)!;
-      const amt = new Prisma.Decimal(entry.amount);
-      if (entry.type === 'RECORDING_FEE' || entry.type === 'CONNECTION_FEE') {
-        ledgerObj.otherCosts = ledgerObj.otherCosts.plus(amt);
-      } else if (entry.type === 'ADJUSTMENT') {
-        ledgerObj.adjustments = ledgerObj.adjustments.plus(amt);
-      } else if (entry.type === 'DISPUTE_HOLD' || entry.type === 'DISPUTE_REVERSAL') {
-        ledgerObj.disputes = ledgerObj.disputes.plus(amt);
-      }
-    }
-
-    const groupsMap = new Map<string, any>();
-    for (const call of calls) {
-      const campId = call.campaignId || 'unknown';
-      const campName = call.campaignName || 'Unknown Campaign';
-
-      const rev = call.buyerBillableAmount
-        ? new Prisma.Decimal(call.buyerBillableAmount)
-        : new Prisma.Decimal(0);
-      const pay = call.publisherPayoutAmount
-        ? new Prisma.Decimal(call.publisherPayoutAmount)
-        : new Prisma.Decimal(0);
-      const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
-
-      if (!groupsMap.has(campId)) {
-        groupsMap.set(campId, {
-          campaignId: campId,
-          campaignName: campName,
-          totalCalls: 0,
-          connectedCalls: 0,
-          billableCalls: 0,
-          buyerRevenue: new Prisma.Decimal(0),
-          publisherPayout: new Prisma.Decimal(0),
-          callCost: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-          disputesCount: 0,
-        });
-      }
-
-      const g = groupsMap.get(campId);
-      g.totalCalls++;
-      if (call.connectedDuration && call.connectedDuration > 0) g.connectedCalls++;
-      if (call.billable) g.billableCalls++;
-      g.buyerRevenue = g.buyerRevenue.plus(rev);
-      g.publisherPayout = g.publisherPayout.plus(pay);
-      g.callCost = g.callCost.plus(callCost);
-      if (call.disputeStatus) {
-        g.disputes = g.disputes.plus(rev);
-        g.disputesCount++;
-      }
-    }
-
-    let totalCalls = 0;
-    let connectedCalls = 0;
-    let billableCalls = 0;
-    let totalRev = new Prisma.Decimal(0);
-    let totalPayout = new Prisma.Decimal(0);
-    let totalCallCost = new Prisma.Decimal(0);
-    let totalOtherCosts = new Prisma.Decimal(0);
-    let totalProfit = new Prisma.Decimal(0);
-    let totalDisputes = new Prisma.Decimal(0);
-    let totalAdjustments = new Prisma.Decimal(0);
-    let totalNetPayableReceivable = new Prisma.Decimal(0);
-
-    const rows = [...groupsMap.values()].map(g => {
-      const ledger = campaignLedgerMap.get(g.campaignId) || {
-        otherCosts: new Prisma.Decimal(0),
-        adjustments: new Prisma.Decimal(0),
-        disputes: new Prisma.Decimal(0),
-      };
-
-      const otherCosts = ledger.otherCosts;
-      const adjustments = ledger.adjustments;
-
-      const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost).minus(otherCosts);
-      const margin = g.buyerRevenue.gt(0)
-        ? (profit.dividedBy(g.buyerRevenue).toNumber() * 100).toFixed(2) + '%'
-        : '0.00%';
-      const netPayableReceivable = profit.plus(adjustments);
-
-      totalCalls += g.totalCalls;
-      connectedCalls += g.connectedCalls;
-      billableCalls += g.billableCalls;
-      totalRev = totalRev.plus(g.buyerRevenue);
-      totalPayout = totalPayout.plus(g.publisherPayout);
-      totalCallCost = totalCallCost.plus(g.callCost);
-      totalOtherCosts = totalOtherCosts.plus(otherCosts);
-      totalProfit = totalProfit.plus(profit);
-      totalDisputes = totalDisputes.plus(g.disputes);
-      totalAdjustments = totalAdjustments.plus(adjustments);
-      totalNetPayableReceivable = totalNetPayableReceivable.plus(netPayableReceivable);
-
-      return [
-        g.campaignName,
-        g.totalCalls,
-        g.connectedCalls,
-        g.billableCalls,
-        g.buyerRevenue.toFixed(4),
-        g.publisherPayout.toFixed(4),
-        g.callCost.toFixed(4),
-        otherCosts.toFixed(4),
-        profit.toFixed(4),
-        margin,
-        g.disputes.toFixed(4),
-        adjustments.toFixed(4),
-        netPayableReceivable.toFixed(4),
-      ];
-    });
-
-    const overallMargin = totalRev.gt(0)
-      ? (totalProfit.dividedBy(totalRev).toNumber() * 100).toFixed(2) + '%'
-      : '0.00%';
-
+    const t = money.totals;
     rows.push([
       'Report Totals',
-      totalCalls,
-      connectedCalls,
-      billableCalls,
-      totalRev.toFixed(4),
-      totalPayout.toFixed(4),
-      totalCallCost.toFixed(4),
-      totalOtherCosts.toFixed(4),
-      totalProfit.toFixed(4),
-      overallMargin,
-      totalDisputes.toFixed(4),
-      totalAdjustments.toFixed(4),
-      totalNetPayableReceivable.toFixed(4),
+      t.totalCalls,
+      t.connectedCalls,
+      t.billableCalls,
+      t.revenue.toFixed(4),
+      t.payout.toFixed(4),
+      t.callCost.toFixed(4),
+      t.otherCosts.toFixed(4),
+      t.profit.toFixed(4),
+      marginText(t),
+      t.disputes.toFixed(4),
+      t.adjustments.toFixed(4),
+      t.netPayableReceivable.toFixed(4),
     ]);
 
     const csvHeaders = [

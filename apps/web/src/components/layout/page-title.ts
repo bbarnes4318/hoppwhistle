@@ -1,4 +1,11 @@
-import { AGENCY_OWNER_NAV, AGENT_NAV, buyerNav, PLATFORM_NAV, publisherNav } from './nav-config';
+import {
+  AGENCY_OWNER_NAV,
+  AGENT_NAV,
+  buyerNav,
+  PLATFORM_NAV,
+  publisherNav,
+  WHITE_LABEL_OWNER_NAV,
+} from './nav-config';
 
 /**
  * The page title shown in the topbar, in the display face.
@@ -37,6 +44,7 @@ const EXPLICIT: Record<string, string> = {
 const ALL_ITEMS = [
   ...PLATFORM_NAV,
   ...AGENCY_OWNER_NAV,
+  ...WHITE_LABEL_OWNER_NAV,
   ...AGENT_NAV,
   ...publisherNav(true),
   ...buyerNav(true),

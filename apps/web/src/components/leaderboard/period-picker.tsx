@@ -162,6 +162,31 @@ export function PeriodPicker({
   );
 }
 
+/**
+ * The period menu. The same eight names and a calendar range the picker above
+ * offers, as one compact select so the whole control fits a toolbar row. The
+ * names still go to the server verbatim; see the header of this file.
+ *
+ * Shared by every screen that measures over a period -- the Leaderboard and
+ * Sales -- so a period means the same thing wherever it is picked.
+ */
+export const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
+  { value: 'TODAY', label: 'Today' },
+  { value: 'YESTERDAY', label: 'Yesterday' },
+  { value: 'THIS_WEEK', label: 'This week' },
+  { value: 'LAST_WEEK', label: 'Last week' },
+  { value: 'THIS_MONTH', label: 'This month' },
+  { value: 'LAST_MONTH', label: 'Last month' },
+  { value: 'THIS_YEAR', label: 'This year' },
+  { value: 'LAST_YEAR', label: 'Last year' },
+  { value: 'CUSTOM', label: 'Custom range' },
+];
+
+/** Whether a picker value is one of the period names. */
+export function isPeriodKey(value: string | null | undefined): value is PeriodKey {
+  return PERIOD_OPTIONS.some(option => option.value === value);
+}
+
 /** Whether a picker state is worth sending. Mirrors the server's own refusal. */
 export function isSendable(period: PeriodKey, from: string, to: string): boolean {
   if (period !== 'CUSTOM') return true;

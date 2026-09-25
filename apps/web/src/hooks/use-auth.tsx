@@ -117,6 +117,11 @@ interface UserData {
    * default NetEnroll look. See `lib/brand-themes.ts`.
    */
   brand?: ServerBrand | null;
+  /**
+   * The acting tenant is on the white-label tier, from `/api/auth/me`. A fact
+   * about the AGENCY; `isWhiteLabel` below is what the person may do with it.
+   */
+  whiteLabel?: boolean;
 }
 
 interface UseAuthReturn {
@@ -141,6 +146,15 @@ interface UseAuthReturn {
    * `components/layout/sidebar.tsx`.
    */
   isPlatformAdmin: boolean;
+  /**
+   * A white-label agency's OWNER or ADMIN: the agency is on the white-label
+   * tier AND this person holds one of those two roles. An agent of the same
+   * agency is not. A previewing platform admin follows the previewed role,
+   * because under a preview the roles ARE the previewed one.
+   *
+   * Navigation and screen state only. The API decides on its own.
+   */
+  isWhiteLabel: boolean;
   /**
    * This session is a platform operator previewing an agency as one of its own
    * roles, and the server refuses every write. Save, submit and delete controls
@@ -259,6 +273,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
           rawUser.brand && typeof rawUser.brand.theme === 'string'
             ? { theme: rawUser.brand.theme, name: rawUser.brand.name ?? null }
             : null,
+        whiteLabel: rawUser.whiteLabel === true,
       });
       setStatus('authenticated');
       setError(null);
@@ -375,6 +390,7 @@ export function useAuth(): UseAuthReturn {
 
   const isAdminOrOwner = isAdmin || isOwner;
   const hasFullAccess = isAdminOrOwner;
+  const isWhiteLabel = user?.whiteLabel === true && isAdminOrOwner;
 
   // Either source answers; `/api/auth/me` is preferred for the capability
   // because it arrives with the role list it has to be read alongside.
@@ -475,6 +491,7 @@ export function useAuth(): UseAuthReturn {
     isReadonlyOnly,
     hasFullAccess,
     isPlatformAdmin,
+    isWhiteLabel,
     isReadOnlyPreview,
     isNewUser,
     buyerId,

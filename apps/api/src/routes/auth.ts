@@ -9,6 +9,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
 import { effectivePermissionsFor } from '../middleware/rbac.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { loadTenantWhiteLabel } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { createSession, generateCsrfToken } from '../middleware/session.js';
 import { auditLog } from '../services/audit.js';
@@ -1233,9 +1234,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * and none in the cross-agency view. Everybody else gets their own
        * tenant's, off the user row, exactly as `tenantId` below is.
        */
-      const brand = await brandForTenant(
-        isPlatformPrincipal ? (principal.actingTenantId ?? null) : user.tenantId
-      );
+      const brandTenantId = isPlatformPrincipal
+        ? (principal.actingTenantId ?? null)
+        : user.tenantId;
+      const brand = await brandForTenant(brandTenantId);
+      /*
+       * Whether that same tenant is on the white-label tier. A fact about the
+       * agency: the client pairs it with OWNER or ADMIN before it opens
+       * anything, exactly as the API does (`lib/white-label.ts`).
+       */
+      const whiteLabel = await loadTenantWhiteLabel(brandTenantId);
 
       return reply.send({
         id: user.id,
@@ -1247,6 +1255,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
         /** `{ theme, name }` for a white-labelled agency, null for the default look. */
         brand,
+        /** The tenant above is on the white-label tier. */
+        whiteLabel,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,

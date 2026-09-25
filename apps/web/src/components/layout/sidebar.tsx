@@ -14,7 +14,7 @@ import { usePlatformContext } from '@/hooks/use-platform-context';
 import { cn } from '@/lib/utils';
 
 import {
-  FIRST_UPGRADE_GROUP,
+  firstUpgradeGroupOf,
   isLockedGroup,
   navFor,
   type NavGroup,
@@ -344,6 +344,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   const {
     isPlatformAdmin,
     hasFullAccess,
+    isWhiteLabel,
     isBuyerOnly,
     isPublisherOnly,
     isAgentOnly,
@@ -379,6 +380,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         isPlatformAdmin,
         previewing,
         hasFullAccess,
+        isWhiteLabel,
         isPublisherOnly,
         isBuyerOnly,
         isAgentOnly,
@@ -389,6 +391,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       isPlatformAdmin,
       previewing,
       hasFullAccess,
+      isWhiteLabel,
       isPublisherOnly,
       isBuyerOnly,
       isAgentOnly,
@@ -398,6 +401,9 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   );
 
   const drawer = variant === 'drawer';
+  // Read off the groups: `Call Network` is an upgrade group for a normal
+  // agency and a working one on the white-label tier.
+  const upgradeGroup = firstUpgradeGroupOf(groups);
   const activeHref = activeHrefFor(pathname, groups);
   const { brand, settled: brandSettled } = useBrand();
 
@@ -480,7 +486,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
                 on. Everything below it is locked, so the working menu reads as
                 complete on its own.
               */}
-              {group.label === FIRST_UPGRADE_GROUP ? (
+              {upgradeGroup !== null && group.label === upgradeGroup ? (
                 <div className="mt-6 border-t border-rule px-3 pt-4">
                   <p className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-brand-ink">
                     Unlock more
@@ -488,7 +494,10 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
                 </div>
               ) : null}
               <div
-                className={cn(gi > 0 && (group.label === FIRST_UPGRADE_GROUP ? 'mt-3' : 'mt-5'))}
+                className={cn(
+                  gi > 0 &&
+                    (upgradeGroup !== null && group.label === upgradeGroup ? 'mt-3' : 'mt-5')
+                )}
               >
                 {group.label ? (
                   <h2 className="flex items-center gap-1.5 px-3 pb-1.5 t-label text-ink-3">

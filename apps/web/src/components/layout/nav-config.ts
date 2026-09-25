@@ -408,14 +408,155 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
 ];
 
 /**
- * The label of the first group of upgrades, where the sidebar draws its
- * "Unlock more" divider. Everything from here down is locked.
+ * A white-label agency principal's navigation.
+ *
+ * ── An agency that also sells calls ──────────────────────────────────────────
+ *
+ * On the white-label tier the OWNER and ADMIN run a call network of their own
+ * as well as a sales floor, so four things that are upgrades for a normal
+ * agency are working screens here: Sales (what their calls sold for),
+ * Publishers, Buyers and Numbers, Payouts (what they owe their publishers),
+ * and their own downline agencies. Those are standard with the tier, not
+ * upgrades, and they sit ABOVE the divider.
+ *
+ * The floor, Money and Account groups are the same entries AGENCY_OWNER_NAV
+ * carries, written out rather than shared so that each nav reads top to bottom
+ * as the person using it sees it. What is still an upgrade on this tier -- the
+ * dialer, carrier routing, the voice tooling and payroll -- is below it, with
+ * the same blurbs a normal agency is shown.
+ *
+ * The screens above the divider are opened by `WHITE_LABEL_ROUTES` in
+ * `lib/staff-only-routes.ts`, for this viewer only; a normal agency is still
+ * redirected off every one of them.
+ */
+export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
+  { items: [platformItem('/dashboard')] },
+  {
+    label: 'Floor',
+    items: [
+      {
+        name: 'Live Board',
+        href: '/live',
+        icon: MonitorPlay,
+        title: 'Your agency right now: calls up, delivered and applications so far today',
+      },
+      platformItem('/calls'),
+      platformItem('/applications'),
+      platformItem('/leaderboard'),
+      platformItem('/insurance-leads'),
+    ],
+  },
+  {
+    label: 'Call Sales',
+    items: [
+      {
+        name: 'Sales',
+        href: '/sales',
+        icon: BadgeDollarSign,
+        title: 'What your calls sold for: buyers, revenue, payouts, profit',
+      },
+      platformItem('/campaigns'),
+      platformItem('/reports'),
+    ],
+  },
+  {
+    label: 'Call Network',
+    items: [
+      platformItem('/publishers'),
+      platformItem('/buyers'),
+      platformItem('/numbers'),
+      {
+        name: 'Payouts',
+        href: '/payouts',
+        icon: HandCoins,
+        title: 'What you owe each publisher, and what you have paid',
+      },
+    ],
+  },
+  {
+    label: 'Agency Network',
+    items: [
+      {
+        name: 'Agencies',
+        href: '/network/agencies',
+        icon: Building2,
+        title: 'Your agencies: calls, applications and closing percentage',
+      },
+      { name: 'Onboard an Agency', href: '/network/onboarding', icon: Handshake },
+    ],
+  },
+  {
+    label: 'Money',
+    items: [
+      platformItem('/rating'),
+      platformItem('/delivery'),
+      platformItem('/delivery/team'),
+      platformItem('/delivery/settlements'),
+      platformItem('/billing'),
+    ],
+  },
+  {
+    label: 'Account',
+    items: [platformItem('/settings/users'), platformItem('/settings')],
+  },
+  {
+    label: 'Upgrades',
+    items: [
+      lockedItem(
+        '/call-center',
+        'Power Dialer',
+        'Put your agents on a dialer that paces calls to how many agents are free.'
+      ),
+      lockedItem(
+        '/settings/carriers',
+        'VOIP Carrier Routing',
+        'Choose which VOIP carriers carry your calls and set automatic failover between them.'
+      ),
+      lockedItem(
+        '/voice-agents',
+        'Voice Agents',
+        'AI voice agents that answer, qualify and transfer live callers straight to your agents.'
+      ),
+      lockedItem(
+        '/voice-studio',
+        'Voice Studio',
+        "Build and fine-tune your voice agents' scripts and voices before they go live."
+      ),
+      lockedItem(
+        '/admin/payroll',
+        'Payroll Admin',
+        'Run agent commissions and payroll from the same data as your submitted applications.'
+      ),
+    ],
+  },
+];
+
+/**
+ * The label of AGENCY_OWNER_NAV's first group of upgrades, where the sidebar
+ * draws its "Unlock more" divider. Everything from here down is locked.
  */
 export const FIRST_UPGRADE_GROUP = 'Call Network';
+
+/** The same, for WHITE_LABEL_OWNER_NAV, whose Call Network is a working group. */
+export const WHITE_LABEL_FIRST_UPGRADE_GROUP = 'Upgrades';
 
 /** A group whose every item is an upgrade gets a lock beside its label. */
 export function isLockedGroup(group: NavGroup): boolean {
   return group.items.length > 0 && group.items.every(item => item.locked);
+}
+
+/**
+ * Where this nav's "Unlock more" divider goes: the label of the first group
+ * whose every item is locked, or null for a nav with no upgrades.
+ *
+ * Read off the groups rather than named, because the same label means
+ * different things in different navs: `Call Network` is the first upgrade
+ * group for a normal agency and a working group on the white-label tier. It
+ * answers FIRST_UPGRADE_GROUP for AGENCY_OWNER_NAV and
+ * WHITE_LABEL_FIRST_UPGRADE_GROUP for WHITE_LABEL_OWNER_NAV.
+ */
+export function firstUpgradeGroupOf(groups: NavGroup[]): string | null {
+  return groups.find(group => isLockedGroup(group))?.label ?? null;
 }
 
 export const AGENT_NAV: NavGroup[] = [
@@ -483,6 +624,11 @@ export interface NavViewer {
    */
   previewing: boolean;
   hasFullAccess: boolean;
+  /**
+   * A white-label agency's OWNER or ADMIN (`useAuth().isWhiteLabel`). Only
+   * read alongside `hasFullAccess`, which it implies.
+   */
+  isWhiteLabel: boolean;
   isPublisherOnly: boolean;
   isBuyerOnly: boolean;
   isAgentOnly: boolean;
@@ -507,7 +653,7 @@ export interface NavViewer {
  */
 export function navFor(viewer: NavViewer): NavGroup[] {
   if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
-  if (viewer.hasFullAccess) return AGENCY_OWNER_NAV;
+  if (viewer.hasFullAccess) return viewer.isWhiteLabel ? WHITE_LABEL_OWNER_NAV : AGENCY_OWNER_NAV;
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
   if (viewer.isAgentOnly) return AGENT_NAV;

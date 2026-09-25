@@ -251,6 +251,17 @@ async function buildServer() {
   const { registerOnboardingRoutes } = await import('./routes/onboarding.js');
   await server.register(registerOnboardingRoutes);
 
+  // The white-label tier's own screens: Sales (what an agency's calls sold
+  // for), Payouts (what it owes its publishers) and its downline agencies.
+  // Each route is the white-label OWNER/ADMIN's or staff's, and scoped to the
+  // acting tenant. See lib/white-label.ts.
+  const { registerCallSalesRoutes } = await import('./routes/call-sales.js');
+  await server.register(registerCallSalesRoutes);
+  const { registerPayoutRoutes } = await import('./routes/payouts.js');
+  await server.register(registerPayoutRoutes);
+  const { registerNetworkRoutes } = await import('./routes/network.js');
+  await server.register(registerNetworkRoutes);
+
   /*
    * Stripe's dispute webhooks. Registered as its own plugin because it installs
    * a raw-body content type parser -- the signature is verified over the bytes

@@ -313,6 +313,7 @@ describe('navFor: which nav each viewer gets', () => {
     isPlatformAdmin: false,
     previewing: false,
     hasFullAccess: false,
+    isWhiteLabel: false,
     isPublisherOnly: false,
     isBuyerOnly: false,
     isAgentOnly: false,

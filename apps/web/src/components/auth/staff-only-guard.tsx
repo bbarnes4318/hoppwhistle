@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
-import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
+import { isRouteBlockedFor, isStaffOnlyRoute } from '@/lib/staff-only-routes';
 
 /**
  * The same removal as `app/(dashboard)/layout.tsx`, for the shells that escape it.
@@ -56,14 +56,23 @@ import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
  * products decide what they serve; this decides what is offered.
  */
 export function StaffOnlyGuard({ children }: { children: React.ReactNode }): JSX.Element | null {
-  const { isPlatformAdmin, status, loading: authLoading, defaultDashboardPath } = useAuth();
+  const {
+    isPlatformAdmin,
+    isWhiteLabel,
+    status,
+    loading: authLoading,
+    defaultDashboardPath,
+  } = useAuth();
   const platform = usePlatformContext();
   const pathname = usePathname();
   const router = useRouter();
 
   const guarded = isStaffOnlyRoute(pathname);
   const settling = authLoading || platform.loading;
-  const turnAway = guarded && !settling && !isPlatformAdmin;
+  // The same decision the dashboard layout makes, so the two cannot disagree
+  // about who may open a staff-only path -- a white-label owner included.
+  const blocked = isRouteBlockedFor(pathname, { isPlatformAdmin, isWhiteLabel });
+  const turnAway = guarded && !settling && blocked;
 
   useEffect(() => {
     if (!guarded || settling) return;
@@ -76,8 +85,8 @@ export function StaffOnlyGuard({ children }: { children: React.ReactNode }): JSX
       return;
     }
 
-    if (!isPlatformAdmin) router.replace(defaultDashboardPath);
-  }, [guarded, settling, status, isPlatformAdmin, router, defaultDashboardPath]);
+    if (blocked) router.replace(defaultDashboardPath);
+  }, [guarded, settling, status, blocked, router, defaultDashboardPath]);
 
   if (!guarded) return <>{children}</>;
 

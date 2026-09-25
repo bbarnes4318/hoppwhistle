@@ -153,8 +153,15 @@ export default function CampaignDetailPage() {
    *
    * The dashboard layout does not render this page until the platform context
    * has settled, so `isPlatformAdmin` is already the answer on first render.
+   *
+   * A white-label agency's OWNER and ADMIN manage their own campaigns exactly
+   * as staff do -- settings, assignments, the buyer-target form and the
+   * Numbers tab, whose DID routes the API opens to them. The flow builder is
+   * still staff's alone: flows stay platform configuration for everybody.
    */
-  const { isPlatformAdmin: canManage } = useAuth();
+  const { isPlatformAdmin, isWhiteLabel } = useAuth();
+  const canManage = isPlatformAdmin || isWhiteLabel;
+  const canBuildFlows = isPlatformAdmin;
 
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -647,14 +654,18 @@ export default function CampaignDetailPage() {
         <TabsList
           className={cn(
             'grid w-full bg-sunken p-1',
-            canManage ? 'max-w-2xl grid-cols-5' : 'max-w-md grid-cols-3'
+            canBuildFlows
+              ? 'max-w-2xl grid-cols-5'
+              : canManage
+                ? 'max-w-xl grid-cols-4'
+                : 'max-w-md grid-cols-3'
           )}
         >
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="publishers">Publishers</TabsTrigger>
           <TabsTrigger value="buyers">Buyers</TabsTrigger>
           {canManage ? <TabsTrigger value="numbers">Numbers (DIDs)</TabsTrigger> : null}
-          {canManage ? <TabsTrigger value="flow">Flow Builder</TabsTrigger> : null}
+          {canBuildFlows ? <TabsTrigger value="flow">Flow Builder</TabsTrigger> : null}
         </TabsList>
 
         {/* Settings Tab */}
@@ -1125,8 +1136,8 @@ export default function CampaignDetailPage() {
           </TabsContent>
         ) : null}
 
-        {/* Flow Builder Mock Tab */}
-        {canManage ? (
+        {/* Flow Builder Mock Tab. Staff only -- see `canBuildFlows`. */}
+        {canBuildFlows ? (
           <TabsContent value="flow">
             <Card>
               <CardHeader>

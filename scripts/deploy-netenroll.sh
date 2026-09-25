@@ -113,6 +113,7 @@ REQUIRED_MIGRATIONS="
 20260924000000_delivery_hold_no_credits
 20260924010000_agency_auto_refill
 20260925000000_tenant_brand_theme
+20260926000000_tenant_white_label
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -438,6 +439,15 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'tenants'
                 AND column_name IN ('brandTheme', 'brandName')) = 2" ;;
+    *_tenant_white_label)
+      # Wrapped BEGIN..COMMIT, so the two tenants columns, the index, the
+      # foreign key and publisher_payments land together or not at all; the
+      # two columns are probed, both of them, so a hand-applied half cannot
+      # read as done.
+      echo "SELECT (SELECT count(*) FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'tenants'
+                AND column_name IN ('whiteLabel', 'parentTenantId')) = 2" ;;
     *)
       echo "" ;;
   esac

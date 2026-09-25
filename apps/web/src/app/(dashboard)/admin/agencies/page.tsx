@@ -87,6 +87,10 @@ interface AgencyRow {
    * leaves them out of the platform totals.
    */
   isNonProduction: boolean;
+  /** On the white-label tier: an agency that also sells calls. */
+  whiteLabel?: boolean;
+  /** The white-label agency that onboarded this one, or null. */
+  parentName?: string | null;
   enrolled: boolean;
   chargesEnabled: boolean;
   deliveredCalls: number;
@@ -524,6 +528,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
               <TableRow>
                 <TableHead className="w-8" />
                 <TableHead>Agency</TableHead>
+                <TableHead>Parent</TableHead>
                 <TableHead>Billing</TableHead>
                 <TableHead className="text-right">Calls</TableHead>
                 <TableHead className="text-right">Applications</TableHead>
@@ -566,8 +571,17 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         {row.isNonProduction && (
                           <StatusChip value="TEST" label="Test" tone="neutral" size="sm" />
                         )}
+                        {row.whiteLabel && (
+                          <StatusChip
+                            value="WHITE_LABEL"
+                            label="White-label"
+                            tone="money"
+                            size="sm"
+                          />
+                        )}
                       </div>
                     </TableCell>
+                    <TableCell className="text-ink-2">{row.parentName ?? '—'}</TableCell>
                     <TableCell>
                       {!row.enrolled ? (
                         <Badge
@@ -715,7 +729,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
                   {openAgency === row.tenantId && (
                     <TableRow className="bg-sunken">
-                      <TableCell colSpan={15} className="p-4">
+                      <TableCell colSpan={16} className="p-4">
                         <EnrolmentPanel
                           row={row}
                           status={enrolment}

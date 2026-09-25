@@ -144,6 +144,48 @@ export const STAFF_ONLY_ROUTES: readonly StaffOnlyRoute[] = [
 ];
 
 /**
+ * What a white-label agency's OWNER and ADMIN may reach inside the areas above.
+ *
+ * ── Why the tier opens part of the marketplace ───────────────────────────────
+ *
+ * A white-label agency also SELLS calls. It runs its own publishers, buyers and
+ * campaigns and points its own numbers at them, so for its OWNER and ADMIN the
+ * management writes above are its own business, not NetEnroll's. Exactly these
+ * routes, matched by the same rules as the lists above: campaign writes,
+ * creating, editing and deleting its publishers and buyers, crediting a
+ * buyer, reading its numbers and editing one, and its DID routes.
+ *
+ * ── What it deliberately does not open ───────────────────────────────────────
+ *
+ * Buying or releasing numbers (`POST /numbers`, `/numbers/existing`,
+ * `DELETE /numbers/:numberId`, `/anveo`, `/bulkvs`, `/fractel`) spends the
+ * platform's carrier accounts and claims shared inventory. Flows, the voice
+ * tooling, carrier routing and the Tools group are platform configuration.
+ * All of that stays staff's, for everybody, the white-label tier included.
+ *
+ * ── It is a pass, not a scope ────────────────────────────────────────────────
+ *
+ * Passing here only means the request reaches its handler. Every handler
+ * behind these routes still resolves the acting tenant and scopes its reads
+ * and writes to it; a white-label owner reaches their own rows and nobody
+ * else's. An AGENT of the same agency, and any API key, still gets 403: the
+ * pass needs the role as well as the tier (`enforceStaffOnly`).
+ */
+type WhiteLabelAllowance = StaffOnlyArea | StaffOnlyRoute;
+
+export const WHITE_LABEL_ALLOWED: readonly WhiteLabelAllowance[] = [
+  { prefix: '/api/v1/campaigns', methods: WRITES },
+  { pattern: '/api/v1/publishers', methods: ['POST'] },
+  { pattern: '/api/v1/publishers/:publisherId', methods: ['PATCH', 'PUT', 'DELETE'] },
+  { pattern: '/api/v1/buyers', methods: ['POST'] },
+  { pattern: '/api/v1/buyers/:buyerId', methods: ['PATCH', 'PUT', 'DELETE'] },
+  { pattern: '/api/v1/buyers/:buyerId/credits', methods: ['POST'] },
+  { pattern: '/api/v1/numbers', methods: ['GET'] },
+  { pattern: '/api/v1/numbers/:numberId', methods: ['GET', 'PATCH', 'PUT'] },
+  { prefix: '/api/v1/did-routes' },
+];
+
+/**
  * Paths under a closed area that are machine callers, not operators.
  *
  * Checked before anything else. Each one carries no session, and refusing it
@@ -203,4 +245,27 @@ export function isStaffOnlyEndpoint(method: string | undefined, url: string | un
   }
 
   return false;
+}
+
+/**
+ * True when this request is one a white-label OWNER or ADMIN may make.
+ *
+ * Only consulted for a request `isStaffOnlyEndpoint` already closed, and only
+ * for a principal who is on the tier and holds the role; see
+ * `middleware/staff-only.ts`. A missing method or url answers false.
+ */
+export function isWhiteLabelAllowed(method: string | undefined, url: string | undefined): boolean {
+  if (!method || !url) return false;
+
+  const path = normalise(url);
+  if (!path) return false;
+
+  const verb = method.toUpperCase();
+
+  return WHITE_LABEL_ALLOWED.some(rule => {
+    if ('prefix' in rule) {
+      return underPrefix(path, rule.prefix) && (!rule.methods || rule.methods.includes(verb));
+    }
+    return rule.methods.includes(verb) && matchesPattern(path, rule.pattern);
+  });
 }

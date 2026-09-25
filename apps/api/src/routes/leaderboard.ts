@@ -38,6 +38,7 @@
 
 import type { FastifyInstance } from 'fastify';
 
+import { csvCell } from '../lib/csv.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
@@ -48,16 +49,6 @@ import {
   PERIOD_KEYS,
   resolvePeriod,
 } from '../services/leaderboard/period.js';
-
-/** A CSV cell that cannot be read as a formula by a spreadsheet. */
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  const text = String(value);
-  // A leading =, +, - or @ makes Excel and Sheets evaluate the cell. An agent's
-  // name is user-supplied and goes in column one of a file somebody opens.
-  const guarded = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${guarded.replace(/"/g, '""')}"`;
-}
 
 interface LeaderboardQuery {
   period?: string;
