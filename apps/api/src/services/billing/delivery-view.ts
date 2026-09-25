@@ -848,6 +848,14 @@ export interface PlatformAgencyRow {
    * looking for it.
    */
   isNonProduction: boolean;
+  /** On the white-label tier: an agency that also sells calls. */
+  whiteLabel: boolean;
+  /**
+   * The white-label agency that onboarded this one, by name, or null. Shown
+   * so staff can tell a downline agency -- which NetEnroll never bills -- from
+   * one of its own customers.
+   */
+  parentName: string | null;
   /** Whether this agency is subject to the billing system at all. */
   enrolled: boolean;
   /** Whether an enrolled agency's settlements actually charge. */
@@ -1036,7 +1044,14 @@ export async function getPlatformOverview(
        */
       ...(includeNonProduction ? {} : { isNonProduction: false }),
     },
-    select: { id: true, name: true, slug: true, isNonProduction: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      isNonProduction: true,
+      whiteLabel: true,
+      parent: { select: { name: true } },
+    },
     orderBy: { name: 'asc' },
   });
 
@@ -1181,6 +1196,8 @@ export async function getPlatformOverview(
         name: tenant.name,
         slug: tenant.slug,
         isNonProduction: tenant.isNonProduction,
+        whiteLabel: tenant.whiteLabel,
+        parentName: tenant.parent?.name ?? null,
         enrolled: profile?.billingEnrolledAt != null,
         chargesEnabled: profile?.chargesEnabled === true,
         autoRefill: profile?.autoRefill !== false,

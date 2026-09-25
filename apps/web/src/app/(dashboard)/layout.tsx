@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
-import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
+import { isRouteBlockedFor } from '@/lib/staff-only-routes';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
@@ -27,6 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isPublisherOnly,
     isBuyerOnly,
     isAgentOnly,
+    isWhiteLabel,
     status: authStatus,
     loading: authLoading,
   } = useAuth();
@@ -126,7 +127,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         path.startsWith('/publisher'))
     ) {
       router.replace('/dashboard');
-    } else if (isStaffOnlyRoute(path)) {
+    } else if (
+      isRouteBlockedFor(path, { isPlatformAdmin: platform.isPlatformAdmin, isWhiteLabel })
+    ) {
       /*
        * NetEnroll's own screens, reached by URL.
        *
@@ -157,6 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isPublisherOnly,
     isBuyerOnly,
     isAgentOnly,
+    isWhiteLabel,
     authStatus,
     authLoading,
     pathname,

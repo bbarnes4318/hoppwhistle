@@ -58,6 +58,13 @@
 import { AgencyPaymentMethod, Prisma, RoleName, TenantActivationSource } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
+import {
+  DELIVERY_DAYS,
+  EMAIL_PATTERN,
+  STATE_PATTERN,
+  TIME_PATTERN,
+  uniqueSlug,
+} from '../lib/agency-details.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId } from '../lib/tenant-context.js';
@@ -72,12 +79,6 @@ import {
 import { toNumber } from '../services/rating/rate-curve.js';
 import { issueActivationGrant } from '../services/tenant-activation.js';
 
-/** `MON`..`SUN`. Stored as strings so no layer can shift a day by a timezone. */
-const DELIVERY_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STATE_PATTERN = /^[A-Z]{2}$/;
-
 /** The five steps, in the order the runbook does them. */
 export type OnboardingStepId = 'TENANT' | 'TERMS' | 'PAYMENT_METHOD' | 'OWNER' | 'ENROL';
 
@@ -88,36 +89,6 @@ export interface OnboardingStepState {
   /** What is missing. Every reason at once, never one at a time. */
   blockers: string[];
   summary: Record<string, unknown> | null;
-}
-
-/**
- * A slug that is stable, readable and unlikely to collide.
- *
- * Derived from the name, suffixed when taken. Not from anything in the request
- * that names an existing tenant: a caller must not be able to steer a new
- * agency onto an existing slug.
- */
-async function uniqueSlug(
-  prisma: ReturnType<typeof getPrismaClient>,
-  name: string
-): Promise<string> {
-  const base =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'agency';
-
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
-    const taken = await prisma.tenant.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    });
-    if (!taken) return candidate;
-  }
-
-  return `${base}-${Date.now()}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature

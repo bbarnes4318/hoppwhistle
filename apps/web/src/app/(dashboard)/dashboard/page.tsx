@@ -29,6 +29,7 @@ import {
 } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SalesTodayPanel } from '@/components/white-label/sales-today-panel';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
@@ -207,7 +208,15 @@ function ChartTooltip({
 /* ─── Main Dashboard ───────────────────────────────────────────── */
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
+  const {
+    user,
+    isPublisherOnly,
+    isBuyerOnly,
+    isAgentOnly,
+    isWhiteLabel,
+    isPlatformAdmin,
+    loading: authLoading,
+  } = useAuth();
 
   /*
    * A platform operator is not one of the roles below, whatever the role list
@@ -400,8 +409,17 @@ export default function DashboardPage() {
     { key: 'custom', label: 'Custom' },
   ];
 
+  /*
+   * A white-label owner's calls are also sold, so what they sold for today
+   * leads the page. Staff inside the agency see it only while previewing it
+   * as a role, which is when they are looking at the owner's dashboard.
+   */
+  const previewing = platform.previewRole != null || user?.previewRole != null;
+  const showSalesToday = isWhiteLabel && (!isPlatformAdmin || previewing);
+
   return (
     <div className="page-canvas">
+      {showSalesToday ? <SalesTodayPanel /> : null}
       {/*
         Period and live status on one toolbar row, KPI tiles straight under it.
         The page title is already in the topbar, so there is no header row of

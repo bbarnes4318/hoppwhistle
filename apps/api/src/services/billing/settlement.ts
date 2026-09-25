@@ -211,6 +211,20 @@ export async function settleAgencyForDeliveryDay(
     skippedReason,
   });
 
+  /*
+   * A white-label agency's downline agency is billed by that agency, never by
+   * NetEnroll, and is skipped before anything else is read -- whatever its
+   * billing rows say. Onboarding one writes no billing profile, so it could
+   * not be enrolled anyway; this makes that a rule rather than a coincidence.
+   */
+  const tenantRow = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { parentTenantId: true },
+  });
+  if (tenantRow?.parentTenantId) {
+    return empty('billed by its parent agency, not by NetEnroll');
+  }
+
   const terms = await loadAgencyTerms(tenantId, { prisma });
 
   /*

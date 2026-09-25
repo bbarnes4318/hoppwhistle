@@ -74,6 +74,28 @@ import { auditLog } from '../services/audit.js';
 /** Long enough for any agency's trading name; short enough for a sidebar and a tab. */
 const BRAND_NAME_MAX_LENGTH = 100;
 
+/** What the branding route reads and answers with. */
+const BRANDING_SELECT = {
+  id: true,
+  brandTheme: true,
+  brandName: true,
+  whiteLabel: true,
+} as const;
+
+function brandingView(tenant: {
+  id: string;
+  brandTheme: string | null;
+  brandName: string | null;
+  whiteLabel: boolean;
+}) {
+  return {
+    tenantId: tenant.id,
+    brandTheme: tenant.brandTheme,
+    brandName: tenant.brandName,
+    whiteLabel: tenant.whiteLabel,
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
@@ -336,7 +358,11 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
    *
    * An agency's white-label brand: which theme its portal is drawn in
    * (`brandTheme`, a key from BRAND_THEME_KEYS, or null for the default
-   * NetEnroll look) and what the portal calls itself (`brandName`).
+   * NetEnroll look), what the portal calls itself (`brandName`), and whether
+   * the agency is on the white-label tier (`whiteLabel`) -- an agency that
+   * also sells calls, whose OWNER and ADMIN get the call network, Sales,
+   * Payouts and downline agencies. The tier is set here and nowhere else,
+   * by staff, audited with the rest.
    *
    * ── Platform admins only, agencies included ─────────────────────────────
    *
@@ -358,20 +384,18 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
     async (request, reply) => {
       const tenant = await prisma.tenant.findUnique({
         where: { id: request.params.tenantId },
-        select: { id: true, brandTheme: true, brandName: true },
+        select: BRANDING_SELECT,
       });
       if (!tenant) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
       }
-      return reply.send({
-        data: { tenantId: tenant.id, brandTheme: tenant.brandTheme, brandName: tenant.brandName },
-      });
+      return reply.send({ data: brandingView(tenant) });
     }
   );
 
   fastify.patch<{
     Params: { tenantId: string };
-    Body: { brandTheme?: unknown; brandName?: unknown };
+    Body: { brandTheme?: unknown; brandName?: unknown; whiteLabel?: unknown };
   }>(
     '/api/v1/admin/tenants/:tenantId/branding',
     { preHandler: [authenticate, requirePlatformAdmin] },
@@ -380,10 +404,22 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       const body = (request.body ?? {}) as Record<string, unknown>;
       const hasTheme = Object.prototype.hasOwnProperty.call(body, 'brandTheme');
       const hasName = Object.prototype.hasOwnProperty.call(body, 'brandName');
+      const hasWhiteLabel = Object.prototype.hasOwnProperty.call(body, 'whiteLabel');
 
-      if (!hasTheme && !hasName) {
+      if (!hasTheme && !hasName && !hasWhiteLabel) {
         return reply.code(400).send({
-          error: { code: 'VALIDATION_ERROR', message: 'Send brandTheme, brandName, or both' },
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Send brandTheme, brandName, whiteLabel, or any of them together',
+          },
+        });
+      }
+
+      // A boolean and nothing else: a string "false" is truthy, and the tier
+      // opens screens.
+      if (hasWhiteLabel && typeof body.whiteLabel !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'whiteLabel must be true or false' },
         });
       }
 
@@ -419,7 +455,7 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
 
       const before = await prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { id: true, brandTheme: true, brandName: true },
+        select: BRANDING_SELECT,
       });
       if (!before) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
@@ -430,8 +466,9 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
         data: {
           ...(hasTheme ? { brandTheme: body.brandTheme as string | null } : {}),
           ...(hasName ? { brandName } : {}),
+          ...(hasWhiteLabel ? { whiteLabel: body.whiteLabel as boolean } : {}),
         },
-        select: { id: true, brandTheme: true, brandName: true },
+        select: BRANDING_SELECT,
       });
 
       await auditLog({
@@ -440,15 +477,23 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
         action: 'platform.tenant.brand_changed',
         entityType: 'tenant',
         entityId: tenantId,
+        // The tier is in the before and after only when this request set it,
+        // so a brand-only change reads exactly as it always has.
         changes: {
-          before: { brandTheme: before.brandTheme, brandName: before.brandName },
-          after: { brandTheme: tenant.brandTheme, brandName: tenant.brandName },
+          before: {
+            brandTheme: before.brandTheme,
+            brandName: before.brandName,
+            ...(hasWhiteLabel ? { whiteLabel: before.whiteLabel } : {}),
+          },
+          after: {
+            brandTheme: tenant.brandTheme,
+            brandName: tenant.brandName,
+            ...(hasWhiteLabel ? { whiteLabel: tenant.whiteLabel } : {}),
+          },
         },
       });
 
-      return reply.send({
-        data: { tenantId: tenant.id, brandTheme: tenant.brandTheme, brandName: tenant.brandName },
-      });
+      return reply.send({ data: brandingView(tenant) });
     }
   );
 

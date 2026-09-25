@@ -23,6 +23,7 @@ import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from '../lib/dem
 import { loadPlatformContext } from '../lib/platform-admin.js';
 import { hydratePrincipal } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { loadTenantWhiteLabel } from '../lib/white-label.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
   // Global API key authentication for /api/v1/* routes
@@ -152,6 +153,9 @@ export function registerApiV1Auth(server: FastifyInstance): void {
             tenantId: dbApiKey.tenantId,
             apiKeyId: dbApiKey.id,
             scopes,
+            // A fact about the tenant. A key holds no role, so it never passes
+            // as a white-label operator on the strength of this alone.
+            tenantWhiteLabel: dbApiKey.tenant.whiteLabel === true,
           };
 
           // Update last used timestamp (don't await)
@@ -195,6 +199,27 @@ export function registerApiV1Auth(server: FastifyInstance): void {
 export async function resolvePrincipal(request: FastifyRequest): Promise<void> {
   await hydratePrincipal(request.user);
   await applyPlatformContext(request);
+  await applyTenantWhiteLabel(request);
+}
+
+/**
+ * Whether the tenant this principal resolved to is on the white-label tier.
+ *
+ * Read AFTER the platform overlay, so it is the tenant the request actually
+ * acts as: a platform admin gets the value of the agency they have ENTERED,
+ * and false in the cross-agency view, where there is no tenant at all. Never
+ * from anything on the wire. See `lib/white-label.ts`.
+ *
+ * The flag names the tenant, not the person: an AGENT of a white-label agency
+ * carries it too, and every check that opens anything pairs it with OWNER or
+ * ADMIN (`isWhiteLabelOperator`).
+ */
+export async function applyTenantWhiteLabel(request: FastifyRequest): Promise<void> {
+  const principal = request.user as
+    | { tenantId?: string | null; tenantWhiteLabel?: boolean }
+    | undefined;
+  if (!principal) return;
+  principal.tenantWhiteLabel = await loadTenantWhiteLabel(principal.tenantId);
 }
 
 /**

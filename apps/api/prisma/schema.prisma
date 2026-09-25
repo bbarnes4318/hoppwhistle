@@ -50,6 +50,20 @@ model Tenant {
   /// theme's own name.
   brandName  String?
 
+  /// ── White-label tier ──────────────────────────────────────────────────────
+  ///
+  /// An agency that also sells calls. Its OWNER and ADMIN get the call network
+  /// (publishers, buyers, campaigns, numbers, payouts), what their calls sold
+  /// for, and downline agencies of their own. Off by default, set by platform
+  /// admins only through the branding route, and audited.
+  whiteLabel     Boolean  @default(false)
+  /// The white-label agency that onboarded this one, or null. A child is a
+  /// normal agency in every other respect, is never billed by NetEnroll, and
+  /// is invisible to its parent except as aggregates.
+  parentTenantId String?
+  parent         Tenant?  @relation("TenantParent", fields: [parentTenantId], references: [id])
+  children       Tenant[] @relation("TenantParent")
+
   // Quota & Budget Controls
   quota          TenantQuota?
   budget         TenantBudget?
@@ -111,10 +125,12 @@ model Tenant {
   settlementDisputes       SettlementDispute[]
   agentSipCredentials      AgentSipCredential[]
   agentSchedules           AgentSchedule[]
+  publisherPayments        PublisherPayment[]
 
   @@index([slug])
   @@index([status])
   @@index([isNonProduction])
+  @@index([parentTenantId])
   @@map("tenants")
 }
 
@@ -851,6 +867,7 @@ model Publisher {
   didRoutes          DidRoute[]
   users              User[]
   apiKeys            ApiKey[]
+  payments           PublisherPayment[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -861,6 +878,35 @@ model Publisher {
 enum PublisherStatus {
   ACTIVE
   INACTIVE
+}
+
+/// A payment a white-label agency made to one of its publishers, as it
+/// recorded it.
+///
+/// The platform moves no money: the agency pays its publisher however it does,
+/// and records it here. Recording one marks the calls it covers PAID -- the
+/// publisher's PAYABLE, undisputed calls created inside [periodFrom, periodTo]
+/// in this tenant -- and `amount` is what those calls summed to.
+model PublisherPayment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  publisherId String
+  amount      Decimal  @db.Decimal(12, 2)
+  periodFrom  DateTime
+  periodTo    DateTime
+  /// How it was paid, as the agency calls it: ACH, check, wire.
+  method      String
+  /// The agency's own reference: a check number, a transfer id.
+  reference   String?
+  paidAt      DateTime
+  createdById String
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher Publisher @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, publisherId])
+  @@map("publisher_payments")
 }
 
 model Buyer {

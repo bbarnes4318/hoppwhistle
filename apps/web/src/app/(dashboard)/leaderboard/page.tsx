@@ -19,7 +19,13 @@ import {
   ToolbarSelect,
 } from '@/components/domain';
 import { Board, Records, ScoringNote, YourStanding } from '@/components/leaderboard/board';
-import { isSendable, localDayKey, periodQuery } from '@/components/leaderboard/period-picker';
+import {
+  isPeriodKey,
+  isSendable,
+  localDayKey,
+  PERIOD_OPTIONS,
+  periodQuery,
+} from '@/components/leaderboard/period-picker';
 import { Podium } from '@/components/leaderboard/podium';
 import type { Leaderboard, PeriodKey } from '@/components/leaderboard/types';
 import { Button } from '@/components/ui/button';
@@ -66,23 +72,6 @@ import { cn } from '@/lib/utils';
  * the server says it measured, never the one it would have computed itself.
  */
 
-/**
- * The period menu. The same eight names and a calendar range the picker in
- * `period-picker.tsx` offers, as one compact select so the whole control fits
- * the toolbar row. The names still go to the server verbatim; see that file.
- */
-const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
-  { value: 'TODAY', label: 'Today' },
-  { value: 'YESTERDAY', label: 'Yesterday' },
-  { value: 'THIS_WEEK', label: 'This week' },
-  { value: 'LAST_WEEK', label: 'Last week' },
-  { value: 'THIS_MONTH', label: 'This month' },
-  { value: 'LAST_MONTH', label: 'Last month' },
-  { value: 'THIS_YEAR', label: 'This year' },
-  { value: 'LAST_YEAR', label: 'Last year' },
-  { value: 'CUSTOM', label: 'Custom range' },
-];
-
 /** Live enough for a floor to watch, quiet enough for forty tabs. See `useLivePoll`. */
 const REFRESH_MS = 60_000;
 
@@ -90,6 +79,27 @@ export default function LeaderboardPage(): JSX.Element {
   const [period, setPeriod] = useState<PeriodKey>('TODAY');
   const [from, setFrom] = useState(() => localDayKey(6));
   const [to, setTo] = useState(() => localDayKey(0));
+
+  /*
+   * A period named in the URL, as Sales links here with its own
+   * (`/leaderboard?period=THIS_WEEK`), so "your agents" on that screen opens
+   * the same window on this one. Read once, after mount, from
+   * `window.location`: `useSearchParams` would need a Suspense boundary around
+   * the whole page for it to build, and the server render has no URL to read.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('period');
+    if (!isPeriodKey(requested)) return;
+    if (requested === 'CUSTOM') {
+      const requestedFrom = params.get('from');
+      const requestedTo = params.get('to');
+      if (!requestedFrom || !requestedTo) return;
+      setFrom(requestedFrom);
+      setTo(requestedTo);
+    }
+    setPeriod(requested);
+  }, []);
 
   const [data, setData] = useState<Leaderboard | null>(null);
   const [error, setError] = useState<string | null>(null);

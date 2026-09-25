@@ -45,6 +45,11 @@ import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-caus
 import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { sanitizeDestinationString } from '../lib/route-destination.js';
+import {
+  didActiveElsewhere,
+  extensionsOutsideTenant,
+  isPlatformPrincipal,
+} from '../lib/tenant-scope-guards.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
 import { recordBlockedCall } from '../services/blocked-call.js';
@@ -159,6 +164,25 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     });
     if (!phoneNumber || phoneNumber.tenantId !== user.tenantId) {
       return reply.code(404).send({ error: 'Phone number not found' });
+    }
+
+    /*
+     * An agency's route rings its own agents, and cannot go live on a DID
+     * another agency is already taking calls on. Staff keep both as they were.
+     * See `lib/tenant-scope-guards.ts`.
+     */
+    if (!isPlatformPrincipal(request)) {
+      if (!body.campaignId) {
+        const foreign = await extensionsOutsideTenant(prisma, user.tenantId, destination);
+        if (foreign.length > 0) {
+          return reply
+            .code(400)
+            .send({ error: `Not one of your agents' extensions: ${foreign.join(', ')}` });
+        }
+      }
+      if (await didActiveElsewhere(prisma, user.tenantId, phoneNumber.number)) {
+        return reply.code(409).send({ error: 'This number is active in another account' });
+      }
     }
 
     // Check for duplicate route
@@ -289,6 +313,27 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         return reply.code(400).send({
           error: 'A valid destination phone number is required when campaign routing is removed',
         });
+      }
+    }
+
+    // The same two checks as the create handler, for an agency: only its own
+    // agents' extensions, and never live over another agency's DID. The
+    // extension check runs only on a destination this request changed.
+    if (!isPlatformPrincipal(request)) {
+      if (!newCampaignId && destination !== existing.destination) {
+        const foreign = await extensionsOutsideTenant(prisma, user.tenantId, destination);
+        if (foreign.length > 0) {
+          return reply
+            .code(400)
+            .send({ error: `Not one of your agents' extensions: ${foreign.join(', ')}` });
+        }
+      }
+      if (
+        body.status === 'ACTIVE' &&
+        existing.status !== 'ACTIVE' &&
+        (await didActiveElsewhere(prisma, user.tenantId, existing.did))
+      ) {
+        return reply.code(409).send({ error: 'This number is active in another account' });
       }
     }
 

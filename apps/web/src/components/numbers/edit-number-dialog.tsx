@@ -22,6 +22,7 @@ import {
  SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 
 interface EditNumberDialogProps {
@@ -61,6 +62,7 @@ export function EditNumberDialog({
  currentPoolStatus,
  onSuccess,
 }: EditNumberDialogProps) {
+ const { isPlatformAdmin: canUsePool } = useAuth();
  const [loading, setLoading] = useState(false);
  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
  const [loadingUsers, setLoadingUsers] = useState(false);
@@ -159,8 +161,14 @@ export function EditNumberDialog({
  campaignId: formData.rtbPoolEnabled || formData.campaignId === 'none' ? null : formData.campaignId,
  userId: formData.userId === 'none' ? null : formData.userId,
  capabilities: formData.capabilities,
+ // The RTB pool is shared across every agency on the platform, so only
+ // staff may put a number in or take it out. See `canUsePool`.
+ ...(canUsePool
+ ? {
  poolType: formData.rtbPoolEnabled ? 'POOL' : 'STATIC',
  poolStatus: formData.rtbPoolEnabled ? 'AVAILABLE' : null,
+ }
+ : {}),
  });
 
  if (response.error) {
@@ -324,7 +332,8 @@ export function EditNumberDialog({
  </div>
  </div>
 
- {/* RTB Pool Section */}
+ {/* RTB Pool Section. Staff only: the pool is platform-wide. */}
+ {canUsePool ? (
  <div className="border-t pt-4 mt-4">
  <div className="flex items-center justify-between">
  <div className="space-y-0.5">
@@ -345,6 +354,7 @@ export function EditNumberDialog({
  </p>
  )}
  </div>
+ ) : null}
 
  {error && (
  <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</div>

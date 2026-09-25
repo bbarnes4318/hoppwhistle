@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
@@ -14,6 +15,8 @@ interface Branding {
   tenantId: string;
   brandTheme: string | null;
   brandName: string | null;
+  /** The white-label tier. Saved through the same route, audited the same way. */
+  whiteLabel?: boolean;
 }
 
 /** The select's value for "no theme". A <select> cannot hold null. */
@@ -41,6 +44,7 @@ export function BrandThemeControl({
   const [saved, setSaved] = useState<Branding | null>(null);
   const [value, setValue] = useState(DEFAULT_VALUE);
   const [saving, setSaving] = useState(false);
+  const [savingTier, setSavingTier] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,8 +94,49 @@ export function BrandThemeControl({
     }
   }
 
+  /*
+   * The white-label tier, saved the moment it is switched: it opens or closes
+   * whole screens for the agency's OWNER and ADMIN -- Sales, the call network,
+   * Payouts and their own downline -- so there is no half-edited state worth
+   * holding in the form. Same route, same audit row as the theme.
+   */
+  async function saveTier(whiteLabel: boolean): Promise<void> {
+    setSavingTier(true);
+    try {
+      const response = await apiClient.patch<Envelope<Branding>>(
+        `/api/v1/admin/tenants/${tenantId}/branding`,
+        { whiteLabel }
+      );
+      const branding = payload(response);
+      if (response.error || !branding) {
+        toast.error('Could not change the white-label tier', response.error?.message);
+        return;
+      }
+      setSaved(current => (current ? { ...current, whiteLabel: branding.whiteLabel } : branding));
+      toast.success(
+        whiteLabel ? 'White-label tier on' : 'White-label tier off',
+        `${agencyName}'s owners see the change on their next page load.`
+      );
+    } finally {
+      setSavingTier(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-3 text-sm">
+      <label
+        className="flex items-center gap-2 text-xs text-ink-3"
+        title="Sales, the call network, Payouts and their own agencies, for this agency's OWNER and ADMIN"
+      >
+        <Switch
+          checked={saved?.whiteLabel === true}
+          onCheckedChange={checked => void saveTier(checked)}
+          disabled={saved === null || savingTier}
+          aria-label="White-label tier"
+          data-testid="white-label-switch"
+        />
+        White-label tier
+      </label>
       <label className="text-xs text-ink-3">
         Brand theme
         <select

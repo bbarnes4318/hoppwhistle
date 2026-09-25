@@ -84,6 +84,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles`, `calls`, `buyers` and `campaigns` to seed two
   // agencies with their own buyers, traffic and applications.
   '**/src/__tests__/agency-live-board.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed a white-label and a
+  // normal agency with publishers, buyers, calls and ledger rows.
+  '**/src/__tests__/white-label.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',

@@ -5,6 +5,7 @@ import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { loadPlatformContext } from '../lib/platform-admin.js';
 import { authorizationFromUser } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { loadTenantWhiteLabel } from '../lib/white-label.js';
 import { auditLog } from '../services/audit.js';
 
 import { enforceReadOnlyPreview } from './read-only-preview.js';
@@ -46,6 +47,14 @@ export interface AuthenticatedUser {
    * global hook in `middleware/read-only-preview.ts`.
    */
   isReadOnlyPreview?: boolean;
+  /**
+   * The acting tenant is on the white-label tier. A fact about the TENANT, read
+   * from the tenant this principal resolved to -- for staff, the agency they
+   * entered; false with none. What a person may do with it is decided by
+   * `isWhiteLabelOperator` in `lib/white-label.ts`, which also asks for OWNER
+   * or ADMIN.
+   */
+  tenantWhiteLabel?: boolean;
 
   /**
    * When the presenting credential stops being accepted, in seconds since the
@@ -148,12 +157,13 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       // long-lived token must never decide whose data is served. The row is the
       // authority; the token only says who is asking.
       const platform = await loadPlatformContext(decoded.userId);
+      const actingTenantId = platform.isPlatformAdmin
+        ? (platform.actingTenantId ?? undefined)
+        : decoded.tenantId;
 
       // Construct authenticated user object explicitly
       request.user = {
-        tenantId: platform.isPlatformAdmin
-          ? (platform.actingTenantId ?? undefined)
-          : decoded.tenantId,
+        tenantId: actingTenantId,
         userId: decoded.userId,
         email: decoded.email,
         /*
@@ -177,6 +187,10 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         actingTenantName: platform.actingTenantName,
         previewRole: platform.previewRole,
         isReadOnlyPreview: !!platform.previewRole,
+        // The same reading `middleware/api-v1-auth.ts` gives it, from the
+        // tenant this request acts as. This path REBUILDS `request.user`, so
+        // without it a route behind `authenticate` would lose the flag.
+        tenantWhiteLabel: await loadTenantWhiteLabel(actingTenantId),
         /*
          * Carried through from the verified token so a handler can say when
          * this session lapses -- `/api/auth/me` reports it, and the client
@@ -373,6 +387,8 @@ export async function authenticateAPIKey(
     scopes,
     publisherId: dbApiKey.publisherId || (dbApiKey.metadata as any)?.publisherId || null,
     buyerId: (dbApiKey.metadata as any)?.buyerId || null,
+    // A key holds no role, so this never opens anything on its own.
+    tenantWhiteLabel: dbApiKey.tenant.whiteLabel === true,
   };
 }
 

@@ -153,6 +153,43 @@ export const STAFF_ONLY_ROUTES = [
   '/settings/quotas',
   '/settings/webhooks',
   '/settings/dnc',
+
+  /*
+   * The white-label tier's own screens. They exist for an agency that also
+   * SELLS calls -- what its calls sold for, and the downline agencies it runs
+   * -- so a normal agency, which only buys, is sent home from them like any
+   * other screen here. `WHITE_LABEL_ROUTES` below is what opens them, and
+   * only to a white-label agency's OWNER and ADMIN.
+   */
+  '/sales',
+  '/network/agencies',
+  '/network/onboarding',
+] as const;
+
+/**
+ * The screens standard with the white-label tier.
+ *
+ * An agency that also sells calls runs its own call network: publishers,
+ * buyers, numbers, what it owes its publishers, the reports on all of it, its
+ * sales, and the downline agencies it onboards. For a white-label agency's
+ * OWNER and ADMIN these are working screens, not upgrades -- `isRouteBlockedFor`
+ * lets them through. Every one of them is still on STAFF_ONLY_ROUTES, so a
+ * normal agency is redirected off each exactly as before.
+ *
+ * The API decides what those screens may DO, separately and on the server:
+ * `WHITE_LABEL_ALLOWED` in apps/api/src/lib/staff-only-endpoints.ts. Buying or
+ * releasing numbers, flows, voice tooling and carrier routing stay NetEnroll's
+ * for everyone.
+ */
+export const WHITE_LABEL_ROUTES = [
+  '/publishers',
+  '/buyers',
+  '/numbers',
+  '/payouts',
+  '/reports',
+  '/sales',
+  '/network/agencies',
+  '/network/onboarding',
 ] as const;
 
 /**
@@ -181,4 +218,35 @@ export function isStaffOnlyRoute(pathname: string | null | undefined): boolean {
   if (!path) return false;
 
   return STAFF_ONLY_ROUTES.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+/** Who is asking, for `isRouteBlockedFor`. Both from `useAuth()`. */
+export interface RouteViewer {
+  isPlatformAdmin: boolean;
+  /** A white-label agency's OWNER or ADMIN. See `useAuth().isWhiteLabel`. */
+  isWhiteLabel: boolean;
+}
+
+/**
+ * True when this viewer must be sent away from this route.
+ *
+ * NetEnroll staff are never blocked. A white-label OWNER or ADMIN passes the
+ * WHITE_LABEL_ROUTES, matched as whole segments exactly as STAFF_ONLY_ROUTES
+ * are. Everybody else gets `isStaffOnlyRoute`'s answer, unchanged -- which is
+ * what keeps a normal agency's redirects exactly as they were.
+ */
+export function isRouteBlockedFor(
+  pathname: string | null | undefined,
+  viewer: RouteViewer
+): boolean {
+  if (viewer.isPlatformAdmin) return false;
+
+  if (viewer.isWhiteLabel) {
+    const path = normalise(pathname);
+    if (WHITE_LABEL_ROUTES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) {
+      return false;
+    }
+  }
+
+  return isStaffOnlyRoute(pathname);
 }

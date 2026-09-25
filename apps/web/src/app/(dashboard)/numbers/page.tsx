@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDisplayDate } from '@/lib/format-time';
 import { cn, formatPhoneNumber } from '@/lib/utils';
@@ -196,6 +197,17 @@ function NumberCard({
 }
 
 function NumbersPage() {
+  /*
+   * Buying, adding and syncing numbers is NetEnroll's, for everybody.
+   *
+   * A white-label agency's owner reaches this page to see its own numbers and
+   * point them at a campaign or a route. Procurement -- the buy menu, "add
+   * existing" and the Anveo sync -- spends the platform's carrier accounts and
+   * claims inventory, and the API refuses all three to anybody who is not
+   * staff (`POST /api/v1/numbers`, `/numbers/existing`, `/anveo`, `/bulkvs`,
+   * `/fractel` stay in STAFF_ONLY_AREAS). So they are not drawn.
+   */
+  const { isPlatformAdmin: canProcure } = useAuth();
   const [search, setSearch] = useState('');
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
   const [fractelPurchaseDialogOpen, setFractelPurchaseDialogOpen] = useState(false);
@@ -338,57 +350,59 @@ function NumbersPage() {
       <PageHeader
         description="Manage your phone numbers and inbound call routes"
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAddExistingOpen(true)}
-              title="Add a number you already own at a carrier, e.g. an Anveo DID"
-            >
-              <Download className="mr-2 h-3.5 w-3.5" />
-              Add existing
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleSyncAnveo()}
-              disabled={syncingAnveo}
-              title="Import DIDs bought directly in the Anveo portal"
-            >
-              {syncingAnveo ? (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              )}
-              Sync Anveo
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm">
-                  <Plus className="mr-2 h-3.5 w-3.5" />
-                  Buy Number
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-surface border-rule text-ink">
-                <DropdownMenuLabel className="text-xs text-ink-3">
-                  Select Provider
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-rule" />
-                <DropdownMenuItem
-                  onClick={handleBuyFractelNumber}
-                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
-                >
-                  Buy from FracTEL (local &amp; toll-free)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleBuyBulkvsNumber}
-                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
-                >
-                  Buy from NetEnroll
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
+          canProcure ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAddExistingOpen(true)}
+                title="Add a number you already own at a carrier, e.g. an Anveo DID"
+              >
+                <Download className="mr-2 h-3.5 w-3.5" />
+                Add existing
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleSyncAnveo()}
+                disabled={syncingAnveo}
+                title="Import DIDs bought directly in the Anveo portal"
+              >
+                {syncingAnveo ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                )}
+                Sync Anveo
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Buy Number
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-surface border-rule text-ink">
+                  <DropdownMenuLabel className="text-xs text-ink-3">
+                    Select Provider
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-rule" />
+                  <DropdownMenuItem
+                    onClick={handleBuyFractelNumber}
+                    className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                  >
+                    Buy from FracTEL (local &amp; toll-free)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleBuyBulkvsNumber}
+                    className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                  >
+                    Buy from NetEnroll
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : null
         }
       />
 
@@ -537,27 +551,34 @@ function NumbersPage() {
         </TabsContent>
       </Tabs>
 
-      <FractelPurchaseDialog
-        open={fractelPurchaseDialogOpen}
-        onOpenChange={setFractelPurchaseDialogOpen}
-        onSuccess={handlePurchaseSuccess}
-      />
+      {canProcure ? (
+        <>
+          <FractelPurchaseDialog
+            open={fractelPurchaseDialogOpen}
+            onOpenChange={setFractelPurchaseDialogOpen}
+            onSuccess={handlePurchaseSuccess}
+          />
 
-      <BulkvsPurchaseDialog
-        open={bulkvsPurchaseDialogOpen}
-        onOpenChange={setBulkvsPurchaseDialogOpen}
-        onSuccess={handlePurchaseSuccess}
-      />
+          <BulkvsPurchaseDialog
+            open={bulkvsPurchaseDialogOpen}
+            onOpenChange={setBulkvsPurchaseDialogOpen}
+            onSuccess={handlePurchaseSuccess}
+          />
 
-      <AddExistingNumberDialog
-        open={addExistingOpen}
-        onOpenChange={setAddExistingOpen}
-        onSuccess={() => {
-          toast({ title: 'Number added', description: 'Calls to it now route to the campaign.' });
-          void loadNumbers();
-          void loadRoutes();
-        }}
-      />
+          <AddExistingNumberDialog
+            open={addExistingOpen}
+            onOpenChange={setAddExistingOpen}
+            onSuccess={() => {
+              toast({
+                title: 'Number added',
+                description: 'Calls to it now route to the campaign.',
+              });
+              void loadNumbers();
+              void loadRoutes();
+            }}
+          />
+        </>
+      ) : null}
 
       <CreateRouteDialog
         open={createRouteOpen}
