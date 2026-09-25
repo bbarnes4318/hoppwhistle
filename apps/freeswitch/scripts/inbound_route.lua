@@ -801,21 +801,30 @@ local billsec = session:getVariable("billsec") or "0"
 local duration_val = session:getVariable("duration") or tostring(end_epoch - start_epoch)
 local answered_epoch = session:getVariable("answered_time") or ""
 
+-- answered_time is in microseconds (older builds: seconds).
+local answered_sec = tonumber(answered_epoch ~= "" and answered_epoch or "0") or 0
+if answered_sec > 1000000000000 then
+  answered_sec = math.floor(answered_sec / 1000000)
+end
+
+-- FreeSWITCH fills in `billsec` only when the channel is destroyed, which is
+-- after this script ends, so here it reads 0 even for a call the buyer took.
+-- The CDR then reported connected transfers as "buyer no-answer / 0s". This
+-- leg is answered when the buyer answers, so connected time is end - answer.
+-- Only when a buyer leg actually took the call: the no-answer fallback prompt
+-- also answers this leg, and that is not connected time.
+if (tonumber(billsec) or 0) == 0 and answered_bridge_channel ~= "" and answered_sec > 0 then
+  billsec = tostring(math.max(0, end_epoch - answered_sec))
+end
+
 log("INFO", "Call ended: " .. caller_number .. " → " .. destination .. 
     " | duration=" .. duration_val .. "s | billsec=" .. billsec .. 
     " | cause=" .. hangup_cause)
 
 -- Build CDR payload
 local answered_at_iso = ""
-if answered_epoch and answered_epoch ~= "" and answered_epoch ~= "0" then
-  -- answered_time is in microseconds
-  local answered_sec = tonumber(answered_epoch)
-  if answered_sec and answered_sec > 1000000000000 then
-    answered_sec = math.floor(answered_sec / 1000000)
-  end
-  if answered_sec then
-    answered_at_iso = os.date("!%Y-%m-%dT%H:%M:%SZ", answered_sec)
-  end
+if answered_sec > 0 then
+  answered_at_iso = os.date("!%Y-%m-%dT%H:%M:%SZ", answered_sec)
 end
 
 local cdr_json = string.format(
