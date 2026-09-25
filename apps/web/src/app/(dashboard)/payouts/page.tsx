@@ -13,8 +13,8 @@ import {
   PanelHeader,
   PanelTitle,
 } from '@/components/domain';
-import { localDayKey } from '@/components/leaderboard/period-picker';
 import { PageHeader } from '@/components/layout/page-header';
+import { localDayKey } from '@/components/leaderboard/period-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
