@@ -36,13 +36,14 @@ const TO = opt('to');
 const DEVICE = opt('device');
 const APPLY = args.includes('--apply');
 const ONLY = opt('only');
+const RESTORE = opt('restore');
 
 const BASE = (process.env.FONESTORM_BASE_URL || 'https://api.fonestorm.com/v2').replace(/\/$/, '');
 const USER = process.env.FONESTORM_USERNAME;
 const PASS = process.env.FONESTORM_PASSWORD;
 
-if (!FROM || !DEVICE) {
-  console.error('Usage: --from <subaccount> [--to <subaccount>] --device <device name, id or host IP> [--apply]');
+if (!FROM || (!DEVICE && !RESTORE)) {
+  console.error('Usage: --from <subaccount> [--to <subaccount>] --device <device name, id or host IP> [--apply]\n       --from <subaccount> --restore <routing-backup.jsonl> [--apply]');
   process.exit(1);
 }
 if (!USER || !PASS) {
@@ -80,6 +81,38 @@ function findToken(data) {
 const firstArray = (data) => (Array.isArray(data) ? data : Object.values(data ?? {}).find(Array.isArray) ?? []);
 const tenDigit = (v) => String(v).replace(/\D/g, '').slice(-10);
 
+// Put each number's call routing back from a backup written by --apply.
+async function restore(token) {
+  const rows = readFileSync(RESTORE, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+    .filter((r) => r.receive?.type);
+  console.log(`${rows.length} numbers to restore from ${RESTORE}`);
+  const byType = {};
+  for (const r of rows) byType[`${r.receive.type} ${r.receive.id ?? r.receive.value ?? ''}`] = (byType[`${r.receive.type} ${r.receive.id ?? r.receive.value ?? ''}`] ?? 0) + 1;
+  for (const [k, n] of Object.entries(byType)) console.log(`  ${n} → ${k}`);
+  if (!APPLY) {
+    console.log('Dry run. Re-run with --apply to restore.');
+    return;
+  }
+  const failed = [];
+  for (const r of rows) {
+    const { type, id, value, url_method } = r.receive;
+    const receive = { type, value: String(id ?? value ?? '') };
+    if (url_method) receive.url_method = url_method;
+    try {
+      await call(token, 'PUT', `/fonenumbers/${r.fonenumber}`, { call_options: { receive } });
+      console.log(`OK    ${r.fonenumber}  → ${type} ${receive.value}`);
+    } catch (e) {
+      console.error(`FAIL  ${r.fonenumber}: ${e.message}`);
+      failed.push(r.fonenumber);
+    }
+  }
+  console.log(`\nRestored ${rows.length - failed.length}/${rows.length}.`);
+  if (failed.length) process.exit(3);
+}
+
 async function main() {
   const parent = findToken(await call(null, 'POST', '/auth', { username: USER, password: PASS, expires: 3600 }));
   if (!parent) throw new Error('FoneStorm auth returned no token');
@@ -90,6 +123,7 @@ async function main() {
   };
 
   const fromToken = await subToken(FROM);
+  if (RESTORE) return restore(fromToken);
   let numbers = firstArray(await call(fromToken, 'GET', '/fonenumbers')).map((n) =>
     tenDigit(typeof n === 'object' ? n.fonenumber ?? n.number : n)
   );
