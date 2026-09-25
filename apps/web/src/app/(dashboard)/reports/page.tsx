@@ -220,7 +220,7 @@ function ReportsPage() {
 
       if (activeTab === 'campaign-profitability' && showProfitability) {
         const response = await apiClient.get<CampaignProfitabilityReport>(
-          `/api/v1/reports/profitability?${query.toString()}`
+          `/api/v1/reports/campaign-profitability?${query.toString()}`
         );
         if (response.data) setProfitReport(response.data);
       } else if (activeTab === 'publisher-revenue' && showPublisherRevenue) {
@@ -298,7 +298,6 @@ function ReportsPage() {
       const query = new URLSearchParams({
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate + 'T23:59:59').toISOString(),
-        format: 'csv',
       });
       if (campaignId) {
         query.append('campaignId', campaignId);
@@ -309,17 +308,24 @@ function ReportsPage() {
       // portal itself for `/?startDate=…` — a 404 reported as "an error
       // occurred". A table cannot be half-assigned, and an unknown tab now
       // says so instead of requesting nothing.
+      //
+      // Each one is the report's `/export.csv` route. They used to be the JSON
+      // routes with `format=csv` added, which none of them reads: two tabs
+      // saved a JSON body under a .csv name, and Campaign Profitability asked
+      // for `/reports/profitability`, which the API has never registered.
+      // `app/__tests__/reports-api-paths.test.ts` checks every path here
+      // against the routes the API actually registers.
       const EXPORTS: Record<string, { endpoint: string; prefix: string }> = {
         'campaign-profitability': {
-          endpoint: '/api/v1/reports/profitability',
+          endpoint: '/api/v1/reports/campaign-profitability/export.csv',
           prefix: 'profitability-report',
         },
         'publisher-revenue': {
-          endpoint: '/api/v1/reports/publisher-revenue',
+          endpoint: '/api/v1/reports/publisher-revenue/export.csv',
           prefix: 'publisher-revenue',
         },
         'buyer-costs': {
-          endpoint: '/api/v1/reports/buyer-costs',
+          endpoint: '/api/v1/reports/buyer-costs/export.csv',
           prefix: 'buyer-costs',
         },
       };
