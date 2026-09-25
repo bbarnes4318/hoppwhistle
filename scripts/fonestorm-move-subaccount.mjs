@@ -42,7 +42,7 @@ const USER = process.env.FONESTORM_USERNAME;
 const PASS = process.env.FONESTORM_PASSWORD;
 
 if (!FROM || !DEVICE) {
-  console.error('Usage: --from <subaccount> [--to <subaccount>] --device <device name or id> [--apply]');
+  console.error('Usage: --from <subaccount> [--to <subaccount>] --device <device name, id or host IP> [--apply]');
   process.exit(1);
 }
 if (!USER || !PASS) {
@@ -112,7 +112,7 @@ async function main() {
     const token = id === FROM ? fromToken : await subToken(id);
     const devices = firstArray(await call(token, 'GET', '/devices'));
     console.log(`\nDevices on ${id}: ${devices.map((d) => `${d.name} (${d.id}, ${d.type})`).join(', ') || 'none'}`);
-    device = devices.find((d) => d.id === DEVICE || d.name === DEVICE);
+    device = devices.find((d) => d.id === DEVICE || d.name === DEVICE || d.host_ip === DEVICE);
     if (device) {
       deviceAcct = id;
       break;
