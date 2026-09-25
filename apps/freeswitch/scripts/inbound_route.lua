@@ -189,10 +189,12 @@ end
 -- lists those legs in `agentCellLegs` (ten-digit keys). Each such leg:
 --   * is skipped when that cell is already on one of our calls, since the
 --     agent's busy check above only sees softphone channels; and
---   * must press 1 to accept, so a voicemail or a pocket answer cannot take
---     the call away from agents who are really there.
--- Kill switch for the confirmation, next call, no restart:
---     fs_cli -x "global_setvar agent_cell_confirm=false"
+--   * can be made to press 1 to accept, so a voicemail or a pocket answer
+--     cannot take the call away from agents who are really there.
+-- The confirmation is OFF by default: on Anveo buyer legs the prompt hung up
+-- the answered leg at once (DESTINATION_OUT_OF_ORDER), so every call dropped.
+-- Turn it on, next call, no restart:
+--     fs_cli -x "global_setvar agent_cell_confirm=true"   (or env AGENT_CELL_CONFIRM=true)
 -- Prompt override: global var agent_cell_confirm_file / env AGENT_CELL_CONFIRM_FILE.
 local function ten_digit_key(value)
     local digits = string.gsub(value or "", "%D", "")
@@ -204,25 +206,25 @@ end
 
 local cell_confirm_setting = fs_global("agent_cell_confirm")
 if cell_confirm_setting == "" then
-    cell_confirm_setting = os.getenv("AGENT_CELL_CONFIRM") or "true"
+    cell_confirm_setting = os.getenv("AGENT_CELL_CONFIRM") or "false"
 end
-local AGENT_CELL_CONFIRM = cell_confirm_setting ~= "false"
+local AGENT_CELL_CONFIRM = cell_confirm_setting == "true"
 
 local AGENT_CELL_CONFIRM_FILE = fs_global("agent_cell_confirm_file")
 if AGENT_CELL_CONFIRM_FILE == "" then
     AGENT_CELL_CONFIRM_FILE = os.getenv("AGENT_CELL_CONFIRM_FILE") or "ivr/ivr-accept_reject_voicemail.wav"
 end
 
--- The agent's cell shows the CUSTOMER's number, so they know who is calling.
--- Buyer legs keep presenting our DID (campaign_external_cid_fix_v1); this
--- per-leg override applies to agent cells only. If FracTEL refuses calls that
--- present a number we do not own, revert with no restart:
---     fs_cli -x "global_setvar agent_cell_show_caller=false"
+-- Optionally the agent's cell shows the CUSTOMER's number instead of our DID.
+-- OFF by default: carriers refuse a caller ID we do not own (Anveo answered
+-- NORMAL_TEMPORARY_FAILURE), so agent cells present our DID like buyer legs
+-- (campaign_external_cid_fix_v1). Turn it on, next call, no restart:
+--     fs_cli -x "global_setvar agent_cell_show_caller=true"   (or env AGENT_CELL_SHOW_CALLER=true)
 local cell_caller_setting = fs_global("agent_cell_show_caller")
 if cell_caller_setting == "" then
-    cell_caller_setting = os.getenv("AGENT_CELL_SHOW_CALLER") or "true"
+    cell_caller_setting = os.getenv("AGENT_CELL_SHOW_CALLER") or "false"
 end
-local AGENT_CELL_SHOW_CALLER = cell_caller_setting ~= "false"
+local AGENT_CELL_SHOW_CALLER = cell_caller_setting == "true"
 
 -- 1XXXXXXXXXX for a real NANP caller, or nil (withheld, anonymous, garbage).
 local function presentable_caller(caller)
