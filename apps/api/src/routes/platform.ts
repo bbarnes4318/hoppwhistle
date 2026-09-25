@@ -49,6 +49,7 @@
  * codebase scopes correctly without knowing any of this happened.
  */
 
+import { BRAND_THEME_KEYS, isBrandThemeKey } from '@hopwhistle/shared';
 import { FastifyInstance } from 'fastify';
 
 import {
@@ -69,6 +70,9 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
+
+/** Long enough for any agency's trading name; short enough for a sidebar and a tab. */
+const BRAND_NAME_MAX_LENGTH = 100;
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<void> {
@@ -322,6 +326,128 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
           deliveryUnchanged: true,
           billingUnchanged: true,
         },
+      });
+    }
+  );
+
+  /**
+   * GET   /api/v1/admin/tenants/:tenantId/branding
+   * PATCH /api/v1/admin/tenants/:tenantId/branding
+   *
+   * An agency's white-label brand: which theme its portal is drawn in
+   * (`brandTheme`, a key from BRAND_THEME_KEYS, or null for the default
+   * NetEnroll look) and what the portal calls itself (`brandName`).
+   *
+   * ── Platform admins only, agencies included ─────────────────────────────
+   *
+   * An agency's own OWNER and ADMIN are refused 403 by `requirePlatformAdmin`:
+   * a brand is part of the agreement with NetEnroll, not a setting. There is
+   * no other writer, so the brand an agency's users see is always one staff
+   * chose, and every change is in the audit log with its before and after.
+   *
+   * `:tenantId` names the tenant being administered, not the caller's acting
+   * tenant -- the same reading as every other platform route.
+   *
+   * The existing tenant PATCH (`/admin/api/v1/tenants/:tenantId`) is a stub
+   * that writes nothing and answers a placeholder, so this is its own route
+   * rather than an extension of that one.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/admin/tenants/:tenantId/branding',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: request.params.tenantId },
+        select: { id: true, brandTheme: true, brandName: true },
+      });
+      if (!tenant) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+      return reply.send({
+        data: { tenantId: tenant.id, brandTheme: tenant.brandTheme, brandName: tenant.brandName },
+      });
+    }
+  );
+
+  fastify.patch<{
+    Params: { tenantId: string };
+    Body: { brandTheme?: unknown; brandName?: unknown };
+  }>(
+    '/api/v1/admin/tenants/:tenantId/branding',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const hasTheme = Object.prototype.hasOwnProperty.call(body, 'brandTheme');
+      const hasName = Object.prototype.hasOwnProperty.call(body, 'brandName');
+
+      if (!hasTheme && !hasName) {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'Send brandTheme, brandName, or both' },
+        });
+      }
+
+      // null clears the theme; anything else must be a known key. An unknown
+      // key is refused rather than stored, so the column only ever holds a
+      // value the web app can draw.
+      if (hasTheme && body.brandTheme !== null && !isBrandThemeKey(body.brandTheme)) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `brandTheme must be null or one of: ${BRAND_THEME_KEYS.join(', ')}`,
+          },
+        });
+      }
+
+      let brandName: string | null | undefined;
+      if (hasName) {
+        if (body.brandName !== null && typeof body.brandName !== 'string') {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: 'brandName must be a string or null' },
+          });
+        }
+        brandName = typeof body.brandName === 'string' ? body.brandName.trim() || null : null;
+        if (brandName && brandName.length > BRAND_NAME_MAX_LENGTH) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `brandName must be at most ${BRAND_NAME_MAX_LENGTH} characters`,
+            },
+          });
+        }
+      }
+
+      const before = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, brandTheme: true, brandName: true },
+      });
+      if (!before) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+
+      const tenant = await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          ...(hasTheme ? { brandTheme: body.brandTheme as string | null } : {}),
+          ...(hasName ? { brandName } : {}),
+        },
+        select: { id: true, brandTheme: true, brandName: true },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.tenant.brand_changed',
+        entityType: 'tenant',
+        entityId: tenantId,
+        changes: {
+          before: { brandTheme: before.brandTheme, brandName: before.brandName },
+          after: { brandTheme: tenant.brandTheme, brandName: tenant.brandName },
+        },
+      });
+
+      return reply.send({
+        data: { tenantId: tenant.id, brandTheme: tenant.brandTheme, brandName: tenant.brandName },
       });
     }
   );

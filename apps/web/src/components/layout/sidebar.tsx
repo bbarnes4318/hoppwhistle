@@ -8,6 +8,7 @@ import * as React from 'react';
 import { Logo } from '@/components/brand/logo';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/use-auth';
+import { useBrand } from '@/hooks/use-brand';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { cn } from '@/lib/utils';
 
@@ -97,6 +98,8 @@ function isItemActive(pathname: string | null, href: string): boolean {
  * built"; this says "not on your plan", in the brand colour, with a lock.
  */
 function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
+  // A white-labelled agency's people do not know NetEnroll by name.
+  const { brand } = useBrand();
   const Icon = item.icon;
   const [open, setOpen] = React.useState(false);
   const hovering = React.useRef(false);
@@ -204,7 +207,7 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
           </div>
         </div>
         <p className="mt-3 border-t border-rule pt-3 t-meta text-ink-3">
-          Ask your NetEnroll account manager to turn this on for your agency.
+          Ask your {brand ? '' : 'NetEnroll '}account manager to turn this on for your agency.
         </p>
       </PopoverContent>
     </Popover>
@@ -395,6 +398,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
 
   const drawer = variant === 'drawer';
   const activeHref = activeHrefFor(pathname, groups);
+  const { brand, settled: brandSettled } = useBrand();
 
   return (
     <div
@@ -403,18 +407,58 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         drawer ? 'w-full' : 'sticky top-0 w-[248px] shrink-0 border-r border-rule'
       )}
     >
-      {/* In the drawer the panel already has a header, so the brand row would
-          be a second one. */}
-      {drawer ? null : (
-        <div className="flex h-16 shrink-0 items-center border-b border-rule px-5">
-          <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
-            {/* The whole lockup, tagline included: at 128px the
-                PAY-PER-APPLICATION line still reads. h-16 matches the topbar
-                beside it (topbar.tsx), so the two bottom rules meet in a
-                single line across the top of the page. Only the nav below
-                scrolls; this block stays put. */}
-            <Logo width={128} />
+      {/* In the drawer the panel already has a header, so the NetEnroll brand
+          row would be a second one. An agency's own logo is the exception: it
+          is the only place a white-labelled user sees whose portal this is, so
+          the drawer carries it too, sized down. */}
+      {drawer ? (
+        brand ? (
+          <div className="flex shrink-0 items-center justify-center border-b border-rule px-5 py-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={brand.logo}
+              alt={brand.name}
+              className="max-h-[40px] w-auto object-contain"
+              draggable={false}
+              data-testid="brand-logo"
+            />
+          </div>
+        ) : null
+      ) : brand ? (
+        /* An agency's lockup is near-square (640x446), not a wide wordmark, so
+           it gets a taller block than NetEnroll's; the "Agency portal" eyebrow
+           at the top of the nav still sits directly under it. */
+        <div className="flex h-[112px] shrink-0 items-center justify-center border-b border-rule px-5">
+          <Link
+            href="/dashboard"
+            className="flex h-full items-center justify-center rounded-control"
+            aria-label={`${brand.name} home`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={brand.logo}
+              alt={brand.name}
+              className="max-h-[96px] w-auto object-contain"
+              draggable={false}
+              data-testid="brand-logo"
+            />
           </Link>
+        </div>
+      ) : (
+        <div className="flex h-16 shrink-0 items-center border-b border-rule px-5">
+          {/* Nothing until the session says whose portal this is: drawing
+              NetEnroll's lockup and then swapping it for an agency's is the
+              flash a white-labelled user must never see. */}
+          {brandSettled ? (
+            <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
+              {/* The whole lockup, tagline included: at 128px the
+                  PAY-PER-APPLICATION line still reads. h-16 matches the topbar
+                  beside it (topbar.tsx), so the two bottom rules meet in a
+                  single line across the top of the page. Only the nav below
+                  scrolls; this block stays put. */}
+              <Logo width={128} />
+            </Link>
+          ) : null}
         </div>
       )}
 

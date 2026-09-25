@@ -39,6 +39,17 @@ model Tenant {
   nonProductionMarkedAt       DateTime?
   nonProductionMarkedByUserId String?
 
+  /// ── White-label brand ─────────────────────────────────────────────────────
+  ///
+  /// Which agency brand theme this tenant's portal is drawn in, or null for the
+  /// default NetEnroll look. Constrained in code, not in the database, to
+  /// BRAND_THEME_KEYS in @hopwhistle/shared, the same list the web app keys its
+  /// logos and palettes by. Set by platform admins only, and audited.
+  brandTheme String?
+  /// The agency's name as its portal should say it. Null falls back to the
+  /// theme's own name.
+  brandName  String?
+
   // Quota & Budget Controls
   quota          TenantQuota?
   budget         TenantBudget?

@@ -13,6 +13,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
+import { BrandThemeControl } from '@/components/platform/brand-theme-control';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -723,6 +724,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
                           onAct={act}
                           onCeiling={setCeiling}
                         />
+                        <div className="mt-3">
+                          <BrandThemeControl tenantId={row.tenantId} agencyName={row.name} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}

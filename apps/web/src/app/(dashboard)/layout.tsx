@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { BrandThemeSync } from '@/components/brand/brand-theme-sync';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -215,6 +216,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Same gate. The call centre is where an agent works, but a platform
       // operator can open the page too, and they should not start a phone.
       <PhoneProvider enabled={canTakeCalls}>
+        <BrandThemeSync />
         <div className="flex h-screen w-screen flex-col overflow-hidden bg-paper text-ink">
           {/*
             The way out of a preview, on the one page that had no way out.
@@ -269,6 +271,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider enabled={canTakeCalls}>
+      {/* The agency's brand theme, from the session. The authenticated shell
+          only: the login page is never branded. */}
+      <BrandThemeSync />
       <div className="flex h-screen overflow-hidden bg-paper text-ink">
         {/*
           The whole document is light, so the shell needs no theme scope of its

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
+import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -46,9 +47,18 @@ export function Topbar() {
   // The tab is named after the page, then the product, so a floor with six
   // NetEnroll tabs open can tell them apart. Set here because every page under
   // the dashboard is a client component and none carries its own metadata.
+  //
+  // The product is the agency's own name when it has a brand theme. Until the
+  // session has said which, the tab carries the page alone rather than naming
+  // a product it may be about to un-name.
+  const { productName, settled: brandSettled } = useBrand();
   React.useEffect(() => {
-    document.title = title ? `${title} · NetEnroll` : 'NetEnroll';
-  }, [title]);
+    if (!brandSettled) {
+      if (title) document.title = title;
+      return;
+    }
+    document.title = title ? `${title} · ${productName}` : productName;
+  }, [title, productName, brandSettled]);
 
   // macOS shows ⌘K, everything else Ctrl K. Read after mount so the server and
   // the client render the same thing.

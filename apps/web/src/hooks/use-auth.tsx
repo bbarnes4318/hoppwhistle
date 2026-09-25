@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import { usePlatformContext } from './use-platform-context';
 
+import type { ServerBrand } from '@/lib/brand-themes';
 import { homePathForRoles } from '@/lib/roles';
 import { clearSessionToken, persistSessionToken } from '@/lib/session-token';
 
@@ -110,6 +111,12 @@ interface UserData {
   isReadOnlyPreview?: boolean;
   /** ISO timestamp from `/api/auth/me`, or null for a token minted before expiry existed. */
   sessionExpiresAt?: string | null;
+  /**
+   * The agency's brand theme, resolved by the server from the principal: the
+   * user's own agency, or the one a platform admin has entered. Null for the
+   * default NetEnroll look. See `lib/brand-themes.ts`.
+   */
+  brand?: ServerBrand | null;
 }
 
 interface UseAuthReturn {
@@ -248,6 +255,10 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         previewRole: rawUser.previewRole ?? null,
         isReadOnlyPreview: rawUser.isReadOnlyPreview === true,
         sessionExpiresAt: rawUser.sessionExpiresAt ?? null,
+        brand:
+          rawUser.brand && typeof rawUser.brand.theme === 'string'
+            ? { theme: rawUser.brand.theme, name: rawUser.brand.name ?? null }
+            : null,
       });
       setStatus('authenticated');
       setError(null);

@@ -101,12 +101,21 @@ export class ErrorBoundary extends Component<Props, State> {
         <div>
           <p className="font-medium">{this.props.label} could not be displayed.</p>
           <p className="text-muted-foreground">
-            The rest of the page is unaffected. Please reload, and let NetEnroll know if it
-            keeps happening.
+            The rest of the page is unaffected. Please reload, and let{' '}
+            {isBranded() ? 'your account manager' : 'NetEnroll'} know if it keeps happening.
           </p>
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">{error.message}</p>
         </div>
       </div>
     );
   }
+}
+
+/**
+ * Whether an agency brand theme is active. Read off the attribute
+ * `BrandThemeSync` sets rather than from the session: a class component has no
+ * hooks, and this only renders after something has already gone wrong.
+ */
+function isBranded(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-brand');
 }
