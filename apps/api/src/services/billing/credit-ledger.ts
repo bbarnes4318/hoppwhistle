@@ -160,6 +160,30 @@ export async function openLots(
     .filter((lot, index) => lot.remaining > 0 && !rows[index].retired);
 }
 
+/**
+ * The credits in the lots that still have credits left: how many are unused,
+ * and how many those lots held when they were bought.
+ *
+ * This is the "of" in "7 remaining of 10". It is NOT the agency's daily block
+ * (`AgencyBillingProfile.dailyBlockApplications`), which is how many the
+ * nightly auto-refill tops back up to and was the number the live strip used
+ * to put there -- an agency that bought 10 with a daily block of 2 read
+ * "10 remaining of 2".
+ *
+ * Both halves come from `openLots`, so a fully used lot drops out of both and a
+ * dry-run lot that was closed out never counts.
+ */
+export async function openLotCredits(
+  prisma: LedgerClient,
+  tenantId: string
+): Promise<{ remaining: number; total: number }> {
+  const lots = await openLots(prisma, tenantId);
+  return {
+    remaining: lots.reduce((sum, lot) => sum + lot.remaining, 0),
+    total: lots.reduce((sum, lot) => sum + lot.quantity, 0),
+  };
+}
+
 export interface PurchaseInput {
   tenantId: string;
   /** The Delivery Day this block is for. */

@@ -49,7 +49,7 @@ import type { CurveAnchor, RateCurve } from '../rating/rate-curve.js';
 import { getRatingSummary } from '../rating/rating-summary.js';
 import { getRedisClient } from '../redis.js';
 
-import { creditBalance, ledgerCountsForDay } from './credit-ledger.js';
+import { creditBalance, ledgerCountsForDay, openLotCredits } from './credit-ledger.js';
 import { evaluateDeliveryGate } from './delivery-gate.js';
 import type { DeliveryGateDecision } from './delivery-gate.js';
 import {
@@ -125,6 +125,12 @@ export interface DeliveryTodayView {
 
   /** Unused paid applications: what is left on the block. */
   applicationsRemainingOnBlock: number;
+  /**
+   * What the lots that still have credits on them held when bought: the "of"
+   * in "7 remaining of 10". Not `dailyBlockApplications`, which is the nightly
+   * auto-refill target -- see `openLotCredits`.
+   */
+  appCreditsOpenTotal: number;
   dailyBlockApplications: number;
   applicationsConsumedToday: number;
 
@@ -191,6 +197,7 @@ const NOT_ENROLLED_VIEW: Omit<
   trackingRate: null,
   trackingBelowMinimum: false,
   applicationsRemainingOnBlock: 0,
+  appCreditsOpenTotal: 0,
   dailyBlockApplications: 0,
   applicationsConsumedToday: 0,
   overrunToday: 0,
@@ -280,8 +287,18 @@ export async function getDeliveryToday(
     };
   }
 
-  const [rating, gate, balance, counts, todayMeasurement, routed, inProgress, hold, profile] =
-    await Promise.all([
+  const [
+    rating,
+    gate,
+    balance,
+    counts,
+    todayMeasurement,
+    routed,
+    inProgress,
+    hold,
+    profile,
+    openCredits,
+  ] = await Promise.all([
       getRatingSummary(tenantId, { prisma, now }),
       // `record: false` -- reading a screen is not a delivery decision, and a
       // page refresh must not be able to raise a delivery hold event or send a
@@ -309,6 +326,7 @@ export async function getDeliveryToday(
         select: { occurredAt: true },
       }),
       prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
+      openLotCredits(prisma, tenantId),
     ]);
 
   /*
@@ -362,6 +380,7 @@ export async function getDeliveryToday(
     trackingRate: rating.trackingRate,
     trackingBelowMinimum: rating.trackingBelowMinimum,
     applicationsRemainingOnBlock: Math.max(0, balance),
+    appCreditsOpenTotal: openCredits.total,
     dailyBlockApplications: gate.dailyBlockApplications,
     applicationsConsumedToday: counts.consumed,
     overrunToday: counts.overrun,
@@ -849,6 +868,8 @@ export interface PlatformAgencyRow {
 
   /** Unused paid applications: what is left on the block right now. */
   applicationsRemainingOnBlock: number;
+  /** What the lots still holding credits were bought with. See `openLotCredits`. */
+  appCreditsOpenTotal: number;
   dailyBlockApplications: number;
   /** Applications submitted today beyond the block. */
   overrunToday: number;
@@ -1043,6 +1064,7 @@ export async function getPlatformOverview(
         disputes,
         trackingChange,
         cleanSettlements,
+        openCredits,
       ] = await Promise.all([
         measureCalendarDay(
           { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
@@ -1123,6 +1145,7 @@ export async function getPlatformOverview(
          * half of what the gate will actually allow.
          */
         consecutiveCleanSettlements(prisma, tenant.id),
+        openLotCredits(prisma, tenant.id),
       ]);
 
       const revenue = settlement === null ? null : toNumber(settlement.totalCharged);
@@ -1182,6 +1205,7 @@ export async function getPlatformOverview(
             : toNumber(trackingChange.curveRate),
         paymentMethod: profile?.paymentMethod ?? 'ACH',
         applicationsRemainingOnBlock: Math.max(0, balance),
+        appCreditsOpenTotal: openCredits.total,
         dailyBlockApplications: terms?.dailyBlockApplications ?? 0,
         overrunToday: ledger.overrun,
         overrunCeiling: effectiveCeiling,

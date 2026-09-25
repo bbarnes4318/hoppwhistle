@@ -126,6 +126,8 @@ export interface StripPayload {
   billing?: {
     dailyBlockApplications: number;
     applicationsRemainingOnBlock: number;
+    /** What the lots still holding credits were bought with: the "of" in "7 of 10". */
+    appCreditsOpenTotal: number;
     overrunToday: number;
     overrunAmountTonight: number | null;
     projectedTotalCharge: number | null;
@@ -254,12 +256,26 @@ export function agencySlots(d: StripPayload): LiveMetricSlot[] {
    */
   return [
     ...operational,
-    {
-      id: 'block',
-      label: 'App Credits',
-      value: counted(billing.applicationsRemainingOnBlock),
-      sub: `remaining of ${count(billing.dailyBlockApplications)}`,
-    },
+    /*
+     * Remaining of what the open lots were bought with -- never of the daily
+     * block. That is the nightly auto-refill target, a different quantity: an
+     * agency that bought 10 with a block of 2 read "10 remaining of 2". The
+     * block is labelled as such on /delivery, where it belongs.
+     */
+    billing.applicationsRemainingOnBlock > 0
+      ? {
+          id: 'block',
+          label: 'App Credits',
+          value: counted(billing.applicationsRemainingOnBlock),
+          sub: `remaining of ${count(billing.appCreditsOpenTotal)}`,
+        }
+      : {
+          id: 'block',
+          label: 'App Credits',
+          value: counted(billing.applicationsRemainingOnBlock),
+          sub: 'all used',
+          tone: 'dropped',
+        },
     {
       id: 'rate',
       label: 'Cost per App',
