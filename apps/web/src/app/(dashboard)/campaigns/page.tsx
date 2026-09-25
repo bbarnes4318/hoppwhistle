@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -105,6 +106,18 @@ function StatusBadge({ status }: { status: Campaign['status'] }) {
 }
 
 function CampaignsPage() {
+  /*
+   * Staff manage campaigns; an agency reads its own.
+   *
+   * `/campaigns` left STAFF_ONLY_ROUTES so an agency principal can see which
+   * campaigns send it calls and how many. Every write under
+   * `/api/v1/campaigns` is still refused to anybody who is not staff
+   * (STAFF_ONLY_AREAS on the API side), so for them the controls that would
+   * only ever answer 403 are not drawn at all: create, edit, duplicate,
+   * pause/activate and delete.
+   */
+  const { isPlatformAdmin: canManage } = useAuth();
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -241,11 +254,19 @@ function CampaignsPage() {
 
   return (
     <CompactPageShell>
-      <CompactPageHeader subtitle="Configure campaigns and track performance">
-        <Button onClick={() => setWizardOpen(true)} size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Create Campaign
-        </Button>
+      <CompactPageHeader
+        subtitle={
+          canManage
+            ? 'Configure campaigns and track performance'
+            : 'The campaigns sending your agency calls, and how many each is sending'
+        }
+      >
+        {canManage ? (
+          <Button onClick={() => setWizardOpen(true)} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Create Campaign
+          </Button>
+        ) : null}
       </CompactPageHeader>
 
       {/* Content */}
@@ -257,7 +278,7 @@ function CampaignsPage() {
                 Campaigns
               </CardTitle>
               <CardDescription className="text-[10px]">
-                View and manage all campaigns
+                {canManage ? 'View and manage all campaigns' : 'View only'}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -344,10 +365,7 @@ function CampaignsPage() {
                 filteredCampaigns.map(campaign => {
                   const campaignStats = stats.get(campaign.id);
                   return (
-                    <TableRow
-                      key={campaign.id}
-                      className="hover:bg-sunken border-b border-border"
-                    >
+                    <TableRow key={campaign.id} className="hover:bg-sunken border-b border-border">
                       {/* Name */}
                       <TableCell className="py-2 px-3">
                         <a
@@ -406,15 +424,17 @@ function CampaignsPage() {
                       {/* Actions */}
                       <TableCell className="py-2 px-3 text-right">
                         <div className="flex justify-end gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
-                            title="Edit"
-                          >
-                            <Edit className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
+                          {canManage ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
+                              title="Edit"
+                            >
+                              <Edit className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -426,37 +446,41 @@ function CampaignsPage() {
                           >
                             <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleDuplicate(campaign)}
-                            title="Duplicate"
-                          >
-                            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleToggleStatus(campaign)}
-                            title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                          >
-                            {campaign.status === 'ACTIVE' ? (
-                              <Pause className="h-3.5 w-3.5 text-ringing-ink" />
-                            ) : (
-                              <Play className="h-3.5 w-3.5 text-live-ink" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => openDeleteDialog(campaign)}
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-dropped-ink" />
-                          </Button>
+                          {canManage ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleDuplicate(campaign)}
+                                title="Duplicate"
+                              >
+                                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleToggleStatus(campaign)}
+                                title={campaign.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                              >
+                                {campaign.status === 'ACTIVE' ? (
+                                  <Pause className="h-3.5 w-3.5 text-ringing-ink" />
+                                ) : (
+                                  <Play className="h-3.5 w-3.5 text-live-ink" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openDeleteDialog(campaign)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-dropped-ink" />
+                              </Button>
+                            </>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -494,39 +518,42 @@ function CampaignsPage() {
       </Card>
 
       {/* Create Campaign Wizard */}
-      <CreateCampaignWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        onSuccess={() => {
-          void fetchCampaigns();
-          void fetchStats();
-        }}
-      />
+      {canManage ? (
+        <>
+          <CreateCampaignWizard
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+            onSuccess={() => {
+              void fetchCampaigns();
+              void fetchStats();
+            }}
+          />
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Campaign?</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{selectedCampaign?.name}</strong>? This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Delete Campaign?</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <strong>{selectedCampaign?.name}</strong>? This
+                  action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
     </CompactPageShell>
   );
 }
-
 
 export default function GuardedCampaignsPage() {
   return (
