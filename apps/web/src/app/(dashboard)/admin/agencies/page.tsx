@@ -6,14 +6,29 @@ import {
   ChevronRight,
   Download,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
-import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -23,6 +38,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -63,6 +80,12 @@ interface AgencyRow {
   tenantId: string;
   name: string;
   slug: string;
+  /**
+   * A demo, fixture or test tenant rather than a real agency. The overview only
+   * returns these rows when asked with `?includeNonProduction=true`, and always
+   * leaves them out of the platform totals.
+   */
+  isNonProduction: boolean;
   enrolled: boolean;
   chargesEnabled: boolean;
   deliveredCalls: number;
@@ -143,8 +166,23 @@ export default function PlatformAgenciesPage(): JSX.Element {
   const [enrolmentBusy, setEnrolmentBusy] = useState(false);
   const [enrolmentNote, setEnrolmentNote] = useState<string | null>(null);
 
+  /*
+   * Test agencies, off by default -- the same toggle, and the same words, as
+   * the live board. Without it a row marked as a test agency would vanish from
+   * this table with no way to find it again and mark it back.
+   */
+  const [showTestAgencies, setShowTestAgencies] = useState(false);
+
+  /** The agency whose test/production marking is being confirmed. */
+  const [marking, setMarking] = useState<AgencyRow | null>(null);
+  const [markingNote, setMarkingNote] = useState('');
+  const [markingBusy, setMarkingBusy] = useState(false);
+
   const load = useCallback(async () => {
-    const query = day ? `?day=${encodeURIComponent(day)}` : '';
+    const params = new URLSearchParams();
+    if (day) params.set('day', day);
+    if (showTestAgencies) params.set('includeNonProduction', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
     const response = await apiClient.get<Envelope<{ calendarDay: string; agencies: AgencyRow[] }>>(
       `/api/v1/platform/delivery/overview${query}`
     );
@@ -159,7 +197,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
     setRows(Array.isArray(overview?.agencies) ? overview.agencies : []);
     if (!day && overview?.calendarDay) setDay(overview.calendarDay);
     setLoading(false);
-  }, [day]);
+  }, [day, showTestAgencies]);
 
   useEffect(() => {
     void load();
@@ -305,6 +343,47 @@ export default function PlatformAgenciesPage(): JSX.Element {
     }
   }
 
+  function openMarking(row: AgencyRow): void {
+    setMarking(row);
+    setMarkingNote('');
+  }
+
+  /**
+   * Mark an agency as a test agency, or back as production.
+   *
+   * Deletes, suspends and un-enrols nothing: the server only changes what the
+   * platform screens list and total. The same call reverses it, and it is
+   * audited in both directions, note included.
+   */
+  async function confirmMarking(): Promise<void> {
+    if (!marking) return;
+    const next = !marking.isNonProduction;
+    const note = markingNote.trim();
+    setMarkingBusy(true);
+    try {
+      const response = await apiClient.put(
+        `/api/v1/platform/tenants/${marking.tenantId}/non-production`,
+        { isNonProduction: next, ...(note ? { note } : {}) }
+      );
+      if (response.error) {
+        toast.error('Could not update agency', response.error.message);
+        return;
+      }
+      toast.success(
+        next ? 'Marked as test agency' : 'Marked as production',
+        next
+          ? `${marking.name} is now hidden unless "Show test agencies" is on.`
+          : `${marking.name} is counted in platform figures again.`
+      );
+      setMarking(null);
+      await load();
+    } catch (err) {
+      toast.error('Could not update agency', err instanceof Error ? err.message : undefined);
+    } finally {
+      setMarkingBusy(false);
+    }
+  }
+
   // Flagged first, then enrolled, then the rest. An unenrolled agency needs
   // nothing from this screen and should not sit above one that does.
   const sorted = [...rows].sort(
@@ -313,7 +392,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
       Number(b.enrolled) - Number(a.enrolled) ||
       a.name.localeCompare(b.name)
   );
-  const needingAction = sorted.filter(row => flagCount(row) > 0);
+  // Test agencies are left out of the banner, as the server leaves them out of
+  // its own flagged count: they are listed only so they can be found.
+  const needingAction = sorted.filter(row => !row.isNonProduction && flagCount(row) > 0);
 
   if (loading) {
     return (
@@ -338,6 +419,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
               onChange={event => setDay(event.target.value)}
               className="h-8 w-40"
             />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTestAgencies(v => !v)}
+              aria-pressed={showTestAgencies}
+            >
+              {showTestAgencies ? 'Hide test agencies' : 'Show test agencies'}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => void load()}>
               <RefreshCw className="mr-2 h-3 w-3" />
               Refresh
@@ -446,6 +535,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 <TableHead className="text-right">Cost / call</TableHead>
                 <TableHead>Settlement</TableHead>
                 <TableHead>Flags</TableHead>
+                <TableHead className="w-10">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -467,7 +559,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         )}
                       </button>
                     </TableCell>
-                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{row.name}</span>
+                        {row.isNonProduction && (
+                          <StatusChip value="TEST" label="Test" tone="neutral" size="sm" />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {!row.enrolled ? (
                         <Badge
@@ -592,11 +691,30 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         )}
                       </div>
                     </TableCell>
+                    <TableCell className="text-right align-middle">
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            aria-label={`More actions for ${row.name}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => openMarking(row)}>
+                            {row.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
 
                   {openAgency === row.tenantId && (
                     <TableRow className="bg-sunken">
-                      <TableCell colSpan={14} className="p-4">
+                      <TableCell colSpan={15} className="p-4">
                         <EnrolmentPanel
                           row={row}
                           status={enrolment}
@@ -614,6 +732,47 @@ export default function PlatformAgenciesPage(): JSX.Element {
           </Table>
         </PanelBody>
       </Panel>
+
+      <Dialog
+        open={marking !== null}
+        onOpenChange={open => {
+          if (!open && !markingBusy) setMarking(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {marking?.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+            </DialogTitle>
+            <DialogDescription>
+              {marking?.isNonProduction
+                ? `${marking?.name ?? ''} will be listed on the platform screens and counted in the platform totals again.`
+                : `${marking?.name ?? ''} will be hidden from this page, the live board and the other platform screens unless "Show test agencies" is on, and left out of the platform totals.`}{' '}
+              Nothing is deleted, and its delivery and billing are unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label htmlFor="agency-marking-note" className="t-label text-ink-2">
+              Note (optional)
+            </label>
+            <Textarea
+              id="agency-marking-note"
+              value={markingNote}
+              onChange={event => setMarkingNote(event.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarking(null)} disabled={markingBusy}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmMarking()} disabled={markingBusy}>
+              {markingBusy && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+              {marking?.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
