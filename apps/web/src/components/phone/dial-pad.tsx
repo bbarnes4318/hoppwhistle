@@ -1,35 +1,16 @@
 'use client';
 
-import { Delete, Phone } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { usePhone } from './phone-provider';
+import { useKeypadKeyboard } from './softphone/hooks';
+import { Keypad } from './softphone/keypad';
 
 // ============================================================================
 // Dial Pad Component
 // ============================================================================
 
-// Keypad buttons - standard phone layout with digits and letters
-const keypadButtons = [
-  { digit: '1', letters: '' },
-  { digit: '2', letters: 'ABC' },
-  { digit: '3', letters: 'DEF' },
-  { digit: '4', letters: 'GHI' },
-  { digit: '5', letters: 'JKL' },
-  { digit: '6', letters: 'MNO' },
-  { digit: '7', letters: 'PQRS' },
-  { digit: '8', letters: 'TUV' },
-  { digit: '9', letters: 'WXYZ' },
-  { digit: '*', letters: '' },
-  { digit: '0', letters: '+' },
-  { digit: '#', letters: '' },
-];
-
-// DTMF tone frequencies
+// DTMF tone frequencies, for the local key-press tone before a call.
 const dtmfFrequencies: Record<string, [number, number]> = {
   '1': [697, 1209],
   '2': [697, 1336],
@@ -45,7 +26,23 @@ const dtmfFrequencies: Record<string, [number, number]> = {
   '#': [941, 1477],
 };
 
-export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element {
+export interface DialPadProps {
+  compact?: boolean;
+  /**
+   * Take digits, Backspace and Enter from the physical keyboard while this
+   * pad is on screen. Off by default: the call-centre portal renders this pad
+   * beside its own fields and has its own key handling.
+   */
+  captureKeyboard?: boolean;
+  /** Above the number field — the softphone puts the caller ID picker here. */
+  header?: ReactNode;
+}
+
+export function DialPad({
+  compact = false,
+  captureKeyboard = false,
+  header,
+}: DialPadProps): JSX.Element {
   const { makeCall, sendDTMF, currentCall, isConnecting, dialerNumber, setDialerNumber } =
     usePhone();
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -59,7 +56,6 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialerNumber]);
 
-  // Update context when local phone number changes
   const updatePhoneNumber = useCallback(
     (value: string) => {
       setPhoneNumber(value);
@@ -68,15 +64,6 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
     [setDialerNumber]
   );
 
-  // Format phone number for display
-  const formatPhoneNumber = (number: string): string => {
-    const digits = number.replace(/\D/g, '');
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
-  };
-
-  // Play DTMF tone
   const playDTMFTone = useCallback((digit: string) => {
     try {
       if (!audioContextRef.current) {
@@ -95,8 +82,6 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
       if (!frequencies) return;
 
       const duration = 0.15;
-
-      // Create oscillators for both frequencies
       const osc1 = context.createOscillator();
       const osc2 = context.createOscillator();
       const gainNode = context.createGain();
@@ -105,7 +90,6 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
       osc2.type = 'sine';
       osc1.frequency.value = frequencies[0];
       osc2.frequency.value = frequencies[1];
-
       gainNode.gain.value = 0.1;
 
       osc1.connect(gainNode);
@@ -124,14 +108,12 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
     }
   }, []);
 
-  // Handle digit press
   const handleDigitPress = useCallback(
     (digit: string) => {
       if (currentCall && currentCall.state !== 'ended') {
         // Send DTMF during active call
         sendDTMF(digit);
       } else {
-        // Add to phone number
         updatePhoneNumber(phoneNumber + digit);
         playDTMFTone(digit);
       }
@@ -139,107 +121,35 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
     [currentCall, sendDTMF, playDTMFTone, phoneNumber, updatePhoneNumber]
   );
 
-  // Handle backspace
   const handleBackspace = useCallback(() => {
     updatePhoneNumber(phoneNumber.slice(0, -1));
   }, [phoneNumber, updatePhoneNumber]);
 
-  // Handle call
   const handleCall = useCallback(() => {
     if (!phoneNumber || isConnecting) return;
     void makeCall(phoneNumber);
     updatePhoneNumber('');
   }, [phoneNumber, isConnecting, makeCall, updatePhoneNumber]);
 
-  // Handle key events
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (/^[0-9*#]$/.test(e.key)) {
-        handleDigitPress(e.key);
-      } else if (e.key === 'Backspace') {
-        handleBackspace();
-      } else if (e.key === 'Enter' && phoneNumber) {
-        handleCall();
-      }
-    },
-    [handleDigitPress, handleBackspace, handleCall, phoneNumber]
-  );
+  const pressedKey = useKeypadKeyboard(captureKeyboard, {
+    onDigit: handleDigitPress,
+    onBackspace: handleBackspace,
+    onEnter: handleCall,
+  });
 
   return (
-    <div className={compact ? 'space-y-2' : 'space-y-4'} onKeyDown={handleKeyDown} tabIndex={0}>
-      {/* Display */}
-      <div
-        className={cn(
-          compact ? 'h-11 px-3 rounded-lg' : 'h-16 px-4 rounded-xl',
-          'flex items-center justify-between',
-          'bg-sunken border border-rule'
-        )}
-      >
-        <input
-          type="text"
-          value={phoneNumber}
-          onChange={e => updatePhoneNumber(e.target.value.replace(/[^0-9+*#()-\s]/g, ''))}
-          placeholder="Enter number..."
-          className={cn(
-            'flex-1 bg-transparent font-mono text-ink outline-none',
-            compact ? 'text-lg placeholder:text-ink-3' : 'text-2xl placeholder:text-ink-3'
-          )}
-        />
-        {phoneNumber && (
-          <button
-            onClick={handleBackspace}
-            className="p-1.5 text-ink-3 hover:text-ink transition-colors"
-          >
-            <Delete className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Formatted Display */}
-      {phoneNumber && (
-        <p className="text-center text-ink-3 text-xs">{formatPhoneNumber(phoneNumber)}</p>
-      )}
-
-      {/* Keypad */}
-      <div className={cn('grid grid-cols-3', compact ? 'gap-1.5' : 'gap-2')}>
-        {keypadButtons.map(({ digit, letters }) => (
-          <button
-            key={digit}
-            onClick={() => handleDigitPress(digit)}
-            className={cn(
-              compact ? 'h-10 rounded-lg' : 'h-16 rounded-xl',
-              'flex flex-col items-center justify-center',
-              'bg-sunken hover:bg-rule active:bg-brand-tint',
-              'border border-transparent hover:border-rule',
-              'transition-all duration-150 ease-out',
-              'active:scale-95'
-            )}
-          >
-            <span className={cn('text-ink font-medium', compact ? 'text-lg' : 'text-2xl')}>
-              {digit}
-            </span>
-            {letters && !compact && (
-              <span className="text-[10px] text-ink-3 tracking-widest -mt-0.5">{letters}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Call Button */}
-      <Button
-        onClick={handleCall}
-        disabled={!phoneNumber || isConnecting}
-        className={cn(
-          'w-full font-medium transition-all duration-200 flex items-center justify-center gap-2',
-          compact ? 'h-11 rounded-lg text-sm' : 'h-14 rounded-xl text-lg',
-          'bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface',
-          'disabled:opacity-50 disabled:cursor-not-allowed shadow-lg'
-        )}
-      >
-        <Phone className={cn(compact ? 'w-4 h-4' : 'w-5 h-5')} />
-        {isConnecting ? 'Connecting...' : 'Call'}
-      </Button>
-    </div>
+    <Keypad
+      mode="dial"
+      size={compact ? 'compact' : 'default'}
+      value={phoneNumber}
+      onChange={updatePhoneNumber}
+      onDigit={handleDigitPress}
+      onBackspace={handleBackspace}
+      onDial={handleCall}
+      dialing={isConnecting}
+      pressedKey={pressedKey}
+      header={header}
+    />
   );
 }
 

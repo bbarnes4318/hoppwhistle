@@ -66,6 +66,8 @@ interface PlatformAgencyRow {
   curveRate: number | null;
   paymentMethod: string;
   applicationsRemainingOnBlock: number;
+  /** What the lots still holding credits were bought with: the "of" in "7 / 10". */
+  appCreditsOpenTotal: number;
   dailyBlockApplications: number;
   overrunToday: number;
   overrunCeiling: number;
@@ -375,7 +377,7 @@ export function PlatformDeliveryView(): JSX.Element {
               <th
                 scope="col"
                 className="num"
-                title="Paid applications remaining today / daily block"
+                title="Paid applications remaining / what the lots still holding credits were bought with"
               >
                 On block
               </th>
@@ -488,7 +490,7 @@ export function PlatformDeliveryView(): JSX.Element {
                   */}
                   <td className="num">
                     {row.enrolled
-                      ? `${count(row.applicationsRemainingOnBlock)} / ${count(row.dailyBlockApplications)}`
+                      ? `${count(row.applicationsRemainingOnBlock)} / ${count(row.appCreditsOpenTotal)}`
                       : '—'}
                   </td>
                   <td className="num">{row.enrolled ? count(row.overrunToday) : '—'}</td>

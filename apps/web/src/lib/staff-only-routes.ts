@@ -10,15 +10,17 @@
  * the command palette's remote search, which linked straight into
  * `/campaigns/:id` and `/buyers?id=` for anybody whose token could list them.
  *
- * So the decision lives here once, and three readers import it:
+ * So the decision lives here once, and two readers import it:
  *
- *   components/layout/nav-config.ts   builds AGENCY_OWNER_NAV from it
  *   app/(dashboard)/layout.tsx        redirects off it
  *   components/auth/staff-only-guard  the two shells that escape that layout
  *
- * A screen added to this list disappears from the sidebar, stops resolving by
- * URL and stops appearing in search, in one edit. That is the property the
- * two-href filter did not have.
+ * `AGENCY_OWNER_NAV` is no longer built from this list. It is written out in
+ * `components/layout/nav-config.ts`, because the agency sidebar now SHOWS
+ * several of these screens as locked upgrades rather than hiding them. A locked
+ * entry never navigates, and this list still stops the URL; the nav-config test
+ * asserts that every locked item except `/call-center` is on it and every
+ * working item is not.
  *
  * ── This is a navigation boundary, not an authorization one ──────────────────
  *
@@ -52,9 +54,14 @@
  */
 export const STAFF_ONLY_ROUTES = [
   // Market. The call marketplace is NetEnroll's side of the business: an agency
-  // buys delivered calls, it does not run campaigns, publishers, buyers or DID
-  // inventory.
-  '/campaigns',
+  // buys delivered calls, it does not run publishers, buyers or DID inventory.
+  //
+  // `/campaigns` is no longer here. Agencies are shown their own campaigns,
+  // READ-ONLY: the list and detail pages draw no create, edit, duplicate,
+  // delete or assignment controls for anybody who is not staff, and every
+  // campaign write on the API is still refused to them (STAFF_ONLY_AREAS in
+  // apps/api/src/lib/staff-only-endpoints.ts). Removing it here also opens
+  // `/campaigns/[id]`.
   '/publishers',
   '/buyers',
   '/numbers',
@@ -65,8 +72,7 @@ export const STAFF_ONLY_ROUTES = [
   '/voice-studio',
   '/settings/carriers',
 
-  // Tools. Removing all four empties the Tools group, which then does not
-  // render — see nav-config.ts, which drops groups left with no items.
+  // Tools. None of the four appears in the agency sidebar at all.
   '/tools/recording-analyzer',
   '/tools/campaign-map',
   '/tools/industry-research',

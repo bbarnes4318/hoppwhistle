@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 
 import { ComponentGallery } from './component-gallery';
 import { ThemePane } from './preview-content';
+import { SoftphoneGallery } from './softphone-gallery';
 
 /**
  * /design-preview — the living style guide.
@@ -100,6 +101,25 @@ export default function DesignPreviewPage() {
           <ThemeScope theme="light" className="bg-transparent">
             <ComponentGallery />
           </ThemeScope>
+        </section>
+
+        {/*
+          The agent softphone, every state, from mock calls — no PhoneProvider
+          and no SIP. Light and dark side by side, like the tokens above, so
+          both are seen finished. Full-screen versions (floating, and the
+          phone-width bottom sheet) are at /design-preview/softphone.
+        */}
+        <section>
+          <h2 className="t-title mb-1 text-ink">Softphone</h2>
+          <p className="t-body mb-3 max-w-3xl text-ink-2">
+            Every state of the floating softphone and its wrap-up, fed mock calls. Each also opens
+            full screen at{' '}
+            <Link href="/design-preview/softphone" className="text-brand-ink underline">
+              /design-preview/softphone
+            </Link>
+            , where it floats as it does in the app and becomes a bottom sheet below 640px.
+          </p>
+          <SoftphoneGallery />
         </section>
       </div>
     </main>

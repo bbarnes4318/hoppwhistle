@@ -9,11 +9,14 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
 import type { ChargeRequest, PaymentGateway } from '../services/billing/ach.js';
 import {
+  closeOutDryRunLots,
   consumeCreditForApplication,
   creditBalance,
+  openLots,
   recordPurchase,
 } from '../services/billing/credit-ledger.js';
 import { evaluateDeliveryGate } from '../services/billing/delivery-gate.js';
+import { getAgencyStrip } from '../services/billing/live-strip.js';
 import {
   runDailySettlement,
   settleAgencyForDeliveryDay,
@@ -1543,6 +1546,101 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
 
       // An overrun does not move the balance: there was no balance to move.
       expect(await creditBalance(prisma, big.id)).toBe(0);
+    });
+  });
+
+  /*
+   * The App Credits figure on the live strip: "N remaining of M".
+   *
+   * M used to be the daily block -- the nightly auto-refill target -- so an
+   * agency that bought 10 with a block of 2 read "10 remaining of 2". M is now
+   * what the lots still holding credits were bought with. Each case is read
+   * through the strip itself, which projects the panel /delivery renders, so
+   * the figure asserted is the one the agency sees.
+   */
+  describe('App Credits: remaining of what the open lots were bought with', () => {
+    async function credits(tenantId: string) {
+      const strip = await getAgencyStrip(tenantId, { prisma, now: middayOf(CLOSED_DAY) });
+      const lots = await openLots(prisma, tenantId);
+      const balance = await creditBalance(prisma, tenantId);
+
+      // The invariant under every case: the open lots' remaining credits ARE
+      // the balance the strip shows, so "remaining" and "of" are drawn from
+      // the same lots.
+      expect(lots.reduce((sum, lot) => sum + lot.remaining, 0)).toBe(Math.max(0, balance));
+
+      return {
+        remaining: strip.billing!.applicationsRemainingOnBlock,
+        total: strip.billing!.appCreditsOpenTotal,
+      };
+    }
+
+    async function purchase(tenantId: string, quantity: number, deliveryDay = CLOSED_DAY) {
+      await recordPurchase(prisma, {
+        tenantId,
+        deliveryDay,
+        quantity,
+        unitRate: 134,
+        stripePaymentIntentId: `pi_${quantity}_${deliveryDay}_${Math.random().toString(36).slice(2, 8)}`,
+      });
+    }
+
+    beforeEach(async () => {
+      // A daily block of 2: the number that must never appear as the total.
+      await seedTerms(big.id, { dailyBlockApplications: 2 });
+      await seedOpeningAgreement(big.id);
+    });
+
+    it('one purchase of 10, none used: 10 of 10', async () => {
+      await purchase(big.id, 10);
+      expect(await credits(big.id)).toEqual({ remaining: 10, total: 10 });
+    });
+
+    it('one purchase of 10, 3 consumed: 7 of 10', async () => {
+      await purchase(big.id, 10);
+      await submitApplications(big.id, CLOSED_DAY, 3);
+      expect(await credits(big.id)).toEqual({ remaining: 7, total: 10 });
+    });
+
+    it('a lot of 10 fully consumed and a new lot of 5: 5 of 5', async () => {
+      await purchase(big.id, 10, '2026-09-05');
+      await submitApplications(big.id, CLOSED_DAY, 10);
+      await purchase(big.id, 5, '2026-09-06');
+      expect(await credits(big.id)).toEqual({ remaining: 5, total: 5 });
+    });
+
+    it('lots of 10 and 5, 4 consumed: 11 of 15', async () => {
+      await purchase(big.id, 10, '2026-09-05');
+      await purchase(big.id, 5, '2026-09-06');
+      await submitApplications(big.id, CLOSED_DAY, 4);
+      expect(await credits(big.id)).toEqual({ remaining: 11, total: 15 });
+    });
+
+    it('no purchases: 0 of 0', async () => {
+      expect(await credits(big.id)).toEqual({ remaining: 0, total: 0 });
+    });
+
+    it('does not count a dry-run lot that was closed out', async () => {
+      // A dry-run settlement sells a block nobody paid for; turning charging
+      // on retires it. What is left is the opening purchase alone. A block of
+      // 20 here, so the settlement has something to top up to.
+      await seedTerms(big.id, { dailyBlockApplications: 20, chargesEnabled: false });
+      await purchase(big.id, 10);
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 40);
+      await submitApplications(big.id, CLOSED_DAY, 3);
+      await settleAgencyForDeliveryDay({ tenantId: big.id, deliveryDay: CLOSED_DAY, prisma, gateway });
+
+      const dryRunLots = await prisma.applicationCreditLedgerEntry.count({
+        where: { tenantId: big.id, entryType: 'PURCHASE', settlementId: { not: null } },
+      });
+      expect(dryRunLots).toBe(1);
+      // Before the closeout the dry-run block counts, as it is spendable.
+      expect(await credits(big.id)).toEqual({ remaining: 20, total: 23 });
+
+      const closeout = await closeOutDryRunLots({ prisma, tenantId: big.id });
+      expect(closeout.lotsRetired).toBe(1);
+
+      expect(await credits(big.id)).toEqual({ remaining: 7, total: 10 });
     });
   });
 

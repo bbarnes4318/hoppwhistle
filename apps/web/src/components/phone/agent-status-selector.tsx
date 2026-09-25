@@ -1,12 +1,12 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { usePhone, type AgentStatus } from './phone-provider';
-
+import { FOCUS_RING, TOUCH_TARGET } from './softphone/parts';
 
 // ============================================================================
 // Agent Status Selector Component
@@ -51,97 +51,143 @@ const statusOptions: StatusOption[] = [
   },
 ];
 
-export function AgentStatusSelector(): JSX.Element {
-  const { agentStatus, setAgentStatus, currentCall } = usePhone();
+export interface AgentStatusMenuProps {
+  value: AgentStatus;
+  /** A call is up: the status reads "On call" and cannot be changed. */
+  onCall: boolean;
+  onChange: (status: AgentStatus) => void;
+  className?: string;
+}
+
+/**
+ * The status pill and its menu, with no provider behind it — the softphone
+ * feeds it from usePhone() and /design-preview feeds it a fixed value.
+ */
+export function AgentStatusMenu({
+  value,
+  onCall,
+  onChange,
+  className,
+}: AgentStatusMenuProps): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Get current status option
-  const currentOption = statusOptions.find(opt => opt.value === agentStatus) ?? statusOptions[3];
+  const currentOption = statusOptions.find(opt => opt.value === value) ?? statusOptions[3];
 
-  // Close dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent): void => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
-  // Handle status selection
   const handleSelect = useCallback(
     (status: AgentStatus) => {
-      // Don't allow status change during active call
-      if (currentCall && currentCall.state !== 'ended') {
-        return;
-      }
-      setAgentStatus(status);
+      // A status change mid-call would tell routing something untrue about
+      // the call in progress.
+      if (onCall) return;
+      onChange(status);
       setIsOpen(false);
     },
-    [currentCall, setAgentStatus]
+    [onCall, onChange]
   );
 
-  // Check if on call
-  const isOnCall = currentCall && currentCall.state !== 'ended';
-
   return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Trigger Button */}
+    <div
+      className={cn('relative', className)}
+      ref={dropdownRef}
+      onKeyDown={e => {
+        // Esc closes the menu, not the whole phone behind it.
+        if (e.key === 'Escape' && isOpen) {
+          e.stopPropagation();
+          setIsOpen(false);
+        }
+      }}
+    >
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        disabled={Boolean(isOnCall)}
+        disabled={onCall}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Your status: ${onCall ? 'On call' : currentOption.label}. Change status.`}
         className={cn(
-          'flex items-center gap-2 px-2 py-1 rounded-lg',
-          'text-xs font-medium transition-all',
-          'hover:bg-sunken',
-          isOnCall && 'opacity-50 cursor-not-allowed'
+          'inline-flex h-7 items-center gap-1.5 rounded-full border border-rule-strong bg-surface px-2.5',
+          'text-xs font-medium transition-colors duration-150 ease-out ne-motion',
+          'hover:bg-sunken disabled:cursor-default disabled:hover:bg-surface',
+          FOCUS_RING,
+          TOUCH_TARGET
         )}
       >
-        <span className={cn('w-2 h-2 rounded-full', currentOption.bgColor)} />
-        <span className={currentOption.color}>{isOnCall ? 'On Call' : currentOption.label}</span>
-        {!isOnCall && (
+        <span className={cn('h-2 w-2 rounded-full', onCall ? 'bg-live' : currentOption.bgColor)} />
+        <span className={onCall ? 'text-live-ink' : currentOption.color}>
+          {onCall ? 'On call' : currentOption.label}
+        </span>
+        {!onCall && (
           <ChevronDown
-            className={cn('w-3 h-3 text-ink-3 transition-transform', isOpen && 'rotate-180')}
+            className={cn(
+              'h-3 w-3 text-ink-3 transition-transform duration-150 ne-motion',
+              isOpen && 'rotate-180'
+            )}
+            aria-hidden
           />
         )}
       </button>
 
-      {/* Dropdown */}
-      {isOpen && !isOnCall && (
+      {isOpen && !onCall && (
         <div
+          role="menu"
+          aria-label="Set your status"
           className={cn(
-            'absolute top-full left-0 mt-2 w-56 z-50',
-            'bg-surface border border-rule rounded-card',
-            'shadow-lg overflow-hidden',
-            'animate-in fade-in-0 zoom-in-95 duration-150'
+            'absolute left-0 top-full z-50 mt-2 w-56',
+            'overflow-hidden rounded-card border border-rule bg-surface shadow-pop',
+            'animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none'
           )}
         >
           {statusOptions.map(option => (
             <button
               key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === option.value}
               onClick={() => handleSelect(option.value)}
               className={cn(
-                'w-full px-4 py-3 flex items-center gap-3 text-left',
-                'hover:bg-sunken transition-colors',
-                agentStatus === option.value && 'bg-brand-tint'
+                'flex w-full items-center gap-3 px-4 py-2.5 text-left',
+                'transition-colors duration-150 ne-motion hover:bg-sunken focus-visible:bg-sunken focus-visible:outline-none',
+                value === option.value && 'bg-brand-tint'
               )}
             >
-              <span className={cn('w-2.5 h-2.5 rounded-full', option.bgColor)} />
+              <span className={cn('h-2.5 w-2.5 rounded-full', option.bgColor)} />
               <div>
                 <p className={cn('text-sm font-medium', option.color)}>{option.label}</p>
                 <p className="text-xs text-ink-3">{option.description}</p>
               </div>
-              {agentStatus === option.value && (
-                <span className="ml-auto text-brand-ink text-xs">✓</span>
+              {value === option.value && (
+                <Check className="ml-auto h-4 w-4 text-brand-ink" aria-hidden />
               )}
             </button>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+export function AgentStatusSelector({ className }: { className?: string } = {}): JSX.Element {
+  const { agentStatus, setAgentStatus, currentCall } = usePhone();
+  const isOnCall = Boolean(currentCall && currentCall.state !== 'ended');
+
+  return (
+    <AgentStatusMenu
+      value={agentStatus}
+      onCall={isOnCall}
+      onChange={setAgentStatus}
+      className={className}
+    />
   );
 }
 

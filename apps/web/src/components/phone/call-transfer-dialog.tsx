@@ -3,7 +3,6 @@
 import { Phone, PhoneForwarded, Search, User, Users, X } from 'lucide-react';
 import { useCallback, useState, type ChangeEvent } from 'react';
 
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -114,32 +113,43 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
       onClick={handleBackdropClick}
+      onKeyDown={e => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
       role="dialog"
       aria-modal="true"
+      aria-label="Transfer call"
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 " />
+      {/* Backdrop: the same scrim as components/ui/dialog. */}
+      <div
+        className="absolute inset-0 bg-[rgba(16,24,40,0.45)] animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+        aria-hidden
+        onClick={onClose}
+      />
 
       {/* Modal */}
       <div
         className={cn(
-          'relative z-10 w-full max-w-md mx-4',
-          'bg-surface',
-          'rounded-card border border-rule shadow-sm',
-          'overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200'
+          'relative z-10 w-full sm:max-w-md sm:mx-4',
+          'bg-surface max-h-[92dvh] overflow-y-auto',
+          'rounded-t-[20px] sm:rounded-card border border-rule shadow-pop',
+          'animate-in fade-in-0 slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 motion-reduce:animate-none'
         )}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-rule flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-tint flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center">
               <PhoneForwarded className="w-5 h-5 text-brand-ink" />
             </div>
             <div>
-              <h2 className="text-ink text-lg font-semibold">Transfer Call</h2>
+              <h2 className="text-ink text-lg font-semibold">Transfer call</h2>
               <p className="text-ink-3 text-sm">Select a destination</p>
             </div>
           </div>
@@ -147,7 +157,9 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="text-ink-3 hover:text-ink"
+            aria-label="Close"
+            autoFocus
+            className="text-ink-2 hover:text-ink [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
           >
             <X className="w-5 h-5" />
           </Button>
@@ -159,22 +171,25 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
             <button
               onClick={() => setTransferType('blind')}
               className={cn(
-                'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
+                'flex-1 py-2 px-4 rounded-control text-sm font-medium border transition-colors duration-150 ne-motion',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-[44px]',
                 transferType === 'blind'
-                  ? 'bg-brand text-brand-fg'
-                  : 'bg-sunken text-ink-3 hover:bg-rule'
+                  ? 'bg-brand-tint text-brand-ink border-brand-ink'
+                  : 'bg-surface text-ink-2 border-rule-strong hover:bg-sunken'
               )}
             >
-              Blind Transfer
+              Blind transfer
             </button>
             <button
               onClick={() => setTransferType('warm')}
               className={cn(
                 'flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all',
-                transferType === 'warm' ? 'bg-brand text-brand-fg' : 'bg-sunken text-ink-3 hover:bg-rule'
+                transferType === 'warm'
+                  ? 'bg-brand text-brand-fg'
+                  : 'bg-sunken text-ink-3 hover:bg-rule'
               )}
             >
-              Warm Transfer
+              Warm transfer
             </button>
           </div>
           <p className="text-ink-3 text-xs mt-2">
@@ -192,10 +207,11 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  'flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5',
+                  'flex-1 py-2 px-3 rounded-[6px] text-xs font-medium transition-[color,background-color,box-shadow] duration-150 ne-motion flex items-center justify-center gap-1.5',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-[44px]',
                   activeTab === tab
-                    ? 'bg-brand text-brand-fg'
-                    : 'text-ink-3 hover:text-ink hover:bg-sunken'
+                    ? 'bg-surface text-ink shadow-card'
+                    : 'text-ink-2 hover:text-ink'
                 )}
               >
                 {tab === 'agents' && <User className="w-3.5 h-3.5" />}
@@ -231,11 +247,12 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
                   onClick={() => handleAgentTransfer(agent)}
                   disabled={agent.status !== 'available'}
                   className={cn(
-                    'w-full p-3 rounded-lg flex items-center gap-3 text-left',
-                    'transition-all',
+                    'w-full p-3 rounded-card flex items-center gap-3 text-left',
+                    'transition-colors duration-150 ne-motion',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     agent.status === 'available'
-                      ? 'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
-                      : 'opacity-50 cursor-not-allowed bg-sunken'
+                      ? 'bg-sunken hover:bg-surface border border-transparent hover:border-rule-strong'
+                      : 'opacity-50 cursor-not-allowed bg-sunken border border-transparent'
                   )}
                 >
                   <div
@@ -264,12 +281,16 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
                           : 'bg-sunken text-ink-3'
                     )}
                   >
-                    {agent.status}
+                    {agent.status === 'available'
+                      ? 'Available'
+                      : agent.status === 'busy'
+                        ? 'On a call'
+                        : 'Offline'}
                   </span>
                 </button>
               ))}
               {filteredAgents.length === 0 && (
-                <p className="text-center text-ink-3 py-8">No agents found</p>
+                <p className="text-center text-sm text-ink-3 py-8">No agents found</p>
               )}
             </div>
           )}
@@ -283,11 +304,12 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
                   onClick={() => handleQueueTransfer(queue)}
                   disabled={queue.availableAgents === 0}
                   className={cn(
-                    'w-full p-3 rounded-lg flex items-center gap-3 text-left',
-                    'transition-all',
+                    'w-full p-3 rounded-card flex items-center gap-3 text-left',
+                    'transition-colors duration-150 ne-motion',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     queue.availableAgents > 0
-                      ? 'bg-sunken hover:bg-rule border border-transparent hover:border-rule'
-                      : 'opacity-50 cursor-not-allowed bg-sunken'
+                      ? 'bg-sunken hover:bg-surface border border-transparent hover:border-rule-strong'
+                      : 'opacity-50 cursor-not-allowed bg-sunken border border-transparent'
                   )}
                 >
                   <div className="w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center">
@@ -302,7 +324,7 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
                 </button>
               ))}
               {filteredQueues.length === 0 && (
-                <p className="text-center text-ink-3 py-8">No queues found</p>
+                <p className="text-center text-sm text-ink-3 py-8">No queues found</p>
               )}
             </div>
           )}
@@ -322,7 +344,7 @@ export function CallTransferDialog({ onClose }: CallTransferDialogProps): JSX.El
               <Button
                 onClick={handleExternalTransfer}
                 disabled={!externalNumber}
-                className="w-full bg-primary"
+                className="w-full"
               >
                 <PhoneForwarded className="w-4 h-4 mr-2" />
                 Transfer to {externalNumber || 'Number'}

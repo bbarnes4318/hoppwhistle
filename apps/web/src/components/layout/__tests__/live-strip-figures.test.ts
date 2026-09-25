@@ -33,6 +33,7 @@ const AGENCY_ENROLLED: StripPayload = {
   billing: {
     dailyBlockApplications: 40,
     applicationsRemainingOnBlock: 28,
+    appCreditsOpenTotal: 50,
     overrunToday: 0,
     overrunAmountTonight: 0,
     projectedTotalCharge: 6360,
@@ -121,12 +122,43 @@ describe('the agency principal reading', () => {
     expect(rendered(slots)).not.toMatch(/tonight|overrun|debit/i);
   });
 
-  it('shows the credits left on the block they paid for', () => {
+  it('shows the credits left out of what the open lots were bought with', () => {
     const block = agencySlots(AGENCY_ENROLLED).find(s => s.id === 'block');
 
     expect(block?.label).toBe('App Credits');
     expect(block?.value).toBe('28');
-    expect(block?.sub).toBe('remaining of 40');
+    // 50 is what the open lots held; 40 is the daily block and must not appear.
+    expect(block?.sub).toBe('remaining of 50');
+  });
+
+  it('never reads the daily block as the total: 10 bought, block of 2', () => {
+    const block = agencySlots({
+      ...AGENCY_ENROLLED,
+      billing: {
+        ...AGENCY_ENROLLED.billing!,
+        dailyBlockApplications: 2,
+        applicationsRemainingOnBlock: 10,
+        appCreditsOpenTotal: 10,
+      },
+    }).find(s => s.id === 'block');
+
+    expect(block?.value).toBe('10');
+    expect(block?.sub).toBe('remaining of 10');
+  });
+
+  it('says "all used" in the dropped tone when no credits are left', () => {
+    const block = agencySlots({
+      ...AGENCY_ENROLLED,
+      billing: {
+        ...AGENCY_ENROLLED.billing!,
+        applicationsRemainingOnBlock: 0,
+        appCreditsOpenTotal: 0,
+      },
+    }).find(s => s.id === 'block');
+
+    expect(block?.value).toBe('0');
+    expect(block?.sub).toBe('all used');
+    expect(block?.tone).toBe('dropped');
   });
 
   it('shows the rate in force, and not the rate tomorrow is tracking toward', () => {

@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 
 import { MY_PAYROLL_ENABLED } from '@/lib/feature-flags';
-import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
 
 export interface NavItem {
   name: string;
@@ -36,6 +35,15 @@ export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   title?: string;
   pending?: boolean;
+  /**
+   * An upgrade: shown, never navigable, with a card explaining what it is.
+   *
+   * Not `pending`. A pending item is a screen that does not exist yet; a locked
+   * one exists and this agency does not have it turned on. The sidebar renders
+   * the two differently -- "Soon" in grey against an "Upgrade" pill in brand --
+   * because they mean different things to the person reading them.
+   */
+  locked?: { blurb: string };
 }
 
 export interface NavGroup {
@@ -175,7 +183,7 @@ export const PLATFORM_NAV: NavGroup[] = [
       },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
       { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
-      { name: 'Carrier routing', href: '/settings/carriers', icon: PhoneForwarded },
+      { name: 'VOIP Carrier Routing', href: '/settings/carriers', icon: PhoneForwarded },
       { name: 'Quotas & Budgets', href: '/settings/quotas', icon: Wallet },
       { name: 'Payroll Admin', href: '/admin/payroll', icon: Receipt },
       {
@@ -225,37 +233,177 @@ export function buyerNav(canViewRecordings: boolean): NavGroup[] {
 }
 
 /**
- * An agency principal's navigation: PLATFORM_NAV minus NetEnroll's own screens.
- *
- * ── What an agency is and is not shown ───────────────────────────────────────
- *
- * This used to mirror PLATFORM_NAV for everything except the two cross-agency
- * admin screens, on the reasoning that anything tenant-scoped belongs to the
- * tenant. That put NetEnroll's side of the business in an agency principal's
- * sidebar: the call marketplace they buy from (campaigns, publishers, buyers,
- * DID inventory), the routing and voice-AI authoring that configures the
- * platform, and a Tools group whose four entries included a WebGL campaign map
- * and an AI direct-to-fan music console.
- *
- * What an agency keeps is what an agency runs: the floor (call centre, calls,
- * applications, CRM), its money (rate, delivery, settlements, billing,
- * reports), and its own administration (users, webhooks, DNC, quotas,
- * payroll).
- *
- * ── The list is not here ─────────────────────────────────────────────────────
- *
- * `lib/staff-only-routes.ts` holds it, because a filter in this file only ever
- * hid links — `app/(dashboard)/layout.tsx` and `components/auth/staff-only-guard.tsx`
- * read the same list to stop the URLs, and the command palette reads this nav
- * to stop the search results. One list, four readers, no drift.
- *
- * Groups left with no items are dropped. Removing all four Tools entries would
- * otherwise render a "Tools" header with nothing under it.
+ * A PLATFORM_NAV item by href, so an agency entry carries the same icon and
+ * tooltip as staff's and cannot drift from it. Throws at module load if the
+ * href is not in PLATFORM_NAV -- a typo here is a build failure, not a missing
+ * sidebar entry nobody notices.
  */
-export const AGENCY_OWNER_NAV: NavGroup[] = PLATFORM_NAV.map(group => ({
-  ...group,
-  items: group.items.filter(item => !isStaffOnlyRoute(item.href)),
-})).filter(group => group.items.length > 0);
+function platformItem(href: string, overrides: Partial<NavItem> = {}): NavItem {
+  const found = PLATFORM_NAV.flatMap(group => group.items).find(item => item.href === href);
+  if (!found) throw new Error(`nav-config: ${href} is not in PLATFORM_NAV`);
+  // `pending` is PLATFORM_NAV's and never carried across: an agency item is
+  // either working or locked.
+  const item: NavItem = { ...found, ...overrides };
+  delete item.pending;
+  return item;
+}
+
+/** An upgrade item: the PLATFORM_NAV entry, renamed if asked, and locked. */
+function lockedItem(href: string, name: string, blurb: string): NavItem {
+  return platformItem(href, { name, locked: { blurb } });
+}
+
+/**
+ * An agency principal's navigation.
+ *
+ * ── Written out, not filtered ────────────────────────────────────────────────
+ *
+ * This used to be PLATFORM_NAV filtered through `isStaffOnlyRoute`, which gave
+ * an agency whatever groups survived the filter in whatever order staff's
+ * happened to be. It is now its own list, in the order an agency principal
+ * works: the floor, selling, money, their own account -- and then, below a
+ * divider, what they could turn on.
+ *
+ * ── The working menu and the upgrade menu ────────────────────────────────────
+ *
+ * Everything above "Unlock more" is a screen the agency can open. Everything
+ * below it is `locked`: rendered, never navigable, with a card saying what it
+ * is and who turns it on. Those routes are still in STAFF_ONLY_ROUTES and the
+ * dashboard layout still redirects an agency off them by URL -- the nav does
+ * not open anything the redirect closes.
+ *
+ * The one exception is Power Dialer. `/call-center` is where an agency's AGENTS
+ * work, it is in AGENT_NAV untouched, and it stays reachable by URL. What is
+ * locked is the owner's sidebar entry for running a dialer campaign, not the
+ * page.
+ *
+ * `lib/staff-only-routes.ts` is still the list the redirect reads; the
+ * nav-config test checks the two agree item by item.
+ */
+export const AGENCY_OWNER_NAV: NavGroup[] = [
+  { items: [platformItem('/dashboard')] },
+  {
+    label: 'Floor',
+    items: [
+      {
+        name: 'Live Board',
+        href: '/live',
+        icon: MonitorPlay,
+        title: 'Your agency right now: calls up, delivered and applications so far today',
+      },
+      platformItem('/calls'),
+      platformItem('/applications'),
+      platformItem('/leaderboard'),
+      platformItem('/insurance-leads'),
+    ],
+  },
+  {
+    label: 'Sales',
+    items: [
+      platformItem('/campaigns'),
+      lockedItem(
+        '/call-center',
+        'Power Dialer',
+        'Put your agents on a dialer that paces calls to how many agents are free.'
+      ),
+    ],
+  },
+  {
+    label: 'Money',
+    items: [
+      platformItem('/rating'),
+      platformItem('/delivery'),
+      platformItem('/delivery/team'),
+      platformItem('/delivery/settlements'),
+      platformItem('/billing'),
+    ],
+  },
+  {
+    label: 'Account',
+    items: [platformItem('/settings/users'), platformItem('/settings')],
+  },
+  {
+    label: 'Call Network',
+    items: [
+      lockedItem(
+        '/publishers',
+        'Publishers',
+        'See every source sending your agency calls and how each one converts.'
+      ),
+      lockedItem(
+        '/buyers',
+        'Buyers',
+        "Route calls your agents can't take to buyers and get paid for the overflow."
+      ),
+      lockedItem(
+        '/numbers',
+        'Numbers',
+        'Buy and manage your own tracking numbers, with full call history on each.'
+      ),
+      lockedItem(
+        '/settings/carriers',
+        'VOIP Carrier Routing',
+        'Choose which VOIP carriers carry your calls and set automatic failover between them.'
+      ),
+    ],
+  },
+  {
+    label: 'AI Voice',
+    items: [
+      lockedItem(
+        '/voice-agents',
+        'Voice Agents',
+        'AI voice agents that answer, qualify and transfer live callers straight to your agents.'
+      ),
+      lockedItem(
+        '/voice-studio',
+        'Voice Studio',
+        "Build and fine-tune your voice agents' scripts and voices before they go live."
+      ),
+    ],
+  },
+  {
+    label: 'Payouts & Payroll',
+    items: [
+      lockedItem(
+        '/payouts',
+        'Payouts',
+        'Track what you owe every publisher and pay out on schedule.'
+      ),
+      lockedItem(
+        '/admin/payroll',
+        'Payroll Admin',
+        'Run agent commissions and payroll from the same data as your submitted applications.'
+      ),
+    ],
+  },
+  {
+    label: 'Agency Network',
+    items: [
+      lockedItem(
+        '/admin/agencies',
+        'Agencies',
+        'Manage the downline agencies working under your account.'
+      ),
+      lockedItem(
+        '/admin/onboarding',
+        'Onboard an Agency',
+        'Bring a new agency onto the platform with agreement, payment and portal access in one flow.'
+      ),
+    ],
+  },
+];
+
+/**
+ * The label of the first group of upgrades, where the sidebar draws its
+ * "Unlock more" divider. Everything from here down is locked.
+ */
+export const FIRST_UPGRADE_GROUP = 'Call Network';
+
+/** A group whose every item is an upgrade gets a lock beside its label. */
+export function isLockedGroup(group: NavGroup): boolean {
+  return group.items.length > 0 && group.items.every(item => item.locked);
+}
 
 export const AGENT_NAV: NavGroup[] = [
   {
@@ -307,6 +455,60 @@ export const AGENT_NAV: NavGroup[] = [
   { label: 'Build', items: [{ name: 'Settings', href: '/settings', icon: Settings }] },
 ];
 
+/** Every item a person can actually open: not pending, not locked. */
 export function allNavItems(groups: NavGroup[]): NavItem[] {
-  return groups.flatMap(group => group.items).filter(item => !item.pending);
+  return groups.flatMap(group => group.items).filter(item => !item.pending && !item.locked);
+}
+
+/** What decides which navigation a viewer gets. All from `useAuth()`. */
+export interface NavViewer {
+  isPlatformAdmin: boolean;
+  /**
+   * A platform operator previewing an agency as one of its roles. The API has
+   * replaced their roles with exactly the previewed one, so the role flags
+   * below already describe the preview.
+   */
+  previewing: boolean;
+  hasFullAccess: boolean;
+  isPublisherOnly: boolean;
+  isBuyerOnly: boolean;
+  isAgentOnly: boolean;
+  isReadonlyOnly: boolean;
+  canViewRecordings: boolean;
+}
+
+/**
+ * Which navigation this viewer gets. The sidebar and the command palette both
+ * read it, so the two cannot disagree about who sees what.
+ *
+ * `isPlatformAdmin` is tested BEFORE `hasFullAccess`: staff inside an agency
+ * carry its ADMIN and OWNER, and testing the role first handed them the
+ * agency's nav. But it is tested only while NOT previewing. `isPlatformAdmin`
+ * stays true for the whole of a role preview -- the banner needs it -- and
+ * reading it first meant an operator previewing an agency as OWNER was shown
+ * PLATFORM_NAV, which is exactly the screen the preview exists to get away
+ * from. Under a preview the roles are the previewed one, so falling through to
+ * the role dispatch gives the agency's nav as OWNER and AGENT_NAV as AGENT.
+ *
+ * Empty means the server answered and named no role this renders a nav for.
+ */
+export function navFor(viewer: NavViewer): NavGroup[] {
+  if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
+  if (viewer.hasFullAccess) return AGENCY_OWNER_NAV;
+  if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
+  if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
+  if (viewer.isAgentOnly) return AGENT_NAV;
+  if (viewer.isReadonlyOnly) {
+    /*
+     * Dashboard alone.
+     *
+     * This used to add /reports when the account held `reports:read`, and that
+     * link now goes somewhere they are sent straight back from: /reports is in
+     * STAFF_ONLY_ROUTES, and the dashboard layout redirects a read-only account
+     * off every route on that list. The capability is untouched; what has gone
+     * is a menu item pointing at a screen this principal can no longer open.
+     */
+    return [{ items: [PLATFORM_NAV[0].items[0]] }];
+  }
+  return [];
 }

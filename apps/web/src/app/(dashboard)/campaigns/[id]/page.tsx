@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -138,6 +139,22 @@ export default function CampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+
+  /*
+   * Staff manage a campaign; an agency principal reads its own, view-only.
+   *
+   * Every campaign write is refused to non-staff on the API (STAFF_ONLY_AREAS),
+   * so for them the settings form is disabled and every control that would
+   * only answer 403 -- assign, edit and remove a publisher or buyer, the
+   * buyer-target form -- is not drawn. DID routes are a staff-only area
+   * outright (`/api/v1/did-routes`), so the Numbers tab is neither requested
+   * nor rendered: an owner sees no section rather than an error. The flow
+   * builder is the same -- flows are platform configuration.
+   *
+   * The dashboard layout does not render this page until the platform context
+   * has settled, so `isPlatformAdmin` is already the answer on first render.
+   */
+  const { isPlatformAdmin: canManage } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -246,11 +263,13 @@ export default function CampaignDetailPage() {
         setCampaignBuyers(buyerRes.data.data);
       }
 
-      // Fetch DID routes and filter by campaign
-      const didRes = await apiClient.get<{ routes: DidRoute[] }>('/api/v1/did-routes');
-      if (didRes.data?.routes) {
-        const filtered = didRes.data.routes.filter((route: any) => route.campaignId === id);
-        setDidRoutes(filtered);
+      // Fetch DID routes and filter by campaign. Staff only: the endpoint is.
+      if (canManage) {
+        const didRes = await apiClient.get<{ routes: DidRoute[] }>('/api/v1/did-routes');
+        if (didRes.data?.routes) {
+          const filtered = didRes.data.routes.filter((route: any) => route.campaignId === id);
+          setDidRoutes(filtered);
+        }
       }
     } catch (err) {
       console.error('Failed to load campaign data:', err);
@@ -262,10 +281,12 @@ export default function CampaignDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, canManage]);
 
-  // Load dropdown lists (Publishers & Buyers)
+  // Load dropdown lists (Publishers & Buyers). Only the assignment dialogs
+  // read them, and only staff get those dialogs.
   const fetchDropdowns = useCallback(async () => {
+    if (!canManage) return;
     try {
       const pubRes = await apiClient.get<{ data: Publisher[] }>('/api/v1/publishers?limit=100');
       if (pubRes.data) setAllPublishers(pubRes.data.data);
@@ -275,7 +296,7 @@ export default function CampaignDetailPage() {
     } catch (err) {
       console.error('Failed to load dropdown lists:', err);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
     void fetchCampaignData();
@@ -623,184 +644,198 @@ export default function CampaignDetailPage() {
 
       {/* Tabs list */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl bg-sunken p-1">
+        <TabsList
+          className={cn(
+            'grid w-full bg-sunken p-1',
+            canManage ? 'max-w-2xl grid-cols-5' : 'max-w-md grid-cols-3'
+          )}
+        >
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="publishers">Publishers</TabsTrigger>
           <TabsTrigger value="buyers">Buyers</TabsTrigger>
-          <TabsTrigger value="numbers">Numbers (DIDs)</TabsTrigger>
-          <TabsTrigger value="flow">Flow Builder</TabsTrigger>
+          {canManage ? <TabsTrigger value="numbers">Numbers (DIDs)</TabsTrigger> : null}
+          {canManage ? <TabsTrigger value="flow">Flow Builder</TabsTrigger> : null}
         </TabsList>
 
         {/* Settings Tab */}
         <TabsContent value="settings">
           <form onSubmit={handleSaveSettings} className="space-y-6">
-            <Card className="border border-border">
-              <CardHeader>
-                <CardTitle>Basic Campaign Configuration</CardTitle>
-                <CardDescription>
-                  Configure campaign identifiers, status, and call recording behaviors.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="camp-name">Campaign Name</Label>
-                  <Input
-                    id="camp-name"
-                    value={settingsForm.name}
-                    onChange={e => setSettingsForm({ ...settingsForm, name: e.target.value })}
-                    required
-                  />
-                </div>
+            {/* A disabled fieldset makes every control inside it read-only. */}
+            <fieldset disabled={!canManage} className="space-y-6">
+              <Card className="border border-border">
+                <CardHeader>
+                  <CardTitle>Basic Campaign Configuration</CardTitle>
+                  <CardDescription>
+                    Configure campaign identifiers, status, and call recording behaviors.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-name">Campaign Name</Label>
+                    <Input
+                      id="camp-name"
+                      value={settingsForm.name}
+                      onChange={e => setSettingsForm({ ...settingsForm, name: e.target.value })}
+                      required
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="camp-offer">Offer Name</Label>
-                  <Input
-                    id="camp-offer"
-                    placeholder="e.g. Health Insurance ACA"
-                    value={settingsForm.offerName}
-                    onChange={e => setSettingsForm({ ...settingsForm, offerName: e.target.value })}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-offer">Offer Name</Label>
+                    <Input
+                      id="camp-offer"
+                      placeholder="e.g. Health Insurance ACA"
+                      value={settingsForm.offerName}
+                      onChange={e =>
+                        setSettingsForm({ ...settingsForm, offerName: e.target.value })
+                      }
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="camp-country">Country Code</Label>
-                  <Select
-                    value={settingsForm.country}
-                    onValueChange={val => setSettingsForm({ ...settingsForm, country: val })}
-                  >
-                    <SelectTrigger id="camp-country">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="US">United States (US)</SelectItem>
-                      <SelectItem value="CA">Canada (CA)</SelectItem>
-                      <SelectItem value="GB">United Kingdom (GB)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-country">Country Code</Label>
+                    <Select
+                      value={settingsForm.country}
+                      onValueChange={val => setSettingsForm({ ...settingsForm, country: val })}
+                    >
+                      <SelectTrigger id="camp-country">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="US">United States (US)</SelectItem>
+                        <SelectItem value="CA">Canada (CA)</SelectItem>
+                        <SelectItem value="GB">United Kingdom (GB)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="camp-status">Campaign Status</Label>
-                  <Select
-                    value={settingsForm.status}
-                    onValueChange={(val: any) => setSettingsForm({ ...settingsForm, status: val })}
-                  >
-                    <SelectTrigger id="camp-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active (Routing Live)</SelectItem>
-                      <SelectItem value="PAUSED">Paused (Temporary Stopped)</SelectItem>
-                      <SelectItem value="ARCHIVED">Setup (Under Configuration)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-status">Campaign Status</Label>
+                    <Select
+                      value={settingsForm.status}
+                      onValueChange={(val: any) =>
+                        setSettingsForm({ ...settingsForm, status: val })
+                      }
+                    >
+                      <SelectTrigger id="camp-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active (Routing Live)</SelectItem>
+                        <SelectItem value="PAUSED">Paused (Temporary Stopped)</SelectItem>
+                        <SelectItem value="ARCHIVED">Setup (Under Configuration)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="flex items-center justify-between sm:col-span-2 py-3 border-t">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="camp-recording">Enable Call Recording</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Record all inbound calls handled by this campaign.
+                  <div className="flex items-center justify-between sm:col-span-2 py-3 border-t">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="camp-recording">Enable Call Recording</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Record all inbound calls handled by this campaign.
+                      </p>
+                    </div>
+                    <Switch
+                      id="camp-recording"
+                      checked={settingsForm.recordingEnabled}
+                      onCheckedChange={checked =>
+                        setSettingsForm({ ...settingsForm, recordingEnabled: checked })
+                      }
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-border">
+                <CardHeader>
+                  <CardTitle>Billable Call & Payout Configuration</CardTitle>
+                  <CardDescription>
+                    Define the duration rules and default pricing rates for routing and financial
+                    reporting.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-6 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-threshold">Billable Threshold (Seconds)</Label>
+                    <Input
+                      id="camp-threshold"
+                      type="number"
+                      min={0}
+                      value={settingsForm.billableDurationSeconds}
+                      onChange={e =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          billableDurationSeconds: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Call must exceed this duration to be billable.
                     </p>
                   </div>
-                  <Switch
-                    id="camp-recording"
-                    checked={settingsForm.recordingEnabled}
-                    onCheckedChange={checked =>
-                      setSettingsForm({ ...settingsForm, recordingEnabled: checked })
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="border border-border">
-              <CardHeader>
-                <CardTitle>Billable Call & Payout Configuration</CardTitle>
-                <CardDescription>
-                  Define the duration rules and default pricing rates for routing and financial
-                  reporting.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="camp-threshold">Billable Threshold (Seconds)</Label>
-                  <Input
-                    id="camp-threshold"
-                    type="number"
-                    min={0}
-                    value={settingsForm.billableDurationSeconds}
-                    onChange={e =>
-                      setSettingsForm({
-                        ...settingsForm,
-                        billableDurationSeconds: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    required
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Call must exceed this duration to be billable.
-                  </p>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-payout">Default Publisher Payout ($)</Label>
+                    <Input
+                      id="camp-payout"
+                      type="number"
+                      step="0.0001"
+                      min={0}
+                      value={settingsForm.publisherPayoutPerBillableCall}
+                      onChange={e =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Amount paid to publisher per billable call.
+                    </p>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="camp-payout">Default Publisher Payout ($)</Label>
-                  <Input
-                    id="camp-payout"
-                    type="number"
-                    step="0.0001"
-                    min={0}
-                    value={settingsForm.publisherPayoutPerBillableCall}
-                    onChange={e =>
-                      setSettingsForm({
-                        ...settingsForm,
-                        publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    required
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Amount paid to publisher per billable call.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="camp-price">Default Buyer Price ($)</Label>
-                  <Input
-                    id="camp-price"
-                    type="number"
-                    step="0.0001"
-                    min={0}
-                    value={settingsForm.buyerPricePerBillableCall}
-                    onChange={e =>
-                      setSettingsForm({
-                        ...settingsForm,
-                        buyerPricePerBillableCall: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    required
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Amount billed to buyer per billable call.
-                  </p>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end border-t px-6 py-4">
-                <Button type="submit" disabled={savingSettings}>
-                  {savingSettings ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving Settings...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Campaign Settings
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-price">Default Buyer Price ($)</Label>
+                    <Input
+                      id="camp-price"
+                      type="number"
+                      step="0.0001"
+                      min={0}
+                      value={settingsForm.buyerPricePerBillableCall}
+                      onChange={e =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          buyerPricePerBillableCall: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Amount billed to buyer per billable call.
+                    </p>
+                  </div>
+                </CardContent>
+                {canManage ? (
+                  <CardFooter className="flex justify-end border-t px-6 py-4">
+                    <Button type="submit" disabled={savingSettings}>
+                      {savingSettings ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving Settings...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Campaign Settings
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                ) : null}
+              </Card>
+            </fieldset>
           </form>
         </TabsContent>
 
@@ -815,10 +850,12 @@ export default function CampaignDetailPage() {
                   override campaign defaults.
                 </CardDescription>
               </div>
-              <Button size="sm" onClick={() => setPubDialogOpen(true)}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Assign Publisher
-              </Button>
+              {canManage ? (
+                <Button size="sm" onClick={() => setPubDialogOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Assign Publisher
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -828,14 +865,14 @@ export default function CampaignDetailPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Payout Rate</TableHead>
                     <TableHead>Assigned On</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {campaignPublishers.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={canManage ? 5 : 4}
                         className="text-center py-8 text-muted-foreground text-sm"
                       >
                         No publishers assigned to this campaign yet.
@@ -878,17 +915,19 @@ export default function CampaignDetailPage() {
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(cp.createdAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
-                            onClick={() => handleRemovePublisher(cp.id)}
-                            title="Remove Publisher Assignment"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+                        {canManage ? (
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
+                              onClick={() => handleRemovePublisher(cp.id)}
+                              title="Remove Publisher Assignment"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     ))
                   )}
@@ -909,16 +948,18 @@ export default function CampaignDetailPage() {
                   routing order (lower = higher priority).
                 </CardDescription>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingBuyerId(null);
-                  setBuyerDialogOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Buyer Destination
-              </Button>
+              {canManage ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingBuyerId(null);
+                    setBuyerDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Buyer Destination
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -930,14 +971,14 @@ export default function CampaignDetailPage() {
                     <TableHead>Weight</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Price Rate</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {campaignBuyers.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={canManage ? 7 : 6}
                         className="text-center py-8 text-muted-foreground text-sm"
                       >
                         No buyers or destination numbers assigned to this campaign yet.
@@ -988,26 +1029,28 @@ export default function CampaignDetailPage() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted mr-1"
-                            onClick={() => handleEditBuyerClick(cb)}
-                            title="Edit Buyer Assignment"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
-                            onClick={() => handleRemoveBuyer(cb.id)}
-                            title="Remove Buyer Assignment"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+                        {canManage ? (
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted mr-1"
+                              onClick={() => handleEditBuyerClick(cb)}
+                              title="Edit Buyer Assignment"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
+                              onClick={() => handleRemoveBuyer(cb.id)}
+                              title="Remove Buyer Assignment"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     ))
                   )}
@@ -1017,328 +1060,353 @@ export default function CampaignDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Numbers/DIDs Tab */}
-        <TabsContent value="numbers" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Inbound Tracking Numbers</CardTitle>
-              <CardDescription>
-                Phone numbers (DIDs) configured to route calls to this campaign. Manage routes in
-                the Inbound Numbers section.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Inbound DID</TableHead>
-                    <TableHead>Destination/Default Routing</TableHead>
-                    <TableHead>DID Label</TableHead>
-                    <TableHead>Assigned On</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {didRoutes.length === 0 ? (
+        {/* Numbers/DIDs Tab. Staff only -- see `canManage`. */}
+        {canManage ? (
+          <TabsContent value="numbers" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Inbound Tracking Numbers</CardTitle>
+                <CardDescription>
+                  Phone numbers (DIDs) configured to route calls to this campaign. Manage routes in
+                  the Inbound Numbers section.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-8 text-muted-foreground text-sm"
-                      >
-                        No phone numbers currently routed to this campaign.
-                      </TableCell>
+                      <TableHead>Inbound DID</TableHead>
+                      <TableHead>Destination/Default Routing</TableHead>
+                      <TableHead>DID Label</TableHead>
+                      <TableHead>Assigned On</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    didRoutes.map(route => (
-                      <TableRow key={route.id}>
-                        <TableCell className="font-mono font-semibold text-primary">
-                          {route.phoneNumber?.number || route.did}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {route.destination}
-                        </TableCell>
-                        <TableCell className="text-sm">{route.label || '—'}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(route.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => router.push('/numbers')}>
-                            Manage Routes
-                            <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {didRoutes.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center py-8 text-muted-foreground text-sm"
+                        >
+                          No phone numbers currently routed to this campaign.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    ) : (
+                      didRoutes.map(route => (
+                        <TableRow key={route.id}>
+                          <TableCell className="font-mono font-semibold text-primary">
+                            {route.phoneNumber?.number || route.did}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm text-muted-foreground">
+                            {route.destination}
+                          </TableCell>
+                          <TableCell className="text-sm">{route.label || '—'}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(route.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => router.push('/numbers')}
+                            >
+                              Manage Routes
+                              <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : null}
 
         {/* Flow Builder Mock Tab */}
-        <TabsContent value="flow">
-          <Card>
-            <CardHeader>
-              <CardTitle>Visual Flow Builder</CardTitle>
-              <CardDescription>Drag and drop nodes to build your call flow routing</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[500px] border-2 border-dashed rounded-lg flex items-center justify-center bg-sunken">
-                <div className="text-center">
-                  <p className="text-lg font-semibold mb-2">Flow Canvas Placeholder</p>
-                  <p className="text-sm text-muted-foreground">
-                    Flow Builder visual programming blocks will render here in a future update.
-                  </p>
-                  <div className="mt-4 flex gap-2 justify-center">
-                    <Badge variant="outline">Entry</Badge>
-                    <Badge variant="outline">IVR Menu</Badge>
-                    <Badge variant="outline">Queue Routing</Badge>
-                    <Badge variant="outline">Buyer Forward</Badge>
-                    <Badge variant="outline">Record Call</Badge>
+        {canManage ? (
+          <TabsContent value="flow">
+            <Card>
+              <CardHeader>
+                <CardTitle>Visual Flow Builder</CardTitle>
+                <CardDescription>
+                  Drag and drop nodes to build your call flow routing
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[500px] border-2 border-dashed rounded-lg flex items-center justify-center bg-sunken">
+                  <div className="text-center">
+                    <p className="text-lg font-semibold mb-2">Flow Canvas Placeholder</p>
+                    <p className="text-sm text-muted-foreground">
+                      Flow Builder visual programming blocks will render here in a future update.
+                    </p>
+                    <div className="mt-4 flex gap-2 justify-center">
+                      <Badge variant="outline">Entry</Badge>
+                      <Badge variant="outline">IVR Menu</Badge>
+                      <Badge variant="outline">Queue Routing</Badge>
+                      <Badge variant="outline">Buyer Forward</Badge>
+                      <Badge variant="outline">Record Call</Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : null}
       </Tabs>
 
-      {/* Assign Publisher Dialog */}
-      <Dialog open={pubDialogOpen} onOpenChange={setPubDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleAssignPublisher} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>Assign Publisher to Campaign</DialogTitle>
-              <DialogDescription>
-                Assign a publisher to this campaign. You may optionally specify a payout rate
-                override.
-              </DialogDescription>
-            </DialogHeader>
+      {/* The assignment dialogs, including the buyer-target form. Staff only. */}
+      {canManage ? (
+        <>
+          {/* Assign Publisher Dialog */}
+          <Dialog open={pubDialogOpen} onOpenChange={setPubDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <form onSubmit={handleAssignPublisher} className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle>Assign Publisher to Campaign</DialogTitle>
+                  <DialogDescription>
+                    Assign a publisher to this campaign. You may optionally specify a payout rate
+                    override.
+                  </DialogDescription>
+                </DialogHeader>
 
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="pub-select">Select Publisher *</Label>
-                <Select
-                  value={pubForm.publisherId}
-                  onValueChange={val => setPubForm({ ...pubForm, publisherId: val })}
-                  required
-                >
-                  <SelectTrigger id="pub-select">
-                    <SelectValue placeholder="Choose a publisher" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allPublishers.map(pub => (
-                      <SelectItem key={pub.id} value={pub.id}>
-                        {pub.name} ({pub.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="pub-select">Select Publisher *</Label>
+                    <Select
+                      value={pubForm.publisherId}
+                      onValueChange={val => setPubForm({ ...pubForm, publisherId: val })}
+                      required
+                    >
+                      <SelectTrigger id="pub-select">
+                        <SelectValue placeholder="Choose a publisher" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allPublishers.map(pub => (
+                          <SelectItem key={pub.id} value={pub.id}>
+                            {pub.name} ({pub.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="pub-override">Payout Override ($ per Billable Call)</Label>
-                <Input
-                  id="pub-override"
-                  type="number"
-                  step="0.0001"
-                  min={0}
-                  placeholder={`Default: $${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}`}
-                  value={pubForm.payoutPerBillableCall}
-                  onChange={e => setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })}
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Leave blank to use the campaign default publisher payout rate.
-                </p>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pub-override">Payout Override ($ per Billable Call)</Label>
+                    <Input
+                      id="pub-override"
+                      type="number"
+                      step="0.0001"
+                      min={0}
+                      placeholder={`Default: $${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}`}
+                      value={pubForm.payoutPerBillableCall}
+                      onChange={e =>
+                        setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })
+                      }
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Leave blank to use the campaign default publisher payout rate.
+                    </p>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="pub-status">Assignment Status</Label>
-                <Select
-                  value={pubForm.status}
-                  onValueChange={(val: any) => setPubForm({ ...pubForm, status: val })}
-                >
-                  <SelectTrigger id="pub-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">Active (Accepting Calls)</SelectItem>
-                    <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setPubDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submittingPub || !pubForm.publisherId}>
-                {submittingPub && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Assign Publisher
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Assign Buyer Dialog */}
-      <Dialog open={buyerDialogOpen} onOpenChange={handleOpenBuyerDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <form onSubmit={handleAssignBuyer} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>
-                {editingBuyerId ? 'Edit Buyer Routing Assignment' : 'Add Buyer Routing Assignment'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingBuyerId
-                  ? 'Modify destination phone number and routing rules for this buyer.'
-                  : 'Configure a destination phone number and routing rules for a buyer.'}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="buyer-select">Select Buyer *</Label>
-                  <Select
-                    value={buyerForm.buyerId}
-                    onValueChange={val =>
-                      setBuyerForm({ ...buyerForm, buyerId: val, buyerEndpointId: '' })
-                    }
-                    required
-                    disabled={editingBuyerId !== null}
-                  >
-                    <SelectTrigger id="buyer-select">
-                      <SelectValue placeholder="Choose buyer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allBuyers.map(b => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.name} ({b.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label htmlFor="pub-status">Assignment Status</Label>
+                    <Select
+                      value={pubForm.status}
+                      onValueChange={(val: any) => setPubForm({ ...pubForm, status: val })}
+                    >
+                      <SelectTrigger id="pub-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active (Accepting Calls)</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="endpoint-select">Buyer Endpoint (Optional)</Label>
-                  <Select
-                    value={buyerForm.buyerEndpointId}
-                    onValueChange={handleEndpointChange}
-                    disabled={(!buyerForm.buyerId && !editingBuyerId) || loadingEndpoints}
-                  >
-                    <SelectTrigger id="endpoint-select">
-                      <SelectValue
-                        placeholder={loadingEndpoints ? 'Loading...' : 'Choose endpoint'}
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setPubDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submittingPub || !pubForm.publisherId}>
+                    {submittingPub && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Assign Publisher
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Assign Buyer Dialog */}
+          <Dialog open={buyerDialogOpen} onOpenChange={handleOpenBuyerDialog}>
+            <DialogContent className="sm:max-w-[500px]">
+              <form onSubmit={handleAssignBuyer} className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingBuyerId
+                      ? 'Edit Buyer Routing Assignment'
+                      : 'Add Buyer Routing Assignment'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editingBuyerId
+                      ? 'Modify destination phone number and routing rules for this buyer.'
+                      : 'Configure a destination phone number and routing rules for a buyer.'}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-select">Select Buyer *</Label>
+                      <Select
+                        value={buyerForm.buyerId}
+                        onValueChange={val =>
+                          setBuyerForm({ ...buyerForm, buyerId: val, buyerEndpointId: '' })
+                        }
+                        required
+                        disabled={editingBuyerId !== null}
+                      >
+                        <SelectTrigger id="buyer-select">
+                          <SelectValue placeholder="Choose buyer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allBuyers.map(b => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name} ({b.code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="endpoint-select">Buyer Endpoint (Optional)</Label>
+                      <Select
+                        value={buyerForm.buyerEndpointId}
+                        onValueChange={handleEndpointChange}
+                        disabled={(!buyerForm.buyerId && !editingBuyerId) || loadingEndpoints}
+                      >
+                        <SelectTrigger id="endpoint-select">
+                          <SelectValue
+                            placeholder={loadingEndpoints ? 'Loading...' : 'Choose endpoint'}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {buyerEndpoints.map(ep => (
+                            <SelectItem key={ep.id} value={ep.id}>
+                              {ep.name} (${Number(ep.basePrice).toFixed(2)})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="buyer-dest">Destination Phone Number (E.164 Format) *</Label>
+                    <Input
+                      id="buyer-dest"
+                      placeholder="e.g., +18652637582"
+                      value={buyerForm.destinationNumber}
+                      onChange={e =>
+                        setBuyerForm({ ...buyerForm, destinationNumber: e.target.value })
+                      }
+                      required
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Must be formatted as a valid E.164 number starting with + and country code.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-priority">Priority (lower = higher priority)</Label>
+                      <Input
+                        id="buyer-priority"
+                        type="number"
+                        min={0}
+                        value={buyerForm.priority}
+                        onChange={e =>
+                          setBuyerForm({ ...buyerForm, priority: parseInt(e.target.value) || 0 })
+                        }
+                        required
                       />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buyerEndpoints.map(ep => (
-                        <SelectItem key={ep.id} value={ep.id}>
-                          {ep.name} (${Number(ep.basePrice).toFixed(2)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="buyer-dest">Destination Phone Number (E.164 Format) *</Label>
-                <Input
-                  id="buyer-dest"
-                  placeholder="e.g., +18652637582"
-                  value={buyerForm.destinationNumber}
-                  onChange={e => setBuyerForm({ ...buyerForm, destinationNumber: e.target.value })}
-                  required
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Must be formatted as a valid E.164 number starting with + and country code.
-                </p>
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-override">Price Override ($ per Billable Call)</Label>
+                      <Input
+                        id="buyer-override"
+                        type="number"
+                        step="0.0001"
+                        min={0}
+                        placeholder="Campaign Default"
+                        value={buyerForm.pricePerBillableCall}
+                        onChange={e =>
+                          setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="buyer-priority">Priority (lower = higher priority)</Label>
-                  <Input
-                    id="buyer-priority"
-                    type="number"
-                    min={0}
-                    value={buyerForm.priority}
-                    onChange={e =>
-                      setBuyerForm({ ...buyerForm, priority: parseInt(e.target.value) || 0 })
-                    }
-                    required
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-weight">Weight (routing probability)</Label>
+                      <Input
+                        id="buyer-weight"
+                        type="number"
+                        min={1}
+                        value={buyerForm.weight}
+                        onChange={e =>
+                          setBuyerForm({ ...buyerForm, weight: parseInt(e.target.value) || 100 })
+                        }
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="buyer-override">Price Override ($ per Billable Call)</Label>
-                  <Input
-                    id="buyer-override"
-                    type="number"
-                    step="0.0001"
-                    min={0}
-                    placeholder="Campaign Default"
-                    value={buyerForm.pricePerBillableCall}
-                    onChange={e =>
-                      setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="buyer-weight">Weight (routing probability)</Label>
-                  <Input
-                    id="buyer-weight"
-                    type="number"
-                    min={1}
-                    value={buyerForm.weight}
-                    onChange={e =>
-                      setBuyerForm({ ...buyerForm, weight: parseInt(e.target.value) || 100 })
-                    }
-                    required
-                  />
+                    <div className="space-y-2">
+                      <Label htmlFor="buyer-status">Assignment Status</Label>
+                      <Select
+                        value={buyerForm.status}
+                        onValueChange={(val: any) => setBuyerForm({ ...buyerForm, status: val })}
+                      >
+                        <SelectTrigger id="buyer-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ACTIVE">Active (Enabled)</SelectItem>
+                          <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="buyer-status">Assignment Status</Label>
-                  <Select
-                    value={buyerForm.status}
-                    onValueChange={(val: any) => setBuyerForm({ ...buyerForm, status: val })}
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleOpenBuyerDialog(false)}
                   >
-                    <SelectTrigger id="buyer-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active (Enabled)</SelectItem>
-                      <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => handleOpenBuyerDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submittingBuyer || !buyerForm.buyerId || !buyerForm.destinationNumber}
-              >
-                {submittingBuyer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingBuyerId ? 'Save Changes' : 'Add Assignment'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={submittingBuyer || !buyerForm.buyerId || !buyerForm.destinationNumber}
+                  >
+                    {submittingBuyer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {editingBuyerId ? 'Save Changes' : 'Add Assignment'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
     </div>
   );
 }

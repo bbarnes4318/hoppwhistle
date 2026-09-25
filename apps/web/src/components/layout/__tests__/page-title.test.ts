@@ -40,6 +40,10 @@ describe('the topbar is the only place a page is named', () => {
     ['/settings/dnc', 'DNC Lists'],
     ['/settings/quotas', 'Quotas & Budgets'],
     ['/admin/payroll', 'Payroll Admin'],
+    // Renamed in PLATFORM_NAV; the topbar follows the nav.
+    ['/settings/carriers', 'VOIP Carrier Routing'],
+    ['/live', 'Live Board'],
+    ['/admin/live', 'Live board'],
   ];
 
   it.each(REQUIRED)('%s is titled "%s"', (path, title) => {

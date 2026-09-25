@@ -66,20 +66,27 @@ describe('the session has named states, not a nullable user', () => {
 describe('nothing renders a navigation before the session resolves', () => {
   const sidebar = stripComments(read('components/layout/sidebar.tsx'));
 
+  /*
+   * The role dispatch moved out of the sidebar into `navFor` in nav-config.ts,
+   * which the sidebar and the command palette both call. The checks follow it.
+   */
+  const navConfig = stripComments(read('components/layout/nav-config.ts'));
+  const navFor = navConfig.slice(navConfig.indexOf('export function navFor'));
+
   it('renders no nav groups for an unresolved or role-less session', () => {
     /*
      * The catch-all used to be `[{ items: [PLATFORM_NAV[0].items[0]] }]` -- one
      * Dashboard link, returned for all three of the collapsed states.
      *
-     * Only the CATCH-ALL is checked, not the whole file: the READONLY branch
-     * legitimately builds a nav starting from that same Dashboard entry, and
-     * forbidding the expression outright would have failed on code that is
+     * Only the CATCH-ALL is checked, not the whole function: the READONLY
+     * branch legitimately builds a nav starting from that same Dashboard entry,
+     * and forbidding the expression outright would have failed on code that is
      * correct. The catch-all is what follows the last role branch.
      */
-    const dispatch = sidebar.slice(sidebar.indexOf('const groups'), sidebar.indexOf('}, ['));
-    const catchAll = dispatch.slice(dispatch.lastIndexOf('}'));
+    const catchAll = navFor.slice(navFor.lastIndexOf('}\n  return'));
     expect(catchAll).not.toContain('PLATFORM_NAV');
     expect(catchAll).toContain('return [];');
+    expect(sidebar).toContain('navFor(');
   });
 
   it('has a distinct treatment for each of the three states', () => {
@@ -90,8 +97,9 @@ describe('nothing renders a navigation before the session resolves', () => {
 
   it('checks the platform nav first, so staff never get an agency nav', () => {
     // `hasFullAccess` is ADMIN-or-OWNER and staff inside an agency carry both.
-    const dispatch = sidebar.slice(sidebar.indexOf('const groups'));
-    expect(dispatch.indexOf('isPlatformAdmin')).toBeLessThan(dispatch.indexOf('hasFullAccess'));
+    expect(navFor.indexOf('viewer.isPlatformAdmin')).toBeLessThan(
+      navFor.indexOf('viewer.hasFullAccess')
+    );
   });
 });
 

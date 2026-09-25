@@ -78,6 +78,11 @@ export interface AgencyStripBilling {
   dailyBlockApplications: number;
   /** Paid for and unused: what is left on the block right now. */
   applicationsRemainingOnBlock: number;
+  /**
+   * What the lots still holding credits were bought with: the "of" beside
+   * `applicationsRemainingOnBlock`. Not the daily block -- see `openLotCredits`.
+   */
+  appCreditsOpenTotal: number;
   /** Applications submitted today beyond the block. */
   overrunToday: number;
   /** What that overrun adds to tonight's debit, at the rate tonight will use. */
@@ -193,6 +198,7 @@ export async function getAgencyStrip(
     billing: {
       dailyBlockApplications: today.dailyBlockApplications,
       applicationsRemainingOnBlock: today.applicationsRemainingOnBlock,
+      appCreditsOpenTotal: today.appCreditsOpenTotal,
       overrunToday: today.overrunToday,
       overrunAmountTonight: today.overrunAmountTonight,
       projectedTotalCharge: today.projectedTotalCharge,
