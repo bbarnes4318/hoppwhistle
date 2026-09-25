@@ -17,6 +17,12 @@ any channel technology through:
   * outbound calls: ``DOGRAH_ARI_TRUNK`` (default ``fractel``, i.e. unchanged)
   * transfers:      ``DOGRAH_ARI_TRANSFER_TRUNK`` (default: DOGRAH_ARI_TRUNK)
   * ``Local/``, ``IAX2/`` and any other ``Tech/...`` destination is dialled as written.
+  * outbound number prefix: ``DOGRAH_ARI_DIAL_PREFIX`` (default empty, i.e.
+    unchanged). Anveo Direct picks the trunk from a tech prefix in front of
+    the number, so with ``012345`` a call to +15551234567 dials
+    ``PJSIP/01234515551234567@<trunk>``. Transfers never get the prefix.
+
+A file already carrying the first version of this patch is upgraded in place.
 
 Dry run by default. ``--apply`` writes a ``.bak-ari-trunk`` backup first. Running
 it again reports ``already_patched``. It refuses (exit 2) if the file does not
@@ -29,12 +35,14 @@ contain exactly the code it expects, rather than guessing.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import sys
 from dataclasses import dataclass
 
 MARKER = "HOPWHISTLE_ARI_TRUNK_V1"
+MARKER_V2 = "HOPWHISTLE_ARI_DIAL_PREFIX_V2"
 
 HELPER = f'''
 
@@ -56,6 +64,26 @@ def _hw_has_tech(destination: str) -> bool:
     """SIP/, PJSIP/, Local/, IAX2/ ...: already a dial string, dial it as written."""
     return bool(_HW_TECH_PREFIX.match(destination.strip()))
 '''
+
+HELPER_V2 = f'''
+
+# {MARKER_V2}: optional tech prefix in front of outbound numbers (Anveo Direct).
+def _hw_dial_number(number: str) -> str:
+    prefix = _hw_re.sub(r"\\D", "", _hw_os.environ.get("DOGRAH_ARI_DIAL_PREFIX", ""))
+    if not prefix:
+        return number
+    digits = _hw_re.sub(r"\\D", "", number)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return number  # not a NANP number: leave it alone
+    return f"{{prefix}}1{{digits}}"
+'''
+
+V2_REPLACEMENT = (
+    'f"PJSIP/{to_number}@{_hw_ari_trunk()}"',
+    'f"PJSIP/{_hw_dial_number(to_number)}@{_hw_ari_trunk()}"',
+)
 
 # (old, new) pairs. Each `old` must occur exactly once.
 REPLACEMENTS = [
@@ -88,7 +116,17 @@ class Result:
     changed: bool
 
 
-def patch_source(source: str) -> str:
+def _insert_before_first_def(source: str, helper: str) -> str:
+    # Helpers go after the module's imports, before the first top-level
+    # definition, so they are defined before anything calls them.
+    match = re.search(r"^(class |def |async def |@)", source, flags=re.M)
+    if not match:
+        raise PatchError("no top-level class or function to insert the helper before")
+    at = match.start()
+    return source[:at].rstrip("\n") + "\n" + helper + "\n\n" + source[at:]
+
+
+def patch_v1(source: str) -> str:
     if MARKER in source:
         return source
     for old, _ in REPLACEMENTS:
@@ -97,14 +135,21 @@ def patch_source(source: str) -> str:
             raise PatchError(f"expected exactly one occurrence of {old!r}, found {count}")
     for old, new in REPLACEMENTS:
         source = source.replace(old, new)
+    return _insert_before_first_def(source, HELPER)
 
-    # The helper goes after the module's imports, before the first top-level
-    # definition, so it is defined before anything calls it.
-    match = re.search(r"^(class |def |async def |@)", source, flags=re.M)
-    if not match:
-        raise PatchError("no top-level class or function to insert the helper before")
-    at = match.start()
-    return source[:at].rstrip("\n") + "\n" + HELPER + "\n\n" + source[at:]
+
+def patch_source(source: str) -> str:
+    source = patch_v1(source)
+    if MARKER_V2 in source:
+        return source
+    old, new = V2_REPLACEMENT
+    count = source.count(old)
+    if count != 1:
+        raise PatchError(f"expected exactly one occurrence of {old!r}, found {count}")
+    source = source.replace(old, new)
+    # V1's helper imports _hw_os/_hw_re before its first def, so V2's helper,
+    # inserted before that def, can use them.
+    return _insert_before_first_def(source, HELPER_V2)
 
 
 def patch_file(path: str, apply: bool) -> Result:
@@ -114,7 +159,11 @@ def patch_file(path: str, apply: bool) -> Result:
     compile(patched, path, "exec")  # never write a file Python cannot load
     changed = patched != original
     if changed and apply:
-        shutil.copy2(path, path + ".bak-ari-trunk")
+        # Keep the very first backup: it is the unpatched original.
+        backup = path + ".bak-ari-trunk"
+        if os.path.exists(backup):
+            backup = path + ".bak-ari-trunk-v2"
+        shutil.copy2(path, backup)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(patched)
     return Result(path, changed)

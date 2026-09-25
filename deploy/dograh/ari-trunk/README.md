@@ -16,6 +16,10 @@ things:
 - **Transfers** dial `@${DOGRAH_ARI_TRANSFER_TRUNK}`. The default is whatever
   `DOGRAH_ARI_TRUNK` is set to.
 - **Any `Tech/...` destination**, including `Local/`, is dialled as written.
+- **Optional number prefix (V2)**: `DOGRAH_ARI_DIAL_PREFIX` goes in front of
+  outbound US numbers as `<prefix>1XXXXXXXXXX`. Anveo Direct needs this, see
+  `deploy/dograh/anveo-trunk`. It's unset by default and never used on transfers.
+  Running the patcher on a file with the first version upgrades it in place.
 
 ## Apply
 
