@@ -206,6 +206,9 @@ export const WHITE_LABEL_ROUTES = [
   '/revenue',
   '/routing',
   '/upgrades',
+  // The agency's own Do Not Call lists: the DNC lists tab of Settings, and the
+  // page it also lives on. Still staff-only for a normal agency.
+  '/settings/dnc',
 ] as const;
 
 /**
