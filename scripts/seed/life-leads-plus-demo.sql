@@ -29,7 +29,10 @@
 --   campaigns                       metadata->>'seed' = 'llp-demo'
 --   calls                           "callSid" LIKE 'LLPDEMO-%'
 --   insurance_carrier_applications  "clientRequestId" LIKE 'llp-demo-%'
---   publisher_payments              reference LIKE 'LLPDEMO-%'
+--   publisher_payments              reference LIKE 'LLPDEMO-%', or any row for a
+--                                   seeded publisher: the clawbacks an accepted
+--                                   return writes, and payments recorded in the
+--                                   app against a demo publisher
 --
 -- ── Re-running ───────────────────────────────────────────────────────────────
 --
@@ -98,7 +101,11 @@ CREATE TEMP TABLE llp_scope ON COMMIT DROP AS
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DELETE FROM publisher_payments
-WHERE "tenantId" IN (SELECT id FROM llp_scope) AND reference LIKE 'LLPDEMO-%';
+WHERE "tenantId" IN (SELECT id FROM llp_scope)
+  AND ("reference" LIKE 'LLPDEMO-%'
+       OR "publisherId" IN (SELECT id FROM publishers
+                            WHERE "tenantId" IN (SELECT id FROM llp_scope)
+                              AND code LIKE 'LLPDEMO%'));
 
 DELETE FROM insurance_carrier_applications
 WHERE "tenantId" IN (SELECT id FROM llp_scope) AND "clientRequestId" LIKE 'llp-demo-%';
@@ -552,19 +559,41 @@ CREATE TEMP TABLE llp_call ON COMMIT DROP AS
            ELSE t.started + t.ring * interval '1 second' END AS answered,
       t.started + (t.ring + t.connected) * interval '1 second' AS ended
     FROM timed t
+  ),
+  -- The newest billable calls of the last two days that ended at least an hour
+  -- ago, so a fresh demo always has returns waiting on Today, and none of them
+  -- was disputed before it ended.
+  recent AS (
+    SELECT
+      b.*,
+      row_number() OVER (
+        ORDER BY (
+          b.is_billable
+          AND b.started >= (SELECT run_at FROM llp_clock) - interval '2 days'
+          AND b.ended <= (SELECT run_at FROM llp_clock) - interval '1 hour'
+        ) DESC,
+        b.started DESC
+      ) AS recent_rank,
+      (
+        b.is_billable
+        AND b.started >= (SELECT run_at FROM llp_clock) - interval '2 days'
+        AND b.ended <= (SELECT run_at FROM llp_clock) - interval '1 hour'
+      ) AS is_recent_billable
+    FROM billed b
   )
   SELECT
     gen_random_uuid()::text AS id,
     'LLPDEMO-' || gen_random_uuid()::text AS call_sid,
     b.*,
-    (b.is_billable AND b.r_dispute < 0.02) AS is_disputed,
+    (b.is_billable AND (b.r_dispute < 0.02 OR (b.is_recent_billable AND b.recent_rank <= 3)))
+      AS is_disputed,
     (b.outcome = 'AGENT' AND b.campaign_key IS DISTINCT FROM 'MED'
        AND b.connected >= 480 AND b.r_app < b.app_probability) AS has_application,
     least(
       b.ended + (60 + floor(b.r_submit * 181)::int) * interval '1 second',
       (SELECT run_at FROM llp_clock)
     ) AS submitted
-  FROM billed b;
+  FROM recent b;
 
 INSERT INTO calls (
   id, "tenantId", "campaignId", "toNumber", "callSid", status, direction,
@@ -576,7 +605,7 @@ INSERT INTO calls (
   revenue, payout, profit, billable, "billableDurationThreshold",
   "publisherPayoutAmount", "buyerBillableAmount", "billingCalculatedAt",
   "buyerChargeStatus", "buyerChargedAt", "publisherPayoutStatus", "publisherPayableAt",
-  "disputeStatus", converted, "missedCall",
+  "disputeStatus", metadata, converted, "missedCall",
   "answeredByUserId", disposition, "callSource"
 )
 SELECT
@@ -608,7 +637,22 @@ SELECT
     WHEN c.outcome = 'BUYER' THEN 'NOT_PAYABLE'
   END,
   CASE WHEN c.is_billable THEN c.ended END,
-  CASE WHEN c.is_disputed THEN 'OPEN' END,
+  -- A buyer's return waiting for a decision: 'DISPUTED' is what every screen
+  -- reads as open (lib/dispute-status.ts), with the reason, when and who on
+  -- the call's metadata, where POST /api/v1/calls/:callId/dispute puts them.
+  CASE WHEN c.is_disputed THEN 'DISPUTED' END,
+  CASE WHEN c.is_disputed THEN jsonb_build_object(
+    'disputeReason', (ARRAY[
+      'Caller already has coverage',
+      'Duplicate caller within 30 days',
+      'Caller outside the age range',
+      'Caller hung up before the pitch',
+      'Wrong number'
+    ])[1 + ((row_number() OVER (PARTITION BY c.is_disputed ORDER BY c.seq) - 1) % 5)::int],
+    'disputedAt', to_char((c.ended + interval '1 hour') AT TIME ZONE 'UTC',
+                          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+    'disputedBy', 'returns@demo.lifeleadsplus.test'
+  ) END,
   c.has_application,
   c.outcome = 'NONE',
   c.agent_id,

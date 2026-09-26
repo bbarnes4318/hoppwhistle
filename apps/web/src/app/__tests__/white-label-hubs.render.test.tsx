@@ -811,25 +811,65 @@ describe('the white-label portal', () => {
   });
 
   describe('Settings', () => {
-    it('is one row of tabs for a white-label owner, opening on API keys, with no Workspace', async () => {
+    it('is one row of tabs for a white-label owner, opening on Webhooks, with no Workspace', async () => {
       await mount('/settings', () => import('../(dashboard)/settings/page'));
-      await waitFor(() => expect(activeTab()).toBe('api-keys'));
+      await waitFor(() => expect(activeTab()).toBe('webhooks'));
       expect(screen.getAllByRole('tablist')).toHaveLength(1);
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
-        'API keys',
         'Webhooks',
         'DNC lists',
         'Legal',
         'Plan & Billing',
       ]);
-      expect(screen.getByText('Manage your API authentication keys')).toBeTruthy();
+      expect(screen.queryByRole('tab', { name: /API keys/i })).toBeNull();
       expect(screen.queryByRole('tab', { name: 'Workspace' })).toBeNull();
       expect(screen.queryByText(/demo/i)).toBeNull();
+      await waitFor(() => expect(asked('GET /api/v1/webhooks')).toBe(true));
     });
 
-    it('lands the old General tab on API keys', async () => {
-      await mount('/settings?tab=general', () => import('../(dashboard)/settings/page'));
-      await waitFor(() => expect(activeTab()).toBe('api-keys'));
+    it.each(['general', 'api-keys'])('lands the old ?tab=%s on Webhooks', async tab => {
+      await mount(`/settings?tab=${tab}`, () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(activeTab()).toBe('webhooks'));
+      expect(screen.queryByText('Production Key')).toBeNull();
+    });
+
+    it("shows the agency's real DNC lists, read from the compliance API", async () => {
+      answers['/api/v1/compliance/dnc-lists'] = {
+        data: [
+          {
+            id: 'dnc-1',
+            name: 'Internal do-not-call',
+            type: 'CUSTOM',
+            status: 'active',
+            entryCount: 42,
+            createdAt: '2026-09-20T15:00:00.000Z',
+            updatedAt: '2026-09-20T15:00:00.000Z',
+          },
+        ],
+      };
+      await mount('/settings?tab=dnc', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(screen.getByText('Internal do-not-call')).toBeTruthy());
+      expect(activeTab()).toBe('dnc');
+      expect(asked('GET /api/v1/compliance/dnc-lists')).toBe(true);
+      expect(screen.getByText('42')).toBeTruthy();
+      expect(screen.queryByText('Global DNC')).toBeNull();
+      expect(screen.queryByText('Upload List')).toBeNull();
+    });
+
+    it('creates a DNC list through the compliance API', async () => {
+      answers['/api/v1/compliance/dnc-lists'] = { data: [] };
+      answers['POST /api/v1/compliance/dnc-lists'] = { id: 'dnc-2', name: 'Opt-outs' };
+      await mount('/settings?tab=dnc', () => import('../(dashboard)/settings/page'));
+      fireEvent.click(await screen.findByRole('button', { name: 'New list' }));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Opt-outs' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create list' }));
+      await waitFor(() =>
+        expect(posted).toContainEqual({
+          path: '/api/v1/compliance/dnc-lists',
+          body: { name: 'Opt-outs', type: 'CUSTOM' },
+        })
+      );
     });
 
     it('opens Plan & Billing on ?tab=plan', async () => {

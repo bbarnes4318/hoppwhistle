@@ -126,8 +126,9 @@ CREATE TRIGGER "settlement_payment_attempts_append_only"
 -- too: schema.prisma declares callId as a plain column, so db push leaves it
 -- unconstrained.
 --
--- Mirrors prisma/migrations/20260927000000_publisher_payment_clawbacks/migration.sql,
--- which is where they are applied to production.
+-- Mirrors prisma/migrations/20260927000000_publisher_payment_clawbacks/migration.sql
+-- and 20260928000000_clawback_check_callid/migration.sql, which is where they
+-- are applied to production.
 -- ---------------------------------------------------------------------------
 
 DO $$
@@ -138,15 +139,19 @@ BEGIN
       FOREIGN KEY ("callId") REFERENCES "calls"("id")
       ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'publisher_payments_kind_amount_check') THEN
-    ALTER TABLE "publisher_payments"
-      ADD CONSTRAINT "publisher_payments_kind_amount_check"
-      CHECK (
-        ("kind" = 'PAYMENT' AND "amount" > 0)
-        OR ("kind" = 'CLAWBACK' AND "amount" < 0 AND "callId" IS NOT NULL)
-      );
-  END IF;
 END $$;
+
+-- A clawback outlives its call: the callId foreign key is ON DELETE SET NULL,
+-- so the CHECK must not require callId. Dropped and re-added so a database
+-- built before 20260928000000_clawback_check_callid gets the new definition.
+ALTER TABLE "publisher_payments"
+  DROP CONSTRAINT IF EXISTS "publisher_payments_kind_amount_check";
+ALTER TABLE "publisher_payments"
+  ADD CONSTRAINT "publisher_payments_kind_amount_check"
+  CHECK (
+    ("kind" = 'PAYMENT' AND "amount" > 0)
+    OR ("kind" = 'CLAWBACK' AND "amount" < 0)
+  );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "publisher_payments_clawback_call_key"
   ON "publisher_payments"("callId") WHERE "kind" = 'CLAWBACK';

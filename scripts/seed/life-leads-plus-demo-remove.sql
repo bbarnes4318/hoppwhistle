@@ -37,7 +37,11 @@ CREATE TEMP TABLE llp_scope ON COMMIT DROP AS
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DELETE FROM publisher_payments
-WHERE "tenantId" IN (SELECT id FROM llp_scope) AND reference LIKE 'LLPDEMO-%';
+WHERE "tenantId" IN (SELECT id FROM llp_scope)
+  AND ("reference" LIKE 'LLPDEMO-%'
+       OR "publisherId" IN (SELECT id FROM publishers
+                            WHERE "tenantId" IN (SELECT id FROM llp_scope)
+                              AND code LIKE 'LLPDEMO%'));
 
 DELETE FROM insurance_carrier_applications
 WHERE "tenantId" IN (SELECT id FROM llp_scope) AND "clientRequestId" LIKE 'llp-demo-%';
