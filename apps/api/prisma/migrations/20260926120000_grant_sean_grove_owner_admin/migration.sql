@@ -1,31 +1,22 @@
--- Grant Sean Grove BOTH agency roles (OWNER + ADMIN).
+-- Grant seangrove@gmail.com BOTH agency roles (OWNER + ADMIN).
 --
 -- Same shape as 20260915153900_grant_khall_owner_admin: two UserRole rows, which
--- the application unions. The account is matched by name because no email is on
--- record here; the match must be unique, so if zero or several users are named
--- Sean Grove this inserts nothing rather than granting the wrong account.
--- Idempotent: existing role rows are never duplicated.
-WITH target AS (
-  SELECT u."id"
-  FROM "users" u
-  WHERE lower(trim(u."firstName")) = 'sean'
-    AND lower(trim(u."lastName")) = 'grove'
-),
-unique_target AS (
-  SELECT "id" FROM target WHERE (SELECT count(*) FROM target) = 1
-)
+-- the application unions. The account already holds ADMIN, so in practice this
+-- adds OWNER; the NOT EXISTS keeps it idempotent and never duplicates a row. If
+-- the account is not present it simply inserts nothing.
 INSERT INTO "user_roles" ("id", "userId", "roleId", "createdAt")
 SELECT
-  md5(t."id" || ':' || r."id"),
-  t."id",
+  md5(u."id" || ':' || r."id"),
+  u."id",
   r."id",
   CURRENT_TIMESTAMP
-FROM unique_target t
+FROM "users" u
 CROSS JOIN "roles" r
-WHERE r."name" IN ('OWNER', 'ADMIN')
+WHERE lower(u."email") = 'seangrove@gmail.com'
+  AND r."name" IN ('OWNER', 'ADMIN')
   AND NOT EXISTS (
     SELECT 1
     FROM "user_roles" existing
-    WHERE existing."userId" = t."id"
+    WHERE existing."userId" = u."id"
       AND existing."roleId" = r."id"
   );

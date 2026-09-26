@@ -450,14 +450,11 @@ migration_applied() {
                 AND table_name = 'tenants'
                 AND column_name IN ('whiteLabel', 'parentTenantId')) = 2" ;;
     *_grant_sean_grove_owner_admin)
-      # Data, not schema: OWNER + ADMIN for the one user named Sean Grove. With
-      # no unique match the migration deliberately inserts nothing, so the
-      # probe reads that as done rather than failing every deploy; once the
-      # account exists it reads false and the next deploy grants the roles.
-      echo "WITH t AS (SELECT id FROM users
-                WHERE lower(trim(\"firstName\")) = 'sean'
-                  AND lower(trim(\"lastName\")) = 'grove')
-            SELECT (SELECT count(*) FROM t) <> 1
+      # Data, not schema: OWNER + ADMIN for seangrove@gmail.com. If that account
+      # is absent the migration inserts nothing, so the probe reads that as done
+      # rather than failing every deploy; if it exists, both roles must be held.
+      echo "WITH t AS (SELECT id FROM users WHERE lower(email) = 'seangrove@gmail.com')
+            SELECT NOT EXISTS (SELECT 1 FROM t)
                 OR (SELECT count(DISTINCT r.name) FROM user_roles ur
                       JOIN roles r ON r.id = ur.\"roleId\"
                      WHERE ur.\"userId\" IN (SELECT id FROM t)
