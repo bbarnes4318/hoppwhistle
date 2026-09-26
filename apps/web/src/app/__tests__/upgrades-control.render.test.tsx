@@ -67,8 +67,7 @@ async function mount(): Promise<void> {
   );
 }
 
-const switchFor = (key: string) =>
-  document.querySelector(`[data-upgrade-switch="${key}"]`) as HTMLElement | null;
+const switchFor = (key: string) => document.querySelector(`[data-upgrade-switch="${key}"]`);
 
 describe('the Upgrades switches', () => {
   beforeEach(() => {
