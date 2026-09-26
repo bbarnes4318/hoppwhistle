@@ -67,6 +67,7 @@ Options:
     console.log(`\n=================== SUMMARY ===================`);
     console.log(`Total Calls Scanned:       ${results.scanned}`);
     console.log(`Total Calls Updated:       ${results.updated}`);
+    console.log(`Locked (paid or returned): ${results.locked}`);
     console.log(`Billable Calls:            ${results.billable}`);
     console.log(`Non-Billable Calls:        ${results.nonBillable}`);
     console.log(`Total Buyer Revenue:       $${results.totalRevenue}`);

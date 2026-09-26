@@ -95,6 +95,9 @@ const DATABASE_BACKED = [
   '**/src/__tests__/campaign-answer-order.test.ts',
   '**/src/__tests__/white-label-today.test.ts',
   '**/src/__tests__/calls-outcome-filter.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed two white-label
+  // agencies with publishers, payable calls and clawbacks.
+  '**/src/__tests__/payout-clawbacks.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',

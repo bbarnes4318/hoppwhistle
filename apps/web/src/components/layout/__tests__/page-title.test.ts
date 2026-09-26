@@ -157,4 +157,11 @@ describe("the viewer's own nav names its pages first", () => {
     expect(pageTitleFor('/buyers', WHITE_LABEL_OWNER_NAV)).toBe('Buyers');
     expect(pageTitleFor('/agents')).toBe('Agents');
   });
+
+  it('calls a campaign Routing for a white-label owner, who opens it from there', () => {
+    const campaign = '/campaigns/0b7c9d3e-5f1a-4c2b-9e8d-1a2b3c4d5e6f';
+    expect(pageTitleFor(campaign, WHITE_LABEL_OWNER_NAV)).toBe('Routing');
+    expect(pageTitleFor(campaign)).toBe('Campaigns');
+    expect(pageTitleFor(campaign, AGENCY_OWNER_NAV)).toBe('Campaigns');
+  });
 });

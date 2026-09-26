@@ -5,8 +5,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Define the mock client
 const mockPrisma = {
   $transaction: vi.fn(cb => cb(mockPrisma)),
+  // calculateCallBilling holds the call's row (SELECT ... FOR UPDATE) first.
+  $queryRaw: vi.fn().mockResolvedValue([]),
   call: {
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     update: vi.fn(),
   },
   buyerEndpoint: {
@@ -358,6 +361,100 @@ describe('BillingService Unit Tests', () => {
       await billingService.calculateCallBilling('call-1');
       expect(mockPrisma.accrualLedger.update).toHaveBeenCalled();
     });
+  });
+});
+
+describe('BillingService: settled calls are locked', () => {
+  let billingService: BillingService;
+
+  const settledCall = {
+    id: 'call-locked',
+    tenantId: 'tenant-1',
+    callSid: 'sid-locked',
+    status: 'COMPLETED',
+    connectedDuration: 120,
+    duration: 130,
+    billable: true,
+    billableDurationThreshold: 60,
+    revenue: new Prisma.Decimal('15.0000'),
+    payout: new Prisma.Decimal('8.0000'),
+    profit: new Prisma.Decimal('6.9000'),
+    buyerBillableAmount: new Prisma.Decimal('15.0000'),
+    publisherPayoutAmount: new Prisma.Decimal('8.0000'),
+    disputeStatus: null as string | null,
+    publisherPayoutStatus: 'PAYABLE' as string | null,
+    buyerChargeStatus: 'CHARGED' as string | null,
+    campaign: { id: 'camp-1', billableDurationSeconds: 60 },
+    buyer: { id: 'buyer-1', billableDuration: 60 },
+    publisher: { id: 'pub-1' },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    billingService = new BillingService();
+  });
+
+  it.each([
+    ['an accepted return', { disputeStatus: 'ACCEPTED' }, 'RETURN_ACCEPTED'],
+    ['a PAID publisher payout', { publisherPayoutStatus: 'PAID' }, 'PUBLISHER_PAID'],
+    [
+      'a CLAWED_BACK publisher payout',
+      { publisherPayoutStatus: 'CLAWED_BACK' },
+      'PUBLISHER_CLAWED_BACK',
+    ],
+    ['a REFUNDED buyer charge', { buyerChargeStatus: 'REFUNDED' }, 'BUYER_REFUNDED'],
+    ['a WAIVED buyer charge', { buyerChargeStatus: 'WAIVED' }, 'BUYER_WAIVED'],
+  ])('changes nothing on %s and answers LOCKED', async (_label, state, reason) => {
+    mockPrisma.call.findUnique.mockResolvedValue({ ...settledCall, ...state });
+
+    const res = await billingService.calculateCallBilling('call-locked');
+
+    expect(res).toMatchObject({
+      success: false,
+      error: 'LOCKED',
+      lockedReason: reason,
+      billable: true,
+      revenue: '15.0000',
+      payout: '8.0000',
+      profit: '6.9000',
+    });
+    expect(mockPrisma.call.update).not.toHaveBeenCalled();
+    expect(mockPrisma.accrualLedger.create).not.toHaveBeenCalled();
+    expect(mockPrisma.accrualLedger.update).not.toHaveBeenCalled();
+    expect(mockPrisma.accrualLedger.deleteMany).not.toHaveBeenCalled();
+    expect(mockPrisma.billingAccount.create).not.toHaveBeenCalled();
+  });
+
+  it('recalculation counts settled calls as locked and leaves them out of every other figure', async () => {
+    mockPrisma.call.findMany.mockResolvedValue([
+      { ...settledCall, id: 'a', disputeStatus: 'ACCEPTED' },
+      { ...settledCall, id: 'b', publisherPayoutStatus: 'PAID' },
+      { ...settledCall, id: 'c', publisherPayoutStatus: 'CLAWED_BACK' },
+      { ...settledCall, id: 'd', buyerChargeStatus: 'REFUNDED' },
+      { ...settledCall, id: 'e', buyerChargeStatus: 'WAIVED' },
+    ]);
+
+    for (const dryRun of [false, true]) {
+      const res = await billingService.recalculateBillingForDateRange({
+        tenantId: 'tenant-1',
+        startDate: new Date('2026-09-01'),
+        endDate: new Date('2026-09-30'),
+        dryRun,
+      });
+      expect(res).toMatchObject({
+        scanned: 5,
+        locked: 5,
+        updated: 0,
+        billable: 0,
+        nonBillable: 0,
+        totalRevenue: '0.0000',
+        totalPayout: '0.0000',
+        totalProfit: '0.0000',
+        changes: [],
+      });
+    }
+    expect(mockPrisma.call.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.call.update).not.toHaveBeenCalled();
   });
 });
 

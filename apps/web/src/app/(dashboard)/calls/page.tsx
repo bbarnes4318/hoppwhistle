@@ -65,6 +65,7 @@ import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
 import { formatFullDateTime, formatTableDateTime } from '@/lib/format-time';
+import { CLAWED_BACK, CLAWED_BACK_BADGE, CLAWED_BACK_LABEL } from '@/lib/payout-status';
 import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
@@ -705,6 +706,19 @@ export default function OperationsCallLogsPage() {
     }
   };
 
+  /*
+   * `?call=<id>` opens that call's detail, once, at mount: Payouts links a
+   * deducted return straight to the call it came from.
+   */
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (openedFromLink.current) return;
+    openedFromLink.current = true;
+    const requested = new URLSearchParams(window.location.search).get('call');
+    if (requested) void handleOpenDetailDrawer(requested);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at mount
+  }, []);
+
   const handlePlayRecording = async (recordingId: string) => {
     if (playingId === recordingId) {
       if (audioRef.current) {
@@ -844,6 +858,12 @@ export default function OperationsCallLogsPage() {
         return (
           <Badge variant="outline" className="bg-sunken text-ink-2 border-rule">
             Not Payable
+          </Badge>
+        );
+      case CLAWED_BACK:
+        return (
+          <Badge variant="outline" className={CLAWED_BACK_BADGE}>
+            {CLAWED_BACK_LABEL}
           </Badge>
         );
       case 'PENDING':

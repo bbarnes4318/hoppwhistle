@@ -42,6 +42,8 @@ const mockPrismaData = {
 
 const mockPrisma = {
   $transaction: vi.fn(cb => cb(mockPrisma)),
+  // calculateCallBilling holds the call's row (SELECT ... FOR UPDATE) first.
+  $queryRaw: vi.fn().mockResolvedValue([]),
 
   /*
    * Phase 3 delivery gating.

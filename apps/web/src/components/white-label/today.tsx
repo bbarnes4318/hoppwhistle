@@ -238,7 +238,9 @@ export function WhiteLabelToday(): JSX.Element {
         <Panel className="min-w-0">
           <PanelHeader>
             <PanelTitle>Buyers today</PanelTitle>
-            <PanelDescription>Calls up, delivered and cap, per buyer</PanelDescription>
+            <PanelDescription>
+              Calls up, delivered, billable, revenue and cap, per buyer
+            </PanelDescription>
           </PanelHeader>
           <PanelBody flush className="overflow-x-auto">
             {!data ? null : data.buyers.length === 0 ? (
@@ -250,9 +252,9 @@ export function WhiteLabelToday(): JSX.Element {
                     <TableHead>Buyer</TableHead>
                     <TableHead className="text-right">Calls up</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
+                    <TableHead className="text-right">Billable</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
                     <TableHead className="text-right">Cap</TableHead>
-                    <TableHead className="text-right">Applications</TableHead>
-                    <TableHead className="text-right">Closing %</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -272,6 +274,12 @@ export function WhiteLabelToday(): JSX.Element {
                       <TableCell className="text-right tabular-nums">
                         {count(buyer.deliveredToday)}
                       </TableCell>
+                      <TableCell className="text-right tabular-nums" data-billable>
+                        {count(buyer.billableToday ?? 0)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-revenue>
+                        {dollars(buyer.revenueToday ?? 0)}
+                      </TableCell>
                       <TableCell
                         className={cn(
                           'text-right tabular-nums',
@@ -282,12 +290,6 @@ export function WhiteLabelToday(): JSX.Element {
                         {buyer.capMax === null
                           ? `${count(buyer.capUsed)} / —`
                           : `${count(buyer.capUsed)} / ${count(buyer.capMax)}`}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {count(buyer.applicationsToday)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {pct(buyer.closingPct, 1)}
                       </TableCell>
                     </TableRow>
                   ))}

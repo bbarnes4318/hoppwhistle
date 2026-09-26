@@ -13,7 +13,7 @@ import {
   ShieldAlert,
   ArrowUpRight,
 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { AnswerOrderControl } from '@/components/campaigns/answer-order-control';
@@ -57,9 +57,30 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { answerOrderOf } from '@/lib/answer-order';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+/** The tabs a campaign has; which of them a viewer sees depends on who they are. */
+const CAMPAIGN_TABS = ['settings', 'agents', 'publishers', 'buyers', 'numbers', 'flow'] as const;
+type CampaignTab = (typeof CAMPAIGN_TABS)[number];
+
+/**
+ * The tab `?tab=` asks for, when this viewer can see it; otherwise Settings.
+ * A link to `?tab=buyers` opens Buyers, and a link to a tab this viewer does
+ * not have opens where everybody starts rather than on nothing.
+ */
+function initialCampaignTab(
+  requested: string | null,
+  visible: { canManage: boolean; canBuildFlows: boolean }
+): CampaignTab {
+  const tab = CAMPAIGN_TABS.find(key => key === requested);
+  if (!tab) return 'settings';
+  if ((tab === 'agents' || tab === 'numbers') && !visible.canManage) return 'settings';
+  if (tab === 'flow' && !visible.canBuildFlows) return 'settings';
+  return tab;
+}
 
 interface Publisher {
   id: string;
@@ -140,7 +161,16 @@ interface CampaignDetails {
 export default function CampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+
+  /*
+   * A white-label owner reaches a campaign from Routing, where Campaigns is a
+   * tab; /campaigns itself redirects them there. "Back" says where it goes.
+   */
+  const whiteLabelView = useWhiteLabelView();
+  const backHref = whiteLabelView ? '/routing' : '/campaigns';
+  const backLabel = whiteLabelView ? 'Back to Routing' : 'Back to Campaigns';
 
   /*
    * Staff manage a campaign; an agency principal reads its own, view-only.
@@ -167,7 +197,18 @@ export default function CampaignDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState('settings');
+  const [activeTab, setActiveTab] = useState<string>(() =>
+    initialCampaignTab(searchParams?.get('tab') ?? null, { canManage, canBuildFlows })
+  );
+
+  // The URL follows the tab, so a reload or a shared link lands on it.
+  const changeTab = useCallback(
+    (tab: string) => {
+      setActiveTab(tab);
+      router.replace(`/campaigns/${encodeURIComponent(id)}?tab=${tab}`, { scroll: false });
+    },
+    [id, router]
+  );
 
   // Core Campaign Data
   const [campaign, setCampaign] = useState<CampaignDetails | null>(null);
@@ -582,41 +623,45 @@ export default function CampaignDetailPage() {
 
   if (loading && !campaign) {
     return (
-      <div className="flex h-[400px] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="page-canvas">
+        <div className="flex h-[400px] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       </div>
     );
   }
 
   if (!campaign) {
     return (
-      <div className="flex flex-col items-center justify-center h-[300px] border border-dashed rounded-lg p-6 bg-sunken">
-        <ShieldAlert className="h-10 w-10 text-dropped-ink mb-4" />
-        <h3 className="text-lg font-medium">Campaign Not Found</h3>
-        <p className="text-sm text-muted-foreground mt-1 mb-4">
-          This campaign does not exist or you do not have permission to view it.
-        </p>
-        <Button onClick={() => router.push('/campaigns')} variant="outline">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Campaigns
-        </Button>
+      <div className="page-canvas">
+        <div className="flex flex-col items-center justify-center h-[300px] border border-dashed rounded-lg p-6 bg-sunken">
+          <ShieldAlert className="h-10 w-10 text-dropped-ink mb-4" />
+          <h3 className="text-lg font-medium">Campaign Not Found</h3>
+          <p className="text-sm text-muted-foreground mt-1 mb-4">
+            This campaign does not exist or you do not have permission to view it.
+          </p>
+          <Button onClick={() => router.push(backHref)} variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" /> {backLabel}
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="page-canvas space-y-6">
       {/* Breadcrumb Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button
-            onClick={() => router.push('/campaigns')}
+            onClick={() => router.push(backHref)}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1 group"
           >
             <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-1" />
-            Back to Campaigns
+            {backLabel}
           </button>
           <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-bold tracking-tight">{campaign.name}</h2>
+            <h2 className="t-title text-ink">{campaign.name}</h2>
             <Badge
               className={cn(
                 campaign.status === 'ACTIVE' &&
@@ -652,7 +697,7 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Tabs list */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
         <TabsList
           className={cn(
             // A row that scrolls on a phone, a grid from 768px: five or six

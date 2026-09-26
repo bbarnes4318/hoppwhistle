@@ -26,6 +26,17 @@
  * each call still being PAYABLE and undisputed: two operators recording the
  * same range at once cannot both pay it. The second finds nothing left and is
  * refused 409, as is any range with nothing payable in it.
+ *
+ * ── Returns after the publisher was paid ─────────────────────────────────────
+ *
+ * Accepting a return on a call its publisher was already paid for writes a
+ * CLAWBACK row (a negative amount, see routes/returns.ts). The publisher's next
+ * payment is recorded net of every clawback still waiting: they are locked
+ * FOR UPDATE inside the payment's transaction, summed, and linked to the new
+ * PAYMENT through `appliedToPaymentId`, so two payments recorded at once cannot
+ * both deduct the same return. When the returns are more than what is payable
+ * the payment is refused 409 CLAWBACK_EXCEEDS_PAYABLE and nothing is written:
+ * the calls stay PAYABLE and the returns carry to the next payment.
  */
 
 import { Prisma, type PrismaClient } from '@prisma/client';
@@ -47,6 +58,17 @@ const REFERENCE_MAX_LENGTH = 120;
 /** Raised inside the payment transaction to roll it back with a 409. */
 class NothingPayableError extends Error {}
 
+/** Raised inside the payment transaction when returns owed are at least the payable. */
+class ClawbackExceedsPayableError extends Error {
+  constructor(
+    readonly payable: Prisma.Decimal,
+    readonly clawbacks: Prisma.Decimal,
+    readonly net: Prisma.Decimal
+  ) {
+    super('CLAWBACK_EXCEEDS_PAYABLE');
+  }
+}
+
 function money(value: Prisma.Decimal): number {
   return Number(value.toFixed(2));
 }
@@ -54,6 +76,12 @@ function money(value: Prisma.Decimal): number {
 interface PaymentRow {
   id: string;
   publisherId: string;
+  /** PAYMENT, or CLAWBACK: a return deducted from the publisher's next payment. */
+  kind: string;
+  /** CLAWBACK only: the returned call. */
+  callId: string | null;
+  /** CLAWBACK only: the PAYMENT it came out of; null while it waits. */
+  appliedToPaymentId: string | null;
   amount: Prisma.Decimal;
   periodFrom: Date;
   periodTo: Date;
@@ -67,6 +95,9 @@ function paymentView(payment: PaymentRow, names: Map<string, string>) {
     id: payment.id,
     publisherId: payment.publisherId,
     publisherName: names.get(payment.publisherId) ?? 'Unknown publisher',
+    kind: payment.kind,
+    callId: payment.callId,
+    appliedToPaymentId: payment.appliedToPaymentId,
     amount: money(payment.amount),
     periodFrom: payment.periodFrom.toISOString(),
     periodTo: payment.periodTo.toISOString(),
@@ -96,6 +127,10 @@ export interface PayoutsPublisherRow {
   payableCalls: number;
   held: number;
   paid: number;
+  /** Returns accepted after this publisher was paid, not yet deducted: positive. */
+  returnsPending: number;
+  /** payable − returnsPending. Negative when the publisher owes the agency. */
+  netPayable: number;
   lastPayment: ReturnType<typeof paymentView> | null;
 }
 
@@ -103,7 +138,7 @@ export interface PayoutsSummary {
   publishers: PayoutsPublisherRow[];
   payments: Array<ReturnType<typeof paymentView>>;
   /** Across every publisher: what is owed now, and on how many calls. */
-  totals: { payable: number; payableCalls: number };
+  totals: { payable: number; payableCalls: number; returnsPending: number; netPayable: number };
 }
 
 /**
@@ -116,14 +151,20 @@ export interface PayoutsSummary {
  *
  * A call is HELD while its payout status is HELD or it carries an OPEN dispute
  * (`isOpenDispute`). A decided return is not open: a denied one is payable
- * again, and an accepted one has had its payout zeroed or was already PAID.
+ * again, and an accepted one has had its payout zeroed -- or, when it was
+ * already PAID, reads CLAWED_BACK and counts as neither paid nor held; the
+ * deduction it owes is `returnsPending` until the next payment takes it.
+ *
+ * `paid` is what was paid for this period's calls; CLAWBACK rows never count
+ * toward it. `returnsPending` is every clawback not yet deducted, whatever the
+ * period, because it comes out of the next payment whenever that is.
  */
 export async function getPayoutsSummary(
   prisma: Pick<PrismaClient, 'publisher' | 'call' | 'publisherPayment'>,
   tenantId: string,
   period: Pick<ResolvedPeriod, 'start' | 'endExclusive'>
 ): Promise<PayoutsSummary> {
-  const [publishers, calls, payments] = await Promise.all([
+  const [publishers, calls, payments, pending] = await Promise.all([
     prisma.publisher.findMany({
       where: { tenantId },
       select: { id: true, name: true },
@@ -147,7 +188,15 @@ export async function getPayoutsSummary(
       orderBy: { paidAt: 'desc' },
       take: 100,
     }),
+    prisma.publisherPayment.groupBy({
+      by: ['publisherId'],
+      where: { tenantId, kind: 'CLAWBACK', appliedToPaymentId: null },
+      _sum: { amount: true },
+    }),
   ]);
+  const pendingByPublisher = new Map(
+    pending.map(row => [row.publisherId, (row._sum.amount ?? new Prisma.Decimal(0)).abs()])
+  );
 
   const names = new Map(publishers.map(publisher => [publisher.id, publisher.name]));
 
@@ -178,20 +227,24 @@ export async function getPayoutsSummary(
 
   const lastPayment = new Map<string, PaymentRow>();
   for (const payment of payments) {
+    if (payment.kind !== 'PAYMENT') continue;
     if (!lastPayment.has(payment.publisherId)) lastPayment.set(payment.publisherId, payment);
   }
 
   let totalPayable = zero();
   let totalPayableCalls = 0;
-  for (const row of figures.values()) {
+  let totalPending = zero();
+  for (const [publisherId, row] of figures) {
     totalPayable = totalPayable.plus(row.payable);
     totalPayableCalls += row.payableCalls;
+    totalPending = totalPending.plus(pendingByPublisher.get(publisherId) ?? 0);
   }
 
   return {
     publishers: publishers.map(publisher => {
       const row = figures.get(publisher.id)!;
       const last = lastPayment.get(publisher.id);
+      const returnsPending = pendingByPublisher.get(publisher.id) ?? zero();
       return {
         publisherId: publisher.id,
         publisherName: publisher.name,
@@ -199,11 +252,18 @@ export async function getPayoutsSummary(
         payableCalls: row.payableCalls,
         held: money(row.held),
         paid: money(row.paid),
+        returnsPending: money(returnsPending),
+        netPayable: money(row.payable.minus(returnsPending)),
         lastPayment: last ? paymentView(last, names) : null,
       };
     }),
     payments: payments.map(payment => paymentView(payment, names)),
-    totals: { payable: money(totalPayable), payableCalls: totalPayableCalls },
+    totals: {
+      payable: money(totalPayable),
+      payableCalls: totalPayableCalls,
+      returnsPending: money(totalPending),
+      netPayable: money(totalPayable.minus(totalPending)),
+    },
   };
 }
 
@@ -332,6 +392,32 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
           );
           if (calls.length === 0 || total.lte(0)) throw new NothingPayableError();
 
+          /*
+           * The returns this publisher still owes, locked so a payment being
+           * recorded at the same moment waits here, then finds them applied
+           * (Postgres re-checks the WHERE on the row it waited for) and skips
+           * them. Never another tenant's: the tenant is in the WHERE.
+           */
+          const clawbacks = await tx.$queryRaw<
+            Array<{ id: string; callId: string | null; amount: Prisma.Decimal }>
+          >`
+            SELECT "id", "callId", "amount"
+            FROM "publisher_payments"
+            WHERE "tenantId" = ${tenantId}
+              AND "publisherId" = ${publisher.id}
+              AND "kind" = 'CLAWBACK'
+              AND "appliedToPaymentId" IS NULL
+            ORDER BY "createdAt", "id"
+            FOR UPDATE
+          `;
+          const gross = total.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+          const clawbackTotal = clawbacks.reduce(
+            (sum, row) => sum.plus(row.amount),
+            new Prisma.Decimal(0)
+          );
+          const net = gross.plus(clawbackTotal);
+          if (net.lte(0)) throw new ClawbackExceedsPayableError(gross, clawbackTotal, net);
+
           const now = new Date();
           /*
            * Conditional on each call still being payable and undisputed. A
@@ -348,7 +434,8 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
             data: {
               tenantId,
               publisherId: publisher.id,
-              amount: total.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+              kind: 'PAYMENT',
+              amount: net,
               periodFrom: periodFrom!,
               periodTo: periodTo!,
               method,
@@ -357,6 +444,13 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
               createdById: userId,
             },
           });
+
+          if (clawbacks.length > 0) {
+            await tx.publisherPayment.updateMany({
+              where: { id: { in: clawbacks.map(row => row.id) }, tenantId },
+              data: { appliedToPaymentId: created.id },
+            });
+          }
 
           await tx.auditLog.create({
             data: {
@@ -372,6 +466,10 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
                 publisherId: publisher.id,
                 publisherName: publisher.name,
                 amount: created.amount.toFixed(2),
+                gross: gross.toFixed(2),
+                clawbacks: clawbackTotal.toFixed(2),
+                net: net.toFixed(2),
+                clawbackIds: clawbacks.map(row => row.id),
                 calls: calls.length,
                 periodFrom: periodFrom!.toISOString(),
                 periodTo: periodTo!.toISOString(),
@@ -381,7 +479,7 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
             },
           });
 
-          return { created, calls: calls.length };
+          return { created, calls: calls.length, gross, clawbacks, net };
         });
       } catch (error) {
         if (error instanceof NothingPayableError) {
@@ -392,6 +490,17 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
             },
           });
         }
+        if (error instanceof ClawbackExceedsPayableError) {
+          return reply.code(409).send({
+            error: {
+              code: 'CLAWBACK_EXCEEDS_PAYABLE',
+              message: `Nothing to pay: $${error.clawbacks.abs().toFixed(2)} in returns is more than the $${error.payable.toFixed(2)} payable. It carries to the next payment.`,
+              payable: money(error.payable),
+              clawbacks: money(error.clawbacks),
+              net: money(error.net),
+            },
+          });
+        }
         throw error;
       }
 
@@ -399,6 +508,13 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
         data: {
           ...paymentView(payment.created, new Map([[publisher.id, publisher.name]])),
           calls: payment.calls,
+          gross: money(payment.gross),
+          clawbacks: payment.clawbacks.map(row => ({
+            id: row.id,
+            callId: row.callId,
+            amount: money(row.amount),
+          })),
+          net: money(payment.net),
         },
       });
     }

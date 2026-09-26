@@ -24,9 +24,16 @@ import type { ReturnDecision, ReturnRow, ReturnSubject } from './returns-types';
 /** The server's limit on a decision note. */
 export const NOTE_MAX_LENGTH = 500;
 
-/** Shown on Accept when the publisher has already been paid for the call. */
-export const PAID_PUBLISHER_WARNING =
-  'This publisher was already paid for this call. Accepting refunds the buyer; recover it from the publisher separately.';
+/**
+ * Shown on Accept when the publisher has already been paid for the call: the
+ * payout is taken back out of their next payment (routes/returns.ts).
+ */
+export function paidPublisherWarning(
+  subject: Pick<ReturnSubject, 'publisherPayoutAmount'>
+): string {
+  const amount = dollars(subject.publisherPayoutAmount ?? 0);
+  return `This publisher was already paid ${amount} for this call. ${amount} will be deducted from their next payment.`;
+}
 
 /**
  * What a decision will do to the buyer's money, in one sentence.
@@ -58,7 +65,7 @@ export function publisherEffect(subject: ReturnSubject, decision: ReturnDecision
   if (status === 'PAYABLE' || status === 'HELD') {
     return `${publisher} is not paid the ${amount} payout for this call.`;
   }
-  if (status === 'PAID') return `${publisher} keeps the ${amount} already paid.`;
+  if (status === 'PAID') return `${publisher}'s ${amount} comes out of their next payment.`;
   return 'There is no publisher payout on this call.';
 }
 
@@ -137,7 +144,9 @@ export function ReturnDecisionDialog({
               </div>
             </dl>
 
-            {alreadyPaid ? <Notice tone="warning" title={PAID_PUBLISHER_WARNING} /> : null}
+            {alreadyPaid && subject ? (
+              <Notice tone="warning" title={paidPublisherWarning(subject)} />
+            ) : null}
 
             <div className="grid gap-2">
               <Label htmlFor="return-note">Note (optional)</Label>

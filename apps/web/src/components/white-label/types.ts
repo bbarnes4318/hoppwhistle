@@ -78,6 +78,14 @@ export interface PublisherPaymentView {
   id: string;
   publisherId: string;
   publisherName: string;
+  /**
+   * PAYMENT is what the agency paid. CLAWBACK is a return accepted after the
+   * publisher was paid for the call: a negative amount, deducted from the
+   * publisher's next payment (`appliedToPaymentId`, null while it waits).
+   */
+  kind: 'PAYMENT' | 'CLAWBACK';
+  callId: string | null;
+  appliedToPaymentId: string | null;
   amount: number;
   periodFrom: string;
   periodTo: string;
@@ -96,6 +104,10 @@ export interface PayoutsSummary {
     payableCalls: number;
     held: number;
     paid: number;
+    /** Returns accepted after this publisher was paid, not yet deducted. */
+    returnsPending: number;
+    /** payable − returnsPending; negative when the publisher owes the agency. */
+    netPayable: number;
     lastPayment: PublisherPaymentView | null;
   }>;
   payments: PublisherPaymentView[];
@@ -153,8 +165,12 @@ export interface WhiteLabelToday {
     kind: string;
     callsInFlight: number;
     deliveredToday: number;
+    /** Kept for older screens; buyers write no applications here, so always 0. */
     applicationsToday: number;
     closingPct: number | null;
+    /** Today's billable calls and what they sold for (call sales, by buyer). */
+    billableToday: number;
+    revenueToday: number;
     atCap: boolean;
     capUsed: number;
     capMax: number | null;

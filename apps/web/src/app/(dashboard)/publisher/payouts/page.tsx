@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
+import { CLAWED_BACK, CLAWED_BACK_BADGE, CLAWED_BACK_LABEL } from '@/lib/payout-status';
 
 interface RevenueSummary {
   earnings: string;
@@ -93,6 +94,12 @@ function PublisherPayoutsPage() {
         return (
           <Badge variant="outline" className="text-xs uppercase font-semibold">
             Cancelled
+          </Badge>
+        );
+      case CLAWED_BACK:
+        return (
+          <Badge variant="outline" className={`text-xs font-semibold ${CLAWED_BACK_BADGE}`}>
+            {CLAWED_BACK_LABEL}
           </Badge>
         );
       default:

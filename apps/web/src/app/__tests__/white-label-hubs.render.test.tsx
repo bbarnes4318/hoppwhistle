@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ReturnRow } from '@/components/buyers/returns-types';
+import type { Leaderboard, LeaderboardRow } from '@/components/leaderboard/types';
 import type { WhiteLabelToday } from '@/components/white-label/types';
 import { WHITE_LABEL_REDIRECTS } from '@/lib/staff-only-routes';
 
@@ -21,6 +22,8 @@ import { WHITE_LABEL_REDIRECTS } from '@/lib/staff-only-routes';
 
 let whiteLabel = true;
 let upgrades: string[] = [];
+/** A NetEnroll operator inside the agency, not previewing a role. */
+let platformAdmin = false;
 
 /** Bodies by pathname, exactly as the server would send them. */
 let answers: Record<string, unknown> = {};
@@ -73,6 +76,7 @@ function installFetch(): void {
             roles: ['OWNER', 'ADMIN'],
             permissions: ['admin:*'],
             tenantId: 'tenant-llp',
+            isPlatformAdmin: platformAdmin,
             whiteLabel,
             upgrades,
             brand: whiteLabel ? { theme: 'life-leads-plus', name: 'Life Leads Plus' } : null,
@@ -80,7 +84,15 @@ function installFetch(): void {
         });
       }
       if (url.pathname === '/api/v1/platform/context') {
-        return json({ data: { isPlatformAdmin: false, actingTenant: null, previewRole: null } });
+        return json({
+          data: platformAdmin
+            ? {
+                isPlatformAdmin: true,
+                actingTenant: { id: 'tenant-llp', name: 'Life Leads Plus' },
+                previewRole: null,
+              }
+            : { isPlatformAdmin: false, actingTenant: null, previewRole: null },
+        });
       }
       const key = `${method} ${url.pathname}`;
       if (key in answers) return json(answers[key]);
@@ -98,8 +110,10 @@ function installFetch(): void {
 let pathname = '/dashboard';
 let search = new URLSearchParams();
 let redirects: string[] = [];
+let routeParams: Record<string, string> = {};
 
 vi.mock('next/navigation', () => ({
+  useParams: () => routeParams,
   usePathname: () => pathname,
   useRouter: () => ({
     replace: (to: string) => redirects.push(to),
@@ -176,8 +190,10 @@ const TODAY: WhiteLabelToday = {
       kind: 'buyer',
       callsInFlight: 2,
       deliveredToday: 6,
-      applicationsToday: 2,
-      closingPct: 33.3,
+      applicationsToday: 0,
+      closingPct: null,
+      billableToday: 5,
+      revenueToday: 212.5,
       atCap: true,
       capUsed: 6,
       capMax: 6,
@@ -227,7 +243,7 @@ function returnRow(overrides: Partial<ReturnRow>): ReturnRow {
     disputedBy: 'buyer@acme.test',
     recordingId: 'rec-1',
     decision: null,
-    returnAfterPublisherPaid: false,
+    clawback: null,
     ...overrides,
   };
 }
@@ -271,6 +287,106 @@ const ROSTER = {
   },
 };
 
+function leaderboardRow(overrides: Partial<LeaderboardRow>): LeaderboardRow {
+  return {
+    userId: 'agent-1',
+    name: 'Ada Agent',
+    email: 'agent@llp.test',
+    rank: 1,
+    points: 40,
+    pointsBreakdown: {
+      applications: 30,
+      uniqueCallers: 8,
+      outboundConnects: 0,
+      talkTime: 2,
+      conversionBonus: 0,
+      total: 40,
+    },
+    movement: null,
+    previousRank: null,
+    inboundCalls: 9,
+    uniqueInboundCallers: 8,
+    outboundCalls: 0,
+    outboundConnected: 0,
+    outboundConnectPct: null,
+    applications: 3,
+    annualizedPremium: 1800,
+    conversionPct: 37.5,
+    closingPct: 33.3,
+    talkTimeSeconds: 1500,
+    hoursWorked: null,
+    occupancyPct: null,
+    applicationsPerHour: null,
+    streakDays: 0,
+    personalBest: null,
+    badges: [],
+    ...overrides,
+  };
+}
+
+const AGENCY_TOTALS = {
+  inboundCalls: 9,
+  uniqueInboundCallers: 8,
+  outboundCalls: 0,
+  outboundConnected: 0,
+  applications: 3,
+  annualizedPremium: 1800,
+  talkTimeSeconds: 1500,
+  conversionPct: 37.5,
+  closingPct: 33.3,
+};
+
+/** An agency that took nine inbound calls today and dialled nobody. */
+const LEADERBOARD: Leaderboard = {
+  period: {
+    key: 'TODAY',
+    label: 'Today',
+    from: '2026-09-25',
+    to: '2026-09-25',
+    days: 1,
+    complete: false,
+  },
+  previousPeriod: { label: 'Yesterday', from: '2026-09-24', to: '2026-09-24' },
+  agency: AGENCY_TOTALS,
+  previousAgency: AGENCY_TOTALS,
+  agencyChange: null,
+  rows: [leaderboardRow({})],
+  records: { bestDay: null, longestStreak: null },
+  you: null,
+  scoring: {
+    points: {
+      perApplication: 10,
+      perUniqueCaller: 1,
+      perOutboundConnect: 1,
+      perTenMinutesTalk: 1,
+      perConversionPoint: 1,
+      conversionBonusMinCallers: 10,
+    },
+    badges: [],
+    streakBadgeDays: 3,
+    lookbackDays: 30,
+  },
+};
+
+const CAMPAIGN = {
+  id: 'camp-1',
+  name: 'Final Expense',
+  offerName: 'Final Expense',
+  country: 'US',
+  recordingEnabled: true,
+  status: 'ACTIVE',
+  publisherId: null,
+  publisher: null,
+  flowId: null,
+  flow: null,
+  billableDurationSeconds: 90,
+  publisherPayoutPerBillableCall: '15.00',
+  buyerPricePerBillableCall: '40.00',
+  calls: 12,
+  phoneNumbers: 2,
+  metadata: null,
+};
+
 /* ── The tests ────────────────────────────────────────────────────────────── */
 
 describe('the white-label portal', () => {
@@ -286,6 +402,7 @@ describe('the white-label portal', () => {
       import('../(dashboard)/routing/page'),
       import('../(dashboard)/settings/page'),
       import('../(dashboard)/upgrades/page'),
+      import('../(dashboard)/campaigns/[id]/page'),
     ]);
   }, 120_000);
 
@@ -295,6 +412,8 @@ describe('the white-label portal', () => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     whiteLabel = true;
     upgrades = [];
+    platformAdmin = false;
+    routeParams = {};
     requested.length = 0;
     posted.length = 0;
     redirects = [];
@@ -349,6 +468,15 @@ describe('the white-label portal', () => {
         '/buyers?id=buyer-acme'
       );
       expect(buyer.querySelector('[data-cap]')?.textContent).toBe('6 / 6');
+      expect(buyer.querySelector('[data-billable]')?.textContent).toBe('5');
+      expect(buyer.querySelector('[data-revenue]')?.textContent).toBe('$212.50');
+
+      // Buyers write no applications here: the columns that were always 0 and
+      // blank are gone, and the ones that say something are in their place.
+      const headers = [...(buyer.closest('table') as HTMLElement).querySelectorAll('th')].map(
+        th => th.textContent
+      );
+      expect(headers).toEqual(['Buyer', 'Calls up', 'Delivered', 'Billable', 'Revenue', 'Cap']);
 
       // Not on this page: the chart and the call history the old dashboard had.
       expect(screen.queryByText(/Sales today/i)).toBeNull();
@@ -424,6 +552,48 @@ describe('the white-label portal', () => {
       ]);
     });
 
+    it('shows no outbound tile or Out/Conn columns for an agency that does not dial', async () => {
+      answers['/api/v1/leaderboard'] = { data: LEADERBOARD };
+      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(screen.getByText('The board')).toBeTruthy());
+
+      expect(figure('Outbound calls')).toBeUndefined();
+      expect(figure('Unique callers')).toBe('8');
+      expect(screen.getByText('9 inbound calls')).toBeTruthy();
+      const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
+      expect(headers).toContain('In');
+      expect(headers).not.toContain('Out');
+      expect(headers).not.toContain('Conn');
+      expect(screen.queryByText(/per outbound call connected/)).toBeNull();
+    });
+
+    it('shows them with the Power Dialer', async () => {
+      upgrades = ['POWER_DIALER'];
+      answers['/api/v1/leaderboard'] = { data: LEADERBOARD };
+      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(screen.getByText('The board')).toBeTruthy());
+
+      expect(figure('Outbound calls')).toBe('0');
+      expect(figure('Unique callers')).toBeUndefined();
+      const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
+      expect(headers).toContain('Out');
+      expect(headers).toContain('Conn');
+      expect(screen.getByText(/per outbound call connected/)).toBeTruthy();
+    });
+
+    it('shows them for an agency that dialled, whatever its upgrades', async () => {
+      answers['/api/v1/leaderboard'] = {
+        data: {
+          ...LEADERBOARD,
+          agency: { ...AGENCY_TOTALS, outboundCalls: 4, outboundConnected: 2 },
+        },
+      };
+      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(figure('Outbound calls')).toBe('4'));
+      const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
+      expect(headers).toContain('Out');
+    });
+
     it('changes tab by replacing ?tab=', async () => {
       await mount('/agents', () => import('../(dashboard)/agents/page'));
       await waitFor(() => expect(activeTab()).toBe('performance'));
@@ -462,8 +632,13 @@ describe('the white-label portal', () => {
       fireEvent.click(within(paid).getByRole('button', { name: 'Accept' }));
       const dialog = await screen.findByRole('dialog');
       expect(
-        within(dialog).getByText(/This publisher was already paid for this call/)
+        within(dialog).getByText(
+          'This publisher was already paid $15.00 for this call. $15.00 will be deducted from their next payment.'
+        )
       ).toBeTruthy();
+      expect(dialog.querySelector('[data-effect="publisher"]')?.textContent).toBe(
+        "Alpha Media's $15.00 comes out of their next payment."
+      );
       expect(dialog.querySelector('[data-effect="buyer"]')?.textContent).toBe(
         "$40.00 is credited back to Acme Senior's balance."
       );
@@ -557,7 +732,126 @@ describe('the white-label portal', () => {
     });
   });
 
+  describe('A campaign', () => {
+    function answerCampaign(): void {
+      answers['/api/v1/campaigns/camp-1'] = CAMPAIGN;
+      answers['/api/v1/campaigns/camp-1/publishers'] = { data: [] };
+      answers['/api/v1/campaigns/camp-1/buyers'] = { data: [] };
+      answers['/api/v1/did-routes'] = { routes: [] };
+    }
+
+    const tabState = (name: string) => screen.getByRole('tab', { name }).getAttribute('data-state');
+
+    it('opens the tab ?tab= names', async () => {
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount(
+        '/campaigns/camp-1?tab=buyers',
+        () => import('../(dashboard)/campaigns/[id]/page')
+      );
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: 'Final Expense' })).toBeTruthy()
+      );
+      expect(tabState('Buyers')).toBe('active');
+      expect(tabState('Settings')).toBe('inactive');
+    });
+
+    it('opens on Settings for a tab it does not have', async () => {
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount('/campaigns/camp-1?tab=flow', () => import('../(dashboard)/campaigns/[id]/page'));
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: 'Final Expense' })).toBeTruthy()
+      );
+      expect(tabState('Settings')).toBe('active');
+    });
+
+    it('puts the tab in the URL when it changes', async () => {
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount('/campaigns/camp-1', () => import('../(dashboard)/campaigns/[id]/page'));
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: 'Final Expense' })).toBeTruthy()
+      );
+      const publishers = screen.getByRole('tab', { name: 'Publishers' });
+      fireEvent.mouseDown(publishers);
+      fireEvent.click(publishers);
+      await waitFor(() => expect(redirects).toContain('/campaigns/camp-1?tab=publishers'));
+      expect(tabState('Publishers')).toBe('active');
+    });
+
+    it('lines up with every other page, titled as they are', async () => {
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount('/campaigns/camp-1', () => import('../(dashboard)/campaigns/[id]/page'));
+      const title = await screen.findByRole('heading', { name: 'Final Expense' });
+      const root = title.closest('.page-canvas') as HTMLElement;
+      expect(root).toBeTruthy();
+      expect(root.parentElement?.closest('.page-canvas')).toBeNull();
+      expect(title.className).toContain('t-title');
+      expect(title.className).not.toContain('text-3xl');
+    });
+
+    it('goes back to Routing for a white-label owner', async () => {
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount('/campaigns/camp-1', () => import('../(dashboard)/campaigns/[id]/page'));
+      fireEvent.click(await screen.findByRole('button', { name: /Back to Routing/ }));
+      expect(redirects).toContain('/routing');
+    });
+
+    it('goes back to Campaigns for anybody else', async () => {
+      whiteLabel = false;
+      answerCampaign();
+      routeParams = { id: 'camp-1' };
+      await mount('/campaigns/camp-1', () => import('../(dashboard)/campaigns/[id]/page'));
+      fireEvent.click(await screen.findByRole('button', { name: /Back to Campaigns/ }));
+      expect(redirects).toContain('/campaigns');
+    });
+  });
+
   describe('Settings', () => {
+    it('is one row of tabs for a white-label owner, opening on API keys, with no Workspace', async () => {
+      await mount('/settings', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(activeTab()).toBe('api-keys'));
+      expect(screen.getAllByRole('tablist')).toHaveLength(1);
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+        'API keys',
+        'Webhooks',
+        'DNC lists',
+        'Legal',
+        'Plan & Billing',
+      ]);
+      expect(screen.getByText('Manage your API authentication keys')).toBeTruthy();
+      expect(screen.queryByRole('tab', { name: 'Workspace' })).toBeNull();
+      expect(screen.queryByText(/demo/i)).toBeNull();
+    });
+
+    it('lands the old General tab on API keys', async () => {
+      await mount('/settings?tab=general', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(activeTab()).toBe('api-keys'));
+    });
+
+    it('opens Plan & Billing on ?tab=plan', async () => {
+      await mount('/settings?tab=plan', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(activeTab()).toBe('plan'));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Rate' })).toBeTruthy());
+    });
+
+    it('shows no Workspace to a normal agency either', async () => {
+      whiteLabel = false;
+      await mount('/settings', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Webhooks' })).toBeTruthy());
+      expect(screen.queryByRole('tab', { name: 'Workspace' })).toBeNull();
+    });
+
+    it('still shows Workspace to a platform admin', async () => {
+      whiteLabel = false;
+      platformAdmin = true;
+      await mount('/settings', () => import('../(dashboard)/settings/page'));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy());
+    });
+
     it('stacks Rate, Delivery and Settlements under Plan & Billing', async () => {
       await mount(
         '/settings?tab=plan&section=settlements',
