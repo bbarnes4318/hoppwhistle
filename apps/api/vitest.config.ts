@@ -98,6 +98,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles` and `audit_logs` to seed two white-label
   // agencies with publishers, payable calls and clawbacks.
   '**/src/__tests__/payout-clawbacks.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed a white-label and a
+  // normal agency, each with an owner and DNC lists.
+  '**/src/__tests__/dnc-lists-access.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',

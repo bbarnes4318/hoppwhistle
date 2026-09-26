@@ -55,10 +55,9 @@ const DAY2_RANGE = { periodFrom: '2026-09-11T04:00:00.000Z', periodTo: '2026-09-
 const BOTH_DAYS = { periodFrom: DAY1_RANGE.periodFrom, periodTo: DAY2_RANGE.periodTo };
 const PERIOD = 'period=CUSTOM&from=2026-09-10&to=2026-09-11';
 
-const MIGRATION = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../prisma/migrations/20260927000000_publisher_payment_clawbacks/migration.sql'
-);
+const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), '../../prisma/migrations');
+const MIGRATION = `${MIGRATIONS}/20260927000000_publisher_payment_clawbacks/migration.sql`;
+const CHECK_MIGRATION = `${MIGRATIONS}/20260928000000_clawback_check_callid/migration.sql`;
 
 describe.skipIf(!gate.available)('Payout clawbacks', () => {
   let prisma: ReturnType<typeof getPrismaClient>;
@@ -406,19 +405,25 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
   // The migration
   // ══════════════════════════════════════════════════════════════════════════
   describe('20260927000000_publisher_payment_clawbacks', () => {
-    it('runs twice without error', async () => {
-      const sql = readFileSync(MIGRATION, 'utf8');
+    it('runs twice without error, and so does the CHECK that follows it', async () => {
       const client = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
       await client.connect();
       try {
-        await client.query(sql);
-        await client.query(sql);
+        for (const file of [MIGRATION, MIGRATION, CHECK_MIGRATION, CHECK_MIGRATION]) {
+          await client.query(readFileSync(file, 'utf8'));
+        }
+        const definition = await client.query<{ def: string }>(
+          `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+           WHERE conname = 'publisher_payments_kind_amount_check'`
+        );
+        expect(definition.rows).toHaveLength(1);
+        expect(definition.rows[0].def).not.toContain('callId');
       } finally {
         await client.end();
       }
     });
 
-    it('rejects a PAYMENT that is not positive, and a CLAWBACK that is not negative or has no call', async () => {
+    it('rejects a PAYMENT that is not positive and a CLAWBACK that is not negative', async () => {
       const callId = await payable(wl.id, wl.alpha, '10.00');
       const base = {
         tenantId: wl.id,
@@ -434,7 +439,7 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
         { kind: 'PAYMENT', amount: new Prisma.Decimal(-5) },
         { kind: 'CLAWBACK', amount: new Prisma.Decimal(0), callId },
         { kind: 'CLAWBACK', amount: new Prisma.Decimal(5), callId },
-        { kind: 'CLAWBACK', amount: new Prisma.Decimal(-5) },
+        { kind: 'CLAWBACK', amount: new Prisma.Decimal(0) },
       ];
       for (const row of bad) {
         await expect(
@@ -443,6 +448,30 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
         ).rejects.toThrow(/publisher_payments_kind_amount_check|check constraint/i);
       }
       expect(await prisma.publisherPayment.count()).toBe(0);
+    });
+
+    it('lets a call with a clawback be deleted, and keeps the clawback with no call', async () => {
+      const owed = await clawback(wl.id, wl.alpha, '20.00', wl.ownerId);
+
+      await prisma.call.delete({ where: { id: owed.callId } });
+
+      const row = await prisma.publisherPayment.findUniqueOrThrow({ where: { id: owed.id } });
+      expect(row).toMatchObject({
+        kind: 'CLAWBACK',
+        callId: null,
+        reference: `Return ${owed.callId}`,
+        appliedToPaymentId: null,
+      });
+      expect(row.amount.toFixed(2)).toBe('-20.00');
+
+      // Still deducted from the next payment.
+      await payable(wl.id, wl.alpha, '50.00');
+      const payment = await record(wl, wl.alpha, DAY1_RANGE);
+      expect(payment.statusCode, payment.body).toBe(201);
+      expect(payment.json().data).toMatchObject({
+        amount: 30,
+        clawbacks: [{ id: owed.id, callId: null, amount: -20 }],
+      });
     });
 
     it('rejects a second clawback for the same call', async () => {

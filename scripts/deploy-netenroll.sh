@@ -115,6 +115,7 @@ REQUIRED_MIGRATIONS="
 20260925000000_tenant_brand_theme
 20260926000000_tenant_white_label
 20260927000000_publisher_payment_clawbacks
+20260928000000_clawback_check_callid
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -456,6 +457,13 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'publisher_payments'
                 AND column_name = 'kind'" ;;
+    *_clawback_check_callid)
+      # One transaction that drops and re-adds the CHECK. Applied means the
+      # constraint exists and no longer names callId; absent (the probe returns
+      # no row) reads as not applied, like any other probe here.
+      echo "SELECT COALESCE((SELECT pg_get_constraintdef(oid) NOT LIKE '%callId%'
+              FROM pg_constraint
+              WHERE conname = 'publisher_payments_kind_amount_check'), false)" ;;
     *)
       echo "" ;;
   esac

@@ -418,6 +418,7 @@ describe('isRouteBlockedFor', () => {
     '/revenue',
     '/routing',
     '/upgrades',
+    '/settings/dnc',
   ];
   const HUBS = ['/agents', '/revenue', '/routing', '/upgrades'];
 

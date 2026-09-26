@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Copy, Trash2, Loader2, Shield, Scale, FileText } from 'lucide-react';
+import { Plus, Trash2, Loader2, Shield, Scale, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { DemoToggle } from '@/components/demo/demo-toggle';
@@ -13,6 +13,7 @@ import {
   PanelHeader,
   PanelTitle,
 } from '@/components/domain';
+import { DncListsView } from '@/components/settings/dnc-lists-view';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,10 +43,10 @@ interface Webhook {
 }
 
 /** One panel of the settings screen, rendered alone. */
-export type SettingsSection = 'api-keys' | 'webhooks' | 'dnc' | 'workspace' | 'legal';
+export type SettingsSection = 'webhooks' | 'dnc' | 'workspace' | 'legal';
 
 /**
- * The settings panels: webhooks, API keys, DNC lists, workspace and legal.
+ * The settings panels: webhooks, DNC lists, workspace and legal.
  *
  * Without `section` it is the whole screen, as it always was: its own row of
  * tabs, opening on Webhooks. With `section` it renders that one panel and no
@@ -235,100 +236,7 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
         </PanelBody>
       </Panel>
     ),
-    'api-keys': (
-      <Panel>
-        <PanelHeader
-          action={
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              Generate Key
-            </Button>
-          }
-        >
-          <PanelTitle>API Keys</PanelTitle>
-          <PanelDescription>Manage your API authentication keys</PanelDescription>
-        </PanelHeader>
-        <PanelBody flush className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Key</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-medium text-ink">Production Key</TableCell>
-                <TableCell className="t-data text-ink-2">cf_live_****1234</TableCell>
-                <TableCell className="t-data text-ink-3">
-                  {new Date().toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Tooltip content="Copy key" align="end">
-                    <Button variant="ghost" size="icon">
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </PanelBody>
-      </Panel>
-    ),
-    dnc: (
-      <Panel>
-        <PanelHeader
-          action={
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              Upload List
-            </Button>
-          }
-        >
-          <PanelTitle>DNC Lists</PanelTitle>
-          <PanelDescription>Upload and manage Do Not Call lists</PanelDescription>
-        </PanelHeader>
-        <PanelBody flush className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Entries</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-medium text-ink">Global DNC</TableCell>
-                <TableCell>
-                  <Badge variant="outline">Global</Badge>
-                </TableCell>
-                <TableCell className="t-num text-ink">1,234</TableCell>
-                <TableCell>
-                  <Badge variant="success">Active</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Tooltip content="Delete key" align="end">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="hover:bg-dropped-tint hover:text-dropped-ink"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </PanelBody>
-      </Panel>
-    ),
+    dnc: <DncListsView embedded />,
     legal: (
       <Panel>
         <PanelHeader>
@@ -441,7 +349,6 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
       <Tabs defaultValue="webhooks" className="w-full">
         <TabsList>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="dnc">DNC Lists</TabsTrigger>
           {isPlatformAdmin ? <TabsTrigger value="workspace">Workspace</TabsTrigger> : null}
           <TabsTrigger value="legal">Legal</TabsTrigger>
@@ -450,8 +357,6 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
         {isPlatformAdmin ? <TabsContent value="workspace">{panels.workspace}</TabsContent> : null}
 
         <TabsContent value="webhooks">{panels.webhooks}</TabsContent>
-
-        <TabsContent value="api-keys">{panels['api-keys']}</TabsContent>
 
         <TabsContent value="dnc">{panels.dnc}</TabsContent>
 
