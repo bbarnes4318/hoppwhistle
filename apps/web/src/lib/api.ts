@@ -287,8 +287,15 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        const errorBody = data as { error?: { code?: string; message?: string } } | null;
-        const code: string = errorBody?.error?.code || 'UNKNOWN_ERROR';
+        // Most routes answer `{ error: { code, message } }`; some older ones
+        // (the DID routes among them) answer `{ error: 'message' }`. Read both,
+        // so a refusal's own reason reaches the screen either way.
+        const errorBody = data as { error?: { code?: string; message?: string } | string } | null;
+        const errorField = errorBody?.error;
+        const code: string =
+          (typeof errorField === 'object' ? errorField?.code : undefined) || 'UNKNOWN_ERROR';
+        const errorMessage =
+          typeof errorField === 'string' ? errorField : errorField?.message;
 
         /*
          * The login redirect, and the one condition it must never fire on.
@@ -322,7 +329,7 @@ class ApiClient {
         return {
           error: {
             code,
-            message: errorBody?.error?.message || 'An error occurred',
+            message: errorMessage || 'An error occurred',
           },
         };
       }

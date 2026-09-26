@@ -2,19 +2,17 @@ import type { DncListType, Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
+import {
+  getActingTenantId,
+  getActingUserId,
+  resolveTenant,
+  sendTenantRefusal,
+} from '../lib/tenant-context.js';
 import { compliancePolicyService } from '../services/compliance-policy-service.js';
 import { complianceService } from '../services/compliance-service.js';
 import { consentProviderService } from '../services/consent-provider-service.js';
 
 const prisma = getPrismaClient();
-
-/**
- * These handlers read `request.user.id`, which `AuthenticatedUser` does not
- * carry (it has `userId`), so the value they record is always undefined. Kept
- * as-is to preserve behaviour; typed here so the read is explicit.
- */
-type LegacyUserIdCarrier = { id?: string } | undefined;
 
 export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void> {
   // Check compliance for a phone number
@@ -72,7 +70,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
       const { phoneNumber, reason, callId, expiresAt } = request.body;
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
-      const userId = (request.user as LegacyUserIdCarrier)?.id;
+      const userId = getActingUserId(request) ?? undefined;
 
       const policy = await compliancePolicyService.getEffectivePolicy(tenantId);
       if (!policy.allowOverride) {
@@ -222,7 +220,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
     };
   }>('/api/v1/compliance/dnc-lists', async (request, reply) => {
     try {
-      const user = request.user as LegacyUserIdCarrier;
+      const userId = getActingUserId(request) ?? undefined;
       const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
@@ -278,7 +276,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
           campaignId,
         },
         {
-          userId: user?.id,
+          userId,
           ipAddress: request.ip,
           requestId: request.id,
         }
@@ -307,7 +305,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
 
   // Delete DNC list
   fastify.delete('/api/v1/compliance/dnc-lists/:listId', async (request, reply) => {
-    const user = request.user as LegacyUserIdCarrier;
+    const userId = getActingUserId(request) ?? undefined;
     const tenantId = getActingTenantId(request);
     
     if (!tenantId) {
@@ -340,7 +338,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
       listId,
       { deleted: true, name: list.name },
       {
-        userId: user?.id,
+        userId,
         ipAddress: request.ip,
         requestId: request.id,
       }

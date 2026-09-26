@@ -1,5 +1,3 @@
-import type { TenantBudget } from '@prisma/client';
-
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { auditLog } from './audit.js';
@@ -141,6 +139,7 @@ export class QuotaService {
       where: { id: tenantId },
       include: {
         quota: true,
+        budget: true,
         quotaOverrides: {
           where: {
             quotaType: 'minutes_per_day',
@@ -158,10 +157,10 @@ export class QuotaService {
     }
 
     // Check override token
-    // FIXME: `budget` is not in this query's `include`, so it is always undefined at
-    // runtime and override tokens are never honoured here. Behaviour kept as-is;
-    // adding `budget: true` to the include would enable overrides for this check.
-    const budget = (tenant as typeof tenant & { budget?: TenantBudget | null }).budget;
+    // The budget carries the override token, so it has to be loaded here too.
+    // It was missing from this query, which is why a valid token never worked
+    // for this check while it did for concurrent calls.
+    const budget = tenant.budget;
     if (overrideToken && budget?.overrideToken === overrideToken) {
       if (budget.overrideTokenExpiresAt && budget.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };
@@ -245,6 +244,7 @@ export class QuotaService {
       where: { id: tenantId },
       include: {
         quota: true,
+        budget: true,
         quotaOverrides: {
           where: {
             quotaType: 'phone_numbers',
@@ -261,10 +261,10 @@ export class QuotaService {
       return { allowed: false, reason: 'Tenant not found' };
     }
 
-    // FIXME: `budget` is not in this query's `include`, so it is always undefined at
-    // runtime and override tokens are never honoured here. Behaviour kept as-is;
-    // adding `budget: true` to the include would enable overrides for this check.
-    const budget = (tenant as typeof tenant & { budget?: TenantBudget | null }).budget;
+    // The budget carries the override token, so it has to be loaded here too.
+    // It was missing from this query, which is why a valid token never worked
+    // for this check while it did for concurrent calls.
+    const budget = tenant.budget;
     if (overrideToken && budget?.overrideToken === overrideToken) {
       if (budget.overrideTokenExpiresAt && budget.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };

@@ -267,12 +267,12 @@ export function CustomerSideDemo() {
   }, [stage, isPlaying, portalAudioPlaying]);
 
   // Cleanup audio on unmount
+  // The element is captured on mount: React clears audioRef before this cleanup
+  // runs, and a detached <audio> keeps playing unless it is paused.
   useEffect(() => {
+    const audio = audioRef.current;
     return () => {
-      if (audioRef.current) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- preserves existing behaviour: reads the ref at unmount time (React has usually detached it by then, so this pause likely never fires)
-        audioRef.current.pause();
-      }
+      audio?.pause();
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }

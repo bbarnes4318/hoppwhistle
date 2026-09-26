@@ -131,3 +131,40 @@ describe('the switcher’s data path, against the shape the server actually send
     expect(() => (response.data as unknown[]).map(x => x)).toThrow(TypeError);
   });
 });
+
+describe('error bodies', () => {
+  it('reads the message from an `{ error: { code, message } }` body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          stubResponse(409, { error: { code: 'DUPLICATE', message: 'That number already has a route' } })
+        )
+      )
+    );
+
+    const { apiClient } = await import('../api');
+    const response = await apiClient.post('/api/v1/did-routes', {});
+
+    expect(response.data).toBeUndefined();
+    expect(response.error).toMatchObject({
+      code: 'DUPLICATE',
+      message: 'That number already has a route',
+    });
+  });
+
+  it('reads the message from an `{ error: "..." }` body, which some routes send', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(stubResponse(400, { error: 'Destination is required' })))
+    );
+
+    const { apiClient } = await import('../api');
+    const response = await apiClient.post('/api/v1/did-routes', {});
+
+    expect(response.error).toMatchObject({
+      code: 'UNKNOWN_ERROR',
+      message: 'Destination is required',
+    });
+  });
+});

@@ -2,8 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { resolveTenant } from '../lib/tenant-context.js';
-import type { AuthenticatedUser } from '../middleware/auth.js';
+import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { carrierService } from '../services/carrier-service.js';
 import { cnamService } from '../services/cnam-service.js';
 import { stirShakenService } from '../services/stir-shaken-service.js';
@@ -42,7 +41,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
   }>('/api/v1/admin/stir-shaken/:callId/override', async (request, reply) => {
     try {
       const { attestation, reason } = request.body;
-      const userId = (request.user as (AuthenticatedUser & { id?: string }) | undefined)?.id;
+      const userId = getActingUserId(request);
 
       if (!userId) {
         void reply.code(401);

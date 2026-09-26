@@ -283,9 +283,10 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
             state: body.state,
             zipCode: body.zipCode,
             leadSource: 'Retention Intake',
-            // FIXME: 'ACTIVE' is not a LeadStatus member, so Prisma rejects this create at
-            // runtime. Cast only preserves existing behaviour; pick a real status (e.g. NEW).
-            status: 'ACTIVE' as unknown as LeadStatus,
+            // A lead created here is a new one. This used to write 'ACTIVE', which
+            // is not a LeadStatus, so the create was rejected and a retention
+            // policy could never be set up for a number with no lead yet.
+            status: LeadStatus.NEW,
           },
         });
       }

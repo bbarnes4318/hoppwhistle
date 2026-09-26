@@ -104,13 +104,25 @@ export function CreateRouteDialog({
 
     setLoading(true);
     try {
-      await apiClient.post('/api/v1/did-routes', {
+      const response = await apiClient.post('/api/v1/did-routes', {
         phoneNumberId,
         destination: routeType === 'CAMPAIGN' ? 'Campaign' : destination,
         campaignId: routeType === 'CAMPAIGN' ? campaignId : undefined,
         label: label || undefined,
         recordingEnabled,
       });
+
+      // The client answers a refusal with `{ error }` rather than throwing, so
+      // a failed create has to be caught here -- it used to fall through to the
+      // "Route Created" toast and close the dialog as if it had worked.
+      if (response.error) {
+        toast({
+          title: 'Failed to create route',
+          description: response.error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
 
       toast({
         title: 'Route Created',

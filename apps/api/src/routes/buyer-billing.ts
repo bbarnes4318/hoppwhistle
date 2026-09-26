@@ -971,8 +971,9 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxConcurrency: maxConcurrency ?? 10,
         weight: weight ?? 100,
         acceptedStates: acceptedStates ?? [], // Empty = National (accepts all states)
-        // NOTE: Prisma expects Prisma.DbNull/JsonNull rather than a bare null for
-        // a Json? column; the cast only records the existing runtime value.
+        // A bare null is accepted here and stored as a JSON null (verified
+        // against Postgres), which is what every existing target row holds.
+        // Prisma.DbNull would store SQL NULL instead, so it is not swapped in.
         hoursOfOperation: (hoursOfOperation ?? null) as unknown as Prisma.InputJsonValue,
         timezone: timezone ?? 'America/New_York',
         basePrice: basePrice ?? 0,

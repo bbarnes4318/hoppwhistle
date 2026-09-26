@@ -81,6 +81,16 @@ const calculateEligibility = (_healthAnswers: Record<string, unknown> | undefine
   return 'LEVEL';
 };
 
+// How each eligibility tier is shown on the quote badge: its name, and whether
+// it is a standard (green), modified (amber) or declined (red) outcome.
+const ELIGIBILITY_BADGES: Record<string, { status: 'standard' | 'modified' | 'declined'; plan: string }> = {
+  LEVEL: { status: 'standard', plan: 'Level' },
+  ROP: { status: 'standard', plan: 'Return of Premium' },
+  GRADED: { status: 'modified', plan: 'Graded' },
+  GI: { status: 'modified', plan: 'Guaranteed Issue' },
+  NOT_ELIGIBLE: { status: 'declined', plan: 'Not Eligible' },
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SETTINGS PANEL FOR CARRIER SELECTION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -489,7 +499,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
   // Manual trigger function - now uses SSE for live status updates
   const triggerCarrierAutomation = useCallback(async (customerData: Record<string, unknown>) => {
-    const API_BASE = (import.meta as ImportMeta & { env: { DEV?: boolean } }).env.DEV ? 'http://localhost:3001/api' : '/api';
+    const API_BASE = process.env.NODE_ENV === 'development' ? 'http://localhost:3001/api' : '/api';
     const ts = new Date().toISOString();
 
     // Reset state
@@ -651,9 +661,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   const eligibility = useMemo(() => {
     return calculateEligibility(formData.healthAnswers);
   }, [formData.healthAnswers]);
-  // The badge below reads `.status`/`.plan`, but the eligibility stub returns a bare tier
-  // string, so both are undefined at runtime. Typed as-is to preserve that behaviour.
-  const eligibilityBadge = eligibility as unknown as { status?: string; plan?: string };
+  const eligibilityBadge = ELIGIBILITY_BADGES[eligibility] ?? {
+    status: 'declined',
+    plan: eligibility,
+  };
 
   const quotes = useMemo(() => {
     if (!ratesLoaded) return []; // Wait for rates to load

@@ -1196,9 +1196,9 @@ export function CallCenterPortal(): JSX.Element {
     handleSaveDispositionRef.current = handleSaveDisposition;
   });
 
-  // Not wrapped in useCallback: the auto-dialer countdown effect lists it as a
-  // dependency and currently re-runs (restarting its timer) on every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- memoizing would change when that effect runs
+  // Recreated every render; the auto-dialer countdown reaches it through
+  // startCallWithApplicationRef so the countdown's timer is not restarted by
+  // unrelated re-renders (which could stop it from ever reaching zero).
   const startCallWithApplication = async (app: ApplicationData) => {
     if (app.id) {
       dialedLeadIdsRef.current.add(app.id);
@@ -1332,6 +1332,11 @@ export function CallCenterPortal(): JSX.Element {
     }
   }, [currentView, fetchApplications]);
 
+  const startCallWithApplicationRef = useRef(startCallWithApplication);
+  useEffect(() => {
+    startCallWithApplicationRef.current = startCallWithApplication;
+  });
+
   // Auto-Dialer Countdown Effect
   useEffect(() => {
     if (isAutoDialing && autoDialStatus === 'wrapup') {
@@ -1347,7 +1352,7 @@ export function CallCenterPortal(): JSX.Element {
           setAutoDialStatus('calling');
           const nextApp = applications[nextIndex];
           if (nextApp) {
-            void startCallWithApplication(nextApp);
+            void startCallWithApplicationRef.current(nextApp);
           }
         } else {
           // End of queue
@@ -1371,7 +1376,6 @@ export function CallCenterPortal(): JSX.Element {
     wrapUpCountdown,
     autoDialIndex,
     applications,
-    startCallWithApplication,
     getNextDialIndex,
   ]);
 
