@@ -65,6 +65,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useBrand } from '@/hooks/use-brand';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -118,6 +119,7 @@ const money = (value: number) => `$${value.toFixed(2)}`;
 const count = (value: number | null) => (value === null ? 'Unlimited' : value.toLocaleString());
 
 export default function QuotasPage() {
+  const { brand } = useBrand();
   const platform = usePlatformContext();
 
   /** NetEnroll staff, in no agency: nothing here has a cross-agency reading. */
@@ -373,7 +375,9 @@ export default function QuotasPage() {
         description={
           administering
             ? `Limits and spend caps for ${administering.name ?? 'this agency'}`
-            : 'Your agency’s limits and spend, set by NetEnroll'
+            : brand
+              ? 'Your agency’s limits and spend, set by your account manager'
+              : 'Your agency’s limits and spend, set by NetEnroll'
         }
       />
 
@@ -461,7 +465,9 @@ export default function QuotasPage() {
               <PanelDescription>
                 {administering
                   ? 'Ceilings enforced on every call this agency places.'
-                  : 'Ceilings enforced on every call you place. NetEnroll sets these.'}
+                  : brand
+                    ? 'Ceilings enforced on every call you place. Your account manager sets these.'
+                    : 'Ceilings enforced on every call you place. NetEnroll sets these.'}
               </PanelDescription>
             </PanelHeader>
 
@@ -730,7 +736,9 @@ export default function QuotasPage() {
               <p className="t-body text-ink-3">
                 {administering
                   ? 'A quota override raises one limit temporarily, with a reason and an expiry. They are created through the platform API.'
-                  : 'A quota override raises one of your limits temporarily. NetEnroll grants them; ask your account contact if you need one.'}
+                  : brand
+                    ? 'A quota override raises one of your limits temporarily. Ask your account manager if you need one.'
+                    : 'A quota override raises one of your limits temporarily. NetEnroll grants them; ask your account contact if you need one.'}
               </p>
             </PanelBody>
           </Panel>

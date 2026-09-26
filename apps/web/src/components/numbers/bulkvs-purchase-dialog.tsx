@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 
@@ -44,6 +45,7 @@ interface BulkvsAddDialogProps {
 type Step = 'search' | 'confirm' | 'success';
 
 export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAddDialogProps) {
+  const { productName } = useBrand();
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +158,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
         return (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground mb-4">
-              Enter a 3-digit area code to search for available NetEnroll numbers.
+              Enter a 3-digit area code to search for available {productName} numbers.
             </div>
 
             <div className="flex gap-2">
@@ -304,12 +306,12 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === 'success' ? 'Number Added' : 'Add Phone Number (NetEnroll)'}
+            {step === 'success' ? 'Number Added' : `Add Phone Number (${productName})`}
           </DialogTitle>
           <DialogDescription>
             {step === 'success'
               ? 'Your new number is ready to use'
-              : 'Search and add numbers from the NetEnroll inventory.'}
+              : `Search and add numbers from the ${productName} inventory.`}
           </DialogDescription>
         </DialogHeader>
 

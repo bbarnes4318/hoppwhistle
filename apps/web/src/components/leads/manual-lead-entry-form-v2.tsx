@@ -16,6 +16,7 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 import { US_STATES } from '@/lib/us-states';
 
@@ -165,6 +166,7 @@ function RequiredMark({ show = true }: { show?: boolean }): JSX.Element | null {
 }
 
 export function ManualLeadEntryFormV2(): JSX.Element {
+  const { productName } = useBrand();
   const [form, setForm] = useState<ManualLeadFormState>(INITIAL_STATE);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -681,7 +683,7 @@ export function ManualLeadEntryFormV2(): JSX.Element {
             <h3 className="font-semibold text-ink">Compliance &amp; Original Source Data</h3>
             <p className="text-sm text-ink-2">
               Use the values captured when the lead originally opted in—not the operator’s current
-              IP or the NetEnroll CRM page.
+              IP or the {productName} CRM page.
             </p>
           </div>
         </div>

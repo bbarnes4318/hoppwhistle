@@ -3,7 +3,10 @@
 import { FileText, Shield, Scale } from 'lucide-react';
 import Link from 'next/link';
 
+import { useBrand } from '@/hooks/use-brand';
+
 export function Footer() {
+ const { productName } = useBrand();
  const currentYear = new Date().getFullYear();
 
  return (
@@ -11,7 +14,7 @@ export function Footer() {
  <div className="container mx-auto px-6 py-4">
  <div className="flex flex-col md:flex-row justify-between items-center gap-4">
  <div className="text-sm text-muted-foreground">
- © {currentYear} NetEnroll. All rights reserved.
+ © {currentYear} {productName}. All rights reserved.
  </div>
  <div className="flex flex-wrap items-center gap-4 text-sm">
  <Link

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
+import { ReturnRequestedPanel } from '@/components/buyers/return-requested-panel';
 import { RedispositionPanel } from '@/components/calls/redisposition-panel';
 import {
   EmptyState,
@@ -59,6 +60,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
@@ -192,8 +194,17 @@ type OptionListBody =
   | NamedOption[]
   | { data?: NamedOption[]; publishers?: NamedOption[]; buyers?: NamedOption[] };
 
+/** The `outcome` filter's values, as `GET /api/v1/calls` reads them. */
+const CALL_OUTCOMES = [
+  { value: 'AGENTS', label: 'Your agents' },
+  { value: 'BUYERS', label: 'Sold to buyers' },
+  { value: 'UNANSWERED', label: 'Unanswered' },
+] as const;
+
 export default function OperationsCallLogsPage() {
-  const { user, isAdmin, isOwner } = useAuth();
+  const { user, isAdmin, isOwner, isPlatformAdmin } = useAuth();
+  // A white-label owner decides returns; the call detail offers it on the call.
+  const whiteLabelView = useWhiteLabelView();
 
   const isAgent = user?.roles.includes('AGENT');
   const isFinance = user?.roles.includes('FINANCE');
@@ -243,6 +254,16 @@ export default function OperationsCallLogsPage() {
   const [selectedPublisherId, setSelectedPublisherId] = useState<string>('all');
   const [selectedBuyerId, setSelectedBuyerId] = useState<string>('all');
   const [selectedDisputeStatus, setSelectedDisputeStatus] = useState<string>('all');
+  /*
+   * Where the call went: to one of the agency's agents, sold to a buyer, or
+   * nowhere. The same three parts as "Where your calls went" on Today and
+   * Revenue, so a figure there can be opened as a list here with `?outcome=`.
+   */
+  const [selectedOutcome, setSelectedOutcome] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'all';
+    const requested = new URLSearchParams(window.location.search).get('outcome');
+    return requested && CALL_OUTCOMES.some(o => o.value === requested) ? requested : 'all';
+  });
   const [selectedListId, setSelectedListId] = useState<string>('all');
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   /*
@@ -541,6 +562,9 @@ export default function OperationsCallLogsPage() {
       if (selectedDisputeStatus !== 'all') {
         queryParams.append('disputeStatus', selectedDisputeStatus);
       }
+      if (selectedOutcome !== 'all') {
+        queryParams.append('outcome', selectedOutcome);
+      }
       if (selectedListId !== 'all') {
         queryParams.append('listId', selectedListId);
       }
@@ -581,6 +605,7 @@ export default function OperationsCallLogsPage() {
     selectedPublisherId,
     selectedBuyerId,
     selectedDisputeStatus,
+    selectedOutcome,
     selectedListId,
   ]);
 
@@ -617,6 +642,7 @@ export default function OperationsCallLogsPage() {
       if (selectedBuyerId !== 'all') queryParams.append('buyerId', selectedBuyerId);
       if (selectedDisputeStatus !== 'all')
         queryParams.append('disputeStatus', selectedDisputeStatus);
+      if (selectedOutcome !== 'all') queryParams.append('outcome', selectedOutcome);
       if (selectedListId !== 'all') queryParams.append('listId', selectedListId);
 
       const headers: HeadersInit = {};
@@ -870,6 +896,7 @@ export default function OperationsCallLogsPage() {
   const hasActiveFilters =
     search !== '' ||
     selectedDisputeStatus !== 'all' ||
+    selectedOutcome !== 'all' ||
     selectedAgentId !== 'all' ||
     selectedDisposition !== 'all' ||
     selectedCampaignId !== 'all' ||
@@ -880,6 +907,7 @@ export default function OperationsCallLogsPage() {
   const clearFilters = () => {
     setSearch('');
     setSelectedDisputeStatus('all');
+    setSelectedOutcome('all');
     setSelectedAgentId('all');
     setSelectedDisposition('all');
     setSelectedCampaignId('all');
@@ -1118,6 +1146,34 @@ export default function OperationsCallLogsPage() {
           </div>
         )}
 
+        {/* Where it went */}
+        {isAdminOrOwner && (
+          <div className={filterCell}>
+            <Select
+              value={selectedOutcome}
+              onValueChange={val => {
+                setSelectedOutcome(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger
+                aria-label="Where it went"
+                className={filterTrigger(selectedOutcome !== 'all')}
+              >
+                <SelectValue>{selectedOutcome === 'all' ? 'Where it went' : undefined}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {CALL_OUTCOMES.map(outcome => (
+                  <SelectItem key={outcome.value} value={outcome.value}>
+                    {outcome.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Dispute filter */}
         <div className={filterCell}>
           <Select
@@ -1136,7 +1192,10 @@ export default function OperationsCallLogsPage() {
             <SelectContent>
               <SelectItem value="all">All Disputes</SelectItem>
               <SelectItem value="NONE">No Disputes</SelectItem>
-              <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
+              <SelectItem value="ANY">Disputed (All)</SelectItem>
+              <SelectItem value="DISPUTED">Disputed - Open</SelectItem>
+              <SelectItem value="ACCEPTED">Return accepted</SelectItem>
+              <SelectItem value="DENIED">Return denied</SelectItem>
               <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
               <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
             </SelectContent>
@@ -1621,13 +1680,24 @@ export default function OperationsCallLogsPage() {
                   <TabsList className="mb-6 flex-shrink-0">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                    <TabsTrigger value="billing">Billing</TabsTrigger>
-                    <TabsTrigger value="rtb">Ping/Post</TabsTrigger>
-                    <TabsTrigger value="admin">Ledger</TabsTrigger>
+                    <TabsTrigger value="billing">Money</TabsTrigger>
+                    {/* The auction record and the raw ledger are NetEnroll's. */}
+                    {isPlatformAdmin ? (
+                      <>
+                        <TabsTrigger value="rtb">Ping/Post</TabsTrigger>
+                        <TabsTrigger value="admin">Ledger</TabsTrigger>
+                      </>
+                    ) : null}
                   </TabsList>
 
                   {/* TAB 1: OVERVIEW */}
                   <TabsContent value="overview" className="space-y-6">
+                    {whiteLabelView && detailCall.disputeStatus === 'DISPUTED' ? (
+                      <ReturnRequestedPanel
+                        callId={detailCall.id}
+                        onDecided={() => void fetchCalls()}
+                      />
+                    ) : null}
                     {/* Recording Player card */}
                     {detailCall.recordingUrl && (
                       <Card className="rounded-card border-rule bg-surface shadow-none">
@@ -1917,149 +1987,154 @@ export default function OperationsCallLogsPage() {
                     )}
                   </TabsContent>
 
-                  {/* TAB 4: PING/POST BIDS */}
-                  <TabsContent value="rtb" className="space-y-6">
-                    <h3 className="t-label text-brand-ink">Lead Auction Details</h3>
-                    {detailCall.pingRequest ? (
-                      <div className="space-y-4">
-                        <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <span className="text-ink-3 font-medium">Vertical</span>
-                              <p className="font-bold text-ink mt-0.5 uppercase">
-                                {detailCall.pingRequest.vertical || '—'}
-                              </p>
+                  {/* TAB 4: PING/POST BIDS. Platform admins only. */}
+                  {isPlatformAdmin ? (
+                    <TabsContent value="rtb" className="space-y-6">
+                      <h3 className="t-label text-brand-ink">Lead Auction Details</h3>
+                      {detailCall.pingRequest ? (
+                        <div className="space-y-4">
+                          <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-ink-3 font-medium">Vertical</span>
+                                <p className="font-bold text-ink mt-0.5 uppercase">
+                                  {detailCall.pingRequest.vertical || '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-ink-3 font-medium">Auction Status</span>
+                                <p className="font-bold text-ink mt-0.5 uppercase">
+                                  {detailCall.pingRequest.status || '—'}
+                                </p>
+                              </div>
                             </div>
                             <div>
-                              <span className="text-ink-3 font-medium">Auction Status</span>
-                              <p className="font-bold text-ink mt-0.5 uppercase">
-                                {detailCall.pingRequest.status || '—'}
-                              </p>
+                              <span className="text-ink-3 font-medium">Demographics Payload</span>
+                              <pre className="mt-1.5 overflow-x-auto rounded-control border border-rule bg-surface p-2 font-mono text-xs text-ink">
+                                {JSON.stringify(detailCall.pingRequest.payload, null, 2)}
+                              </pre>
                             </div>
                           </div>
-                          <div>
-                            <span className="text-ink-3 font-medium">Demographics Payload</span>
-                            <pre className="mt-1.5 overflow-x-auto rounded-control border border-rule bg-surface p-2 font-mono text-xs text-ink">
-                              {JSON.stringify(detailCall.pingRequest.payload, null, 2)}
-                            </pre>
-                          </div>
-                        </div>
 
-                        {/* Bids list */}
-                        <div className="space-y-2">
-                          <h4 className="t-label text-ink-3">Auction Bids</h4>
-                          {detailCall.pingRequest.bids && detailCall.pingRequest.bids.length > 0 ? (
-                            <div className="overflow-hidden rounded-card border border-rule">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Buyer</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Bid Amount</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {detailCall.pingRequest.bids.map(bid => (
-                                    <TableRow key={bid.id} className="border-rule">
-                                      <TableCell className="t-meta font-medium text-ink">
-                                        {bid.buyer?.name || 'Unknown'}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge
-                                          variant="outline"
-                                          className={
-                                            bid.status === 'WON'
-                                              ? 'bg-live-tint text-live-ink border-live/40'
-                                              : 'bg-sunken text-ink-2 border-rule'
-                                          }
-                                        >
-                                          {bid.status}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell className="t-num text-right font-semibold text-ink">
-                                        ${Number(bid.amount).toFixed(2)}
-                                      </TableCell>
+                          {/* Bids list */}
+                          <div className="space-y-2">
+                            <h4 className="t-label text-ink-3">Auction Bids</h4>
+                            {detailCall.pingRequest.bids &&
+                            detailCall.pingRequest.bids.length > 0 ? (
+                              <div className="overflow-hidden rounded-card border border-rule">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Buyer</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead className="text-right">Bid Amount</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-ink-3 italic">
-                              No bids recorded in this auction.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center text-ink-3 gap-1">
-                        <ArrowRightLeft className="w-8 h-8" />
-                        <span className="t-meta">
-                          Call did not originate from a Ping/Post RTB auction.
-                        </span>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* TAB 5: ADMIN / TRANSACTIONS */}
-                  <TabsContent value="admin" className="space-y-6">
-                    {/* Disputes note */}
-                    <div className="space-y-3">
-                      <h3 className="t-label text-brand-ink">Dispute Review</h3>
-                      <div className="rounded-card bg-sunken p-4 space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-ink-3 font-medium">Dispute Status</span>
-                          {detailCall.disputeStatus ? (
-                            getDisputeBadge(detailCall.disputeStatus)
-                          ) : (
-                            <span className="text-ink-3 italic">No Active Disputes</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Manual Adjustments log */}
-                    <div className="space-y-3">
-                      <h3 className="t-label text-brand-ink">Manual adjustments history</h3>
-                      {detailCall.buyerTransactions && detailCall.buyerTransactions.length > 0 ? (
-                        <div className="overflow-hidden rounded-card border border-rule">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {detailCall.buyerTransactions.map(tx => (
-                                <TableRow key={tx.id} className="border-rule">
-                                  <TableCell className="t-data whitespace-nowrap text-ink-2">
-                                    {formatTableDateTime(tx.createdAt)}
-                                  </TableCell>
-                                  <TableCell className="t-meta font-medium uppercase text-ink">
-                                    {tx.type}
-                                  </TableCell>
-                                  <TableCell className="t-meta text-ink-2">
-                                    {tx.description}
-                                  </TableCell>
-                                  <TableCell className="t-num text-right font-semibold text-dropped-ink">
-                                    -${Number(tx.amount).toFixed(2)}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {detailCall.pingRequest.bids.map(bid => (
+                                      <TableRow key={bid.id} className="border-rule">
+                                        <TableCell className="t-meta font-medium text-ink">
+                                          {bid.buyer?.name || 'Unknown'}
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge
+                                            variant="outline"
+                                            className={
+                                              bid.status === 'WON'
+                                                ? 'bg-live-tint text-live-ink border-live/40'
+                                                : 'bg-sunken text-ink-2 border-rule'
+                                            }
+                                          >
+                                            {bid.status}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell className="t-num text-right font-semibold text-ink">
+                                          ${Number(bid.amount).toFixed(2)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-ink-3 italic">
+                                No bids recorded in this auction.
+                              </p>
+                            )}
+                          </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center py-6 text-center text-ink-3 gap-1">
-                          <History className="w-6 h-6" />
-                          <span className="t-meta">No manual billing adjustments recorded.</span>
+                        <div className="flex flex-col items-center justify-center py-12 text-center text-ink-3 gap-1">
+                          <ArrowRightLeft className="w-8 h-8" />
+                          <span className="t-meta">
+                            Call did not originate from a Ping/Post RTB auction.
+                          </span>
                         </div>
                       )}
-                    </div>
-                  </TabsContent>
+                    </TabsContent>
+                  ) : null}
+
+                  {/* TAB 5: ADMIN / TRANSACTIONS. Platform admins only. */}
+                  {isPlatformAdmin ? (
+                    <TabsContent value="admin" className="space-y-6">
+                      {/* Disputes note */}
+                      <div className="space-y-3">
+                        <h3 className="t-label text-brand-ink">Dispute Review</h3>
+                        <div className="rounded-card bg-sunken p-4 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-ink-3 font-medium">Dispute Status</span>
+                            {detailCall.disputeStatus ? (
+                              getDisputeBadge(detailCall.disputeStatus)
+                            ) : (
+                              <span className="text-ink-3 italic">No Active Disputes</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Manual Adjustments log */}
+                      <div className="space-y-3">
+                        <h3 className="t-label text-brand-ink">Manual adjustments history</h3>
+                        {detailCall.buyerTransactions && detailCall.buyerTransactions.length > 0 ? (
+                          <div className="overflow-hidden rounded-card border border-rule">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Date</TableHead>
+                                  <TableHead>Type</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Amount</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {detailCall.buyerTransactions.map(tx => (
+                                  <TableRow key={tx.id} className="border-rule">
+                                    <TableCell className="t-data whitespace-nowrap text-ink-2">
+                                      {formatTableDateTime(tx.createdAt)}
+                                    </TableCell>
+                                    <TableCell className="t-meta font-medium uppercase text-ink">
+                                      {tx.type}
+                                    </TableCell>
+                                    <TableCell className="t-meta text-ink-2">
+                                      {tx.description}
+                                    </TableCell>
+                                    <TableCell className="t-num text-right font-semibold text-dropped-ink">
+                                      -${Number(tx.amount).toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-6 text-center text-ink-3 gap-1">
+                            <History className="w-6 h-6" />
+                            <span className="t-meta">No manual billing adjustments recorded.</span>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                  ) : null}
                 </Tabs>
               )}
             </div>

@@ -16,6 +16,8 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
+import { AnswerOrderControl } from '@/components/campaigns/answer-order-control';
+import { CampaignAgentsTab } from '@/components/campaigns/campaign-agents-tab';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,6 +57,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { answerOrderOf } from '@/lib/answer-order';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -130,6 +133,8 @@ interface CampaignDetails {
   buyerPricePerBillableCall: string;
   calls: number;
   phoneNumbers: number;
+  /** Free-form settings. `answerOrder` is "who answers first"; see lib/answer-order. */
+  metadata?: Record<string, unknown> | null;
 }
 
 export default function CampaignDetailPage() {
@@ -650,15 +655,18 @@ export default function CampaignDetailPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList
           className={cn(
-            'grid w-full bg-sunken p-1',
+            // A row that scrolls on a phone, a grid from 768px: five or six
+            // labels do not fit a 390px screen side by side.
+            'w-full bg-sunken p-1 md:grid',
             canBuildFlows
-              ? 'max-w-2xl grid-cols-5'
+              ? 'md:max-w-3xl md:grid-cols-6'
               : canManage
-                ? 'max-w-xl grid-cols-4'
-                : 'max-w-md grid-cols-3'
+                ? 'md:max-w-2xl md:grid-cols-5'
+                : 'grid max-w-md grid-cols-3'
           )}
         >
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          {canManage ? <TabsTrigger value="agents">Your agents</TabsTrigger> : null}
           <TabsTrigger value="publishers">Publishers</TabsTrigger>
           <TabsTrigger value="buyers">Buyers</TabsTrigger>
           {canManage ? <TabsTrigger value="numbers">Numbers (DIDs)</TabsTrigger> : null}
@@ -948,8 +956,22 @@ export default function CampaignDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* The agency's own agents on this campaign. */}
+        {canManage ? (
+          <TabsContent value="agents" className="space-y-6">
+            <CampaignAgentsTab campaignId={campaign.id} canManage={canManage} />
+          </TabsContent>
+        ) : null}
+
         {/* Buyers Assignment Tab */}
         <TabsContent value="buyers" className="space-y-6">
+          {canManage ? (
+            <AnswerOrderControl
+              campaignId={campaign.id}
+              value={answerOrderOf(campaign.metadata)}
+              onChanged={() => void fetchCampaignData()}
+            />
+          ) : null}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <div>

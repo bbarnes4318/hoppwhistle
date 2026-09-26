@@ -34,9 +34,12 @@ import {
   Telescope,
   TrendingUp,
   Trophy,
+  Sparkles,
   UserCog,
+  Users,
   UsersRound,
   Wallet,
+  Waypoints,
   Webhook,
 } from 'lucide-react';
 
@@ -410,71 +413,85 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
 /**
  * A white-label agency principal's navigation.
  *
- * ── An agency that also sells calls ──────────────────────────────────────────
+ * ── An agency that also sells calls, on eleven entries ───────────────────────
  *
  * On the white-label tier the OWNER and ADMIN run a call network of their own
- * as well as a sales floor, so four things that are upgrades for a normal
- * agency are working screens here: Sales (what their calls sold for),
- * Publishers, Buyers and Numbers, Payouts (what they owe their publishers),
- * and their own downline agencies. Those are standard with the tier, not
- * upgrades, and they sit ABOVE the divider.
+ * as well as a sales floor. This nav used to list every screen that involved:
+ * twenty-seven entries, five of them locked, with the same person's buyers in
+ * one group, what those buyers owed in another and the portal logins in a
+ * third. It is now one entry per job, and the screens that used to be separate
+ * entries are tabs on the entry they belong to:
  *
- * The floor, Money and Account groups are the same entries AGENCY_OWNER_NAV
- * carries, written out rather than shared so that each nav reads top to bottom
- * as the person using it sees it. What is still an upgrade on this tier -- the
- * dialer, carrier routing, the voice tooling and payroll -- is below it, with
- * the same blurbs a normal agency is shown.
+ *   Today       what is happening now, and what needs a decision
+ *   Agents      Leaderboard, Agents today, Team and Team Members
+ *   Buyers      buyers, their balances (was Billing) and Returns
+ *   Publishers  publishers and what they are owed (was Payouts)
+ *   Revenue     Sales and Reports
+ *   Routing     Campaigns and Numbers
+ *   Settings    settings, and Rate, Delivery and Settlements as Plan & Billing
+ *   Upgrades    what used to be the five locked items, as one page
  *
- * The screens above the divider are opened by `WHITE_LABEL_ROUTES` in
- * `lib/staff-only-routes.ts`, for this viewer only; a normal agency is still
+ * The old URLs still resolve: the dashboard layout sends a white-label viewer
+ * from each one to its tab (`WHITE_LABEL_REDIRECTS` in
+ * `lib/staff-only-routes.ts`), and everybody else gets the page they always
+ * got. Nothing here is locked, so there is no "Unlock more" divider.
+ *
+ * The screens here that a normal agency does not have are opened by
+ * `WHITE_LABEL_ROUTES`, for this viewer only; a normal agency is still
  * redirected off every one of them.
  */
 export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
-  { items: [platformItem('/dashboard')] },
+  {
+    items: [
+      platformItem('/dashboard', {
+        name: 'Today',
+        title: 'Your calls, agents, buyers and money right now',
+      }),
+    ],
+  },
   {
     label: 'Floor',
     items: [
-      {
-        name: 'Live Board',
-        href: '/live',
-        icon: MonitorPlay,
-        title: 'Your agency right now: calls up, delivered and applications so far today',
-      },
       platformItem('/calls'),
       platformItem('/applications'),
-      platformItem('/leaderboard'),
-      platformItem('/insurance-leads'),
+      {
+        name: 'Agents',
+        href: '/agents',
+        icon: Users,
+        title: 'How your agents are doing, and who can take a call',
+      },
     ],
   },
   {
     label: 'Call Sales',
     items: [
+      platformItem('/buyers', {
+        title: 'Your buyers: routing caps, balances, portal logins and returns',
+      }),
+      platformItem('/publishers', {
+        title: 'Your publishers: payouts, portal logins and performance',
+      }),
       {
-        name: 'Sales',
-        href: '/sales',
+        name: 'Revenue',
+        href: '/revenue',
         icon: BadgeDollarSign,
-        title: 'What your calls sold for: buyers, revenue, payouts, profit',
+        title: 'What your calls sold for, by buyer, publisher, campaign and day',
       },
-      platformItem('/campaigns'),
-      platformItem('/reports'),
     ],
   },
   {
-    label: 'Call Network',
+    label: 'Routing',
     items: [
-      platformItem('/publishers'),
-      platformItem('/buyers'),
-      platformItem('/numbers'),
       {
-        name: 'Payouts',
-        href: '/payouts',
-        icon: HandCoins,
-        title: 'What you owe each publisher, and what you have paid',
+        name: 'Routing',
+        href: '/routing',
+        icon: Waypoints,
+        title: 'Campaigns and phone numbers: where every call goes',
       },
     ],
   },
   {
-    label: 'Agency Network',
+    label: 'Network',
     items: [
       {
         name: 'Agencies',
@@ -482,63 +499,87 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
         icon: Building2,
         title: 'Your agencies: calls, applications and closing percentage',
       },
-      { name: 'Onboard an Agency', href: '/network/onboarding', icon: Handshake },
-    ],
-  },
-  {
-    label: 'Money',
-    items: [
-      platformItem('/rating'),
-      platformItem('/delivery'),
-      platformItem('/delivery/team'),
-      platformItem('/delivery/settlements'),
-      platformItem('/billing'),
     ],
   },
   {
     label: 'Account',
-    items: [platformItem('/settings/users'), platformItem('/settings')],
-  },
-  {
-    label: 'Upgrades',
     items: [
-      lockedItem(
-        '/call-center',
-        'Power Dialer',
-        'Put your agents on a dialer that paces calls to how many agents are free.'
-      ),
-      lockedItem(
-        '/settings/carriers',
-        'VOIP Carrier Routing',
-        'Choose which VOIP carriers carry your calls and set automatic failover between them.'
-      ),
-      lockedItem(
-        '/voice-agents',
-        'Voice Agents',
-        'AI voice agents that answer, qualify and transfer live callers straight to your agents.'
-      ),
-      lockedItem(
-        '/voice-studio',
-        'Voice Studio',
-        "Build and fine-tune your voice agents' scripts and voices before they go live."
-      ),
-      lockedItem(
-        '/admin/payroll',
-        'Payroll Admin',
-        'Run agent commissions and payroll from the same data as your submitted applications.'
-      ),
+      platformItem('/settings'),
+      { name: 'Upgrades', href: '/upgrades', icon: Sparkles, title: 'Features you can add' },
     ],
   },
 ];
+
+/**
+ * The upgrades a white-label agency can have turned on, as `/api/auth/me`
+ * names them. The `/upgrades` page lists all five; `upgrades` on the session
+ * says which of them this agency has.
+ */
+export const UPGRADE_KEYS = [
+  'POWER_DIALER',
+  'CARRIER_ROUTING',
+  'VOICE_AGENTS',
+  'VOICE_STUDIO',
+  'PAYROLL_ADMIN',
+] as const;
+
+export type UpgradeKey = (typeof UPGRADE_KEYS)[number];
+
+export interface Upgrade {
+  key: UpgradeKey;
+  /** The locked entry a normal agency is shown for it: name, icon and blurb. */
+  item: NavItem;
+  /** One more line under the blurb, where the blurb does not say it all. */
+  note?: string;
+}
+
+/** The locked AGENCY_OWNER_NAV entry for this href, so the blurbs cannot drift. */
+function agencyUpgrade(href: string): NavItem {
+  const found = AGENCY_OWNER_NAV.flatMap(group => group.items).find(
+    item => item.href === href && item.locked
+  );
+  if (!found) throw new Error(`nav-config: ${href} is not an upgrade in AGENCY_OWNER_NAV`);
+  return found;
+}
+
+/**
+ * What the white-label `/upgrades` page lists, in order: the five items that
+ * were locked at the foot of this nav, with the blurbs a normal agency reads.
+ */
+export const WHITE_LABEL_UPGRADES: Upgrade[] = [
+  {
+    key: 'POWER_DIALER',
+    item: agencyUpgrade('/call-center'),
+    note: 'Includes the CRM and lead lists your agents dial.',
+  },
+  { key: 'CARRIER_ROUTING', item: agencyUpgrade('/settings/carriers') },
+  { key: 'VOICE_AGENTS', item: agencyUpgrade('/voice-agents') },
+  { key: 'VOICE_STUDIO', item: agencyUpgrade('/voice-studio') },
+  { key: 'PAYROLL_ADMIN', item: agencyUpgrade('/admin/payroll') },
+];
+
+/**
+ * WHITE_LABEL_OWNER_NAV, plus what this agency's upgrades add to it.
+ *
+ * Today that is one entry: the CRM, which holds the lead lists the Power
+ * Dialer dials and means nothing without it. Until Power Dialer is on, the
+ * CRM is not in this nav. Without an upgrade that adds an entry, this returns
+ * WHITE_LABEL_OWNER_NAV itself.
+ */
+export function whiteLabelOwnerNav(upgrades: readonly string[] = []): NavGroup[] {
+  if (!upgrades.includes('POWER_DIALER')) return WHITE_LABEL_OWNER_NAV;
+  return WHITE_LABEL_OWNER_NAV.map(group =>
+    group.label === 'Floor'
+      ? { ...group, items: [...group.items, platformItem('/insurance-leads')] }
+      : group
+  );
+}
 
 /**
  * The label of AGENCY_OWNER_NAV's first group of upgrades, where the sidebar
  * draws its "Unlock more" divider. Everything from here down is locked.
  */
 export const FIRST_UPGRADE_GROUP = 'Call Network';
-
-/** The same, for WHITE_LABEL_OWNER_NAV, whose Call Network is a working group. */
-export const WHITE_LABEL_FIRST_UPGRADE_GROUP = 'Upgrades';
 
 /** A group whose every item is an upgrade gets a lock beside its label. */
 export function isLockedGroup(group: NavGroup): boolean {
@@ -550,10 +591,9 @@ export function isLockedGroup(group: NavGroup): boolean {
  * whose every item is locked, or null for a nav with no upgrades.
  *
  * Read off the groups rather than named, because the same label means
- * different things in different navs: `Call Network` is the first upgrade
- * group for a normal agency and a working group on the white-label tier. It
- * answers FIRST_UPGRADE_GROUP for AGENCY_OWNER_NAV and
- * WHITE_LABEL_FIRST_UPGRADE_GROUP for WHITE_LABEL_OWNER_NAV.
+ * different things in different navs. It answers FIRST_UPGRADE_GROUP for
+ * AGENCY_OWNER_NAV, and null for WHITE_LABEL_OWNER_NAV, which locks nothing:
+ * its upgrades are a page of their own, `/upgrades`.
  */
 export function firstUpgradeGroupOf(groups: NavGroup[]): string | null {
   return groups.find(group => isLockedGroup(group))?.label ?? null;
@@ -634,6 +674,8 @@ export interface NavViewer {
   isAgentOnly: boolean;
   isReadonlyOnly: boolean;
   canViewRecordings: boolean;
+  /** The upgrades turned on for this agency. See `whiteLabelOwnerNav`. */
+  upgrades?: readonly string[];
 }
 
 /**
@@ -653,7 +695,9 @@ export interface NavViewer {
  */
 export function navFor(viewer: NavViewer): NavGroup[] {
   if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
-  if (viewer.hasFullAccess) return viewer.isWhiteLabel ? WHITE_LABEL_OWNER_NAV : AGENCY_OWNER_NAV;
+  if (viewer.hasFullAccess) {
+    return viewer.isWhiteLabel ? whiteLabelOwnerNav(viewer.upgrades) : AGENCY_OWNER_NAV;
+  }
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
   if (viewer.isAgentOnly) return AGENT_NAV;

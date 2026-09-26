@@ -350,6 +350,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     isAgentOnly,
     isReadonlyOnly,
     canViewRecordings,
+    upgrades,
     status,
     hasResolvedNoRole,
     user,
@@ -386,6 +387,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         isAgentOnly,
         isReadonlyOnly,
         canViewRecordings,
+        upgrades,
       }),
     [
       isPlatformAdmin,
@@ -397,6 +399,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       isAgentOnly,
       isReadonlyOnly,
       canViewRecordings,
+      upgrades,
     ]
   );
 

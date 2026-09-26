@@ -122,3 +122,50 @@ export interface NetworkAgencies {
   period: ResolvedPeriodView;
   agencies: NetworkAgencyRow[];
 }
+
+/** `GET /api/v1/white-label/today`: the white-label owner's Today screen. */
+export interface WhiteLabelToday {
+  now: {
+    callsUp: number;
+    agentsReady: number;
+    agentsOnCall: number;
+    agentsActive: number;
+    buyersTaking: number;
+    buyersAtCap: number;
+    buyersActive: number;
+    returnsOpen: number;
+  };
+  today: {
+    inbound: number;
+    answeredByAgents: number;
+    sentToBuyers: number;
+    unanswered: number;
+    blocked: number;
+    revenue: number;
+    profit: number;
+    applications: number;
+    closingPct: number | null;
+  };
+  /** One row per buyer on the agency live board, with today's cap. */
+  buyers: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    callsInFlight: number;
+    deliveredToday: number;
+    applicationsToday: number;
+    closingPct: number | null;
+    atCap: boolean;
+    capUsed: number;
+    capMax: number | null;
+  }>;
+  /** What needs a decision, in the order to take it. Only non-zero counts. */
+  attention: Array<{
+    kind: 'returns' | 'buyers_at_cap' | 'agents_blocked' | 'payouts_owed';
+    count: number;
+    href: string;
+    label: string;
+    /** Dollars; on `payouts_owed` only. */
+    amount?: number;
+  }>;
+}

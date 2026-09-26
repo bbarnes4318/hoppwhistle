@@ -43,7 +43,8 @@ export const dynamic = 'force-dynamic';
 type SearchParams = Record<string, string | string[] | undefined>;
 
 const OUTCOME_OPTIONS = [
-  { value: 'DISPUTED', label: 'Disputed' },
+  // Every disputed call, open or decided. `DISPUTED` now means open only.
+  { value: 'ANY', label: 'Disputed' },
   { value: 'NONE', label: 'Not disputed' },
 ];
 

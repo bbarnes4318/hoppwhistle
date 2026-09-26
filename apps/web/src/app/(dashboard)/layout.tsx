@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
-import { isRouteBlockedFor } from '@/lib/staff-only-routes';
+import { isRouteBlockedFor, whiteLabelRedirectFor } from '@/lib/staff-only-routes';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
@@ -79,6 +79,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
 
     if (!user) return;
+
+    /*
+     * A white-label viewer's old URLs, onto their hub tabs.
+     *
+     * The white-label nav gathers Leaderboard, Sales, Billing, Payouts and the
+     * rest into hubs; a bookmark to one of the old screens lands on the tab it
+     * became. Exact paths only -- see WHITE_LABEL_REDIRECTS. A platform admin
+     * previewing the agency as its owner is shown the owner's structure, so
+     * the preview follows them too; staff not previewing keep every page.
+     */
+    const previewing = platform.previewRole != null || user.previewRole != null;
+    if (!platform.loading && isWhiteLabel && (!platform.isPlatformAdmin || previewing)) {
+      const destination = whiteLabelRedirectFor(`${pathname ?? ''}${window.location.search}`);
+      if (destination) {
+        router.replace(destination);
+        return;
+      }
+    }
 
     /*
      * A platform operator holds no agency roles in the cross-agency view, so
@@ -167,6 +185,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router,
     platform.isPlatformAdmin,
     platform.loading,
+    platform.previewRole,
   ]);
 
   /*

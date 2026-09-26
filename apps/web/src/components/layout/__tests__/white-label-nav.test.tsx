@@ -6,29 +6,32 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENCY_OWNER_NAV,
   FIRST_UPGRADE_GROUP,
-  WHITE_LABEL_FIRST_UPGRADE_GROUP,
   WHITE_LABEL_OWNER_NAV,
+  WHITE_LABEL_UPGRADES,
   allNavItems,
   firstUpgradeGroupOf,
   isLockedGroup,
   navFor,
   PLATFORM_NAV,
+  whiteLabelOwnerNav,
   type NavGroup,
 } from '@/components/layout/nav-config';
 import {
   isRouteBlockedFor,
   isStaffOnlyRoute,
   STAFF_ONLY_ROUTES,
+  WHITE_LABEL_REDIRECTS,
   WHITE_LABEL_ROUTES,
+  whiteLabelRedirectFor,
 } from '@/lib/staff-only-routes';
 
 /**
- * The white-label tier's navigation, and the redirect that has to agree with it.
+ * The white-label tier's navigation, and the redirects that have to agree with it.
  *
- * A white-label agency sells calls as well as taking them, so for its OWNER and
- * ADMIN six screens a normal agency is shown as upgrades are working screens
- * -- Sales, Publishers, Buyers, Numbers, Payouts and their own agencies -- and
- * five are still upgrades. The requirement is spelled out below rather than
+ * A white-label agency sells calls as well as taking them. Its OWNER and ADMIN
+ * get eleven entries in five groups, and nothing locked: the screens that used
+ * to be separate entries are tabs of the hub they belong to, and the upgrades
+ * are a page of their own. The requirement is spelled out below rather than
  * read back from the nav, so the two have to agree.
  */
 
@@ -43,149 +46,124 @@ function hasPage(href: string): boolean {
   );
 }
 
-/** [label, [name, href, locked]] -- the order asked for. */
-const EXPECTED: Array<[string | undefined, Array<[string, string, boolean]>]> = [
-  [undefined, [['Dashboard', '/dashboard', false]]],
+/** [label, [name, href, title]] -- exactly the list asked for. */
+const EXPECTED: Array<[string | undefined, Array<[string, string, string | undefined]>]> = [
+  [undefined, [['Today', '/dashboard', 'Your calls, agents, buyers and money right now']]],
   [
     'Floor',
     [
-      ['Live Board', '/live', false],
-      ['Calls', '/calls', false],
-      ['Applications', '/applications', false],
-      ['Leaderboard', '/leaderboard', false],
-      ['CRM', '/insurance-leads', false],
+      ['Calls', '/calls', undefined],
+      ['Applications', '/applications', undefined],
+      ['Agents', '/agents', 'How your agents are doing, and who can take a call'],
     ],
   ],
   [
     'Call Sales',
     [
-      ['Sales', '/sales', false],
-      ['Campaigns', '/campaigns', false],
-      ['Reports', '/reports', false],
+      ['Buyers', '/buyers', 'Your buyers: routing caps, balances, portal logins and returns'],
+      ['Publishers', '/publishers', 'Your publishers: payouts, portal logins and performance'],
+      ['Revenue', '/revenue', 'What your calls sold for, by buyer, publisher, campaign and day'],
     ],
   ],
+  ['Routing', [['Routing', '/routing', 'Campaigns and phone numbers: where every call goes']]],
   [
-    'Call Network',
+    'Network',
     [
-      ['Publishers', '/publishers', false],
-      ['Buyers', '/buyers', false],
-      ['Numbers', '/numbers', false],
-      ['Payouts', '/payouts', false],
-    ],
-  ],
-  [
-    'Agency Network',
-    [
-      ['Agencies', '/network/agencies', false],
-      ['Onboard an Agency', '/network/onboarding', false],
-    ],
-  ],
-  [
-    'Money',
-    [
-      ['Rate', '/rating', false],
-      ['Delivery', '/delivery', false],
-      ['Team', '/delivery/team', false],
-      ['Settlements', '/delivery/settlements', false],
-      ['Billing', '/billing', false],
+      [
+        'Agencies',
+        '/network/agencies',
+        'Your agencies: calls, applications and closing percentage',
+      ],
     ],
   ],
   [
     'Account',
     [
-      ['Team Members', '/settings/users', false],
-      ['Settings', '/settings', false],
-    ],
-  ],
-  [
-    'Upgrades',
-    [
-      ['Power Dialer', '/call-center', true],
-      ['VOIP Carrier Routing', '/settings/carriers', true],
-      ['Voice Agents', '/voice-agents', true],
-      ['Voice Studio', '/voice-studio', true],
-      ['Payroll Admin', '/admin/payroll', true],
+      ['Settings', '/settings', undefined],
+      ['Upgrades', '/upgrades', 'Features you can add'],
     ],
   ],
 ];
 
 const items = WHITE_LABEL_OWNER_NAV.flatMap(group => group.items);
-const locked = items.filter(item => item.locked);
 
 describe('WHITE_LABEL_OWNER_NAV', () => {
-  it('has the groups in order', () => {
+  it('has the five groups in order', () => {
     expect(WHITE_LABEL_OWNER_NAV.map(group => group.label)).toEqual(
       EXPECTED.map(([label]) => label)
     );
   });
 
+  it('has exactly eleven items, none of them locked or pending', () => {
+    expect(items).toHaveLength(11);
+    expect(items.filter(item => item.locked || item.pending)).toEqual([]);
+    expect(allNavItems(WHITE_LABEL_OWNER_NAV)).toHaveLength(11);
+  });
+
   it.each(EXPECTED.map(([label, want]) => [label ?? '(unlabelled)', want] as const))(
-    '%s has its items in order, locked where marked',
+    '%s has its items in order, with the tooltips asked for',
     (label, want) => {
       const group = WHITE_LABEL_OWNER_NAV.find(g => (g.label ?? '(unlabelled)') === label);
       expect(group, `no group ${label}`).toBeDefined();
-      expect(group!.items.map(item => [item.name, item.href, !!item.locked])).toEqual(want);
+      expect(group!.items.map(item => [item.name, item.href])).toEqual(
+        want.map(([name, href]) => [name, href])
+      );
+      want.forEach(([, href, title]) => {
+        if (title === undefined) return;
+        expect(group!.items.find(item => item.href === href)?.title, href).toBe(title);
+      });
     }
   );
 
-  it('opens the six white-label screens, and leaves the five upgrades locked', () => {
-    const open = allNavItems(WHITE_LABEL_OWNER_NAV).map(item => item.href);
+  it('carries the platform entries it reuses unchanged, apart from what was overridden', () => {
+    const platform = new Map(
+      PLATFORM_NAV.flatMap(group => group.items).map(item => [item.href, item] as const)
+    );
+    for (const href of ['/calls', '/applications', '/settings']) {
+      const item = items.find(i => i.href === href)!;
+      expect(item.title).toBe(platform.get(href)?.title);
+      expect(item.icon).toBe(platform.get(href)?.icon);
+    }
+    expect(items.find(i => i.href === '/dashboard')?.icon).toBe(platform.get('/dashboard')?.icon);
+  });
+
+  it('no longer lists the screens that became tabs, or the old upgrades', () => {
+    const hrefs = items.map(item => item.href);
     for (const href of [
+      '/live',
+      '/leaderboard',
+      '/insurance-leads',
       '/sales',
-      '/publishers',
-      '/buyers',
+      '/campaigns',
+      '/reports',
       '/numbers',
       '/payouts',
-      '/network/agencies',
       '/network/onboarding',
+      '/rating',
+      '/delivery',
+      '/delivery/team',
+      '/delivery/settlements',
+      '/billing',
+      '/settings/users',
+      '/call-center',
+      '/settings/carriers',
+      '/voice-agents',
+      '/voice-studio',
+      '/admin/payroll',
     ]) {
-      expect(open, href).toContain(href);
-    }
-    expect(locked.map(item => item.name)).toEqual([
-      'Power Dialer',
-      'VOIP Carrier Routing',
-      'Voice Agents',
-      'Voice Studio',
-      'Payroll Admin',
-    ]);
-  });
-
-  it('gives each upgrade the blurb a normal agency is shown for it', () => {
-    const agency = new Map(
-      AGENCY_OWNER_NAV.flatMap(group => group.items).map(item => [item.href, item] as const)
-    );
-    for (const item of locked) {
-      expect(item.locked?.blurb, item.href).toBe(agency.get(item.href)?.locked?.blurb);
+      expect(hrefs, href).not.toContain(href);
     }
   });
 
-  it('carries the icons, and the tooltips asked for', () => {
-    const byHref = new Map(items.map(item => [item.href, item] as const));
-    expect(byHref.get('/sales')?.title).toBe(
-      'What your calls sold for: buyers, revenue, payouts, profit'
-    );
-    expect(byHref.get('/payouts')?.title).toBe(
-      'What you owe each publisher, and what you have paid'
-    );
-    expect(byHref.get('/network/agencies')?.title).toBe(
-      'Your agencies: calls, applications and closing percentage'
-    );
-  });
-
-  it('links every working item to a page that exists', () => {
+  it('links every item to a page that exists', () => {
     for (const item of allNavItems(WHITE_LABEL_OWNER_NAV)) {
       expect(hasPage(item.href), `${item.href} has no page`).toBe(true);
     }
   });
 
-  it('draws the "Unlock more" divider above the upgrades, and only the upgrades', () => {
-    expect(firstUpgradeGroupOf(WHITE_LABEL_OWNER_NAV)).toBe(WHITE_LABEL_FIRST_UPGRADE_GROUP);
-    const divider = WHITE_LABEL_OWNER_NAV.findIndex(
-      group => group.label === WHITE_LABEL_FIRST_UPGRADE_GROUP
-    );
-    WHITE_LABEL_OWNER_NAV.forEach((group, i) => {
-      expect(isLockedGroup(group), group.label).toBe(i >= divider);
-    });
+  it('draws no "Unlock more" divider, because nothing is locked', () => {
+    expect(firstUpgradeGroupOf(WHITE_LABEL_OWNER_NAV)).toBeNull();
+    WHITE_LABEL_OWNER_NAV.forEach(group => expect(isLockedGroup(group), group.label).toBe(false));
   });
 
   it('still draws the agency divider where it was', () => {
@@ -194,8 +172,50 @@ describe('WHITE_LABEL_OWNER_NAV', () => {
   });
 
   it('never calls anything "booked" or an agent team a "desk"', () => {
-    const copy = items.map(item => `${item.name} ${item.title ?? ''} ${item.locked?.blurb ?? ''}`);
+    const copy = [
+      ...items.map(item => `${item.name} ${item.title ?? ''}`),
+      ...WHITE_LABEL_UPGRADES.map(
+        u => `${u.item.name} ${u.item.locked?.blurb ?? ''} ${u.note ?? ''}`
+      ),
+    ];
     expect(copy.join(' ')).not.toMatch(/\bbooked\b|\bdesk\b/i);
+  });
+});
+
+describe('the white-label upgrades', () => {
+  it('lists the five old locked items, with the blurbs a normal agency is shown', () => {
+    const agency = new Map(
+      AGENCY_OWNER_NAV.flatMap(group => group.items).map(item => [item.href, item] as const)
+    );
+    expect(WHITE_LABEL_UPGRADES.map(u => u.item.name)).toEqual([
+      'Power Dialer',
+      'VOIP Carrier Routing',
+      'Voice Agents',
+      'Voice Studio',
+      'Payroll Admin',
+    ]);
+    for (const upgrade of WHITE_LABEL_UPGRADES) {
+      expect(upgrade.item.locked?.blurb, upgrade.key).toBe(
+        agency.get(upgrade.item.href)?.locked?.blurb
+      );
+    }
+    expect(WHITE_LABEL_UPGRADES[0].note).toBe('Includes the CRM and lead lists your agents dial.');
+  });
+
+  it('adds the CRM to the floor only once Power Dialer is on', () => {
+    expect(whiteLabelOwnerNav([])).toBe(WHITE_LABEL_OWNER_NAV);
+    expect(whiteLabelOwnerNav(['VOICE_STUDIO'])).toBe(WHITE_LABEL_OWNER_NAV);
+
+    const unlocked = whiteLabelOwnerNav(['POWER_DIALER']);
+    const floor = unlocked.find(group => group.label === 'Floor')!;
+    expect(floor.items.map(item => item.href)).toEqual([
+      '/calls',
+      '/applications',
+      '/agents',
+      '/insurance-leads',
+    ]);
+    // The constant itself is not touched.
+    expect(WHITE_LABEL_OWNER_NAV.flatMap(g => g.items)).toHaveLength(11);
   });
 });
 
@@ -359,6 +379,23 @@ describe('navFor with the white-label tier', () => {
     ).toBe(WHITE_LABEL_OWNER_NAV);
   });
 
+  it('adds the CRM for a white-label owner whose agency has Power Dialer', () => {
+    const groups = navFor({
+      ...NOBODY,
+      hasFullAccess: true,
+      isWhiteLabel: true,
+      upgrades: ['POWER_DIALER'],
+    });
+    expect(allNavItems(groups).map(item => item.href)).toContain('/insurance-leads');
+    expect(
+      allNavItems(navFor({ ...NOBODY, hasFullAccess: true, isWhiteLabel: true })).map(i => i.href)
+    ).not.toContain('/insurance-leads');
+    // A normal agency's nav does not read upgrades at all.
+    expect(navFor({ ...NOBODY, hasFullAccess: true, upgrades: ['POWER_DIALER'] })).toBe(
+      AGENCY_OWNER_NAV
+    );
+  });
+
   it('never gives the white-label nav without full access', () => {
     expect(navFor({ ...NOBODY, isWhiteLabel: true, isAgentOnly: true })).not.toBe(
       WHITE_LABEL_OWNER_NAV
@@ -368,7 +405,7 @@ describe('navFor with the white-label tier', () => {
 });
 
 describe('isRouteBlockedFor', () => {
-  const EIGHT = [
+  const OPENED = [
     '/publishers',
     '/buyers',
     '/numbers',
@@ -377,29 +414,39 @@ describe('isRouteBlockedFor', () => {
     '/sales',
     '/network/agencies',
     '/network/onboarding',
+    '/agents',
+    '/revenue',
+    '/routing',
+    '/upgrades',
   ];
+  const HUBS = ['/agents', '/revenue', '/routing', '/upgrades'];
 
   const WL = { isPlatformAdmin: false, isWhiteLabel: true };
   const NORMAL = { isPlatformAdmin: false, isWhiteLabel: false };
   const STAFF = { isPlatformAdmin: true, isWhiteLabel: false };
 
-  it('is the eight routes asked for', () => {
-    expect([...WHITE_LABEL_ROUTES]).toEqual(EIGHT);
+  it('is the routes asked for, the four hubs included', () => {
+    expect([...WHITE_LABEL_ROUTES]).toEqual(OPENED);
   });
 
-  it.each(EIGHT)('lets a white-label owner through %s, and what is under it', path => {
+  it.each(HUBS)('lists the hub %s as staff-only, so a normal agency is sent home', path => {
+    expect(STAFF_ONLY_ROUTES as readonly string[]).toContain(path);
+    expect(WHITE_LABEL_ROUTES as readonly string[]).toContain(path);
+  });
+
+  it.each(OPENED)('lets a white-label owner through %s, and what is under it', path => {
     expect(isRouteBlockedFor(path, WL)).toBe(false);
     expect(isRouteBlockedFor(`${path}/`, WL)).toBe(false);
     expect(isRouteBlockedFor(`${path}?id=abc`, WL)).toBe(false);
   });
 
-  it.each(EIGHT)('blocks a normal owner on %s', path => {
+  it.each(OPENED)('blocks a normal owner on %s', path => {
     expect(isStaffOnlyRoute(path)).toBe(true);
     expect(isRouteBlockedFor(path, NORMAL)).toBe(true);
   });
 
   it('lets staff through everything', () => {
-    for (const path of [...STAFF_ONLY_ROUTES, ...EIGHT, '/dashboard']) {
+    for (const path of [...STAFF_ONLY_ROUTES, ...OPENED, '/dashboard']) {
       expect(isRouteBlockedFor(path, STAFF), path).toBe(false);
     }
   });
@@ -432,5 +479,60 @@ describe('isRouteBlockedFor', () => {
       expect(isRouteBlockedFor(path, NORMAL), path).toBe(isStaffOnlyRoute(path));
       expect(isRouteBlockedFor(path, WL), path).toBe(false);
     }
+  });
+});
+
+describe('whiteLabelRedirectFor', () => {
+  const ASKED: Array<[string, string]> = [
+    ['/live', '/dashboard'],
+    ['/leaderboard', '/agents?tab=performance'],
+    ['/delivery/team', '/agents?tab=period'],
+    ['/settings/users', '/agents?tab=roster'],
+    ['/sales', '/revenue'],
+    ['/reports', '/revenue?tab=reports'],
+    ['/payouts', '/publishers?tab=payouts'],
+    ['/billing', '/buyers?tab=wallets'],
+    ['/campaigns', '/routing'],
+    ['/numbers', '/routing?tab=numbers'],
+    ['/rating', '/settings?tab=plan'],
+    ['/delivery', '/settings?tab=plan'],
+    ['/delivery/settlements', '/settings?tab=plan&section=settlements'],
+  ];
+
+  it('is exactly the redirects asked for', () => {
+    expect(Object.entries(WHITE_LABEL_REDIRECTS)).toEqual(ASKED);
+  });
+
+  it.each(ASKED)('sends %s to %s', (from, to) => {
+    expect(whiteLabelRedirectFor(from)).toBe(to);
+    expect(whiteLabelRedirectFor(`${from}/`)).toBe(to);
+  });
+
+  it('lands every redirect on a page that exists', () => {
+    for (const [, to] of ASKED) expect(hasPage(to), to).toBe(true);
+  });
+
+  it('matches exact paths only', () => {
+    for (const path of [
+      '/campaigns/abc-123',
+      '/delivery/me',
+      '/network/onboarding',
+      '/settings',
+      '/settings/webhooks',
+      '/buyers',
+      '/leaderboards',
+      '/dashboard',
+    ]) {
+      expect(whiteLabelRedirectFor(path), path).toBeNull();
+    }
+  });
+
+  it("carries the old URL's query under the tab's own", () => {
+    expect(whiteLabelRedirectFor('/leaderboard?period=THIS_WEEK')).toBe(
+      '/agents?period=THIS_WEEK&tab=performance'
+    );
+    expect(whiteLabelRedirectFor('/delivery/settlements?tab=x')).toBe(
+      '/settings?tab=plan&section=settlements'
+    );
   });
 });

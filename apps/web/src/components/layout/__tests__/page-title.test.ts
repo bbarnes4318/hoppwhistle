@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { AGENCY_OWNER_NAV, AGENT_NAV, PLATFORM_NAV } from '../nav-config';
+import { AGENCY_OWNER_NAV, AGENT_NAV, PLATFORM_NAV, WHITE_LABEL_OWNER_NAV } from '../nav-config';
 import { pageTitleFor } from '../page-title';
 
 /**
@@ -147,5 +147,14 @@ describe('the pages that were fixed render no title of their own', () => {
     const props = source.slice(declStart, source.indexOf('\n}', declStart));
     expect(props).toContain("Omit<React.HTMLAttributes<HTMLDivElement>, 'title'>");
     expect(props).not.toMatch(/^\s*title\??:/m);
+  });
+});
+
+describe("the viewer's own nav names its pages first", () => {
+  it('calls /dashboard Today for a white-label owner, and Dashboard otherwise', () => {
+    expect(pageTitleFor('/dashboard', WHITE_LABEL_OWNER_NAV)).toBe('Today');
+    expect(pageTitleFor('/dashboard')).toBe('Dashboard');
+    expect(pageTitleFor('/buyers', WHITE_LABEL_OWNER_NAV)).toBe('Buyers');
+    expect(pageTitleFor('/agents')).toBe('Agents');
   });
 });

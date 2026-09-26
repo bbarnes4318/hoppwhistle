@@ -22,7 +22,9 @@ import { describe, expect, it } from 'vitest';
  */
 
 const WEB_SRC = resolve(__dirname, '../..');
-const PAGE = readFileSync(join(WEB_SRC, 'app', '(dashboard)', 'reports', 'page.tsx'), 'utf8');
+// The Reports view: its body moved out of the page so the Revenue hub can
+// render it in a tab, and the page renders it too.
+const PAGE = readFileSync(join(WEB_SRC, 'components', 'reports', 'reports-view.tsx'), 'utf8');
 const API_ROUTES = readFileSync(resolve(WEB_SRC, '../../api/src/routes/index.ts'), 'utf8');
 
 /** The report paths the API registers, from its `'/api/v1/reports/...'` literals. */
