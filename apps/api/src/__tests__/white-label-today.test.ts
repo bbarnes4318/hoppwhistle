@@ -103,6 +103,17 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
     });
   }
 
+  /**
+   * `msAgo` before now, but never before the start of today on the platform's
+   * clock. Fixtures written a couple of minutes back would otherwise land on
+   * YESTERDAY for the first two minutes after midnight in New York, and the
+   * TODAY figures under test would read zero.
+   */
+  function earlierToday(msAgo: number): Date {
+    const startOfToday = resolvePeriod('TODAY').start.getTime();
+    return new Date(Math.max(Date.now() - msAgo, startOfToday + 1));
+  }
+
   async function call(tenantId: string, data: Partial<Prisma.CallUncheckedCreateInput> = {}) {
     return (
       await prisma.call.create({
@@ -112,7 +123,7 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
           callSid: `today-${++seq}-${Date.now()}`,
           status: CallStatus.COMPLETED,
           direction: CallDirection.INBOUND,
-          createdAt: new Date(Date.now() - 120_000),
+          createdAt: earlierToday(120_000),
           ...data,
         },
       })
@@ -239,7 +250,7 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
     };
 
     /* ── Today's calls ─────────────────────────────────────────────────────── */
-    const minuteAgo = new Date(Date.now() - 60_000);
+    const minuteAgo = earlierToday(60_000);
     const delivered = await call(tenantId, {
       buyerId: buyers.atCap,
       publisherId,
@@ -276,7 +287,7 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
         firstName: 'Test',
         lastName: 'Applicant',
         callId: delivered,
-        submittedAt: new Date(Date.now() - 30_000),
+        submittedAt: earlierToday(30_000),
       },
     });
 

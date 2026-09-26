@@ -419,4 +419,117 @@ describe.skipIf(!gate.available)('Tenant brand theme', () => {
       });
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Upgrades: PUT /api/v1/admin/tenants/:tenantId/upgrades
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('setting the upgrades', () => {
+    function setUpgrades(userId: string, tenantId: string | null, target: string, body: unknown) {
+      return app.inject({
+        method: 'PUT',
+        url: `/api/v1/admin/tenants/${target}/upgrades`,
+        headers: tokenFor(userId, tenantId),
+        payload: body as Record<string, unknown>,
+      });
+    }
+
+    it('lets a platform admin turn Power Dialer on, and the agency is told', async () => {
+      await prisma.tenant.update({
+        where: { id: agencyB.id },
+        data: { metadata: { keep: 'this', upgrades: ['NOT_A_THING'] } },
+      });
+
+      const response = await setUpgrades(operatorId, null, agencyB.id, {
+        upgrades: ['VOICE_STUDIO', 'POWER_DIALER', 'POWER_DIALER'],
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual({
+        tenantId: agencyB.id,
+        upgrades: ['POWER_DIALER', 'VOICE_STUDIO'],
+      });
+
+      // The rest of the metadata is untouched.
+      const row = await prisma.tenant.findUnique({
+        where: { id: agencyB.id },
+        select: { metadata: true },
+      });
+      expect(row?.metadata).toEqual({ keep: 'this', upgrades: ['POWER_DIALER', 'VOICE_STUDIO'] });
+
+      expect((await me(agencyB.ownerId, agencyB.id)).json().upgrades).toEqual([
+        'POWER_DIALER',
+        'VOICE_STUDIO',
+      ]);
+
+      const read = await app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/tenants/${agencyB.id}/upgrades`,
+        headers: tokenFor(operatorId, null),
+      });
+      expect(read.statusCode).toBe(200);
+      expect(read.json().data.upgrades).toEqual(['POWER_DIALER', 'VOICE_STUDIO']);
+    });
+
+    it('turns them all off with an empty list', async () => {
+      await setUpgrades(operatorId, null, agencyB.id, { upgrades: ['POWER_DIALER'] });
+      const off = await setUpgrades(operatorId, null, agencyB.id, { upgrades: [] });
+      expect(off.statusCode).toBe(200);
+      expect((await me(agencyB.ownerId, agencyB.id)).json().upgrades).toEqual([]);
+    });
+
+    it.each([
+      [{}],
+      [{ upgrades: 'POWER_DIALER' }],
+      [{ upgrades: ['POWER_DIALER', 'CRM'] }],
+      [{ upgrades: [1] }],
+    ])('refuses a bad body 400: %j', async body => {
+      const response = await setUpgrades(operatorId, null, agencyB.id, body);
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('answers 404 for an unknown tenant', async () => {
+      const response = await setUpgrades(operatorId, null, '00000000-0000-0000-0000-000000000000', {
+        upgrades: [],
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it.each([
+      ['OWNER', () => agencyA.ownerId],
+      ['ADMIN', () => agencyA.adminId],
+      ['AGENT', () => agencyA.agentId],
+    ])('refuses an agency %s 403, on their own agency', async (_role, userId) => {
+      const response = await setUpgrades(userId(), agencyA.id, agencyA.id, {
+        upgrades: ['POWER_DIALER'],
+      });
+      expect(response.statusCode).toBe(403);
+      const read = await app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/tenants/${agencyA.id}/upgrades`,
+        headers: tokenFor(userId(), agencyA.id),
+      });
+      expect(read.statusCode).toBe(403);
+      expect((await me(agencyA.ownerId, agencyA.id)).json().upgrades).toEqual([]);
+    });
+
+    it('writes an audit row with the before and after', async () => {
+      await setUpgrades(operatorId, null, agencyB.id, { upgrades: ['POWER_DIALER'] });
+      await setUpgrades(operatorId, null, agencyB.id, { upgrades: [] });
+      const rows = await prisma.auditLog.findMany({
+        where: { action: 'platform.tenant.upgrades_changed' },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(rows).toHaveLength(2);
+      expect(rows[0].userId).toBe(operatorId);
+      expect(rows[0].entityId).toBe(agencyB.id);
+      expect(rows[0].changes).toEqual({
+        before: { upgrades: [] },
+        after: { upgrades: ['POWER_DIALER'] },
+      });
+      expect(rows[1].changes).toEqual({
+        before: { upgrades: ['POWER_DIALER'] },
+        after: { upgrades: [] },
+      });
+    });
+  });
 });
