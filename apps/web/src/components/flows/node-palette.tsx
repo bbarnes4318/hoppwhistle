@@ -44,7 +44,7 @@ const nodeTypes = [
 ];
 
 export function NodePalette({
-  onAddNode,
+  onAddNode: _onAddNode,
 }: {
   onAddNode: (nodeType: string, position: { x: number; y: number }) => void;
 }) {

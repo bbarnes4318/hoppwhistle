@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+
 import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
@@ -156,18 +157,20 @@ export class ComplianceService {
   async checkOverride(
     tenantId: string,
     phoneNumber: string,
-    callId?: string
+    _callId?: string
   ): Promise<{ hasOverride: boolean; overrideId?: string; expiresAt?: Date }> {
     const normalized = this.normalizePhoneNumber(phoneNumber);
 
+    // NOTE: this filter used to carry a second `OR` key scoping the override to
+    // `callId` (or a global override). Duplicate keys in an object literal keep
+    // only the last one, so that callId clause never reached Prisma and any
+    // unexpired override for the number matches regardless of call. The dead
+    // clause was removed to keep the query exactly as it has always run;
+    // restoring call scoping (AND of both ORs) is a behaviour change to review.
     const override = await this.prisma.complianceOverride.findFirst({
       where: {
         tenantId,
         phoneNumber: normalized,
-        OR: [
-          { callId: callId || null },
-          { callId: null }, // Global override
-        ],
         OR: [
           { expiresAt: null },
           { expiresAt: { gt: new Date() } },
@@ -251,7 +254,7 @@ export class ComplianceService {
         return {
           allowed: false,
           reason: 'Consent token missing or invalid',
-          consentStatus: consentCheck.status as any,
+          consentStatus: consentCheck.status as ComplianceCheckResult['consentStatus'],
         };
       }
     }
@@ -336,7 +339,7 @@ export class ComplianceService {
         ipAddress: options.ipAddress,
         source: options.source,
         expiresAt: options.expiresAt,
-        metadata: options.metadata || {},
+        metadata: (options.metadata || {}) as Prisma.InputJsonObject,
       },
     });
 
@@ -393,7 +396,7 @@ export class ComplianceService {
           action: data.action,
           entityType: data.entityType,
           entityId: data.entityId,
-          changes: data.changes || {},
+          changes: (data.changes || {}) as Prisma.InputJsonObject,
           ipAddress: data.ipAddress,
           userAgent: data.userAgent,
         },

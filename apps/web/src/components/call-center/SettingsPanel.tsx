@@ -148,6 +148,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 {/* Carrier Logo */}
                 <div className="carrier-logo-wrap">
                   {info.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- static carrier logo with onError fallback; next/image would change loading behaviour
                     <img
                       src={info.logo}
                       alt={carrier}

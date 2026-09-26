@@ -238,8 +238,6 @@ describe('the call-state signals', () => {
     // live is only ever text or a dot on its tint — which is why the live
     // board is the one screen that must not use a brand-tinted chip.
     expect(contrast(light.live, light.brand), 'light live vs brand').toBeGreaterThanOrEqual(2);
-    {
-    }
   });
 });
 

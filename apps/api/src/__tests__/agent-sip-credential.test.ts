@@ -145,7 +145,9 @@ class FakeTable {
 /** Each user's home agency (`users.tenantId`), as the `users` table holds it. */
 const homeAgency = new Map<string, string>();
 
-function fakePrisma(table: FakeTable): Parameters<typeof issueCredential>[2]['prisma'] {
+function fakePrisma(
+  table: FakeTable
+): NonNullable<Parameters<typeof issueCredential>[2]>['prisma'] {
   const user = {
     findUnique: vi.fn(async (args: { where: { id: string } }) => {
       await Promise.resolve();

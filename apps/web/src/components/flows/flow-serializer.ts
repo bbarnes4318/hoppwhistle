@@ -32,8 +32,8 @@ export class FlowSerializer {
       }
       edgeMap.get(edge.source)!.push({
         target: edge.target,
-        condition: edge.data?.condition,
-        weight: edge.data?.weight,
+        condition: edge.data?.condition as string | undefined,
+        weight: edge.data?.weight as number | undefined,
       });
     });
 
@@ -43,7 +43,7 @@ export class FlowSerializer {
       .map(node => this.convertNodeToFlowNode(node, edgeMap));
 
     // Create entry node
-    const entryTarget = entryNode.data.config?.target as string | undefined;
+    const entryTarget = (entryNode.data.config as { target?: string } | undefined)?.target;
     const entryEdges = edgeMap.get(entryNode.id) || [];
     const target = entryTarget || entryEdges[0]?.target || flowNodes[0]?.id || '';
 
@@ -87,7 +87,7 @@ export class FlowSerializer {
           maxDigits: (config.maxDigits as number) || undefined,
           finishOnKey: (config.finishOnKey as string) || undefined,
           choices,
-          default: outgoingEdges.find(e => !e.condition)?.target || config.default,
+          default: outgoingEdges.find(e => !e.condition)?.target || (config.default as string | undefined),
           ...(next ? { next } : {}),
         };
       }
@@ -131,10 +131,10 @@ export class FlowSerializer {
             (config.buyers as Array<{
               id: string;
               destination: string;
-              weight?: number;
+              weight: number;
               maxConcurrency?: number;
               maxDailyCalls?: number;
-              enabled?: boolean;
+              enabled: boolean;
             }>) || [],
           strategy:
             (config.strategy as 'round-robin' | 'weighted' | 'least-calls') || 'round-robin',

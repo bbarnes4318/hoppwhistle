@@ -13,6 +13,8 @@
  * review (logged as a warning) but left as-is to avoid data loss.
  */
 
+import type { Prisma } from '@prisma/client';
+
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -68,7 +70,7 @@ export async function repairUuidRouteDestinations(): Promise<void> {
         where: { id: '1b419be1-cccd-40cb-99ae-ca88d696e370' },
       });
       if (specialUser) {
-        const metadata = (specialUser.metadata as Record<string, any>) || {};
+        const metadata = (specialUser.metadata as Prisma.JsonObject | null) || {};
         if (!metadata.extension) {
           metadata.extension = '+18666132993';
           await prisma.user.update({
@@ -104,7 +106,7 @@ export async function repairUuidRouteDestinations(): Promise<void> {
     for (const route of corruptedRoutes) {
       // The UUID in destination should be the userId. Try to find the user's extension.
       const user = route.phoneNumber?.user;
-      const extension = (user?.metadata as any)?.extension;
+      const extension = (user?.metadata as Prisma.JsonObject | null | undefined)?.extension;
 
       if (extension && typeof extension === 'string' && extension.replace(/\D/g, '').length >= 3) {
         // User has a valid extension — use it as the destination

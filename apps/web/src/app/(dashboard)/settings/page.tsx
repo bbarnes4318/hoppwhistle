@@ -215,7 +215,7 @@ export default function SettingsPage() {
                               variant="ghost"
                               size="icon"
                               className="hover:bg-dropped-tint hover:text-dropped-ink"
-                              onClick={() => handleDeleteWebhook(webhook.id)}
+                              onClick={() => void handleDeleteWebhook(webhook.id)}
                               disabled={readOnly}
                               title={readOnlyProps.title}
                             >
@@ -422,7 +422,7 @@ export default function SettingsPage() {
       <AddWebhookDialog
         open={addWebhookOpen}
         onOpenChange={setAddWebhookOpen}
-        onSuccess={loadWebhooks}
+        onSuccess={() => void loadWebhooks()}
       />
     </div>
   );

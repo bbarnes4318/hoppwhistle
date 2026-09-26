@@ -403,7 +403,7 @@ export function CustomerIntakeForm(): JSX.Element {
                 Clear
               </Button>
               <Button
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
                 disabled={isSubmitting || !isTopSectionValid()}
                 className="bg-brand text-brand-fg px-6"
               >
@@ -967,7 +967,7 @@ export function CustomerIntakeForm(): JSX.Element {
                   Clear Form
                 </Button>
                 <Button
-                  onClick={handleSubmit}
+                  onClick={() => void handleSubmit()}
                   disabled={isSubmitting || !isTopSectionValid()}
                   className="bg-brand text-brand-fg px-6"
                 >

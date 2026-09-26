@@ -108,7 +108,10 @@ export default function MusicSettingsPage() {
     }
   }, []);
 
-  const handleUpdate = (key: keyof ExtendedMusicSettings, value: any) => {
+  const handleUpdate = (
+    key: keyof ExtendedMusicSettings,
+    value: ExtendedMusicSettings[keyof ExtendedMusicSettings]
+  ) => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setIsDirty(true);
   };

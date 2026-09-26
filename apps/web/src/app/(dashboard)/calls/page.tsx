@@ -68,6 +68,7 @@ import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
 interface CallRecord {
   id: string;
   callSid?: string;
+  direction?: string;
   createdAt: string;
   startedAt?: string | null;
   answeredAt?: string | null;
@@ -164,7 +165,7 @@ interface CallDetail extends CallRecord {
     id: string;
     vertical?: string;
     requestId?: string;
-    payload?: any;
+    payload?: unknown;
     status?: string;
     createdAt: string;
     bids?: Array<{
@@ -180,6 +181,16 @@ interface CallDetail extends CallRecord {
     createdAt: string;
   }>;
 }
+
+interface NamedOption {
+  id: string;
+  name: string;
+}
+
+// The filter-option routes answer either a bare array or an envelope.
+type OptionListBody =
+  | NamedOption[]
+  | { data?: NamedOption[]; publishers?: NamedOption[]; buyers?: NamedOption[] };
 
 export default function OperationsCallLogsPage() {
   const { user, isAdmin, isOwner } = useAuth();
@@ -223,10 +234,10 @@ export default function OperationsCallLogsPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   // Filter parameters
-  const [campaigns, setCampaigns] = useState<any[]>([]);
-  const [publishers, setPublishers] = useState<any[]>([]);
-  const [buyers, setBuyers] = useState<any[]>([]);
-  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<NamedOption[]>([]);
+  const [publishers, setPublishers] = useState<NamedOption[]>([]);
+  const [buyers, setBuyers] = useState<NamedOption[]>([]);
+  const [leadLists, setLeadLists] = useState<NamedOption[]>([]);
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPublisherId, setSelectedPublisherId] = useState<string>('all');
@@ -431,13 +442,13 @@ export default function OperationsCallLogsPage() {
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const campRes = await apiClient.get<any>('/api/v1/campaigns');
+        const campRes = await apiClient.get<OptionListBody>('/api/v1/campaigns');
         if (campRes.data) {
           const list = Array.isArray(campRes.data) ? campRes.data : campRes.data.data || [];
           setCampaigns(list);
         }
 
-        const listsRes = await apiClient.get<any>('/api/v1/lead-lists');
+        const listsRes = await apiClient.get<OptionListBody>('/api/v1/lead-lists');
         if (listsRes.data) {
           const list = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data.data || [];
           setLeadLists(list);
@@ -462,14 +473,14 @@ export default function OperationsCallLogsPage() {
             );
           }
 
-          const pubRes = await apiClient.get<any>('/api/v1/publishers');
+          const pubRes = await apiClient.get<OptionListBody>('/api/v1/publishers');
           if (pubRes.data) {
             const list = Array.isArray(pubRes.data)
               ? pubRes.data
               : pubRes.data.publishers || pubRes.data.data || [];
             setPublishers(list);
           }
-          const buyRes = await apiClient.get<any>('/api/v1/buyers');
+          const buyRes = await apiClient.get<OptionListBody>('/api/v1/buyers');
           if (buyRes.data) {
             const list = Array.isArray(buyRes.data)
               ? buyRes.data
@@ -1175,7 +1186,7 @@ export default function OperationsCallLogsPage() {
 
           <Tooltip content="Export CSV" align="end">
             <Button
-              onClick={handleExportCSV}
+              onClick={() => void handleExportCSV()}
               disabled={exporting || calls.length === 0}
               size="sm"
               aria-label="Export CSV"

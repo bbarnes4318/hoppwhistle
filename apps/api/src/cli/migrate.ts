@@ -141,7 +141,7 @@ function parseCSV(filePath: string): Record<string, unknown>[] {
     columns: true,
     skip_empty_lines: true,
     trim: true,
-  });
+  }) as Record<string, unknown>[];
   return records;
 }
 
@@ -150,7 +150,7 @@ function parseCSV(filePath: string): Record<string, unknown>[] {
  */
 function parseJSON(filePath: string): Record<string, unknown>[] {
   const content = readFileSync(filePath, 'utf-8');
-  return JSON.parse(content);
+  return JSON.parse(content) as Record<string, unknown>[];
 }
 
 /**

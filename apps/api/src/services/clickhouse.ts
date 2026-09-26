@@ -48,7 +48,7 @@ export class ClickHouseService {
         format: 'JSONEachRow',
       });
 
-      const data = await result.json<T>();
+      const data = await result.json<T[]>();
       return data;
     } catch (error) {
       logger.error('ClickHouse query error:', error);

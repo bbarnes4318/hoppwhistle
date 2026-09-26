@@ -26,12 +26,13 @@ import { eventBus } from '../services/event-bus.js';
  * in `quotas.ts`: it names the object being acted on, and the authority to act
  * on it comes from the capability, not from the body.
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugins must return a promise
 export async function registerDemoEventRoutes(fastify: FastifyInstance) {
   fastify.addHook('onRequest', authenticate);
   fastify.addHook('preHandler', requirePlatformAdmin);
 
   // Endpoint to trigger a mock call event
-  fastify.post('/api/v1/demo/events/call', async (request, reply) => {
+  fastify.post('/api/v1/demo/events/call', async (request, _reply) => {
     const { callId, eventType, tenantId } = request.body as {
       callId?: string;
       eventType?: string;
@@ -86,7 +87,15 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
     }
 
     // Publish event
-    const eventData: any = {
+    const eventData: {
+      callId: string;
+      callState: typeof updatedState;
+      direction?: string;
+      duration?: number;
+      answered?: boolean;
+      hasRecording?: boolean;
+      recordingDuration?: number;
+    } = {
       callId: mockCallId,
       callState: updatedState,
     };
@@ -117,7 +126,7 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
   });
 
   // Endpoint to start a sequence of mock call events
-  fastify.post('/api/v1/demo/events/call/sequence', async (request, reply) => {
+  fastify.post('/api/v1/demo/events/call/sequence', async (request, _reply) => {
     const { callId, tenantId, delay = 1000 } = request.body as {
       callId?: string;
       tenantId?: string;
@@ -155,20 +164,22 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
     ];
 
     for (let i = 0; i < events.length; i++) {
-      setTimeout(async () => {
-        const { event, status } = events[i];
-        const updatedState = await callStateService.updateCallState(mockCallId, {
-          status,
-        });
+      setTimeout(() => {
+        void (async () => {
+          const { event, status } = events[i];
+          const updatedState = await callStateService.updateCallState(mockCallId, {
+            status,
+          });
 
-        await eventBus.publish('call.*', {
-          event,
-          tenantId: mockTenantId,
-          data: {
-            callId: mockCallId,
-            callState: updatedState,
-          },
-        });
+          await eventBus.publish('call.*', {
+            event,
+            tenantId: mockTenantId,
+            data: {
+              callId: mockCallId,
+              callState: updatedState,
+            },
+          });
+        })();
       }, i * delay);
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { DollarSign, Check, X, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import {
   formatCurrency,
   calculateAgeFromDOB,
 } from '@/lib/call-center/quoteCalculator';
-import { FACE_AMOUNT_OPTIONS, CARRIER_LOGOS, type ProspectData } from '@/lib/call-center/types';
+import { FACE_AMOUNT_OPTIONS, type ProspectData } from '@/lib/call-center/types';
 import { cn } from '@/lib/utils';
 
 // ============================================================================

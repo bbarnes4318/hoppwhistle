@@ -393,7 +393,7 @@ function BotDashboardContent() {
  return (
  <Step3LeadsCampaign
  leads={leads}
- onUploadLeads={handleUploadLeads}
+ onUploadLeads={(e) => void handleUploadLeads(e)}
  concurrency={concurrency}
  onConcurrencyChange={setConcurrency}
  onContinue={() => setCurrentStep(4)}

@@ -332,11 +332,11 @@ export function CarrierConfirmation({
       {/* Script Prompt */}
       <div className="bg-brand-tint border border-brand rounded-lg p-4">
         <p className="text-brand-ink text-sm italic">
-          "Just to confirm, you've selected {formatCurrency(premium)} per month for $
+          &quot;Just to confirm, you&apos;ve selected {formatCurrency(premium)} per month for $
           {faceAmount.toLocaleString()}
           of whole life coverage with {carrier}.{' '}
           {beneficiary ? `Your beneficiary is ${beneficiary}.` : ''}
-          Does that sound correct?"
+          Does that sound correct?&quot;
         </p>
       </div>
 

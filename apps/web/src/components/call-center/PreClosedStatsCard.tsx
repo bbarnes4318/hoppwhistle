@@ -1,11 +1,38 @@
 import { User, Heart, Shield, DollarSign, TrendingDown, Award, Activity } from 'lucide-react';
 import React from 'react';
 
-interface PreClosedStatsCardProps {
-  leadData: any;
+type LeadValue = string | number | null | undefined;
+
+/** Fields this card reads from a CRM customer record or live call data. */
+interface PreClosedLeadData {
+  firstName?: string | null;
+  first_name?: string | null;
+  lastName?: string | null;
+  last_name?: string | null;
+  fullName?: string | null;
+  age?: string | number | null;
+  primaryBeneficiaryName?: string | null;
+  primaryBeneficiaryRelationship?: string | null;
+  relation?: string | null;
+  coverageAmount?: LeadValue;
+  faceAmount?: LeadValue;
+  carrier?: string | null;
+  monthlyPremium?: LeadValue;
+  currentPremium?: LeadValue;
+  insurance?: {
+    coverageAmount?: LeadValue;
+    carrier?: string | null;
+    monthlyPremium?: LeadValue;
+  } | null;
+  customFields?: Record<string, string | undefined> | null;
 }
 
-export function PreClosedStatsCard({ leadData }: PreClosedStatsCardProps) {
+interface PreClosedStatsCardProps {
+  leadData: object | null | undefined;
+}
+
+export function PreClosedStatsCard({ leadData: rawLeadData }: PreClosedStatsCardProps) {
+  const leadData = rawLeadData as PreClosedLeadData | null | undefined;
   if (!leadData) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center text-ink-3 bg-sunken border border-rule rounded-card">
@@ -58,14 +85,14 @@ export function PreClosedStatsCard({ leadData }: PreClosedStatsCardProps) {
   const cheapestSavings = leadData.customFields?.savingsVsCurrent;
 
   // Formatting helpers
-  const formatCurrency = (val: any) => {
+  const formatCurrency = (val: LeadValue) => {
     if (val === undefined || val === null || val === '') return 'N/A';
     const num = parseFloat(String(val));
     if (isNaN(num)) return val;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
   };
 
-  const formatSavings = (val: any) => {
+  const formatSavings = (val: LeadValue) => {
     if (val === undefined || val === null || val === '') return null;
     const num = parseFloat(String(val));
     if (isNaN(num) || num <= 0) return null;

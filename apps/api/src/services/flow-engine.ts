@@ -8,12 +8,12 @@ import {
 
 import { getPrismaClient } from '../lib/prisma.js';
 
+import { isDeliveryAllowed } from './billing/delivery-gate.js';
 import { callStateService } from './call-state.js';
 import { carrierService } from './carrier-service.js';
 import { cnamService } from './cnam-service.js';
 import { compliancePolicyService } from './compliance-policy-service.js';
 import { complianceService } from './compliance-service.js';
-import { isDeliveryAllowed } from './billing/delivery-gate.js';
 import { eventBus } from './event-bus.js';
 import { stirShakenService } from './stir-shaken-service.js';
 
@@ -209,7 +209,7 @@ export class FlowEngine {
    */
   private async executeAction(
     action: ExecutionResult['action'],
-    nextNodeId: string | null
+    _nextNodeId: string | null
   ): Promise<void> {
     switch (action.type) {
       case 'continue':
@@ -253,7 +253,7 @@ export class FlowEngine {
         });
         break;
 
-      case 'buyer.route':
+      case 'buyer.route': {
         // Check compliance before routing to buyer
         const complianceResult = await this.checkComplianceBeforeBuyerRoute(action.params);
         if (!complianceResult.allowed) {
@@ -332,6 +332,7 @@ export class FlowEngine {
           },
         });
         break;
+      }
 
       case 'record.start':
         await eventBus.publish('call.*', {
@@ -362,7 +363,7 @@ export class FlowEngine {
         if (action.params) {
           this.context.tags = {
             ...this.context.tags,
-            ...(action.params as Record<string, unknown>),
+            ...action.params,
           };
         }
         break;
@@ -372,7 +373,7 @@ export class FlowEngine {
         break;
 
       default:
-        console.warn(`Unknown action type: ${(action as any).type}`);
+        console.warn(`Unknown action type: ${action.type}`);
     }
   }
 
@@ -445,10 +446,9 @@ export class FlowEngine {
   /**
    * Check compliance before routing to buyer
    */
-  private async checkComplianceBeforeBuyerRoute(buyerParams: {
-    buyerId?: string;
-    destination?: string;
-  }): Promise<import('./compliance-service.js').ComplianceCheckResult> {
+  private async checkComplianceBeforeBuyerRoute(
+    _buyerParams: ExecutionResult['action']['params']
+  ): Promise<import('./compliance-service.js').ComplianceCheckResult> {
     try {
       // Get call details to extract phone number
       const call = await this.prisma.call.findUnique({
@@ -468,7 +468,7 @@ export class FlowEngine {
       const policy = await compliancePolicyService.getEffectivePolicy(this.tenantId);
 
       // Get consent token from call metadata if available
-      const consentToken = (call.metadata as any)?.consentToken;
+      const consentToken = (call.metadata as { consentToken?: string } | null)?.consentToken;
 
       // Perform compliance check
       const result = await complianceService.checkCompliance(this.tenantId, call.toNumber, {
@@ -534,7 +534,7 @@ export class FlowEngine {
 
   private get logger() {
     return {
-      error: (msg: string, ...args: any[]) => console.error(`[FlowEngine] ${msg}`, ...args),
+      error: (msg: string, ...args: unknown[]) => console.error(`[FlowEngine] ${msg}`, ...args),
     };
   }
 }

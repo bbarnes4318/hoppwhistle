@@ -102,7 +102,7 @@ async function createActivity(
       | 'COMPLIANCE';
     title: string;
     description?: string;
-    metadata?: any;
+    metadata?: Prisma.InputJsonValue;
     createdById?: string;
   }
 ) {
@@ -277,7 +277,7 @@ export async function ingestLead(
           ...((existing.customFields as Record<string, unknown>) || {}),
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        } as any,
+        } as Prisma.InputJsonObject,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : existing.notes,
         priority: contactData.priority ? String(contactData.priority) : existing.priority,
@@ -342,7 +342,7 @@ export async function ingestLead(
         customFields: {
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        } as any,
+        } as Prisma.InputJsonObject,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : null,
         priority: contactData.priority ? String(contactData.priority) : null,
@@ -661,7 +661,7 @@ export interface ActivityReturn {
   title: string;
   description: string | null;
   createdAt: string;
-  metadata?: any;
+  metadata?: Prisma.JsonValue;
   createdById?: string | null;
 }
 
@@ -1187,7 +1187,7 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
           : existing
             ? (existing.customFields as Prisma.InputJsonValue)
             : {}
-      ) as any,
+      ) as Prisma.InputJsonValue,
     };
 
     if (existing) {

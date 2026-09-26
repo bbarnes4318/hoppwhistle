@@ -86,7 +86,7 @@ async function passThroughError(
   });
 }
 
-export async function registerFishRoutes(fastify: FastifyInstance) {
+export function registerFishRoutes(fastify: FastifyInstance): Promise<void> {
   /** Whether the Studio is usable at all, plus remaining credit. */
   fastify.get('/api/v1/fish/status', async (request, reply) => {
     if (!requireUser(request, reply)) return;
@@ -205,7 +205,7 @@ export async function registerFishRoutes(fastify: FastifyInstance) {
           sampleCount += 1;
           form.append(
             'voices',
-            new Blob([buffer], { type: part.mimetype || 'application/octet-stream' }),
+            new Blob([new Uint8Array(buffer)], { type: part.mimetype || 'application/octet-stream' }),
             part.filename || `sample-${sampleCount}.wav`
           );
         } else if (part.type === 'field' && typeof part.value === 'string') {
@@ -243,7 +243,7 @@ export async function registerFishRoutes(fastify: FastifyInstance) {
     const visibility = ALLOWED_VISIBILITY.includes(fields.visibility as never)
       ? fields.visibility
       : 'private';
-    form.set('visibility', visibility!);
+    form.set('visibility', visibility);
 
     if (fields.enhance_audio_quality === 'false') {
       form.set('enhance_audio_quality', 'false');
@@ -391,4 +391,6 @@ export async function registerFishRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  return Promise.resolve();
 }

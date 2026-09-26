@@ -4,11 +4,11 @@ import type { ProgressEvent, ResearchRunDetail, StageInfo } from '@hopwhistle/sh
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useToast } from '@/components/ui/use-toast';
+
 import { researchApi, type ReportResponse } from './api';
 import { InstitutionalReport } from './InstitutionalReport';
 import { computePhases, FRIENDLY_STAGE, RESEARCH_STREAMS, type PhaseState } from './phases';
-
-import { useToast } from '@/components/ui/use-toast';
 
 const ACTIVE = new Set(['queued', 'planning', 'running', 'waiting']);
 type StageWithOutput = StageInfo & { output?: unknown };

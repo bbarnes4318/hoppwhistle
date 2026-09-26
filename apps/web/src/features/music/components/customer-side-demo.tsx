@@ -24,7 +24,7 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,8 @@ import { cn } from '@/lib/utils';
 const playRingtone = () => {
   if (typeof window === 'undefined') return () => {};
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextClass = window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return () => {};
     const ctx = new AudioContextClass();
     
@@ -200,7 +201,7 @@ export function CustomerSideDemo() {
   const previewIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Speak text helper using SpeechSynthesis API
-  const speakText = (text: string) => {
+  const speakText = useCallback((text: string) => {
     if (!audioFeedbackEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
@@ -218,7 +219,7 @@ export function CustomerSideDemo() {
     } catch (e) {
       console.warn('Speech synthesis failed:', e);
     }
-  };
+  }, [audioFeedbackEnabled]);
 
   // Ringtone simulation hook
   useEffect(() => {
@@ -242,7 +243,7 @@ export function CustomerSideDemo() {
         window.speechSynthesis.cancel();
       }
     }
-  }, [stage, audioFeedbackEnabled]);
+  }, [stage, audioFeedbackEnabled, speakText]);
 
   // Sync audio with Stage 3 and Stage 6
   useEffect(() => {
@@ -269,6 +270,7 @@ export function CustomerSideDemo() {
   useEffect(() => {
     return () => {
       if (audioRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- preserves existing behaviour: reads the ref at unmount time (React has usually detached it by then, so this pause likely never fires)
         audioRef.current.pause();
       }
       if (typeof window !== 'undefined' && window.speechSynthesis) {

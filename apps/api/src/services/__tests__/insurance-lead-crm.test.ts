@@ -80,7 +80,7 @@ describe('Insurance Lead CRM Services', () => {
         data: expect.objectContaining({
           postStatus: 'HOLD',
           ameriquoteErrorMessage: 'Ameriquote delivery is disabled by owner request.',
-        }),
+        }) as unknown,
       });
     });
   });
@@ -125,7 +125,7 @@ describe('Insurance Lead CRM Services', () => {
           where: { id: 'sub-1' },
           data: expect.objectContaining({
             postStatus: 'HOLD',
-          }),
+          }) as unknown,
         })
       );
 

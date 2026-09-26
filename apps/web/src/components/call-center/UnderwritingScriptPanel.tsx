@@ -8,7 +8,7 @@ import { useScriptAccess } from '@/hooks/useUserRoles';
 import { cn } from '@/lib/utils';
 
 interface UnderwritingScriptPanelProps {
-  prospectData?: any;
+  prospectData?: unknown;
   onDataUpdate?: (data: Record<string, unknown>) => void;
 }
 

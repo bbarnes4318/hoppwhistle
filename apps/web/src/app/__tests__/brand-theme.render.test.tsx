@@ -11,7 +11,7 @@
  * pass here also says the shell reads it from there.
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let brand: { theme: string; name: string | null } | null = null;
 let meLatencyMs = 0;
@@ -98,6 +98,21 @@ async function mountShell(): Promise<() => void> {
 }
 
 describe('the agency brand theme in the authenticated shell', () => {
+  /*
+   * Load the shell once, before any test's clock starts. The first
+   * `mountShell` otherwise pays for importing the whole dashboard layout
+   * inside the 5s test timeout -- about 1.8s quietly, more on a busy runner.
+   * `mountShell` imports the same modules and now gets them from the cache.
+   */
+  beforeAll(async () => {
+    await Promise.all([
+      import('@/hooks/use-auth'),
+      import('@/hooks/use-platform-context'),
+      import('@/contexts/customer-intake-context'),
+      import('../(dashboard)/layout'),
+    ]);
+  }, 60_000);
+
   beforeEach(() => {
     brand = null;
     meLatencyMs = 0;

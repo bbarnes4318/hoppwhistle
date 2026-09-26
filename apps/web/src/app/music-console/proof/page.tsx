@@ -14,12 +14,23 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+
 import { proofRecords } from '../../../features/music/data/demo-music-data';
 import { outcomeLabel, segmentLabel } from '../../../features/music/lib/utils';
 import { ProofRecord } from '../../../features/music/types';
 
-import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
+/** The fields read from a Vapi call returned by /api/vapi/calls. */
+interface VapiCallSummary {
+  id: string;
+  status?: string;
+  duration?: number;
+  createdAt?: string;
+  recordingUrl?: string;
+  transcript?: string;
+  customer?: { name?: string; number?: string };
+}
 
 function getWaveformHeight(id: string, index: number): number {
   const val = Math.sin((id.charCodeAt(id.length - 1) + index) * 127.1 + 311.7) * 43758.5453;
@@ -80,7 +91,7 @@ export default function MusicProofPage() {
         .then(r => r.json())
         .then(data => {
           const calls = Array.isArray(data) ? data : (data?.message || []);
-          const mapped: ProofRecord[] = calls.map((call: any) => ({
+          const mapped: ProofRecord[] = calls.map((call: VapiCallSummary) => ({
             id: call.id,
             interactionId: call.id,
             campaignId: 'c-live',

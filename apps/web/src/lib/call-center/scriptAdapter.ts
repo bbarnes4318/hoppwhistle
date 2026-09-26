@@ -6,8 +6,8 @@ import {
   STARTING_NODE,
   replaceVariables,
   SCRIPT_PHASES,
-  ScriptNode,
 } from './scriptData';
+import type { ScriptNode } from './types';
 
 export interface AdaptedNode {
   id: string;
@@ -141,4 +141,6 @@ export const getAdaptedNodes = (formData: Record<string, unknown>): Record<strin
 };
 
 export { STARTING_NODE, replaceVariables, SCRIPT_PHASES };
-export default { getAdaptedNodes, adaptNodeForComponent, STARTING_NODE, replaceVariables };
+const scriptAdapter = { getAdaptedNodes, adaptNodeForComponent, STARTING_NODE, replaceVariables };
+
+export default scriptAdapter;

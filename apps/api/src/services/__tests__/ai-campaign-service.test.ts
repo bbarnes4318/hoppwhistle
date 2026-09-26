@@ -1,10 +1,37 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Let's create an in-memory database store to act as a database back-end
-let campaigns: any[] = [];
-let contacts: any[] = [];
-let calls: any[] = [];
-let dncEntries: any[] = [];
+interface CampaignRow {
+  id: string;
+  tenantId: string;
+  status: string;
+  archivedAt: Date | null;
+}
+interface ContactRow {
+  id: string;
+  campaignId: string;
+  phoneNumber: string;
+  status: string;
+  metadata: Record<string, unknown>;
+}
+interface CallRow {
+  id: string;
+  contactId: string;
+  campaignId: string;
+  status: string;
+  outcome: string | null;
+  startedAt: Date;
+}
+interface DncRow {
+  phoneNumber: string;
+  tenantId: string;
+  type: string;
+}
+
+let campaigns: CampaignRow[] = [];
+let contacts: ContactRow[] = [];
+let calls: CallRow[] = [];
+let dncEntries: DncRow[] = [];
 
 // Helper to reset database
 function resetDatabase() {
@@ -16,36 +43,40 @@ function resetDatabase() {
 
 const mockPrisma = {
   aICampaign: {
-    findFirst: vi.fn(async (args) => {
+    findFirst: vi.fn((args: { where: { id: string; tenantId?: string } }) => {
       const { id, tenantId } = args.where;
-      return campaigns.find(c => c.id === id && (!tenantId || c.tenantId === tenantId)) || null;
+      return Promise.resolve(
+        campaigns.find(c => c.id === id && (!tenantId || c.tenantId === tenantId)) || null
+      );
     }),
-    update: vi.fn(async (args) => {
+    update: vi.fn((args: { where: { id: string }; data: Partial<CampaignRow> }) => {
       const { id } = args.where;
       const data = args.data;
       const campaign = campaigns.find(c => c.id === id);
       if (campaign) {
         Object.assign(campaign, data);
       }
-      return campaign;
+      return Promise.resolve(campaign);
     }),
   },
   aICampaignContact: {
-    findMany: vi.fn(async (args) => {
+    findMany: vi.fn((args: { where: { campaignId: string } }) => {
       const { campaignId } = args.where;
       const matched = contacts.filter(c => c.campaignId === campaignId);
       // Include relation calls sorted by startedAt desc
-      return matched.map(contact => {
-        const contactCalls = calls
-          .filter(c => c.contactId === contact.id)
-          .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
-        return {
-          ...contact,
-          calls: contactCalls,
-        };
-      });
+      return Promise.resolve(
+        matched.map(contact => {
+          const contactCalls = calls
+            .filter(c => c.contactId === contact.id)
+            .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+          return {
+            ...contact,
+            calls: contactCalls,
+          };
+        })
+      );
     }),
-    updateMany: vi.fn(async (args) => {
+    updateMany: vi.fn((args: { where: { id?: { in?: string[] } }; data: Partial<ContactRow> }) => {
       const { id } = args.where;
       const idsToUpdate = id && id.in ? id.in : [];
       const data = args.data;
@@ -56,27 +87,32 @@ const mockPrisma = {
           count++;
         }
       });
-      return { count };
+      return Promise.resolve({ count });
     }),
   },
-  $transaction: vi.fn(async (cb) => {
-    return await cb(mockPrisma);
-  }),
-  $queryRaw: vi.fn(async (query, ...params) => {
+  $transaction: vi.fn<[cb: (tx: unknown) => Promise<unknown>], Promise<unknown>>(),
+  $queryRaw: vi.fn((query: TemplateStringsArray | string, ...params: unknown[]) => {
     const queryStr = typeof query === 'string' ? query : query.join('');
     if (queryStr.includes('FOR UPDATE')) {
       const campaignId = params[0];
       const tenantId = params[1];
       const campaign = campaigns.find(c => c.id === campaignId && (!tenantId || c.tenantId === tenantId));
-      if (!campaign) return [];
-      return [{ id: campaign.id, status: campaign.status, archivedAt: campaign.archivedAt }];
+      if (!campaign) return Promise.resolve([]);
+      return Promise.resolve([
+        { id: campaign.id, status: campaign.status, archivedAt: campaign.archivedAt },
+      ]);
     }
-    return [];
+    return Promise.resolve([]);
   }),
-  $executeRaw: vi.fn(async () => {
-    return 1;
+  $executeRaw: vi.fn(() => {
+    return Promise.resolve(1);
   }),
 };
+
+// Wired after the literal, so the callback can hand over the client it belongs to.
+mockPrisma.$transaction.mockImplementation(async cb => {
+  return await cb(mockPrisma);
+});
 
 vi.mock('../../lib/prisma.js', () => ({
   getPrismaClient: () => mockPrisma,
@@ -84,14 +120,17 @@ vi.mock('../../lib/prisma.js', () => ({
 
 // Mock compliance service using checkDnc helper that queries our in-memory DNC entries
 const mockComplianceService = {
-  checkDnc: vi.fn(async (tenantId: string, phoneNumber: string, campaignId?: string) => {
+  checkDnc: vi.fn((tenantId: string, phoneNumber: string, _campaignId?: string) => {
     const isBlocked = dncEntries.some(
       e => e.phoneNumber === phoneNumber && e.tenantId === tenantId
     );
     if (isBlocked) {
-      return { blocked: true, match: { listId: 'list-1', listName: 'DNC List' } };
+      return Promise.resolve({
+        blocked: true,
+        match: { listId: 'list-1', listName: 'DNC List' },
+      });
     }
-    return { blocked: false };
+    return Promise.resolve({ blocked: false });
   }),
 };
 vi.mock('../compliance-service.js', () => ({

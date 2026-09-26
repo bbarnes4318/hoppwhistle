@@ -15,7 +15,7 @@ interface RateLimitConfig {
  * Rate limiting using Redis for distributed systems
  */
 export async function checkRateLimit(
-  request: FastifyRequest,
+  _request: FastifyRequest,
   config: RateLimitConfig
 ): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
   const redis = getRedisClient();
@@ -63,18 +63,6 @@ export function rateLimit(options: {
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const user = request.user;
-    let identifier: string;
-    let type: 'api_key' | 'ip';
-
-    // Determine identifier
-    if (user?.apiKeyId) {
-      identifier = user.apiKeyId;
-      type = 'api_key';
-    } else {
-      // Use IP address
-      identifier = request.ip || 'unknown';
-      type = 'ip';
-    }
 
     // Check API key-specific rate limit if applicable
     if (user?.apiKeyId) {
@@ -106,7 +94,7 @@ export function rateLimit(options: {
             error: `Rate limit exceeded: ${apiKey.rateLimit} requests per ${windowMs}ms`,
           });
 
-          reply.code(429).send({
+          void reply.code(429).send({
             error: {
               code: 'RATE_LIMIT_EXCEEDED',
               message: 'Rate limit exceeded',
@@ -117,9 +105,9 @@ export function rateLimit(options: {
         }
 
         // Add rate limit headers
-        reply.header('X-RateLimit-Limit', apiKey.rateLimit.toString());
-        reply.header('X-RateLimit-Remaining', result.remaining.toString());
-        reply.header('X-RateLimit-Reset', result.resetAt.toISOString());
+        void reply.header('X-RateLimit-Limit', apiKey.rateLimit.toString());
+        void reply.header('X-RateLimit-Remaining', result.remaining.toString());
+        void reply.header('X-RateLimit-Reset', result.resetAt.toISOString());
 
         if (options.skipOnSuccess && result.allowed) {
           return;
@@ -151,7 +139,7 @@ export function rateLimit(options: {
         error: `IP rate limit exceeded: ${maxRequests} requests per ${windowMs}ms`,
       });
 
-      reply.code(429).send({
+      void reply.code(429).send({
         error: {
           code: 'RATE_LIMIT_EXCEEDED',
           message: 'Rate limit exceeded',
@@ -162,9 +150,9 @@ export function rateLimit(options: {
     }
 
     // Add rate limit headers
-    reply.header('X-RateLimit-Limit', maxRequests.toString());
-    reply.header('X-RateLimit-Remaining', ipResult.remaining.toString());
-    reply.header('X-RateLimit-Reset', ipResult.resetAt.toISOString());
+    void reply.header('X-RateLimit-Limit', maxRequests.toString());
+    void reply.header('X-RateLimit-Remaining', ipResult.remaining.toString());
+    void reply.header('X-RateLimit-Reset', ipResult.resetAt.toISOString());
   };
 }
 

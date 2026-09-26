@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Download, Loader2 } from 'lucide-react';
+import { Camera, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -47,8 +47,8 @@ export function ScreenshotButton({
  if (elementId || element) {
  return (
  <Button variant={variant} disabled={exporting} size="sm" onClick={() => {
- if (elementId) handleExport('dashboard');
- else if (element) handleExport('chart');
+ if (elementId) void handleExport('dashboard');
+ else if (element) void handleExport('chart');
  }}>
  {exporting ? (
  <>
@@ -66,7 +66,7 @@ export function ScreenshotButton({
  }
 
  return (
- <Button variant={variant} disabled={exporting} size="sm" onClick={() => handleExport('dashboard')}>
+ <Button variant={variant} disabled={exporting} size="sm" onClick={() => void handleExport('dashboard')}>
  {exporting ? (
  <>
  <Loader2 className="mr-2 h-4 w-4 animate-spin" />

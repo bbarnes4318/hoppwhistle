@@ -168,10 +168,12 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
                   onChange={e => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
                   className="pl-10"
                   maxLength={3}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') void handleSearch();
+                  }}
                 />
               </div>
-              <Button onClick={handleSearch} disabled={loading || areaCode.length !== 3}>
+              <Button onClick={() => void handleSearch()} disabled={loading || areaCode.length !== 3}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
               </Button>
             </div>
@@ -323,7 +325,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
               <Button variant="outline" onClick={() => setStep('search')} disabled={loading}>
                 Back
               </Button>
-              <Button onClick={handleAdd} disabled={loading}>
+              <Button onClick={() => void handleAdd()} disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm Number
               </Button>

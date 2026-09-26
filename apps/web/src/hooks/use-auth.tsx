@@ -3,11 +3,11 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
-import { usePlatformContext } from './use-platform-context';
-
 import type { ServerBrand } from '@/lib/brand-themes';
 import { homePathForRoles } from '@/lib/roles';
 import { clearSessionToken, persistSessionToken } from '@/lib/session-token';
+
+import { usePlatformContext } from './use-platform-context';
 
 /**
  * The signed-in user, fetched once for the whole tree.

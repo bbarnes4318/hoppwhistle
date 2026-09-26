@@ -1,6 +1,5 @@
 import 'dotenv-flow/config';
 import { getStorageService } from '../services/storage.js';
-import { Readable } from 'stream';
 
 async function main() {
   console.log('Testing S3 Storage Service...');
@@ -40,7 +39,7 @@ async function main() {
 
     // Read the stream
     const chunks: Buffer[] = [];
-    for await (const chunk of streamResult.stream) {
+    for await (const chunk of streamResult.stream as AsyncIterable<Buffer | string>) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     const content = Buffer.concat(chunks).toString();
@@ -56,4 +55,4 @@ async function main() {
   }
 }
 
-main();
+void main();

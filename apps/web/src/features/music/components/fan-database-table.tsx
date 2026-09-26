@@ -21,7 +21,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
 import { fans } from '../data/demo-music-data';
-import type { FanProfile } from '../types';
+import type { FanProfile, FanSegment, FanSource } from '../types';
 
 // Helper text formatting functions
 function formatSegment(seg: string) {
@@ -117,8 +117,8 @@ export function FanDatabaseTable() {
           const name = parts[0]?.trim() || `Imported Fan ${idx}`;
           const phone = parts[1]?.trim() || `+1 555-000-${1000 + idx}`;
           const city = parts[2]?.trim() || 'Austin';
-          const segment = (parts[3]?.trim() || 'superfan') as any;
-          const source = (parts[4]?.trim() || 'sms_opt_in') as any;
+          const segment = (parts[3]?.trim() || 'superfan') as FanSegment;
+          const source = (parts[4]?.trim() || 'sms_opt_in') as FanSource;
           newFans.push({
             id: `imported-${Date.now()}-${idx}`,
             name,

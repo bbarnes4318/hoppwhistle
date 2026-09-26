@@ -163,15 +163,29 @@ async function authenticateWebSocket(
   return { tenantId, via: 'jwt' };
 }
 
+/**
+ * The part of the `ws` WebSocket this route uses. `@fastify/websocket` types
+ * `connection.socket` with `ws`, which ships no type declarations here, so it
+ * arrives as `any`; naming the methods we call keeps them checked.
+ */
+interface EventSocket {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  on(event: 'message', listener: (message: Buffer) => void): void;
+  on(event: 'close', listener: () => void): void;
+  on(event: 'error', listener: (err: Error) => void): void;
+}
+
 export async function registerWebSocketRoutes(fastify: FastifyInstance) {
   await fastify.register(async function (scoped) {
     await scoped.register(import('@fastify/websocket'));
 
     scoped.get('/ws/events', { websocket: true }, async (connection, request) => {
+      const socket = connection.socket as EventSocket;
       const auth = await authenticateWebSocket(fastify, request);
 
       if (!auth) {
-        connection.socket.close(1008, 'Unauthorized');
+        socket.close(1008, 'Unauthorized');
         return;
       }
 
@@ -193,11 +207,11 @@ export async function registerWebSocketRoutes(fastify: FastifyInstance) {
           if (payload.tenantId !== tenantId) return;
           if (!grantedChannels.has(channel)) return;
 
-          connection.socket.send(JSON.stringify({ type: 'event', channel, payload }));
+          socket.send(JSON.stringify({ type: 'event', channel, payload }));
         }
       );
 
-      connection.socket.on('message', (message: Buffer) => {
+      socket.on('message', (message: Buffer) => {
         try {
           const data = JSON.parse(message.toString()) as WebSocketMessage;
           const requested = Array.isArray(data.channels) ? data.channels : [];
@@ -207,7 +221,7 @@ export async function registerWebSocketRoutes(fastify: FastifyInstance) {
               const refused = requested.filter(ch => !isAllowedChannel(ch));
               requested.filter(isAllowedChannel).forEach(ch => grantedChannels.add(ch));
 
-              connection.socket.send(
+              socket.send(
                 JSON.stringify({
                   type: 'subscribed',
                   channels: Array.from(grantedChannels),
@@ -222,7 +236,7 @@ export async function registerWebSocketRoutes(fastify: FastifyInstance) {
 
             case 'unsubscribe':
               requested.filter(isAllowedChannel).forEach(ch => grantedChannels.delete(ch));
-              connection.socket.send(
+              socket.send(
                 JSON.stringify({
                   type: 'unsubscribed',
                   channels: Array.from(grantedChannels),
@@ -231,27 +245,27 @@ export async function registerWebSocketRoutes(fastify: FastifyInstance) {
               break;
 
             case 'ping':
-              connection.socket.send(
+              socket.send(
                 JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() })
               );
               break;
           }
         } catch {
-          connection.socket.send(
+          socket.send(
             JSON.stringify({ type: 'error', message: 'Invalid message format' })
           );
         }
       });
 
-      connection.socket.on('close', () => {
+      socket.on('close', () => {
         void unsubscribe();
       });
 
-      connection.socket.on('error', (err: Error) => {
+      socket.on('error', (err: Error) => {
         console.error('WebSocket error:', err.message);
       });
 
-      connection.socket.send(
+      socket.send(
         JSON.stringify({
           type: 'connected',
           // Deliberately not the tenant id: the client does not need it, and a

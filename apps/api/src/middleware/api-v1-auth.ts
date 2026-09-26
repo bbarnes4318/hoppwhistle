@@ -97,8 +97,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
       }
 
       if (verified) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        request.user = decoded as any;
+        request.user = decoded as FastifyRequest['user'];
         await resolvePrincipal(request);
         return;
       }

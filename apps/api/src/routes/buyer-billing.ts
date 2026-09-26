@@ -9,6 +9,7 @@
  * API endpoints for managing buyer credits, transactions, and balances.
  */
 
+import type { Prisma } from '@prisma/client';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import {
@@ -393,6 +394,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       billingType?: 'TERMS' | 'UPFRONT';
       billableDuration?: number;
       leadsRemaining?: number;
+      walletBalance?: number;
       canPauseTargets?: boolean;
       canSetCaps?: boolean;
       canDisputeConversions?: boolean;
@@ -969,10 +971,12 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxConcurrency: maxConcurrency ?? 10,
         weight: weight ?? 100,
         acceptedStates: acceptedStates ?? [], // Empty = National (accepts all states)
-        hoursOfOperation: hoursOfOperation ?? null,
+        // NOTE: Prisma expects Prisma.DbNull/JsonNull rather than a bare null for
+        // a Json? column; the cast only records the existing runtime value.
+        hoursOfOperation: (hoursOfOperation ?? null) as unknown as Prisma.InputJsonValue,
         timezone: timezone ?? 'America/New_York',
         basePrice: basePrice ?? 0,
-        pricingRules: pricingRules ?? null,
+        pricingRules: (pricingRules ?? null) as unknown as Prisma.InputJsonValue,
       },
     });
 

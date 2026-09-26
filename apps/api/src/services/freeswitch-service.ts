@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import modesl from 'modesl';
 
 import { logger } from '../lib/logger.js';
@@ -215,8 +216,8 @@ export class FreeSwitchService {
         const prisma = getPrismaClient();
         const call = await prisma.call.findUnique({ where: { id: callId } });
         if (call) {
-          const callMetadata = (call.metadata as any) || {};
-          const existingRecordingDebug = callMetadata.recordingDebug || {};
+          const callMetadata = (call.metadata as Prisma.JsonObject | null) || {};
+          const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | null | undefined) || {};
           await prisma.call.update({
             where: { id: callId },
             data: {
@@ -227,7 +228,7 @@ export class FreeSwitchService {
                   freeswitchRecordingStartedAt: new Date().toISOString(),
                   freeswitchRecordingPath: recordingPath,
                 },
-              } as any,
+              },
             },
           });
         }

@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { createTransport } from 'nodemailer';
 
 /**
  * Publisher Email Service
@@ -20,7 +20,7 @@ function getTransporter() {
   const pass = process.env.SMTP_PASSWORD;
 
   if (host && user && pass) {
-    return nodemailer.createTransport({
+    return createTransport({
       host,
       port,
       // TLS is required, not opportunistic. See services/agent-invite-email.ts.

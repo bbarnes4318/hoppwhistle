@@ -28,6 +28,8 @@ import { checkInternalKey, requireInternalKey } from '../lib/internal-auth.js';
  * asserting on a copy of the logic.
  */
 
+type InternalKeyRequest = Parameters<typeof checkInternalKey>[0];
+
 const SECRET = 'not-a-real-key-0123456789abcdef0123456789abcdef';
 
 let app: FastifyInstance;
@@ -35,8 +37,12 @@ let app: FastifyInstance;
 async function buildApp(): Promise<FastifyInstance> {
   const instance = Fastify();
 
-  instance.get('/guarded', { preHandler: [requireInternalKey] }, async () => ({ ok: true }));
-  instance.post('/guarded-post', { preHandler: [requireInternalKey] }, async () => ({ ok: true }));
+  instance.get('/guarded', { preHandler: [requireInternalKey] }, () =>
+    Promise.resolve({ ok: true })
+  );
+  instance.post('/guarded-post', { preHandler: [requireInternalKey] }, () =>
+    Promise.resolve({ ok: true })
+  );
 
   await instance.ready();
   return instance;
@@ -169,10 +175,10 @@ describe('the FreeSWITCH internal-key guard', () => {
     expect(notConfigured.json()).toEqual(wrongKey.json());
   });
 
-  it('reports the reason internally, so an operator can tell them apart', async () => {
+  it('reports the reason internally, so an operator can tell them apart', () => {
     // The other half of the case above: the distinction exists, it just does
     // not reach the caller. An operator staring at a telephony outage needs it.
-    const request = { headers: {}, query: {} } as any;
+    const request = { headers: {}, query: {} } as unknown as InternalKeyRequest;
 
     expect(checkInternalKey(request)).toEqual({ ok: false, reason: 'missing' });
 
@@ -180,9 +186,12 @@ describe('the FreeSWITCH internal-key guard', () => {
     expect(checkInternalKey(request)).toEqual({ ok: false, reason: 'not_configured' });
   });
 
-  it('reports which transport was used, so the query form can be retired', async () => {
-    const viaHeader = { headers: { 'x-internal-key': SECRET }, query: {} } as any;
-    const viaQuery = { headers: {}, query: { k: SECRET } } as any;
+  it('reports which transport was used, so the query form can be retired', () => {
+    const viaHeader = {
+      headers: { 'x-internal-key': SECRET },
+      query: {},
+    } as unknown as InternalKeyRequest;
+    const viaQuery = { headers: {}, query: { k: SECRET } } as unknown as InternalKeyRequest;
 
     expect(checkInternalKey(viaHeader)).toEqual({ ok: true, via: 'header' });
     expect(checkInternalKey(viaQuery)).toEqual({ ok: true, via: 'query' });
@@ -208,13 +217,13 @@ describe('the guarded routes are the FreeSWITCH callbacks', () => {
    */
   it('every /api/v1/freeswitch route carries the guard', async () => {
     const { readFileSync } = await import('fs');
-    const { join } = await import('path');
+    const path = await import('path');
 
     const files = ['did-routes.ts', 'carrier-routing.ts'];
     const unguarded: string[] = [];
 
     for (const file of files) {
-      const source = readFileSync(join(process.cwd(), 'src', 'routes', file), 'utf8');
+      const source = readFileSync(path.join(process.cwd(), 'src', 'routes', file), 'utf8');
 
       // Each registration, and the ~200 characters after it, which is where a
       // preHandler would be if there is one.
@@ -240,11 +249,11 @@ describe('the guarded routes are the FreeSWITCH callbacks', () => {
     // Guards the guard: a regex that matches nothing would pass the test above
     // while checking nothing at all.
     const { readFileSync } = await import('fs');
-    const { join } = await import('path');
+    const path = await import('path');
 
     let found = 0;
     for (const file of ['did-routes.ts', 'carrier-routing.ts']) {
-      const source = readFileSync(join(process.cwd(), 'src', 'routes', file), 'utf8');
+      const source = readFileSync(path.join(process.cwd(), 'src', 'routes', file), 'utf8');
       found += [
         ...source.matchAll(
           /server\.(get|post|put|patch|delete)\(\s*\n?\s*'(\/api\/v1\/freeswitch\/[^']+)'/g

@@ -10,7 +10,6 @@ import {
   Copy,
   Check,
   ChevronRight,
-  Info,
   Loader2,
   Key,
 } from 'lucide-react';
@@ -60,7 +59,6 @@ function PublisherTesterPage() {
   const [pingResponsePayload, setPingResponsePayload] = useState<string | null>(null);
   const [pingSuccess, setPingSuccess] = useState<boolean | null>(null);
   const [bidAmount, setBidAmount] = useState<number | null>(null);
-  const [bidToken, setBidToken] = useState<string | null>(null);
 
   // Post Form State
   const [postToken, setPostToken] = useState('');
@@ -98,29 +96,6 @@ function PublisherTesterPage() {
     void fetchKeys();
   }, [fetchKeys]);
 
-  const getEffectiveKey = async (): Promise<string | null> => {
-    if (useManualKey) {
-      if (!manualApiKey.trim()) {
-        toast.error('Please enter an API Key');
-        return null;
-      }
-      return manualApiKey.trim();
-    }
-
-    if (!selectedApiKey) {
-      toast.error('Please create or select an API Key first');
-      return null;
-    }
-
-    // Since we only list key prefixes in the UI, we need a way to make calls.
-    // Wait, let's look at how the tester calls the API. Can it make a request to a helper tester endpoint on the backend
-    // to proxy the request, or do we need the raw API key?
-    // Wait! Let's check if the backend has `/api/v1/ping/verify` or similar, or does the front-end need the raw API key?
-    // In ping.ts, we saw `fastify.post('/api/v1/ping/verify')`! Let's check what it does. Maybe it is a test endpoint that accepts session authentication?
-    // Let's do a search or view `apps/api/src/routes/ping.ts` around line 240.
-    return selectedApiKey;
-  };
-
   const handleSendPing = async () => {
     const key = useManualKey ? manualApiKey.trim() : selectedApiKey;
     if (!key) {
@@ -131,7 +106,6 @@ function PublisherTesterPage() {
     setPingLoading(true);
     setPingSuccess(null);
     setBidAmount(null);
-    setBidToken(null);
     setPingResponsePayload(null);
 
     const payload = {
@@ -169,7 +143,6 @@ function PublisherTesterPage() {
       if (response.ok && data.bid > 0) {
         setPingSuccess(true);
         setBidAmount(data.bid);
-        setBidToken(data.token);
         setPostToken(data.token); // Auto prefill post token
         toast.success(`Ping success! Bid received: $${data.bid}`);
       } else {
@@ -180,10 +153,12 @@ function PublisherTesterPage() {
           toast.error(data.error?.message || 'Ping failed');
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setPingSuccess(false);
-      setPingResponsePayload(JSON.stringify({ error: err.message || 'Network error' }, null, 2));
+      setPingResponsePayload(
+        JSON.stringify({ error: (err instanceof Error && err.message) || 'Network error' }, null, 2)
+      );
       toast.error('Network request failed');
     } finally {
       setPingLoading(false);
@@ -240,10 +215,12 @@ function PublisherTesterPage() {
         setPostSuccess(false);
         toast.error(data.error?.message || data.message || 'Post failed');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setPostSuccess(false);
-      setPostResponsePayload(JSON.stringify({ error: err.message || 'Network error' }, null, 2));
+      setPostResponsePayload(
+        JSON.stringify({ error: (err instanceof Error && err.message) || 'Network error' }, null, 2)
+      );
       toast.error('Network request failed');
     } finally {
       setPostLoading(false);
@@ -255,7 +232,6 @@ function PublisherTesterPage() {
     setPingResponsePayload(null);
     setPingSuccess(null);
     setBidAmount(null);
-    setBidToken(null);
     setPostToken('');
     setPostRequestPayload(null);
     setPostResponsePayload(null);
@@ -266,7 +242,7 @@ function PublisherTesterPage() {
   };
 
   const handleCopyText = (text: string, type: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+    void navigator.clipboard.writeText(text).then(() => {
       setCopiedType(type);
       setTimeout(() => setCopiedType(null), 2000);
       toast.success('Copied JSON');
@@ -352,7 +328,7 @@ function PublisherTesterPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Forms column (left) */}
         <div>
-          <Tabs value={activeTab} onValueChange={val => setActiveTab(val as any)}>
+          <Tabs value={activeTab} onValueChange={val => setActiveTab(val as 'ping' | 'post')}>
             <TabsList className="bg-sunken border border-rule text-ink-2 p-1 w-full grid grid-cols-2">
               <TabsTrigger
                 value="ping"
@@ -438,7 +414,7 @@ function PublisherTesterPage() {
                   </div>
 
                   <Button
-                    onClick={handleSendPing}
+                    onClick={() => void handleSendPing()}
                     disabled={pingLoading}
                     className="w-full bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-bold gap-2 mt-2"
                   >
@@ -527,7 +503,7 @@ function PublisherTesterPage() {
                   </div>
 
                   <Button
-                    onClick={handleSendPost}
+                    onClick={() => void handleSendPost()}
                     disabled={postLoading}
                     className="w-full bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-bold gap-2 mt-2"
                   >

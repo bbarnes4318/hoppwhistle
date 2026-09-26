@@ -1,7 +1,7 @@
 'use client';
 
-import { CallCenterPortal } from '@/components/call-center/CallCenterPortal';
 import { RoleGuard } from '@/components/auth/role-guard';
+import { CallCenterPortal } from '@/components/call-center/CallCenterPortal';
 
 function CallCenterPage(): JSX.Element {
   return <CallCenterPortal />;

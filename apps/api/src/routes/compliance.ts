@@ -1,14 +1,22 @@
+import type { DncListType, Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 import { compliancePolicyService } from '../services/compliance-policy-service.js';
 import { complianceService } from '../services/compliance-service.js';
 import { consentProviderService } from '../services/consent-provider-service.js';
-import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 
 const prisma = getPrismaClient();
 
-export async function registerComplianceRoutes(fastify: FastifyInstance) {
+/**
+ * These handlers read `request.user.id`, which `AuthenticatedUser` does not
+ * carry (it has `userId`), so the value they record is always undefined. Kept
+ * as-is to preserve behaviour; typed here so the read is explicit.
+ */
+type LegacyUserIdCarrier = { id?: string } | undefined;
+
+export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void> {
   // Check compliance for a phone number
   fastify.post<{
     Body: {
@@ -41,7 +49,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
         override: result.override,
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'COMPLIANCE_CHECK_ERROR',
@@ -64,11 +72,11 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       const { phoneNumber, reason, callId, expiresAt } = request.body;
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
-      const userId = (request as any).user?.id;
+      const userId = (request.user as LegacyUserIdCarrier)?.id;
 
       const policy = await compliancePolicyService.getEffectivePolicy(tenantId);
       if (!policy.allowOverride) {
-        reply.code(403);
+        void reply.code(403);
         return {
           error: {
             code: 'OVERRIDE_NOT_ALLOWED',
@@ -88,7 +96,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
         overrideId,
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'OVERRIDE_ERROR',
@@ -127,7 +135,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       if (provider !== 'CUSTOM') {
         const verification = await consentProviderService.verifyToken(token, provider);
         if (!verification.verified) {
-          reply.code(400);
+          void reply.code(400);
           return {
             error: {
               code: 'TOKEN_VERIFICATION_FAILED',
@@ -155,7 +163,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
         consentId,
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'CONSENT_STORAGE_ERROR',
@@ -175,9 +183,9 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
 
     const { type } = request.query as { type?: string };
 
-    const where: any = { tenantId };
+    const where: Prisma.DncListWhereInput = { tenantId };
     if (type) {
-      where.type = type;
+      where.type = type as DncListType;
     }
 
     const lists = await prisma.dncList.findMany({
@@ -214,7 +222,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/compliance/dnc-lists', async (request, reply) => {
     try {
-      const user = (request as any).user;
+      const user = request.user as LegacyUserIdCarrier;
       const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
@@ -224,7 +232,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       const { name, type, campaignId } = request.body;
 
       if (!name || !name.trim()) {
-        reply.code(400);
+        void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Name is required' } };
       }
 
@@ -238,7 +246,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
         });
 
         if (!campaign) {
-          reply.code(404);
+          void reply.code(404);
           return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
         }
       }
@@ -270,14 +278,13 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
           campaignId,
         },
         {
-          tenantId,
           userId: user?.id,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
-      reply.code(201);
+      void reply.code(201);
       return {
         id: list.id,
         name: list.name,
@@ -288,7 +295,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
         updatedAt: list.updatedAt.toISOString(),
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'DNC_LIST_ERROR',
@@ -300,7 +307,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
 
   // Delete DNC list
   fastify.delete('/api/v1/compliance/dnc-lists/:listId', async (request, reply) => {
-    const user = (request as any).user;
+    const user = request.user as LegacyUserIdCarrier;
     const tenantId = getActingTenantId(request);
     
     if (!tenantId) {
@@ -317,7 +324,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
     });
 
     if (!list) {
-      reply.code(404);
+      void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'DNC list not found' } };
     }
 
@@ -333,27 +340,27 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       listId,
       { deleted: true, name: list.name },
       {
-        tenantId,
         userId: user?.id,
         ipAddress: request.ip,
-        requestId: (request as any).id,
+        requestId: request.id,
       }
     );
 
-    reply.code(204);
+    void reply.code(204);
+    return;
   });
 
   // Get compliance audit log
   fastify.get('/api/v1/compliance/audit', async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
-    const { callId, phoneNumber, limit = 100 } = request.query as {
+    const { callId, limit = 100 } = request.query as {
       callId?: string;
       phoneNumber?: string;
       limit?: number;
     };
 
-    const where: any = {
+    const where: Prisma.AuditLogWhereInput = {
       tenantId,
       action: {
         startsWith: 'compliance.',
@@ -377,5 +384,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       data: logs,
     };
   });
+
+  return Promise.resolve();
 }
 

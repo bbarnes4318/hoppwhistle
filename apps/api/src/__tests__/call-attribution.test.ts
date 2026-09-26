@@ -35,7 +35,7 @@ vi.mock('../lib/logger.js', () => ({
 
 import { UnknownCallError, attributeCall } from '../services/applications/call-attribution.js';
 
-const findFirst = vi.fn();
+const findFirst = vi.fn<[args: unknown], Promise<{ id: string } | null>>();
 const prisma = { call: { findFirst } } as unknown as Parameters<typeof attributeCall>[0];
 
 const AT = new Date('2026-09-21T15:00:00Z');

@@ -72,8 +72,15 @@ describe.skipIf(!gate.available)('Session expiry and refresh', () => {
       payload: payload as Record<string, unknown>,
     });
 
-  const decode = (token: string): Record<string, any> =>
-    JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+  interface Claims {
+    exp: number;
+    iat: number;
+    tenantId?: string;
+    userId?: string;
+  }
+
+  const decode = (token: string): Claims =>
+    JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as Claims;
 
   /**
    * A token that has already lapsed.
@@ -139,7 +146,7 @@ describe.skipIf(!gate.available)('Session expiry and refresh', () => {
       payload: { email: 'agent@expiry.local', password: PASSWORD },
     });
     expect(res.statusCode).toBe(200);
-    return JSON.parse(res.body).token;
+    return (JSON.parse(res.body) as { token: string }).token;
   }
 
   describe('a login token expires', () => {
@@ -163,7 +170,7 @@ describe.skipIf(!gate.available)('Session expiry and refresh', () => {
         url: '/api/auth/me',
         headers: { authorization: `Bearer ${token}` },
       });
-      const body = JSON.parse(me.body);
+      const body = JSON.parse(me.body) as { sessionExpiresAt: string };
       // So the client renews before it lapses, rather than discovering it as a
       // 401 on some unrelated page.
       expect(Date.parse(body.sessionExpiresAt)).toBeGreaterThan(Date.now());
@@ -189,7 +196,7 @@ describe.skipIf(!gate.available)('Session expiry and refresh', () => {
 
       const res = await refresh(before);
       expect(res.statusCode).toBe(200);
-      const after = JSON.parse(res.body).token;
+      const after = (JSON.parse(res.body) as { token: string }).token;
 
       expect(decode(after).exp).toBeGreaterThan(decode(before).exp);
       expect(decode(after).userId).toBe(agentId);
@@ -208,13 +215,13 @@ describe.skipIf(!gate.available)('Session expiry and refresh', () => {
     it('ignores a tenantId in the body', async () => {
       const res = await refresh(await login(), { tenantId: otherTenantId });
       expect(res.statusCode).toBe(200);
-      expect(decode(JSON.parse(res.body).token).tenantId).toBe(tenantId);
+      expect(decode((JSON.parse(res.body) as { token: string }).token).tenantId).toBe(tenantId);
     });
 
     it('ignores a userId in the body', async () => {
       const res = await refresh(await login(), { userId: otherUserId });
       expect(res.statusCode).toBe(200);
-      expect(decode(JSON.parse(res.body).token).userId).toBe(agentId);
+      expect(decode((JSON.parse(res.body) as { token: string }).token).userId).toBe(agentId);
     });
 
     it('refuses an anonymous caller', async () => {

@@ -28,7 +28,7 @@ interface ChartDataPoint {
 
 interface MetricsApiResponse {
   period: { start: string; end: string };
-  metrics: any;
+  metrics: unknown;
   breakdown: Array<{
     timestamp: string;
     totalCalls: number;
@@ -44,7 +44,7 @@ interface CallsOverTimeProps {
   onPeriodSelect?: (start: Date, end: Date) => void;
 }
 
-export function CallsOverTime({ onPeriodSelect }: CallsOverTimeProps) {
+export function CallsOverTime({ onPeriodSelect: _onPeriodSelect }: CallsOverTimeProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [data, setData] = useState<ChartDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +87,7 @@ export function CallsOverTime({ onPeriodSelect }: CallsOverTimeProps) {
       });
 
       const response = await apiClient.get<MetricsApiResponse>(
-        `/api/v1/reporting/metrics?${params}`
+        `/api/v1/reporting/metrics?${params.toString()}`
       );
 
       if (response.error) {
@@ -126,16 +126,24 @@ export function CallsOverTime({ onPeriodSelect }: CallsOverTimeProps) {
   }, [timeRange, getDateRange]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ color?: string; name?: string; value?: number | string }>;
+    label?: string;
+  }) => {
     if (!active || !payload) return null;
 
     return (
       <div className="rounded-lg border border-rule bg-surface p-3 shadow-lg">
         <p className="mb-2 font-medium text-ink">{label}</p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index) => (
           <div key={index} className="flex items-center gap-2 text-sm">
             <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
             <span className="text-muted-foreground">{entry.name}:</span>

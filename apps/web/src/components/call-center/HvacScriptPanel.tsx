@@ -1,9 +1,7 @@
 'use client';
 
 import {
-  FileText,
   User,
-  Phone,
   Play,
   ArrowRight,
   HelpCircle,
@@ -125,7 +123,7 @@ export default function HvacScriptPanel({ prospectData, onDataUpdate }: HvacScri
       .replace(/\[Your Name\]/g, agentName)
       .replace(/\[City\]/g, city)
       .replace(/\[Time\]/g, scheduledTime);
-    navigator.clipboard.writeText(plainText).then(() => {
+    void navigator.clipboard.writeText(plainText).then(() => {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2000);
     });

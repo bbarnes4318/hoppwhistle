@@ -15,7 +15,7 @@
  * only `Authorization: Bearer` and `x-api-key`.
  */
 
-import fastifyCookie from '@fastify/cookie';
+import { fastifyCookie } from '@fastify/cookie';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {

@@ -1,6 +1,6 @@
 'use client';
 
-import { PhoneCall, TrendingUp, DollarSign, Target } from 'lucide-react';
+import { PhoneCall, TrendingUp, DollarSign } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useWebSocket } from '@/components/hooks/use-websocket';
@@ -23,13 +23,14 @@ export function LiveStats() {
     enabled: true, // Hook will check backend availability internally
     onMessage: message => {
       // Update stats based on real-time events
-      if (message.type === 'event' && message.payload?.event === 'call.completed') {
+      const eventName = (message.payload as { event?: string } | null | undefined)?.event;
+      if (message.type === 'event' && eventName === 'call.completed') {
         setStats(prev => ({
           ...prev,
           activeCalls: Math.max(0, prev.activeCalls - 1),
           billableMinutes: prev.billableMinutes + Math.floor(Math.random() * 5) + 1,
         }));
-      } else if (message.type === 'event' && message.payload?.event === 'call.started') {
+      } else if (message.type === 'event' && eventName === 'call.started') {
         setStats(prev => ({
           ...prev,
           activeCalls: prev.activeCalls + 1,

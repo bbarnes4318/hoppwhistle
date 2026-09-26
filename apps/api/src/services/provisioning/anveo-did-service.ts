@@ -15,6 +15,7 @@
  */
 
 import { createHmac } from 'crypto';
+
 import { logger } from '../../lib/logger.js';
 import { secrets } from '../secrets.js';
 

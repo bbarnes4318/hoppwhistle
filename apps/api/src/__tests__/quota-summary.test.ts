@@ -196,7 +196,7 @@ describe.skipIf(!gate.available)("an agency's own quota reading", () => {
 
     const body = response.json();
     // Enveloped, because `payload()` in the web client is what reads it.
-    expect(Object.keys(body)).toEqual(['data']);
+    expect(Object.keys(body as object)).toEqual(['data']);
 
     const { quota, budget, status } = body.data;
 

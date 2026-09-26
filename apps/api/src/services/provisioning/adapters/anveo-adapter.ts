@@ -66,9 +66,9 @@ export class AnveoAdapter implements ProvisioningAdapter {
 
       if (!response.ok) {
         const errorText = await response.text();
-        let errorData;
+        let errorData: { message?: string };
         try {
-          errorData = JSON.parse(errorText);
+          errorData = JSON.parse(errorText) as { message?: string };
         } catch {
           errorData = { message: errorText };
         }
@@ -89,11 +89,14 @@ export class AnveoAdapter implements ProvisioningAdapter {
         );
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
+      const envelope = data as { status?: string; error?: string; message?: string };
 
       // Anveo API returns status in response body
-      if (data.status === 'error' || data.error) {
-        throw new Error(`Anveo API error: ${data.error || data.message || 'Unknown error'}`);
+      if (envelope.status === 'error' || envelope.error) {
+        throw new Error(
+          `Anveo API error: ${envelope.error || envelope.message || 'Unknown error'}`
+        );
       }
 
       return data as T;

@@ -1,7 +1,12 @@
 import { Prisma } from '@prisma/client';
 import { describe, it, expect } from 'vitest';
 
-import { computeLiveMetrics, resolveRole } from '../routes/live-metrics.js';
+import {
+  computeLiveMetrics,
+  resolveRole,
+  type BuyerEndpointDelegate,
+  type CallDelegate,
+} from '../routes/live-metrics.js';
 
 /**
  * These run without a database. The delegate is faked so the tests can assert
@@ -50,8 +55,7 @@ function fakeDelegate(opts: {
       );
     },
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { delegate: delegate as any, recorded };
+  return { delegate: delegate as unknown as CallDelegate, recorded };
 }
 
 /** Fake BuyerEndpoint delegate. `cap` of null means no active DAY-period cap. */
@@ -63,8 +67,7 @@ function fakeEndpoints(cap: number | null) {
       return Promise.resolve({ _sum: { maxCap: cap } });
     },
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { endpoints: delegate as any, recorded };
+  return { endpoints: delegate as unknown as BuyerEndpointDelegate, recorded };
 }
 
 const ADMIN = { isAdminOrOwner: true, publisherId: null, buyerId: null };

@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import pino from 'pino';
+import { pino } from 'pino';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -29,8 +29,8 @@ export const logger = pino({
 
 export function createRequestLogger(request: FastifyRequest) {
   const requestId = request.id;
-  const tenantId = (request as any).user?.tenantId || 'unknown';
-  const userId = (request as any).user?.userId || 'unknown';
+  const tenantId = request.user?.tenantId || 'unknown';
+  const userId = request.user?.userId || 'unknown';
 
   return logger.child({
     requestId,

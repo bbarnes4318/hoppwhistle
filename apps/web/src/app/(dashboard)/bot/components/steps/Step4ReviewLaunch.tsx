@@ -92,7 +92,7 @@ export function Step4ReviewLaunch({
       <Card>
         <CardHeader>
           <CardTitle>Configuration Checklist</CardTitle>
-          <CardDescription>Review your settings before launching "{campaignName}"</CardDescription>
+          <CardDescription>Review your settings before launching &quot;{campaignName}&quot;</CardDescription>
         </CardHeader>
         <CardContent>
           {/* Checklist */}

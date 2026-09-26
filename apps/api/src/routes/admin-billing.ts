@@ -65,7 +65,8 @@ class InvoiceGeneratorService {
         'SELECT "tenantId", currency FROM billing_accounts WHERE id = $1',
         [billingAccountId]
       );
-      const { tenantId, currency } = accountResult.rows[0];
+      // Values unused; the destructure still throws when the account row is missing.
+      const { tenantId: _tenantId, currency: _currency } = accountResult.rows[0];
 
       const lines = accrualsResult.rows.map(accrual => ({
         description: accrual.description,
@@ -352,6 +353,7 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       void reply.code(403);
       return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
     }
+    return undefined;
   });
 
   // Create/Update Rate Card

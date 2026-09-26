@@ -36,7 +36,7 @@ interface ScriptContextValue {
  // Script Navigation
  currentNodeId: string;
  setCurrentNodeId: (nodeId: string) => void;
- getCurrentNode: () => ScriptNode | undefined;
+ getCurrentNode: () => ScriptNode | null | undefined;
  navigateToNode: (nodeId: string) => void;
  goBack: () => void;
  canGoBack: boolean;
@@ -145,7 +145,7 @@ export function ScriptProvider({ children, initialProspectData }: ScriptProvider
  const [currentNodeId, setCurrentNodeId] = useState<string>('greeting');
  const [nodeHistory, setNodeHistory] = useState<string[]>([]);
 
- const getCurrentNode = useCallback((): ScriptNode | undefined => {
+ const getCurrentNode = useCallback((): ScriptNode | null | undefined => {
  if (activeScript === 'underwriter') {
  return getUnderwriterNode(currentNodeId);
  } else {

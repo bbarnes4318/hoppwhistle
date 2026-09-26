@@ -1,5 +1,6 @@
 'use client';
 
+import { DISPOSITION_LABELS } from '@hopwhistle/shared';
 import { FileText, Headphones, Percent, Phone, PhoneCall } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -58,8 +59,6 @@ interface DashboardStats {
   dispositions: Record<string, number>;
   dateRange: { startDate: string; endDate: string };
 }
-
-import { DISPOSITION_LABELS } from '@hopwhistle/shared';
 
 interface CallRecord {
   id: string;
@@ -133,7 +132,10 @@ function getDateRange(preset: DatePreset): { start: Date; end: Date } {
 
 function getCallResult(call: CallRecord): string {
   if (call.disposition) {
-    return DISPOSITION_LABELS[call.disposition] || call.disposition;
+    return (
+      (DISPOSITION_LABELS as Record<string, string | undefined>)[call.disposition] ||
+      call.disposition
+    );
   }
   if (call.missedCall) return 'No Answer';
   if (call.status === 'COMPLETED') return 'Completed';

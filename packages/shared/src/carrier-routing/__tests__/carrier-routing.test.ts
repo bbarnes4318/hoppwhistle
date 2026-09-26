@@ -142,7 +142,7 @@ describe('resolveChain fallback', () => {
     ['a route whose only carrier has no enabled gateway', route([step('FRACTEL', 0, [gw('fractel1', { enabled: false })])])],
     ['a route with no steps', route([])],
   ])('falls back to the legacy chain for %s', (_label, input) => {
-    const chain = resolveChain(input as RouteRow | null, 'INBOUND', NOW);
+    const chain = resolveChain(input, 'INBOUND', NOW);
     expect(chain.source).toBe('fallback');
     expect(chain.gateways.map(g => g.gateway)).toEqual([...LEGACY_FALLBACK_GATEWAYS]);
     expect(chain.fallbackReason).toBeTruthy();

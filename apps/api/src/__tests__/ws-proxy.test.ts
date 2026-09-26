@@ -1,9 +1,9 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { createServer, type Server } from 'node:tls';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
+import { createServer, type Server } from 'node:tls';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -154,7 +154,7 @@ describe('scripts/check-ws-proxy.mjs fails loudly', () => {
     );
 
     server = createServer({ cert: readFileSync(certPath), key: readFileSync(keyPath) }, socket => {
-      socket.once('data', chunk => {
+      socket.once('data', (chunk: Buffer) => {
         const request = chunk.toString();
         const key = /sec-websocket-key:\s*(\S+)/i.exec(request)?.[1] ?? '';
         socket.end(respond(key));

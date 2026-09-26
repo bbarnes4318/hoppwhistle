@@ -31,7 +31,7 @@
  * against the real API, which catches what a stubbed fetch cannot.
  */
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PLATFORM_WIDE_LANDING_ROUTES } from '@/lib/platform-routes';
 
@@ -204,6 +204,29 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('a platform admin with no acting tenant', () => {
+  /*
+   * Load the real tree once, before any test's clock starts.
+   *
+   * The first `loadPage` pays for transforming and importing the whole
+   * dashboard layout and the three pages: about 2.5s on a quiet machine, and
+   * past the 5s test timeout on a busy CI runner. That was the first test in
+   * this file timing out while every later one took about 0.3s. Importing
+   * here moves that one-off cost into a hook with its own budget. `loadPage`
+   * still imports the same modules and mounts the same tree; its imports now
+   * come from the module cache.
+   */
+  beforeAll(async () => {
+    await Promise.all([
+      import('@/hooks/use-auth'),
+      import('@/hooks/use-platform-context'),
+      import('@/contexts/customer-intake-context'),
+      import('../(dashboard)/layout'),
+      import('../(dashboard)/delivery/page'),
+      import('../(dashboard)/rating/page'),
+      import('../(dashboard)/delivery/settlements/page'),
+    ]);
+  }, 60_000);
+
   beforeEach(() => {
     requests = [];
     redirects = [];

@@ -1,6 +1,5 @@
 'use client';
 
-import { Calendar } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   LineChart,
@@ -14,7 +13,6 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiClient } from '@/lib/api';
 
@@ -62,7 +60,7 @@ export function AnalyticsCharts({ filters }: { filters?: AnalyticsFilters }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadMetrics();
+    void loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 

@@ -76,5 +76,5 @@ Examples:
   }
 }
 
-main();
+void main();
 

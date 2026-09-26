@@ -272,7 +272,7 @@ class ApiClient {
         headers,
       });
 
-      let data: any = null;
+      let data: unknown = null;
       const text = await response.text();
       if (text) {
         if (requestOptions.responseType === 'text' && response.ok) {
@@ -287,7 +287,8 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        const code: string = data?.error?.code || 'UNKNOWN_ERROR';
+        const errorBody = data as { error?: { code?: string; message?: string } } | null;
+        const code: string = errorBody?.error?.code || 'UNKNOWN_ERROR';
 
         /*
          * The login redirect, and the one condition it must never fire on.
@@ -321,7 +322,7 @@ class ApiClient {
         return {
           error: {
             code,
-            message: data?.error?.message || 'An error occurred',
+            message: errorBody?.error?.message || 'An error occurred',
           },
         };
       }
@@ -330,7 +331,7 @@ class ApiClient {
       // browser is not cycling through sign-outs.
       if (typeof window !== 'undefined') clearLogoutLoop();
 
-      return { data };
+      return { data: data as T };
     } catch (error) {
       return {
         error: {

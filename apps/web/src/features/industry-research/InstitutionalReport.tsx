@@ -217,7 +217,7 @@ export function InstitutionalReport({
   }, [mobileNav]);
 
   const categories = useMemo(() => {
-    const buckets = new Map<string, { label: string; sections: typeof r.sections }>();
+    const buckets = new Map<string, { label: string; sections: StructuredReport['sections'] }>();
     for (const c of CATEGORY_DEFS) buckets.set(c.key, { label: c.label, sections: [] });
     for (const s of r.sections) {
       const hit =

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { campaignId, assistantId, contacts, callerIds, campaignGoal, script, complianceSettings } = body;
+    const { assistantId, contacts } = body;
 
     const apiKey = process.env.VAPI_API_KEY;
     
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       message: `Simulated dialing ${contacts?.length || 0} contacts. VAPI_API_KEY not configured.`,
       data: { dispatched: contacts?.length || 0 }
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
 }

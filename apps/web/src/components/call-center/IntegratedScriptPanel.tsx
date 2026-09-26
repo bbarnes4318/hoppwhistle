@@ -36,7 +36,11 @@ import { getAllCarrierQuotes, isAgeEligible } from '../../lib/call-center/quoteC
 // ═══════════════════════════════════════════════════════════════════════════
 // AREA CODE UTILITY - Derive state from phone number
 // ═══════════════════════════════════════════════════════════════════════════
-import { getAdaptedNodes, STARTING_NODE } from '../../lib/call-center/scriptAdapter';
+import {
+  getAdaptedNodes,
+  STARTING_NODE,
+  type AdaptedNode,
+} from '../../lib/call-center/scriptAdapter';
 import { subscribeToSettings, getEnabledCarriers } from '../../lib/call-center/settingsService';
 import { getStateFromAreaCode } from '../../lib/call-center/utils/areaCodeLookup';
 
@@ -60,7 +64,7 @@ const subscribeToRates = (_callback: () => void): (() => void) => {
 // STUB: calculateMonthlyPremium - returns null, actual quotes use getAllCarrierQuotes
 const calculateMonthlyPremium = (
   _carrier: string,
-  _age: number,
+  _age: number | null,
   _gender: string,
   _tobacco: boolean,
   _coverage: number,
@@ -72,7 +76,7 @@ const calculateMonthlyPremium = (
 };
 
 // STUB: calculateEligibility - returns basic eligibility
-const calculateEligibility = (_healthAnswers: Record<string, unknown>): string => {
+const calculateEligibility = (_healthAnswers: Record<string, unknown> | undefined): string => {
   // Returns a basic eligibility tier
   return 'LEVEL';
 };
@@ -100,7 +104,7 @@ const calculateAge = (dob: string | null | undefined): number | null => {
 // ═══════════════════════════════════════════════════════════════════════════
 // CARRIER LOGO MAPPING
 // ═══════════════════════════════════════════════════════════════════════════
-const CARRIER_LOGOS = {
+const CARRIER_LOGOS: Record<string, string> = {
   Aflac: '/logos/aflac.png',
   SBLI: '/logos/sbli.png',
   CICA: '/logos/cica.png',
@@ -139,6 +143,109 @@ interface ProspectData {
   first_name?: string;
   last_name?: string;
   email?: string;
+  firstName?: string;
+  middle_name?: string;
+  middleName?: string;
+  lastName?: string;
+  gender?: string;
+  beneficiary?: string;
+  address?: string;
+  zip?: string;
+  accountHolder?: string;
+  accountName?: string;
+  bankName?: string;
+  bankCityState?: string;
+  bankAddress?: string;
+  ssPaymentSchedule?: boolean | null;
+  draftSchedule?: string;
+  draftDay?: string;
+  draftDate?: string;
+  routingNumber?: string;
+  routing?: string;
+  accountNumber?: string;
+  accountNum?: string;
+  accountType?: string;
+  [key: string]: unknown;
+}
+
+/** Everything the script collects during the call. */
+type ScriptFormData = {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  state: string;
+  city: string;
+  dob: string;
+  age: number | null;
+  gender: string;
+  tobacco: boolean;
+  heightFeet: number;
+  heightInches: number;
+  weight: number;
+  beneficiaryName: string;
+  beneficiaryRelation: string;
+  ssPaymentDay: string;
+  address: string;
+  zip: string;
+  ssn: string;
+  birthState: string;
+  citizenship: string;
+  email: string;
+  phone: string;
+  accountHolder: string;
+  bankName: string;
+  bankCityState: string;
+  ssPaymentSchedule: boolean | null;
+  draftDay: string;
+  routingNumber: string;
+  accountNumber: string;
+  accountType: string;
+  wantsEmail: boolean | null;
+  healthQ1: boolean | null;
+  healthQ2: boolean | null;
+  healthQ3: boolean | null;
+  healthQ4: boolean | null;
+  healthQ5: boolean | null;
+  healthQ6: boolean | null;
+  healthQ7a: boolean | null;
+  healthQ7b: boolean | null;
+  healthQ7c: boolean | null;
+  healthQ7d: boolean | null;
+  healthQ8a: boolean | null;
+  healthQ8b: boolean | null;
+  healthQ8c: boolean | null;
+  healthCovid: boolean | null;
+  doctorName: string;
+  doctorAddress: string;
+  doctorPhone: string;
+  selectedCarrier: string | null;
+  selectedCoverage: number;
+  selectedPremium: number | null;
+  selectedPlanType: string;
+  hospitalizationReason: string;
+  callbackDate: string;
+  callbackTime: string;
+  ownerIsInsured: boolean;
+  payorIsInsured: boolean;
+  hasExistingInsurance: boolean | null;
+  existingCompanyName: string;
+  existingPolicyNumber: string;
+  existingCoverageAmount: string;
+  willReplaceExisting: boolean | null;
+  locationVerified: boolean;
+  dobVerified: boolean;
+  locationDataSource: string;
+  dobDataSource: string;
+  /** Never populated; read only by the calculateEligibility stub. */
+  healthAnswers?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+/** One live status update from the automation SSE stream. */
+interface AutomationStep {
+  step?: number;
+  message?: string;
+  status?: string;
   [key: string]: unknown;
 }
 
@@ -185,7 +292,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ─────────────────────────────────────────────────────────────────────────
   const [nodeId, setNodeId] = useState(STARTING_NODE);
   const [history, setHistory] = useState([STARTING_NODE]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ScriptFormData>({
     firstName: prospectData?.first_name || prospectData?.firstName || '',
     middleName: prospectData?.middle_name || prospectData?.middleName || '',
     lastName: prospectData?.last_name || prospectData?.lastName || '',
@@ -279,12 +386,12 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   const [settingsVersion, setSettingsVersion] = useState(0); // Forces re-render on settings change
   const [automationStarted, setAutomationStarted] = useState(false); // Track if background automation has started
   const [automationLoading, setAutomationLoading] = useState(false); // Track if automation is running
-  const [automationError, setAutomationError] = useState(null); // Error message if automation fails
-  const [automationSteps, setAutomationSteps] = useState([]); // Live SSE status updates
-  const [applicationNumber, setApplicationNumber] = useState(null); // Application number after success
-  const [confirmedCarrier, setConfirmedCarrier] = useState(null); // Carrier officially confirmed for submission
+  const [automationError, setAutomationError] = useState<string | null>(null); // Error message if automation fails
+  const [automationSteps, setAutomationSteps] = useState<AutomationStep[]>([]); // Live SSE status updates
+  const [applicationNumber, setApplicationNumber] = useState<string | null>(null); // Application number after success
+  const [confirmedCarrier, setConfirmedCarrier] = useState<string | null>(null); // Carrier officially confirmed for submission
   const [showCarrierConfirmation, setShowCarrierConfirmation] = useState(false); // Show confirmation panel
-  const scrollRef = useRef(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CARRIER CONFIRMATION LOGIC
@@ -381,8 +488,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ─────────────────────────────────────────────────────────────────────────
 
   // Manual trigger function - now uses SSE for live status updates
-  const triggerCarrierAutomation = useCallback(async customerData => {
-    const API_BASE = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api';
+  const triggerCarrierAutomation = useCallback(async (customerData: Record<string, unknown>) => {
+    const API_BASE = (import.meta as ImportMeta & { env: { DEV?: boolean } }).env.DEV ? 'http://localhost:3001/api' : '/api';
     const ts = new Date().toISOString();
 
     // Reset state
@@ -431,7 +538,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         eventSource.onmessage = async event => {
           try {
-            const statusUpdate = JSON.parse(event.data);
+            const statusUpdate = JSON.parse(event.data) as AutomationStep;
             console.log('%c[SSE] Status Update:', 'color: #0ff', statusUpdate);
 
             // Add status update to steps array
@@ -507,14 +614,15 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         'background: #f00; color: #fff; font-weight: bold;',
         err
       );
-      setAutomationError(err.message);
+      const message = (err as Error).message;
+      setAutomationError(message);
       setAutomationLoading(false);
       fetch(`${API_BASE}/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Automation EXCEPTION: ${err.message}`, level: 'error' }),
+        body: JSON.stringify({ message: `Automation EXCEPTION: ${message}`, level: 'error' }),
       }).catch(() => {});
-      return { success: false, error: err.message };
+      return { success: false, error: message };
     }
   }, []);
 
@@ -523,17 +631,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ─────────────────────────────────────────────────────────────────────────
   // UPDATE FORM DATA
   // ─────────────────────────────────────────────────────────────────────────
-  const updateField = useCallback((key, value) => {
+  const updateField = useCallback((key: string, value: unknown) => {
     setFormData(prev => {
-      const updated = { ...prev, [key]: value };
+      const updated: ScriptFormData = { ...prev, [key]: value };
       if (key === 'dob' && value) {
-        updated.age = calculateAge(value);
+        updated.age = calculateAge(value as string);
       }
       return updated;
     });
   }, []);
 
-  const updateMultiple = useCallback(updates => {
+  const updateMultiple = useCallback((updates: Record<string, unknown>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   }, []);
 
@@ -543,6 +651,9 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   const eligibility = useMemo(() => {
     return calculateEligibility(formData.healthAnswers);
   }, [formData.healthAnswers]);
+  // The badge below reads `.status`/`.plan`, but the eligibility stub returns a bare tier
+  // string, so both are undefined at runtime. Typed as-is to preserve that behaviour.
+  const eligibilityBadge = eligibility as unknown as { status?: string; plan?: string };
 
   const quotes = useMemo(() => {
     if (!ratesLoaded) return []; // Wait for rates to load
@@ -556,6 +667,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
       },
       eligibility as 'LEVEL' | 'ROP' | 'GRADED' | 'GI' | 'NOT_ELIGIBLE' | undefined
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ratesVersion/settingsVersion are intentional cache-busters that recompute quotes when rates or carrier settings change
   }, [
     formData.age,
     formData.gender,
@@ -618,6 +730,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         activeQuote.planType
       ),
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on activeQuote's carrier/planType (not object identity) so premiums only recompute when those change
   }, [
     activeQuote?.carrier,
     activeQuote?.planType,
@@ -751,7 +864,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // SCRIPT TEXT REPLACEMENT
   // ─────────────────────────────────────────────────────────────────────────
   const replaceVars = useCallback(
-    text => {
+    (text: string | null | undefined) => {
       if (!text) return '';
 
       // Calculate three-option coverage amounts
@@ -805,7 +918,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           .replace(/{last_name_spelled}/g, lastNameSpelled)
           .replace(/{state}/g, formData.state || 'your state')
           .replace(/{city}/g, formData.city || '')
-          .replace(/{age}/g, formData.age || '')
+          .replace(/{age}/g, String(formData.age || ''))
           .replace(
             /{dob}/g,
             formData.dob
@@ -900,7 +1013,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // NAVIGATION
   // ─────────────────────────────────────────────────────────────────────────
   const goTo = useCallback(
-    (nextId, options = {}) => {
+    (nextId: string | undefined, options: { setData?: Record<string, unknown> } = {}) => {
       if (!nextId || !NODES[nextId]) return;
       if (options.setData) {
         updateMultiple(options.setData);
@@ -939,7 +1052,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER INPUT FIELD
   // ─────────────────────────────────────────────────────────────────────────
-  const renderField = field => {
+  const renderField = (field: AdaptedNode['fields'][number]) => {
     const value = formData[field.key] || '';
     const baseClass =
       'bg-sunken border border-rule-strong rounded-lg px-3 py-2 text-ink text-lg focus:border-brand-ink focus:outline-none';
@@ -1038,12 +1151,12 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         <div key={field.key} className={field.inline ? 'flex-1' : ''}>
           <label className="text-ink-2 text-sm mb-1 block">{field.label}</label>
           <select
-            value={value}
+            value={value as string}
             onChange={e => updateField(field.key, e.target.value)}
             className={`${baseClass} w-full`}
           >
             <option value="">Select...</option>
-            {field.options.map(opt => (
+            {field.options!.map(opt => (
               <option key={opt} value={opt}>
                 {opt}
               </option>
@@ -1075,7 +1188,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         <label className="text-ink-2 text-sm mb-1 block">{field.label}</label>
         <input
           type={field.type || 'text'}
-          value={value}
+          value={value as string | number}
           onChange={e => updateField(field.key, e.target.value)}
           placeholder={field.placeholder || ''}
           className={`${baseClass} w-full ${field.sensitive ? 'font-mono tracking-widest' : ''}`}
@@ -1160,14 +1273,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             </div>
             <div
               className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${
-                eligibility.status === 'standard'
+                eligibilityBadge.status === 'standard'
                   ? 'bg-live-tint text-live-ink'
-                  : eligibility.status === 'modified'
+                  : eligibilityBadge.status === 'modified'
                     ? 'bg-ringing-tint text-ringing-ink'
                     : 'bg-dropped-tint text-dropped-ink'
               }`}
             >
-              {eligibility.plan}
+              {eligibilityBadge.plan}
             </div>
           </div>
 
@@ -1332,13 +1445,15 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                     }`}
                   >
                     {CARRIER_LOGOS[quote.carrier] ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- static carrier logo with onError fallback; next/image would change loading/rendering
                       <img
                         src={CARRIER_LOGOS[quote.carrier]}
                         alt={quote.carrier}
                         className="w-12 h-12 object-contain"
                         onError={e => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling?.classList.remove('hidden');
+                          const img = e.target as HTMLImageElement;
+                          img.style.display = 'none';
+                          (img.nextSibling as Element | null)?.classList.remove('hidden');
                         }}
                       />
                     ) : null}
@@ -1403,6 +1518,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   >
                     <div className="w-10 h-10 rounded-lg bg-sunken flex items-center justify-center flex-shrink-0 overflow-hidden">
                       {CARRIER_LOGOS[quote.carrier] ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- static carrier logo with onError fallback; next/image would change loading/rendering
                         <img
                           src={CARRIER_LOGOS[quote.carrier]}
                           alt={quote.carrier}
@@ -1488,6 +1604,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 <div className="p-4 rounded-card bg-sunken border border-rule">
                   <div className="flex items-center gap-4">
                     {CARRIER_LOGOS[activeQuote.carrier] && (
+                      // eslint-disable-next-line @next/next/no-img-element -- static carrier logo with onError fallback; next/image would change loading/rendering
                       <img
                         src={CARRIER_LOGOS[activeQuote.carrier]}
                         alt={activeQuote.carrier}
@@ -1599,8 +1716,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   }
 
   const progressPercent = (node.phase / 15) * 100;
-  const getOptionColor = color => {
-    const colors = {
+  const getOptionColor = (color: string) => {
+    const colors: Record<string, string> = {
       emerald: 'border-live bg-live-tint hover:bg-brand hover:text-ink',
       amber: 'border-ringing bg-ringing-tint hover:bg-ringing-tint',
       blue: 'border-money bg-money-tint hover:bg-money-tint',
@@ -2177,6 +2294,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   {/* Carrier Logo */}
                   <div className="w-14 h-14 rounded-card bg-surface flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-brand ring-offset-2 ring-offset-transparent">
                     {CARRIER_LOGOS[activeQuote.carrier] ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- static carrier logo with onError fallback; next/image would change loading/rendering
                       <img
                         src={CARRIER_LOGOS[activeQuote.carrier]}
                         alt={activeQuote.carrier}

@@ -6,7 +6,6 @@ import {
   Lightbulb,
   AlertTriangle,
   Check,
-  X,
   User,
   Heart,
   Shield,
@@ -19,7 +18,6 @@ import { useState, useCallback, useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
-  SCRIPT_NODES,
   SCRIPT_PHASES,
   STARTING_NODE,
   replaceVariables,

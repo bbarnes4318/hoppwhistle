@@ -339,7 +339,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
        * `api-response-contract.test.ts`. This is the same fact asserted where
        * the route's own permission test can see it.
        */
-      const body = response.json() as { data?: unknown };
+      const body = response.json();
       expect(Array.isArray(body.data), 'the agency list must be at `data`').toBe(true);
 
       const ids = (body.data as Array<{ id: string }>).map(tenant => tenant.id);

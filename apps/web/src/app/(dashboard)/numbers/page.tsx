@@ -583,7 +583,7 @@ function NumbersPage() {
       <CreateRouteDialog
         open={createRouteOpen}
         onOpenChange={setCreateRouteOpen}
-        availableNumbers={numbers as any}
+        availableNumbers={numbers}
         onSuccess={() => void loadRoutes()}
       />
 

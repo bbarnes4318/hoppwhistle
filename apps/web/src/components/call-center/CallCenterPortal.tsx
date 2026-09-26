@@ -62,7 +62,7 @@ import type {
   ProspectData,
   SelectedScript,
 } from './types';
-import UnderwritingScriptPanel from './UnderwritingScriptPanel';
+import { UnderwritingScriptPanel } from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
@@ -130,6 +130,12 @@ const getDefaultScriptText = (
   }
   return '';
 };
+
+interface LeadListSummary {
+  id: string;
+  name: string;
+  _count?: { leads?: number };
+}
 
 // ============================================================================
 // MAIN COMPONENT
@@ -225,7 +231,9 @@ export function CallCenterPortal(): JSX.Element {
   // Refs to avoid stale closures in setTimeout/useEffect
   const callTimerValRef = useRef(0);
   const activeCallDataRef = useRef<ProspectData | null>(null);
-  const handleSaveDispositionRef = useRef<any>(null);
+  const handleSaveDispositionRef = useRef<
+    ((autoDisp?: string, autoNotes?: string) => Promise<void>) | null
+  >(null);
   const wasAnsweredRef = useRef<boolean>(false);
   const hasHadActiveSessionRef = useRef<boolean>(false);
 
@@ -344,7 +352,7 @@ export function CallCenterPortal(): JSX.Element {
   });
 
   const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
-  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [leadLists, setLeadLists] = useState<LeadListSummary[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>('');
 
   // Database-driven role and script access
@@ -750,10 +758,10 @@ export function CallCenterPortal(): JSX.Element {
 
       if (e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        void handleAnswerCall();
+        handleAnswerCall();
       } else if (e.key.toLowerCase() === 'd') {
         e.preventDefault();
-        void handleDeclineCall();
+        handleDeclineCall();
       }
     };
 
@@ -762,9 +770,9 @@ export function CallCenterPortal(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIncomingCall]);
 
-  const handleAnswerCall = async () => {
+  const handleAnswerCall = () => {
     try {
-      await answerCall(); // Use hook's answer method for SIP
+      answerCall(); // Use hook's answer method for SIP
     } catch (e) {
       console.error('Failed to answer call:', e);
     }
@@ -787,9 +795,9 @@ export function CallCenterPortal(): JSX.Element {
     }, 1000);
   };
 
-  const handleDeclineCall = async () => {
+  const handleDeclineCall = () => {
     try {
-      await hangupCall(); // Rejecting an incoming call via hangup
+      hangupCall(); // Rejecting an incoming call via hangup
     } catch (e) {
       console.error('Failed to decline call:', e);
     }
@@ -797,10 +805,10 @@ export function CallCenterPortal(): JSX.Element {
     setIncomingCallData(null);
   };
 
-  const handleHangup = async () => {
+  const handleHangup = () => {
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     try {
-      await hangupCall();
+      hangupCall();
     } catch (e) {
       console.error(e);
     }
@@ -1037,7 +1045,7 @@ export function CallCenterPortal(): JSX.Element {
     }
 
     // Save updated CRM data if lead exists
-    const resolvedLeadId = activeCallData?.id || crmData?.customer?.id;
+    const resolvedLeadId = (activeCallData?.id as string | undefined) || crmData?.customer?.id;
     if (resolvedLeadId && activeCallData) {
       try {
         // Collect custom fields (any fields not in standard CRM fields list)
@@ -1182,10 +1190,15 @@ export function CallCenterPortal(): JSX.Element {
     }
   };
 
+  // No dependency array: handleSaveDisposition is recreated every render, so
+  // the ref is refreshed after every render.
   useEffect(() => {
     handleSaveDispositionRef.current = handleSaveDisposition;
-  }, [handleSaveDisposition]);
+  });
 
+  // Not wrapped in useCallback: the auto-dialer countdown effect lists it as a
+  // dependency and currently re-runs (restarting its timer) on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- memoizing would change when that effect runs
   const startCallWithApplication = async (app: ApplicationData) => {
     if (app.id) {
       dialedLeadIdsRef.current.add(app.id);
@@ -1226,7 +1239,7 @@ export function CallCenterPortal(): JSX.Element {
     setLoadingApplications(true);
     try {
       // 1. Fetch Lead Lists in parallel to keep dropdown updated
-      const listsRes = await apiClient.get<any[]>('/api/v1/lead-lists');
+      const listsRes = await apiClient.get<LeadListSummary[]>('/api/v1/lead-lists');
       if (!listsRes.error && listsRes.data) {
         setLeadLists(listsRes.data);
       }
@@ -1236,10 +1249,10 @@ export function CallCenterPortal(): JSX.Element {
         ? `/api/v1/insurance-leads?limit=50000&listId=${selectedListId}&status=NEW`
         : '/api/v1/insurance-leads?limit=50000&status=NEW';
 
-      const res = await apiClient.get<any>(url);
+      const res = await apiClient.get<{ data?: (ApplicationData & { fullName?: string })[] }>(url);
       if (!res.error && res.data) {
         const result = res.data;
-        const apps = (result.data || []).map((lead: any) => ({
+        const apps = (result.data || []).map(lead => ({
           ...lead,
           firstName: lead.firstName || '',
           lastName: lead.lastName || '',
@@ -1479,7 +1492,7 @@ export function CallCenterPortal(): JSX.Element {
   const selectedList = leadLists.find(l => l.id === selectedListId);
   const isPreClosedListSelected = selectedList?.name?.toLowerCase() === 'preclosed';
 
-  const activeLeadListName = crmData?.customer?.list?.name || activeCallData?.list?.name || '';
+  const activeLeadListName = crmData?.customer?.list?.name || (activeCallData?.list as { name?: string } | undefined)?.name || '';
   const isPreClosedLead = activeLeadListName.toLowerCase() === 'preclosed';
 
   const isPreClosed = isPreClosedListSelected || isPreClosedLead;
@@ -1606,7 +1619,7 @@ export function CallCenterPortal(): JSX.Element {
                     </label>
                     <select
                       value={editingScriptType}
-                      onChange={e => handleScriptTypeChange(e.target.value as any)}
+                      onChange={e => handleScriptTypeChange(e.target.value as 'sales' | 'retention' | 'underwriting')}
                       className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="sales">Contractor Script</option>
@@ -1754,10 +1767,10 @@ export function CallCenterPortal(): JSX.Element {
               incomingCallData={incomingCallData}
               ringDuration={ringDuration}
               handleAnswerCall={() => {
-                void handleAnswerCall();
+                handleAnswerCall();
               }}
               handleDeclineCall={() => {
-                void handleDeclineCall();
+                handleDeclineCall();
               }}
             />
           )}
@@ -1773,7 +1786,7 @@ export function CallCenterPortal(): JSX.Element {
               setIsAddingThirdParty={setIsAddingThirdParty}
               thirdPartyConnected={thirdPartyConnected}
               handleHangup={() => {
-                void handleHangup();
+                handleHangup();
               }}
               makeCall={makeCall}
               callNotes={callNotes}
@@ -1804,7 +1817,7 @@ export function CallCenterPortal(): JSX.Element {
               applicationError={applicationError}
               savingApplication={savingApplication}
               handleSkipDisposition={() => {
-                const leadId = activeCallData?.id || crmData?.customer?.id;
+                const leadId = (activeCallData?.id as string | undefined) || crmData?.customer?.id;
                 if (leadId) {
                   apiClient
                     .patch(`/api/v1/insurance-leads/${leadId}`, {
@@ -1955,7 +1968,7 @@ export function CallCenterPortal(): JSX.Element {
                       ) : selectedScript === 'cold_call_transfer' ? (
                         <ColdCallTransferScriptPanel
                           prospectData={activeCallData}
-                          leadId={activeCallData?.id}
+                          leadId={activeCallData?.id as string | undefined}
                           onDataUpdate={(data: Record<string, unknown>) =>
                             setActiveCallData(prev =>
                               prev ? ({ ...prev, ...data } as ProspectData) : null
@@ -1968,7 +1981,7 @@ export function CallCenterPortal(): JSX.Element {
                       ) : selectedScript === 'better_plan_callback' ? (
                         <BetterPlanCallbackScriptPanel
                           prospectData={activeCallData}
-                          leadId={activeCallData?.id}
+                          leadId={activeCallData?.id as string | undefined}
                           onDataUpdate={(data: Record<string, unknown>) =>
                             setActiveCallData(prev =>
                               prev ? ({ ...prev, ...data } as ProspectData) : null
@@ -2022,12 +2035,11 @@ export function CallCenterPortal(): JSX.Element {
                                 direction: currentCall.direction,
                                 campaignName:
                                   currentCall.prospectData?.campaignName ||
-                                  activeCallData?.campaignName,
-                                publisherName:
-                                  currentCall.prospectData?.publisherName ||
-                                  activeCallData?.publisherName,
-                                buyerName:
-                                  currentCall.prospectData?.buyerName || activeCallData?.buyerName,
+                                  (activeCallData?.campaignName as string | undefined),
+                                publisherName: (currentCall.prospectData?.publisherName ||
+                                  activeCallData?.publisherName) as string | undefined,
+                                buyerName: (currentCall.prospectData?.buyerName ||
+                                  activeCallData?.buyerName) as string | undefined,
                               }
                             : null
                         }

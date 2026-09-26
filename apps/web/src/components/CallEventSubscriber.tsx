@@ -112,7 +112,7 @@ export function CallEventSubscriber({
           }
         };
 
-        ws.onerror = err => {
+        ws.onerror = () => {
           // Suppress repeated connection errors when backend isn't running
           if (process.env.NODE_ENV === 'development') {
             console.warn('WebSocket connection error (backend may not be running)');
@@ -127,7 +127,7 @@ export function CallEventSubscriber({
 
           // Attempt to reconnect after 3 seconds
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            void connect();
           }, 3000);
         };
 
@@ -142,7 +142,7 @@ export function CallEventSubscriber({
       }
     };
 
-    connect();
+    void connect();
 
     return () => {
       if (reconnectTimeoutRef.current) {

@@ -1,7 +1,5 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import {
  ArrowLeft,
  DollarSign,
@@ -16,6 +14,8 @@ import {
  UserPlus,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, useMemo, useCallback } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -247,7 +247,7 @@ export function CustomerIntakeForm(): JSX.Element {
  </div>
  </div>
 
- <form onSubmit={handleSubmit} className="space-y-6">
+ <form onSubmit={e => void handleSubmit(e)} className="space-y-6">
  {/* Contact Information */}
  <Card>
  <CardHeader>

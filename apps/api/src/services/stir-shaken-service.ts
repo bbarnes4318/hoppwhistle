@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { logger } from './logger.js';
@@ -46,7 +48,7 @@ export class StirShakenService {
         passthru: options.headers?.passthru,
         verifiedAt: new Date(),
         verifiedBy: options.verifiedBy,
-        metadata: options.metadata || {},
+        metadata: (options.metadata || {}) as Prisma.InputJsonObject,
       },
       update: {
         attestation,
@@ -55,7 +57,7 @@ export class StirShakenService {
         passthru: options.headers?.passthru,
         verifiedAt: new Date(),
         verifiedBy: options.verifiedBy,
-        metadata: options.metadata || {},
+        metadata: (options.metadata || {}) as Prisma.InputJsonObject,
       },
     });
 

@@ -13,11 +13,19 @@ import {
   preflightRun,
   researchBriefInputSchema,
   resolveAssignments,
+  type ProviderId,
   type ProviderRole,
+  type ResearchMode,
   type ResearchRunSummary,
   type RunProvenance,
+  type RunStatus,
+  type StageCost,
   type StageInfo,
+  type StageKey,
+  type StageStatus,
+  type Verdict,
 } from '@hopwhistle/shared';
+import type { Prisma, ResearchRun, ResearchStage } from '@prisma/client';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
@@ -42,8 +50,7 @@ function featureEnabled(): boolean {
 /** Require an authenticated Owner/Admin. Verifies roles against the DB (the
  *  session token does not always embed roles), returns null + error otherwise. */
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<AuthCtx | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const user = (request as any).user as
+  const user = request.user as
     | { tenantId?: string; userId?: string; roles?: string[] }
     | undefined;
   const tenantId = user?.tenantId;
@@ -91,10 +98,9 @@ function planStages(mode: keyof typeof RESEARCH_MODES): Array<{
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function provenanceOf(run: any): RunProvenance {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const p = (run?.brief as any)?.provenance as Partial<RunProvenance> | undefined;
+function provenanceOf(run: { brief: Prisma.JsonValue } | null | undefined): RunProvenance {
+  const brief = run?.brief as { provenance?: Partial<RunProvenance> } | null | undefined;
+  const p = brief?.provenance;
   if (p && p.executionType) {
     return {
       executionType: p.executionType,
@@ -108,35 +114,33 @@ function provenanceOf(run: any): RunProvenance {
   return { ...FRESH_PROVENANCE };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function runToSummary(run: any): ResearchRunSummary {
+function runToSummary(run: ResearchRun & { reports?: unknown[] }): ResearchRunSummary {
   return {
     id: run.id,
     industry: run.industry,
     geography: run.geography,
-    mode: run.mode,
-    status: run.status,
+    mode: run.mode as ResearchMode,
+    status: run.status as RunStatus,
     createdAt: run.createdAt?.toISOString?.() ?? String(run.createdAt),
     startedAt: run.startedAt ? run.startedAt.toISOString() : null,
     finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
     estimatedCostUsd: run.estimatedCostUsd ?? 0,
     accruedCostUsd: run.accruedCostUsd ?? 0,
     maxBudgetUsd: run.maxBudgetUsd ?? 0,
-    verdict: run.verdict ?? null,
+    verdict: (run.verdict as Verdict | null) ?? null,
     overallScore: run.overallScore ?? null,
     hasReport: Array.isArray(run.reports) ? run.reports.length > 0 : false,
     provenance: provenanceOf(run),
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function stageToInfo(s: any): StageInfo {
+function stageToInfo(s: ResearchStage): StageInfo {
   return {
-    key: s.stageKey,
+    key: s.stageKey as StageKey,
     label: s.label,
-    status: s.status,
-    role: s.role ?? undefined,
-    provider: s.provider ?? undefined,
+    status: s.status as StageStatus,
+    role: (s.role as ProviderRole | null) ?? undefined,
+    provider: (s.provider as ProviderId | null) ?? undefined,
     model: s.model ?? undefined,
     startedAt: s.startedAt ? s.startedAt.toISOString() : undefined,
     finishedAt: s.finishedAt ? s.finishedAt.toISOString() : undefined,
@@ -240,8 +244,9 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       }
       const assignments = resolveAssignments(process.env, {
         mode,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        providerOverrides: request.body?.providerOverrides as any,
+        providerOverrides: request.body?.providerOverrides as
+          | Partial<Record<ProviderRole, ProviderId>>
+          | undefined,
       });
       const estimate = estimateRunCost(mode, assignments);
       return { data: { estimate, assignments, mode } };
@@ -304,12 +309,9 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         geography: brief.geography || 'United States',
         mode: brief.mode,
         status: 'queued',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        brief: brief as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        providerAssignments: assignments as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        costEstimate: estimate as any,
+        brief: brief as unknown as Prisma.InputJsonObject,
+        providerAssignments: assignments as unknown as Prisma.InputJsonObject,
+        costEstimate: estimate as unknown as Prisma.InputJsonObject,
         maxBudgetUsd: input.maxBudgetUsd,
         estimatedCostUsd,
         accruedCostUsd: 0,
@@ -629,9 +631,11 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       });
       const r2 = (n: number) => Math.round(n * 100) / 100;
       const lines = stages
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map(s => ({ s, cd: (s.output as any)?.costDetails }))
-        .filter(x => x.cd)
+        .map(s => ({
+          s,
+          cd: (s.output as { costDetails?: StageCost } | null)?.costDetails,
+        }))
+        .filter((x): x is { s: ResearchStage; cd: StageCost } => Boolean(x.cd))
         .map(({ s, cd }) => ({
           stage: s.stageKey,
           provider: s.provider,
@@ -670,9 +674,11 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         high += c.costHighUsd;
         if (c.cache?.cacheSavingsUsd) cacheSavingsUsd += c.cache.cacheSavingsUsd;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const repairOutcome =
-        (stages.find(s => s.stageKey === 'publish')?.output as any)?.repairOutcome ?? null;
+      const publishOutput = stages.find(s => s.stageKey === 'publish')?.output as
+        | { repairOutcome?: unknown }
+        | null
+        | undefined;
+      const repairOutcome = publishOutput?.repairOutcome ?? null;
       return {
         data: {
           runId: run.id,
@@ -727,8 +733,10 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       );
       const reusedSources = reused
         .filter(s => s.stageKey === 'evidence')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .reduce((n, s) => n + ((s.output as any)?.sources?.length ?? 0), 0);
+        .reduce(
+          (n, s) => n + ((s.output as { sources?: unknown[] } | null)?.sources?.length ?? 0),
+          0
+        );
       const researchStageKeys = ['primary', 'independent', 'social'];
       const avoidedProviderCalls = reused.filter(s =>
         researchStageKeys.includes(s.stageKey)
@@ -750,8 +758,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         avoidedEstimatedCost,
       };
       const replayBrief = {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(src.brief as any),
+        ...(src.brief as Prisma.JsonObject),
         provenance,
         // Legacy flat fields kept for backward compatibility.
         reusedFromRunId: src.id,
@@ -768,12 +775,9 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
           geography: src.geography,
           mode: src.mode,
           status: 'queued',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          brief: replayBrief as any,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          providerAssignments: src.providerAssignments as any,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          costEstimate: src.costEstimate as any,
+          brief: replayBrief as unknown as Prisma.InputJsonObject,
+          providerAssignments: src.providerAssignments as Prisma.InputJsonValue,
+          costEstimate: src.costEstimate as Prisma.InputJsonValue,
           maxBudgetUsd: src.maxBudgetUsd,
           estimatedCostUsd: 0,
           accruedCostUsd: 0,
@@ -798,8 +802,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         const reusedOutput =
           s.output && typeof s.output === 'object'
             ? {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ...(s.output as any),
+                ...(s.output as Prisma.JsonObject),
                 costDetails: {
                   usd: 0,
                   basis: 'reused',
@@ -821,8 +824,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
             sourcesFound: s.sourcesFound,
             costUsd: 0,
             usedFallback: s.usedFallback,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            output: (reusedOutput ?? undefined) as any,
+            output: (reusedOutput ?? undefined) as Prisma.InputJsonValue | undefined,
             finishedAt: new Date(),
           },
         });
@@ -992,7 +994,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
       const name = (request.body?.name ?? '').trim();
       const capabilities = Array.isArray(request.body?.capabilities)
-        ? request.body!.capabilities
+        ? request.body.capabilities
         : [];
       if (!name) {
         void reply.code(400);

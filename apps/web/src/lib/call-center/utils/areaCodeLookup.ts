@@ -418,9 +418,11 @@ export const getAreaCodesForState = (stateName: string): string[] => {
     .map(([code]) => code);
 };
 
-export default {
+const areaCodeLookup = {
   extractAreaCode,
   getStateFromAreaCode,
   getAreaCodesForState,
   AREA_CODE_TO_STATE,
 };
+
+export default areaCodeLookup;

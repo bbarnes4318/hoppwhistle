@@ -46,18 +46,19 @@ describe('TelnyxAdapter', () => {
     it('should list numbers and map response correctly', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [
-            {
-              id: '123',
-              phone_number: '+15551234567',
-              status: 'active',
-              connection_id: 'conn-1',
-              created_at: '2023-01-01T00:00:00Z',
-              tags: ['tag1'],
-            },
-          ],
-        }),
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: '123',
+                phone_number: '+15551234567',
+                status: 'active',
+                connection_id: 'conn-1',
+                created_at: '2023-01-01T00:00:00Z',
+                tags: ['tag1'],
+              },
+            ],
+          }),
       });
 
       const numbers = await adapter.listNumbers();
@@ -70,7 +71,7 @@ describe('TelnyxAdapter', () => {
         status: 'assigned',
         features: { voice: true, sms: true, mms: true },
         providerId: '123',
-        purchasedAt: expect.any(Date),
+        purchasedAt: expect.any(Date) as unknown,
         metadata: {
           connectionId: 'conn-1',
           tags: ['tag1'],
@@ -83,7 +84,7 @@ describe('TelnyxAdapter', () => {
           method: 'GET',
           headers: expect.objectContaining({
             Authorization: 'Bearer test-api-key',
-          }),
+          }) as unknown,
         })
       );
     });
@@ -94,31 +95,33 @@ describe('TelnyxAdapter', () => {
       // Mock search response
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [
-            {
-              phone_number: '+15559998888',
-              region_information: {
-                region_name: 'NY',
-                region_code: 'NY',
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                phone_number: '+15559998888',
+                region_information: {
+                  region_name: 'NY',
+                  region_code: 'NY',
+                },
               },
-            },
-          ],
-        }),
+            ],
+          }),
       });
 
       // Mock purchase response
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: {
-            id: 'new-id',
-            phone_number: '+15559998888',
-            status: 'active',
-            connection_id: 'test-connection-id',
-            created_at: '2023-01-02T00:00:00Z',
-          },
-        }),
+        json: () =>
+          Promise.resolve({
+            data: {
+              id: 'new-id',
+              phone_number: '+15559998888',
+              status: 'active',
+              connection_id: 'test-connection-id',
+              created_at: '2023-01-02T00:00:00Z',
+            },
+          }),
       });
 
       const result = await adapter.purchaseNumber({
@@ -154,7 +157,7 @@ describe('TelnyxAdapter', () => {
     it('should throw if no numbers available', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ data: [] }),
+        json: () => Promise.resolve({ data: [] }),
       });
 
       await expect(adapter.purchaseNumber({ areaCode: '999' })).rejects.toThrow(
@@ -167,7 +170,7 @@ describe('TelnyxAdapter', () => {
     it('should release a number', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       });
 
       await adapter.releaseNumber('123');
@@ -184,7 +187,7 @@ describe('TelnyxAdapter', () => {
       fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 400,
-        text: async () => JSON.stringify({ errors: [{ detail: 'Invalid request' }] }),
+        text: () => Promise.resolve(JSON.stringify({ errors: [{ detail: 'Invalid request' }] })),
       });
 
       await expect(adapter.listNumbers()).rejects.toThrow('Telnyx API error: Invalid request');

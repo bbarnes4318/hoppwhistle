@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { logger } from './logger.js';
@@ -20,7 +22,7 @@ export interface CnamResult {
 export class MockCnamProvider implements CnamProvider {
   name = 'mock';
 
-  async lookup(phoneNumber: string): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
+  lookup(phoneNumber: string): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
     // Mock implementation - returns fake names based on area code
     const areaCode = phoneNumber.slice(2, 5);
     const mockNames: Record<string, string> = {
@@ -32,14 +34,20 @@ export class MockCnamProvider implements CnamProvider {
 
     const callerName = mockNames[areaCode] || null;
 
-    return {
+    return Promise.resolve({
       callerName,
       metadata: {
         source: 'mock',
         areaCode,
       },
-    };
+    });
   }
+}
+
+/** Subset of the Twilio Lookup v1 caller-name response that we read. */
+interface TwilioCnamLookupResponse {
+  country_code?: string;
+  caller_name?: { caller_name?: string | null } | null;
 }
 
 /**
@@ -76,7 +84,7 @@ export class TwilioCnamProvider implements CnamProvider {
         throw new Error(`Twilio API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as TwilioCnamLookupResponse;
       return {
         callerName: data.caller_name?.caller_name || null,
         metadata: {
@@ -183,14 +191,14 @@ export class CnamService {
         provider: provider.name,
         cached: true,
         cachedUntil,
-        metadata: result.metadata || {},
+        metadata: (result.metadata || {}) as Prisma.InputJsonValue,
       },
       update: {
         callerName: result.callerName,
         provider: provider.name,
         cached: true,
         cachedUntil,
-        metadata: result.metadata || {},
+        metadata: (result.metadata || {}) as Prisma.InputJsonValue,
         updatedAt: new Date(),
       },
     });

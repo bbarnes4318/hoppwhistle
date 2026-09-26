@@ -7,8 +7,6 @@ import {
   MicOff,
   Pause,
   Play,
-  User,
-  Clock,
   PhoneCall,
   PhoneForwarded,
 } from 'lucide-react';
@@ -43,7 +41,6 @@ export function DialerControls({
     hangupCall,
     toggleMute,
     toggleHold,
-    sendDTMF,
     isConnecting,
   } = usePhone();
 
@@ -76,9 +73,9 @@ export function DialerControls({
   };
 
   // Handle hangup
-  const handleHangup = async () => {
+  const handleHangup = () => {
     try {
-      await hangupCall();
+      hangupCall();
     } catch (error) {
       console.error('Failed to end call:', error);
     }
@@ -238,7 +235,7 @@ export function DialerControls({
 
       {/* Dial Button */}
       <Button
-        onClick={handleDial}
+        onClick={() => void handleDial()}
         disabled={!phoneNumber.trim() || isConnecting || agentStatus === 'offline'}
         className={cn(
           'w-full bg-brand text-brand-fg',

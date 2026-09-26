@@ -29,7 +29,7 @@
  *      an agent who did nothing.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { getAgentRange } from '../services/billing/delivery-view.js';
 
@@ -42,9 +42,11 @@ const prisma = {
   ? NonNullable<P>
   : never;
 
+type GroupByMock = Mock<[args: { where: unknown }], Promise<unknown[]>>;
+
 const mocks = prisma as unknown as {
-  call: { groupBy: ReturnType<typeof vi.fn> };
-  insuranceCarrierApplication: { groupBy: ReturnType<typeof vi.fn> };
+  call: { groupBy: GroupByMock };
+  insuranceCarrierApplication: { groupBy: GroupByMock };
   user: { findMany: ReturnType<typeof vi.fn> };
   timeEntry: { groupBy: ReturnType<typeof vi.fn> };
 };

@@ -2,13 +2,9 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-
-import { PricingRule, PricingRulesEditor } from './PricingRulesEditor';
-import { HoursOfOperation, ScheduleEditor } from './ScheduleEditor';
-import { StateSelector } from './StateSelector';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +28,10 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/components/ui/use-toast';
+
+import { PricingRule, PricingRulesEditor } from './PricingRulesEditor';
+import { HoursOfOperation, ScheduleEditor } from './ScheduleEditor';
+import { StateSelector } from './StateSelector';
 
 // Zod Schema for form validation
 const campaignFormSchema = z.object({
@@ -141,7 +141,7 @@ export function CampaignForm({ buyerId, initialData, onSuccess }: CampaignFormPr
 
  return (
  <Form {...form}>
- <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+ <form onSubmit={e => void form.handleSubmit(onSubmit)(e)} className="space-y-6">
  {/* Endpoint Details */}
  <Card>
  <CardHeader>

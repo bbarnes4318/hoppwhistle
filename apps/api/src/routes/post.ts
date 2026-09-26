@@ -27,7 +27,7 @@ interface PostRequestBody {
 // Route Registration
 // ============================================================================
 
-export async function registerPostRoutes(fastify: FastifyInstance): Promise<void> {
+export function registerPostRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
 
   /**
@@ -263,4 +263,6 @@ export async function registerPostRoutes(fastify: FastifyInstance): Promise<void
       }
     }
   );
+
+  return Promise.resolve();
 }

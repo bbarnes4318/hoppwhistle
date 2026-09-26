@@ -27,6 +27,21 @@ interface CsvImportDialogProps {
 /** Rows per import request — small enough that a 1,000-lead file can't time out. */
 const IMPORT_BATCH_SIZE = 100;
 
+interface LeadListOption {
+  id: string;
+  name: string;
+  vertical?: string;
+}
+
+/** One import batch's summary, as returned by /api/v1/insurance-leads/import. */
+interface ImportBatchResult {
+  listId?: string;
+  total?: number;
+  successCount?: number;
+  failCount?: number;
+  details?: ImportResultDetail[];
+}
+
 interface ImportResultDetail {
   success: boolean;
   name: string;
@@ -604,7 +619,7 @@ const TARGET_FIELDS: TargetField[] = [
 
 export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [leadLists, setLeadLists] = useState<LeadListOption[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>('');
   const [newListName, setNewListName] = useState<string>('');
   const [isCreateNewList, setIsCreateNewList] = useState<boolean>(true);
@@ -612,7 +627,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   useEffect(() => {
     const loadLists = async () => {
       try {
-        const response = await apiClient.get<any[]>('/api/v1/lead-lists');
+        const response = await apiClient.get<LeadListOption[]>('/api/v1/lead-lists');
         if (!response.error && response.data) {
           setLeadLists(response.data);
           if (response.data.length > 0) {
@@ -933,12 +948,12 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           throw new Error(response.error.message || 'Import API request failed');
         }
 
-        const data = response.data as any;
+        const data = response.data as ImportBatchResult;
         resolvedListId = data.listId || resolvedListId;
         combined.total += data.total ?? batch.length;
         combined.successCount += data.successCount ?? 0;
         combined.failCount += data.failCount ?? 0;
-        combined.details.push(...((data.details ?? []) as ImportResultDetail[]));
+        combined.details.push(...(data.details ?? []));
       }
 
       setImportProgress({ done: payloadLeads.length, total: payloadLeads.length });
@@ -950,8 +965,8 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       );
       setImportResult(combined);
       setStep(4);
-    } catch (err: any) {
-      alert(err.message || 'Import API request failed');
+    } catch (err) {
+      alert((err as Error).message || 'Import API request failed');
     } finally {
       setImporting(false);
     }
@@ -1057,7 +1072,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                   ].map(opt => (
                     <button
                       key={opt.value}
-                      onClick={() => setVertical(opt.value as any)}
+                      onClick={() => setVertical(opt.value as 'ACA' | 'FE' | 'B2B')}
                       className={`flex flex-col items-start rounded-lg border p-4 text-left transition-all ${vertical === opt.value ? 'bg-brand-tint border-brand text-ink' : 'bg-surface border-rule text-ink-3 hover:border-rule-strong'}`}
                     >
                       <span className="font-semibold text-sm">{opt.label}</span>
@@ -1132,7 +1147,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                       onChange={e => setSelectedListId(e.target.value)}
                       className="w-full bg-surface border border-rule rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-ink cursor-pointer"
                     >
-                      {leadLists.map((list: any) => (
+                      {leadLists.map(list => (
                         <option key={list.id} value={list.id}>
                           {list.name} ({list.vertical})
                         </option>
@@ -1643,8 +1658,8 @@ function BuyerDeliveryPanel({
         cursor = batch.nextCursor;
         if (!cursor) break;
       }
-    } catch (err: any) {
-      setSendError(err?.message || 'Delivery request failed');
+    } catch (err) {
+      setSendError((err as Error | undefined)?.message || 'Delivery request failed');
     } finally {
       setSending(false);
       void loadPreflight();

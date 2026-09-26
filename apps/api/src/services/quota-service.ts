@@ -1,4 +1,5 @@
-import { logger } from '../lib/logger.js';
+import type { TenantBudget } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { auditLog } from './audit.js';
@@ -157,8 +158,12 @@ export class QuotaService {
     }
 
     // Check override token
-    if (overrideToken && tenant.budget?.overrideToken === overrideToken) {
-      if (tenant.budget.overrideTokenExpiresAt && tenant.budget.overrideTokenExpiresAt < new Date()) {
+    // FIXME: `budget` is not in this query's `include`, so it is always undefined at
+    // runtime and override tokens are never honoured here. Behaviour kept as-is;
+    // adding `budget: true` to the include would enable overrides for this check.
+    const budget = (tenant as typeof tenant & { budget?: TenantBudget | null }).budget;
+    if (overrideToken && budget?.overrideToken === overrideToken) {
+      if (budget.overrideTokenExpiresAt && budget.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };
       }
       return { allowed: true, reason: 'Override token used' };
@@ -256,8 +261,12 @@ export class QuotaService {
       return { allowed: false, reason: 'Tenant not found' };
     }
 
-    if (overrideToken && tenant.budget?.overrideToken === overrideToken) {
-      if (tenant.budget.overrideTokenExpiresAt && tenant.budget.overrideTokenExpiresAt < new Date()) {
+    // FIXME: `budget` is not in this query's `include`, so it is always undefined at
+    // runtime and override tokens are never honoured here. Behaviour kept as-is;
+    // adding `budget: true` to the include would enable overrides for this check.
+    const budget = (tenant as typeof tenant & { budget?: TenantBudget | null }).budget;
+    if (overrideToken && budget?.overrideToken === overrideToken) {
+      if (budget.overrideTokenExpiresAt && budget.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };
       }
       return { allowed: true, reason: 'Override token used' };
@@ -418,7 +427,7 @@ export class QuotaService {
   async recordCallCost(
     tenantId: string,
     cost: number,
-    callId: string
+    _callId: string
   ): Promise<void> {
     const prisma = getPrismaClient();
 

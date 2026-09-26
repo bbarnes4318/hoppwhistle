@@ -24,9 +24,6 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { researchApi, type ResearchConfig } from './api';
-import { CapabilityPicker } from './CapabilityPicker';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +39,9 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+
+import { researchApi, type ResearchConfig } from './api';
+import { CapabilityPicker } from './CapabilityPicker';
 
 // Human labels for each research depth — provider/model names deliberately hidden.
 const MODE_COPY: Record<ResearchMode, { tagline: string; body: string; recommended?: boolean }> = {
@@ -408,7 +408,7 @@ export function ResearchConfigForm() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={saveProfile}
+              onClick={() => void saveProfile()}
               disabled={savingProfile || !profileName.trim() || brief.capabilities.length === 0}
             >
               <Save className="mr-1 h-4 w-4" /> Save
@@ -618,7 +618,7 @@ export function ResearchConfigForm() {
           <Button
             type="button"
             size="lg"
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={submitting || missingProviders.length > 0 || forensicNeedsBudget}
           >
             {submitting ? (

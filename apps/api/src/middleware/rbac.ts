@@ -504,7 +504,7 @@ export function requirePermission(requiredPermission: Permission) {
     const user = request.user;
 
     if (!user) {
-      reply.code(401).send({
+      void reply.code(401).send({
         error: {
           code: 'UNAUTHORIZED',
           message: 'Authentication required',
@@ -540,7 +540,7 @@ export function requirePermission(requiredPermission: Permission) {
         error: `Permission denied: ${requiredPermission}`,
       });
 
-      reply.code(403).send({
+      void reply.code(403).send({
         error: {
           code: 'FORBIDDEN',
           message: `Permission denied: ${requiredPermission}`,
@@ -559,7 +559,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
     const user = request.user;
 
     if (!user) {
-      reply.code(401).send({
+      void reply.code(401).send({
         error: {
           code: 'UNAUTHORIZED',
           message: 'Authentication required',
@@ -593,7 +593,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
       error: `Permission denied: requires one of [${permissions.join(', ')}]`,
     });
 
-    reply.code(403).send({
+    void reply.code(403).send({
       error: {
         code: 'FORBIDDEN',
         message: `Permission denied: requires one of [${permissions.join(', ')}]`,
@@ -610,7 +610,7 @@ export function requireRole(...roles: RoleName[]) {
     const user = request.user;
 
     if (!user || !user.userId) {
-      reply.code(401).send({
+      void reply.code(401).send({
         error: {
           code: 'UNAUTHORIZED',
           message: 'User authentication required',
@@ -644,7 +644,7 @@ export function requireRole(...roles: RoleName[]) {
     });
 
     if (!userWithRoles || userWithRoles.tenantId !== user.tenantId) {
-      reply.code(403).send({
+      void reply.code(403).send({
         error: {
           code: 'FORBIDDEN',
           message: 'User not found',
@@ -654,7 +654,7 @@ export function requireRole(...roles: RoleName[]) {
     }
 
     const userRoles = userWithRoles.roles.map(ur => ur.role.name);
-    const hasRole = roles.some(role => userRoles.includes(role as string));
+    const hasRole = roles.some(role => userRoles.includes(role));
 
     if (!hasRole) {
       await auditLog({
@@ -671,7 +671,7 @@ export function requireRole(...roles: RoleName[]) {
         error: `Role denied: requires one of [${roles.join(', ')}]`,
       });
 
-      reply.code(403).send({
+      void reply.code(403).send({
         error: {
           code: 'FORBIDDEN',
           message: `Role denied: requires one of [${roles.join(', ')}]`,

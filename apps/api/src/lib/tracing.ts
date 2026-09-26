@@ -26,7 +26,7 @@ export function initTracing(serviceName: string = 'hopwhistle-api'): void {
   }
 
   try {
-    sdk = new NodeSDK({
+    const nodeSdk = new NodeSDK({
       resource: new Resource({
         [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
         [SemanticResourceAttributes.SERVICE_VERSION]: process.env.npm_package_version || '1.0.0',
@@ -43,8 +43,9 @@ export function initTracing(serviceName: string = 'hopwhistle-api'): void {
       ],
     });
 
+    sdk = nodeSdk;
     if (sdk) {
-      sdk.start();
+      nodeSdk.start();
       console.log(`[Tracing] Initialized for ${serviceName}, exporting to ${jaegerEndpoint}`);
     }
   } catch (error) {

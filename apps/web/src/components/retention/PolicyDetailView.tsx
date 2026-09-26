@@ -7,19 +7,16 @@ import {
   MapPin,
   User,
   FileText,
-  DollarSign,
   CalendarDays,
   Clock,
   Edit,
   Plus,
-  Save,
   CheckCircle,
   XCircle,
   AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 import { usePhone } from '@/components/phone/phone-provider';
 import type { RetentionPolicy, PolicyStatus } from '@/components/retention';
@@ -145,7 +142,6 @@ interface PolicyDetailViewProps {
 }
 
 export function PolicyDetailView({ policyId }: PolicyDetailViewProps): JSX.Element {
-  const router = useRouter();
   const { makeCall } = usePhone();
   const [policy] = useState<RetentionPolicy>(MOCK_POLICY);
   const [notes] = useState(MOCK_NOTES);
@@ -178,7 +174,7 @@ export function PolicyDetailView({ policyId }: PolicyDetailViewProps): JSX.Eleme
   // Click-to-call handler
   const handleCallCustomer = useCallback(() => {
     if (policy.lead?.phoneNumber) {
-      makeCall(policy.lead.phoneNumber);
+      void makeCall(policy.lead.phoneNumber);
     }
   }, [policy.lead?.phoneNumber, makeCall]);
 
@@ -347,7 +343,7 @@ export function PolicyDetailView({ policyId }: PolicyDetailViewProps): JSX.Eleme
                   className="flex-1"
                 />
                 <Button
-                  onClick={handleLogCall}
+                  onClick={() => void handleLogCall()}
                   disabled={!newNote.trim() || isLogging}
                   className="gap-2"
                 >

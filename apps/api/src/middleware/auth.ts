@@ -65,6 +65,12 @@ export interface AuthenticatedUser {
   exp?: number;
 }
 
+/** Loosely-typed fields an API key's `metadata` JSON column may carry. */
+interface ApiKeyMetadata {
+  publisherId?: string | null;
+  buyerId?: string | null;
+}
+
 /**
  * JWT authentication middleware with user validation
  */
@@ -72,7 +78,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
   const authHeader = request.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'Missing or invalid authorization header',
@@ -114,7 +120,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       // the token actually claims one, so the check still catches a token whose
       // tenant has drifted from the user row for an ordinary agency user.
       if (!user || (decoded.tenantId != null && user.tenantId !== decoded.tenantId)) {
-        reply.code(401).send({
+        void reply.code(401).send({
           error: {
             code: 'UNAUTHORIZED',
             message: 'User not found',
@@ -124,7 +130,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       }
 
       if (user.status !== 'ACTIVE') {
-        reply.code(403).send({
+        void reply.code(403).send({
           error: {
             code: 'FORBIDDEN',
             message: 'User account is not active',
@@ -233,7 +239,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       error: err instanceof Error ? err.message : 'Invalid token',
     });
 
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'Invalid or expired token',
@@ -260,7 +266,7 @@ export async function authenticateAPIKey(
   const apiKey = request.headers['x-api-key'] as string;
 
   if (!apiKey) {
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'Missing API key',
@@ -296,7 +302,7 @@ export async function authenticateAPIKey(
       error: 'API key not found',
     });
 
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'Invalid API key',
@@ -321,7 +327,7 @@ export async function authenticateAPIKey(
       error: `API key status: ${dbApiKey.status}`,
     });
 
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'API key is not active',
@@ -346,7 +352,7 @@ export async function authenticateAPIKey(
       error: 'API key expired',
     });
 
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'API key has expired',
@@ -357,7 +363,7 @@ export async function authenticateAPIKey(
 
   // Check tenant status
   if (dbApiKey.tenant.status !== 'ACTIVE') {
-    reply.code(403).send({
+    void reply.code(403).send({
       error: {
         code: 'FORBIDDEN',
         message: 'Tenant is not active',
@@ -380,13 +386,15 @@ export async function authenticateAPIKey(
   const scopes =
     dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
 
+  const apiKeyMetadata = dbApiKey.metadata as unknown as ApiKeyMetadata | null;
+
   // Set authenticated user for API key auth
   request.user = {
     tenantId: dbApiKey.tenantId,
     apiKeyId: dbApiKey.id,
     scopes,
-    publisherId: dbApiKey.publisherId || (dbApiKey.metadata as any)?.publisherId || null,
-    buyerId: (dbApiKey.metadata as any)?.buyerId || null,
+    publisherId: dbApiKey.publisherId || apiKeyMetadata?.publisherId || null,
+    buyerId: apiKeyMetadata?.buyerId || null,
     // A key holds no role, so this never opens anything on its own.
     tenantWhiteLabel: dbApiKey.tenant.whiteLabel === true,
   };
@@ -404,7 +412,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   } else if (apiKey) {
     await authenticateAPIKey(request, reply);
   } else {
-    reply.code(401).send({
+    void reply.code(401).send({
       error: {
         code: 'UNAUTHORIZED',
         message: 'Missing authentication (JWT token or API key)',

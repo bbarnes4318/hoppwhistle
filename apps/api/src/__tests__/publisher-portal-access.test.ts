@@ -11,6 +11,7 @@ import {
   isPublisherUser,
   requirePublisherAccess,
 } from '../middleware/rbac.js';
+import type { JwtPayload } from '../types/fastify.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
 
@@ -271,7 +272,7 @@ describe.skipIf(!gate.available)('Publisher portal access', () => {
     it('the token itself still carries no roles', () => {
       // Guards the suite: if a sign site ever starts embedding roles, these
       // cases would pass without the resolution they exist to cover.
-      const claims = app.jwt.verify(tokenFor(publisherUserId)) as Record<string, unknown>;
+      const claims = app.jwt.verify(tokenFor(publisherUserId));
       expect(claims).not.toHaveProperty('roles');
       expect(claims).not.toHaveProperty('publisherId');
     });
@@ -396,7 +397,7 @@ describe.skipIf(!gate.available)('Publisher portal access', () => {
         email: 'agent@test.local',
         roles: ['ADMIN', 'OWNER'],
         publisherId: siblingPublisherId,
-      });
+      } as JwtPayload);
 
       const response = await app.inject({
         method: 'GET',

@@ -7,6 +7,24 @@ export interface ConsentVerificationResult {
   error?: string;
 }
 
+/** The fields this service reads from a TrustedForm certificate response. */
+interface TrustedFormCertificateResponse {
+  status?: string;
+  expires_at?: string | number;
+  ip_address?: unknown;
+  timestamp?: unknown;
+  page_url?: unknown;
+}
+
+/** The fields this service reads from a Jornaya lead verification response. */
+interface JornayaVerifyResponse {
+  valid?: boolean;
+  expires_at?: string | number;
+  ip_address?: unknown;
+  timestamp?: unknown;
+  source_url?: unknown;
+}
+
 /**
  * TrustedForm API stub
  */
@@ -46,7 +64,7 @@ export class TrustedFormService {
         };
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as TrustedFormCertificateResponse;
 
       return {
         verified: data.status === 'valid',
@@ -106,7 +124,7 @@ export class JornayaService {
         };
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as JornayaVerifyResponse;
 
       return {
         verified: data.valid === true,
@@ -154,7 +172,7 @@ export class ConsentProviderService {
       default:
         return {
           verified: false,
-          error: `Unknown provider: ${provider}`,
+          error: `Unknown provider: ${String(provider)}`,
         };
     }
   }

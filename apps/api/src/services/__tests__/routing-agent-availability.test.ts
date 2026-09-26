@@ -55,7 +55,7 @@ vi.mock('../../lib/geo.js', () => ({
 }));
 
 vi.mock('../buyer-live-status-service.js', () => ({
-  liveStatusService: { getTargetsLiveStatus: vi.fn(async () => new Map()) },
+  liveStatusService: { getTargetsLiveStatus: vi.fn(() => Promise.resolve(new Map())) },
 }));
 
 /*
@@ -66,12 +66,12 @@ vi.mock('../buyer-live-status-service.js', () => ({
  */
 vi.mock('../redis.js', () => ({
   getRedisClient: () => ({
-    get: vi.fn(async () => JSON.stringify({ status: 'offline' })),
+    get: vi.fn(() => Promise.resolve(JSON.stringify({ status: 'offline' }))),
   }),
 }));
 
 vi.mock('../telephony/sip-registrations.js', () => ({
-  getRegisteredExtensions: vi.fn(async () => null),
+  getRegisteredExtensions: vi.fn(() => Promise.resolve(null)),
 }));
 
 import { RoutingService } from '../routing.js';

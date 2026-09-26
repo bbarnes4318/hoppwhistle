@@ -1,13 +1,16 @@
+import type { Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { resolveTenant } from '../lib/tenant-context.js';
+import type { AuthenticatedUser } from '../middleware/auth.js';
 import { carrierService } from '../services/carrier-service.js';
 import { cnamService } from '../services/cnam-service.js';
 import { stirShakenService } from '../services/stir-shaken-service.js';
-import { resolveTenant } from '../lib/tenant-context.js';
 
 const prisma = getPrismaClient();
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin: registered via server.register(), which expects an async function
 export async function registerStirShakenRoutes(fastify: FastifyInstance) {
   // Get STIR/SHAKEN status for a call
   fastify.get<{ Params: { callId: string } }>(
@@ -16,7 +19,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
       const attestation = await stirShakenService.getAttestation(request.params.callId);
 
       if (!attestation) {
-        reply.code(404);
+        void reply.code(404);
         return {
           error: {
             code: 'NOT_FOUND',
@@ -39,10 +42,10 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
   }>('/api/v1/admin/stir-shaken/:callId/override', async (request, reply) => {
     try {
       const { attestation, reason } = request.body;
-      const userId = (request as any).user?.id;
+      const userId = (request.user as (AuthenticatedUser & { id?: string }) | undefined)?.id;
 
       if (!userId) {
-        reply.code(401);
+        void reply.code(401);
         return {
           error: {
             code: 'UNAUTHORIZED',
@@ -63,7 +66,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
         message: 'Attestation overridden successfully',
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'OVERRIDE_ERROR',
@@ -82,7 +85,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
     };
 
     if (!phoneNumber) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'MISSING_PARAM',
@@ -121,7 +124,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
         message: 'Caller name overridden successfully',
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'OVERRIDE_ERROR',
@@ -140,7 +143,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
     };
 
     if (!phoneNumber) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'MISSING_PARAM',
@@ -181,7 +184,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
         message: 'Carrier information overridden successfully',
       };
     } catch (error) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'OVERRIDE_ERROR',
@@ -201,7 +204,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 
-    const where: any = { tenantId };
+    const where: Prisma.StirShakenStatusWhereInput = { tenantId };
     if (phoneNumber) {
       where.phoneNumber = phoneNumber;
     }

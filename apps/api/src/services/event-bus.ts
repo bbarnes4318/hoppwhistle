@@ -24,9 +24,9 @@ export class EventBus {
   async initialize(): Promise<void> {
     try {
       await this.redis.xgroup('CREATE', this.streamKey, this.consumerGroupName, '0', 'MKSTREAM');
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Group already exists, ignore
-      if (!err.message.includes('BUSYGROUP')) {
+      if (!(err instanceof Error) || !err.message.includes('BUSYGROUP')) {
         throw err;
       }
     }

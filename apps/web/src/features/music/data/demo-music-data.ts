@@ -243,7 +243,7 @@ export const campaignTimeSeries: CampaignTimeSeriesPoint[] = Array.from({ length
 const FAN_SOURCES: FanSource[] = ['fan_club', 'pre_save_page', 'merch_checkout', 'ticketing_partner', 'qr_code', 'sms_opt_in', 'vip_waitlist'];
 const FAN_SEGMENTS: FanSegment[] = ['superfan', 'vip_list', 'previous_merch', 'tour_city', 'stream_save', 'fan_club_inactive', 'festival_audience'];
 const CITIES = ['Los Angeles', 'New York', 'Chicago', 'Austin', 'Nashville', 'London', 'Toronto', 'Miami'];
-const CONSENT_STATUSES = ['opted_in', 'opted_in', 'opted_in', 'opted_out', 'pending'];
+const CONSENT_STATUSES = ['opted_in', 'opted_in', 'opted_in', 'opted_out', 'pending'] as const;
 
 export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
   return {
@@ -258,7 +258,7 @@ export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
     verifiedActions: range(i * 41, 0, 5),
     preSaves: range(i * 43, 0, 3),
     favoriteArtist: pick(['Nona Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'], i * 47),
-    consentStatus: pick(CONSENT_STATUSES, i * 53) as any,
+    consentStatus: pick(CONSENT_STATUSES, i * 53),
     totalInteractions: range(i * 59, 1, 12),
   };
 });

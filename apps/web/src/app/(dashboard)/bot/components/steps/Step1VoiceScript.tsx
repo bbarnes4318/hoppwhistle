@@ -24,12 +24,6 @@ const VOICES = [
   { id: 'aura-zeus-en', name: 'Zeus', gender: 'Male', accent: 'American' },
 ];
 
-const DEFAULT_SCRIPT = `Hello! This is a quick call from {company}.
-
-We're reaching out about the final expense coverage you requested information on.
-
-Is this a good time to speak for just a moment?`;
-
 interface Step1VoiceScriptProps {
   selectedVoice: string;
   onVoiceChange: (voice: string) => void;

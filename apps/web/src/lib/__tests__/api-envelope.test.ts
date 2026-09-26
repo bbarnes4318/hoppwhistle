@@ -128,6 +128,6 @@ describe('the switcher’s data path, against the shape the server actually send
     // `response.data` is NOT the array. Reading it as one and calling `.map`
     // is the whole bug, in one assertion.
     expect(Array.isArray(response.data)).toBe(false);
-    expect(() => (response.data as unknown as unknown[]).map(x => x)).toThrow(TypeError);
+    expect(() => (response.data as unknown[]).map(x => x)).toThrow(TypeError);
   });
 });

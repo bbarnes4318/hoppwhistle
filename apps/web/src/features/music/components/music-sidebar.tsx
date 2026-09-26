@@ -64,6 +64,7 @@ export function MusicSidebar() {
       <div className="flex flex-col justify-center px-5 py-5 border-b border-white/[0.04] shrink-0 gap-2.5">
         <Link href="/music-console" className="block group">
           <div className="bg-white rounded-lg p-2.5 flex items-center justify-center border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_4px_16px_rgba(20,92,255,0.15)]">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static logo; next/image would change loading/rendering */}
             <img src="/rps-logo.png" alt="RPS / Radio Phone Station" className="h-5.5 w-auto object-contain" />
           </div>
           <div className="flex items-center justify-between mt-2.5 px-0.5">

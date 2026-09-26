@@ -214,7 +214,7 @@ describe.skipIf(!gate.available)(
 
         let code = '(unparseable body)';
         try {
-          code = (response.json() as any)?.error?.code ?? '(no code)';
+          code = (response.json())?.error?.code ?? '(no code)';
         } catch {
           /* a 401 with a non-JSON body is still a 401 */
         }
@@ -269,7 +269,7 @@ describe.skipIf(!gate.available)(
         });
 
         expect(response.statusCode, `${route.method} ${route.url}`).toBe(409);
-        expect((response.json() as any).error.code, `${route.method} ${route.url}`).toBe(
+        expect((response.json()).error.code, `${route.method} ${route.url}`).toBe(
           'NO_ACTING_TENANT'
         );
       }

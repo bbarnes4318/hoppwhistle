@@ -1,18 +1,18 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 import { createRequestLogger } from '../lib/logger.js';
 import { httpRequestDuration, httpRequestTotal, httpRequestErrors } from '../lib/metrics.js';
 
-function parseJsonResponsePayload(payload: unknown): Record<string, any> | null {
+function parseJsonResponsePayload(payload: unknown): Record<string, unknown> | null {
   try {
     if (typeof payload === 'string') {
-      return JSON.parse(payload) as Record<string, any>;
+      return JSON.parse(payload) as Record<string, unknown>;
     }
     if (Buffer.isBuffer(payload)) {
-      return JSON.parse(payload.toString('utf8')) as Record<string, any>;
+      return JSON.parse(payload.toString('utf8')) as Record<string, unknown>;
     }
     if (payload && typeof payload === 'object') {
-      return payload as Record<string, any>;
+      return payload as Record<string, unknown>;
     }
   } catch {
     // Not a JSON response; leave it untouched.
@@ -20,11 +20,13 @@ function parseJsonResponsePayload(payload: unknown): Record<string, any> | null 
   return null;
 }
 
-export async function registerLoggingMiddleware(fastify: FastifyInstance): Promise<void> {
+export function registerLoggingMiddleware(fastify: FastifyInstance): Promise<void> {
   // Request logging
-  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.addHook('onRequest', async (request: FastifyRequest, _reply: FastifyReply) => {
     const requestLogger = createRequestLogger(request);
-    request.log = requestLogger as any;
+    // Our pino and Fastify's bundled pino differ by a minor version, so the
+    // child logger lacks `msgPrefix` in the type only.
+    request.log = requestLogger as unknown as FastifyBaseLogger;
     requestLogger.info({ msg: 'Incoming request' });
   });
 
@@ -54,7 +56,7 @@ export async function registerLoggingMiddleware(fastify: FastifyInstance): Promi
     if (!responseBody) return payload;
 
     const tenantId =
-      ((request as any).user?.tenantId as string | undefined) ||
+      request.user?.tenantId ||
       (request.headers['x-demo-tenant-id'] as string | undefined);
     if (!tenantId) return payload;
 
@@ -129,7 +131,7 @@ export async function registerLoggingMiddleware(fastify: FastifyInstance): Promi
   // Response logging and metrics
   fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     const duration = reply.getResponseTime() / 1000; // Convert to seconds
-    const tenantId = (request as any).user?.tenantId || 'unknown';
+    const tenantId = request.user?.tenantId || 'unknown';
     const route = request.routerPath || request.url;
     const method = request.method;
     const statusCode = reply.statusCode;
@@ -174,7 +176,7 @@ export async function registerLoggingMiddleware(fastify: FastifyInstance): Promi
   // Error logging
   fastify.setErrorHandler((error, request: FastifyRequest, reply: FastifyReply) => {
     const requestLogger = createRequestLogger(request);
-    const tenantId = (request as any).user?.tenantId || 'unknown';
+    const tenantId = request.user?.tenantId || 'unknown';
     const route = request.routerPath || request.url;
     const method = request.method;
 
@@ -190,11 +192,11 @@ export async function registerLoggingMiddleware(fastify: FastifyInstance): Promi
     httpRequestErrors.inc({
       method,
       route,
-      error_type: error.statusCode >= 500 ? 'server_error' : 'client_error',
+      error_type: (error.statusCode ?? 0) >= 500 ? 'server_error' : 'client_error',
       tenant_id: tenantId,
     });
 
-    reply.status(error.statusCode || 500).send({
+    void reply.status(error.statusCode || 500).send({
       error: {
         code: error.code || 'INTERNAL_ERROR',
         message: error.message || 'Internal server error',
@@ -202,4 +204,6 @@ export async function registerLoggingMiddleware(fastify: FastifyInstance): Promi
       },
     });
   });
+
+  return Promise.resolve();
 }

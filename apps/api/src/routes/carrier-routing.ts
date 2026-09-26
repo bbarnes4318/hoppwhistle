@@ -15,8 +15,6 @@
  * drop the call.
  */
 
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-
 import {
   CALL_ROUTE_LABELS,
   CALL_ROUTE_TYPES,
@@ -25,6 +23,7 @@ import {
   resolveChain,
   type CallRouteType,
 } from '@hopwhistle/shared';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';

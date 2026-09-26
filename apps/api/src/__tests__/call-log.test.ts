@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
+import type { JwtPayload } from '../types/fastify.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
 
@@ -98,7 +99,7 @@ describe.skipIf(!gate.available)('The call-by-call ledger', () => {
     roles: string[]
   ): Record<string, string> {
     return {
-      authorization: `Bearer ${app.jwt.sign({ ...who, roles })}`,
+      authorization: `Bearer ${app.jwt.sign({ ...who, roles } as JwtPayload)}`,
     };
   }
 
@@ -205,7 +206,7 @@ describe.skipIf(!gate.available)('The call-by-call ledger', () => {
       headers,
     });
     expect(response.statusCode, `ledger refused: ${response.body.slice(0, 300)}`).toBe(200);
-    return (response.json() as any).data;
+    return response.json().data;
   }
 
   beforeAll(async () => {
@@ -402,7 +403,7 @@ describe.skipIf(!gate.available)('The call-by-call ledger', () => {
       // an agent could see a call in their figures and be refused when they
       // clicked it to re-read their own notes.
       expect(response.statusCode).toBe(200);
-      expect((response.json() as any).agentName).toBe('Dana Reed');
+      expect(response.json().agentName).toBe('Dana Reed');
     });
 
     it('still refuses a call they had nothing to do with', async () => {
@@ -437,7 +438,7 @@ describe.skipIf(!gate.available)('The call-by-call ledger', () => {
 
       expect(response.statusCode).toBe(201);
       const created = await prisma.call.findUnique({
-        where: { id: (response.json() as any).id },
+        where: { id: response.json().id },
       });
 
       // Without this the row counted for nobody: the agent who made the call
@@ -458,7 +459,7 @@ describe.skipIf(!gate.available)('The call-by-call ledger', () => {
       });
 
       const created = await prisma.call.findUnique({
-        where: { id: (response.json() as any).id },
+        where: { id: response.json().id },
       });
 
       /*

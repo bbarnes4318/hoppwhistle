@@ -41,7 +41,7 @@ export default function DncPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDncLists();
+    void loadDncLists();
   }, []);
 
   const loadDncLists = async () => {
@@ -84,7 +84,7 @@ export default function DncPage() {
     try {
       const response = await apiClient.delete(`/api/v1/compliance/dnc-lists/${listId}`);
       if (!response.error) {
-        loadDncLists();
+        void loadDncLists();
       } else {
         toast({
           variant: 'destructive',
@@ -161,7 +161,7 @@ export default function DncPage() {
                           variant="ghost"
                           size="icon"
                           className="hover:bg-dropped-tint hover:text-dropped-ink"
-                          onClick={() => handleDeleteList(list.id)}
+                          onClick={() => void handleDeleteList(list.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

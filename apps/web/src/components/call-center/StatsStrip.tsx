@@ -14,7 +14,7 @@ interface StatsStripProps {
 export function StatsStrip({
   totalCallsCount,
   appointmentsCount,
-  appointmentRate,
+  appointmentRate: _appointmentRate,
   followUpCount,
   salesCount,
   conversionRate,

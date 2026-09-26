@@ -18,6 +18,8 @@ import {
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import { StatusBadge } from '../../../features/music/components';
 import { fanCampaigns } from '../../../features/music/data/demo-music-data';
 import {
@@ -28,8 +30,6 @@ import {
   segmentLabel,
 } from '../../../features/music/lib/utils';
 import type { FanCampaign } from '../../../features/music/types';
-
-import { cn } from '@/lib/utils';
 
 export default function MusicCampaignsPage() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);

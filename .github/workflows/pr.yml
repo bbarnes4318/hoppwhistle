@@ -101,14 +101,19 @@ jobs:
       # "Failed to resolve entry for package" and, while this job's test step
       # was continue-on-error, discarded.
 
-      # NOTE: lint/format/typecheck/build are advisory (continue-on-error) due
-      # to pre-existing repo-wide debt that predates this gate ever passing.
-      # Flip these back to blocking once the existing debt is paid down.
+      # Lint and Type check are BLOCKING. They used to be advisory because of
+      # repo-wide debt -- about 1,800 lint problems and 180 type errors
+      # across api and web -- that predated this gate ever passing. That debt
+      # is paid down, so both now pass clean, and a failure is a real failure.
+      # Do not put continue-on-error back to get a change through: fix the
+      # finding, or narrowly suppress it on the one line with a reason.
       #
-      # `pnpm test` is no longer among them -- see the step below.
+      # Format check and Build stay advisory for now. Formatting has its own
+      # repo-wide debt, and `pnpm build` covers packages outside this gate.
+      #
+      # `pnpm test` is no longer advisory either -- see the step below.
       - name: Lint
         run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" --filter "!@hopwhistle/worker" lint
-        continue-on-error: true
 
       - name: Format check
         run: pnpm format:check
@@ -116,7 +121,11 @@ jobs:
 
       - name: Type check
         run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" typecheck
-        continue-on-error: true
+
+      # apps/web's `typecheck` script covers only the dialer-v2 slice. This
+      # one is the whole app, tests and e2e included.
+      - name: Type check (web, whole app)
+        run: pnpm --filter @hopwhistle/web typecheck:all
 
       # `exec`, not a bare `prisma`: without it pnpm looks for a package script
       # by that name, finds none, prints "None of the selected packages has a

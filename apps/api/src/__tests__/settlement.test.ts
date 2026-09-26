@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
 import { PaymentProvider } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import Fastify, { FastifyInstance } from 'fastify';
@@ -114,15 +114,15 @@ class FakeGateway implements PaymentGateway {
     };
   }
 
-  async chargeCardOnSession(request: ChargeRequest) {
+  chargeCardOnSession(request: ChargeRequest) {
     this.cardCharges.push(request);
-    return {
+    return Promise.resolve({
       ok: true,
       paymentIntentId: `pi_card_${this.cardCharges.length}`,
       status: 'succeeded',
       failureCode: null,
       failureMessage: null,
-    };
+    });
   }
 
   /**
@@ -133,39 +133,39 @@ class FakeGateway implements PaymentGateway {
    * property that a daily settlement never reaches a card is now narrower: it
    * never reaches one for an ACH agency, which is every agency in this suite.
    */
-  async chargeCardOffSession(request: ChargeRequest) {
+  chargeCardOffSession(request: ChargeRequest) {
     this.cardCharges.push(request);
     if (this.declineWith) {
-      return {
+      return Promise.resolve({
         ok: false,
         paymentIntentId: null,
         status: 'requires_payment_method',
         failureCode: 'card_declined',
         failureMessage: this.declineWith,
-      };
+      });
     }
-    return {
+    return Promise.resolve({
       ok: true,
       paymentIntentId: `pi_card_${this.cardCharges.length}`,
       status: 'succeeded',
       failureCode: null,
       failureMessage: null,
-    };
+    });
   }
 
-  async createCardSetupIntent() {
-    return { id: 'seti_card_fake', clientSecret: 'seti_card_fake_secret' };
+  createCardSetupIntent() {
+    return Promise.resolve({ id: 'seti_card_fake', clientSecret: 'seti_card_fake_secret' });
   }
 
-  async describeCardMandate() {
-    return {
+  describeCardMandate() {
+    return Promise.resolve({
       setupIntentStatus: 'succeeded',
       paymentMethodId: 'pm_card_fake',
       usable: true,
       brand: 'visa',
       last4: '4242',
       customerId: 'cus_fake',
-    };
+    });
   }
 
   /** Nothing in this suite drives a webhook; the Phase 5 suite does. */
@@ -173,23 +173,23 @@ class FakeGateway implements PaymentGateway {
     return null;
   }
 
-  async ensureCustomer() {
-    return 'cus_fake';
+  ensureCustomer() {
+    return Promise.resolve('cus_fake');
   }
 
-  async createAchSetupIntent() {
-    return { id: 'seti_fake', clientSecret: 'seti_fake_secret' };
+  createAchSetupIntent() {
+    return Promise.resolve({ id: 'seti_fake', clientSecret: 'seti_fake_secret' });
   }
 
-  async describeAchMandate() {
-    return {
+  describeAchMandate() {
+    return Promise.resolve({
       setupIntentStatus: 'succeeded',
       paymentMethodId: 'pm_fake',
       usable: true,
       bankName: 'Test Bank',
       last4: '6789',
       customerId: 'cus_fake',
-    };
+    });
   }
 
   isEnabled() {

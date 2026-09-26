@@ -10,8 +10,6 @@ import {
   BookOpen,
   Code2,
   Shield,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -73,7 +71,6 @@ function PublisherApiSetupPage() {
   const [newRawKey, setNewRawKey] = useState('');
 
   // Copy state
-  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [copiedTextType, setCopiedTextType] = useState<string | null>(null);
 
   const fetchKeys = useCallback(async () => {
@@ -167,7 +164,7 @@ function PublisherApiSetupPage() {
   };
 
   const handleCopyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+    void navigator.clipboard.writeText(text).then(() => {
       setCopiedTextType(type);
       setTimeout(() => setCopiedTextType(null), 2000);
       toast.success('Copied to clipboard');
@@ -257,7 +254,7 @@ function PublisherApiSetupPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRevokeKey(k.id)}
+                          onClick={() => void handleRevokeKey(k.id)}
                           className="h-8 w-8 p-0 text-ink-2 hover:text-dropped-ink hover:bg-dropped-tint rounded-full"
                           title="Revoke Key"
                         >
@@ -431,7 +428,7 @@ function PublisherApiSetupPage() {
       {/* Generate API Key Dialog */}
       <Dialog open={openGenDialog} onOpenChange={setOpenGenDialog}>
         <DialogContent className="bg-surface border-rule text-ink max-w-md">
-          <form onSubmit={handleGenerateKey}>
+          <form onSubmit={(e) => void handleGenerateKey(e)}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-ink">Generate API Key</DialogTitle>
               <DialogDescription className="text-xs text-ink-2">

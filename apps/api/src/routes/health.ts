@@ -15,14 +15,16 @@ interface HealthStatus {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin: registered via server.register(), which expects an async function
 export async function registerHealthRoutes(fastify: FastifyInstance): Promise<void> {
   // Liveness probe - just checks if the service is running
+  // eslint-disable-next-line @typescript-eslint/require-await -- Fastify handler returns its reply payload via a promise
   fastify.get('/health/live', async () => {
     return { status: 'ok', service: 'hopwhistle-api' };
   });
 
   // Readiness probe - checks if dependencies are available
-  fastify.get('/health/ready', async (request, reply) => {
+  fastify.get('/health/ready', async (_request, reply) => {
     const checks: HealthStatus['checks'] = {
       database: { status: 'error' },
       redis: { status: 'error' },
@@ -93,11 +95,12 @@ export async function registerHealthRoutes(fastify: FastifyInstance): Promise<vo
     };
 
     const statusCode = overallStatus === 'healthy' ? 200 : overallStatus === 'degraded' ? 200 : 503;
-    reply.code(statusCode);
+    void reply.code(statusCode);
     return status;
   });
 
   // Health endpoint (detailed)
+  // eslint-disable-next-line @typescript-eslint/require-await -- Fastify handler returns its reply payload via a promise
   fastify.get('/health', async () => {
     return {
       status: 'ok',

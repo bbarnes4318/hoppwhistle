@@ -7,15 +7,12 @@ import {
   Shield,
   Clipboard,
   CheckSquare,
-  Plus,
   RefreshCw,
   AlertTriangle,
   ExternalLink,
   PlusCircle,
-  FileText,
   Clock,
   Check,
-  CheckCircle,
 } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -65,7 +62,7 @@ export function CustomerCrmPanel({
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [edits, setEdits] = useState<Record<string, any>>({});
+  const [edits, setEdits] = useState<Record<string, string | number>>({});
 
   const customer = data.customer;
 
@@ -102,7 +99,7 @@ export function CustomerCrmPanel({
     if (!customer?.id) return;
     try {
       setIsSaving(true);
-      const payload: Record<string, any> = {
+      const payload: Record<string, unknown> = {
         firstName: edits.firstName || null,
         lastName: edits.lastName || null,
         email: edits.email || null,
@@ -112,7 +109,7 @@ export function CustomerCrmPanel({
         zipCode: edits.zipCode || null,
         county: edits.county || null,
         gender: edits.gender || null,
-        age: edits.age ? parseInt(edits.age) : null,
+        age: edits.age ? parseInt(String(edits.age)) : null,
         birthDate: edits.birthDate || null,
         carrier: edits.carrier || null,
         product: edits.product || null,
@@ -277,7 +274,7 @@ export function CustomerCrmPanel({
                       Cancel
                     </button>
                     <button
-                      onClick={handleSaveChanges}
+                      onClick={() => void handleSaveChanges()}
                       disabled={isSaving}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-ink bg-brand hover:bg-brand-ink hover:text-surface rounded-lg font-bold transition-all"
                     >
@@ -872,7 +869,7 @@ export function CustomerCrmPanel({
 
           {isAddingTask && (
             <form
-              onSubmit={handleCreateTask}
+              onSubmit={e => void handleCreateTask(e)}
               className="p-3 bg-sunken border border-rule rounded-lg space-y-3"
             >
               <input
@@ -886,7 +883,7 @@ export function CustomerCrmPanel({
               <div className="flex gap-2">
                 <select
                   value={newTaskPriority}
-                  onChange={e => setNewTaskPriority(e.target.value as any)}
+                  onChange={e => setNewTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')}
                   className="bg-sunken text-ink text-xs border border-rule rounded p-2 focus:outline-none flex-1"
                 >
                   <option value="LOW">Low Priority</option>
@@ -920,12 +917,12 @@ export function CustomerCrmPanel({
           )}
 
           <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-            {data.tasks.filter((t: any) => t.status === 'OPEN').length === 0 ? (
+            {data.tasks.filter(t => t.status === 'OPEN').length === 0 ? (
               <p className="text-xs text-ink-2 italic">No open tasks for this customer.</p>
             ) : (
               data.tasks
-                .filter((t: any) => t.status === 'OPEN')
-                .map((task: any) => (
+                .filter(t => t.status === 'OPEN')
+                .map(task => (
                   <div
                     key={task.id}
                     className="p-2.5 bg-sunken border border-rule rounded-lg flex items-center justify-between gap-3 group"
@@ -944,7 +941,7 @@ export function CustomerCrmPanel({
                       </div>
                     </div>
                     <button
-                      onClick={() => handleCompleteTask(task.id)}
+                      onClick={() => void handleCompleteTask(task.id)}
                       className="p-1.5 text-ink-2 hover:text-brand-ink bg-sunken border border-rule rounded hover:border-brand transition-all flex items-center gap-1 text-[10px]"
                     >
                       <Check className="w-3.5 h-3.5" />
@@ -966,7 +963,7 @@ export function CustomerCrmPanel({
           </div>
 
           {isInsuranceLead && (
-            <form onSubmit={handleAddNote} className="flex gap-2">
+            <form onSubmit={e => void handleAddNote(e)} className="flex gap-2">
               <input
                 type="text"
                 required
@@ -989,7 +986,7 @@ export function CustomerCrmPanel({
             {data.activities.length === 0 ? (
               <p className="text-xs text-ink-2 italic">No historical activities logged.</p>
             ) : (
-              data.activities.map((act: any) => (
+              data.activities.map(act => (
                 <div key={act.id} className="text-xs flex gap-2.5 items-start">
                   <div className="p-1.5 bg-brand-tint border border-brand text-brand-ink rounded-full flex-shrink-0 mt-0.5">
                     <Clock className="w-3.5 h-3.5" />
@@ -1045,7 +1042,7 @@ export function CustomerCrmPanel({
                   No submissions associated with this lead.
                 </p>
               ) : (
-                data.submissions.map((sub: any) => (
+                data.submissions.map(sub => (
                   <div
                     key={sub.id}
                     className="p-3 bg-sunken border border-rule rounded-lg text-xs space-y-1.5"
@@ -1098,7 +1095,7 @@ export function CustomerCrmPanel({
               </p>
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                {data.duplicates.map((dup: any) => (
+                {data.duplicates.map(dup => (
                   <div
                     key={dup.id}
                     className="p-3 bg-sunken border border-rule rounded-lg flex items-center justify-between gap-3 text-xs"

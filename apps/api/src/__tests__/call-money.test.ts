@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- a fake Prisma client, answering exactly the queries the report makes */
 import { Prisma } from '@prisma/client';
 import Fastify, { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -92,9 +91,9 @@ const LEDGER = [
 ];
 
 const fakePrisma = {
-  user: { findUnique: vi.fn(async () => null) },
-  call: { findMany: vi.fn(async () => CALLS) },
-  accrualLedger: { findMany: vi.fn(async () => LEDGER) },
+  user: { findUnique: vi.fn(() => Promise.resolve(null)) },
+  call: { findMany: vi.fn(() => Promise.resolve(CALLS)) },
+  accrualLedger: { findMany: vi.fn(() => Promise.resolve(LEDGER)) },
 };
 
 vi.mock('../lib/prisma.js', () => ({ getPrismaClient: () => fakePrisma }));
@@ -119,6 +118,7 @@ describe('campaign profitability, on the shared call-money arithmetic', () => {
     app = Fastify();
     app.addHook('onRequest', async request => {
       (request as { user?: unknown }).user = { tenantId: TENANT, roles: ['OWNER'] };
+      await Promise.resolve();
     });
     const { registerReportingRoutes } = await import('../routes/index.js');
     await app.register(registerReportingRoutes);
@@ -148,10 +148,11 @@ describe('campaign profitability, on the shared call-money arithmetic', () => {
   });
 
   it('scopes both queries to the acting tenant', () => {
-    for (const call of fakePrisma.call.findMany.mock.calls as any[]) {
+    type Scoped = [{ where: { tenantId: string } }][];
+    for (const call of fakePrisma.call.findMany.mock.calls as unknown as Scoped) {
       expect(call[0].where.tenantId).toBe(TENANT);
     }
-    for (const call of fakePrisma.accrualLedger.findMany.mock.calls as any[]) {
+    for (const call of fakePrisma.accrualLedger.findMany.mock.calls as unknown as Scoped) {
       expect(call[0].where.tenantId).toBe(TENANT);
     }
   });

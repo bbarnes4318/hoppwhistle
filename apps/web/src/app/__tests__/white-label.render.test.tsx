@@ -9,7 +9,7 @@
  * state rather than a wall of zeroes.
  */
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   CallSalesSummary,
@@ -208,6 +208,20 @@ async function mount(load: () => Promise<{ default: () => JSX.Element }>): Promi
 }
 
 describe('white-label screens', () => {
+  /*
+   * Load the three pages once, before any test's clock starts, so the first
+   * test does not pay the import cost inside its 5s timeout. `mount` imports
+   * the same modules and now gets them from the cache.
+   */
+  beforeAll(async () => {
+    await Promise.all([
+      import('@/hooks/use-auth'),
+      import('../(dashboard)/sales/page'),
+      import('../(dashboard)/payouts/page'),
+      import('../(dashboard)/network/agencies/page'),
+    ]);
+  }, 60_000);
+
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('token', 'a-signed-in-white-label-owner');

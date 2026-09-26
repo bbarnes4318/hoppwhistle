@@ -203,13 +203,14 @@ describe('the staff-only hook', () => {
     // depends on only for `request.user`.
     app.addHook('onRequest', async request => {
       if (principal) (request as { user?: unknown }).user = principal;
+      await Promise.resolve();
     });
     registerStaffOnly(app);
 
-    app.post('/api/v1/campaigns', async () => ({ created: true }));
-    app.get('/api/v1/campaigns', async () => ({ data: [] }));
-    app.post('/api/v1/numbers/lookup', async () => ({ flowId: 'simple' }));
-    app.post('/api/v1/buyers/abc/targets', async () => ({ ok: true }));
+    app.post('/api/v1/campaigns', () => Promise.resolve({ created: true }));
+    app.get('/api/v1/campaigns', () => Promise.resolve({ data: [] }));
+    app.post('/api/v1/numbers/lookup', () => Promise.resolve({ flowId: 'simple' }));
+    app.post('/api/v1/buyers/abc/targets', () => Promise.resolve({ ok: true }));
     await app.ready();
   });
 

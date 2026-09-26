@@ -51,13 +51,14 @@ import {
   isPlatformPrincipal,
 } from '../lib/tenant-scope-guards.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
-import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
 import { recordBlockedCall } from '../services/blocked-call.js';
+import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
 
-interface RtbMetadata {
+// A type alias (not an interface) so it is assignable to Prisma's JSON input type.
+type RtbMetadata = {
   pingId?: string | null;
   transferNumber?: string | null;
   bidAmount?: number | null;
@@ -65,7 +66,7 @@ interface RtbMetadata {
   publisherRequestId?: string | null;
   postAcceptedAt?: string | null;
   routeType?: string | null;
-}
+};
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDidRouteRoutes(server: FastifyInstance) {
@@ -790,8 +791,8 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       let phoneNumberId: string | null = null;
       let buyerId: string | null = null;
       let targetId: string | null = null;
-      let campaignId: string | null = null;
-      let publisherId: string | null = null;
+      let campaignId: string | null | undefined = null;
+      let publisherId: string | null | undefined = null;
       let tenantId: string = body.tenantId;
       let buyerName: string | null = null;
       let rtbMetadata: RtbMetadata | null = null;

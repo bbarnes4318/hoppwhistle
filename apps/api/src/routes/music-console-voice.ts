@@ -13,7 +13,48 @@ const VOICE_OPTIONS = [
   { id: 'andrea', name: 'Andrea', provider: 'deepgram', desc: 'Clear, articulate female' },
 ];
 
-export async function registerMusicVoiceRoutes(
+/** Body of POST /voice-agents. */
+interface CreateVoiceAgentBody {
+  name?: string;
+  systemPrompt?: string;
+  voice?: string;
+  firstMessage?: string;
+  forwardingNumber?: string;
+  category?: string;
+}
+
+/** Body of POST /voice-agents/:id/calls. */
+interface DispatchCallBody {
+  phoneNumberId?: string;
+  customer?: unknown;
+}
+
+/** A Vapi assistant: its id, plus whatever else Vapi returns (passed through). */
+interface VapiAssistant {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** The fields read from a Vapi phone-number record. */
+interface VapiPhoneNumber {
+  id: string;
+  number: string;
+}
+
+/** `error.message` for anything thrown that carries a string message. */
+function thrownMessage(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return undefined;
+}
+
+export function registerMusicVoiceRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
 ): Promise<void> {
@@ -67,13 +108,13 @@ export async function registerMusicVoiceRoutes(
         throw new Error(`Vapi API responded with status ${res.status}`);
       }
 
-      const assistants = await res.json();
+      const assistants = (await res.json()) as VapiAssistant[];
       const localMap = new Map(localAgents.map(a => [a.vapiAssistantId, a]));
 
       // Filter and enrich matching assistants
       const enriched = assistants
-        .filter((a: any) => localMap.has(a.id))
-        .map((a: any) => {
+        .filter(a => localMap.has(a.id))
+        .map(a => {
           const local = localMap.get(a.id)!;
           return {
             ...a,
@@ -86,10 +127,10 @@ export async function registerMusicVoiceRoutes(
         });
 
       return reply.send(enriched);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Music Console Voice] List error:', error);
       return reply.status(500).send({
-        error: error.message || 'Failed to list voice agents',
+        error: thrownMessage(error) || 'Failed to list voice agents',
       });
     }
   });
@@ -100,7 +141,7 @@ export async function registerMusicVoiceRoutes(
     if (!tenantId) return;
     const userId = request.user.userId;
     const prisma = getPrismaClient();
-    const body = request.body as any;
+    const body = request.body as CreateVoiceAgentBody;
 
     if (!body.name || !body.systemPrompt) {
       return reply.status(400).send({ error: 'Name and system prompt are required' });
@@ -151,7 +192,7 @@ export async function registerMusicVoiceRoutes(
         throw new Error(`Vapi assistant creation failed: ${errText}`);
       }
 
-      const createdAssistant = await res.json();
+      const createdAssistant = (await res.json()) as VapiAssistant;
 
       // Save mapping record to database
       const voiceAgent = await prisma.voiceAgent.create({
@@ -174,9 +215,9 @@ export async function registerMusicVoiceRoutes(
         vapiAssistantId: voiceAgent.vapiAssistantId,
         displayName: voiceAgent.displayName,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Music Console Voice] Create error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to create voice agent' });
+      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to create voice agent' });
     }
   });
 
@@ -221,9 +262,9 @@ export async function registerMusicVoiceRoutes(
       });
 
       return reply.send({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Music Console Voice] Delete error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to delete voice agent' });
+      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to delete voice agent' });
     }
   });
 
@@ -261,11 +302,11 @@ export async function registerMusicVoiceRoutes(
         throw new Error(`Failed to fetch calls from Vapi: Status ${res.status}`);
       }
 
-      const data = await res.json();
+      const data: unknown = await res.json();
       return reply.send(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Music Console Voice] Fetch calls error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to fetch calls' });
+      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to fetch calls' });
     }
   });
 
@@ -275,7 +316,7 @@ export async function registerMusicVoiceRoutes(
     if (!tenantId) return;
     const { id } = request.params as { id: string };
     const prisma = getPrismaClient();
-    const body = request.body as any;
+    const body = request.body as DispatchCallBody;
 
     try {
       const apiKey = getApiKey();
@@ -300,8 +341,8 @@ export async function registerMusicVoiceRoutes(
           headers: { Authorization: `Bearer ${apiKey}` },
         });
         if (pnRes.ok) {
-          const phoneNumbers = await pnRes.json();
-          const matched = phoneNumbers.find((pn: any) => pn.number === finalPhoneNumberId);
+          const phoneNumbers = (await pnRes.json()) as VapiPhoneNumber[];
+          const matched = phoneNumbers.find(pn => pn.number === finalPhoneNumberId);
           if (matched) {
             finalPhoneNumberId = matched.id;
           } else {
@@ -329,20 +370,22 @@ export async function registerMusicVoiceRoutes(
 
       if (!res.ok) {
         const text = await res.text();
-        let err;
+        let err: { message?: string };
         try {
-          err = JSON.parse(text);
+          err = JSON.parse(text) as { message?: string };
         } catch (e) {
           err = { message: text };
         }
         throw new Error(err.message || `Vapi API error: ${res.status}`);
       }
 
-      const callData = await res.json();
+      const callData: unknown = await res.json();
       return reply.status(201).send(callData);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Music Console Voice] Dispatch call error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to dispatch call' });
+      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to dispatch call' });
     }
   });
+
+  return Promise.resolve();
 }

@@ -29,7 +29,7 @@ interface MetricsApiResponse {
     aht: number;
     conversionRate?: number;
   };
-  breakdown: any[];
+  breakdown: unknown[];
 }
 
 interface SalesFunnelProps {
@@ -56,7 +56,7 @@ export function SalesFunnel({ onStageClick }: SalesFunnelProps) {
       });
 
       const response = await apiClient.get<MetricsApiResponse>(
-        `/api/v1/reporting/metrics?${params}`
+        `/api/v1/reporting/metrics?${params.toString()}`
       );
 
       if (response.error) {
@@ -118,7 +118,7 @@ export function SalesFunnel({ onStageClick }: SalesFunnelProps) {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   const getDropOff = (index: number) => {

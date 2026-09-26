@@ -17,11 +17,8 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-
 import { usePhone } from '@/components/phone';
 import type { InsuranceLeadDetail, UserSummary } from '@/lib/api/leads';
-
-import { MarkApplicationPanel } from './mark-application-panel';
 import {
   updateInsuranceLead,
   fetchUsers,
@@ -30,6 +27,7 @@ import {
   cancelInsuranceLeadTask,
 } from '@/lib/api/leads';
 
+import { MarkApplicationPanel } from './mark-application-panel';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -227,16 +225,17 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
     setEdits(prev => ({ ...prev, [key]: value }));
   };
 
+  const leadId = lead?.id;
   useEffect(() => {
     setEdits({});
-    if (lead) {
+    if (leadId) {
       fetchUsers()
         .then(res => {
           setUsers(res.data || []);
         })
         .catch(err => console.error('Failed to load users:', err));
     }
-  }, [lead?.id]);
+  }, [leadId]);
 
   const handleSave = () => {
     if (!lead || !hasEdits) return;
@@ -244,9 +243,9 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
     setSaveMsg(null);
 
     // Transform boolean string back to boolean for backend validation
-    const transformedEdits = { ...edits };
+    const transformedEdits: Record<string, unknown> = { ...edits };
     if (transformedEdits.doNotCall !== undefined) {
-      transformedEdits.doNotCall = (transformedEdits.doNotCall === 'true') as unknown as boolean;
+      transformedEdits.doNotCall = transformedEdits.doNotCall === 'true';
     }
 
     // Merge modified custom fields back into customFields object
@@ -772,7 +771,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                   <div className="grid grid-cols-2 gap-3">
                     <EditField
                       label="Aflac Monthly Quote"
-                      value={((lead.customFields as any)?.aflacMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.aflacMonthlyQuote ?? '') as string}
                       fieldKey="aflacMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
@@ -780,7 +779,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="Aflac-Modified Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.aflacModifiedMonthlyQuote ?? '') as string
+                        (lead.customFields?.aflacModifiedMonthlyQuote ?? '') as string
                       }
                       fieldKey="aflacModifiedMonthlyQuote"
                       edits={edits}
@@ -788,42 +787,42 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     />
                     <EditField
                       label="SBLI Monthly Quote"
-                      value={((lead.customFields as any)?.sbliMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.sbliMonthlyQuote ?? '') as string}
                       fieldKey="sbliMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="SBLI-Modified Monthly Quote"
-                      value={((lead.customFields as any)?.sbliModifiedMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.sbliModifiedMonthlyQuote ?? '') as string}
                       fieldKey="sbliModifiedMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="CICA Monthly Quote"
-                      value={((lead.customFields as any)?.cicaMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.cicaMonthlyQuote ?? '') as string}
                       fieldKey="cicaMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="CICA-GI Monthly Quote"
-                      value={((lead.customFields as any)?.cicaGiMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.cicaGiMonthlyQuote ?? '') as string}
                       fieldKey="cicaGiMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="GTL Monthly Quote"
-                      value={((lead.customFields as any)?.gtlMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.gtlMonthlyQuote ?? '') as string}
                       fieldKey="gtlMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="TransAmerica Monthly Quote"
-                      value={((lead.customFields as any)?.transamericaMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.transamericaMonthlyQuote ?? '') as string}
                       fieldKey="transamericaMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
@@ -831,7 +830,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="TransAmerica Graded Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.transamericaGradedMonthlyQuote ?? '') as string
+                        (lead.customFields?.transamericaGradedMonthlyQuote ?? '') as string
                       }
                       fieldKey="transamericaGradedMonthlyQuote"
                       edits={edits}
@@ -839,21 +838,21 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     />
                     <EditField
                       label="Corebridge Monthly Quote"
-                      value={((lead.customFields as any)?.corebridgeMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.corebridgeMonthlyQuote ?? '') as string}
                       fieldKey="corebridgeMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="AmAm Monthly Quote"
-                      value={((lead.customFields as any)?.amamMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.amamMonthlyQuote ?? '') as string}
                       fieldKey="amamMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="AmAm-Graded Monthly Quote"
-                      value={((lead.customFields as any)?.amamGradedMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.amamGradedMonthlyQuote ?? '') as string}
                       fieldKey="amamGradedMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
@@ -861,7 +860,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="AmAm-Return or Premium Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.amamReturnOrPremiumMonthlyQuote ??
+                        (lead.customFields?.amamReturnOrPremiumMonthlyQuote ??
                           '') as string
                       }
                       fieldKey="amamReturnOrPremiumMonthlyQuote"
@@ -870,14 +869,14 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     />
                     <EditField
                       label="AHL Monthly Quote"
-                      value={((lead.customFields as any)?.ahlMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.ahlMonthlyQuote ?? '') as string}
                       fieldKey="ahlMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="AHL-Graded Monthly Quote"
-                      value={((lead.customFields as any)?.ahlGradedMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.ahlGradedMonthlyQuote ?? '') as string}
                       fieldKey="ahlGradedMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
@@ -885,7 +884,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="Royal Neighbors Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.royalNeighborsMonthlyQuote ?? '') as string
+                        (lead.customFields?.royalNeighborsMonthlyQuote ?? '') as string
                       }
                       fieldKey="royalNeighborsMonthlyQuote"
                       edits={edits}
@@ -894,7 +893,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="Royal Neighbors-Graded Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.royalNeighborsGradedMonthlyQuote ??
+                        (lead.customFields?.royalNeighborsGradedMonthlyQuote ??
                           '') as string
                       }
                       fieldKey="royalNeighborsGradedMonthlyQuote"
@@ -903,7 +902,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     />
                     <EditField
                       label="Gerber-GI Monthly Quote"
-                      value={((lead.customFields as any)?.gerberGiMonthlyQuote ?? '') as string}
+                      value={(lead.customFields?.gerberGiMonthlyQuote ?? '') as string}
                       fieldKey="gerberGiMonthlyQuote"
                       edits={edits}
                       onEdit={handleEdit}
@@ -911,7 +910,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="Mutual of Omaha Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.mutualOfOmahaMonthlyQuote ?? '') as string
+                        (lead.customFields?.mutualOfOmahaMonthlyQuote ?? '') as string
                       }
                       fieldKey="mutualOfOmahaMonthlyQuote"
                       edits={edits}
@@ -920,7 +919,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <EditField
                       label="Mutual of Omaha-Graded Monthly Quote"
                       value={
-                        ((lead.customFields as any)?.mutualOfOmahaGradedMonthlyQuote ??
+                        (lead.customFields?.mutualOfOmahaGradedMonthlyQuote ??
                           '') as string
                       }
                       fieldKey="mutualOfOmahaGradedMonthlyQuote"
@@ -929,28 +928,28 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     />
                     <EditField
                       label="AmAm Quote"
-                      value={((lead.customFields as any)?.amamQuote ?? '') as string}
+                      value={(lead.customFields?.amamQuote ?? '') as string}
                       fieldKey="amamQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="AmAm Less Than Current"
-                      value={((lead.customFields as any)?.amamLessThanCurrent ?? '') as string}
+                      value={(lead.customFields?.amamLessThanCurrent ?? '') as string}
                       fieldKey="amamLessThanCurrent"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="GTL Quote"
-                      value={((lead.customFields as any)?.gtlQuote ?? '') as string}
+                      value={(lead.customFields?.gtlQuote ?? '') as string}
                       fieldKey="gtlQuote"
                       edits={edits}
                       onEdit={handleEdit}
                     />
                     <EditField
                       label="GTL Less Than Current"
-                      value={((lead.customFields as any)?.gtlLessThanCurrent ?? '') as string}
+                      value={(lead.customFields?.gtlLessThanCurrent ?? '') as string}
                       fieldKey="gtlLessThanCurrent"
                       edits={edits}
                       onEdit={handleEdit}
@@ -959,7 +958,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                       <EditField
                         label="Cheapest Carrier Under Current"
                         value={
-                          ((lead.customFields as any)?.cheapestCarrierUnderCurrent ?? '') as string
+                          (lead.customFields?.cheapestCarrierUnderCurrent ?? '') as string
                         }
                         fieldKey="cheapestCarrierUnderCurrent"
                         edits={edits}
@@ -969,7 +968,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     <div className="col-span-2">
                       <EditField
                         label="Savings vs Current"
-                        value={((lead.customFields as any)?.savingsVsCurrent ?? '') as string}
+                        value={(lead.customFields?.savingsVsCurrent ?? '') as string}
                         fieldKey="savingsVsCurrent"
                         edits={edits}
                         onEdit={handleEdit}

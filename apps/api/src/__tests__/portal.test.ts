@@ -921,12 +921,21 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       });
 
       // The per-day rows are the window the settlement named, and they add up.
-      expect(data.window.map((row: any) => row.deliveryDay)).toEqual(stored.windowDayKeys);
+      expect(data.window.map((row: { deliveryDay: string }) => row.deliveryDay)).toEqual(
+        stored.windowDayKeys
+      );
       expect(data.recomputed.deliveredCalls).toBe(
-        data.window.reduce((total: number, row: any) => total + row.deliveredCalls, 0)
+        data.window.reduce(
+          (total: number, row: { deliveredCalls: number }) => total + row.deliveredCalls,
+          0
+        )
       );
       expect(data.recomputed.submittedApplications).toBe(
-        data.window.reduce((total: number, row: any) => total + row.submittedApplications, 0)
+        data.window.reduce(
+          (total: number, row: { submittedApplications: number }) =>
+            total + row.submittedApplications,
+          0
+        )
       );
 
       // 440 calls to 67 applications is 15.23%, above the flat point: $134.

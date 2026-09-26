@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { logger } from './logger.js';
@@ -27,7 +29,7 @@ export interface CarrierResult {
 export class MockCarrierProvider implements CarrierProvider {
   name = 'mock';
 
-  async lookup(phoneNumber: string): Promise<{
+  lookup(phoneNumber: string): Promise<{
     carrier: string | null;
     lata: string | null;
     ocn: string | null;
@@ -48,7 +50,7 @@ export class MockCarrierProvider implements CarrierProvider {
       ocn: '0000',
     };
 
-    return {
+    return Promise.resolve({
       carrier: data.carrier,
       lata: data.lata,
       ocn: data.ocn,
@@ -56,8 +58,19 @@ export class MockCarrierProvider implements CarrierProvider {
         source: 'mock',
         areaCode,
       },
-    };
+    });
   }
+}
+
+/** Subset of the Twilio Lookup v1 carrier response that we read. */
+interface TwilioCarrierLookupResponse {
+  country_code?: string;
+  carrier?: {
+    name?: string | null;
+    type?: string | null;
+    mobile_country_code?: string | null;
+    mobile_network_code?: string | null;
+  } | null;
 }
 
 /**
@@ -99,7 +112,7 @@ export class TwilioCarrierProvider implements CarrierProvider {
         throw new Error(`Twilio API error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as TwilioCarrierLookupResponse;
       return {
         carrier: data.carrier?.name || null,
         lata: data.carrier?.mobile_country_code || null,
@@ -215,7 +228,7 @@ export class CarrierService {
         provider: provider.name,
         cached: true,
         cachedUntil,
-        metadata: result.metadata || {},
+        metadata: (result.metadata || {}) as Prisma.InputJsonValue,
       },
       update: {
         carrier: result.carrier,
@@ -224,7 +237,7 @@ export class CarrierService {
         provider: provider.name,
         cached: true,
         cachedUntil,
-        metadata: result.metadata || {},
+        metadata: (result.metadata || {}) as Prisma.InputJsonValue,
         updatedAt: new Date(),
       },
     });

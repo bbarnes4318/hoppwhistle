@@ -20,14 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -107,7 +99,7 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
   // Load countries on mount
   useEffect(() => {
     if (open) {
-      loadCountries();
+      void loadCountries();
     }
   }, [open]);
 
@@ -194,15 +186,15 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
   const handleCountrySelect = (country: AnveoCountry) => {
     setSelectedCountry(country);
     if (country.hasStates) {
-      loadStates(country.countryId);
+      void loadStates(country.countryId);
     } else {
-      loadAreas(country.countryId);
+      void loadAreas(country.countryId);
     }
   };
 
   const handleStateSelect = (state: AnveoState) => {
     setSelectedState(state);
-    loadAreas(undefined, state.stateId);
+    void loadAreas(undefined, state.stateId);
   };
 
   const handleAreaSelect = (area: AnveoArea, ratePlan: AnveoRatePlan) => {
@@ -264,7 +256,7 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
                   <p className="font-medium mb-1">Failed to load countries</p>
                   <p className="text-xs opacity-80">{error}</p>
                 </div>
-                <Button variant="outline" onClick={loadCountries}>
+                <Button variant="outline" onClick={() => void loadCountries()}>
                   Try Again
                 </Button>
               </div>
@@ -274,7 +266,7 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
                   <p>No countries available at this time.</p>
                   <p className="text-xs mt-1">Please check your Anveo API configuration.</p>
                 </div>
-                <Button variant="outline" onClick={loadCountries}>
+                <Button variant="outline" onClick={() => void loadCountries()}>
                   Refresh
                 </Button>
               </div>
@@ -527,7 +519,7 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
               <Button variant="outline" onClick={() => setStep('area')} disabled={loading}>
                 Back
               </Button>
-              <Button onClick={handlePurchase} disabled={loading}>
+              <Button onClick={() => void handlePurchase()} disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm Purchase
               </Button>

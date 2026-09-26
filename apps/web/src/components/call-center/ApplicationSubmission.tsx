@@ -477,7 +477,7 @@ export function ApplicationSubmission({
       {/* Submit Button */}
       {state === 'idle' && (
         <Button
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           disabled={disabled || !isReadyToSubmit}
           className={cn(
             'w-full h-12 font-semibold text-lg transition-all',

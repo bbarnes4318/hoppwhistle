@@ -1,5 +1,6 @@
 'use client';
 
+import type { CallRouteType as CallRouteTypeName } from '@hopwhistle/shared';
 import {
   createContext,
   useCallback,
@@ -18,9 +19,8 @@ import {
   SessionState,
   Invitation,
   UserAgentOptions,
+  type SessionDescriptionHandlerOptions,
 } from 'sip.js';
-
-import type { CallRouteType as CallRouteTypeName } from '@hopwhistle/shared';
 
 /**
  * REGISTER, and resolve only when the registrar ACCEPTS it.
@@ -63,7 +63,14 @@ export function registerAndConfirm(registerer: Registerer, timeoutMs = 15000): P
 }
 
 // Helper to extract the actual SIP Call-ID header from a SIP.js Session object
-function getSipCallId(session: any): string {
+interface SipSessionLike {
+  id?: string;
+  request?: { callId?: string; getHeader?: (name: string) => string | undefined };
+  incomingMessage?: { callId?: string };
+  outgoingRequestMessage?: { callId?: string };
+}
+
+function getSipCallId(session: SipSessionLike | null | undefined): string {
   if (!session) return '';
 
   // Strategy 1: Check request headers (standard SIP header)
@@ -814,7 +821,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
    * Legacy compat wrapper — called from outbound (Inviter) flows.
    * Delegates to the new wireRemoteAudio.
    */
-  const setupRemoteAudio = (session: Session) => {
+  const setupRemoteAudio = useCallback((session: Session) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pc = (session.sessionDescriptionHandler as any)?.peerConnection as
       | RTCPeerConnection
@@ -824,7 +831,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       return;
     }
     wireRemoteAudio(pc);
-  };
+  }, [wireRemoteAudio]);
 
   const handleCallAnswered = useCallback(() => {
     setCurrentCall(prev => {
@@ -885,9 +892,11 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
 
         // Unhold/unmute audio tracks in the browser RTCPeerConnection
         try {
-          const sdh = sessionRef.current.sessionDescriptionHandler as any;
+          const sdh = sessionRef.current.sessionDescriptionHandler as
+            | { peerConnection?: RTCPeerConnection }
+            | undefined;
           if (sdh && sdh.peerConnection) {
-            const pc = sdh.peerConnection as RTCPeerConnection;
+            const pc = sdh.peerConnection;
             const senders = pc.getSenders();
             for (const sender of senders) {
               if (sender.track && sender.track.kind === 'audio') {
@@ -1085,6 +1094,8 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
 
         const inviter = new Inviter(userAgentRef.current, target, {
           extraHeaders,
+          // peerConnectionConfiguration is not in SIP.js's per-session options type (it is
+          // read from the SDH factory configuration); kept unchanged.
           sessionDescriptionHandlerOptions: {
             constraints: { audio: true, video: false },
             peerConnectionConfiguration: {
@@ -1096,7 +1107,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
                 { urls: 'stun:stun4.l.google.com:19302' },
               ],
             },
-          },
+          } as SessionDescriptionHandlerOptions,
         });
         sessionRef.current = inviter;
 
@@ -1155,7 +1166,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
         throw err;
       }
     },
-    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
+    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId, setupRemoteAudio]
   );
 
   const answerCall = useCallback(() => {
@@ -1180,6 +1191,8 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       // Accept with explicit media constraints to ensure mic capture
       invitation
         .accept({
+          // peerConnectionConfiguration is not in SIP.js's per-session options type (it is
+          // read from the SDH factory configuration); kept unchanged.
           sessionDescriptionHandlerOptions: {
             constraints: { audio: true, video: false },
             peerConnectionConfiguration: {
@@ -1191,7 +1204,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
                 { urls: 'stun:stun4.l.google.com:19302' },
               ],
             },
-          },
+          } as SessionDescriptionHandlerOptions,
         })
         .then(() => {
           console.log('[Phone] Call accepted — wiring remote audio (post-accept safety net)');
@@ -1297,7 +1310,9 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   const playDTMFTone = useCallback((digit: string) => {
     try {
       if (!audioContextRef.current) {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioContextClass =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AudioContextClass) {
           audioContextRef.current = new AudioContextClass();
         }
@@ -1375,9 +1390,9 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       // could not be sent (avoids the far end receiving the digit twice).
       if (!sentViaInfo) {
         const sdh = session.sessionDescriptionHandler;
-        if (sdh && typeof (sdh as any).sendDtmf === 'function') {
+        if (sdh && typeof sdh.sendDtmf === 'function') {
           try {
-            (sdh as any).sendDtmf(digit);
+            sdh.sendDtmf(digit);
             console.log('[Phone] Sent DTMF via RTP (fallback):', digit);
           } catch (e) {
             console.error('[Phone] DTMF RTP fallback failed:', e);

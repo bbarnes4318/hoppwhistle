@@ -3,6 +3,30 @@ import { Pool } from 'pg';
 
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
+/**
+ * A `transcripts` row as this route reads it. Columns it only passes through
+ * to the response are left as `unknown`.
+ */
+interface TranscriptRow {
+  id: string;
+  tenant_id: string;
+  call_id: string;
+  engine: unknown;
+  language: unknown;
+  duration_sec: unknown;
+  full_text: string;
+  speaker_labels: unknown;
+  created_at: unknown;
+}
+
+/** A transcript joined with its segments and analysis. */
+interface TranscriptDetailRow extends TranscriptRow {
+  segments: unknown[] | null;
+  billable: boolean | null;
+  application_submitted: unknown;
+  reasoning: unknown;
+}
+
 // Inline repository to avoid path issues
 class TranscriptRepository {
   private pool: Pool;
@@ -15,8 +39,8 @@ class TranscriptRepository {
     this.pool = new Pool({ connectionString: databaseUrl, max: 10 });
   }
 
-  async getTranscriptByCall(callId: string): Promise<any> {
-    const result = await this.pool.query(
+  async getTranscriptByCall(callId: string): Promise<TranscriptDetailRow | null> {
+    const result = await this.pool.query<TranscriptDetailRow>(
       `SELECT t.*, 
               COALESCE(json_agg(
                 json_build_object(
@@ -39,23 +63,23 @@ class TranscriptRepository {
     return result.rows[0] || null;
   }
 
-  async listTranscripts(tenantId: string, query?: string, limit: number = 20, offset: number = 0): Promise<any[]> {
+  async listTranscripts(tenantId: string, query?: string, limit: number = 20, offset: number = 0): Promise<TranscriptRow[]> {
     let sql = `SELECT t.* FROM transcripts t WHERE t.tenant_id = $1`;
-    const params: any[] = [tenantId];
+    const params: (string | number)[] = [tenantId];
     if (query) {
       sql += ` AND t.full_text ILIKE $${params.length + 1}`;
       params.push(`%${query}%`);
     }
     sql += ` ORDER BY t.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
-    const result = await this.pool.query(sql, params);
+    const result = await this.pool.query<TranscriptRow>(sql, params);
     return result.rows;
   }
 }
 
 const repository = new TranscriptRepository();
 
-export async function registerTranscriptRoutes(fastify: FastifyInstance) {
+export function registerTranscriptRoutes(fastify: FastifyInstance): Promise<void> {
   // Get transcript for a call
   fastify.get<{ Params: { callId: string } }>(
     '/api/v1/calls/:callId/transcript',
@@ -69,7 +93,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
         const transcript = await repository.getTranscriptByCall(request.params.callId);
 
         if (!transcript) {
-          reply.code(404);
+          void reply.code(404);
           return {
             error: {
               code: 'NOT_FOUND',
@@ -80,7 +104,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
 
         // Verify tenant access
         if (transcript.tenant_id !== tenantId) {
-          reply.code(403);
+          void reply.code(403);
           return {
             error: {
               code: 'FORBIDDEN',
@@ -106,7 +130,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
           createdAt: transcript.created_at,
         };
       } catch (error) {
-        reply.code(500);
+        void reply.code(500);
         return {
           error: {
             code: 'INTERNAL_ERROR',
@@ -135,7 +159,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
       const transcripts = await repository.listTranscripts(tenantId, q, limit, offset);
 
       return {
-        data: transcripts.map((t: any) => ({
+        data: transcripts.map(t => ({
           id: t.id,
           callId: t.call_id,
           engine: t.engine,
@@ -151,7 +175,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
         },
       };
     } catch (error) {
-      reply.code(500);
+      void reply.code(500);
       return {
         error: {
           code: 'INTERNAL_ERROR',
@@ -160,5 +184,7 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
       };
     }
   });
+
+  return Promise.resolve();
 }
 

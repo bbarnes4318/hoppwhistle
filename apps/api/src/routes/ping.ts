@@ -33,6 +33,7 @@ interface PingRequestBody {
 // Route Registration
 // ============================================================================
 
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin: registered via server.register(), which expects an async function
 export async function registerPingRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
 

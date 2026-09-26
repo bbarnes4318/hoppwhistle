@@ -47,10 +47,13 @@ function hl(children: ReactNode, query: string): ReactNode {
  * through the safe highlighter.
  */
 export function highlightMarkdownComponents(query: string): Components {
-  const wrap =
-    (Tag: keyof JSX.IntrinsicElements) =>
+  const wrap = (Tag: keyof JSX.IntrinsicElements) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ({ children, ...props }: any) => <Tag {...props}>{hl(children, query)}</Tag>;
+    const Highlighted = ({ children, ...props }: any) => (
+      <Tag {...props}>{hl(children, query)}</Tag>
+    );
+    return Highlighted;
+  };
   return {
     p: wrap('p'),
     li: wrap('li'),

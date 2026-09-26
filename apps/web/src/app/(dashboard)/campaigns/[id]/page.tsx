@@ -2,17 +2,13 @@
 
 import {
   ArrowLeft,
-  Check,
   Edit,
   Eye,
   Loader2,
-  Play,
   Plus,
   RefreshCw,
   Save,
   Trash2,
-  X,
-  Phone,
   UserPlus,
   ShieldAlert,
   ArrowUpRight,
@@ -107,6 +103,7 @@ interface CampaignBuyer {
 
 interface DidRoute {
   id: string;
+  campaignId?: string | null;
   did: string;
   destination: string;
   label: string | null;
@@ -274,7 +271,7 @@ export default function CampaignDetailPage() {
       if (canManage) {
         const didRes = await apiClient.get<{ routes: DidRoute[] }>('/api/v1/did-routes');
         if (didRes.data?.routes) {
-          const filtered = didRes.data.routes.filter((route: any) => route.campaignId === id);
+          const filtered = didRes.data.routes.filter(route => route.campaignId === id);
           setDidRoutes(filtered);
         }
       }
@@ -634,7 +631,7 @@ export default function CampaignDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchCampaignData} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => void fetchCampaignData()} disabled={loading}>
             <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Refresh
           </Button>
@@ -670,7 +667,7 @@ export default function CampaignDetailPage() {
 
         {/* Settings Tab */}
         <TabsContent value="settings">
-          <form onSubmit={handleSaveSettings} className="space-y-6">
+          <form onSubmit={e => void handleSaveSettings(e)} className="space-y-6">
             {/* A disabled fieldset makes every control inside it read-only. */}
             <fieldset disabled={!canManage} className="space-y-6">
               <Card className="border border-border">
@@ -724,8 +721,11 @@ export default function CampaignDetailPage() {
                     <Label htmlFor="camp-status">Campaign Status</Label>
                     <Select
                       value={settingsForm.status}
-                      onValueChange={(val: any) =>
-                        setSettingsForm({ ...settingsForm, status: val })
+                      onValueChange={(val: string) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          status: val as typeof settingsForm.status,
+                        })
                       }
                     >
                       <SelectTrigger id="camp-status">
@@ -932,7 +932,7 @@ export default function CampaignDetailPage() {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
-                              onClick={() => handleRemovePublisher(cp.id)}
+                              onClick={() => void handleRemovePublisher(cp.id)}
                               title="Remove Publisher Assignment"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1055,7 +1055,7 @@ export default function CampaignDetailPage() {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint"
-                              onClick={() => handleRemoveBuyer(cb.id)}
+                              onClick={() => void handleRemoveBuyer(cb.id)}
                               title="Remove Buyer Assignment"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1174,7 +1174,7 @@ export default function CampaignDetailPage() {
           {/* Assign Publisher Dialog */}
           <Dialog open={pubDialogOpen} onOpenChange={setPubDialogOpen}>
             <DialogContent className="sm:max-w-[425px]">
-              <form onSubmit={handleAssignPublisher} className="space-y-4">
+              <form onSubmit={e => void handleAssignPublisher(e)} className="space-y-4">
                 <DialogHeader>
                   <DialogTitle>Assign Publisher to Campaign</DialogTitle>
                   <DialogDescription>
@@ -1226,7 +1226,9 @@ export default function CampaignDetailPage() {
                     <Label htmlFor="pub-status">Assignment Status</Label>
                     <Select
                       value={pubForm.status}
-                      onValueChange={(val: any) => setPubForm({ ...pubForm, status: val })}
+                      onValueChange={(val: string) =>
+                        setPubForm({ ...pubForm, status: val as typeof pubForm.status })
+                      }
                     >
                       <SelectTrigger id="pub-status">
                         <SelectValue />
@@ -1255,7 +1257,7 @@ export default function CampaignDetailPage() {
           {/* Assign Buyer Dialog */}
           <Dialog open={buyerDialogOpen} onOpenChange={handleOpenBuyerDialog}>
             <DialogContent className="sm:max-w-[500px]">
-              <form onSubmit={handleAssignBuyer} className="space-y-4">
+              <form onSubmit={e => void handleAssignBuyer(e)} className="space-y-4">
                 <DialogHeader>
                   <DialogTitle>
                     {editingBuyerId
@@ -1383,7 +1385,9 @@ export default function CampaignDetailPage() {
                       <Label htmlFor="buyer-status">Assignment Status</Label>
                       <Select
                         value={buyerForm.status}
-                        onValueChange={(val: any) => setBuyerForm({ ...buyerForm, status: val })}
+                        onValueChange={(val: string) =>
+                          setBuyerForm({ ...buyerForm, status: val as typeof buyerForm.status })
+                        }
                       >
                         <SelectTrigger id="buyer-status">
                           <SelectValue />

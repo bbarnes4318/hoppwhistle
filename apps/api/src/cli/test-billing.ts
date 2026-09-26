@@ -1,8 +1,9 @@
 #!/usr/bin/env tsx
 import 'dotenv-flow/config';
+import { Prisma } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 import { billingService } from '../services/billing-service.js';
-import { Prisma } from '@prisma/client';
 
 async function runTests() {
   console.log('Starting Hopwhistle Billing Service Test Suite...');
@@ -265,7 +266,7 @@ async function runTests() {
       run1.profit === run2.profit &&
       dbCall !== null &&
       dbCall.billingRuleSnapshot !== null &&
-      (dbCall.billingRuleSnapshot as any).publisherPayoutRate === '7.5'
+      (dbCall.billingRuleSnapshot as { publisherPayoutRate?: unknown }).publisherPayoutRate === '7.5'
     );
 
   } catch (err) {
@@ -296,4 +297,4 @@ async function runTests() {
   }
 }
 
-runTests();
+void runTests();

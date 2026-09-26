@@ -89,16 +89,16 @@ if (!inviteEarlyMediaBehavior.test(source)) {
 }
 
 replaceOnce(
-  `    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
+  `    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId, setupRemoteAudio]
   );
 
   const answerCall`,
-  `    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId, playRingtone]
+  `    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId, setupRemoteAudio, playRingtone]
   );
 
   const answerCall`,
   'outbound callback dependencies',
-  'selectedCallerId, playRingtone]'
+  'setupRemoteAudio, playRingtone]'
 );
 
 if (!source.includes('Sent DTMF via WebRTC RTP')) {

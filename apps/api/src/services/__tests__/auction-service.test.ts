@@ -13,7 +13,7 @@ const mockPrisma = {
     findMany: vi.fn(),
   },
   call: {
-    count: vi.fn(),
+    count: vi.fn<[args: { where: { targetId?: string } }], Promise<number>>(),
   },
   pingRequest: {
     create: vi.fn(),

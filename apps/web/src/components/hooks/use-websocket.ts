@@ -99,7 +99,7 @@ export function useWebSocket(url: string, options: {
 
         if (autoReconnect && enabled && shouldConnectRef.current) {
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            void connect();
           }, reconnectInterval);
         }
       };
@@ -130,7 +130,7 @@ export function useWebSocket(url: string, options: {
 
   useEffect(() => {
     if (enabled) {
-      connect();
+      void connect();
     }
 
     return () => {
