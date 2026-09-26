@@ -96,8 +96,15 @@ async function resolveTenantContext(
     }
   }
 
-  // JWT via ?token= query param (required for EventSource/SSE clients)
-  const queryToken = (request.query as Record<string, string | undefined>)?.token;
+  // JWT via ?token= query param (required for EventSource/SSE clients).
+  //
+  // Only on the /api/automation/* aliases the call-center panels stream from.
+  // Under /api/v1 a query-string token is a 15-minute recording pass and
+  // nothing else (middleware/api-v1-auth.ts); honouring a login token here
+  // would reopen it for the /api/v1/automation/* routes.
+  const queryToken = request.url.startsWith('/api/v1/')
+    ? undefined
+    : (request.query as Record<string, string | undefined>)?.token;
   if (queryToken) {
     try {
       const decoded = fastify.jwt.verify<{ tenantId?: string; userId?: string }>(queryToken);

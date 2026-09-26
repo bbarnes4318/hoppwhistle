@@ -24,7 +24,7 @@ import { StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
 import { UrlFilterBar } from '../_components/url-filter-bar';
 import { UrlPagination } from '../_components/url-pagination';
-import { durationScale, recordingUrlFor, thresholdFor } from '../_lib/calls';
+import { acceptedByBuyer, durationScale, recordingUrlFor, thresholdFor } from '../_lib/calls';
 import { firstParam, parsePage, RANGE_OPTIONS, resolveRange } from '../_lib/range';
 
 import { CallsTable, type CallRowView } from './calls-table';
@@ -223,6 +223,7 @@ async function CallsPanel({
     chargeStatus: call.buyerChargeStatus,
     disputeStatus: call.disputeStatus,
     disposition: call.disposition,
+    accepted: acceptedByBuyer(call),
     recordingUrl: recordingUrlFor(call, canViewRecordings),
   }));
 

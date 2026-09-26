@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { apiPatch, apiPost } from '@/lib/server/api';
+import { apiGet, apiPatch, apiPost } from '@/lib/server/api';
 
 import { composeDisputeReason, isDisputeReason, type DisputeInput } from './_lib/dispute';
 import { MISSING_TOKEN_MESSAGE, normalizeToken } from './_lib/token';
@@ -45,21 +45,55 @@ function revalidateBuyer(): void {
 /**
  * Accept a call — the buyer confirming this was what they paid for.
  *
- * Recorded as the VERIFIED disposition, the platform's existing term for "this
- * connection was real". Accepting is not a charge event: the charge already
- * happened when the call crossed the threshold. What it settles is whether the
- * buyer is going to argue about it.
+ * Accepting is not a charge event: the charge already happened when the call
+ * crossed the threshold, and the charge status is left exactly as it was. What
+ * it settles is whether the buyer is going to argue about it, and it is
+ * recorded on the call as the time the buyer accepted.
+ *
+ * This used to POST to the disposition route, which only answers PATCH, so the
+ * button 404'd on every click -- and a disposition is the agency's record of
+ * what its agent did, not the buyer's to write.
  */
 export async function acceptCall(token: string, callId: string): Promise<ActionResult> {
   const bearer = normalizeToken(token);
   if (!bearer) return { ok: false, error: MISSING_TOKEN_MESSAGE };
 
   try {
-    await apiPost(`/api/v1/calls/${callId}/disposition`, bearer, { disposition: 'VERIFIED' });
+    await apiPost(`/api/v1/calls/${encodeURIComponent(callId)}/accept`, bearer);
     revalidateBuyer();
     return { ok: true };
   } catch (err) {
     return failure(err, 'Could not accept this call.');
+  }
+}
+
+export interface PlaybackResult extends ActionResult {
+  url?: string;
+}
+
+/**
+ * A playable URL for one recording.
+ *
+ * The recording URLs on a call carry no credential, and an <audio> element
+ * cannot send one, so playback asks the API for a short-lived pass good for
+ * that one stream. A read, but it takes the token as an argument like every
+ * action here, for the same reason.
+ */
+export async function recordingPlaybackUrl(
+  token: string,
+  recordingId: string
+): Promise<PlaybackResult> {
+  const bearer = normalizeToken(token);
+  if (!bearer) return { ok: false, error: MISSING_TOKEN_MESSAGE };
+
+  try {
+    const result = await apiGet<{ url: string }>(
+      `/api/v1/recordings/${encodeURIComponent(recordingId)}/url`,
+      bearer
+    );
+    return { ok: true, url: result.url };
+  } catch (err) {
+    return failure(err, 'Could not load this recording.');
   }
 }
 

@@ -17,6 +17,7 @@ import { PageHeader } from '../_components/page-header';
 import { StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
 import {
+  acceptedByBuyer,
   disputedAtOf,
   disputeReasonOf,
   durationScale,
@@ -180,9 +181,7 @@ async function FileSection({ token, buyerId, startISO, endISO, canViewRecordings
 
   // Only calls that actually cost something and are not already settled — a
   // call you were not charged for has nothing to dispute.
-  const candidates = callsResult.data.rows.filter(
-    call => call.billable && call.disposition !== 'VERIFIED'
-  );
+  const candidates = callsResult.data.rows.filter(call => call.billable && !acceptedByBuyer(call));
   const scale = durationScale(candidates, profile?.billableDuration ?? null);
 
   const rows: FileableCall[] = candidates.slice(0, 25).map(call => ({

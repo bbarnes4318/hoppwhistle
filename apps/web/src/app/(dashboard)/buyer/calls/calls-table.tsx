@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 
 import { DisputeDrawer, type DisputableCall } from '../_components/dispute-drawer';
 import { disputeOutcome } from '../_lib/dispute';
+import { useRecordingPlayback } from '../_lib/use-recording-playback';
 import { acceptCall } from '../actions';
 
 /**
@@ -51,6 +52,8 @@ export interface CallRowView {
   chargeStatus: string | null;
   disputeStatus: string | null;
   disposition: string | null;
+  /** The buyer has accepted this call. See `acceptedByBuyer`. */
+  accepted: boolean;
   recordingUrl: string | null;
 }
 
@@ -69,7 +72,7 @@ function outcomeChip(row: CallRowView): React.ReactNode {
       />
     );
   }
-  if (row.disposition === 'VERIFIED') {
+  if (row.accepted) {
     return <StatusChip value="ACCEPTED" tone="live" label="Accepted" size="sm" />;
   }
   return row.billable ? (
@@ -81,7 +84,7 @@ function outcomeChip(row: CallRowView): React.ReactNode {
 
 /** A call is settled once it has been accepted or disputed — nothing left to do. */
 function isSettled(row: CallRowView): boolean {
-  return Boolean(row.disputeStatus) || row.disposition === 'VERIFIED';
+  return Boolean(row.disputeStatus) || row.accepted;
 }
 
 function RowActions({
@@ -438,16 +441,26 @@ function CallDetailDrawer({
       </DrawerSection>
 
       <DrawerSection title="Recording">
-        {row.recordingUrl ? (
-          <RecordingPlayer
-            src={row.recordingUrl}
-            durationSeconds={row.connectedSeconds}
-            thresholdSeconds={row.thresholdSeconds}
-          />
-        ) : (
-          <p className="t-body text-ink-3">No recording is available for this call.</p>
-        )}
+        <CallRecording row={row} open={open} />
       </DrawerSection>
     </SheetDrawer>
   );
+}
+
+/** The recording, exchanged for a playable pass only when the drawer is open. */
+function CallRecording({ row, open }: { row: CallRowView; open: boolean }) {
+  const playback = useRecordingPlayback(row.recordingUrl, open);
+  if (!row.recordingUrl) {
+    return <p className="t-body text-ink-3">No recording is available for this call.</p>;
+  }
+  if (playback.src) {
+    return (
+      <RecordingPlayer
+        src={playback.src}
+        durationSeconds={row.connectedSeconds}
+        thresholdSeconds={row.thresholdSeconds}
+      />
+    );
+  }
+  return <p className="t-body text-ink-3">{playback.error ?? 'Loading the recording…'}</p>;
 }

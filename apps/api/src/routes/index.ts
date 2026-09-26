@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 
 import { OPEN_DISPUTE, isOpenDispute } from '../lib/dispute-status.js';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
-import { requirePlatformAdmin } from '../lib/platform-context.js';
+import { isPlatformAdminRequest, requirePlatformAdmin } from '../lib/platform-context.js';
 import {
   didActiveElsewhere,
   extensionsOutsideTenant,
@@ -47,7 +47,6 @@ function buildCallWhere(params: {
   tenantId: string;
   isAdminOrOwner: boolean;
   userId?: string;
-  userNumbers: string[];
   search?: string;
   phone?: string;
   startDate?: string;
@@ -68,7 +67,6 @@ function buildCallWhere(params: {
     tenantId,
     isAdminOrOwner,
     userId,
-    userNumbers,
     search,
     phone,
     startDate,
@@ -90,41 +88,17 @@ function buildCallWhere(params: {
     } else if (publisherId) {
       where.publisherId = publisherId;
     } else if (userId) {
-      const numberFormats: string[] = [];
-      for (const num of userNumbers) {
-        numberFormats.push(num);
-        if (num.startsWith('+1')) {
-          numberFormats.push(num.substring(2)); // 10 digit
-          numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
-        } else if (num.startsWith('1') && num.length === 11) {
-          numberFormats.push('+' + num);
-          numberFormats.push(num.substring(1));
-        } else if (num.length === 10) {
-          numberFormats.push('+1' + num);
-          numberFormats.push('1' + num);
-        }
-      }
       /*
-       * "My calls", and the clause it was missing.
+       * "My calls" means the calls this agent answered, and nothing else.
        *
-       * The sidebar promises an agent that this list is "narrowed server-side
-       * to the ones you took". It was narrowed to the calls they CREATED and
-       * to the phone numbers assigned to them -- and an agent taking inbound
-       * Final Expense calls satisfies neither. The row is created by the
-       * inbound handler, and the DID belongs to the agency, not to the agent,
-       * so `userNumbers` is empty for the entire floor.
-       *
-       * The result was the one list an agent looks at every day showing
-       * everything except the calls they actually answered.
+       * It used to be an OR that also matched the calls they created, the
+       * numbers assigned to them, and any call whose `did` or `toNumber` was
+       * one of those numbers. The DID belongs to the agency, and a number
+       * shared across a team made a colleague's calls -- with their callers,
+       * notes and recordings -- land in this list. `answeredByUserId` is who
+       * picked the phone up; it is the one clause that is about this agent.
        */
-      where.OR = [
-        { answeredByUserId: userId },
-        { createdById: userId },
-        { fromNumber: { userId: userId } },
-        { callerId: { in: numberFormats } },
-        { toNumber: { in: numberFormats } },
-        { did: { in: numberFormats } },
-      ];
+      where.answeredByUserId = userId;
     }
   } else {
     // Admin filters
@@ -402,24 +376,28 @@ function getPublicApiBaseUrl(request: FastifyRequest): string {
   return `${protocol}://${host}`;
 }
 
-function buildRecordingPlaybackUrls(call: any, apiBaseUrl: string, token?: string) {
+/*
+ * The stream URLs carry no credential.
+ *
+ * They used to end in `?token=<7-day login JWT>`, and the auth hook accepted
+ * `?token=` as a full login on every /api/v1 route -- so every recording link
+ * on the Calls page, and every row of the CSV export, was a working week-long
+ * session for whoever it was pasted to. Playback in the app goes through the
+ * authenticated `GET /api/v1/recordings/:id/url`, which mints a 15-minute token
+ * good for that one stream and nothing else (see `middleware/api-v1-auth.ts`).
+ */
+function buildRecordingPlaybackUrls(call: any, apiBaseUrl: string) {
   const latestRecording = call.recordings?.[0] ?? null;
   const primaryId = call.primaryRecordingId || latestRecording?.id || null;
 
   let primaryUrl = '';
   if (primaryId) {
     primaryUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${primaryId}/stream`;
-    if (token) {
-      primaryUrl += `?token=${token}`;
-    }
   } else if (call.recordingUrl) {
     if (call.recordingUrl.startsWith('http://') || call.recordingUrl.startsWith('https://')) {
       primaryUrl = call.recordingUrl;
     } else {
       primaryUrl = `${apiBaseUrl.replace(/\/$/, '')}${call.recordingUrl}`;
-      if (token && !primaryUrl.includes('?token=')) {
-        primaryUrl += `?token=${token}`;
-      }
     }
   }
 
@@ -427,17 +405,20 @@ function buildRecordingPlaybackUrls(call: any, apiBaseUrl: string, token?: strin
   const allUrls =
     call.recordings && call.recordings.length > 0
       ? call.recordings
-          .map((rec: any) => {
-            let u = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${rec.id}/stream`;
-            if (token) {
-              u += `?token=${token}`;
-            }
-            return u;
-          })
+          .map((rec: any) => `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${rec.id}/stream`)
           .join('; ')
       : primaryUrl;
 
   return { primaryUrl, allUrls };
+}
+
+/**
+ * Where the web app lives, for links written into exports.
+ *
+ * Same variable and default as `services/agent-invite-email.ts`.
+ */
+function appUrl(): string {
+  return (process.env.APP_URL ?? 'https://agents.netenroll.com').replace(/\/+$/, '');
 }
 
 function csvEscape(value: any): string {
@@ -500,6 +481,40 @@ async function attachAnsweredBy<T extends { answeredByUserId?: string | null }>(
   }
 }
 
+/**
+ * Whether this principal may read one call.
+ *
+ * The same rule `buildCallWhere` applies to the list, for one row: OWNER and
+ * ADMIN see the agency; a publisher or buyer sees their own traffic; an agent
+ * sees the calls they answered. Anybody else sees nothing.
+ *
+ * An agent's rule used to also match calls they created and calls that touched
+ * one of "their" numbers -- including the DID, which belongs to the agency -- so
+ * a colleague's call could be opened, and written to, by id.
+ */
+function mayReadCall(
+  profile: {
+    isAdminOrOwner: boolean;
+    userRoles?: string[];
+    buyerId?: string | null;
+    publisherId?: string | null;
+  },
+  call: { publisherId?: string | null; buyerId?: string | null; answeredByUserId?: string | null },
+  userId: string | undefined
+): boolean {
+  if (profile.isAdminOrOwner) return true;
+  if (profile.userRoles?.includes('PUBLISHER')) {
+    return !!profile.publisherId && call.publisherId === profile.publisherId;
+  }
+  if (profile.userRoles?.includes('BUYER')) {
+    return !!profile.buyerId && call.buyerId === profile.buyerId;
+  }
+  if (profile.userRoles?.includes('AGENT')) {
+    return !!userId && call.answeredByUserId === userId;
+  }
+  return false;
+}
+
 function mapCallRecord(
   call: any,
   apiBaseUrl: string,
@@ -541,24 +556,7 @@ function mapCallRecord(
       });
   }
 
-  let token: string | undefined = undefined;
-  if (request && request.server && (request.server as any).jwt && (request as any).user) {
-    try {
-      token = (request.server as any).jwt.sign(
-        {
-          tenantId: (request as any).user.tenantId,
-          userId: (request as any).user.userId,
-          email: (request as any).user.email,
-          roles: (request as any).user.roles || [],
-        },
-        { expiresIn: '7d' }
-      );
-    } catch (err) {
-      request.log?.error?.({ err }, 'Failed to synchronously sign JWT for recording URL');
-    }
-  }
-
-  const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl, token);
+  const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl);
 
   // Apply financial masking based on role
   let revenue = call.revenue;
@@ -572,6 +570,7 @@ function mapCallRecord(
   let targetNumber = call.targetNumber;
   let toNumber = call.toNumber;
   let buyerName = call.buyerName;
+  let publisherName: string | null = call.publisherName || call.publisher?.name || null;
 
   let margin: number | null = null;
 
@@ -604,6 +603,16 @@ function mapCallRecord(
         cost = null;
         profit = null;
       } else if (profile.userRoles?.includes('AGENT')) {
+        /*
+         * Who bought the call, who sold it, and where it was sent are the
+         * agency's commercial relationships, not the agent's. An agent needs
+         * the caller and the disposition; the counterparties and the
+         * destination number stay with the principals.
+         */
+        buyerName = null;
+        publisherName = null;
+        targetNumber = null;
+        toNumber = null;
         if (!hasFinanceRole) {
           revenue = null;
           payout = null;
@@ -667,7 +676,7 @@ function mapCallRecord(
     did: call.did,
     targetNumber,
     publisherId: call.publisherId,
-    publisherName: call.publisherName || call.publisher?.name || null,
+    publisherName,
     buyerId: call.buyerId,
     buyerName: buyerName || null,
     campaignId: call.campaignId,
@@ -1229,6 +1238,29 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      /*
+       * A buyer sees the campaigns it has taken calls from, by name, and
+       * nothing else. The full list carried every campaign in the agency with
+       * its publisher, its payout and the price every OTHER buyer pays; the
+       * buyer portal only ever wanted names for a filter. Unpaged, because a
+       * filter that silently stops at 20 hides the 21st campaign.
+       */
+      const profile = await getUserProfile(request, prisma);
+      if (!profile.isAdminOrOwner && profile.userRoles?.includes('BUYER')) {
+        const own = profile.buyerId
+          ? await prisma.campaign.findMany({
+              where: { tenantId, calls: { some: { tenantId, buyerId: profile.buyerId } } },
+              orderBy: { name: 'asc' },
+              select: { id: true, name: true },
+            })
+          : [];
+        return {
+          data: own,
+          meta: { page: 1, limit: own.length, total: own.length, totalPages: 1 },
+        };
+      }
+
       const page = parseInt(request.query.page || '1');
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
@@ -3427,20 +3459,6 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     const profile = await getUserProfile(request, prisma);
 
-    let userNumbers: string[] = [];
-    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
-      const fetchedNumbers = await prisma.phoneNumber.findMany({
-        where: {
-          tenantId,
-          userId: user.userId,
-        },
-        select: {
-          number: true,
-        },
-      });
-      userNumbers = fetchedNumbers.map(n => n.number);
-    }
-
     let listPhoneNumbers: string[] | undefined = undefined;
     if (request.query.listId && request.query.listId !== 'all') {
       const leads = await prisma.insuranceLead.findMany({
@@ -3454,7 +3472,6 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
       userId: user?.userId,
-      userNumbers,
       search: request.query.search,
       phone: request.query.phone,
       startDate: request.query.startDate,
@@ -3571,20 +3588,6 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     const profile = await getUserProfile(request, prisma);
 
-    let userNumbers: string[] = [];
-    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
-      const fetchedNumbers = await prisma.phoneNumber.findMany({
-        where: {
-          tenantId,
-          userId: user.userId,
-        },
-        select: {
-          number: true,
-        },
-      });
-      userNumbers = fetchedNumbers.map(n => n.number);
-    }
-
     let listPhoneNumbers: string[] | undefined = undefined;
     if (request.query.listId && request.query.listId !== 'all') {
       const leads = await prisma.insuranceLead.findMany({
@@ -3598,7 +3601,6 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
       userId: user?.userId,
-      userNumbers,
       search: request.query.search,
       phone: request.query.phone,
       startDate,
@@ -3620,37 +3622,24 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     });
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
-    const authHeader = request.headers.authorization;
-    const queryToken = (request.query as any)?.token;
-    let token =
-      authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
 
-    if (!token && tenantId) {
-      try {
-        token = await (reply as any).jwtSign(
-          {
-            tenantId,
-            userId: user?.userId,
-            email: user?.email,
-            roles: ['ADMIN'],
-          },
-          { expiresIn: '7d' }
-        );
-      } catch (err) {
-        request.log.error({ err }, 'Failed to sign token for CSV export');
-      }
-    }
+    /*
+     * Who the call was bought and sold by, where it went, and whether money
+     * moved on it are the agency's commercial book. They are OWNER/ADMIN
+     * columns; a buyer, publisher or agent export leaves them out entirely
+     * rather than shipping them blank.
+     */
+    const commercialColumns = profile.isAdminOrOwner;
 
     const headers = [
       'Time',
       'Call ID',
       'Call SID',
-      'Publisher',
-      'Buyer',
+      ...(commercialColumns ? ['Publisher', 'Buyer'] : []),
       'Campaign',
       'Caller ID (From)',
       'DID (DNIS)',
-      'Destination (To)',
+      ...(commercialColumns ? ['Destination (To)'] : []),
       'Duration',
       'Connected Duration',
       'Billable',
@@ -3658,10 +3647,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       'Disposition',
       'Disposition Notes',
       'Source',
-      'Buyer Charge Status',
-      'Publisher Payout Status',
+      ...(commercialColumns ? ['Buyer Charge Status', 'Publisher Payout Status'] : []),
       'Dispute Status',
-      'Recording URL',
+      'Recording',
     ];
 
     if (profile.isAdminOrOwner) {
@@ -3710,12 +3698,11 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           mapped.createdAt,
           mapped.id,
           mapped.callSid || '',
-          mapped.publisherName || '',
-          mapped.buyerName || '',
+          ...(commercialColumns ? [mapped.publisherName || '', mapped.buyerName || ''] : []),
           mapped.campaignName || '',
           mapped.callerId || '',
           mapped.did || '',
-          mapped.toNumber || mapped.targetNumber || '',
+          ...(commercialColumns ? [mapped.toNumber || mapped.targetNumber || ''] : []),
           mapped.duration ? formatDuration(mapped.duration) : '0:00',
           mapped.connectedDuration ? formatDuration(mapped.connectedDuration) : '0:00',
           mapped.billable ? 'Y' : 'N',
@@ -3729,10 +3716,17 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           mapped.disposition || '',
           mapped.dispositionNotes || '',
           mapped.callSource || '',
-          mapped.buyerChargeStatus || '',
-          mapped.publisherPayoutStatus || '',
+          ...(commercialColumns
+            ? [mapped.buyerChargeStatus || '', mapped.publisherPayoutStatus || '']
+            : []),
           mapped.disputeStatus || '',
-          mapped.recordingUrl || '',
+          /*
+           * A link to the call in the app, never to the audio. The stream URL
+           * used to be written here with a 7-day login token on the end, so
+           * every exported spreadsheet was a working login. The call page
+           * plays the recording to whoever signs in and may hear it.
+           */
+          mapped.recordingUrl ? `${appUrl()}/calls?call=${encodeURIComponent(mapped.id)}` : '',
         ];
 
         if (profile.isAdminOrOwner) {
@@ -3893,67 +3887,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     const profile = await getUserProfile(request, prisma);
 
-    // Enforce access control
-    if (!profile.isAdminOrOwner) {
-      if (profile.userRoles?.includes('PUBLISHER')) {
-        if (call.publisherId !== profile.publisherId) {
-          void reply.code(403);
-          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
-        }
-      } else if (profile.userRoles?.includes('BUYER')) {
-        if (call.buyerId !== profile.buyerId) {
-          void reply.code(403);
-          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
-        }
-      } else if (profile.userRoles?.includes('AGENT')) {
-        // Fetch agent's phone numbers
-        const fetchedNumbers = await prisma.phoneNumber.findMany({
-          where: { tenantId, userId: user?.userId },
-          select: { number: true },
-        });
-        const userNumbers = fetchedNumbers.map(n => n.number);
-        const numberFormats: string[] = [];
-        for (const num of userNumbers) {
-          numberFormats.push(num);
-          if (num.startsWith('+1')) {
-            numberFormats.push(num.substring(2));
-            numberFormats.push(num.substring(1));
-          } else if (num.startsWith('1') && num.length === 11) {
-            numberFormats.push('+' + num);
-            numberFormats.push(num.substring(1));
-          } else if (num.length === 10) {
-            numberFormats.push('+1' + num);
-            numberFormats.push('1' + num);
-          }
-        }
-        const callCaller = call.callerId || '';
-        const callTo = call.toNumber || '';
-        const callDid = call.did || '';
-        const hasNumberMatch =
-          numberFormats.includes(callCaller) ||
-          numberFormats.includes(callTo) ||
-          numberFormats.includes(callDid);
-
-        /*
-         * The call they ANSWERED counts as theirs.
-         *
-         * This used to be `createdById` and a number match, neither of which
-         * an inbound call routed to a softphone satisfies: the row is created
-         * by the inbound handler, not the agent, and the agent owns no
-         * `PhoneNumber` -- their DID belongs to the agency. So an agent could
-         * take a call, write it up, see it in their own figures on My day, and
-         * then be refused when they clicked it to re-read their notes.
-         */
-        const answeredByThisAgent = !!user?.userId && call.answeredByUserId === user.userId;
-
-        if (call.createdById !== user?.userId && !answeredByThisAgent && !hasNumberMatch) {
-          void reply.code(403);
-          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
-        }
-      } else {
-        void reply.code(403);
-        return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
-      }
+    if (!mayReadCall(profile, call, user?.userId)) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
     }
 
     await attachAnsweredBy([call], prisma, tenantId);
@@ -3967,9 +3903,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       profile
     );
 
-    // Eager lookup for matching PingRequest if it was an RTB call
+    /*
+     * The matching PingRequest, for NetEnroll staff only.
+     *
+     * It carries every bid on the call -- each buyer's name and price -- which
+     * is the marketplace's book, not any one agency's. Nobody else is shown it.
+     */
     let pingRequest = null;
-    if (call.did && call.callerId) {
+    if (isPlatformAdminRequest(request) && call.did && call.callerId) {
       pingRequest = await prisma.pingRequest.findFirst({
         where: {
           assignedPhoneNumber: { number: call.did, tenantId },
@@ -4810,6 +4751,25 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     }
 
     /*
+     * Who may write this call up.
+     *
+     * The same rule as reading it (`mayReadCall`), minus the counterparties: a
+     * buyer or publisher may see their own traffic but a disposition is the
+     * agency's record of what its agent did, and is not theirs to change. This
+     * route had no check at all past the tenant, so any agent could rewrite a
+     * colleague's disposition -- and with it their closing figures -- by id.
+     */
+    const profile = await getUserProfile(request, prisma);
+    if (!profile.isAdminOrOwner) {
+      const isCounterparty =
+        profile.userRoles?.includes('BUYER') || profile.userRoles?.includes('PUBLISHER');
+      if (isCounterparty || !mayReadCall(profile, call, user?.userId)) {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
+      }
+    }
+
+    /*
      * Marking this call a sale, days after it happened.
      *
      * The application is required, in the same shape and on the same terms as
@@ -5033,6 +4993,23 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       }
     }
 
+    /*
+     * One dispute per call. A call that already carries one -- open, or
+     * decided ACCEPTED or DENIED -- is refused rather than overwritten: a
+     * refiled dispute on a DENIED call used to reset it to DISPUTED and erase
+     * the decision, and a buyer could keep a denied call in dispute forever.
+     */
+    const alreadyDisputed = {
+      error: {
+        code: 'ALREADY_DISPUTED',
+        message: 'A dispute has already been filed on this call',
+      },
+    };
+    if (call.disputeStatus !== null) {
+      void reply.code(409);
+      return alreadyDisputed;
+    }
+
     // 3. Update Call with dispute status and save reason in metadata
     const metadata = (call.metadata as Record<string, any>) || {};
     const updatedMetadata = {
@@ -5042,20 +5019,93 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       disputedBy: userRecord.email,
     };
 
-    const updatedCall = await prisma.call.update({
-      where: { id: callId },
+    // Conditional on the column still being empty, so two concurrent filings
+    // cannot both succeed.
+    const { count } = await prisma.call.updateMany({
+      where: { id: callId, tenantId, disputeStatus: null },
       data: {
         disputeStatus: 'DISPUTED',
         metadata: updatedMetadata,
       },
     });
+    if (count === 0) {
+      void reply.code(409);
+      return alreadyDisputed;
+    }
 
     return {
       success: true,
-      callId: updatedCall.id,
-      disputeStatus: updatedCall.disputeStatus,
+      callId,
+      disputeStatus: 'DISPUTED',
     };
   });
+
+  /**
+   * POST /api/v1/calls/:callId/accept
+   *
+   * The buyer confirming a call was what they paid for. It records when, in
+   * `metadata.acceptedByBuyerAt`, and changes nothing else: the charge already
+   * happened when the call crossed its threshold, so `buyerChargeStatus` is
+   * left exactly as it is, and the disposition is the agency's record of what
+   * its agent did, not the buyer's to write.
+   *
+   * The buyer portal's Accept button used to POST to the disposition route,
+   * which answers PATCH only, so every click 404'd.
+   *
+   * Only the buyer the call was sold to may accept it. Accepting twice keeps
+   * the first time.
+   */
+  fastify.post<{ Params: { callId: string } }>(
+    '/api/v1/calls/:callId/accept',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const profile = await getUserProfile(request, prisma);
+      if (!user?.userId || !profile.buyerId) {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Only a buyer can accept a call' } };
+      }
+
+      const { callId } = request.params;
+      const call = await prisma.call.findFirst({
+        where: { id: callId, tenantId },
+        select: { id: true, buyerId: true, buyerChargeStatus: true, metadata: true },
+      });
+      if (!call) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+      }
+      if (call.buyerId !== profile.buyerId) {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'You can only accept your own calls' } };
+      }
+
+      const metadata = (call.metadata as Record<string, unknown> | null) ?? {};
+      const acceptedByBuyerAt =
+        typeof metadata.acceptedByBuyerAt === 'string'
+          ? metadata.acceptedByBuyerAt
+          : new Date().toISOString();
+
+      if (metadata.acceptedByBuyerAt !== acceptedByBuyerAt) {
+        await prisma.call.update({
+          where: { id: call.id },
+          data: { metadata: { ...metadata, acceptedByBuyerAt } as Prisma.InputJsonValue },
+        });
+      }
+
+      return {
+        success: true,
+        callId: call.id,
+        acceptedByBuyerAt,
+        buyerChargeStatus: call.buyerChargeStatus,
+      };
+    }
+  );
 
   /**
    * GET /api/v1/publishers/:publisherId/payouts
@@ -6390,20 +6440,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       : new Date(now.getFullYear(), now.getMonth(), 1);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : now;
 
-    let userNumbers: string[] = [];
-    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
-      const fetchedNumbers = await prisma.phoneNumber.findMany({
-        where: { tenantId, userId: user.userId },
-        select: { number: true },
-      });
-      userNumbers = fetchedNumbers.map(n => n.number);
-    }
-
     const whereClause = buildCallWhere({
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
       userId: user?.userId,
-      userNumbers,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       buyerId: profile.buyerId,
@@ -6414,7 +6454,6 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
       userId: user?.userId,
-      userNumbers,
       buyerId: profile.buyerId,
       publisherId: profile.publisherId,
     });
@@ -7789,6 +7828,27 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 // Public API - Billing
 export async function registerBillingRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+
+  /*
+   * The agency's own invoices and balance -- what NetEnroll bills the tenant.
+   *
+   * A buyer or publisher is a user inside the tenant too, so these tenant-
+   * scoped reads handed them the agency's platform bill. They are refused;
+   * a buyer's statement is its own ledger (`/api/v1/buyers/:id/...`).
+   */
+  async function isCounterparty(request: FastifyRequest, prisma: any): Promise<boolean> {
+    const profile = await getUserProfile(request, prisma);
+    if (profile.isAdminOrOwner) return false;
+    return (
+      !!profile.userRoles?.includes('BUYER') ||
+      !!profile.userRoles?.includes('PUBLISHER') ||
+      !!profile.buyerId ||
+      !!profile.publisherId
+    );
+  }
+  const COUNTERPARTY_REFUSAL = {
+    error: { code: 'FORBIDDEN', message: "The agency's billing is not visible to this account" },
+  };
   fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/v1/billing/invoices',
     async (request, reply) => {
@@ -7799,6 +7859,10 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      if (await isCounterparty(request, prisma)) {
+        void reply.code(403);
+        return COUNTERPARTY_REFUSAL;
+      }
       const page = parseInt(request.query.page || '1');
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
@@ -7885,6 +7949,10 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      if (await isCounterparty(request, prisma)) {
+        void reply.code(403);
+        return COUNTERPARTY_REFUSAL;
+      }
       const { invoiceId } = request.params as { invoiceId: string };
 
       // Get billing account for tenant
@@ -7945,6 +8013,10 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    if (await isCounterparty(request, prisma)) {
+      void reply.code(403);
+      return COUNTERPARTY_REFUSAL;
+    }
 
     // Get billing account for tenant
     const billingAccount = await prisma.billingAccount.findFirst({

@@ -111,16 +111,6 @@ export async function registerPingRoutes(fastify: FastifyInstance): Promise<void
             keyHash,
             status: 'ACTIVE',
           },
-          include: {
-            tenant: {
-              include: {
-                publishers: {
-                  where: { status: 'ACTIVE' },
-                  take: 1,
-                },
-              },
-            },
-          },
         });
 
         if (!apiKeyRecord) {
@@ -148,21 +138,27 @@ export async function registerPingRoutes(fastify: FastifyInstance): Promise<void
           };
         }
 
-        // Get publisher ID from the key's tenant or from metadata
+        /*
+         * The publisher this key belongs to, and no other.
+         *
+         * Keys store it in the `publisherId` column; `metadata.publisherId` is
+         * the older place and is still read as a fallback. The fallback after
+         * that used to be `tenant.publishers[0]` -- the tenant's first active
+         * publisher -- and since keys minted by the portal never had it in
+         * metadata, every publisher's traffic was credited to that one. A key
+         * with no publisher of its own is refused rather than guessed at.
+         */
         const publisherId =
-          (apiKeyRecord.metadata as { publisherId?: string })?.publisherId ||
-          apiKeyRecord.tenant.publishers[0]?.id;
+          apiKeyRecord.publisherId ??
+          (apiKeyRecord.metadata as { publisherId?: string } | null)?.publisherId ??
+          null;
 
         if (!publisherId) {
-          logger.warn({
-            msg: 'No publisher associated with API key',
-            tenantId: apiKeyRecord.tenantId,
-          });
-          void reply.code(400);
+          void reply.code(403);
           return {
             error: {
-              code: 'BAD_REQUEST',
-              message: 'No publisher associated with this API key',
+              code: 'PUBLISHER_KEY_REQUIRED',
+              message: 'This API key does not belong to a publisher',
             },
           };
         }

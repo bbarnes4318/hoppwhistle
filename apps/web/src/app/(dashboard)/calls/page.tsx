@@ -1700,7 +1700,8 @@ export default function OperationsCallLogsPage() {
                   <TabsList className="mb-6 flex-shrink-0">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                    <TabsTrigger value="billing">Money</TabsTrigger>
+                    {/* Money, and who bought and sold the call, are the principals'. */}
+                    {canSeeFinance ? <TabsTrigger value="billing">Money</TabsTrigger> : null}
                     {/* The auction record and the raw ledger are NetEnroll's. */}
                     {isPlatformAdmin ? (
                       <>
@@ -1757,42 +1758,48 @@ export default function OperationsCallLogsPage() {
                     )}
 
                     {/* Metadata grids */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={canSeeFinance ? 'grid grid-cols-2 gap-4' : 'grid gap-4'}>
                       <div className="rounded-card bg-sunken p-3 space-y-1">
                         <span className="t-label block text-ink-3">Caller Number</span>
                         <p className="t-data font-medium text-ink">
                           {detailCall.callerId ? formatPhoneNumber(detailCall.callerId) : '—'}
                         </p>
                       </div>
-                      <div className="rounded-card bg-sunken p-3 space-y-1">
-                        <span className="t-label block text-ink-3">Destination Number</span>
-                        <p className="t-data font-medium text-ink">
-                          {detailCall.toNumber && detailCall.toNumber !== 'Masked'
-                            ? formatPhoneNumber(detailCall.toNumber)
-                            : 'Masked'}
-                        </p>
-                      </div>
+                      {canSeeFinance && (
+                        <div className="rounded-card bg-sunken p-3 space-y-1">
+                          <span className="t-label block text-ink-3">Destination Number</span>
+                          <p className="t-data font-medium text-ink">
+                            {detailCall.toNumber && detailCall.toNumber !== 'Masked'
+                              ? formatPhoneNumber(detailCall.toNumber)
+                              : 'Masked'}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className={canSeeFinance ? 'grid grid-cols-3 gap-4' : 'grid gap-4'}>
                       <div className="rounded-card bg-sunken p-3 space-y-0.5">
                         <span className="t-label block text-ink-3">Campaign</span>
                         <p className="truncate text-sm font-medium text-ink">
                           {detailCall.campaignName || '—'}
                         </p>
                       </div>
-                      <div className="rounded-card bg-sunken p-3 space-y-0.5">
-                        <span className="t-label block text-ink-3">Publisher</span>
-                        <p className="truncate text-sm font-medium text-ink">
-                          {detailCall.publisherName || '—'}
-                        </p>
-                      </div>
-                      <div className="rounded-card bg-sunken p-3 space-y-0.5">
-                        <span className="t-label block text-ink-3">Buyer</span>
-                        <p className="truncate text-sm font-medium text-ink">
-                          {detailCall.buyerName || '—'}
-                        </p>
-                      </div>
+                      {canSeeFinance && (
+                        <>
+                          <div className="rounded-card bg-sunken p-3 space-y-0.5">
+                            <span className="t-label block text-ink-3">Publisher</span>
+                            <p className="truncate text-sm font-medium text-ink">
+                              {detailCall.publisherName || '—'}
+                            </p>
+                          </div>
+                          <div className="rounded-card bg-sunken p-3 space-y-0.5">
+                            <span className="t-label block text-ink-3">Buyer</span>
+                            <p className="truncate text-sm font-medium text-ink">
+                              {detailCall.buyerName || '—'}
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Financial Performance snapshot */}
@@ -1923,89 +1930,91 @@ export default function OperationsCallLogsPage() {
                     )}
                   </TabsContent>
 
-                  {/* TAB 3: BILLING */}
-                  <TabsContent value="billing" className="space-y-6">
-                    <div className="space-y-4">
-                      <h3 className="t-label text-brand-ink">Billing Snapshot Rules</h3>
-                      <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <span className="text-ink-3 font-medium">Billable Threshold</span>
-                            <p className="font-bold text-ink mt-0.5">
-                              {detailCall.billableDurationThreshold
-                                ? `${detailCall.billableDurationThreshold} seconds`
-                                : '60 seconds (Default)'}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-ink-3 font-medium">Billable Result</span>
-                            <p className="font-bold text-ink mt-0.5">
-                              {detailCall.billable ? 'Billable' : 'Non-Billable'}
-                            </p>
-                          </div>
-                        </div>
-                        <Separator className="bg-rule" />
-                        <div>
-                          <span className="text-ink-3 font-medium">Billing Reason</span>
-                          <p className="font-medium text-brand-ink mt-1 font-sans leading-relaxed">
-                            {detailCall.billableReason || '—'}
-                          </p>
-                        </div>
-                        {detailCall.noPayoutReason && (
-                          <>
-                            <Separator className="bg-rule" />
+                  {/* TAB 3: BILLING. Principals and finance only. */}
+                  {canSeeFinance ? (
+                    <TabsContent value="billing" className="space-y-6">
+                      <div className="space-y-4">
+                        <h3 className="t-label text-brand-ink">Billing Snapshot Rules</h3>
+                        <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
+                          <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <span className="text-dropped-ink font-medium">
-                                Payout Denied Reason
-                              </span>
-                              <p className="mt-0.5 font-medium text-dropped-ink">
-                                {detailCall.noPayoutReason}
+                              <span className="text-ink-3 font-medium">Billable Threshold</span>
+                              <p className="font-bold text-ink mt-0.5">
+                                {detailCall.billableDurationThreshold
+                                  ? `${detailCall.billableDurationThreshold} seconds`
+                                  : '60 seconds (Default)'}
                               </p>
                             </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Accruals ledger lists (Admin only) */}
-                    {isAdminOrOwner && (
-                      <div className="space-y-3">
-                        <h3 className="t-label text-brand-ink">Accruals Ledger Entries</h3>
-                        {detailCall.accruals && detailCall.accruals.length > 0 ? (
-                          <div className="overflow-hidden rounded-card border border-rule">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Type</TableHead>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead className="text-right">Amount</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {detailCall.accruals.map(acc => (
-                                  <TableRow key={acc.id} className="border-rule">
-                                    <TableCell className="t-meta font-medium uppercase text-ink">
-                                      {acc.type.replace('_', ' ')}
-                                    </TableCell>
-                                    <TableCell className="t-meta text-ink-2">
-                                      {acc.description}
-                                    </TableCell>
-                                    <TableCell
-                                      className={`t-num text-right font-semibold ${acc.type.includes('PAYOUT') ? 'text-money-ink' : 'text-ink'}`}
-                                    >
-                                      ${Number(acc.amount).toFixed(2)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                            <div>
+                              <span className="text-ink-3 font-medium">Billable Result</span>
+                              <p className="font-bold text-ink mt-0.5">
+                                {detailCall.billable ? 'Billable' : 'Non-Billable'}
+                              </p>
+                            </div>
                           </div>
-                        ) : (
-                          <p className="text-xs text-ink-3 italic">No accrual records stored.</p>
-                        )}
+                          <Separator className="bg-rule" />
+                          <div>
+                            <span className="text-ink-3 font-medium">Billing Reason</span>
+                            <p className="font-medium text-brand-ink mt-1 font-sans leading-relaxed">
+                              {detailCall.billableReason || '—'}
+                            </p>
+                          </div>
+                          {detailCall.noPayoutReason && (
+                            <>
+                              <Separator className="bg-rule" />
+                              <div>
+                                <span className="text-dropped-ink font-medium">
+                                  Payout Denied Reason
+                                </span>
+                                <p className="mt-0.5 font-medium text-dropped-ink">
+                                  {detailCall.noPayoutReason}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </TabsContent>
+
+                      {/* Accruals ledger lists (Admin only) */}
+                      {isAdminOrOwner && (
+                        <div className="space-y-3">
+                          <h3 className="t-label text-brand-ink">Accruals Ledger Entries</h3>
+                          {detailCall.accruals && detailCall.accruals.length > 0 ? (
+                            <div className="overflow-hidden rounded-card border border-rule">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {detailCall.accruals.map(acc => (
+                                    <TableRow key={acc.id} className="border-rule">
+                                      <TableCell className="t-meta font-medium uppercase text-ink">
+                                        {acc.type.replace('_', ' ')}
+                                      </TableCell>
+                                      <TableCell className="t-meta text-ink-2">
+                                        {acc.description}
+                                      </TableCell>
+                                      <TableCell
+                                        className={`t-num text-right font-semibold ${acc.type.includes('PAYOUT') ? 'text-money-ink' : 'text-ink'}`}
+                                      >
+                                        ${Number(acc.amount).toFixed(2)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-ink-3 italic">No accrual records stored.</p>
+                          )}
+                        </div>
+                      )}
+                    </TabsContent>
+                  ) : null}
 
                   {/* TAB 4: PING/POST BIDS. Platform admins only. */}
                   {isPlatformAdmin ? (

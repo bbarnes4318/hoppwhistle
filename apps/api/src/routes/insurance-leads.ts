@@ -11,7 +11,7 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-import { agentScopeFor, mayReachOwnedRow } from '../lib/agent-scope.js';
+import { agentScopeFor, isAgencyPrincipal, mayReachOwnedRow } from '../lib/agent-scope.js';
 import {
   permits,
   resolveStateAuthority,
@@ -798,6 +798,15 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return sendTenantRefusal(request, reply);
     }
 
+    // Deletes every lead on the list with it -- the same rule as the bulk
+    // delete of leads.
+    if (!isAgencyPrincipal(request)) {
+      void reply.code(403);
+      return {
+        error: { code: 'FORBIDDEN', message: 'Only an owner or administrator can delete leads' },
+      };
+    }
+
     const { id } = request.params;
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
@@ -1475,6 +1484,18 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const tenantId = getTenantId(request);
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
+    }
+
+    /*
+     * Deleting leads is an agency principal's call. This had no role check, so
+     * any agent -- including one scoped to their own assigned leads everywhere
+     * else in this file -- could delete the agency's whole book by id.
+     */
+    if (!isAgencyPrincipal(request)) {
+      void reply.code(403);
+      return {
+        error: { code: 'FORBIDDEN', message: 'Only an owner or administrator can delete leads' },
+      };
     }
 
     const { ids } = request.body;

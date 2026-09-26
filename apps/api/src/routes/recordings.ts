@@ -2,10 +2,14 @@ import type { Call, Prisma, RecordingStatus } from '@prisma/client';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { RECORDING_TOKEN_TTL_SECONDS, signRecordingToken } from '../lib/recording-token.js';
 import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { RecordingService } from '../services/recording-service.js';
 
 const recordingService = new RecordingService();
+
+/** Matches no call: an agent principal with no user id sees nothing. */
+const NO_USER = ' ';
 const prisma = getPrismaClient();
 
 function getPublicApiBaseUrl(request: FastifyRequest): string {
@@ -205,12 +209,11 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   }
 
   // Helper to verify recording access permissions
-  async function checkRecordingAccess(
+  function checkRecordingAccess(
     recording: { call: Call | null },
     profile: Awaited<ReturnType<typeof getUserProfile>>,
-    tenantId: string,
     userId?: string
-  ): Promise<boolean> {
+  ): boolean {
     if (profile.isAdminOrOwner) {
       return true;
     }
@@ -221,33 +224,14 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       return !!(profile.buyerAccessToRecordings && recording.call?.buyerId === profile.buyerId);
     }
     if (profile.userRoles.includes('AGENT') && userId) {
-      if (recording.call?.createdById === userId) {
-        return true;
-      }
-      // Fetch agent's phone numbers
-      const fetchedNumbers = await prisma.phoneNumber.findMany({
-        where: { tenantId, userId },
-        select: { number: true },
-      });
-      const userNumbers = fetchedNumbers.map(n => n.number);
-      const numberFormats: string[] = [];
-      for (const num of userNumbers) {
-        numberFormats.push(num);
-        if (num.startsWith('+1')) {
-          numberFormats.push(num.substring(2));
-          numberFormats.push(num.substring(1));
-        } else if (num.startsWith('1') && num.length === 11) {
-          numberFormats.push('+' + num);
-          numberFormats.push(num.substring(1));
-        } else if (num.length === 10) {
-          numberFormats.push('+1' + num);
-          numberFormats.push('1' + num);
-        }
-      }
-      const callCaller = recording.call?.callerId || '';
-      const callTo = recording.call?.toNumber || '';
-      const callDid = recording.call?.did || '';
-      return numberFormats.includes(callCaller) || numberFormats.includes(callTo) || numberFormats.includes(callDid);
+      /*
+       * The calls this agent answered -- the same rule as the call list and
+       * the call detail (`buildCallWhere`, `mayReadCall` in routes/index.ts).
+       * This used to match the agent's phone numbers against the call's
+       * caller, destination and DID; the DID belongs to the agency, so a
+       * number shared across a team opened a colleague's recordings.
+       */
+      return recording.call?.answeredByUserId === userId;
     }
     return false;
   }
@@ -315,33 +299,8 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
         callWhere.buyerId = profile.buyerId;
       } else if (profile.userRoles.includes('AGENT')) {
-        // Fetch agent's phone numbers
-        const fetchedNumbers = await prisma.phoneNumber.findMany({
-          where: { tenantId, userId: request.user?.userId },
-          select: { number: true },
-        });
-        const userNumbers = fetchedNumbers.map(n => n.number);
-        const numberFormats: string[] = [];
-        for (const num of userNumbers) {
-          numberFormats.push(num);
-          if (num.startsWith('+1')) {
-            numberFormats.push(num.substring(2));
-            numberFormats.push(num.substring(1));
-          } else if (num.startsWith('1') && num.length === 11) {
-            numberFormats.push('+' + num);
-            numberFormats.push(num.substring(1));
-          } else if (num.length === 10) {
-            numberFormats.push('+1' + num);
-            numberFormats.push('1' + num);
-          }
-        }
-        callWhere.OR = [
-          { createdById: request.user?.userId },
-          { fromNumber: { userId: request.user?.userId } },
-          { callerId: { in: numberFormats } },
-          { toNumber: { in: numberFormats } },
-          { did: { in: numberFormats } },
-        ];
+        // The calls this agent answered -- see `checkRecordingAccess`.
+        callWhere.answeredByUserId = request.user?.userId ?? NO_USER;
       } else {
         return {
           data: [],
@@ -428,7 +387,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       const profile = await getUserProfile(request);
-      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
+      const isAllowed = checkRecordingAccess(recording, profile, request.user?.userId);
 
       if (!isAllowed) {
         void reply.code(403);
@@ -484,29 +443,29 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       const profile = await getUserProfile(request);
-      const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
+      const isAllowed = checkRecordingAccess(recording, profile, request.user?.userId);
 
       if (!isAllowed) {
         void reply.code(403);
         return { error: { code: 'FORBIDDEN', message: 'Access denied to this recording' } };
       }
 
-      const token = await reply.jwtSign(
-        {
-          tenantId,
-          userId: request.user?.userId,
-          email: request.user?.email,
-        },
-        { expiresIn: '1h' }
-      );
+      // A pass for this one stream, for 15 minutes -- never a login token.
+      // See `lib/recording-token.ts`.
+      const token = signRecordingToken(fastify, {
+        tenantId,
+        userId: request.user?.userId,
+        email: request.user?.email,
+        recordingId,
+      });
 
       const apiBaseUrl = getPublicApiBaseUrl(request);
-      const playbackUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${recordingId}/stream?token=${token}`;
+      const playbackUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${encodeURIComponent(recordingId)}/stream?token=${token}`;
 
       return {
         url: playbackUrl,
-        expiresIn: 3600,
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        expiresIn: RECORDING_TOKEN_TTL_SECONDS,
+        expiresAt: new Date(Date.now() + RECORDING_TOKEN_TTL_SECONDS * 1000).toISOString(),
       };
     } catch (error) {
       void reply.code(404);
@@ -548,7 +507,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
 
         const profile = await getUserProfile(request);
-        const isAllowed = await checkRecordingAccess(recording, profile, tenantId, request.user?.userId);
+        const isAllowed = checkRecordingAccess(recording, profile, request.user?.userId);
 
         if (!isAllowed) {
           void reply.code(403);
@@ -648,7 +607,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
    * acting tenant from the authenticated principal, the row looked up WITH that
    * tenant in the query rather than checked afterwards, and then
    * `checkRecordingAccess`, which narrows an AGENT to recordings of calls they
-   * created or took on one of their own numbers.
+   * answered.
    *
    * The storage key is an identifier, never a credential. Holding one proves
    * nothing and grants nothing; it only names the row whose ownership is then
@@ -700,7 +659,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
 
     if (recording) {
       const profile = await getUserProfile(request);
-      authorized = await checkRecordingAccess(recording, profile, tenantId, userId);
+      authorized = checkRecordingAccess(recording, profile, userId);
     } else {
       /*
        * A Recording Analyzer upload. Owned by the user who uploaded it, inside

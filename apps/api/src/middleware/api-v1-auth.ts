@@ -23,6 +23,7 @@ import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from '../lib/dem
 import { loadPlatformContext } from '../lib/platform-admin.js';
 import { hydratePrincipal } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { recordingIdFromStreamPath, verifyRecordingToken } from '../lib/recording-token.js';
 import { loadTenantWhiteLabel } from '../lib/white-label.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
@@ -86,18 +87,26 @@ export function registerApiV1Auth(server: FastifyInstance): void {
         await resolvePrincipal(request);
         return;
       }
-    } else if (queryToken) {
-      let decoded: unknown;
-      let verified = false;
-      try {
-        decoded = server.jwt.verify(queryToken);
-        verified = true;
-      } catch {
-        // JWT failed, try API key / demo tenant fallback
-      }
-
-      if (verified) {
-        request.user = decoded as FastifyRequest['user'];
+    } else if (queryToken && request.method === 'GET') {
+      /*
+       * `?token=` is a recording pass and nothing else.
+       *
+       * It used to be verified as a login token on every /api/v1 route, and
+       * every recording link the app handed out carried a 7-day login token --
+       * so a pasted link was a week-long session. Now only
+       * `GET /api/v1/recordings/:id/stream` reads it, and only a 15-minute,
+       * single-recording token minted by `/recordings/:id/url` passes. A login
+       * token here is not even signed with the right key. See
+       * `lib/recording-token.ts`.
+       */
+      const recordingId = recordingIdFromStreamPath(request.url);
+      const claims = recordingId ? verifyRecordingToken(server, queryToken, recordingId) : null;
+      if (claims) {
+        request.user = {
+          tenantId: claims.tenantId,
+          userId: claims.userId,
+          email: claims.email,
+        } as FastifyRequest['user'];
         await resolvePrincipal(request);
         return;
       }
