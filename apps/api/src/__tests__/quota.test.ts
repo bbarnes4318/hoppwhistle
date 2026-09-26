@@ -168,6 +168,44 @@ describe('Quota Service', () => {
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('Daily minute limit exceeded');
     });
+
+    // The override token lives on the budget, which this check used not to load,
+    // so a valid token was never honoured here.
+    it('loads the budget and honours a valid override token', async () => {
+      mockPrisma.tenant.findUnique.mockImplementation(
+        ({ include }: { include?: { budget?: boolean } }) =>
+          Promise.resolve({
+            id: 'tenant-1',
+            quota: { enabled: true, maxMinutesPerDay: 100 },
+            budget: include?.budget ? { overrideToken: 'let-it-through' } : undefined,
+            quotaOverrides: [],
+          })
+      );
+      mockPrisma.call.findMany.mockResolvedValue([{ duration: 5400 }]);
+
+      const result = await quotaService.checkDailyMinutes('tenant-1', 15, 'let-it-through');
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('Override token used');
+    });
+  });
+
+  describe('checkPhoneNumberQuota', () => {
+    it('loads the budget and honours a valid override token', async () => {
+      mockPrisma.tenant.findUnique.mockImplementation(
+        ({ include }: { include?: { budget?: boolean } }) =>
+          Promise.resolve({
+            id: 'tenant-1',
+            quota: { enabled: true, maxPhoneNumbers: 1 },
+            budget: include?.budget ? { overrideToken: 'let-it-through' } : undefined,
+            quotaOverrides: [],
+          })
+      );
+      mockPrisma.phoneNumber.count.mockResolvedValue(5);
+
+      const result = await quotaService.checkPhoneNumberQuota('tenant-1', 'let-it-through');
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('Override token used');
+    });
   });
 
   describe('checkBudget', () => {

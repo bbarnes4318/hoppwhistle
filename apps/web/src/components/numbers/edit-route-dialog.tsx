@@ -132,7 +132,7 @@ export function EditRouteDialog({
 
     setSaving(true);
     try {
-      await apiClient.patch(`/api/v1/did-routes/${route.id}`, {
+      const response = await apiClient.patch(`/api/v1/did-routes/${route.id}`, {
         destination: routeType === 'CAMPAIGN' ? 'Campaign' : destination,
         label: label || null,
         status,
@@ -140,6 +140,14 @@ export function EditRouteDialog({
         buyerId: routeType === 'STATIC' && buyerId !== 'none' ? buyerId : null,
         campaignId: routeType === 'CAMPAIGN' ? campaignId : null,
       });
+      if (response.error) {
+        toast({
+          title: 'Failed to update route',
+          description: response.error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
 
       toast({
         title: 'Route Updated',
@@ -166,7 +174,15 @@ export function EditRouteDialog({
     }
     setDeleting(true);
     try {
-      await apiClient.delete(`/api/v1/did-routes/${route.id}`);
+      const response = await apiClient.delete(`/api/v1/did-routes/${route.id}`);
+      if (response.error) {
+        toast({
+          title: 'Failed to delete route',
+          description: response.error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
       toast({
         title: 'Route Deleted',
         description: 'Successfully deleted inbound route.',

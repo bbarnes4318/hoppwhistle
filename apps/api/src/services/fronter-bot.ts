@@ -10,7 +10,7 @@
  */
 import * as net from 'net';
 
-import type { LeadStatus } from '@prisma/client';
+import { LeadStatus } from '@prisma/client';
 import modesl from 'modesl';
 import type { Event as ESLEvent } from 'modesl';
 const { Connection: ESLConnection } = modesl;
@@ -24,6 +24,26 @@ const SOCKET_LISTEN_HOST = process.env.FRONTER_SOCKET_HOST || '0.0.0.0';
 const DTMF_TIMEOUT_MS = parseInt(process.env.FRONTER_DTMF_TIMEOUT_MS || '10000', 10);
 const DEFAULT_INTRO_AUDIO = process.env.FRONTER_INTRO_AUDIO || 'ivr/ivr-welcome.wav';
 const TRANSFER_DESTINATION = process.env.FRONTER_TRANSFER_DEST || 'queue-default';
+
+/** What happened on a bot call. */
+type BotOutcome = 'IN_CALL' | 'TRANSFERRED' | 'NOT_INTERESTED' | 'NO_RESPONSE' | 'OTHER' | 'FAILED';
+
+/**
+ * The lead status each bot outcome records.
+ *
+ * The bot used to write its outcome names straight into `Lead.status`, but
+ * none of them is a `LeadStatus`, so every one of those updates was rejected
+ * and only logged: no bot call ever changed a lead. These are the nearest real
+ * statuses. A failure on our side (FAILED) records nothing.
+ */
+const LEAD_STATUS_FOR_OUTCOME: Record<BotOutcome, LeadStatus | null> = {
+  IN_CALL: LeadStatus.CONTACTED,
+  TRANSFERRED: LeadStatus.QUALIFIED,
+  NOT_INTERESTED: LeadStatus.LOST,
+  NO_RESPONSE: LeadStatus.CONTACTED,
+  OTHER: LeadStatus.CONTACTED,
+  FAILED: null,
+};
 
 export class FronterBotService {
   private server: net.Server | null = null;
@@ -281,16 +301,20 @@ export class FronterBotService {
   /**
    * Update lead status in database.
    */
-  private async updateLeadStatus(leadId: string, status: string): Promise<void> {
+  private async updateLeadStatus(leadId: string, outcome: BotOutcome): Promise<void> {
+    const status = LEAD_STATUS_FOR_OUTCOME[outcome];
+    if (!status) {
+      // A failure on our side says nothing about the lead: leave its status alone.
+      logger.warn({ msg: 'Bot call failed; lead status left unchanged', leadId, outcome });
+      return;
+    }
     try {
       await this.prisma.lead.update({
         where: { id: leadId },
-        // NOTE: callers pass values (IN_CALL, TRANSFERRED, FAILED, ...) that are not
-        // LeadStatus members, so Prisma rejects them at runtime and the catch below logs it.
-        data: { status: status as LeadStatus },
+        data: { status },
       });
     } catch (error) {
-      logger.error({ msg: 'Failed to update lead status', leadId, status, error });
+      logger.error({ msg: 'Failed to update lead status', leadId, outcome, status, error });
     }
   }
 }

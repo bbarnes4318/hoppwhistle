@@ -38,9 +38,9 @@ function PublisherTesterPage() {
   // Configuration
   const [keys, setKeys] = useState<ApiKeyRecord[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
-  const [selectedApiKey, setSelectedApiKey] = useState('');
+  // The full key is shown once, when it is generated; the server keeps only its
+  // prefix and a hash, so the tester needs the person to paste the full key.
   const [manualApiKey, setManualApiKey] = useState('');
-  const [useManualKey, setUseManualKey] = useState(false);
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'ping' | 'post'>('ping');
@@ -81,9 +81,8 @@ function PublisherTesterPage() {
       const res = await apiClient.get<{ keys: ApiKeyRecord[] }>(
         `/api/v1/publishers/${publisherId}/keys`
       );
-      if (res.data && res.data.keys && res.data.keys.length > 0) {
+      if (res.data && res.data.keys) {
         setKeys(res.data.keys);
-        setSelectedApiKey(res.data.keys[0].prefix); // Save prefix first
       }
     } catch (err) {
       console.error('Failed to fetch API keys:', err);
@@ -97,7 +96,7 @@ function PublisherTesterPage() {
   }, [fetchKeys]);
 
   const handleSendPing = async () => {
-    const key = useManualKey ? manualApiKey.trim() : selectedApiKey;
+    const key = manualApiKey.trim();
     if (!key) {
       toast.error('API key is required to run the test');
       return;
@@ -166,7 +165,7 @@ function PublisherTesterPage() {
   };
 
   const handleSendPost = async () => {
-    const key = useManualKey ? manualApiKey.trim() : selectedApiKey;
+    const key = manualApiKey.trim();
     if (!key) {
       toast.error('API key is required to run the test');
       return;
@@ -276,51 +275,22 @@ function PublisherTesterPage() {
           </div>
 
           <div className="flex-1 flex flex-col sm:flex-row gap-4 w-full">
-            {!useManualKey ? (
-              <div className="flex-1 flex gap-2 items-center">
-                <select
-                  value={selectedApiKey}
-                  onChange={e => setSelectedApiKey(e.target.value)}
-                  className="bg-surface border border-rule rounded-control p-2 text-sm text-ink focus:border-brand-ink outline-none w-full max-w-md"
-                >
-                  {loadingKeys ? (
-                    <option>Loading API keys...</option>
-                  ) : keys.length === 0 ? (
-                    <option>No API Keys found - generate one first</option>
-                  ) : (
-                    keys.map(k => (
-                      <option key={k.id} value={k.prefix}>
-                        {k.name} ({k.prefix}...)
-                      </option>
-                    ))
-                  )}
-                </select>
-                <Button
-                  variant="link"
-                  onClick={() => setUseManualKey(true)}
-                  className="text-xs text-brand-ink hover:text-brand-ink p-0"
-                >
-                  Enter key manually
-                </Button>
-              </div>
-            ) : (
-              <div className="flex-1 flex gap-2 items-center w-full">
-                <Input
-                  type="password"
-                  placeholder="Enter raw API key (hw_pub_...)"
-                  value={manualApiKey}
-                  onChange={e => setManualApiKey(e.target.value)}
-                  className="bg-surface border-rule text-ink focus:border-brand-ink max-w-md"
-                />
-                <Button
-                  variant="link"
-                  onClick={() => setUseManualKey(false)}
-                  className="text-xs text-brand-ink hover:text-brand-ink p-0"
-                >
-                  Use generated keys
-                </Button>
-              </div>
-            )}
+            <div className="flex-1 flex flex-col gap-1 w-full">
+              <Input
+                type="password"
+                placeholder="Paste your full API key (hw_pub_...)"
+                value={manualApiKey}
+                onChange={e => setManualApiKey(e.target.value)}
+                className="bg-surface border-rule text-ink focus:border-brand-ink max-w-md"
+              />
+              <p className="text-xs text-ink-3">
+                {loadingKeys
+                  ? 'Loading your API keys...'
+                  : keys.length === 0
+                    ? 'No API keys found - generate one first.'
+                    : `Your keys: ${keys.map(k => `${k.name} (${k.prefix}...)`).join(', ')}. The full key is only shown when it is generated.`}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -157,23 +157,26 @@ export class ComplianceService {
   async checkOverride(
     tenantId: string,
     phoneNumber: string,
-    _callId?: string
+    callId?: string
   ): Promise<{ hasOverride: boolean; overrideId?: string; expiresAt?: Date }> {
     const normalized = this.normalizePhoneNumber(phoneNumber);
 
-    // NOTE: this filter used to carry a second `OR` key scoping the override to
-    // `callId` (or a global override). Duplicate keys in an object literal keep
-    // only the last one, so that callId clause never reached Prisma and any
-    // unexpired override for the number matches regardless of call. The dead
-    // clause was removed to keep the query exactly as it has always run;
-    // restoring call scoping (AND of both ORs) is a behaviour change to review.
+    /*
+     * An override applies to the call it was granted for, or -- when it names
+     * no call -- to every call to the number. And it must not have expired.
+     *
+     * Both conditions are ORs, so they sit together under an AND. They used to
+     * be two `OR` keys in one object, and JavaScript keeps only the last
+     * duplicate key: the call condition was silently dropped, and an override
+     * granted for one call waved through every call to that number.
+     */
     const override = await this.prisma.complianceOverride.findFirst({
       where: {
         tenantId,
         phoneNumber: normalized,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
+        AND: [
+          { OR: [...(callId ? [{ callId }] : []), { callId: null }] },
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
         ],
       },
       orderBy: {
