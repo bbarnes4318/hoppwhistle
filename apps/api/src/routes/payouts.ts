@@ -20,7 +20,7 @@
  *
  * ── What a payment covers ────────────────────────────────────────────────────
  *
- * Exactly the publisher's calls that are PAYABLE, carry no dispute, and were
+ * Exactly the publisher's calls that are PAYABLE, carry no OPEN dispute, and were
  * created inside [periodFrom, periodTo], in this tenant. They are selected,
  * summed and marked PAID in one transaction, and the update is conditional on
  * each call still being PAYABLE and undisputed: two operators recording the
@@ -28,13 +28,15 @@
  * refused 409, as is any range with nothing payable in it.
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
+import { OPEN_DISPUTE, isOpenDispute } from '../lib/dispute-status.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { requireWhiteLabelOperator } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
+import type { ResolvedPeriod } from '../services/leaderboard/period.js';
 
 import { periodFromQuery, type PeriodQuery } from './call-sales.js';
 
@@ -86,6 +88,125 @@ function instant(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** One publisher's line on the Payouts screen. */
+export interface PayoutsPublisherRow {
+  publisherId: string;
+  publisherName: string;
+  payable: number;
+  payableCalls: number;
+  held: number;
+  paid: number;
+  lastPayment: ReturnType<typeof paymentView> | null;
+}
+
+export interface PayoutsSummary {
+  publishers: PayoutsPublisherRow[];
+  payments: Array<ReturnType<typeof paymentView>>;
+  /** Across every publisher: what is owed now, and on how many calls. */
+  totals: { payable: number; payableCalls: number };
+}
+
+/**
+ * What the acting tenant owes, holds and has paid each of its publishers over
+ * one period.
+ *
+ * Its own function, not inline in the route, because the white-label Today
+ * screen shows the same "owed to publishers" figure and two copies of this
+ * arithmetic is how the two screens would come to disagree.
+ *
+ * A call is HELD while its payout status is HELD or it carries an OPEN dispute
+ * (`isOpenDispute`). A decided return is not open: a denied one is payable
+ * again, and an accepted one has had its payout zeroed or was already PAID.
+ */
+export async function getPayoutsSummary(
+  prisma: Pick<PrismaClient, 'publisher' | 'call' | 'publisherPayment'>,
+  tenantId: string,
+  period: Pick<ResolvedPeriod, 'start' | 'endExclusive'>
+): Promise<PayoutsSummary> {
+  const [publishers, calls, payments] = await Promise.all([
+    prisma.publisher.findMany({
+      where: { tenantId },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.call.findMany({
+      where: {
+        tenantId,
+        publisherId: { not: null },
+        createdAt: { gte: period.start, lt: period.endExclusive },
+      },
+      select: {
+        publisherId: true,
+        publisherPayoutAmount: true,
+        publisherPayoutStatus: true,
+        disputeStatus: true,
+      },
+    }),
+    prisma.publisherPayment.findMany({
+      where: { tenantId },
+      orderBy: { paidAt: 'desc' },
+      take: 100,
+    }),
+  ]);
+
+  const names = new Map(publishers.map(publisher => [publisher.id, publisher.name]));
+
+  const zero = () => new Prisma.Decimal(0);
+  const figures = new Map(
+    publishers.map(publisher => [
+      publisher.id,
+      { payable: zero(), payableCalls: 0, held: zero(), paid: zero() },
+    ])
+  );
+
+  for (const call of calls) {
+    const row = call.publisherId ? figures.get(call.publisherId) : undefined;
+    if (!row) continue;
+    const amount = call.publisherPayoutAmount
+      ? new Prisma.Decimal(call.publisherPayoutAmount)
+      : zero();
+
+    if (call.publisherPayoutStatus === 'PAID') {
+      row.paid = row.paid.plus(amount);
+    } else if (call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus)) {
+      row.held = row.held.plus(amount);
+    } else if (call.publisherPayoutStatus === 'PAYABLE') {
+      row.payable = row.payable.plus(amount);
+      row.payableCalls++;
+    }
+  }
+
+  const lastPayment = new Map<string, PaymentRow>();
+  for (const payment of payments) {
+    if (!lastPayment.has(payment.publisherId)) lastPayment.set(payment.publisherId, payment);
+  }
+
+  let totalPayable = zero();
+  let totalPayableCalls = 0;
+  for (const row of figures.values()) {
+    totalPayable = totalPayable.plus(row.payable);
+    totalPayableCalls += row.payableCalls;
+  }
+
+  return {
+    publishers: publishers.map(publisher => {
+      const row = figures.get(publisher.id)!;
+      const last = lastPayment.get(publisher.id);
+      return {
+        publisherId: publisher.id,
+        publisherName: publisher.name,
+        payable: money(row.payable),
+        payableCalls: row.payableCalls,
+        held: money(row.held),
+        paid: money(row.paid),
+        lastPayment: last ? paymentView(last, names) : null,
+      };
+    }),
+    payments: payments.map(payment => paymentView(payment, names)),
+    totals: { payable: money(totalPayable), payableCalls: totalPayableCalls },
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
@@ -100,63 +221,7 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
       const period = periodFromQuery(request.query, reply);
       if (!period) return;
 
-      const [publishers, calls, payments] = await Promise.all([
-        prisma.publisher.findMany({
-          where: { tenantId },
-          select: { id: true, name: true },
-          orderBy: { name: 'asc' },
-        }),
-        prisma.call.findMany({
-          where: {
-            tenantId,
-            publisherId: { not: null },
-            createdAt: { gte: period.start, lt: period.endExclusive },
-          },
-          select: {
-            publisherId: true,
-            publisherPayoutAmount: true,
-            publisherPayoutStatus: true,
-            disputeStatus: true,
-          },
-        }),
-        prisma.publisherPayment.findMany({
-          where: { tenantId },
-          orderBy: { paidAt: 'desc' },
-          take: 100,
-        }),
-      ]);
-
-      const names = new Map(publishers.map(publisher => [publisher.id, publisher.name]));
-
-      const zero = () => new Prisma.Decimal(0);
-      const figures = new Map(
-        publishers.map(publisher => [
-          publisher.id,
-          { payable: zero(), payableCalls: 0, held: zero(), paid: zero() },
-        ])
-      );
-
-      for (const call of calls) {
-        const row = call.publisherId ? figures.get(call.publisherId) : undefined;
-        if (!row) continue;
-        const amount = call.publisherPayoutAmount
-          ? new Prisma.Decimal(call.publisherPayoutAmount)
-          : zero();
-
-        if (call.publisherPayoutStatus === 'PAID') {
-          row.paid = row.paid.plus(amount);
-        } else if (call.publisherPayoutStatus === 'HELD' || call.disputeStatus) {
-          row.held = row.held.plus(amount);
-        } else if (call.publisherPayoutStatus === 'PAYABLE') {
-          row.payable = row.payable.plus(amount);
-          row.payableCalls++;
-        }
-      }
-
-      const lastPayment = new Map<string, PaymentRow>();
-      for (const payment of payments) {
-        if (!lastPayment.has(payment.publisherId)) lastPayment.set(payment.publisherId, payment);
-      }
+      const summary = await getPayoutsSummary(prisma, tenantId, period);
 
       return reply.send({
         data: {
@@ -171,20 +236,8 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
             startsAt: period.start.toISOString(),
             endsAt: new Date(period.endExclusive.getTime() - 1).toISOString(),
           },
-          publishers: publishers.map(publisher => {
-            const row = figures.get(publisher.id)!;
-            const last = lastPayment.get(publisher.id);
-            return {
-              publisherId: publisher.id,
-              publisherName: publisher.name,
-              payable: money(row.payable),
-              payableCalls: row.payableCalls,
-              held: money(row.held),
-              paid: money(row.paid),
-              lastPayment: last ? paymentView(last, names) : null,
-            };
-          }),
-          payments: payments.map(payment => paymentView(payment, names)),
+          publishers: summary.publishers,
+          payments: summary.payments,
         },
       });
     }
@@ -254,7 +307,13 @@ export async function registerPayoutRoutes(fastify: FastifyInstance): Promise<vo
         tenantId,
         publisherId: publisher.id,
         publisherPayoutStatus: 'PAYABLE',
-        disputeStatus: null,
+        /*
+         * No OPEN dispute. Written as an OR because Prisma's
+         * `{ not: 'DISPUTED' }` compiles to `<> 'DISPUTED'`, which is never
+         * true of NULL -- it would drop every call that was never disputed.
+         * A denied return ('DENIED') is payable again.
+         */
+        OR: [{ disputeStatus: null }, { disputeStatus: { not: OPEN_DISPUTE } }],
         createdAt: { gte: periodFrom!, lte: periodTo! },
       };
 

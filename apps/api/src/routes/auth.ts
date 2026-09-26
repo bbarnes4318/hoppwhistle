@@ -8,6 +8,7 @@ import { FastifyInstance } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { loadTenantUpgrades } from '../lib/tenant-upgrades.js';
 import { loadTenantWhiteLabel } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { effectivePermissionsFor } from '../middleware/rbac.js';
@@ -1244,6 +1245,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * anything, exactly as the API does (`lib/white-label.ts`).
        */
       const whiteLabel = await loadTenantWhiteLabel(brandTenantId);
+      /*
+       * The upgrades that same tenant has turned on, from its metadata. Same
+       * tenant, same reason: an operator in the cross-agency view has none,
+       * because there is no agency whose upgrades they are looking at.
+       */
+      const upgrades = await loadTenantUpgrades(brandTenantId);
 
       return reply.send({
         id: user.id,
@@ -1257,6 +1264,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         brand,
         /** The tenant above is on the white-label tier. */
         whiteLabel,
+        /** The upgrade keys turned on for that tenant (`lib/tenant-upgrades.ts`). */
+        upgrades,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,

@@ -261,6 +261,12 @@ async function buildServer() {
   await server.register(registerPayoutRoutes);
   const { registerNetworkRoutes } = await import('./routes/network.js');
   await server.register(registerNetworkRoutes);
+  // Returns (a buyer's disputed call, and the agency's decision on it) and the
+  // Today screen. Same access and scoping as the three above.
+  const { registerReturnRoutes } = await import('./routes/returns.js');
+  await server.register(registerReturnRoutes);
+  const { registerWhiteLabelTodayRoutes } = await import('./routes/white-label-today.js');
+  await server.register(registerWhiteLabelTodayRoutes);
 
   /*
    * Stripe's dispute webhooks. Registered as its own plugin because it installs

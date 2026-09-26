@@ -310,12 +310,19 @@ export class BuyerBillingService {
    * @param amount - Number of leads to add
    * @param adminId - ID of admin performing the action
    * @param description - Optional description for the transaction
+   * @param client - A transaction to run inside instead of opening one. Given
+   *   by a caller whose own writes must commit or fail with this credit -- a
+   *   return being accepted refunds the wallet in the same transaction that
+   *   zeroes the call. The audit row is then written through it too, so a
+   *   rolled-back credit leaves no row claiming it happened. Omitted, this
+   *   behaves exactly as it always has.
    */
   async addCredits(
     buyerId: string,
     amount: number,
     adminId: string,
-    description?: string
+    description?: string,
+    client?: Prisma.TransactionClient
   ): Promise<{ success: boolean; newBalance: number; error?: string }> {
     const prisma = getPrismaClient();
 
@@ -324,7 +331,7 @@ export class BuyerBillingService {
     }
 
     try {
-      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const credit = async (tx: Prisma.TransactionClient) => {
         // Fetch buyer
         const buyer = await tx.buyer.findUnique({
           where: { id: buyerId },
@@ -361,7 +368,7 @@ export class BuyerBillingService {
         });
 
         // Audit log
-        await auditLog({
+        const audit = {
           tenantId: buyer.tenantId,
           userId: adminId,
           action: 'buyer.billing.credit',
@@ -375,7 +382,12 @@ export class BuyerBillingService {
           },
           ipAddress: 'admin',
           success: true,
-        });
+        };
+        if (client) {
+          await tx.auditLog.create({ data: audit });
+        } else {
+          await auditLog(audit);
+        }
 
         if (buyer.status === 'PAUSED') {
           logger.info({
@@ -387,7 +399,9 @@ export class BuyerBillingService {
         }
 
         return Number(newBalance);
-      });
+      };
+
+      const result = client ? await credit(client) : await prisma.$transaction(credit);
 
       return { success: true, newBalance: result };
     } catch (error) {

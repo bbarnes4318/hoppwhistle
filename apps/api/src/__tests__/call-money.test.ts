@@ -53,7 +53,7 @@ const CALLS = [
     publisherPayoutAmount: d('30.2500'),
     cost: d('0.4425'),
     connectedDuration: 420,
-    disputeStatus: 'OPEN',
+    disputeStatus: 'DISPUTED',
   },
   {
     id: 'c4',
