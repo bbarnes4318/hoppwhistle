@@ -34,7 +34,12 @@ export interface ReturnRow {
     decidedBy: string | null;
     note: string | null;
   } | null;
-  returnAfterPublisherPaid: boolean;
+  /**
+   * An accepted return on a call whose publisher was already paid: the
+   * deduction from that publisher's next payment, and the payment it came out
+   * of (null while it waits).
+   */
+  clawback: { paymentId: string; amount: number; appliedToPaymentId: string | null } | null;
 }
 
 export interface ReturnsPage {

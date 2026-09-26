@@ -6666,11 +6666,16 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       totalEarnings = totalEarnings.plus(payout);
 
       const isPaid = call.publisherPayoutStatus === 'PAID';
-      const isHeld = call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus);
+      // A return accepted after the publisher was paid: its payout is zeroed and
+      // the deduction lives in publisher_payments, so it is neither paid nor held.
+      const isClawedBack = call.publisherPayoutStatus === 'CLAWED_BACK';
+      const isHeld =
+        !isClawedBack &&
+        (call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus));
 
       if (isPaid) totalPaid = totalPaid.plus(payout);
       else if (isHeld) totalHeld = totalHeld.plus(payout);
-      else totalPending = totalPending.plus(payout);
+      else if (!isClawedBack) totalPending = totalPending.plus(payout);
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
@@ -6696,7 +6701,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       g.earnings = g.earnings.plus(payout);
       if (isPaid) g.paid = g.paid.plus(payout);
       else if (isHeld) g.held = g.held.plus(payout);
-      else g.pending = g.pending.plus(payout);
+      else if (!isClawedBack) g.pending = g.pending.plus(payout);
     }
 
     const rows = [...groupsMap.values()].map(g => {
@@ -6805,7 +6810,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         : new Prisma.Decimal(0);
 
       const isPaid = call.publisherPayoutStatus === 'PAID';
-      const isHeld = call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus);
+      // A return accepted after the publisher was paid: its payout is zeroed and
+      // the deduction lives in publisher_payments, so it is neither paid nor held.
+      const isClawedBack = call.publisherPayoutStatus === 'CLAWED_BACK';
+      const isHeld =
+        !isClawedBack &&
+        (call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus));
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
@@ -6829,7 +6839,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       g.earnings = g.earnings.plus(payout);
       if (isPaid) g.paid = g.paid.plus(payout);
       else if (isHeld) g.held = g.held.plus(payout);
-      else g.pending = g.pending.plus(payout);
+      else if (!isClawedBack) g.pending = g.pending.plus(payout);
     }
 
     let totalCalls = 0;

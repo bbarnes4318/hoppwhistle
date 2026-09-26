@@ -12,10 +12,11 @@
  * decides, it is OPEN: its revenue is counted as disputed and its publisher
  * payout is held. The decision closes it one of two ways, on the call itself:
  *
- *   ACCEPT   the call is given back. Revenue goes to zero; the publisher's
- *            payout goes to zero too unless it was already PAID, in which case
- *            it stands and the call is flagged `returnAfterPublisherPaid` for
- *            the agency to settle with the publisher by hand. A prepaid
+ *   ACCEPT   the call is given back. Revenue goes to zero, and so does the
+ *            publisher's payout. When the publisher was already PAID for it,
+ *            the payout becomes a CLAWBACK row in publisher_payments (a
+ *            negative amount) that comes out of that publisher's next payment,
+ *            and the call reads CLAWED_BACK. A prepaid
  *            (UPFRONT) buyer whose wallet was charged gets the ORIGINAL amount
  *            back through `buyerBillingService.addCredits`; anybody else's
  *            charge is waived.
@@ -144,7 +145,53 @@ export interface ReturnRow {
     decidedBy: string | null;
     note: string | null;
   } | null;
-  returnAfterPublisherPaid: boolean;
+  /**
+   * The deduction an accepted return made from a publisher who had already
+   * been paid for the call: the CLAWBACK row, its (negative) amount, and the
+   * payment it came out of -- null while it waits for the next one.
+   */
+  clawback: ReturnClawback | null;
+}
+
+// A type alias rather than an interface so it is assignable to Prisma's JSON
+// input, where the audit row stores it.
+export type ReturnClawback = {
+  paymentId: string;
+  amount: number;
+  appliedToPaymentId: string | null;
+};
+
+/** The clawback rows a page of returns refers to, by id. */
+export type ClawbackIndex = Map<string, ReturnClawback>;
+
+/** The clawback row a call's metadata points at, or undefined when none. */
+function clawbackIdOf(metadata: Prisma.JsonValue): string | undefined {
+  const id = metadataOf(metadata).clawbackPaymentId;
+  return typeof id === 'string' && id !== '' ? id : undefined;
+}
+
+/** Load the clawback rows a set of calls point at, within one tenant. */
+async function loadClawbacks(
+  db: Pick<Prisma.TransactionClient, 'publisherPayment'>,
+  tenantId: string,
+  calls: Array<{ metadata: Prisma.JsonValue }>
+): Promise<ClawbackIndex> {
+  const ids = calls.map(c => clawbackIdOf(c.metadata)).filter((id): id is string => !!id);
+  if (ids.length === 0) return new Map();
+  const rows = await db.publisherPayment.findMany({
+    where: { tenantId, id: { in: ids }, kind: 'CLAWBACK' },
+    select: { id: true, amount: true, appliedToPaymentId: true },
+  });
+  return new Map(
+    rows.map(r => [
+      r.id,
+      {
+        paymentId: r.id,
+        amount: Number(r.amount.toFixed(2)),
+        appliedToPaymentId: r.appliedToPaymentId,
+      },
+    ])
+  );
 }
 
 /** A call's metadata as an object, or an empty one when it is anything else. */
@@ -175,7 +222,7 @@ function partyOf(
   return null;
 }
 
-export function returnRowOf(call: ReturnCall): ReturnRow {
+export function returnRowOf(call: ReturnCall, clawbacks: ClawbackIndex = new Map()): ReturnRow {
   const meta = metadataOf(call.metadata);
   const decision = meta.disputeDecision;
 
@@ -213,7 +260,7 @@ export function returnRowOf(call: ReturnCall): ReturnRow {
             note: stringOrNull(meta.decisionNote),
           }
         : null,
-    returnAfterPublisherPaid: meta.returnAfterPublisherPaid === true,
+    clawback: clawbacks.get(clawbackIdOf(call.metadata) ?? '') ?? null,
   };
 }
 
@@ -354,8 +401,10 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
         prisma.call.count({ where: { tenantId, disputeStatus: OPEN_DISPUTE } }),
       ]);
 
+      const clawbacks = await loadClawbacks(prisma, tenantId, calls);
+
       return reply.send({
-        data: calls.map(returnRowOf),
+        data: calls.map(call => returnRowOf(call, clawbacks)),
         meta: {
           page,
           limit: RETURNS_PAGE_SIZE,
@@ -435,6 +484,8 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
               payout: true,
               profit: true,
               buyerId: true,
+              publisherId: true,
+              createdAt: true,
               buyerBillableAmount: true,
               publisherPayoutAmount: true,
               publisherPayoutStatus: true,
@@ -457,6 +508,8 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
 
           const data: Prisma.CallUpdateManyMutationInput = {};
           let refund: Prisma.Decimal | null = null;
+          /** The payout to take back from an already-paid publisher, positive. */
+          let clawback: { publisherId: string; amount: Prisma.Decimal } | null = null;
 
           if (chosen === 'ACCEPT') {
             const zero = new Prisma.Decimal(0);
@@ -473,11 +526,23 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
               payout = zero;
             } else if (call.publisherPayoutStatus === 'PAID') {
               /*
-               * The publisher already has the money. Nothing here can take it
-               * back, so the payout stands and the call says so; the agency
-               * settles it with the publisher outside the platform.
+               * The publisher already has the money. It comes out of their next
+               * payment: a CLAWBACK row is written below, once the conditional
+               * update has proved this is the one decision. With no publisher
+               * or nothing paid there is nothing to take back, and the payout
+               * fields are left as they are.
                */
-              metadata.returnAfterPublisherPaid = true;
+              const paid = (call.publisherPayoutAmount ?? zero).toDecimalPlaces(2);
+              if (call.publisherId && paid.gt(0)) {
+                clawback = { publisherId: call.publisherId, amount: paid };
+                data.publisherPayoutStatus = 'CLAWED_BACK';
+                data.publisherPayoutAmount = zero;
+                data.payout = zero;
+                payout = zero;
+                metadata.originalPublisherPayout = (
+                  call.publisherPayoutAmount ?? zero
+                ).toString();
+              }
             }
             data.profit = zero.minus(payout).minus(call.cost ?? zero);
 
@@ -504,6 +569,37 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
             data,
           });
           if (updated.count !== 1) throw new AlreadyDecidedError();
+
+          let clawbackRow: ReturnClawback | null = null;
+          if (clawback) {
+            const row = await tx.publisherPayment.create({
+              data: {
+                kind: 'CLAWBACK',
+                tenantId,
+                publisherId: clawback.publisherId,
+                callId,
+                amount: clawback.amount.negated(),
+                periodFrom: call.createdAt,
+                periodTo: call.createdAt,
+                method: 'RETURN',
+                reference: `Return ${callId}`,
+                paidAt: new Date(),
+                createdById: userId,
+                appliedToPaymentId: null,
+              },
+              select: { id: true, amount: true, appliedToPaymentId: true },
+            });
+            clawbackRow = {
+              paymentId: row.id,
+              amount: Number(row.amount.toFixed(2)),
+              appliedToPaymentId: row.appliedToPaymentId,
+            };
+            metadata.clawbackPaymentId = row.id;
+            await tx.call.update({
+              where: { id: callId },
+              data: { metadata: metadata as Prisma.InputJsonValue },
+            });
+          }
 
           if (refund && call.buyer) {
             const credited = await buyerBillingService.addCredits(
@@ -552,7 +648,7 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
                 before: moneySnapshot(call),
                 after: moneySnapshot(after),
                 walletRefund: refund ? refund.toFixed(2) : null,
-                returnAfterPublisherPaid: metadata.returnAfterPublisherPaid === true,
+                clawback: clawbackRow,
               },
             },
           });
@@ -570,7 +666,8 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
         where: { id: callId, tenantId },
         select: RETURN_SELECT,
       });
-      return reply.send({ data: returnRowOf(row) });
+      const clawbacks = await loadClawbacks(prisma, tenantId, [row]);
+      return reply.send({ data: returnRowOf(row, clawbacks) });
     }
   );
 }

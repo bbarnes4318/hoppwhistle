@@ -14,6 +14,36 @@ export interface BillingCalculationResult {
   payout: string;
   profit: string;
   error?: string;
+  /** Set with error 'LOCKED': why the call's money may not be recomputed. */
+  lockedReason?: BillingLockReason;
+}
+
+export type BillingLockReason =
+  | 'RETURN_ACCEPTED'
+  | 'PUBLISHER_PAID'
+  | 'PUBLISHER_CLAWED_BACK'
+  | 'BUYER_REFUNDED'
+  | 'BUYER_WAIVED';
+
+/**
+ * Why a call's billing is settled and must never be recomputed, or null.
+ *
+ * calculateCallBilling rebuilds a call's money from scratch: it would charge
+ * the buyer again for an accepted return, and flip a PAID payout back to
+ * PAYABLE -- which pays the publisher twice. A call that has been decided or
+ * paid out is history; billing leaves it exactly as it is.
+ */
+export function billingLockReason(call: {
+  disputeStatus: string | null;
+  publisherPayoutStatus: string | null;
+  buyerChargeStatus: string | null;
+}): BillingLockReason | null {
+  if (call.disputeStatus === 'ACCEPTED') return 'RETURN_ACCEPTED';
+  if (call.publisherPayoutStatus === 'PAID') return 'PUBLISHER_PAID';
+  if (call.publisherPayoutStatus === 'CLAWED_BACK') return 'PUBLISHER_CLAWED_BACK';
+  if (call.buyerChargeStatus === 'REFUNDED') return 'BUYER_REFUNDED';
+  if (call.buyerChargeStatus === 'WAIVED') return 'BUYER_WAIVED';
+  return null;
 }
 
 export class BillingService {
@@ -66,6 +96,11 @@ export class BillingService {
 
     try {
       return await prisma.$transaction(async tx => {
+        // Hold the row for the rest of the transaction, so a return decided or a
+        // payment recorded while this runs waits for it rather than being
+        // overwritten by figures computed from the state before it.
+        await tx.$queryRaw`SELECT "id" FROM "calls" WHERE "id" = ${callId} FOR UPDATE`;
+
         // 1. Fetch Call details
         const call = await tx.call.findUnique({
           where: { id: callId },
@@ -94,6 +129,27 @@ export class BillingService {
             payout: '0.0000',
             profit: '0.0000',
             error: 'Call is not finalized yet',
+          };
+        }
+
+        // Settled money is history: see billingLockReason. Nothing is written,
+        // not even to the AccrualLedger, and the call's own figures come back.
+        const lockedReason = billingLockReason(call);
+        if (lockedReason) {
+          const figure = (value: Prisma.Decimal | null) =>
+            (value ?? new Prisma.Decimal(0)).toFixed(4);
+          return {
+            success: false,
+            billable: call.billable,
+            durationUsed: this.getBillableDuration(call),
+            thresholdUsed: call.billableDurationThreshold ?? 0,
+            publisherPayoutRate: figure(call.publisherPayoutAmount),
+            buyerPriceRate: figure(call.buyerBillableAmount),
+            revenue: figure(call.revenue),
+            payout: figure(call.payout),
+            profit: figure(call.profit),
+            error: 'LOCKED',
+            lockedReason,
           };
         }
 
@@ -625,6 +681,8 @@ export class BillingService {
   }): Promise<{
     scanned: number;
     updated: number;
+    /** Calls left untouched because their money is settled (billingLockReason). */
+    locked: number;
     billable: number;
     nonBillable: number;
     totalRevenue: string;
@@ -656,12 +714,16 @@ export class BillingService {
         billable: true,
         revenue: true,
         payout: true,
+        disputeStatus: true,
+        publisherPayoutStatus: true,
+        buyerChargeStatus: true,
       },
     });
 
     const results = {
       scanned: calls.length,
       updated: 0,
+      locked: 0,
       billable: 0,
       nonBillable: 0,
       totalRevenue: '0.0000',
@@ -675,6 +737,12 @@ export class BillingService {
     let totalProfDec = new Prisma.Decimal(0);
 
     for (const call of calls) {
+      // Settled calls are skipped outright, and counted in no other figure.
+      if (billingLockReason(call)) {
+        results.locked++;
+        continue;
+      }
+
       if (dryRun) {
         // Run billing calculation inside transaction but roll back or don't commit?
         // We can simulate the calculation by calling a dry-run calculation helper or just invoking the tx logic.
@@ -732,6 +800,11 @@ export class BillingService {
         };
 
         const res = await this.calculateCallBilling(call.id);
+        // Settled between the read above and the call's own transaction.
+        if (res.error === 'LOCKED') {
+          results.locked++;
+          continue;
+        }
         if (res.success) {
           results.updated++;
           if (res.billable) {

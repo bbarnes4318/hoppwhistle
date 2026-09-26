@@ -42,6 +42,16 @@ const EXPLICIT: Record<string, string> = {
   '/ai-campaigns/new': 'New AI campaign',
 };
 
+/**
+ * Detail pages a viewer reaches from a hub in their own nav, titled as that
+ * hub. A white-label owner opens a campaign from Routing (their Campaigns tab
+ * is a tab there), so /campaigns/<id> reads "Routing" for them. Consulted only
+ * when the viewer's own nav has the hub, so everybody else is unchanged.
+ */
+const DETAIL_HUB: Record<string, string> = {
+  '/campaigns': '/routing',
+};
+
 const ALL_ITEMS = [
   ...PLATFORM_NAV,
   ...AGENCY_OWNER_NAV,
@@ -70,8 +80,15 @@ export function pageTitleFor(pathname: string | null, own?: NavGroup[]): string 
   if (!pathname) return '';
   if (EXPLICIT[pathname]) return EXPLICIT[pathname];
 
-  const exact = own?.flatMap(group => group.items).find(item => item.href === pathname);
+  const ownItems = own?.flatMap(group => group.items) ?? [];
+  const exact = ownItems.find(item => item.href === pathname);
   if (exact) return exact.name;
+
+  for (const [collection, hub] of Object.entries(DETAIL_HUB)) {
+    if (!pathname.startsWith(`${collection}/`)) continue;
+    const hubItem = ownItems.find(item => item.href === hub);
+    if (hubItem) return hubItem.name;
+  }
 
   // Longest matching nav PATH wins, so /publisher/calls beats /publisher.
   // Sorting by the raw href instead would let a filtered variant of a page win

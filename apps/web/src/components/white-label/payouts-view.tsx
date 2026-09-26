@@ -1,7 +1,8 @@
 'use client';
 
 import { HandCoins, Loader2, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { dollars, count } from '@/components/delivery/ledger';
 import {
@@ -36,7 +37,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
 import { PeriodToolbar, usePeriod } from '@/components/white-label/period-toolbar';
-import type { PayoutsSummary } from '@/components/white-label/types';
+import type { PayoutsSummary, PublisherPaymentView } from '@/components/white-label/types';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
@@ -45,6 +46,68 @@ import { formatDayRange, formatDisplayDate } from '@/lib/format-time';
 import { cn } from '@/lib/utils';
 
 type PublisherRow = PayoutsSummary['publishers'][number];
+
+/**
+ * What the agency pays next, as one cell: the dollars, or "Owes you $X" in the
+ * warning tone when the publisher's returns are more than it is owed.
+ */
+export function NetToPay({ net }: { net: number }): JSX.Element {
+  if (net < 0) {
+    return (
+      <span className="text-ringing-ink" data-owes="true">
+        {`Owes you ${dollars(Math.abs(net))}`}
+      </span>
+    );
+  }
+  return <>{dollars(net)}</>;
+}
+
+/** The server's refusal when returns are at least the payable, word for word. */
+export function carryForwardMessage(payable: number, returns: number): string {
+  return `Nothing to pay: ${dollars(returns)} in returns is more than the ${dollars(
+    payable
+  )} payable. It carries to the next payment.`;
+}
+
+/** First eight characters of a call id: enough to find it, short enough for a cell. */
+function shortCall(callId: string): string {
+  return callId.slice(0, 8);
+}
+
+/**
+ * Payment history in the order it is read: each payment, then the returns
+ * deducted from it beneath it. A return still waiting, or one whose payment is
+ * outside the hundred shown, stands in its own place.
+ */
+export function historyRows(
+  payments: PublisherPaymentView[]
+): Array<{ payment: PublisherPaymentView; nested: boolean }> {
+  const shown = new Set(payments.filter(p => p.kind !== 'CLAWBACK').map(p => p.id));
+  const under = new Map<string, PublisherPaymentView[]>();
+  for (const payment of payments) {
+    if (
+      payment.kind === 'CLAWBACK' &&
+      payment.appliedToPaymentId &&
+      shown.has(payment.appliedToPaymentId)
+    ) {
+      const list = under.get(payment.appliedToPaymentId) ?? [];
+      list.push(payment);
+      under.set(payment.appliedToPaymentId, list);
+    }
+  }
+  const rows: Array<{ payment: PublisherPaymentView; nested: boolean }> = [];
+  for (const payment of payments) {
+    const isNested =
+      payment.kind === 'CLAWBACK' &&
+      payment.appliedToPaymentId !== null &&
+      shown.has(payment.appliedToPaymentId);
+    if (isNested) continue;
+    rows.push({ payment, nested: false });
+    for (const clawback of under.get(payment.id) ?? [])
+      rows.push({ payment: clawback, nested: true });
+  }
+  return rows;
+}
 
 /**
  * Payouts: what a white-label agency owes its publishers, and what it has paid.
@@ -56,6 +119,12 @@ type PublisherRow = PayoutsSummary['publishers'][number];
  * it asks `GET /api/v1/payouts/summary` for exactly the chosen days and reads
  * that publisher's payable figure, then records against the same two instants
  * the server resolved. The browser computes no amount and no date.
+ *
+ * ── Returns after the publisher was paid ─────────────────────────────────────
+ *
+ * An accepted return on a call the publisher was already paid for comes out of
+ * their next payment. "Returns to deduct" is what is waiting; "Net to pay" is
+ * what the next payment will be, and reads "Owes you" when the returns are more.
  */
 export function PayoutsView(): JSX.Element {
   const state = usePeriod('THIS_MONTH');
@@ -128,7 +197,7 @@ export function PayoutsView(): JSX.Element {
               <PanelTitle>Publishers</PanelTitle>
               <PanelDescription>
                 Calls created in the period. Held is disputed or on hold; it is not payable until it
-                is resolved.
+                is resolved. Returns to deduct come out of the next payment, whatever its period.
               </PanelDescription>
             </PanelHeader>
             <PanelBody flush className="overflow-x-auto">
@@ -144,6 +213,8 @@ export function PayoutsView(): JSX.Element {
                     <TableRow>
                       <TableHead>Publisher</TableHead>
                       <TableHead className="text-right">Payable</TableHead>
+                      <TableHead className="text-right">Returns to deduct</TableHead>
+                      <TableHead className="text-right">Net to pay</TableHead>
                       <TableHead className="text-right">Held</TableHead>
                       <TableHead className="text-right">Paid</TableHead>
                       <TableHead>Last payment</TableHead>
@@ -159,6 +230,15 @@ export function PayoutsView(): JSX.Element {
                           <span className="ml-1 t-meta text-ink-3">
                             {`${count(row.payableCalls)} call${row.payableCalls === 1 ? '' : 's'}`}
                           </span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums" data-figure="returns">
+                          {row.returnsPending > 0 ? `−${dollars(row.returnsPending)}` : '—'}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-medium tabular-nums"
+                          data-figure="net"
+                        >
+                          <NetToPay net={row.netPayable} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {dollars(row.held)}
@@ -212,21 +292,27 @@ export function PayoutsView(): JSX.Element {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.payments.map(payment => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{formatDisplayDate(payment.paidAt)}</TableCell>
-                        <TableCell className="font-medium">{payment.publisherName}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {dollars(payment.amount)}
-                        </TableCell>
-                        <TableCell className="t-meta text-ink-2">
-                          {`${formatDisplayDate(payment.periodFrom)} – ${formatDisplayDate(
-                            payment.periodTo
-                          )}`}
-                        </TableCell>
-                        <TableCell>{payment.method}</TableCell>
-                        <TableCell className="t-data">{payment.reference ?? '—'}</TableCell>
-                      </TableRow>
+                    {historyRows(data.payments).map(({ payment, nested }) => (
+                      <Fragment key={payment.id}>
+                        {payment.kind === 'CLAWBACK' ? (
+                          <ClawbackHistoryRow payment={payment} nested={nested} />
+                        ) : (
+                          <TableRow data-payment={payment.id}>
+                            <TableCell>{formatDisplayDate(payment.paidAt)}</TableCell>
+                            <TableCell className="font-medium">{payment.publisherName}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {dollars(payment.amount)}
+                            </TableCell>
+                            <TableCell className="t-meta text-ink-2">
+                              {`${formatDisplayDate(payment.periodFrom)} – ${formatDisplayDate(
+                                payment.periodTo
+                              )}`}
+                            </TableCell>
+                            <TableCell>{payment.method}</TableCell>
+                            <TableCell className="t-data">{payment.reference ?? '—'}</TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -247,6 +333,52 @@ export function PayoutsView(): JSX.Element {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A return deducted from a publisher's payment, under the payment it came out
+ * of -- or, while it waits for the next one, on its own.
+ */
+function ClawbackHistoryRow({
+  payment,
+  nested,
+}: {
+  payment: PublisherPaymentView;
+  nested: boolean;
+}): JSX.Element {
+  const waiting = payment.appliedToPaymentId === null;
+  const callLink = payment.callId ? (
+    <Link
+      href={`/calls?call=${encodeURIComponent(payment.callId)}`}
+      className="text-ink underline-offset-2 hover:underline"
+    >
+      {`call ${shortCall(payment.callId)}`}
+    </Link>
+  ) : null;
+  return (
+    <TableRow
+      data-clawback={payment.id}
+      data-applied-to={payment.appliedToPaymentId ?? ''}
+      className={cn(nested && 'bg-sunken/50')}
+    >
+      <TableCell className={cn('t-meta text-ink-3', nested && 'pl-8')}>
+        {formatDisplayDate(payment.paidAt)}
+      </TableCell>
+      <TableCell className="t-meta text-ink-2">{payment.publisherName}</TableCell>
+      <TableCell className="text-right tabular-nums text-dropped-ink">
+        {`−${dollars(Math.abs(payment.amount))}`}
+      </TableCell>
+      <TableCell className="t-meta text-ink-2" colSpan={3}>
+        {waiting ? (
+          <span className="text-ringing-ink">
+            Waiting for next payment{callLink ? <> · Return on {callLink}</> : null}
+          </span>
+        ) : (
+          <>Return deducted{callLink ? <>, {callLink}</> : null}</>
+        )}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -272,6 +404,9 @@ function RecordPaymentDialog({
   const [quote, setQuote] = useState<{
     amount: number;
     calls: number;
+    /** Returns waiting to be deducted, positive, and what is left to pay. */
+    returns: number;
+    net: number;
     startsAt: string;
     endsAt: string;
   } | null>(null);
@@ -307,6 +442,8 @@ function RecordPaymentDialog({
         setQuote({
           amount: row.payable,
           calls: row.payableCalls,
+          returns: row.returnsPending ?? 0,
+          net: row.netPayable ?? row.payable,
           startsAt: summary.period.startsAt,
           endsAt: summary.period.endsAt,
         });
@@ -323,13 +460,16 @@ function RecordPaymentDialog({
     if (!quote) return;
     setSaving(true);
     try {
-      const response = await apiClient.post<Envelope<{ amount: number }>>('/api/v1/payouts', {
-        publisherId: publisher.publisherId,
-        periodFrom: quote.startsAt,
-        periodTo: quote.endsAt,
-        method: method.trim(),
-        reference: reference.trim() || undefined,
-      });
+      const response = await apiClient.post<Envelope<{ amount: number; clawbacks?: unknown[] }>>(
+        '/api/v1/payouts',
+        {
+          publisherId: publisher.publisherId,
+          periodFrom: quote.startsAt,
+          periodTo: quote.endsAt,
+          method: method.trim(),
+          reference: reference.trim() || undefined,
+        }
+      );
       const recorded = payload(response);
       if (response.error || !recorded) {
         setProblem(response.error?.message ?? 'The payment was not recorded.');
@@ -346,6 +486,8 @@ function RecordPaymentDialog({
   }
 
   const nothingPayable = quote !== null && (quote.calls === 0 || quote.amount <= 0);
+  // Payable, but the returns waiting are at least as much: nothing to pay.
+  const returnsExceed = quote !== null && !nothingPayable && quote.net <= 0;
 
   return (
     <Dialog open onOpenChange={open => (open ? null : onClose())}>
@@ -407,13 +549,31 @@ function RecordPaymentDialog({
             <p className="t-meta text-ink-3">Working out what is payable…</p>
           ) : (
             <>
-              <p className="t-label text-ink-3">{`Payable for ${formatDayRange(from, to)}`}</p>
-              <p className="t-data text-lg font-semibold text-ink" data-figure="quote">
-                {dollars(quote.amount)}
-              </p>
-              <p className="t-meta text-ink-3">
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+                <dt className="t-label text-ink-3">{`Payable for ${formatDayRange(from, to)}`}</dt>
+                <dd className="t-data text-right text-ink" data-figure="quote">
+                  {dollars(quote.amount)}
+                </dd>
+                <dt className="t-label text-ink-3">Less returns</dt>
+                <dd className="t-data text-right text-ink" data-figure="less-returns">
+                  {quote.returns > 0 ? `−${dollars(quote.returns)}` : dollars(0)}
+                </dd>
+                <dt className="t-label text-ink">Net to pay</dt>
+                <dd
+                  className="t-data text-right text-lg font-semibold text-ink"
+                  data-figure="net-to-pay"
+                >
+                  <NetToPay net={quote.net} />
+                </dd>
+              </dl>
+              <p className="mt-1 t-meta text-ink-3">
                 {`${count(quote.calls)} payable, undisputed call${quote.calls === 1 ? '' : 's'}`}
               </p>
+              {returnsExceed ? (
+                <p className="mt-2 t-meta text-ringing-ink" data-carry-forward="true">
+                  {carryForwardMessage(quote.amount, quote.returns)}
+                </p>
+              ) : null}
             </>
           )}
         </div>
@@ -427,12 +587,18 @@ function RecordPaymentDialog({
           <Button
             onClick={() => void save()}
             disabled={
-              saving || quoting || !quote || nothingPayable || !method.trim() || isReadOnlyPreview
+              saving ||
+              quoting ||
+              !quote ||
+              nothingPayable ||
+              returnsExceed ||
+              !method.trim() ||
+              isReadOnlyPreview
             }
             title={isReadOnlyPreview ? 'A role preview is read-only' : undefined}
           >
             {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {nothingPayable ? 'Nothing payable' : 'Record payment'}
+            {nothingPayable || returnsExceed ? 'Nothing to pay' : 'Record payment'}
           </Button>
         </DialogFooter>
       </DialogContent>

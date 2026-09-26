@@ -63,6 +63,7 @@ export const DEFAULT_TONE: Record<string, StatusTone> = {
   DAILY_EXCEEDED: 'dropped',
   MONTHLY_EXCEEDED: 'dropped',
   NONE: 'dropped', // STIR: no attestation at all
+  CLAWED_BACK: 'dropped', // publisher payout: returned, deducted from next payment
 
   // --- in flight → ringing ----------------------------------------------
   PENDING: 'ringing',

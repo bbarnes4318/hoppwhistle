@@ -336,9 +336,35 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
       const source = boardBuyers.find(b => b.id === row.id)!;
       expect(row).toMatchObject(source);
       expect(Object.keys(row).sort()).toEqual(
-        [...Object.keys(source), 'atCap', 'capUsed', 'capMax'].sort()
+        [
+          ...Object.keys(source),
+          'atCap',
+          'capUsed',
+          'capMax',
+          'billableToday',
+          'revenueToday',
+        ].sort()
       );
     }
+  });
+
+  it("carries each buyer's billable calls and revenue from the Sales summary's byBuyer", async () => {
+    const data = (await get(wl.ownerId, wl.id)).json().data;
+    const sales = await getCallSalesSummary(wl.id, resolvePeriod('TODAY'), { prisma });
+    const byBuyer = new Map(sales.byBuyer.map(row => [row.buyerId, row]));
+
+    expect(data.buyers.length).toBeGreaterThan(0);
+    for (const row of data.buyers) {
+      expect(row.billableToday).toBe(byBuyer.get(row.id)?.billable ?? 0);
+      expect(row.revenueToday).toBe(byBuyer.get(row.id)?.revenue ?? 0);
+    }
+    // By hand: Acme's one billable $40 call; the monthly buyer's live call is not billable.
+    const row = (id: string) => data.buyers.find((r: any) => r.id === id);
+    expect(row(wl.buyers.atCap)).toMatchObject({ billableToday: 1, revenueToday: 40 });
+    expect(row(wl.buyers.monthly)).toMatchObject({ billableToday: 0, revenueToday: 0 });
+    // Still there for older clients.
+    expect(row(wl.buyers.atCap)).toHaveProperty('applicationsToday');
+    expect(row(wl.buyers.atCap)).toHaveProperty('closingPct');
   });
 
   it('answers the hand-counted fixture', async () => {

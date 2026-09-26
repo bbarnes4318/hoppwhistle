@@ -901,9 +901,16 @@ model PublisherPayment {
   paidAt      DateTime
   createdById String
   createdAt   DateTime @default(now())
+  kind               String  @default("PAYMENT") /// PAYMENT | CLAWBACK
+  /// CLAWBACK only: the returned call the deduction came from.
+  callId             String?
+  /// CLAWBACK only: the PAYMENT it was deducted from; null until then.
+  appliedToPaymentId String?
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher Publisher @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher Publisher          @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  appliedTo PublisherPayment?  @relation("ClawbackApplied", fields: [appliedToPaymentId], references: [id], onDelete: SetNull)
+  clawbacks PublisherPayment[] @relation("ClawbackApplied")
 
   @@index([tenantId, publisherId])
   @@map("publisher_payments")

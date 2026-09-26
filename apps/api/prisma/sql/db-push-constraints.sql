@@ -115,3 +115,42 @@ DROP TRIGGER IF EXISTS "settlement_payment_attempts_append_only" ON "settlement_
 CREATE TRIGGER "settlement_payment_attempts_append_only"
     BEFORE UPDATE OR DELETE ON "settlement_payment_attempts"
     FOR EACH ROW EXECUTE FUNCTION "hopwhistle_payment_attempts_append_only"();
+
+
+-- ---------------------------------------------------------------------------
+-- Publisher clawbacks: a return accepted after the publisher was paid is a
+-- negative publisher_payments row, deducted from that publisher's next payment.
+--
+-- The CHECK keeps the sign tied to the kind, and the partial unique index is
+-- what stops one call being clawed back twice. The callId foreign key is here
+-- too: schema.prisma declares callId as a plain column, so db push leaves it
+-- unconstrained.
+--
+-- Mirrors prisma/migrations/20260927000000_publisher_payment_clawbacks/migration.sql,
+-- which is where they are applied to production.
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'publisher_payments_callId_fkey') THEN
+    ALTER TABLE "publisher_payments"
+      ADD CONSTRAINT "publisher_payments_callId_fkey"
+      FOREIGN KEY ("callId") REFERENCES "calls"("id")
+      ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'publisher_payments_kind_amount_check') THEN
+    ALTER TABLE "publisher_payments"
+      ADD CONSTRAINT "publisher_payments_kind_amount_check"
+      CHECK (
+        ("kind" = 'PAYMENT' AND "amount" > 0)
+        OR ("kind" = 'CLAWBACK' AND "amount" < 0 AND "callId" IS NOT NULL)
+      );
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "publisher_payments_clawback_call_key"
+  ON "publisher_payments"("callId") WHERE "kind" = 'CLAWBACK';
+
+CREATE INDEX IF NOT EXISTS "publisher_payments_unapplied_idx"
+  ON "publisher_payments"("tenantId", "publisherId")
+  WHERE "kind" = 'CLAWBACK' AND "appliedToPaymentId" IS NULL;

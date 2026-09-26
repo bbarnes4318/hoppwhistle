@@ -98,13 +98,32 @@ function ConversionCell({
   );
 }
 
+/**
+ * Whether outbound figures mean anything to this agency.
+ *
+ * Outbound calls come from the Power Dialer. An agency without it, and with no
+ * dials in the period, would read an Out and a Conn column of zeroes on every
+ * row -- so they are shown when it has the upgrade or actually dialled. Driven
+ * by the data, so an agency that dials keeps everything. A platform admin not
+ * previewing a role sees the whole board, always.
+ */
+export function showsOutbound(
+  data: Pick<Leaderboard, 'agency'>,
+  viewer: { upgrades: string[]; isPlatformAdmin: boolean; previewing: boolean }
+): boolean {
+  if (viewer.isPlatformAdmin && !viewer.previewing) return true;
+  return viewer.upgrades.includes('POWER_DIALER') || data.agency.outboundCalls > 0;
+}
+
 export interface BoardProps {
   data: Leaderboard;
   /** The signed-in agent, so their own row stands out in forty. */
   viewerId: string | null;
+  /** The Out and Conn columns; see `showsOutbound`. */
+  showOutbound?: boolean;
 }
 
-export function Board({ data, viewerId }: BoardProps): JSX.Element {
+export function Board({ data, viewerId, showOutbound = true }: BoardProps): JSX.Element {
   const definitions = React.useMemo(() => badgeById(data.scoring.badges), [data.scoring.badges]);
   const agencyConversion = data.agency.conversionPct;
 
@@ -138,12 +157,16 @@ export function Board({ data, viewerId }: BoardProps): JSX.Element {
             >
               Unique
             </th>
-            <th className="num" title="Outbound calls this agent placed">
-              Out
-            </th>
-            <th className="num" title="Outbound calls that connected">
-              Conn
-            </th>
+            {showOutbound ? (
+              <>
+                <th className="num" title="Outbound calls this agent placed">
+                  Out
+                </th>
+                <th className="num" title="Outbound calls that connected">
+                  Conn
+                </th>
+              </>
+            ) : null}
             <th className="num" title="Applications submitted this period">
               Apps
             </th>
@@ -225,7 +248,11 @@ export function Board({ data, viewerId }: BoardProps): JSX.Element {
                       ? [
                           `${count(row.pointsBreakdown.applications)} from applications`,
                           `${count(row.pointsBreakdown.uniqueCallers)} from callers worked`,
-                          `${count(row.pointsBreakdown.outboundConnects)} from outbound connects`,
+                          ...(showOutbound
+                            ? [
+                                `${count(row.pointsBreakdown.outboundConnects)} from outbound connects`,
+                              ]
+                            : []),
                           `${count(row.pointsBreakdown.talkTime)} from talk time`,
                           `${count(row.pointsBreakdown.conversionBonus)} conversion bonus`,
                         ].join('\n')
@@ -237,17 +264,21 @@ export function Board({ data, viewerId }: BoardProps): JSX.Element {
 
                 <td className="num">{count(row.inboundCalls)}</td>
                 <td className="num">{count(row.uniqueInboundCallers)}</td>
-                <td className="num">{count(row.outboundCalls)}</td>
-                <td
-                  className="num"
-                  title={
-                    row.outboundConnectPct === null
-                      ? undefined
-                      : `${pct(row.outboundConnectPct, 1)} of dials connected`
-                  }
-                >
-                  {count(row.outboundConnected)}
-                </td>
+                {showOutbound ? (
+                  <>
+                    <td className="num">{count(row.outboundCalls)}</td>
+                    <td
+                      className="num"
+                      title={
+                        row.outboundConnectPct === null
+                          ? undefined
+                          : `${pct(row.outboundConnectPct, 1)} of dials connected`
+                      }
+                    >
+                      {count(row.outboundConnected)}
+                    </td>
+                  </>
+                ) : null}
                 <td className="num font-medium">{count(row.applications)}</td>
                 <td className="num">
                   <ConversionCell value={row.conversionPct} agency={agencyConversion} />
@@ -318,7 +349,14 @@ export function Records({ data }: { data: Leaderboard }): JSX.Element | null {
  * tuned. These are the values the server actually scored with, for this
  * response.
  */
-export function ScoringNote({ data }: { data: Leaderboard }): JSX.Element {
+export function ScoringNote({
+  data,
+  showOutbound = true,
+}: {
+  data: Leaderboard;
+  /** The "per outbound connect" line; see `showsOutbound`. */
+  showOutbound?: boolean;
+}): JSX.Element {
   const { points, badges, streakBadgeDays } = data.scoring;
 
   return (
@@ -339,25 +377,32 @@ export function ScoringNote({ data }: { data: Leaderboard }): JSX.Element {
 
         <ul className="mb-3 space-y-0.5">
           <li>
-            <span className="font-semibold tabular-nums text-ink">+{points.perApplication}</span> per
-            application submitted
+            <span className="font-semibold tabular-nums text-ink">+{points.perApplication}</span>{' '}
+            per application submitted
           </li>
           <li>
-            <span className="font-semibold tabular-nums text-ink">+{points.perUniqueCaller}</span> per unique
-            inbound caller worked
+            <span className="font-semibold tabular-nums text-ink">+{points.perUniqueCaller}</span>{' '}
+            per unique inbound caller worked
+          </li>
+          {showOutbound ? (
+            <li>
+              <span className="font-semibold tabular-nums text-ink">
+                +{points.perOutboundConnect}
+              </span>{' '}
+              per outbound call connected
+            </li>
+          ) : null}
+          <li>
+            <span className="font-semibold tabular-nums text-ink">+{points.perTenMinutesTalk}</span>{' '}
+            per ten minutes of connected talk time
           </li>
           <li>
-            <span className="font-semibold tabular-nums text-ink">+{points.perOutboundConnect}</span> per
-            outbound call connected
-          </li>
-          <li>
-            <span className="font-semibold tabular-nums text-ink">+{points.perTenMinutesTalk}</span> per ten
-            minutes of connected talk time
-          </li>
-          <li>
-            <span className="font-semibold tabular-nums text-ink">+{points.perConversionPoint}</span> per
-            point of conversion rate — only once you have worked {points.conversionBonusMinCallers}{' '}
-            unique callers, so one lucky call does not take the top spot
+            <span className="font-semibold tabular-nums text-ink">
+              +{points.perConversionPoint}
+            </span>{' '}
+            per point of conversion rate — only once you have worked{' '}
+            {points.conversionBonusMinCallers} unique callers, so one lucky call does not take the
+            top spot
           </li>
         </ul>
 

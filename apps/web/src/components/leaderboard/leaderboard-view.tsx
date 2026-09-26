@@ -18,7 +18,13 @@ import {
   ToolbarMeta,
   ToolbarSelect,
 } from '@/components/domain';
-import { Board, Records, ScoringNote, YourStanding } from '@/components/leaderboard/board';
+import {
+  Board,
+  Records,
+  ScoringNote,
+  showsOutbound,
+  YourStanding,
+} from '@/components/leaderboard/board';
 import {
   isPeriodKey,
   isSendable,
@@ -29,6 +35,7 @@ import {
 import { Podium } from '@/components/leaderboard/podium';
 import type { Leaderboard, PeriodKey } from '@/components/leaderboard/types';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/use-auth';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
@@ -107,6 +114,8 @@ export function LeaderboardView(): JSX.Element {
 
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
+  const { upgrades, isPlatformAdmin, user } = useAuth();
+  const previewing = platform.previewRole != null || user?.previewRole != null;
   const sendable = isSendable(period, from, to);
   const query = periodQuery(period, from, to);
 
@@ -192,6 +201,9 @@ export function LeaderboardView(): JSX.Element {
     if (hours <= 0) return null;
     return data.agency.applications / hours;
   }, [data]);
+
+  // Out and Conn, and the outbound tile, only where dialling means something.
+  const showOutbound = data ? showsOutbound(data, { upgrades, isPlatformAdmin, previewing }) : true;
 
   if (withoutAgency) {
     return (
@@ -326,13 +338,23 @@ export function LeaderboardView(): JSX.Element {
                     : `${count(data.agency.uniqueInboundCallers)} unique callers`
                 }
               />
-              <StatTile
-                label="Outbound calls"
-                figure={count(data.agency.outboundCalls)}
-                data-figure-label="Outbound calls"
-                data-figure-value={count(data.agency.outboundCalls)}
-                sub={`${count(data.agency.outboundConnected)} connected`}
-              />
+              {showOutbound ? (
+                <StatTile
+                  label="Outbound calls"
+                  figure={count(data.agency.outboundCalls)}
+                  data-figure-label="Outbound calls"
+                  data-figure-value={count(data.agency.outboundCalls)}
+                  sub={`${count(data.agency.outboundConnected)} connected`}
+                />
+              ) : (
+                <StatTile
+                  label="Unique callers"
+                  figure={count(data.agency.uniqueInboundCallers)}
+                  data-figure-label="Unique callers"
+                  data-figure-value={count(data.agency.uniqueInboundCallers)}
+                  sub={`${count(data.agency.inboundCalls)} inbound calls`}
+                />
+              )}
               <StatTile
                 label="Applications"
                 figure={count(data.agency.applications)}
@@ -386,12 +408,16 @@ export function LeaderboardView(): JSX.Element {
                   icon={Trophy}
                 />
               ) : (
-                <Board data={data} viewerId={data.you?.userId ?? null} />
+                <Board
+                  data={data}
+                  viewerId={data.you?.userId ?? null}
+                  showOutbound={showOutbound}
+                />
               )}
             </PanelBody>
           </Panel>
 
-          <ScoringNote data={data} />
+          <ScoringNote data={data} showOutbound={showOutbound} />
         </>
       )}
     </div>

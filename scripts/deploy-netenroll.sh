@@ -114,6 +114,7 @@ REQUIRED_MIGRATIONS="
 20260924010000_agency_auto_refill
 20260925000000_tenant_brand_theme
 20260926000000_tenant_white_label
+20260927000000_publisher_payment_clawbacks
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -448,6 +449,13 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'tenants'
                 AND column_name IN ('whiteLabel', 'parentTenantId')) = 2" ;;
+    *_publisher_payment_clawbacks)
+      # Wrapped BEGIN..COMMIT, so the three columns, the constraints and the
+      # indexes land together or not at all; the kind column stands for them.
+      echo "SELECT count(*) = 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'publisher_payments'
+                AND column_name = 'kind'" ;;
     *)
       echo "" ;;
   esac

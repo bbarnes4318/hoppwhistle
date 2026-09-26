@@ -25,6 +25,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
+import { CLAWED_BACK, CLAWED_BACK_BADGE, CLAWED_BACK_LABEL } from '@/lib/payout-status';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallEarningRecord {
@@ -116,6 +117,12 @@ function PublisherEarningsPage() {
         return (
           <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
             Disputed
+          </Badge>
+        );
+      case CLAWED_BACK:
+        return (
+          <Badge variant="outline" className={CLAWED_BACK_BADGE}>
+            {CLAWED_BACK_LABEL}
           </Badge>
         );
       case 'PENDING':

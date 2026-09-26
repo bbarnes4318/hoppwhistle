@@ -98,6 +98,14 @@ export type TodayBuyerRow = AgencyLiveBoardRow & {
   atCap: boolean;
   capUsed: number;
   capMax: number | null;
+  /**
+   * Today's billable calls and what they sold for, from the same call-sales
+   * summary as the tiles above (`byBuyer`); 0 for a buyer with no calls today.
+   * Buyers write no applications here, so these are the columns that say
+   * something -- applicationsToday and closingPct stay for older clients.
+   */
+  billableToday: number;
+  revenueToday: number;
 };
 
 export interface TodayAttentionItem {
@@ -195,9 +203,15 @@ export async function getWhiteLabelToday(
   const activeBuyers = buyers.filter(buyer => buyer.status === 'ACTIVE');
   const buyersAtCap = activeBuyers.filter(buyer => capOf.get(buyer.id)?.atCap === true).length;
 
+  const salesOf = new Map(sales.byBuyer.map(row => [row.buyerId, row]));
   const buyerRows: TodayBuyerRow[] = board.rows
     .filter(row => row.kind === 'buyer')
-    .map(row => ({ ...row, ...(capOf.get(row.id) ?? buyerCap(0, 0)) }));
+    .map(row => ({
+      ...row,
+      ...(capOf.get(row.id) ?? buyerCap(0, 0)),
+      billableToday: salesOf.get(row.id)?.billable ?? 0,
+      revenueToday: salesOf.get(row.id)?.revenue ?? 0,
+    }));
 
   /* ── Agents ─────────────────────────────────────────────────────────────── */
 

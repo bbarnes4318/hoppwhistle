@@ -17,8 +17,8 @@ import { announceSkip, databaseGate } from './helpers/live-services.js';
  * A white-label agency with an UPFRONT (prepaid) buyer and a TERMS buyer, and
  * a normal agency beside it with a disputed call of its own. Each open return
  * is shaped for one branch of the decision: a charged prepaid call (refund), a
- * call whose publisher was already paid (payout stands, flagged), a held
- * payout (denied, payable again).
+ * call whose publisher was already paid (clawed back from their next payment),
+ * a held payout (denied, payable again).
  *
  *   GET  /api/v1/returns                   OPEN by default, openCount, filters, callId
  *   POST /api/v1/returns/:callId/decision  money, wallet, audit, 409, 404, 403
@@ -309,7 +309,7 @@ describe.skipIf(!gate.available)('Returns', () => {
         disputedBy: 'buyer@acme.test',
         recordingId: 'rec-charged',
         decision: null,
-        returnAfterPublisherPaid: false,
+        clawback: null,
       });
     });
 
@@ -426,29 +426,127 @@ describe.skipIf(!gate.available)('Returns', () => {
         publisherPayoutStatus: 'NOT_PAYABLE',
         buyerChargeStatus: 'REFUNDED',
         decision: { decision: 'ACCEPT', decidedBy: wl.ownerEmail, note: 'Agreed, out of state' },
-        returnAfterPublisherPaid: false,
+        clawback: null,
       });
       expect(Number.isNaN(Date.parse(row.decision.decidedAt))).toBe(false);
     });
 
-    it('ACCEPT after the publisher was paid leaves the payout and flags the call', async () => {
+    it('ACCEPT after the publisher was paid writes one CLAWBACK and zeroes the payout', async () => {
       const response = await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' });
       expect(response.statusCode, response.body).toBe(200);
 
+      const clawbacks = await prisma.publisherPayment.findMany({ where: { kind: 'CLAWBACK' } });
+      expect(clawbacks).toHaveLength(1);
+      const [clawback] = clawbacks;
+      expect(clawback).toMatchObject({
+        tenantId: wl.id,
+        publisherId: wl.publisherId,
+        callId: calls.paid,
+        method: 'RETURN',
+        reference: `Return ${calls.paid}`,
+        createdById: wl.ownerId,
+        appliedToPaymentId: null,
+        periodFrom: DAY1,
+        periodTo: DAY1,
+      });
+      expect(clawback.amount.toFixed(2)).toBe('-20.00');
+
       const after = await prisma.call.findUniqueOrThrow({ where: { id: calls.paid } });
-      expect(after.publisherPayoutStatus).toBe('PAID');
-      expect(after.publisherPayoutAmount?.toFixed(2)).toBe('20.00');
-      expect(after.payout?.toFixed(2)).toBe('20.00');
+      expect(after.publisherPayoutStatus).toBe('CLAWED_BACK');
+      expect(after.publisherPayoutAmount?.toFixed(2)).toBe('0.00');
+      expect(after.payout?.toFixed(2)).toBe('0.00');
       expect(after.revenue?.toFixed(2)).toBe('0.00');
-      expect(after.profit?.toFixed(2)).toBe('-20.25');
+      expect(after.profit?.toFixed(2)).toBe('-0.25');
       // A TERMS buyer's charge is waived, not refunded to a wallet.
       expect(after.buyerChargeStatus).toBe('WAIVED');
-      expect(after.metadata).toMatchObject({ returnAfterPublisherPaid: true, decisionNote: null });
+      expect(after.metadata).toMatchObject({
+        decisionNote: null,
+        originalPublisherPayout: '20',
+        clawbackPaymentId: clawback.id,
+      });
+      expect(after.metadata).not.toHaveProperty('returnAfterPublisherPaid');
       expect(response.json().data).toMatchObject({
-        returnAfterPublisherPaid: true,
-        publisherPayoutAmount: 20,
+        publisherPayoutStatus: 'CLAWED_BACK',
+        publisherPayoutAmount: 0,
+        clawback: { paymentId: clawback.id, amount: -20, appliedToPaymentId: null },
       });
       expect(await prisma.buyerTransaction.count()).toBe(0);
+
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'return.accepted', entityId: calls.paid },
+      });
+      expect(audit.changes).toMatchObject({
+        clawback: { paymentId: clawback.id, amount: -20, appliedToPaymentId: null },
+      });
+
+      // And it reads back the same way on the list.
+      const listed = (
+        await get(wl.ownerId, wl.id, `/api/v1/returns?callId=${calls.paid}`)
+      ).json().data[0];
+      expect(listed.clawback).toEqual({
+        paymentId: clawback.id,
+        amount: -20,
+        appliedToPaymentId: null,
+      });
+    });
+
+    it('a second ACCEPT on a clawed-back call is 409 and writes no second clawback', async () => {
+      expect(
+        (await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' })).statusCode
+      ).toBe(200);
+      const again = await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' });
+      expect(again.statusCode).toBe(409);
+      expect(await prisma.publisherPayment.count({ where: { kind: 'CLAWBACK' } })).toBe(1);
+    });
+
+    it('two concurrent ACCEPTs on a paid call write exactly one clawback', async () => {
+      const [first, second] = await Promise.all([
+        decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' }),
+        decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' }),
+      ]);
+      expect([first.statusCode, second.statusCode].sort()).toEqual([200, 409]);
+      expect(await prisma.publisherPayment.count({ where: { kind: 'CLAWBACK' } })).toBe(1);
+    });
+
+    it('ACCEPT on a PAID call with a zero payout writes no clawback and leaves the payout', async () => {
+      const zeroPaid = await call(wl.id, {
+        createdAt: DAY1,
+        publisherId: wl.publisherId,
+        buyerId: wl.termsBuyerId,
+        billable: true,
+        buyerBillableAmount: new Prisma.Decimal('50'),
+        revenue: new Prisma.Decimal('50'),
+        publisherPayoutAmount: new Prisma.Decimal('0'),
+        payout: new Prisma.Decimal('0'),
+        publisherPayoutStatus: 'PAID',
+        disputeStatus: 'DISPUTED',
+        metadata: disputeMeta('Nothing paid'),
+      });
+      const noPublisher = await call(wl.id, {
+        createdAt: DAY1,
+        buyerId: wl.termsBuyerId,
+        billable: true,
+        buyerBillableAmount: new Prisma.Decimal('50'),
+        revenue: new Prisma.Decimal('50'),
+        publisherPayoutAmount: new Prisma.Decimal('12'),
+        payout: new Prisma.Decimal('12'),
+        publisherPayoutStatus: 'PAID',
+        disputeStatus: 'DISPUTED',
+        metadata: disputeMeta('No publisher'),
+      });
+
+      for (const id of [zeroPaid, noPublisher]) {
+        const response = await decide(wl.ownerId, wl.id, id, { decision: 'ACCEPT' });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().data.clawback).toBeNull();
+        const after = await prisma.call.findUniqueOrThrow({ where: { id } });
+        expect(after.publisherPayoutStatus).toBe('PAID');
+        expect(after.metadata).not.toHaveProperty('clawbackPaymentId');
+      }
+      expect(await prisma.publisherPayment.count({ where: { kind: 'CLAWBACK' } })).toBe(0);
+      expect(
+        (await prisma.call.findUniqueOrThrow({ where: { id: noPublisher } })).payout?.toFixed(2)
+      ).toBe('12.00');
     });
 
     it('DENY puts a held payout back to payable and leaves the money', async () => {

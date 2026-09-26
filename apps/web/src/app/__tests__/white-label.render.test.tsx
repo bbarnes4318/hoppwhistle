@@ -8,7 +8,7 @@
  * publisher; and one row per downline agency. An empty period gets the empty
  * state rather than a wall of zeroes.
  */
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -104,10 +104,15 @@ const PAYOUTS: PayoutsSummary = {
       payableCalls: 1,
       held: 15,
       paid: 300,
+      returnsPending: 0,
+      netPayable: 20,
       lastPayment: {
         id: 'pay-1',
         publisherId: 'pub-alpha',
         publisherName: 'Alpha Media',
+        kind: 'PAYMENT',
+        callId: null,
+        appliedToPaymentId: null,
         amount: 300,
         periodFrom: '2026-08-01T04:00:00.000Z',
         periodTo: '2026-09-01T03:59:59.999Z',
@@ -122,12 +127,107 @@ const PAYOUTS: PayoutsSummary = {
       id: 'pay-1',
       publisherId: 'pub-alpha',
       publisherName: 'Alpha Media',
+      kind: 'PAYMENT',
+      callId: null,
+      appliedToPaymentId: null,
       amount: 300,
       periodFrom: '2026-08-01T04:00:00.000Z',
       periodTo: '2026-09-01T03:59:59.999Z',
       method: 'ACH',
       reference: 'TRX-88',
       paidAt: '2026-09-02T15:00:00.000Z',
+    },
+  ],
+};
+
+/**
+ * Returns after the publisher was paid. Alpha is owed 100 less a 20 return;
+ * Beta is owed 5 but has a 12.50 return waiting, so it owes the agency. One of
+ * Alpha's earlier returns was deducted from its last payment.
+ */
+const PAYOUTS_WITH_RETURNS: PayoutsSummary = {
+  ...PAYOUTS,
+  publishers: [
+    {
+      publisherId: 'pub-alpha',
+      publisherName: 'Alpha Media',
+      payable: 100,
+      payableCalls: 4,
+      held: 0,
+      paid: 80,
+      returnsPending: 20,
+      netPayable: 80,
+      lastPayment: null,
+    },
+    {
+      publisherId: 'pub-beta',
+      publisherName: 'Beta Leads',
+      payable: 5,
+      payableCalls: 1,
+      held: 0,
+      paid: 0,
+      returnsPending: 12.5,
+      netPayable: -7.5,
+      lastPayment: null,
+    },
+  ],
+  payments: [
+    {
+      id: 'claw-waiting',
+      publisherId: 'pub-beta',
+      publisherName: 'Beta Leads',
+      kind: 'CLAWBACK',
+      callId: 'fedcba9876543210',
+      appliedToPaymentId: null,
+      amount: -12.5,
+      periodFrom: '2026-09-20T15:00:00.000Z',
+      periodTo: '2026-09-20T15:00:00.000Z',
+      method: 'RETURN',
+      reference: 'Return fedcba9876543210',
+      paidAt: '2026-09-24T15:00:00.000Z',
+    },
+    {
+      id: 'pay-2',
+      publisherId: 'pub-alpha',
+      publisherName: 'Alpha Media',
+      kind: 'PAYMENT',
+      callId: null,
+      appliedToPaymentId: null,
+      amount: 80,
+      periodFrom: '2026-09-01T04:00:00.000Z',
+      periodTo: '2026-09-08T03:59:59.999Z',
+      method: 'ACH',
+      reference: 'TRX-99',
+      paidAt: '2026-09-10T15:00:00.000Z',
+    },
+    {
+      id: 'pay-1',
+      publisherId: 'pub-alpha',
+      publisherName: 'Alpha Media',
+      kind: 'PAYMENT',
+      callId: null,
+      appliedToPaymentId: null,
+      amount: 300,
+      periodFrom: '2026-08-01T04:00:00.000Z',
+      periodTo: '2026-09-01T03:59:59.999Z',
+      method: 'ACH',
+      reference: 'TRX-88',
+      paidAt: '2026-09-02T15:00:00.000Z',
+    },
+    // Older than pay-2 by paidAt, but deducted from it: it reads under pay-2.
+    {
+      id: 'claw-applied',
+      publisherId: 'pub-alpha',
+      publisherName: 'Alpha Media',
+      kind: 'CLAWBACK',
+      callId: 'abcdef1234567890',
+      appliedToPaymentId: 'pay-2',
+      amount: -20,
+      periodFrom: '2026-08-20T15:00:00.000Z',
+      periodTo: '2026-08-20T15:00:00.000Z',
+      method: 'RETURN',
+      reference: 'Return abcdef1234567890',
+      paidAt: '2026-09-01T15:00:00.000Z',
     },
   ],
 };
@@ -291,7 +391,7 @@ describe('white-label screens', () => {
 
       await waitFor(() => expect(screen.getAllByText('Alpha Media').length).toBeGreaterThan(0));
       const row = document.querySelector('[data-publisher="pub-alpha"]') as HTMLElement;
-      expect(within(row).getByText('$20.00')).toBeTruthy();
+      expect(row.querySelector('[data-figure="payable"]')?.textContent).toContain('$20.00');
       expect(within(row).getByText('$15.00')).toBeTruthy();
       expect(row.querySelector('[data-figure="paid"]')?.textContent).toBe('$300.00');
       expect(within(row).getByRole('button', { name: 'Record payment' })).toBeTruthy();
@@ -299,6 +399,91 @@ describe('white-label screens', () => {
       expect(screen.getByText('Payment history')).toBeTruthy();
       expect(screen.getByText('TRX-88')).toBeTruthy();
       expect(requested).toContain('/api/v1/payouts/summary?period=THIS_MONTH');
+    });
+
+    it('shows returns to deduct, the net to pay, and "Owes you" when returns are more', async () => {
+      answers['/api/v1/payouts/summary'] = PAYOUTS_WITH_RETURNS;
+      await mount(() => import('../(dashboard)/payouts/page'));
+
+      await waitFor(() =>
+        expect(document.querySelector('[data-publisher="pub-beta"]')).toBeTruthy()
+      );
+      expect(screen.getByText('Returns to deduct')).toBeTruthy();
+      expect(screen.getByText('Net to pay')).toBeTruthy();
+
+      const alpha = document.querySelector('[data-publisher="pub-alpha"]') as HTMLElement;
+      expect(alpha.querySelector('[data-figure="returns"]')?.textContent).toBe('−$20.00');
+      expect(alpha.querySelector('[data-figure="net"]')?.textContent).toBe('$80.00');
+
+      const beta = document.querySelector('[data-publisher="pub-beta"]') as HTMLElement;
+      const owes = beta.querySelector('[data-figure="net"] [data-owes="true"]') as HTMLElement;
+      expect(owes.textContent).toBe('Owes you $7.50');
+      expect(owes.className).toContain('text-ringing-ink');
+    });
+
+    it('lists a deducted return under the payment it came out of, and a waiting one as waiting', async () => {
+      answers['/api/v1/payouts/summary'] = PAYOUTS_WITH_RETURNS;
+      await mount(() => import('../(dashboard)/payouts/page'));
+
+      await waitFor(() => expect(screen.getByText('TRX-99')).toBeTruthy());
+
+      const applied = document.querySelector('[data-clawback="claw-applied"]') as HTMLElement;
+      expect(applied.textContent).toContain('Return deducted, call abcdef12');
+      expect(
+        within(applied).getByRole('link', { name: 'call abcdef12' }).getAttribute('href')
+      ).toBe('/calls?call=abcdef1234567890');
+      // Directly beneath its payment, not in its own paidAt position.
+      const payment = document.querySelector('[data-payment="pay-2"]') as HTMLElement;
+      expect(payment.nextElementSibling).toBe(applied);
+
+      const waiting = document.querySelector('[data-clawback="claw-waiting"]') as HTMLElement;
+      expect(waiting.textContent).toContain('Waiting for next payment');
+      expect(
+        within(waiting).getByRole('link', { name: 'call fedcba98' }).getAttribute('href')
+      ).toBe('/calls?call=fedcba9876543210');
+    });
+
+    it('shows payable, less returns and net in the dialog, and will not save when returns are more', async () => {
+      answers['/api/v1/payouts/summary'] = PAYOUTS_WITH_RETURNS;
+      await mount(() => import('../(dashboard)/payouts/page'));
+      await waitFor(() =>
+        expect(document.querySelector('[data-publisher="pub-beta"]')).toBeTruthy()
+      );
+
+      const beta = document.querySelector('[data-publisher="pub-beta"]') as HTMLElement;
+      fireEvent.click(within(beta).getByRole('button', { name: 'Record payment' }));
+
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(dialog.querySelector('[data-figure="net-to-pay"]')).toBeTruthy());
+      expect(dialog.querySelector('[data-figure="quote"]')?.textContent).toBe('$5.00');
+      expect(dialog.querySelector('[data-figure="less-returns"]')?.textContent).toBe('−$12.50');
+      expect(dialog.querySelector('[data-figure="net-to-pay"]')?.textContent).toBe(
+        'Owes you $7.50'
+      );
+      expect(dialog.querySelector('[data-carry-forward="true"]')?.textContent).toBe(
+        'Nothing to pay: $12.50 in returns is more than the $5.00 payable. It carries to the next payment.'
+      );
+      const save = within(dialog).getByRole('button', { name: 'Nothing to pay' });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('lets a payment net of returns be saved', async () => {
+      answers['/api/v1/payouts/summary'] = PAYOUTS_WITH_RETURNS;
+      await mount(() => import('../(dashboard)/payouts/page'));
+      await waitFor(() =>
+        expect(document.querySelector('[data-publisher="pub-alpha"]')).toBeTruthy()
+      );
+
+      const alpha = document.querySelector('[data-publisher="pub-alpha"]') as HTMLElement;
+      fireEvent.click(within(alpha).getByRole('button', { name: 'Record payment' }));
+
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() =>
+        expect(dialog.querySelector('[data-figure="net-to-pay"]')?.textContent).toBe('$80.00')
+      );
+      expect(dialog.querySelector('[data-carry-forward="true"]')).toBeNull();
+      const save = within(dialog).getByRole('button', { name: 'Record payment' });
+      await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false));
     });
   });
 
