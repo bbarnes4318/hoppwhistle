@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { BrandThemeControl } from '@/components/platform/brand-theme-control';
+import { UpgradesControl } from '@/components/platform/upgrades-control';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -740,6 +741,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
                         />
                         <div className="mt-3">
                           <BrandThemeControl tenantId={row.tenantId} agencyName={row.name} />
+                          <div className="mt-3">
+                            <UpgradesControl tenantId={row.tenantId} agencyName={row.name} />
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>

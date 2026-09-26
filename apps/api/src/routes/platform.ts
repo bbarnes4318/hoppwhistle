@@ -50,6 +50,7 @@
  */
 
 import { BRAND_THEME_KEYS, isBrandThemeKey } from '@hopwhistle/shared';
+import { Prisma } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
 
 import {
@@ -68,6 +69,7 @@ import {
 } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId } from '../lib/tenant-context.js';
+import { TENANT_UPGRADES, tenantUpgrades } from '../lib/tenant-upgrades.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 
@@ -497,6 +499,103 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
     }
   );
 
+  /**
+   * GET /api/v1/admin/tenants/:tenantId/upgrades
+   * PUT /api/v1/admin/tenants/:tenantId/upgrades   { upgrades: TenantUpgrade[] }
+   *
+   * Which paid upgrades an agency has turned on: Power Dialer, VOIP Carrier
+   * Routing, Voice Agents, Voice Studio, Payroll Admin. `/api/auth/me` sends
+   * the list to the agency's users, and the white-label nav and the Upgrades
+   * page read it -- Power Dialer, for one, puts the CRM in the owner's
+   * sidebar.
+   *
+   * ── Platform admins only ─────────────────────────────────────────────────
+   *
+   * Same posture as the brand above: an upgrade is part of the agreement with
+   * NetEnroll, so an agency's own OWNER and ADMIN are refused 403, and every
+   * change is audited with its before and after.
+   *
+   * ── The whole list, not a toggle ─────────────────────────────────────────
+   *
+   * PUT replaces the set. Every key must be one of TENANT_UPGRADES -- an
+   * unknown one is refused 400 rather than dropped, so a typo is not saved as
+   * "nothing". It is stored at `metadata.upgrades`; every other key in the
+   * tenant's metadata is kept as it was.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/admin/tenants/:tenantId/upgrades',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: request.params.tenantId },
+        select: { id: true, metadata: true },
+      });
+      if (!tenant) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+      return reply.send({
+        data: { tenantId: tenant.id, upgrades: tenantUpgrades(tenant.metadata) },
+      });
+    }
+  );
+
+  fastify.put<{ Params: { tenantId: string }; Body: { upgrades?: unknown } }>(
+    '/api/v1/admin/tenants/:tenantId/upgrades',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const requested = (request.body ?? {}).upgrades;
+
+      if (
+        !Array.isArray(requested) ||
+        requested.some(
+          key => typeof key !== 'string' || !(TENANT_UPGRADES as readonly string[]).includes(key)
+        )
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `upgrades must be an array of: ${TENANT_UPGRADES.join(', ')}`,
+          },
+        });
+      }
+      // In the canonical order, once each, so the stored list reads the same
+      // however it was sent.
+      const upgrades = TENANT_UPGRADES.filter(key => (requested as unknown[]).includes(key));
+
+      const before = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { metadata: true },
+      });
+      if (!before) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+
+      const metadata =
+        before.metadata && typeof before.metadata === 'object' && !Array.isArray(before.metadata)
+          ? (before.metadata as Record<string, unknown>)
+          : {};
+
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { metadata: { ...metadata, upgrades } as Prisma.InputJsonValue },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.tenant.upgrades_changed',
+        entityType: 'tenant',
+        entityId: tenantId,
+        changes: {
+          before: { upgrades: tenantUpgrades(before.metadata) },
+          after: { upgrades },
+        },
+      });
+
+      return reply.send({ data: { tenantId, upgrades } });
+    }
+  );
   /**
    * POST /api/v1/platform/acting-tenant
    *

@@ -604,6 +604,12 @@ describe('the white-label portal', () => {
       await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
       await waitFor(() => expect(screen.getByText('Turned on for your agency.')).toBeTruthy());
       expect(screen.getAllByText('Ask your account manager to turn this on.')).toHaveLength(4);
+      expect(screen.getByRole('link', { name: 'Open the Power Dialer' }).getAttribute('href')).toBe(
+        '/call-center'
+      );
+      expect(screen.getByRole('link', { name: 'Open the CRM' }).getAttribute('href')).toBe(
+        '/insurance-leads'
+      );
     });
   });
 });

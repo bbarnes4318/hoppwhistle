@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { Panel, PanelBody, StatusChip } from '@/components/domain';
 import { WHITE_LABEL_UPGRADES } from '@/components/layout/nav-config';
 import { PageHeader } from '@/components/layout/page-header';
@@ -42,6 +44,16 @@ export default function UpgradesPage(): JSX.Element {
                 <p className="mt-auto t-meta text-ink-3">
                   {on ? 'Turned on for your agency.' : 'Ask your account manager to turn this on.'}
                 </p>
+                {on && key === 'POWER_DIALER' ? (
+                  <div className="flex flex-wrap gap-3 t-meta">
+                    <Link href="/call-center" className="text-brand-ink hover:underline">
+                      Open the Power Dialer
+                    </Link>
+                    <Link href="/insurance-leads" className="text-brand-ink hover:underline">
+                      Open the CRM
+                    </Link>
+                  </div>
+                ) : null}
               </PanelBody>
             </Panel>
           );
