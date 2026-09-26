@@ -22,6 +22,23 @@ export function isDisputeReason(value: string): value is DisputeReason {
   return DISPUTE_REASONS.some(r => r.value === value);
 }
 
+/**
+ * Where a filed dispute got to, as the buyer reads it.
+ *
+ * The agency decides each one from its Returns screen: ACCEPTED means the call
+ * was taken back and the buyer refunded or not charged, DENIED means it stands.
+ * Anything else -- DISPUTED, and the older UNDER_REVIEW -- is still waiting.
+ */
+export function disputeOutcome(status: string | null | undefined): {
+  label: string;
+  tone: 'live' | 'dropped' | 'ringing';
+  decided: boolean;
+} {
+  if (status === 'ACCEPTED') return { label: 'Return accepted', tone: 'live', decided: true };
+  if (status === 'DENIED') return { label: 'Return denied', tone: 'dropped', decided: true };
+  return { label: 'Under review', tone: 'ringing', decided: false };
+}
+
 export interface DisputeEvidence {
   /** Connected seconds as measured, and the threshold they are judged against. */
   connectedSeconds: number | null;

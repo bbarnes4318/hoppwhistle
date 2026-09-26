@@ -22,11 +22,13 @@ import {
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { useBrand } from '@/hooks/use-brand';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 import { CommandPalette, useCommandPalette } from './command-palette';
 import { MobileNav } from './mobile-nav';
+import { WHITE_LABEL_OWNER_NAV } from './nav-config';
 import { pageTitleFor } from './page-title';
 
 /**
@@ -42,7 +44,9 @@ export function Topbar() {
   const { user } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
-  const title = pageTitleFor(pathname);
+  // A white-label owner's pages are named as their own sidebar names them.
+  const whiteLabel = useWhiteLabelView();
+  const title = pageTitleFor(pathname, whiteLabel ? WHITE_LABEL_OWNER_NAV : undefined);
 
   // The tab is named after the page, then the product, so a floor with six
   // NetEnroll tabs open can tell them apart. Set here because every page under
@@ -51,7 +55,7 @@ export function Topbar() {
   // The product is the agency's own name when it has a brand theme. Until the
   // session has said which, the tab carries the page alone rather than naming
   // a product it may be about to un-name.
-  const { productName, settled: brandSettled } = useBrand();
+  const { brand, productName, settled: brandSettled } = useBrand();
   React.useEffect(() => {
     if (!brandSettled) {
       if (title) document.title = title;
@@ -107,7 +111,7 @@ export function Topbar() {
           fallback={() => (
             <span
               role="alert"
-              title="The agency switcher could not be loaded. Everything else on this page still works. Please reload, and let NetEnroll know if it keeps happening."
+              title={`The agency switcher could not be loaded. Everything else on this page still works. Please reload, and let ${brand ? 'your account manager' : 'NetEnroll'} know if it keeps happening.`}
               className="flex items-center gap-1.5 rounded-control border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive"
             >
               <AlertTriangle className="h-3 w-3" />

@@ -3,6 +3,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
+import { OPEN_DISPUTE, isOpenDispute } from '../lib/dispute-status.js';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import {
@@ -12,6 +13,7 @@ import {
 } from '../lib/tenant-scope-guards.js';
 import {
   getActingTenantId,
+  getActingUserId,
   replyTenantRefusal,
   resolveTenant,
   sendTenantRefusal,
@@ -20,6 +22,12 @@ import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { recordAgentApplication } from '../services/applications/agent-entry.js';
 import { UnknownCallError } from '../services/applications/call-attribution.js';
+import {
+  ANSWER_ORDERS,
+  answerOrderFromMetadata,
+  isAnswerOrder,
+} from '../services/campaigns/answer-order.js';
+import { applyAnswerOrder } from '../services/campaigns/apply-answer-order.js';
 import {
   ApplicationInputSchema,
   describeApplicationIssues,
@@ -53,6 +61,8 @@ function buildCallWhere(params: {
   agentId?: string | null;
   /** One disposition, or `NONE` for the calls nobody has written up. */
   disposition?: string | null;
+  /** Where the call went: `AGENTS`, `BUYERS` or `UNANSWERED`. Anything else is no filter. */
+  outcome?: string | null;
 }) {
   const {
     tenantId,
@@ -70,6 +80,7 @@ function buildCallWhere(params: {
     listPhoneNumbers,
     agentId,
     disposition,
+    outcome,
   } = params;
   const where: Record<string, any> = { tenantId };
 
@@ -129,9 +140,21 @@ function buildCallWhere(params: {
     where.campaignId = campaignId;
   }
 
+  /*
+   * 'DISPUTED' is the OPEN dispute and nothing else. It used to be
+   * `{ not: null }`, which was the same thing while nothing but a buyer's
+   * dispute ever wrote the column; a decided return now leaves 'ACCEPTED' or
+   * 'DENIED' behind, and neither is open. See `lib/dispute-status.ts`.
+   *
+   * 'ANY' is the old meaning, kept under its own name: every call a dispute
+   * was ever filed on, open or decided -- the buyer portal's list of what it
+   * has filed, which has to show how each one came out.
+   */
   if (disputeStatus) {
-    if (disputeStatus === 'DISPUTED') {
+    if (disputeStatus === 'ANY') {
       where.disputeStatus = { not: null };
+    } else if (disputeStatus === OPEN_DISPUTE) {
+      where.disputeStatus = OPEN_DISPUTE;
     } else if (disputeStatus === 'NONE') {
       where.disputeStatus = null;
     } else {
@@ -212,6 +235,26 @@ function buildCallWhere(params: {
     if (!isNaN(parsedEnd.getTime())) {
       andClauses.push({ createdAt: { lte: parsedEnd } });
     }
+  }
+
+  /*
+   * Where the call went, the same three ways the Sales screen splits them
+   * (`services/reporting/call-sales.ts`): answered by one of the agency's own
+   * agents, sent on to a buyer, or neither and not blocked. Read off the same
+   * columns, so a call answered by an agent AND then sent to a buyer appears
+   * under both -- as it is counted in both there.
+   *
+   * An AND clause rather than a key on `where`, so it narrows the buyer,
+   * publisher and agent filters above instead of replacing them. An unknown
+   * value is no filter, like an absent one: a stale link should show calls,
+   * not a 400.
+   */
+  if (outcome === 'AGENTS') {
+    andClauses.push({ answeredByUserId: { not: null } });
+  } else if (outcome === 'BUYERS') {
+    andClauses.push({ buyerId: { not: null } });
+  } else if (outcome === 'UNANSWERED') {
+    andClauses.push({ answeredAt: null, blocked: false });
   }
 
   if (search && search.trim()) {
@@ -2152,25 +2195,46 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const assignment = await prisma.campaignBuyer.create({
-      data: {
-        tenantId,
-        campaignId,
-        buyerId,
-        buyerEndpointId: buyerEndpointId || null,
-        destinationNumber: normalizedDestination,
-        pricePerBillableCall:
-          pricePerBillableCall !== undefined && pricePerBillableCall !== null
-            ? new Prisma.Decimal(pricePerBillableCall)
-            : null,
-        priority: priority || 0,
-        weight: weight !== undefined ? weight : 100,
-        status: status || 'ACTIVE',
-      },
-      include: {
-        buyer: { select: { id: true, name: true } },
-        buyerEndpoint: { select: { id: true, name: true } },
-      },
+    /*
+     * A campaign with a "who answers first" mode places a new buyer by that
+     * mode's rule, not by whatever priority the body carried: the rule is
+     * re-run over the whole campaign after the insert, in the same
+     * transaction, so the new row is ranked relative to the buyers already
+     * there and the agents stay where the mode put them. No mode set, and the
+     * priority is written as given, exactly as before.
+     */
+    const answerOrder = answerOrderFromMetadata(campaign.metadata);
+
+    const assignment = await prisma.$transaction(async tx => {
+      const created = await tx.campaignBuyer.create({
+        data: {
+          tenantId,
+          campaignId,
+          buyerId,
+          buyerEndpointId: buyerEndpointId || null,
+          destinationNumber: normalizedDestination,
+          pricePerBillableCall:
+            pricePerBillableCall !== undefined && pricePerBillableCall !== null
+              ? new Prisma.Decimal(pricePerBillableCall)
+              : null,
+          priority: priority || 0,
+          weight: weight !== undefined ? weight : 100,
+          status: status || 'ACTIVE',
+        },
+        select: { id: true },
+      });
+
+      if (answerOrder) {
+        await applyAnswerOrder(tx, tenantId, campaignId, answerOrder);
+      }
+
+      return tx.campaignBuyer.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          buyer: { select: { id: true, name: true } },
+          buyerEndpoint: { select: { id: true, name: true } },
+        },
+      });
     });
 
     return reply.code(201).send({ data: assignment });
@@ -2299,6 +2363,116 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
 
       await prisma.campaignBuyer.delete({ where: { id: assignmentId } });
       return reply.code(204).send();
+    }
+  );
+
+  /**
+   * PUT /api/v1/campaigns/:campaignId/answer-order
+   *
+   * "Who answers first": the agency's own agents, its buyers, or both
+   * together. Rewrites the campaign's CampaignAgent and CampaignBuyer
+   * priorities by the rule in `services/campaigns/answer-order.ts` and stores
+   * the mode on `campaign.metadata.answerOrder`, so later assignments are
+   * placed by the same rule. Routing is not changed: it already reads those
+   * priorities.
+   *
+   * Same access as every other campaign write: staff, or a white-label OWNER
+   * or ADMIN (`WHITE_LABEL_ALLOWED` in lib/staff-only-endpoints.ts), and only
+   * ever on the acting tenant's own campaign -- anybody else's is a 404.
+   *
+   * One transaction: the priorities, the mode and the audit row commit or fail
+   * together, so the stored mode can never describe priorities that were not
+   * written.
+   */
+  fastify.put<{ Params: { campaignId: string }; Body: { answerOrder?: unknown } }>(
+    '/api/v1/campaigns/:campaignId/answer-order',
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) return replyTenantRefusal(request, reply);
+
+      const answerOrder = request.body?.answerOrder;
+      if (!isAnswerOrder(answerOrder)) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `answerOrder must be one of: ${ANSWER_ORDERS.join(', ')}`,
+          },
+        });
+      }
+
+      const { campaignId } = request.params;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, tenantId },
+        select: { id: true, metadata: true },
+      });
+      if (!campaign) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'NOT_FOUND', message: 'Campaign not found' } });
+      }
+
+      const previous = answerOrderFromMetadata(campaign.metadata);
+      const metadata =
+        campaign.metadata &&
+        typeof campaign.metadata === 'object' &&
+        !Array.isArray(campaign.metadata)
+          ? (campaign.metadata as Record<string, unknown>)
+          : {};
+
+      const result = await prisma.$transaction(async tx => {
+        const plan = await applyAnswerOrder(tx, tenantId, campaignId, answerOrder);
+
+        await tx.campaign.update({
+          where: { id: campaignId },
+          data: { metadata: { ...metadata, answerOrder } as Prisma.InputJsonValue },
+        });
+
+        const [agents, buyers] = await Promise.all([
+          tx.campaignAgent.findMany({
+            where: { tenantId, campaignId },
+            select: { userId: true, priority: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+          tx.campaignBuyer.findMany({
+            where: { tenantId, campaignId },
+            select: { buyerId: true, priority: true },
+            orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+          }),
+        ]);
+
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            userId: getActingUserId(request) ?? undefined,
+            action: 'campaign.answer_order.set',
+            entityType: 'Campaign',
+            entityId: campaignId,
+            resource: request.url,
+            method: request.method,
+            requestId: request.id,
+            ipAddress: request.ip,
+            userAgent: request.headers['user-agent'],
+            changes: {
+              before: { answerOrder: previous },
+              after: { answerOrder },
+              agentsUpdated: plan.agents.length,
+              buyersUpdated: plan.buyers.length,
+            },
+          },
+        });
+
+        return { agents, buyers };
+      });
+
+      return reply.send({
+        data: {
+          answerOrder,
+          agents: result.agents.map(a => ({ userId: a.userId, priority: a.priority })),
+          buyers: result.buyers.map(b => ({ buyerId: b.buyerId, priority: b.priority })),
+        },
+      });
     }
   );
 }
@@ -3187,6 +3361,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       listId?: string;
       agentId?: string;
       disposition?: string;
+      outcome?: string;
     };
   }>('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3297,6 +3472,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
        */
       agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
       disposition: request.query.disposition,
+      outcome: request.query.outcome,
     });
 
     const [calls, total] = await Promise.all([
@@ -3353,6 +3529,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       listId?: string;
       agentId?: string;
       disposition?: string;
+      outcome?: string;
     };
   }>('/api/v1/calls/export.csv', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3439,6 +3616,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
        */
       agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
       disposition: request.query.disposition,
+      outcome: request.query.outcome,
     });
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
@@ -5351,6 +5529,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
             // which means the screen that sets it could not show it.
             metadata: true,
             buyerId: true,
+            publisherId: true,
             buyer: {
               select: {
                 id: true,
@@ -5383,6 +5562,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           buyerId: u.buyerId,
           buyerName: u.buyer?.name || null,
           buyerCode: u.buyer?.code || null,
+          publisherId: u.publisherId,
           invitedAt: u.createdAt.toISOString(),
           lastLoginAt: u.lastLoginAt?.toISOString() || null,
           // Normalised on the way out so the screen shows what would actually
@@ -5459,7 +5639,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
 
     // Validate role
     const requestedRole = body.role?.toUpperCase() || 'ANALYST';
-    const validRoles = ['ADMIN', 'OWNER', 'ANALYST', 'AGENT', 'BUYER'];
+    const validRoles = ['ADMIN', 'OWNER', 'ANALYST', 'AGENT', 'BUYER', 'PUBLISHER'];
     if (!validRoles.includes(requestedRole)) {
       void reply.code(400);
       return {
@@ -5479,6 +5659,61 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           message: 'buyerId or createNewBuyer is required for BUYER role',
         },
       };
+    }
+
+    /*
+     * A portal user is linked to exactly one party, and of their own kind. A
+     * BUYER carrying a publisherId (or a PUBLISHER a buyerId) would be a login
+     * whose portal scopes itself by one id while `getUserProfile` reads the
+     * other -- the publisher portal and the buyer portal both trust that link
+     * to decide whose calls and money the person sees.
+     */
+    if (requestedRole === 'BUYER' && body.publisherId) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'A BUYER invite cannot carry a publisherId',
+        },
+      };
+    }
+    if (requestedRole === 'PUBLISHER' && body.buyerId) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'A PUBLISHER invite cannot carry a buyerId',
+        },
+      };
+    }
+
+    // PUBLISHER role requires a publisherId, and it must be one of THIS
+    // tenant's publishers: the id is client-supplied, and without the tenant
+    // filter a publisher login could be linked to another agency's publisher
+    // and read its calls and payouts. Not found and not ours read the same.
+    if (requestedRole === 'PUBLISHER') {
+      if (!body.publisherId) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'publisherId is required for PUBLISHER role',
+          },
+        };
+      }
+      const publisherRecord = await prisma.publisher.findFirst({
+        where: { id: body.publisherId, tenantId },
+        select: { id: true },
+      });
+      if (!publisherRecord) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid publisherId - publisher not found',
+          },
+        };
+      }
     }
 
     // Auto-create buyer if requested
@@ -5544,6 +5779,18 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           code: 'VALIDATION_ERROR',
           message:
             'ADMIN and OWNER roles cannot be assigned to external buyer users. Use BUYER role instead.',
+        },
+      };
+    }
+
+    // The same rule for the other portal: an internal user is nobody's publisher.
+    if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.publisherId) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message:
+            'ADMIN and OWNER roles cannot be assigned to external publisher users. Use PUBLISHER role instead.',
         },
       };
     }
@@ -5630,6 +5877,8 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         roles: newUser.roles.map(r => r.role.name),
         buyerId: newUser.buyerId,
         buyerName: newUser.buyer?.name || null,
+        publisherId: newUser.publisherId,
+        publisherName: newUser.publisher?.name || null,
       },
       {
         userId: user?.userId,
@@ -5651,8 +5900,12 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       roles: newUser.roles.map(r => r.role.name.toLowerCase()),
       buyerId: newUser.buyerId,
       buyerName: newUser.buyer?.name || null,
+      publisherId: newUser.publisherId,
+      publisherName: newUser.publisher?.name || null,
       createdAt: newUser.createdAt.toISOString(),
-      // In production, don't return temp password - send via email
+      // In production, don't return temp password - send via email. Returned
+      // for every role, PUBLISHER included: it is the only way the inviter
+      // can hand a portal user their first sign-in.
       tempPassword: tempPassword, // Only for development/testing
     };
   });
@@ -6413,7 +6666,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       totalEarnings = totalEarnings.plus(payout);
 
       const isPaid = call.publisherPayoutStatus === 'PAID';
-      const isHeld = call.publisherPayoutStatus === 'HELD' || !!call.disputeStatus;
+      const isHeld = call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus);
 
       if (isPaid) totalPaid = totalPaid.plus(payout);
       else if (isHeld) totalHeld = totalHeld.plus(payout);
@@ -6552,7 +6805,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         : new Prisma.Decimal(0);
 
       const isPaid = call.publisherPayoutStatus === 'PAID';
-      const isHeld = call.publisherPayoutStatus === 'HELD' || !!call.disputeStatus;
+      const isHeld = call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus);
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
@@ -6766,7 +7019,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         }
       }
 
-      if (call.disputeStatus) {
+      if (isOpenDispute(call.disputeStatus)) {
         totalDisputes = totalDisputes.plus(cost);
       }
 
@@ -6808,7 +7061,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         }
       }
 
-      if (call.disputeStatus) {
+      if (isOpenDispute(call.disputeStatus)) {
         g.disputes = g.disputes.plus(cost);
       }
     }
@@ -6977,7 +7230,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         }
       }
 
-      if (call.disputeStatus) {
+      if (isOpenDispute(call.disputeStatus)) {
         g.disputes = g.disputes.plus(cost);
       }
     }

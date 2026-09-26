@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { durationScale } from './calls';
-import { composeDisputeReason } from './dispute';
+import { composeDisputeReason, disputeOutcome } from './dispute';
 import { resolveRange } from './range';
 import { normalizeToken } from './token';
 
@@ -118,5 +118,31 @@ describe('resolveRange', () => {
   it('falls back rather than querying a backwards or malformed window', () => {
     expect(resolveRange({ range: 'custom', from: '2026-08-09', to: '2026-08-01' }).key).toBe('30d');
     expect(resolveRange({ range: 'custom', from: 'yesterday', to: '2026-08-01' }).key).toBe('30d');
+  });
+});
+
+describe('disputeOutcome', () => {
+  it('reads an accepted return as accepted', () => {
+    expect(disputeOutcome('ACCEPTED')).toEqual({
+      label: 'Return accepted',
+      tone: 'live',
+      decided: true,
+    });
+  });
+
+  it('reads a denied return as denied', () => {
+    expect(disputeOutcome('DENIED')).toEqual({
+      label: 'Return denied',
+      tone: 'dropped',
+      decided: true,
+    });
+  });
+
+  it.each(['DISPUTED', 'UNDER_REVIEW', null, undefined])('reads %s as under review', status => {
+    expect(disputeOutcome(status)).toEqual({
+      label: 'Under review',
+      tone: 'ringing',
+      decided: false,
+    });
   });
 });

@@ -5,6 +5,7 @@ import {
   PLATFORM_NAV,
   publisherNav,
   WHITE_LABEL_OWNER_NAV,
+  type NavGroup,
 } from './nav-config';
 
 /**
@@ -48,9 +49,7 @@ const ALL_ITEMS = [
   ...AGENT_NAV,
   ...publisherNav(true),
   ...buyerNav(true),
-].flatMap(
-  g => g.items
-);
+].flatMap(g => g.items);
 
 function humanise(segment: string): string {
   return segment
@@ -59,9 +58,20 @@ function humanise(segment: string): string {
     .join(' ');
 }
 
-export function pageTitleFor(pathname: string | null): string {
+/**
+ * The title for `pathname`.
+ *
+ * `own` is the viewer's own navigation, when the caller knows it. Its entries
+ * are consulted first, because the same href can be named differently in two
+ * navs: `/dashboard` is "Dashboard" to staff and an agency, and "Today" to a
+ * white-label owner, whose sidebar says Today.
+ */
+export function pageTitleFor(pathname: string | null, own?: NavGroup[]): string {
   if (!pathname) return '';
   if (EXPLICIT[pathname]) return EXPLICIT[pathname];
+
+  const exact = own?.flatMap(group => group.items).find(item => item.href === pathname);
+  if (exact) return exact.name;
 
   // Longest matching nav PATH wins, so /publisher/calls beats /publisher.
   // Sorting by the raw href instead would let a filtered variant of a page win

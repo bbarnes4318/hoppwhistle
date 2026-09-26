@@ -164,6 +164,18 @@ export const STAFF_ONLY_ROUTES = [
   '/sales',
   '/network/agencies',
   '/network/onboarding',
+
+  /*
+   * The white-label tier's hubs: Agents, Revenue, Routing and Upgrades. Each
+   * gathers screens a white-label owner used to reach one sidebar entry at a
+   * time. A normal agency's nav does not link them, and a normal agency typed
+   * onto one is sent home like any other screen here -- its own Leaderboard,
+   * Team Members and Campaigns are where they always were.
+   */
+  '/agents',
+  '/revenue',
+  '/routing',
+  '/upgrades',
 ] as const;
 
 /**
@@ -190,7 +202,41 @@ export const WHITE_LABEL_ROUTES = [
   '/sales',
   '/network/agencies',
   '/network/onboarding',
+  '/agents',
+  '/revenue',
+  '/routing',
+  '/upgrades',
 ] as const;
+
+/**
+ * Where a white-label viewer's old URLs go.
+ *
+ * The white-label nav gathers these screens into hubs, one tab each (see
+ * WHITE_LABEL_OWNER_NAV). A bookmark or a link to the old URL must still land
+ * on the screen it named, so the dashboard layout replaces each of these
+ * paths with its hub tab -- for a white-label viewer only. Everybody else gets
+ * the page at the old URL, which still renders the same view.
+ *
+ * EXACT paths, not prefixes. `/delivery` and `/delivery/settlements` go to
+ * different sections, `/delivery/me` is an agent's own page and goes nowhere,
+ * and `/campaigns/[id]` is still where a campaign's detail lives.
+ * `/network/onboarding` is not here: the Agencies screen links to it.
+ */
+export const WHITE_LABEL_REDIRECTS: Readonly<Record<string, string>> = {
+  '/live': '/dashboard',
+  '/leaderboard': '/agents?tab=performance',
+  '/delivery/team': '/agents?tab=period',
+  '/settings/users': '/agents?tab=roster',
+  '/sales': '/revenue',
+  '/reports': '/revenue?tab=reports',
+  '/payouts': '/publishers?tab=payouts',
+  '/billing': '/buyers?tab=wallets',
+  '/campaigns': '/routing',
+  '/numbers': '/routing?tab=numbers',
+  '/rating': '/settings?tab=plan',
+  '/delivery': '/settings?tab=plan',
+  '/delivery/settlements': '/settings?tab=plan&section=settlements',
+};
 
 /**
  * The pathname as this module compares it.
@@ -204,6 +250,29 @@ function normalise(pathname: string | null | undefined): string {
   const path = (pathname ?? '').trim().split('?')[0].split('#')[0];
   if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
   return path;
+}
+
+/**
+ * The hub tab a white-label viewer on this path belongs on, or null.
+ *
+ * The path is compared after the same normalisation as the route lists, so a
+ * trailing slash does not dodge it. A query on the old URL is carried across
+ * underneath the tab's own -- Revenue links "your agents" to
+ * `/leaderboard?period=THIS_WEEK`, and that has to open the Performance tab on
+ * the same week, not on today.
+ */
+export function whiteLabelRedirectFor(pathname: string | null | undefined): string | null {
+  const path = normalise(pathname);
+  if (!Object.prototype.hasOwnProperty.call(WHITE_LABEL_REDIRECTS, path)) return null;
+
+  const target = WHITE_LABEL_REDIRECTS[path];
+  const query = (pathname ?? '').split('#')[0].split('?')[1];
+  if (!query) return target;
+
+  const [targetPath, targetQuery = ''] = target.split('?');
+  const merged = new URLSearchParams(query);
+  new URLSearchParams(targetQuery).forEach((value, key) => merged.set(key, value));
+  return `${targetPath}?${merged.toString()}`;
 }
 
 /**

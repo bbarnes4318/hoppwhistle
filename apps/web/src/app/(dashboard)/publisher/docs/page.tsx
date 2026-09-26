@@ -14,13 +14,15 @@ import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useBrand } from '@/hooks/use-brand';
 
 function PublisherDocsPage() {
+  const { productName } = useBrand();
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="border-b pb-4">
         <p className="mt-1 text-sm text-ink-2">
-          Everything you need to integrate with NetEnroll, test your integration, and work out what
+          Everything you need to integrate with {productName}, test your integration, and work out what
           went wrong when a call does not price the way you expected.
         </p>
       </div>

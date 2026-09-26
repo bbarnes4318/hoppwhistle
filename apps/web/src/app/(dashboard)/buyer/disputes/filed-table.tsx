@@ -15,12 +15,13 @@ import {
   StatusChip,
 } from '@/components/domain';
 
+import { disputeOutcome } from '../_lib/dispute';
+
 /**
  * Disputes you have filed, and where each one got to.
  *
- * The platform records a dispute as open or not — there is no resolved state
- * behind it yet — so this says "under review" and means it, rather than
- * inventing a progress bar out of a single boolean.
+ * A dispute is under review until the agency decides it, and then reads
+ * "Return accepted" or "Return denied" -- see `disputeOutcome`.
  */
 
 export interface FiledDisputeRow {
@@ -87,7 +88,12 @@ export function FiledDisputesTable({ rows }: { rows: FiledDisputeRow[] }) {
       id: 'status',
       header: 'Outcome',
       width: '140px',
-      cell: row => <StatusChip value={row.status} tone="ringing" label="Under review" size="sm" />,
+      cell: row => {
+        const outcome = disputeOutcome(row.status);
+        return (
+          <StatusChip value={row.status} tone={outcome.tone} label={outcome.label} size="sm" />
+        );
+      },
     },
     {
       id: 'amount',
@@ -129,14 +135,22 @@ export function FiledDisputesTable({ rows }: { rows: FiledDisputeRow[] }) {
           <>
             <DrawerSection title="Outcome">
               <DrawerField label="Status">
-                <StatusChip value={detail.status} tone="ringing" label="Under review" size="sm" />
+                <StatusChip
+                  value={detail.status}
+                  tone={disputeOutcome(detail.status).tone}
+                  label={disputeOutcome(detail.status).label}
+                  size="sm"
+                />
               </DrawerField>
               <DrawerField label="At stake">
                 <MoneyCell amount={detail.amount} unit="major" tone="auto" />
               </DrawerField>
               <p className="t-meta mt-2 text-ink-3">
-                The charge stands while this is reviewed, and the publisher&apos;s payout is held.
-                The outcome appears here once it is decided.
+                {detail.status === 'ACCEPTED'
+                  ? 'The call was taken back: you are refunded, or were never charged, for it.'
+                  : detail.status === 'DENIED'
+                    ? 'The call stands as billed.'
+                    : "The charge stands while this is reviewed, and the publisher's payout is held. The outcome appears here once it is decided."}
               </p>
             </DrawerSection>
 

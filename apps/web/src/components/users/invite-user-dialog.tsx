@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2, Building2, UserPlus } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +28,14 @@ interface InviteUserDialogProps {
  open: boolean;
  onOpenChange: (open: boolean) => void;
  onSuccess?: () => void;
+ /** Offer only these roles. Every role in AVAILABLE_ROLES when absent. */
+ roles?: readonly string[];
+}
+
+interface Publisher {
+ id: string;
+ name: string;
+ status?: string;
 }
 
 interface Buyer {
@@ -43,10 +51,28 @@ const AVAILABLE_ROLES = [
  { value: 'ANALYST', label: 'Analyst', description: 'View-only access to reports' },
  { value: 'AGENT', label: 'Agent', description: 'Call center agent access' },
  { value: 'BUYER', label: 'Buyer (External)', description: 'External buyer portal access' },
+ {
+ value: 'PUBLISHER',
+ label: 'Publisher (External)',
+ description: 'External publisher portal access',
+ },
 ] as const;
 
-export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDialogProps) {
+/** The roles the dialog offers: these, in AVAILABLE_ROLES' order, or every one. */
+export function rolesOffered(roles?: readonly string[]) {
+ return roles ? AVAILABLE_ROLES.filter(role => roles.includes(role.value)) : AVAILABLE_ROLES;
+}
+
+/** The role a fresh form starts on: Analyst, unless it is not on offer. */
+function initialRole(offered: ReadonlyArray<{ value: string }>): string {
+ return offered.some(role => role.value === 'ANALYST') ? 'ANALYST' : (offered[0]?.value ?? 'ANALYST');
+}
+
+export function InviteUserDialog({ open, onOpenChange, onSuccess, roles }: InviteUserDialogProps) {
+ const offeredRoles = useMemo(() => rolesOffered(roles), [roles]);
  const [loading, setLoading] = useState(false);
+ const [publishers, setPublishers] = useState<Publisher[]>([]);
+ const [loadingPublishers, setLoadingPublishers] = useState(false);
  const [error, setError] = useState<string | null>(null);
  const [buyers, setBuyers] = useState<Buyer[]>([]);
  const [loadingBuyers, setLoadingBuyers] = useState(false);
@@ -56,8 +82,9 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  email: '',
  firstName: '',
  lastName: '',
- role: 'ANALYST',
+ role: initialRole(offeredRoles),
  buyerId: '',
+ publisherId: '',
  });
 
  // Fetch buyers when role is BUYER and not creating new
@@ -67,6 +94,13 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  }
  }, [formData.role, createNewBuyer, buyers.length]);
 
+ // Fetch publishers when role is PUBLISHER: a publisher login is always tied to one.
+ useEffect(() => {
+ if (formData.role === 'PUBLISHER' && publishers.length === 0) {
+ void loadPublishers();
+ }
+ }, [formData.role, publishers.length]);
+
  useEffect(() => {
  if (open) {
  // Reset form when dialog opens
@@ -74,14 +108,15 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  email: '',
  firstName: '',
  lastName: '',
- role: 'ANALYST',
+ role: initialRole(offeredRoles),
  buyerId: '',
+ publisherId: '',
  });
  setCreateNewBuyer(true);
  setNewBuyerName('');
  setError(null);
  }
- }, [open]);
+ }, [open, offeredRoles]);
 
  const loadBuyers = async () => {
  setLoadingBuyers(true);
@@ -94,6 +129,20 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  console.error('Failed to load buyers:', err);
  } finally {
  setLoadingBuyers(false);
+ }
+ };
+
+ const loadPublishers = async () => {
+ setLoadingPublishers(true);
+ try {
+ const response = await apiClient.get<{ data: Publisher[] }>('/api/v1/publishers');
+ if (response.data?.data) {
+ setPublishers(response.data.data.filter(p => !p.status || p.status === 'ACTIVE'));
+ }
+ } catch (err) {
+ console.error('Failed to load publishers:', err);
+ } finally {
+ setLoadingPublishers(false);
  }
  };
 
@@ -122,6 +171,11 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  }
  }
 
+ if (formData.role === 'PUBLISHER' && !formData.publisherId) {
+ setError('Please select the publisher this login is for');
+ return;
+ }
+
  setLoading(true);
  setError(null);
 
@@ -132,6 +186,7 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  lastName?: string;
  role: string;
  buyerId?: string;
+ publisherId?: string;
  createNewBuyer?: boolean;
  newBuyerName?: string;
  } = {
@@ -151,6 +206,10 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  }
  }
 
+ if (formData.role === 'PUBLISHER') {
+ payload.publisherId = formData.publisherId;
+ }
+
  const response = await apiClient.post<{
  id: string;
  email: string;
@@ -167,9 +226,11 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
 
  if (response.data) {
  // Show success message with temp password
- const message = response.data.tempPassword
- ? `✅ Buyer invited successfully!\n\n📧 Email: ${response.data.email}\n🔑 Temporary Password: ${response.data.tempPassword}\n🏢 Buyer Company: ${response.data.buyerName || 'Linked'}\n\n⚠️ Please share these credentials securely with the buyer.`
- : 'User invited successfully!';
+ const message = !response.data.tempPassword
+ ? 'User invited successfully!'
+ : formData.role === 'PUBLISHER'
+ ? `✅ Publisher invited successfully!\n\n📧 Email: ${response.data.email}\n🔑 Temporary Password: ${response.data.tempPassword}\n🏢 Publisher: ${publishers.find(p => p.id === formData.publisherId)?.name || 'Linked'}\n\n⚠️ Please share these credentials securely with the publisher.`
+ : `✅ Buyer invited successfully!\n\n📧 Email: ${response.data.email}\n🔑 Temporary Password: ${response.data.tempPassword}\n🏢 Buyer Company: ${response.data.buyerName || 'Linked'}\n\n⚠️ Please share these credentials securely with the buyer.`;
 
  alert(message);
  onSuccess?.();
@@ -183,6 +244,7 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  };
 
  const isBuyerRole = formData.role === 'BUYER';
+ const isPublisherRole = formData.role === 'PUBLISHER';
 
  return (
  <Dialog open={open} onOpenChange={onOpenChange}>
@@ -246,6 +308,7 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  role: value,
  // Clear buyerId when switching away from BUYER
  buyerId: value !== 'BUYER' ? '' : formData.buyerId,
+ publisherId: value !== 'PUBLISHER' ? '' : formData.publisherId,
  })
  }
  disabled={loading}
@@ -254,7 +317,7 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  <SelectValue placeholder="Select a role" />
  </SelectTrigger>
  <SelectContent>
- {AVAILABLE_ROLES.map(role => (
+ {offeredRoles.map(role => (
  <SelectItem key={role.value} value={role.value}>
  <div className="flex flex-col">
  <span>{role.label}</span>
@@ -340,6 +403,39 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  </div>
  )}
 
+ {isPublisherRole && (
+ <div className="space-y-2">
+ <Label htmlFor="publisherId">Publisher *</Label>
+ <Select
+ value={formData.publisherId}
+ onValueChange={value => setFormData({ ...formData, publisherId: value })}
+ disabled={loading || loadingPublishers}
+ >
+ <SelectTrigger id="publisherId">
+ <SelectValue
+ placeholder={loadingPublishers ? 'Loading publishers...' : 'Select a publisher'}
+ />
+ </SelectTrigger>
+ <SelectContent>
+ {publishers.length === 0 && !loadingPublishers ? (
+ <SelectItem value="" disabled>
+ No active publishers found
+ </SelectItem>
+ ) : (
+ publishers.map(publisher => (
+ <SelectItem key={publisher.id} value={publisher.id}>
+ {publisher.name}
+ </SelectItem>
+ ))
+ )}
+ </SelectContent>
+ </Select>
+ <p className="text-xs text-muted-foreground">
+ This login sees that publisher&apos;s calls and payouts, and nothing else.
+ </p>
+ </div>
+ )}
+
  {error && (
  <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</div>
  )}
@@ -355,7 +451,8 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
  loading ||
  !formData.email.trim() ||
  (isBuyerRole && createNewBuyer && !newBuyerName.trim()) ||
- (isBuyerRole && !createNewBuyer && !formData.buyerId)
+ (isBuyerRole && !createNewBuyer && !formData.buyerId) ||
+ (isPublisherRole && !formData.publisherId)
  }
  >
  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

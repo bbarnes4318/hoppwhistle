@@ -16,7 +16,8 @@
  *   revenue        buyerBillableAmount
  *   payout         publisherPayoutAmount
  *   call cost      cost
- *   disputes       the revenue of a call with a disputeStatus
+ *   disputes       the revenue of a call with an OPEN dispute ('DISPUTED'; a
+ *                  decided return is closed -- see lib/dispute-status.ts)
  *
  * and, per group, from the accrual ledger rows written against its calls:
  *
@@ -35,6 +36,8 @@
  */
 
 import { Prisma, type PrismaClient } from '@prisma/client';
+
+import { isOpenDispute } from '../../lib/dispute-status.js';
 
 /** The accrual-ledger row types that bear on a call's money. */
 export const CALL_MONEY_LEDGER_TYPES = [
@@ -185,7 +188,7 @@ export function summariseCallMoney<C extends MoneyCall>(
       bucket.revenue = bucket.revenue.plus(revenue);
       bucket.payout = bucket.payout.plus(payout);
       bucket.callCost = bucket.callCost.plus(callCost);
-      if (call.disputeStatus) {
+      if (isOpenDispute(call.disputeStatus)) {
         bucket.disputes = bucket.disputes.plus(revenue);
         bucket.disputesCount++;
       }

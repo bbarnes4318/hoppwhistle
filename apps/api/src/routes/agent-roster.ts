@@ -53,6 +53,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { resolveTenant, getActingUserId } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
+import { agentPriorityFor, answerOrderFromMetadata } from '../services/campaigns/answer-order.js';
 import { getRedisClient } from '../services/redis.js';
 
 /** Mirrors `services/routing.ts`, which reads the same key for the same reason. */
@@ -107,8 +108,13 @@ const AgentSettingsSchema = z
     message: 'Nothing to update',
   });
 
-/** One agent's live softphone status, from the key the softphone writes. */
-async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
+/**
+ * Each agent's live softphone status, from the key the softphone writes.
+ *
+ * Exported for the white-label Today screen, which counts agents ready and on
+ * a call from the same key; one reader means one idea of where that key lives.
+ */
+export async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
   const statuses = new Map<string, string>();
   if (userIds.length === 0) return statuses;
 
@@ -146,7 +152,7 @@ async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
  * off AND has no campaign has a setup problem the owner should be told about
  * first, because it will still be there when they come back.
  */
-type BlockerCode =
+export type BlockerCode =
   | 'INVITE_PENDING'
   | 'ACCOUNT_STATUS'
   | 'NO_LICENSED_STATES'
@@ -159,7 +165,7 @@ type BlockerCode =
  * A client that has to branch on the sentence breaks the moment the sentence
  * is reworded, and these sentences are written to be read, so they will be.
  */
-function blocker(agent: {
+export function blocker(agent: {
   status: string;
   licensedStates: string[];
   hasSipCredential: boolean;
@@ -193,6 +199,63 @@ function blocker(agent: {
     return { code: 'UNAVAILABLE', reason: 'Has turned their phone off' };
   }
   return null;
+}
+
+/** The columns of a user `agentBlocker` reads. */
+export const AGENT_BLOCKER_SELECT = {
+  status: true,
+  availableForCalls: true,
+  metadata: true,
+  sipCredential: { select: { status: true, passwordEncrypted: true } },
+} satisfies Prisma.UserSelect;
+
+/** What `agentBlocker` needs to know about one agent. */
+export interface AgentBlockerFacts {
+  status: string;
+  availableForCalls: boolean;
+  metadata: Prisma.JsonValue;
+  sipCredential: { status: string; passwordEncrypted: string | null } | null;
+}
+
+/** A user's metadata as an object, or an empty one when it is anything else. */
+function metadataOf(metadata: Prisma.JsonValue): Record<string, unknown> {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * A credential row with no password is a RESERVATION: the migration claimed
+ * this agent's old extension but there was never a per-agent secret to carry
+ * over. It cannot authenticate, so the agent has not really been provisioned
+ * yet -- see `AgentSipCredential`.
+ */
+function hasUsableSipCredential(credential: AgentBlockerFacts['sipCredential']): boolean {
+  return (
+    credential !== null && credential.status === 'ACTIVE' && credential.passwordEncrypted !== null
+  );
+}
+
+/**
+ * `blocker` for one user row, from the columns in `AGENT_BLOCKER_SELECT` and
+ * the number of ACTIVE campaigns they are assigned to.
+ *
+ * The roster and the white-label Today screen both call this, so "an agent who
+ * can't take calls" means the same thing on both.
+ */
+export function agentBlocker(
+  user: AgentBlockerFacts,
+  campaignCount: number
+): ReturnType<typeof blocker> {
+  const meta = metadataOf(user.metadata);
+  return blocker({
+    status: user.status,
+    licensedStates: normalizeLicensedStates(meta.licensedStates),
+    hasSipCredential: hasUsableSipCredential(user.sipCredential),
+    campaignCount,
+    availableForCalls: user.availableForCalls,
+    forwardsToCell: readCellForwardNumber(meta) !== null,
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
@@ -262,37 +325,16 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
       }
 
       const agents = users.map(user => {
-        const meta =
-          user.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)
-            ? (user.metadata as Record<string, unknown>)
-            : {};
+        const meta = metadataOf(user.metadata);
 
         const licensedStates = normalizeLicensedStates(meta.licensedStates);
         const rawMax = meta.maxConcurrentCalls;
         const parsedMax = typeof rawMax === 'number' ? rawMax : parseInt(String(rawMax), 10);
         const assignedCampaigns = campaignsByUser.get(user.id) ?? [];
 
-        /*
-         * A credential row with no password is a RESERVATION: the migration
-         * claimed this agent's old extension but there was never a per-agent
-         * secret to carry over. It cannot authenticate, so the agent has not
-         * really been provisioned yet -- see `AgentSipCredential`.
-         */
-        const hasSipCredential =
-          user.sipCredential !== null &&
-          user.sipCredential.status === 'ACTIVE' &&
-          user.sipCredential.passwordEncrypted !== null;
-
+        const hasSipCredential = hasUsableSipCredential(user.sipCredential);
         const cellForwardNumber = readCellForwardNumber(meta);
-
-        const blocked = blocker({
-          status: user.status,
-          licensedStates,
-          hasSipCredential,
-          campaignCount: assignedCampaigns.length,
-          availableForCalls: user.availableForCalls,
-          forwardsToCell: cellForwardNumber !== null,
-        });
+        const blocked = agentBlocker(user, assignedCampaigns.length);
 
         return {
           id: user.id,
@@ -424,10 +466,11 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
        * other direction: an id that named another agency's campaign would put
        * this agency's agent into that agency's call pool.
        */
+      let owned: Array<{ id: string; metadata: Prisma.JsonValue }> = [];
       if (requested.length > 0) {
-        const owned = await prisma.campaign.findMany({
+        owned = await prisma.campaign.findMany({
           where: { id: { in: requested }, tenantId },
-          select: { id: true },
+          select: { id: true, metadata: true },
         });
         if (owned.length !== requested.length) {
           const ownedIds = new Set(owned.map(c => c.id));
@@ -442,6 +485,14 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
         }
       }
 
+      const modeByCampaign = new Map(
+        owned.map(c => [c.id, answerOrderFromMetadata(c.metadata)] as const)
+      );
+      const newAgentPriority = (campaignId: string): number | null => {
+        const mode = modeByCampaign.get(campaignId);
+        return mode ? agentPriorityFor(mode) : null;
+      };
+
       /*
        * Replace, in one transaction. Deleting then inserting outside a
        * transaction leaves a window in which the agent is on NO campaign, and
@@ -454,7 +505,19 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
         ...requested.map(campaignId =>
           prisma.campaignAgent.upsert({
             where: { tenantId_campaignId_userId: { tenantId, campaignId, userId } },
-            create: { tenantId, campaignId, userId, status: 'ACTIVE' },
+            /*
+             * A NEW assignment on a campaign with a "who answers first" mode
+             * is placed where that mode puts every agent (0, or 1000 when
+             * buyers go first); with no mode it has no preference, as before.
+             * An existing row keeps its priority -- the mode already set it.
+             */
+            create: {
+              tenantId,
+              campaignId,
+              userId,
+              status: 'ACTIVE',
+              priority: newAgentPriority(campaignId),
+            },
             update: { status: 'ACTIVE' },
           })
         ),

@@ -30,9 +30,10 @@ import {
 } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SalesTodayPanel } from '@/components/white-label/sales-today-panel';
+import { WhiteLabelToday } from '@/components/white-label/today';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { apiClient } from '@/lib/api';
 import { hasLeftConsole } from '@/lib/console-exit';
 import { formatClock, formatTableDateTime } from '@/lib/format-time';
@@ -208,17 +209,26 @@ function ChartTooltip({
 }
 
 /* ─── Main Dashboard ───────────────────────────────────────────── */
+/**
+ * A white-label owner's `/dashboard` is Today: what is happening now, where
+ * today's calls went, and what needs a decision. Everybody else gets the
+ * dashboard below, unchanged. See `useWhiteLabelView` for who counts --
+ * staff inside a white-label agency see it only while previewing its owner.
+ */
 export default function DashboardPage() {
+  const whiteLabel = useWhiteLabelView();
+  const { loading } = useAuth();
+  const platform = usePlatformContext();
+  // Which dashboard is not known until both have answered. The layout already
+  // waits for them; this page does too, so neither dashboard mounts, and fires
+  // its requests, only to be swapped for the other.
+  if (loading || platform.loading) return <div className="flex-1" aria-busy="true" />;
+  return whiteLabel ? <WhiteLabelToday /> : <AgencyDashboard />;
+}
+
+function AgencyDashboard() {
   const router = useRouter();
-  const {
-    user,
-    isPublisherOnly,
-    isBuyerOnly,
-    isAgentOnly,
-    isWhiteLabel,
-    isPlatformAdmin,
-    loading: authLoading,
-  } = useAuth();
+  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
 
   /*
    * A platform operator is not one of the roles below, whatever the role list
@@ -411,17 +421,8 @@ export default function DashboardPage() {
     { key: 'custom', label: 'Custom' },
   ];
 
-  /*
-   * A white-label owner's calls are also sold, so what they sold for today
-   * leads the page. Staff inside the agency see it only while previewing it
-   * as a role, which is when they are looking at the owner's dashboard.
-   */
-  const previewing = platform.previewRole != null || user?.previewRole != null;
-  const showSalesToday = isWhiteLabel && (!isPlatformAdmin || previewing);
-
   return (
     <div className="page-canvas">
-      {showSalesToday ? <SalesTodayPanel /> : null}
       {/*
         Period and live status on one toolbar row, KPI tiles straight under it.
         The page title is already in the topbar, so there is no header row of

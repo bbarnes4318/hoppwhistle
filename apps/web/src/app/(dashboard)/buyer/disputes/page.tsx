@@ -223,7 +223,9 @@ async function FiledSection({ token, buyerId, startISO, endISO }: Args) {
         pageSize: 50,
         startDate: startISO,
         endDate: endISO,
-        disputeStatus: 'DISPUTED',
+        // Every call a dispute was filed on, decided or not, so an accepted or
+        // denied return stays on the list with its outcome.
+        disputeStatus: 'ANY',
       })
     ),
   ]);

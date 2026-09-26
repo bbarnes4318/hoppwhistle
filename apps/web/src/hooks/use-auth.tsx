@@ -122,6 +122,11 @@ interface UserData {
    * about the AGENCY; `isWhiteLabel` below is what the person may do with it.
    */
   whiteLabel?: boolean;
+  /**
+   * The upgrades turned on for the acting agency, from `/api/auth/me`. See
+   * `UPGRADE_KEYS` in `components/layout/nav-config.ts`.
+   */
+  upgrades?: string[];
 }
 
 interface UseAuthReturn {
@@ -165,6 +170,8 @@ interface UseAuthReturn {
    * screen does not lie about what will happen.
    */
   isReadOnlyPreview: boolean;
+  /** The upgrades turned on for this agency; empty when none or unknown. */
+  upgrades: string[];
   isNewUser: boolean;
   buyerId: string | null;
   publisherId: string | null;
@@ -274,6 +281,9 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
             ? { theme: rawUser.brand.theme, name: rawUser.brand.name ?? null }
             : null,
         whiteLabel: rawUser.whiteLabel === true,
+        upgrades: Array.isArray(rawUser.upgrades)
+          ? rawUser.upgrades.filter((key: unknown): key is string => typeof key === 'string')
+          : [],
       });
       setStatus('authenticated');
       setError(null);
@@ -353,6 +363,9 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
  * happen; a test that renders one component in isolation gets a sane answer
  * rather than a thrown error that unmounts what it was trying to look at.
  */
+/** One empty list, so a memo keyed on `upgrades` does not re-run every render. */
+const NO_UPGRADES: string[] = [];
+
 const NO_SESSION: AuthSession = {
   user: null,
   status: 'anonymous',
@@ -493,6 +506,7 @@ export function useAuth(): UseAuthReturn {
     isPlatformAdmin,
     isWhiteLabel,
     isReadOnlyPreview,
+    upgrades: user?.upgrades ?? NO_UPGRADES,
     isNewUser,
     buyerId,
     publisherId,

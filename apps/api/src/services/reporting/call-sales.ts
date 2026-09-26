@@ -25,6 +25,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 
+import { isOpenDispute } from '../../lib/dispute-status.js';
 import type { ResolvedPeriod } from '../leaderboard/period.js';
 import { calendarDayOf } from '../rating/calendar-day.js';
 
@@ -55,6 +56,7 @@ export interface CallSalesTotals {
   /** A percentage. Null when there was no revenue. */
   marginPct: number | null;
   revenuePerBillableCall: number | null;
+  /** Calls with an OPEN dispute (`isOpenDispute`); a decided return is not one. */
   disputedCalls: number;
   duplicates: number;
   blocked: number;
@@ -242,7 +244,7 @@ export async function getCallSalesSummary(
     marginPct: revenue.gt(0) ? percent(totalsMoney.profit.toNumber(), revenue.toNumber()) : null,
     revenuePerBillableCall:
       billableToBuyers > 0 ? money(revenue.dividedBy(billableToBuyers)) : null,
-    disputedCalls: calls.filter(call => call.disputeStatus !== null).length,
+    disputedCalls: calls.filter(call => isOpenDispute(call.disputeStatus)).length,
     duplicates: calls.filter(call => call.isDuplicate).length,
     blocked,
   };
@@ -292,7 +294,7 @@ export async function getCallSalesSummary(
         revenue: money(billableRevenue(list)),
         avgConnectedSeconds:
           connected.length > 0 ? Math.round(connectedSeconds / connected.length) : null,
-        disputed: list.filter(call => call.disputeStatus !== null).length,
+        disputed: list.filter(call => isOpenDispute(call.disputeStatus)).length,
         capConsumedToday: buyer?.stats?.capConsumedToday ?? 0,
       };
     })

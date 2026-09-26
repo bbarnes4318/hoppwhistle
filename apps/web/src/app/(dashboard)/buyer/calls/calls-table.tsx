@@ -21,6 +21,7 @@ import { readSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
 
 import { DisputeDrawer, type DisputableCall } from '../_components/dispute-drawer';
+import { disputeOutcome } from '../_lib/dispute';
 import { acceptCall } from '../actions';
 
 /**
@@ -58,7 +59,15 @@ function outcomeChip(row: CallRowView): React.ReactNode {
     // disputeStatus is a free String in the schema, not an enum, so the tone
     // table cannot resolve it. Amber, not violet: an open dispute is an
     // unsettled question, not something the platform stopped on purpose.
-    return <StatusChip value={row.disputeStatus} tone="ringing" size="sm" />;
+    const outcome = disputeOutcome(row.disputeStatus);
+    return (
+      <StatusChip
+        value={row.disputeStatus}
+        tone={outcome.tone}
+        label={outcome.decided ? outcome.label : undefined}
+        size="sm"
+      />
+    );
   }
   if (row.disposition === 'VERIFIED') {
     return <StatusChip value="ACCEPTED" tone="live" label="Accepted" size="sm" />;

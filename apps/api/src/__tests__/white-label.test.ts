@@ -257,7 +257,7 @@ describe.skipIf(!gate.available)('White-label tier', () => {
       buyerBillableAmount: new Prisma.Decimal('40'),
       publisherPayoutAmount: new Prisma.Decimal('15'),
       publisherPayoutStatus: 'PAYABLE',
-      disputeStatus: 'OPEN',
+      disputeStatus: 'DISPUTED',
       cost: new Prisma.Decimal('0.40'),
       connectedDuration: 120,
     });

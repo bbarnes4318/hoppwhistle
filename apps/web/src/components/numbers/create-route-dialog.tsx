@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
+import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
 
@@ -51,6 +52,7 @@ export function CreateRouteDialog({
   availableNumbers,
   onSuccess,
 }: CreateRouteDialogProps) {
+  const { brand } = useBrand();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [phoneNumberId, setPhoneNumberId] = useState('');
@@ -164,7 +166,7 @@ export function CreateRouteDialog({
 
         <form onSubmit={e => void handleSubmit(e)} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="phoneNumber">NetEnroll DID</Label>
+            <Label htmlFor="phoneNumber">{brand ? 'Phone number' : 'NetEnroll DID'}</Label>
             <Select value={phoneNumberId} onValueChange={setPhoneNumberId} disabled={loading}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a phone number" />
