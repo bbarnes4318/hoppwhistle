@@ -114,6 +114,7 @@ REQUIRED_MIGRATIONS="
 20260924010000_agency_auto_refill
 20260925000000_tenant_brand_theme
 20260926000000_tenant_white_label
+20260926120000_grant_sean_grove_owner_admin
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -448,6 +449,19 @@ migration_applied() {
               WHERE table_schema = 'public'
                 AND table_name = 'tenants'
                 AND column_name IN ('whiteLabel', 'parentTenantId')) = 2" ;;
+    *_grant_sean_grove_owner_admin)
+      # Data, not schema: OWNER + ADMIN for the one user named Sean Grove. With
+      # no unique match the migration deliberately inserts nothing, so the
+      # probe reads that as done rather than failing every deploy; once the
+      # account exists it reads false and the next deploy grants the roles.
+      echo "WITH t AS (SELECT id FROM users
+                WHERE lower(trim(\"firstName\")) = 'sean'
+                  AND lower(trim(\"lastName\")) = 'grove')
+            SELECT (SELECT count(*) FROM t) <> 1
+                OR (SELECT count(DISTINCT r.name) FROM user_roles ur
+                      JOIN roles r ON r.id = ur.\"roleId\"
+                     WHERE ur.\"userId\" IN (SELECT id FROM t)
+                       AND r.name IN ('OWNER', 'ADMIN')) = 2" ;;
     *)
       echo "" ;;
   esac
