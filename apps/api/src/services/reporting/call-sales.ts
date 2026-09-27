@@ -18,9 +18,10 @@
  * Payout, call cost, the ledger fees, adjustments, disputes and profit come
  * from `services/reporting/call-money.ts`, the arithmetic
  * `/api/v1/reports/campaign-profitability` runs on, so the two reconcile.
- * Revenue is the sum of `buyerBillableAmount` over billable calls; the billing
- * service writes zero revenue on every non-billable call, so that is the same
- * figure the report sums.
+ * Revenue is call-money's revenue, the sum of `buyerBillableAmount`: the billing
+ * service writes zero revenue on every non-billable call, so it is the same
+ * figure the report sums. The calls are `salesCallWhere`'s, the one set every
+ * money screen reads.
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -30,8 +31,8 @@ import type { ResolvedPeriod } from '../leaderboard/period.js';
 import { calendarDayOf } from '../rating/calendar-day.js';
 
 import {
-  callAmounts,
   loadCallMoneyLedger,
+  salesCallWhere,
   summariseCallMoney,
   type MoneyBucket,
   type MoneyLedgerEntry,
@@ -43,12 +44,23 @@ export interface CallSalesTotals {
   inboundCalls: number;
   answeredByAgents: number;
   sentToBuyers: number;
+  /** Every billable call, whoever answered it. */
+  billable: number;
+  /** Of `billable`, the calls a buyer answered. */
   billableToBuyers: number;
+  /** Of `billable`, the calls one of the agency's agents answered. */
+  billableAgentAnswered: number;
   /** A percentage: 62.5 means 62.5%. Null when nothing was sent to a buyer. */
   sellThroughPct: number | null;
   revenue: number;
   publisherPayouts: number;
   callCost: number;
+  /**
+   * True when any call's cost in the period is the per-minute estimate the
+   * billing service falls back on (`metadata.costEstimated`), so the screen can
+   * say "Call cost (estimated)".
+   */
+  callCostEstimated: boolean;
   otherCosts: number;
   adjustments: number;
   disputes: number;
@@ -106,7 +118,10 @@ export interface CallSalesDayRow {
   day: string;
   inbound: number;
   sentToBuyers: number;
+  /** Every billable call that day, whoever answered it. */
   billable: number;
+  billableToBuyers: number;
+  billableAgentAnswered: number;
   revenue: number;
   payout: number;
   profit: number;
@@ -145,6 +160,7 @@ const CALL_SELECT = {
   disputeStatus: true,
   isDuplicate: true,
   blocked: true,
+  metadata: true,
 } satisfies Prisma.CallSelect;
 
 type SalesCall = Prisma.CallGetPayload<{ select: typeof CALL_SELECT }>;
@@ -160,23 +176,40 @@ function percent(part: number, whole: number): number | null {
   return Math.round((part / whole) * 10000) / 100;
 }
 
-/** Revenue as this screen counts it: billable calls only. */
-function billableRevenue(calls: readonly SalesCall[]): Prisma.Decimal {
-  return calls.reduce(
-    (sum, call) => (call.billable ? sum.plus(callAmounts(call).revenue) : sum),
-    callAmounts({ ...EMPTY_CALL }).revenue
-  );
+/**
+ * The billable calls, split by who answered.
+ *
+ * Billable means `billable = true` and nothing else, on every screen. Of those,
+ * a call a buyer answered earns revenue; a call one of the agency's own agents
+ * answered earns none but is still paid to its publisher.
+ */
+function billableSplit(calls: readonly SalesCall[]): {
+  billable: number;
+  toBuyers: number;
+  agentAnswered: number;
+} {
+  let billable = 0;
+  let toBuyers = 0;
+  let agentAnswered = 0;
+  for (const call of calls) {
+    if (!call.billable) continue;
+    billable++;
+    if (call.buyerId !== null) toBuyers++;
+    else if (call.answeredByUserId !== null) agentAnswered++;
+  }
+  return { billable, toBuyers, agentAnswered };
 }
 
-const EMPTY_CALL = {
-  id: '',
-  billable: false,
-  buyerBillableAmount: null,
-  publisherPayoutAmount: null,
-  cost: null,
-  connectedDuration: null,
-  disputeStatus: null,
-};
+/** Whether the billing service priced this call's cost at its per-minute estimate. */
+export function isCostEstimated(call: { metadata: Prisma.JsonValue | null }): boolean {
+  const metadata = call.metadata;
+  return (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    !Array.isArray(metadata) &&
+    metadata.costEstimated === true
+  );
+}
 
 function groupBy<K>(calls: readonly SalesCall[], keyOf: (call: SalesCall) => K | null) {
   const groups = new Map<K, SalesCall[]>();
@@ -204,11 +237,7 @@ export async function getCallSalesSummary(
   const { prisma } = deps;
 
   const calls: SalesCall[] = await prisma.call.findMany({
-    where: {
-      tenantId,
-      direction: 'INBOUND',
-      createdAt: { gte: period.start, lt: period.endExclusive },
-    },
+    where: salesCallWhere(tenantId, period),
     select: CALL_SELECT,
     orderBy: { createdAt: 'asc' },
   });
@@ -224,6 +253,7 @@ export async function getCallSalesSummary(
   const all = summariseCallMoney(calls, ledger, () => 'all');
   const byPublisherMoney = summariseCallMoney(calls, ledger, call => call.publisherId ?? '');
   const byDayMoney = summariseCallMoney(calls, ledger, call => calendarDayOf(call.createdAt));
+  const byBuyerMoney = summariseCallMoney(calls, ledger, call => call.buyerId ?? '');
 
   /* ── Totals ─────────────────────────────────────────────────────────────── */
 
@@ -231,21 +261,30 @@ export async function getCallSalesSummary(
   const answeredByAgents = calls.filter(call => call.answeredByUserId !== null).length;
   const toBuyers = calls.filter(call => call.buyerId !== null);
   const sentToBuyers = toBuyers.length;
-  const billableToBuyers = toBuyers.filter(call => call.billable).length;
+  const split = billableSplit(calls);
+  const billableToBuyers = split.toBuyers;
   const blocked = calls.filter(call => call.blocked).length;
 
-  const revenue = billableRevenue(calls);
   const totalsMoney: MoneyBucket = all.totals;
+  /*
+   * The same revenue every other screen reads: `buyerBillableAmount` summed by
+   * call-money. The billing service writes zero on a call that is not billable
+   * or that no buyer answered, so this is the billable-to-buyers revenue.
+   */
+  const revenue = totalsMoney.revenue;
 
   const totals: CallSalesTotals = {
     inboundCalls,
     answeredByAgents,
     sentToBuyers,
+    billable: split.billable,
     billableToBuyers,
+    billableAgentAnswered: split.agentAnswered,
     sellThroughPct: percent(billableToBuyers, sentToBuyers),
     revenue: money(revenue),
     publisherPayouts: money(totalsMoney.payout),
     callCost: money(totalsMoney.callCost),
+    callCostEstimated: calls.some(isCostEstimated),
     otherCosts: money(totalsMoney.otherCosts),
     adjustments: money(totalsMoney.adjustments),
     disputes: money(totalsMoney.disputes),
@@ -300,7 +339,7 @@ export async function getCallSalesSummary(
         calls: list.length,
         billable,
         billablePct: percent(billable, list.length),
-        revenue: money(billableRevenue(list)),
+        revenue: money(byBuyerMoney.groups.get(buyerId)!.revenue),
         avgConnectedSeconds:
           connected.length > 0 ? Math.round(connectedSeconds / connected.length) : null,
         disputed: list.filter(call => isOpenDispute(call.disputeStatus)).length,
@@ -333,13 +372,11 @@ export async function getCallSalesSummary(
         calls: list.length,
         answeredByAgents: list.filter(call => call.answeredByUserId !== null).length,
         sentToBuyers: list.filter(call => call.buyerId !== null).length,
-        billable: list.filter(call => call.billable).length,
-        billableAgentAnswered: list.filter(
-          call => call.billable && call.buyerId === null && call.answeredByUserId !== null
-        ).length,
-        billableToBuyers: list.filter(call => call.billable && call.buyerId !== null).length,
+        billable: billableSplit(list).billable,
+        billableAgentAnswered: billableSplit(list).agentAnswered,
+        billableToBuyers: billableSplit(list).toBuyers,
         payout: money(bucket.payout),
-        revenue: money(billableRevenue(list)),
+        revenue: money(bucket.revenue),
         profit: money(bucket.profit),
       };
     })
@@ -355,8 +392,10 @@ export async function getCallSalesSummary(
       day,
       inbound: list.length,
       sentToBuyers: list.filter(call => call.buyerId !== null).length,
-      billable: list.filter(call => call.buyerId !== null && call.billable).length,
-      revenue: money(billableRevenue(list)),
+      billable: billableSplit(list).billable,
+      billableToBuyers: billableSplit(list).toBuyers,
+      billableAgentAnswered: billableSplit(list).agentAnswered,
+      revenue: money(bucket.revenue),
       payout: money(bucket.payout),
       profit: money(bucket.profit),
     };

@@ -120,6 +120,35 @@ export async function disputeCall(token: string, input: DisputeInput): Promise<A
   }
 }
 
+/**
+ * Ask the agency to top the wallet up.
+ *
+ * The API emails the agency's owners the buyer's name and the amount; it moves
+ * no money, so there is nothing to revalidate. The buyer id is the caller's
+ * own -- the API refuses any other.
+ */
+export async function requestTopUp(
+  token: string,
+  buyerId: string,
+  amount: number
+): Promise<ActionResult> {
+  const bearer = normalizeToken(token);
+  if (!bearer) return { ok: false, error: MISSING_TOKEN_MESSAGE };
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: 'Enter an amount above $0.' };
+  }
+
+  try {
+    await apiPost(`/api/v1/buyers/${encodeURIComponent(buyerId)}/top-up-request`, bearer, {
+      amount,
+    });
+    return { ok: true };
+  } catch (err) {
+    return failure(err, 'Could not send this request.');
+  }
+}
+
 export interface TargetPatch {
   status?: 'ACTIVE' | 'INACTIVE';
   maxCap?: number;

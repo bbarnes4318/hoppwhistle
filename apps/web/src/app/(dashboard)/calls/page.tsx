@@ -12,6 +12,7 @@ import {
   ArrowRightLeft,
   X,
   SlidersHorizontal,
+  ListFilter,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
@@ -22,6 +23,8 @@ import {
   Notice,
   Panel,
   PanelBody,
+  SheetDrawer,
+  StatusChip,
   Toolbar,
   ToolbarActions,
   ToolbarClear,
@@ -65,8 +68,29 @@ import { apiClient, isNoActingTenant } from '@/lib/api';
 import { resolveVisibleColumns } from '@/lib/call-column-visibility';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
 import { formatFullDateTime, formatTableDateTime } from '@/lib/format-time';
-import { CLAWED_BACK, CLAWED_BACK_BADGE, CLAWED_BACK_LABEL } from '@/lib/payout-status';
+import { CLAWED_BACK, CLAWED_BACK_LABEL } from '@/lib/payout-status';
 import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
+
+import {
+  ALL_RETURNS,
+  DISPUTE_FILTER_OPTIONS,
+  answeredByOf,
+  chargeStatusBadge,
+  columnRoleOf,
+  columnStorageKey,
+  defaultVisibleColumns,
+  disputeBadge,
+  exportFilename,
+  localDayKey,
+  payoutStatusBadge,
+  recordingIdOf,
+  visibleColumnsFor,
+  type CallColumn,
+  type CallColumnId,
+  type CallColumnRole,
+  type CallsViewer,
+  type StatusBadge,
+} from './call-columns';
 
 interface CallRecord {
   id: string;
@@ -127,6 +151,8 @@ interface CallRecord {
    */
   answeredByUserId?: string | null;
   agentName?: string | null;
+  /** The submitted, non-voided application on this call, if any. List rows only. */
+  application?: { id: string; carrier: string } | null;
 }
 
 interface CallDetail extends CallRecord {
@@ -314,6 +340,9 @@ export default function OperationsCallLogsPage() {
   const [detailCall, setDetailCall] = useState<CallDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // The Filters sheet, below 640px.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   // Audio Playback
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -321,32 +350,26 @@ export default function OperationsCallLogsPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Column Selection and Visibility
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    const defaults: Record<string, boolean> = {
-      time: true,
-      agentName: true,
-      campaignName: true,
-      callerId: true,
-      duration: true,
-      disposition: true,
-      status: false,
-      recording: true,
-      dispositionNotes: true,
-      publisherName: false,
-      buyerName: false,
-      did: false,
-      toNumber: false,
-      connectedDuration: false,
-      billable: false,
-      buyerBillableAmount: false,
-      publisherPayoutAmount: false,
-      cost: false,
-      profit: false,
-      margin: false,
-    };
+  const viewer: CallsViewer = {
+    isAgent: !!isAgent,
+    isAdminOrOwner: !!isAdminOrOwner,
+    isBuyer: !!isBuyer,
+    isPublisher: !!isPublisher,
+  };
+  const columnRole = columnRoleOf(viewer);
 
-    if (typeof window === 'undefined') return defaults;
+  /*
+   * The defaults depend on who is looking, and who is looking is not known
+   * until the session has loaded -- so the stored choice is read once the role
+   * is, and re-read if it changes, rather than once in a state initialiser
+   * that would always see a signed-out viewer.
+   */
+  const [columnState, setColumnState] = useState<{
+    role: CallColumnRole;
+    visible: Record<string, boolean>;
+  } | null>(null);
 
+  useEffect(() => {
     /*
      * MERGED under the defaults, never returned in place of them -- see
      * `lib/call-column-visibility.ts`, which holds the reasoning and the
@@ -354,50 +377,34 @@ export default function OperationsCallLogsPage() {
      * hid every column added after a user's last visit, permanently, from
      * exactly the people who use this screen most.
      */
+    let stored: string | null = null;
     try {
-      return resolveVisibleColumns(localStorage.getItem('hopwhistle_calls_columns'), defaults);
+      stored = localStorage.getItem(columnStorageKey(columnRole));
     } catch {
       // Reading localStorage throws outright in some privacy modes.
-      return defaults;
     }
-  });
-
-  const toggleColumn = (columnId: string) => {
-    setVisibleColumns(prev => {
-      const updated = { ...prev, [columnId]: !prev[columnId] };
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('hopwhistle_calls_columns', JSON.stringify(updated));
-      }
-      return updated;
+    setColumnState({
+      role: columnRole,
+      visible: resolveVisibleColumns(stored, defaultVisibleColumns(columnRole)),
     });
+  }, [columnRole]);
+
+  const visibleColumns: Record<string, boolean> =
+    columnState?.role === columnRole ? columnState.visible : defaultVisibleColumns(columnRole);
+
+  const toggleColumn = (columnId: CallColumnId) => {
+    const updated = { ...visibleColumns, [columnId]: !visibleColumns[columnId] };
+    setColumnState({ role: columnRole, visible: updated });
+    try {
+      localStorage.setItem(columnStorageKey(columnRole), JSON.stringify(updated));
+    } catch {
+      // Not remembered across visits; still applied for this one.
+    }
   };
 
-  const columns = [
-    { id: 'time', label: 'Time', canSee: true },
-    // Second, beside the time. The two questions asked of any row on this
-    // screen are "when" and "who", in that order.
-    { id: 'agentName', label: 'Agent', canSee: true },
-    { id: 'publisherName', label: 'Publisher', canSee: !!isAdminOrOwner },
-    { id: 'buyerName', label: 'Buyer', canSee: !!isAdminOrOwner },
-    { id: 'campaignName', label: 'Campaign', canSee: true },
-    { id: 'callerId', label: 'Customer Phone', canSee: true },
-    { id: 'did', label: 'DID (DNIS)', canSee: !isBuyer },
-    { id: 'toNumber', label: 'Destination', canSee: !isPublisher },
-    { id: 'duration', label: 'Duration', canSee: true },
-    { id: 'connectedDuration', label: 'Connected', canSee: true },
-    { id: 'billable', label: 'Billable', canSee: true },
-    { id: 'buyerBillableAmount', label: 'Charge', canSee: !isPublisher && !isAgent },
-    { id: 'publisherPayoutAmount', label: 'Payout', canSee: !isBuyer && !isAgent },
-    { id: 'cost', label: 'Cost', canSee: !!isAdminOrOwner },
-    { id: 'profit', label: 'Profit', canSee: !!isAdminOrOwner },
-    { id: 'margin', label: 'Margin', canSee: !!isAdminOrOwner },
-    { id: 'status', label: 'Status', canSee: true },
-    // The canonical outcome, beside the free text about it. The screen showed
-    // the notes and not the disposition, which is the one that is countable.
-    { id: 'disposition', label: 'Disposition', canSee: true },
-    { id: 'dispositionNotes', label: 'Call Notes', canSee: true },
-    { id: 'recording', label: 'Recording', canSee: true },
-  ];
+  /** The columns this viewer may pick from, and the ones they have picked. */
+  const columns = visibleColumnsFor(viewer);
+  const shownColumns = columns.filter(col => visibleColumns[col.id]);
 
   // Date Calculator Preset helper
   const calculatePresetDates = (preset: string): { from: Date | null; to: Date | null } => {
@@ -452,14 +459,23 @@ export default function OperationsCallLogsPage() {
       setToDate('');
     } else if (val !== 'Custom') {
       const { from, to } = calculatePresetDates(val);
+      // The local calendar day the preset names, not its UTC instant's.
       if (from) {
-        setFromDate(from.toISOString().split('T')[0]);
+        setFromDate(localDayKey(from));
       }
       if (to) {
-        setToDate(to.toISOString().split('T')[0]);
+        setToDate(localDayKey(to));
       }
     }
     setPage(1);
+  };
+
+  /** The range the ledger is showing, as `YYYY-MM-DD` days; empty for an open end. */
+  const appliedRange = (): { from: string; to: string } => {
+    if (datePreset === 'All Time') return { from: '', to: '' };
+    if (datePreset === 'Custom') return { from: fromDate, to: toDate };
+    const { from, to } = calculatePresetDates(datePreset);
+    return { from: from ? localDayKey(from) : '', to: to ? localDayKey(to) : '' };
   };
 
   // Load select option filters
@@ -669,10 +685,7 @@ export default function OperationsCallLogsPage() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute(
-        'download',
-        `call-operations-export-${new Date().toISOString().slice(0, 10)}.csv`
-      );
+      link.setAttribute('download', exportFilename(appliedRange()));
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -686,10 +699,16 @@ export default function OperationsCallLogsPage() {
   };
 
   // Eager load details for drawer
-  const handleOpenDetailDrawer = async (callId: string) => {
+  /*
+   * `refresh` re-reads the call already open -- after a return is decided --
+   * without blanking the drawer to a spinner while it does.
+   */
+  const handleOpenDetailDrawer = async (callId: string, refresh = false) => {
     setDetailCallId(callId);
-    setDetailLoading(true);
-    setDetailCall(null);
+    if (!refresh) {
+      setDetailLoading(true);
+      setDetailCall(null);
+    }
     try {
       const res = await apiClient.get<CallDetail>(`/api/v1/calls/${callId}`);
       // Same envelope, same rule as fetchCalls: apiClient never throws, so a
@@ -799,7 +818,7 @@ export default function OperationsCallLogsPage() {
     }
   };
 
-  const activeColumnsCount = columns.filter(col => col.canSee && visibleColumns[col.id]).length + 1;
+  const activeColumnsCount = Math.max(1, shownColumns.length);
 
   const isAudioPlayerInDrawer =
     !!detailCallId && playingId === detailCall?.primaryRecordingId && !!audioUrl;
@@ -818,92 +837,17 @@ export default function OperationsCallLogsPage() {
     />
   );
 
-  const getChargeStatusBadge = (status?: string | null) => {
-    const s = status || 'PENDING';
-    switch (s.toUpperCase()) {
-      case 'CHARGED':
-        return (
-          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
-            Charged
-          </Badge>
-        );
-      case 'NOT_BILLABLE':
-        return (
-          <Badge variant="outline" className="bg-sunken text-ink-2 border-rule">
-            Not Billable
-          </Badge>
-        );
-      case 'PENDING':
-      default:
-        return (
-          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
-            Pending
-          </Badge>
-        );
-    }
-  };
-
-  const getPayoutStatusBadge = (status?: string | null) => {
-    const s = status || 'PENDING';
-    switch (s.toUpperCase()) {
-      case 'PAID':
-        return (
-          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
-            Paid
-          </Badge>
-        );
-      case 'PAYABLE':
-        return (
-          <Badge variant="outline" className="bg-money-tint text-money-ink border-money/40">
-            Payable
-          </Badge>
-        );
-      case 'NOT_PAYABLE':
-        return (
-          <Badge variant="outline" className="bg-sunken text-ink-2 border-rule">
-            Not Payable
-          </Badge>
-        );
-      case CLAWED_BACK:
-        return (
-          <Badge variant="outline" className={CLAWED_BACK_BADGE}>
-            {CLAWED_BACK_LABEL}
-          </Badge>
-        );
-      case 'PENDING':
-      default:
-        return (
-          <Badge variant="outline" className="bg-ringing-tint text-ringing-ink border-ringing/40">
-            Pending
-          </Badge>
-        );
-    }
-  };
-
-  const getDisputeBadge = (status?: string | null) => {
-    if (!status) return null;
-    switch (status.toUpperCase()) {
-      case 'RESOLVED':
-        return (
-          <Badge variant="outline" className="bg-live-tint text-live-ink border-live/40">
-            Disputed - Resolved
-          </Badge>
-        );
-      case 'PENDING':
-      case 'UNDER_REVIEW':
-        return (
-          <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
-            Disputed - Review
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className="bg-dropped-tint text-dropped-ink border-dropped/40">
-            {status}
-          </Badge>
-        );
-    }
-  };
+  /** A billing or return status, as a chip in its status-tone. Nothing for none. */
+  const statusChip = (badge: StatusBadge | null) =>
+    badge ? (
+      <StatusChip
+        size="sm"
+        value={badge.value}
+        tone={badge.tone}
+        label={badge.label}
+        title={badge.value === CLAWED_BACK ? CLAWED_BACK_LABEL : undefined}
+      />
+    ) : null;
 
   /*
    * Search, every filter, then the ledger actions. A set filter is tinted so
@@ -928,6 +872,16 @@ export default function OperationsCallLogsPage() {
     selectedPublisherId !== 'all' ||
     selectedBuyerId !== 'all' ||
     datePreset !== 'All Time';
+  /** How many of the filters behind the phone's "Filters" button are set. */
+  const secondaryFilterCount = [
+    selectedAgentId,
+    selectedCampaignId,
+    selectedListId,
+    selectedPublisherId,
+    selectedBuyerId,
+    selectedOutcome,
+    selectedDisputeStatus,
+  ].filter(value => value !== 'all').length;
   const clearFilters = () => {
     setSearch('');
     setSelectedDisputeStatus('all');
@@ -940,6 +894,385 @@ export default function OperationsCallLogsPage() {
     setSelectedBuyerId('all');
     handlePresetChange('All Time');
   };
+
+  /** The customer's number: who called in, or who was called out to. */
+  const callerOf = (call: CallRecord): string | null => {
+    const phone = call.direction?.toLowerCase() === 'outbound' ? call.toNumber : call.callerId;
+    return phone ? formatPhoneNumber(phone) : null;
+  };
+
+  const money = (value?: number | null) =>
+    value !== null && value !== undefined ? `$${Number(value).toFixed(2)}` : '—';
+
+  /** Each column's cell classes, beside the one list of columns. */
+  const cellClass: Record<CallColumnId, string> = {
+    time: 't-data whitespace-nowrap text-ink',
+    callerId: 't-data whitespace-nowrap text-ink',
+    campaignName: 'text-ink-2 font-semibold text-xs',
+    answeredBy: 'text-xs',
+    publisherName: 'text-ink-2 font-medium text-xs',
+    buyerName: 'text-ink-2 font-medium text-xs',
+    did: 't-data whitespace-nowrap text-ink-2',
+    toNumber: 't-data whitespace-nowrap text-ink-2',
+    duration: 't-num text-ink-2',
+    connectedDuration: 't-num text-ink-2',
+    disposition: 'text-xs',
+    application: 'text-xs',
+    dispositionNotes: 'text-ink-2 text-xs max-w-xs truncate',
+    billable: '',
+    revenue: 't-num text-right font-medium text-ink',
+    payout: 't-num text-right font-medium text-money-ink',
+    cost: 't-num text-right text-ink-2',
+    profit: 't-num text-right font-semibold text-brand-ink',
+    margin: 't-num text-right text-ink-2',
+    status: 'text-center',
+    dispute: '',
+    recording: 'text-center',
+  };
+
+  const renderCell = (call: CallRecord, col: CallColumn) => {
+    switch (col.id) {
+      case 'time':
+        return formatTableDateTime(call.createdAt);
+      case 'callerId':
+        return callerOf(call) ?? '—';
+      case 'campaignName':
+        return call.campaignName || '—';
+      case 'answeredBy': {
+        const answeredBy = answeredByOf(call);
+        if (answeredBy) {
+          return (
+            <span
+              className="font-medium text-ink"
+              title={answeredBy.kind === 'buyer' ? 'Sold to this buyer' : undefined}
+            >
+              {answeredBy.name}
+            </span>
+          );
+        }
+        /*
+         * Its own reading, not an em dash beside every other missing value on
+         * the row. "Nobody is recorded as having taken this" is a fact a floor
+         * lead acts on -- it is the call that went to an empty chair, or the
+         * one an agent never wrote up.
+         */
+        return (
+          <span
+            className="text-ink-3"
+            title="No agent or buyer is recorded as having answered this call"
+          >
+            Unattributed
+          </span>
+        );
+      }
+      case 'publisherName':
+        return call.publisherName || '—';
+      case 'buyerName':
+        return call.buyerName || '—';
+      case 'did':
+        return call.did ? formatPhoneNumber(call.did) : '—';
+      case 'toNumber':
+        return call.toNumber && call.toNumber !== 'Masked' ? (
+          formatPhoneNumber(call.toNumber || call.targetNumber || '')
+        ) : (
+          <span className="text-ink-3 italic">Masked</span>
+        );
+      case 'duration':
+        return call.duration ? formatDuration(call.duration) : '—';
+      case 'connectedDuration':
+        return call.connectedDuration ? formatDuration(call.connectedDuration) : '—';
+      case 'disposition':
+        // The canonical outcome: the one that is countable, unlike the notes.
+        return call.disposition ? (
+          <span className="rounded-control border border-rule bg-sunken px-1.5 py-0.5 font-medium text-ink-2">
+            {DISPOSITION_LABELS[call.disposition] ?? call.disposition}
+          </span>
+        ) : (
+          <span className="text-ink-3" title="Not written up yet">
+            Not set
+          </span>
+        );
+      case 'application':
+        return call.application ? (
+          <span className="font-medium text-ink">{call.application.carrier}</span>
+        ) : (
+          '—'
+        );
+      case 'dispositionNotes':
+        return call.dispositionNotes || '—';
+      case 'billable':
+        return (
+          <StatusChip
+            size="sm"
+            value={call.billable ? 'BILLABLE' : 'NOT_BILLABLE'}
+            tone={call.billable ? 'live' : 'neutral'}
+            label={call.billable ? 'Billable' : 'No'}
+          />
+        );
+      case 'revenue':
+        return money(call.buyerBillableAmount);
+      case 'payout':
+        return money(call.publisherPayoutAmount);
+      case 'cost':
+        return money(call.cost);
+      case 'profit':
+        return money(call.profit);
+      case 'margin':
+        return call.margin !== null && call.margin !== undefined
+          ? `${Number(call.margin).toFixed(1)}%`
+          : '—';
+      case 'status':
+        // What the buyer was charged and what the publisher is owed. Nothing
+        // for a call with neither: a blank is not "Pending".
+        return (
+          <div className="flex items-center justify-center gap-1">
+            {!isPublisher && statusChip(chargeStatusBadge(call.buyerChargeStatus))}
+            {!isBuyer && statusChip(payoutStatusBadge(call.publisherPayoutStatus))}
+          </div>
+        );
+      case 'dispute':
+        return statusChip(disputeBadge(call.disputeStatus)) ?? '—';
+      case 'recording': {
+        const recordingId = recordingIdOf(call);
+        if (!recordingId) return <span className="text-ink-3 text-xs italic">—</span>;
+        return (
+          <div className="flex items-center justify-center gap-2">
+            <Tooltip content="Play or pause recording">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Play or pause recording"
+                onClick={() => void handlePlayRecording(recordingId)}
+                disabled={audioLoading && playingId === recordingId}
+                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
+              >
+                {audioLoading && playingId === recordingId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : playingId === recordingId ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
+            <Tooltip content="Download recording">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Download recording"
+                onClick={() =>
+                  void handleDownloadRecording(recordingId, `call-${call.id}-recording.wav`)
+                }
+                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
+
+  /*
+   * The filters past search, date and disposition. Rendered twice from one
+   * definition: inline on the toolbar from 640px, and in the Filters sheet
+   * below that, where eight selects on a phone would push the calls off the
+   * first screen.
+   */
+  const renderSecondaryFilters = (cell: string) => (
+    <>
+      {/* Agent Filter — principals only; an agent's list is already their own */}
+      {isAdminOrOwner && agents.length > 0 && (
+        <div className={cell}>
+          <Select
+            value={selectedAgentId}
+            onValueChange={val => {
+              setSelectedAgentId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger aria-label="Agent" className={filterTrigger(selectedAgentId !== 'all')}>
+              <SelectValue>{selectedAgentId === 'all' ? 'Agent' : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Agents</SelectItem>
+              {agents.map(agent => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Campaign Filter */}
+      <div className={cell}>
+        <Select
+          value={selectedCampaignId}
+          onValueChange={val => {
+            setSelectedCampaignId(val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger
+            aria-label="Campaign"
+            className={filterTrigger(selectedCampaignId !== 'all')}
+          >
+            <SelectValue>{selectedCampaignId === 'all' ? 'Campaign' : undefined}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Campaigns</SelectItem>
+            {campaigns.map(c => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Lead List Filter -- the Power Dialer upgrade's lists; without it there are none */}
+      {hasPowerDialer && (
+        <div className={cell}>
+          <Select
+            value={selectedListId}
+            onValueChange={val => {
+              setSelectedListId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Lead list"
+              className={filterTrigger(selectedListId !== 'all')}
+            >
+              <SelectValue>{selectedListId === 'all' ? 'Lead list' : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Lead Lists</SelectItem>
+              {leadLists.map(l => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Publisher Filter (Admin only) */}
+      {isAdminOrOwner && (
+        <div className={cell}>
+          <Select
+            value={selectedPublisherId}
+            onValueChange={val => {
+              setSelectedPublisherId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Publisher"
+              className={filterTrigger(selectedPublisherId !== 'all')}
+            >
+              <SelectValue>{selectedPublisherId === 'all' ? 'Publisher' : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Publishers</SelectItem>
+              {publishers.map(p => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Buyer Filter (Admin only) */}
+      {isAdminOrOwner && (
+        <div className={cell}>
+          <Select
+            value={selectedBuyerId}
+            onValueChange={val => {
+              setSelectedBuyerId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger aria-label="Buyer" className={filterTrigger(selectedBuyerId !== 'all')}>
+              <SelectValue>{selectedBuyerId === 'all' ? 'Buyer' : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Buyers</SelectItem>
+              {buyers.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Where it went */}
+      {isAdminOrOwner && (
+        <div className={cell}>
+          <Select
+            value={selectedOutcome}
+            onValueChange={val => {
+              setSelectedOutcome(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Where it went"
+              className={filterTrigger(selectedOutcome !== 'all')}
+            >
+              <SelectValue>{selectedOutcome === 'all' ? 'Where it went' : undefined}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {CALL_OUTCOMES.map(outcome => (
+                <SelectItem key={outcome.value} value={outcome.value}>
+                  {outcome.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Returns: whether a buyer asked for the call back, and how it was decided */}
+      <div className={cell}>
+        <Select
+          value={selectedDisputeStatus}
+          onValueChange={val => {
+            setSelectedDisputeStatus(val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger
+            aria-label="Returns"
+            className={filterTrigger(selectedDisputeStatus !== ALL_RETURNS)}
+          >
+            <SelectValue>
+              {selectedDisputeStatus === ALL_RETURNS ? 'Returns' : undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_RETURNS}>All calls</SelectItem>
+            {DISPUTE_FILTER_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
 
   return (
     <div className="page-canvas">
@@ -1034,197 +1367,20 @@ export default function OperationsCallLogsPage() {
           </Select>
         </div>
 
-        {/* Agent Filter — principals only; an agent's list is already their own */}
-        {isAdminOrOwner && agents.length > 0 && (
-          <div className={filterCell}>
-            <Select
-              value={selectedAgentId}
-              onValueChange={val => {
-                setSelectedAgentId(val);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                aria-label="Agent"
-                className={filterTrigger(selectedAgentId !== 'all')}
-              >
-                <SelectValue>{selectedAgentId === 'all' ? 'Agent' : undefined}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map(agent => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Campaign Filter */}
-        <div className={filterCell}>
-          <Select
-            value={selectedCampaignId}
-            onValueChange={val => {
-              setSelectedCampaignId(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger
-              aria-label="Campaign"
-              className={filterTrigger(selectedCampaignId !== 'all')}
-            >
-              <SelectValue>{selectedCampaignId === 'all' ? 'Campaign' : undefined}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Campaigns</SelectItem>
-              {campaigns.map(c => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Lead List Filter */}
-        <div className={filterCell}>
-          <Select
-            value={selectedListId}
-            onValueChange={val => {
-              setSelectedListId(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger
-              aria-label="Lead list"
-              className={filterTrigger(selectedListId !== 'all')}
-            >
-              <SelectValue>{selectedListId === 'all' ? 'Lead list' : undefined}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Lead Lists</SelectItem>
-              {leadLists.map(l => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Publisher Filter (Admin only) */}
-        {isAdminOrOwner && (
-          <div className={filterCell}>
-            <Select
-              value={selectedPublisherId}
-              onValueChange={val => {
-                setSelectedPublisherId(val);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                aria-label="Publisher"
-                className={filterTrigger(selectedPublisherId !== 'all')}
-              >
-                <SelectValue>{selectedPublisherId === 'all' ? 'Publisher' : undefined}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Publishers</SelectItem>
-                {publishers.map(p => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Buyer Filter (Admin only) */}
-        {isAdminOrOwner && (
-          <div className={filterCell}>
-            <Select
-              value={selectedBuyerId}
-              onValueChange={val => {
-                setSelectedBuyerId(val);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                aria-label="Buyer"
-                className={filterTrigger(selectedBuyerId !== 'all')}
-              >
-                <SelectValue>{selectedBuyerId === 'all' ? 'Buyer' : undefined}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Buyers</SelectItem>
-                {buyers.map(b => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Where it went */}
-        {isAdminOrOwner && (
-          <div className={filterCell}>
-            <Select
-              value={selectedOutcome}
-              onValueChange={val => {
-                setSelectedOutcome(val);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                aria-label="Where it went"
-                className={filterTrigger(selectedOutcome !== 'all')}
-              >
-                <SelectValue>{selectedOutcome === 'all' ? 'Where it went' : undefined}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {CALL_OUTCOMES.map(outcome => (
-                  <SelectItem key={outcome.value} value={outcome.value}>
-                    {outcome.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Dispute filter */}
-        <div className={filterCell}>
-          <Select
-            value={selectedDisputeStatus}
-            onValueChange={val => {
-              setSelectedDisputeStatus(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger
-              aria-label="Dispute status"
-              className={filterTrigger(selectedDisputeStatus !== 'all')}
-            >
-              <SelectValue>{selectedDisputeStatus === 'all' ? 'Disputes' : undefined}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Disputes</SelectItem>
-              <SelectItem value="NONE">No Disputes</SelectItem>
-              <SelectItem value="ANY">Disputed (All)</SelectItem>
-              <SelectItem value="DISPUTED">Disputed - Open</SelectItem>
-              <SelectItem value="ACCEPTED">Return accepted</SelectItem>
-              <SelectItem value="DENIED">Return denied</SelectItem>
-              <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
-              <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Every other filter: on the row from 640px, behind "Filters" below it */}
+        <div className="hidden sm:contents">{renderSecondaryFilters(filterCell)}</div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFiltersOpen(true)}
+          className={cn(
+            'h-8 shrink-0 gap-1.5 px-2.5 text-xs sm:hidden',
+            secondaryFilterCount > 0 && 'border-brand-ink bg-brand-tint text-brand-ink'
+          )}
+        >
+          <ListFilter className="h-3.5 w-3.5" />
+          Filters{secondaryFilterCount > 0 ? ` (${secondaryFilterCount})` : ''}
+        </Button>
 
         {/* Ledger actions, pinned to the right end of the row */}
         <ToolbarActions>
@@ -1247,23 +1403,18 @@ export default function OperationsCallLogsPage() {
               className="bg-surface border-rule text-ink min-w-[200px]"
               align="end"
             >
-              <DropdownMenuLabel className="text-ink-3 text-xs">
-                Configure Ledger Columns
-              </DropdownMenuLabel>
+              <DropdownMenuLabel className="text-ink-3 text-xs">Columns</DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-rule" />
-              {columns.map(col => {
-                if (!col.canSee) return null;
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={col.id}
-                    checked={visibleColumns[col.id]}
-                    onCheckedChange={() => toggleColumn(col.id)}
-                    className="focus:bg-brand-tint focus:text-brand-ink text-xs"
-                  >
-                    {col.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
+              {columns.map(col => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={!!visibleColumns[col.id]}
+                  onCheckedChange={() => toggleColumn(col.id)}
+                  className="focus:bg-brand-tint focus:text-brand-ink text-xs"
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -1286,46 +1437,49 @@ export default function OperationsCallLogsPage() {
         </ToolbarActions>
       </Toolbar>
 
+      {/* Below 640px, every filter past search, date and disposition lives here */}
+      <SheetDrawer
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title="Filters"
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2">
+            {secondaryFilterCount > 0 && (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setFiltersOpen(false)}>
+              Done
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3 p-4">
+          {renderSecondaryFilters('w-full [&_button]:w-full')}
+        </div>
+      </SheetDrawer>
+
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">
         <PanelBody flush>
           <Table>
             <TableHeader>
               <TableRow>
-                {visibleColumns.time && <TableHead className="pl-5">Time</TableHead>}
-                {visibleColumns.agentName && <TableHead>Agent</TableHead>}
-                {visibleColumns.publisherName && isAdminOrOwner && <TableHead>Publisher</TableHead>}
-                {visibleColumns.buyerName && isAdminOrOwner && <TableHead>Buyer</TableHead>}
-                {visibleColumns.campaignName && <TableHead>Campaign</TableHead>}
-                {visibleColumns.callerId && <TableHead>Customer Phone</TableHead>}
-                {visibleColumns.did && !isBuyer && <TableHead>DID (DNIS)</TableHead>}
-                {visibleColumns.toNumber && !isPublisher && <TableHead>Destination</TableHead>}
-                {visibleColumns.duration && <TableHead>Duration</TableHead>}
-                {visibleColumns.connectedDuration && <TableHead>Connected</TableHead>}
-                {visibleColumns.billable && <TableHead>Billable</TableHead>}
-                {/* Financial Fields */}
-                {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                  <TableHead className="text-right">Charge</TableHead>
-                )}
-                {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                  <TableHead className="text-right">Payout</TableHead>
-                )}
-                {visibleColumns.cost && isAdminOrOwner && (
-                  <TableHead className="text-right">Cost</TableHead>
-                )}
-                {visibleColumns.profit && isAdminOrOwner && (
-                  <TableHead className="text-right">Profit</TableHead>
-                )}
-                {visibleColumns.margin && isAdminOrOwner && (
-                  <TableHead className="text-right">Margin</TableHead>
-                )}
-                {visibleColumns.status && <TableHead className="text-center">Status</TableHead>}{' '}
-                {visibleColumns.disposition && <TableHead>Disposition</TableHead>}
-                {visibleColumns.dispositionNotes && <TableHead>Call Notes</TableHead>}
-                {visibleColumns.recording && (
-                  <TableHead className="text-center">Recording</TableHead>
-                )}
-                <TableHead className="pr-5 text-right">Action</TableHead>
+                {shownColumns.map((col, index) => (
+                  <TableHead
+                    key={col.id}
+                    className={cn(
+                      col.align === 'right' && 'text-right',
+                      col.align === 'center' && 'text-center',
+                      index === 0 && 'pl-5',
+                      index === shownColumns.length - 1 && 'pr-5'
+                    )}
+                  >
+                    {col.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1334,7 +1488,7 @@ export default function OperationsCallLogsPage() {
                   <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-ink-3">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="h-6 w-6 animate-spin text-brand-ink" />
-                      <span className="t-body">Loading pay-per-call ledger...</span>
+                      <span className="t-body">Loading calls...</span>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1391,228 +1545,42 @@ export default function OperationsCallLogsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                calls.map(call => {
-                  const showToDetails = call.toNumber && call.toNumber !== 'Masked';
-
-                  return (
-                    <TableRow
-                      key={call.id}
-                      onClick={() => void handleOpenDetailDrawer(call.id)}
-                      className="cursor-pointer"
-                    >
-                      {visibleColumns.time && (
-                        <TableCell className="t-data whitespace-nowrap pl-5 text-ink">
-                          {formatTableDateTime(call.createdAt)}
-                        </TableCell>
-                      )}
-                      {visibleColumns.agentName && (
-                        <TableCell className="text-xs">
-                          {call.agentName ? (
-                            <span className="font-medium text-ink">{call.agentName}</span>
-                          ) : (
-                            /*
-                             * Its own reading, not an em dash beside every
-                             * other missing value on the row. "Nobody is
-                             * recorded as having taken this" is a fact a floor
-                             * lead acts on -- it is the call that went to an
-                             * empty chair, or the one an agent never wrote up.
-                             */
-                            <span
-                              className="text-ink-3"
-                              title="No agent is recorded as having answered this call"
-                            >
-                              Unattributed
-                            </span>
-                          )}
-                        </TableCell>
-                      )}
-                      {visibleColumns.publisherName && isAdminOrOwner && (
-                        <TableCell className="text-ink-2 font-medium text-xs">
-                          {call.publisherName || '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.buyerName && isAdminOrOwner && (
-                        <TableCell className="text-ink-2 font-medium text-xs">
-                          {call.buyerName || '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.campaignName && (
-                        <TableCell className="text-ink-2 font-semibold text-xs">
-                          {call.campaignName || '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.callerId && (
-                        <TableCell className="t-data whitespace-nowrap text-ink">
-                          {(() => {
-                            const phone =
-                              call.direction?.toLowerCase() === 'outbound'
-                                ? call.toNumber
-                                : call.callerId;
-                            return phone ? formatPhoneNumber(phone) : '—';
-                          })()}
-                        </TableCell>
-                      )}
-                      {visibleColumns.did && !isBuyer && (
-                        <TableCell className="t-data whitespace-nowrap text-ink-2">
-                          {call.did ? formatPhoneNumber(call.did) : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.toNumber && !isPublisher && (
-                        <TableCell className="t-data whitespace-nowrap text-ink-2">
-                          {showToDetails ? (
-                            formatPhoneNumber(call.toNumber || call.targetNumber || '')
-                          ) : (
-                            <span className="text-ink-3 italic">Masked</span>
-                          )}
-                        </TableCell>
-                      )}
-                      {visibleColumns.duration && (
-                        <TableCell className="t-num text-ink-2">
-                          {call.duration ? formatDuration(call.duration) : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.connectedDuration && (
-                        <TableCell className="t-num text-ink-2">
-                          {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.billable && (
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              call.billable
-                                ? 'bg-live-tint text-live-ink border-live/40'
-                                : 'bg-dropped-tint text-dropped-ink border-dropped/40'
-                            }
-                          >
-                            {call.billable ? 'Billable' : 'No'}
-                          </Badge>
-                        </TableCell>
-                      )}
-                      {/* Financial Ledger Columns */}
-                      {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                        <TableCell className="t-num text-right font-medium text-ink">
-                          {call.buyerBillableAmount !== null &&
-                          call.buyerBillableAmount !== undefined
-                            ? `$${Number(call.buyerBillableAmount).toFixed(2)}`
-                            : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                        <TableCell className="t-num text-right font-medium text-money-ink">
-                          {call.publisherPayoutAmount !== null &&
-                          call.publisherPayoutAmount !== undefined
-                            ? `$${Number(call.publisherPayoutAmount).toFixed(2)}`
-                            : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.cost && isAdminOrOwner && (
-                        <TableCell className="t-num text-right text-ink-2">
-                          {call.cost !== null ? `$${Number(call.cost).toFixed(2)}` : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.profit && isAdminOrOwner && (
-                        <TableCell className="t-num text-right font-semibold text-brand-ink">
-                          {call.profit !== null ? `$${Number(call.profit).toFixed(2)}` : '—'}
-                        </TableCell>
-                      )}
-                      {visibleColumns.margin && isAdminOrOwner && (
-                        <TableCell className="t-num text-right text-ink-2">
-                          {call.margin !== null ? `${Number(call.margin).toFixed(1)}%` : '—'}
-                        </TableCell>
-                      )}
-                      {/* Billing and dispute statuses */}
-                      {visibleColumns.status && (
-                        <TableCell className="text-center">
-                          <div className="flex flex-col gap-1 items-center justify-center">
-                            {call.disputeStatus ? (
-                              getDisputeBadge(call.disputeStatus)
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                {!isPublisher && getChargeStatusBadge(call.buyerChargeStatus)}
-                                {!isBuyer && getPayoutStatusBadge(call.publisherPayoutStatus)}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                      )}
-                      {visibleColumns.disposition && (
-                        <TableCell className="text-xs">
-                          {call.disposition ? (
-                            <span className="rounded-control border border-rule bg-sunken px-1.5 py-0.5 font-medium text-ink-2">
-                              {DISPOSITION_LABELS[call.disposition] ?? call.disposition}
-                            </span>
-                          ) : (
-                            <span className="text-ink-3" title="Not written up yet">
-                              Not set
-                            </span>
-                          )}
-                        </TableCell>
-                      )}
-                      {visibleColumns.dispositionNotes && (
-                        <TableCell
-                          className="text-ink-2 text-xs max-w-xs truncate"
-                          title={call.dispositionNotes || ''}
-                        >
-                          {call.dispositionNotes || '—'}
-                        </TableCell>
-                      )}
-                      {/* Recording inline player and download */}
-                      {visibleColumns.recording && (
-                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                          {call.recordingUrl || call.primaryRecordingId ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <Tooltip content="Play or pause recording">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    void handlePlayRecording(call.primaryRecordingId || call.id)
-                                  }
-                                  disabled={
-                                    audioLoading &&
-                                    playingId === (call.primaryRecordingId || call.id)
-                                  }
-                                  className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-brand-ink hover:text-brand-ink"
-                                >
-                                  {audioLoading &&
-                                  playingId === (call.primaryRecordingId || call.id) ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : playingId === (call.primaryRecordingId || call.id) ? (
-                                    <Pause className="h-4 w-4" />
-                                  ) : (
-                                    <Play className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </Tooltip>
-                              <Tooltip content="Download recording">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    void handleDownloadRecording(
-                                      call.primaryRecordingId || call.id,
-                                      `call-${call.id}-recording.wav`
-                                    )
-                                  }
-                                  className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </Tooltip>
-                            </div>
-                          ) : (
-                            <span className="text-ink-3 text-xs italic">—</span>
-                          )}
-                        </TableCell>
-                      )}
-                      <TableCell className="whitespace-nowrap pr-5 text-right text-xs font-medium text-brand-ink">
-                        Inspect →
+                calls.map(call => (
+                  /*
+                   * The row is the way into the call: click it, or focus it
+                   * and press Enter. Controls inside a cell (the recording
+                   * buttons) stop their own clicks from opening it.
+                   */
+                  <TableRow
+                    key={call.id}
+                    tabIndex={0}
+                    onClick={() => void handleOpenDetailDrawer(call.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && e.target === e.currentTarget) {
+                        e.preventDefault();
+                        void handleOpenDetailDrawer(call.id);
+                      }
+                    }}
+                    className="cursor-pointer focus-visible:bg-sunken focus-visible:outline-none"
+                  >
+                    {shownColumns.map((col, index) => (
+                      <TableCell
+                        key={col.id}
+                        className={cn(
+                          cellClass[col.id],
+                          index === 0 && 'pl-5',
+                          index === shownColumns.length - 1 && 'pr-5'
+                        )}
+                        title={
+                          col.id === 'dispositionNotes' ? call.dispositionNotes || '' : undefined
+                        }
+                        onClick={col.id === 'recording' ? e => e.stopPropagation() : undefined}
+                      >
+                        {renderCell(call, col)}
                       </TableCell>
-                    </TableRow>
-                  );
-                })
+                    ))}
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
@@ -1666,13 +1634,16 @@ export default function OperationsCallLogsPage() {
               <div>
                 <span className="t-label flex items-center gap-1.5 text-brand-ink">
                   <Activity className="w-3.5 h-3.5" />
-                  Call Auditor
+                  Call
                 </span>
                 <DialogHeader>
                   <h2 className="t-title mt-1 text-ink">
+                    {/* Who called, which is how a person finds a call; the id is not. */}
                     {detailCall
-                      ? `Call Detail: ${detailCall.id.slice(0, 8)}...`
-                      : 'Loading Call Details...'}
+                      ? detailCall.callerId
+                        ? formatPhoneNumber(detailCall.callerId)
+                        : 'Unknown caller'
+                      : 'Loading call...'}
                   </h2>
                 </DialogHeader>
               </div>
@@ -1693,7 +1664,7 @@ export default function OperationsCallLogsPage() {
               {detailLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-brand-ink" />
-                  <span className="t-body text-ink-3">Retrieving operations ledger...</span>
+                  <span className="t-body text-ink-3">Loading call...</span>
                 </div>
               ) : !detailCall ? (
                 <div className="text-center py-12 text-ink-3">
@@ -1720,16 +1691,22 @@ export default function OperationsCallLogsPage() {
                     {whiteLabelView && detailCall.disputeStatus === 'DISPUTED' ? (
                       <ReturnRequestedPanel
                         callId={detailCall.id}
-                        onDecided={() => void fetchCalls()}
+                        onDecided={() => {
+                          // The drawer's own copy too, so it stops offering a
+                          // decision that has just been made.
+                          void handleOpenDetailDrawer(detailCall.id, true);
+                          void fetchCalls();
+                        }}
                       />
                     ) : null}
                     {/* Recording Player card */}
-                    {detailCall.recordingUrl && (
+                    {/* Only a call with a recording of its own; never the call id in its place */}
+                    {recordingIdOf(detailCall) && (
                       <Card className="rounded-card border-rule bg-surface shadow-none">
                         <CardHeader className="py-3 px-4">
                           <CardTitle className="t-label flex items-center gap-1.5 text-brand-ink">
                             <Volume2 className="h-4 w-4" />
-                            Stream Call Recording
+                            Recording
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 pt-0 flex items-center gap-3">
@@ -1738,7 +1715,7 @@ export default function OperationsCallLogsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() =>
-                                void handlePlayRecording(detailCall.primaryRecordingId || '')
+                                void handlePlayRecording(recordingIdOf(detailCall) ?? '')
                               }
                               disabled={audioLoading}
                               className="h-9 w-9 flex-shrink-0 rounded-full border-none bg-brand-strong p-0 text-white hover:bg-brand-strong-hover hover:text-white"
@@ -1828,7 +1805,7 @@ export default function OperationsCallLogsPage() {
                             </p>
                           </div>
                           <div className="rounded-card bg-sunken p-3">
-                            <span className="t-meta block text-ink-3">Platform Margin</span>
+                            <span className="t-meta block text-ink-3">Margin</span>
                             <p className="mt-1 text-lg font-semibold tabular-nums text-brand-ink">
                               {detailCall.margin !== null
                                 ? `${Number(detailCall.margin).toFixed(1)}%`
@@ -1863,29 +1840,13 @@ export default function OperationsCallLogsPage() {
                         }}
                       />
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <span className="t-meta block text-ink-3">Answered by</span>
-                          <p className="mt-0.5 text-sm font-medium text-ink">
-                            {detailCall.agentName ?? (
-                              <span className="text-ink-3">Unattributed</span>
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="t-meta block text-ink-3">Disposition</span>
-                          <p className="mt-0.5 text-sm font-medium text-ink">
-                            {detailCall.disposition ? (
-                              (DISPOSITION_LABELS[detailCall.disposition] ?? detailCall.disposition)
-                            ) : (
-                              <span className="text-ink-3">Not written up</span>
-                            )}
-                          </p>
-                        </div>
+                      {/* The disposition and notes are the panel's own fields above. */}
+                      <div>
+                        <span className="t-meta block text-ink-3">Answered by</span>
+                        <p className="mt-0.5 text-sm font-medium text-ink">
+                          {detailCall.agentName ?? <span className="text-ink-3">Unattributed</span>}
+                        </p>
                       </div>
-                      <p className="t-body text-ink-2">
-                        {detailCall.dispositionNotes || 'No notes were recorded for this call.'}
-                      </p>
                     </div>
                   </TabsContent>
 
@@ -1920,7 +1881,7 @@ export default function OperationsCallLogsPage() {
                                   <p>Answered: {formatFullDateTime(leg.answeredAt)}</p>
                                 )}
                                 {leg.endedAt && <p>Ended: {formatFullDateTime(leg.endedAt)}</p>}
-                                {leg.duration && <p>Duration: {leg.duration}s</p>}
+                                {leg.duration != null && <p>Duration: {leg.duration}s</p>}
                               </div>
                             </div>
                           </div>
@@ -1937,47 +1898,59 @@ export default function OperationsCallLogsPage() {
                   {/* TAB 3: BILLING. Principals and finance only. */}
                   {canSeeFinance ? (
                     <TabsContent value="billing" className="space-y-6">
-                      <div className="space-y-4">
-                        <h3 className="t-label text-brand-ink">Billing Snapshot Rules</h3>
-                        <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <span className="text-ink-3 font-medium">Billable Threshold</span>
-                              <p className="font-bold text-ink mt-0.5">
-                                {detailCall.billableDurationThreshold
-                                  ? `${detailCall.billableDurationThreshold} seconds`
-                                  : '60 seconds (Default)'}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="text-ink-3 font-medium">Billable Result</span>
-                              <p className="font-bold text-ink mt-0.5">
-                                {detailCall.billable ? 'Billable' : 'Non-Billable'}
-                              </p>
-                            </div>
-                          </div>
-                          <Separator className="bg-rule" />
-                          <div>
-                            <span className="text-ink-3 font-medium">Billing Reason</span>
-                            <p className="font-medium text-brand-ink mt-1 font-sans leading-relaxed">
-                              {detailCall.billableReason || '—'}
-                            </p>
-                          </div>
-                          {detailCall.noPayoutReason && (
-                            <>
-                              <Separator className="bg-rule" />
+                      {/*
+                        Billing rules are the buyer's: a call nobody bought was
+                        never billed, and its threshold and reason would describe
+                        a charge that does not exist.
+                      */}
+                      {detailCall.buyerId ? (
+                        <div className="space-y-4">
+                          <h3 className="t-label text-brand-ink">Billing Snapshot Rules</h3>
+                          <div className="rounded-card bg-sunken p-4 space-y-3 text-xs">
+                            <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <span className="text-dropped-ink font-medium">
-                                  Payout Denied Reason
-                                </span>
-                                <p className="mt-0.5 font-medium text-dropped-ink">
-                                  {detailCall.noPayoutReason}
+                                <span className="text-ink-3 font-medium">Billable Threshold</span>
+                                <p className="font-bold text-ink mt-0.5">
+                                  {/* The threshold stored on the call, not an assumed default */}
+                                  {detailCall.billableDurationThreshold != null
+                                    ? `${detailCall.billableDurationThreshold} seconds`
+                                    : 'Not recorded'}
                                 </p>
                               </div>
-                            </>
-                          )}
+                              <div>
+                                <span className="text-ink-3 font-medium">Billable Result</span>
+                                <p className="font-bold text-ink mt-0.5">
+                                  {detailCall.billable ? 'Billable' : 'Non-Billable'}
+                                </p>
+                              </div>
+                            </div>
+                            <Separator className="bg-rule" />
+                            <div>
+                              <span className="text-ink-3 font-medium">Billing Reason</span>
+                              <p className="font-medium text-brand-ink mt-1 font-sans leading-relaxed">
+                                {detailCall.billableReason || '—'}
+                              </p>
+                            </div>
+                            {detailCall.noPayoutReason && (
+                              <>
+                                <Separator className="bg-rule" />
+                                <div>
+                                  <span className="text-dropped-ink font-medium">
+                                    Payout Denied Reason
+                                  </span>
+                                  <p className="mt-0.5 font-medium text-dropped-ink">
+                                    {detailCall.noPayoutReason}
+                                  </p>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <p className="t-body text-ink-3">
+                          This call was not sold to a buyer, so it was not billed.
+                        </p>
+                      )}
 
                       {/* Accruals ledger lists (Admin only) */}
                       {isAdminOrOwner && (
@@ -2117,7 +2090,7 @@ export default function OperationsCallLogsPage() {
                           <div className="flex items-center justify-between">
                             <span className="text-ink-3 font-medium">Dispute Status</span>
                             {detailCall.disputeStatus ? (
-                              getDisputeBadge(detailCall.disputeStatus)
+                              statusChip(disputeBadge(detailCall.disputeStatus))
                             ) : (
                               <span className="text-ink-3 italic">No Active Disputes</span>
                             )}

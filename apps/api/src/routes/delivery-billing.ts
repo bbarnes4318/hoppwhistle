@@ -518,6 +518,12 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       return reply.send({
         data: {
           /*
+           * Whether the agency is in the billing system at all
+           * (`billingEnrolledAt`). Settings -> Plan & Billing reads it: an
+           * agency that is not has no rate, delivery or settlements to show.
+           */
+          enrolled: terms.enrolled,
+          /*
            * The instrument this agency actually pays with. `status` and `valid`
            * answer for THAT one -- a card-paying agency reading "no mandate"
            * because it has no bank account on file would be reading a defect that

@@ -7,28 +7,21 @@ import { CustomerIntakeProvider } from '@/contexts/customer-intake-context';
 import { AuthSessionProvider } from '@/hooks/use-auth';
 import { PlatformContextProvider } from '@/hooks/use-platform-context';
 import { fontVariables } from '@/lib/fonts';
+import { brandForRequest, brandMetadata } from '@/lib/server/public-brand';
 
-export const metadata: Metadata = {
-  title: {
-    default: 'NetEnroll',
-    template: '%s · NetEnroll',
-  },
-  description: 'Agency portal for pay-per-application call delivery',
-  applicationName: 'NetEnroll',
-  /*
-   * The supplied square mark, `public/net-enroll-favicon.png`, resized. PNG
-   * only: the artwork arrived as pixels, so there is no vector favicon to
-   * offer and a stale favicon.svg would win over these on every browser that
-   * prefers SVG.
-   */
-  icons: {
-    icon: [
-      { url: '/favicon-32.png', type: 'image/png', sizes: '32x32' },
-      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
-    ],
-    apple: '/apple-touch-icon.png',
-  },
-};
+/**
+ * The document's title, application name and icons follow the brand that owns
+ * the host the request came in on: a white-label agency's own domain is titled
+ * and badged as that agency from the first byte, sign-in page included, and
+ * agents.netenroll.com (or any host no agency owns) is NetEnroll. Once signed
+ * in, <BrandThemeSync> re-points the icons at the session's brand.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    ...brandMetadata(await brandForRequest()),
+    description: 'Agency portal for pay-per-application call delivery',
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   /*

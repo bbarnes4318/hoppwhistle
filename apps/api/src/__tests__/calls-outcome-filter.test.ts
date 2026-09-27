@@ -188,6 +188,31 @@ describe.skipIf(!gate.available)('GET /api/v1/calls filters', () => {
     expect(await listed('disputeStatus=NONE')).toEqual(names('agent', 'blocked'));
   });
 
+  it("carries each row's submitted application, and not a voided one", async () => {
+    const application = (callId: string, voided: boolean) =>
+      prisma.insuranceCarrierApplication.create({
+        data: {
+          tenantId,
+          callId,
+          carrier: voided ? 'Voided Life' : 'Aflac',
+          firstName: 'Dolores',
+          lastName: 'Reyes',
+          source: 'AGENT_ENTRY',
+          submittedAt: new Date(),
+          voidedAt: voided ? new Date() : null,
+        },
+      });
+    await application(ids.both, false);
+    await application(ids.agent, true);
+
+    const response = await get('/api/v1/calls?limit=100');
+    expect(response.statusCode, response.body).toBe(200);
+    const byId = new Map<string, any>(response.json().data.map((call: any) => [call.id, call]));
+    expect(byId.get(ids.both).application).toMatchObject({ carrier: 'Aflac' });
+    expect(byId.get(ids.agent).application).toBeNull();
+    expect(byId.get(ids.buyer).application).toBeNull();
+  });
+
   it('the CSV export honours outcome the same way', async () => {
     const response = await get('/api/v1/calls/export.csv?outcome=UNANSWERED');
     expect(response.statusCode, response.body).toBe(200);

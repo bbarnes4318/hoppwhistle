@@ -39,6 +39,46 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { isOpenDispute } from '../../lib/dispute-status.js';
 
+/**
+ * The instants a set of calls is read between: `[start, endExclusive)`, as
+ * `resolvePeriod` or `calendarDayBounds` resolve them -- America/New_York
+ * calendar days, never a browser's clock or a UTC midnight.
+ */
+export interface CallRange {
+  start: Date;
+  endExclusive: Date;
+}
+
+/**
+ * The calls every money figure is read off: this tenant's INBOUND calls created
+ * inside the range.
+ *
+ * ── One set, everywhere ──────────────────────────────────────────────────────
+ *
+ * Sales, Today, Payouts, the three reports and their CSVs, and the monthly
+ * statements each used to write their own where clause -- one read every
+ * direction, one read `lte` a browser's end-of-day, one read INBOUND -- so the
+ * same month could hold a different number of calls on each screen. They all
+ * start here now, and narrow it (a buyer, a publisher, a campaign) by spreading
+ * this and adding to it.
+ */
+export function salesCallWhere(tenantId: string, range: CallRange): Prisma.CallWhereInput {
+  return {
+    tenantId,
+    direction: 'INBOUND',
+    createdAt: { gte: range.start, lt: range.endExclusive },
+  };
+}
+
+/**
+ * Every call there has ever been, for the figures that are not about a period:
+ * what is owed to a publisher right now is owed whenever the call came in.
+ */
+export const ALL_TIME: CallRange = {
+  start: new Date(0),
+  endExclusive: new Date('9999-12-31T00:00:00.000Z'),
+};
+
 /** The accrual-ledger row types that bear on a call's money. */
 export const CALL_MONEY_LEDGER_TYPES = [
   'ADJUSTMENT',

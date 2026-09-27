@@ -121,6 +121,7 @@ REQUIRED_MIGRATIONS="
 20260930010000_phone_number_released
 20260930020000_number_charges
 20260930030000_password_reset_tokens
+20261001000000_statements
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -494,6 +495,11 @@ migration_applied() {
     *_password_reset_tokens)
       # Wrapped BEGIN..COMMIT; the table stands for its index and foreign key.
       echo "SELECT to_regclass('public.password_reset_tokens') IS NOT NULL" ;;
+    *_statements)
+      # Wrapped BEGIN..COMMIT; the table stands for its checks and foreign key,
+      # with the unique index statements:close relies on probed alongside it.
+      echo "SELECT to_regclass('public.statements') IS NOT NULL
+            AND to_regclass('public.\"statements_tenantId_partyType_partyId_month_key\"') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac

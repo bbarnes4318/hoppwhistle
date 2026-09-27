@@ -3,6 +3,8 @@ import * as React from 'react';
 import { SessionCookieSync } from '@/components/auth/session-cookie-sync';
 import { ThemeScope } from '@/components/domain';
 
+import { AccountBanner } from './_components/account-banner';
+
 /**
  * The buyer shell.
  *
@@ -11,12 +13,21 @@ import { ThemeScope } from '@/components/domain';
  * dashboard layout still carries the legacy dark class for unconverted routes),
  * and it mounts the one client component that keeps the session cookie in step
  * with localStorage so the server render has a session to read.
+ *
+ * It also carries the account notice -- paused, and why, or running low -- so
+ * every page says it without each one having to remember to. It sits in its own
+ * Suspense boundary: the page does not wait on the profile read behind it.
  */
 export default function BuyerLayout({ children }: { children: React.ReactNode }) {
   return (
     <ThemeScope theme="light" className="min-h-full">
       <SessionCookieSync />
-      <div className="space-y-5 px-3 py-5 sm:px-6">{children}</div>
+      <div className="space-y-5 px-3 py-5 sm:px-6">
+        <React.Suspense fallback={null}>
+          <AccountBanner />
+        </React.Suspense>
+        {children}
+      </div>
     </ThemeScope>
   );
 }

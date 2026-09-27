@@ -505,6 +505,23 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
             decidedBy,
             decisionNote: note,
           };
+          /*
+           * What the buyer was billed for the call, kept before an acceptance
+           * zeroes `buyerBillableAmount` below. Without it an accepted return
+           * reads "$0.00" to the buyer -- as though the call had never cost
+           * anything, rather than cost this much and been given back -- and a
+           * monthly statement has nothing to show the credit against. Written
+           * on a denial too, so every decided return carries it the same way,
+           * and never over a value an earlier write already kept: the first
+           * record is the one taken before any zeroing. A call that never had
+           * an amount gets none, rather than a claimed "0".
+           */
+          if (
+            metadata.originalBuyerBillableAmount === undefined &&
+            call.buyerBillableAmount !== null
+          ) {
+            metadata.originalBuyerBillableAmount = call.buyerBillableAmount.toString();
+          }
 
           const data: Prisma.CallUpdateManyMutationInput = {};
           let refund: Prisma.Decimal | null = null;

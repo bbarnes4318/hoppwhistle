@@ -127,7 +127,7 @@ describe('the call ledger when /api/v1/calls does not return rows', () => {
 
     // Loading state clears once the request has been answered either way.
     await waitFor(() => {
-      expect(screen.queryByText(/Loading pay-per-call ledger/i)).toBeNull();
+      expect(screen.queryByText(/Loading calls/i)).toBeNull();
     });
   }
 

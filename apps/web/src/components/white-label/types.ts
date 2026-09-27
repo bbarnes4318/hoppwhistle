@@ -25,11 +25,16 @@ export interface CallSalesSummary {
     inboundCalls: number;
     answeredByAgents: number;
     sentToBuyers: number;
+    /** Every billable call, whoever answered it. */
+    billable: number;
     billableToBuyers: number;
+    billableAgentAnswered: number;
     sellThroughPct: number | null;
     revenue: number;
     publisherPayouts: number;
     callCost: number;
+    /** True when any call's cost in the period is the $/min estimate, not a carrier figure. */
+    callCostEstimated: boolean;
     otherCosts: number;
     adjustments: number;
     disputes: number;
@@ -70,7 +75,10 @@ export interface CallSalesSummary {
     day: string;
     inbound: number;
     sentToBuyers: number;
+    /** Every billable call that day, whoever answered it. */
     billable: number;
+    billableToBuyers: number;
+    billableAgentAnswered: number;
     revenue: number;
     payout: number;
     profit: number;

@@ -18,6 +18,8 @@ import { StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
 import {
   acceptedByBuyer,
+  decisionNoteOf,
+  displayAmountOf,
   disputedAtOf,
   disputeReasonOf,
   durationScale,
@@ -25,6 +27,7 @@ import {
   thresholdFor,
 } from '../_lib/calls';
 import { resolveRange } from '../_lib/range';
+import { chargedSpend } from '../_lib/spend';
 
 import { FilePanel, type FileableCall } from './file-panel';
 import { FiledDisputesTable, type FiledDisputeRow } from './filed-table';
@@ -110,7 +113,7 @@ async function DisputeSummary({ token, buyerId, startISO, endISO }: Args) {
     return <PanelError title="Disputes" message={reportResult.error ?? 'No report returned.'} />;
   }
 
-  const spend = toMajor(reportResult.data.totals.buyerCost);
+  const spend = chargedSpend(reportResult.data.totals);
   const disputed = toMajor(reportResult.data.totals.disputes);
   const open = openResult.data?.total ?? 0;
 
@@ -245,7 +248,10 @@ async function FiledSection({ token, buyerId, startISO, endISO }: Args) {
     filedAt: disputedAtOf(call),
     status: call.disputeStatus ?? 'DISPUTED',
     reason: disputeReasonOf(call),
-    amount: call.buyerBillableAmount,
+    // A decided return shows what the call was billed, not the $0.00 an
+    // acceptance leaves on it.
+    amount: displayAmountOf(call),
+    decisionNote: decisionNoteOf(call),
     connectedSeconds: call.connectedDuration ?? call.duration ?? 0,
     thresholdSeconds: thresholdFor(call, profile),
     scaleSeconds: scale,

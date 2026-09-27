@@ -1,122 +1,104 @@
 'use client';
 
 import { Loader2, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { Badge } from '@/components/ui/badge';
+import { dollars } from '@/components/delivery/ledger';
+import { StatementsPanel } from '@/components/statements/statements-panel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
+import { PeriodToolbar, usePeriod } from '@/components/white-label/period-toolbar';
 import { useAuth } from '@/hooks/use-auth';
-import { apiClient } from '@/lib/api';
-import { CLAWED_BACK, CLAWED_BACK_BADGE, CLAWED_BACK_LABEL } from '@/lib/payout-status';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
+import {
+  payoutSummaryPath,
+  type PublisherDeduction,
+  type PublisherPayments,
+  type PublisherPayoutSummary,
+} from '@/lib/publisher-portal';
 
-interface RevenueSummary {
-  earnings: string;
-  paid: string;
-  pending: string;
-  held: string;
+/**
+ * Payouts: what the agency has paid this publisher, and what it owes.
+ *
+ * ── The owner's numbers ──────────────────────────────────────────────────────
+ *
+ * The cards are this publisher's row of the agency's own Payouts screen for the
+ * chosen period (`/payouts/summary`), and the history is the payments the
+ * agency recorded there (`/payouts`). The page used to read a payouts table
+ * nothing writes, so the history was always empty, and labelled its cards
+ * "All-time" over figures that were not. Nothing here adds anything up.
+ */
+
+function dateOnly(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString() : '—';
 }
 
-interface PayoutRecord {
-  id: string;
-  amount: number;
-  currency: string;
-  status: string;
-  method: string;
-  reference: string | null;
-  processedAt: string | null;
-  createdAt: string;
+/** A deduction as it reads on a statement: "−$5.00", never "$-5.00". */
+function deducted(amount: number): string {
+  return `−${dollars(Math.abs(amount))}`;
+}
+
+function DeductionLabel({ deduction }: { deduction: PublisherDeduction }) {
+  return (
+    <>
+      Returned call
+      {deduction.callDate ? ` from ${dateOnly(deduction.callDate)}` : ' (call since removed)'}
+    </>
+  );
 }
 
 function PublisherPayoutsPage() {
   const { publisherId } = useAuth();
+  const period = usePeriod('THIS_MONTH');
+  const { sendable, query } = period;
 
-  const [summary, setSummary] = useState<RevenueSummary | null>(null);
-  const [payouts, setPayouts] = useState<PayoutRecord[]>([]);
+  const [summary, setSummary] = useState<PublisherPayoutSummary | null>(null);
+  const [history, setHistory] = useState<PublisherPayments | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    if (!publisherId) return;
+    if (!publisherId || !sendable) return;
     setLoading(true);
     try {
-      // 1. Fetch Earnings Summary from Reports
-      const summaryRes = await apiClient.get<{ totals: RevenueSummary }>(
-        `/api/v1/reports/publisher-revenue?publisherId=${publisherId}`
-      );
-      if (summaryRes.data?.totals) {
-        setSummary(summaryRes.data.totals);
+      const [summaryRes, historyRes] = await Promise.all([
+        apiClient.get<Envelope<PublisherPayoutSummary>>(payoutSummaryPath(publisherId, query)),
+        apiClient.get<Envelope<PublisherPayments>>(`/api/v1/publishers/${publisherId}/payouts`),
+      ]);
+      if (summaryRes.error || historyRes.error) {
+        toast.error(
+          'Failed to load payout details',
+          summaryRes.error?.message ?? historyRes.error?.message
+        );
       }
-
-      // 2. Fetch Payouts list
-      const payoutsRes = await apiClient.get<{ data: PayoutRecord[] }>(
-        `/api/v1/publishers/${publisherId}/payouts`
-      );
-      if (payoutsRes.data?.data) {
-        setPayouts(payoutsRes.data.data);
-      }
+      setSummary(payload(summaryRes) ?? null);
+      setHistory(payload(historyRes) ?? null);
     } catch (err) {
       console.error('Failed to load publisher payouts data:', err);
       toast.error('Failed to load payout details');
     } finally {
       setLoading(false);
     }
-  }, [publisherId]);
+  }, [publisherId, sendable, query]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
-  const getPayoutStatusBadge = (status: string) => {
-    const s = status.toUpperCase();
-    switch (s) {
-      case 'COMPLETED':
-        return (
-          <Badge variant="success" className="text-xs uppercase font-semibold">
-            Completed
-          </Badge>
-        );
-      case 'PROCESSING':
-      case 'PENDING':
-        return (
-          <Badge variant="warning" className="text-xs uppercase font-semibold">
-            Processing
-          </Badge>
-        );
-      case 'FAILED':
-        return (
-          <Badge variant="destructive" className="text-xs uppercase font-semibold">
-            Failed
-          </Badge>
-        );
-      case 'CANCELLED':
-        return (
-          <Badge variant="outline" className="text-xs uppercase font-semibold">
-            Cancelled
-          </Badge>
-        );
-      case CLAWED_BACK:
-        return (
-          <Badge variant="outline" className={`text-xs font-semibold ${CLAWED_BACK_BADGE}`}>
-            {CLAWED_BACK_LABEL}
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className="text-xs uppercase font-semibold">
-            {status}
-          </Badge>
-        );
-    }
-  };
+  const label = summary?.period.label ?? 'This month';
+  const payments = history?.payments ?? [];
+  const waiting = history?.waiting ?? [];
+  const figure = (value: number | undefined) =>
+    loading || value === undefined ? '...' : dollars(value);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
+    <div className="page-canvas">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
           <p className="mt-1 text-sm text-ink-2">
-            Monitor your earnings settlements, payout history, and payment processing status.
+            What you are owed for the period, and every payment your agency has recorded.
           </p>
         </div>
         <Button onClick={() => void loadData()} variant="outline" size="sm">
@@ -125,47 +107,36 @@ function PublisherPayoutsPage() {
         </Button>
       </div>
 
+      <PeriodToolbar state={period} resolved={summary?.period ?? null} label="Payouts period" />
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Total Earnings
+              Payable
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-ink">
-              {loading ? '...' : `$${parseFloat(summary?.earnings || '0').toFixed(2)}`}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">All-time generated earnings</p>
+            <div className="text-2xl font-bold font-mono text-ink">{figure(summary?.payable)}</div>
+            <p className="text-xs text-ink-3 mt-1">
+              {label}
+              {summary ? ` · ${summary.payableCalls.toLocaleString()} calls not yet paid` : ''}
+            </p>
           </CardContent>
         </Card>
 
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Settled Payouts
+              Paid
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-live-ink">
-              {loading ? '...' : `$${parseFloat(summary?.paid || '0').toFixed(2)}`}
+              {figure(summary?.paid)}
             </div>
-            <p className="text-xs text-ink-3 mt-1">Total successfully paid out</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Pending Payable
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-ringing-ink">
-              {loading ? '...' : `$${parseFloat(summary?.pending || '0').toFixed(2)}`}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">Accruing for next payout cycle</p>
+            <p className="text-xs text-ink-3 mt-1">{label} · calls already paid for</p>
           </CardContent>
         </Card>
 
@@ -177,38 +148,50 @@ function PublisherPayoutsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-dropped-ink">
-              {loading ? '...' : `$${parseFloat(summary?.held || '0').toFixed(2)}`}
+              {figure(summary?.held)}
             </div>
-            <p className="text-xs text-ink-3 mt-1">Held due to disputes or reviews</p>
+            <p className="text-xs text-ink-3 mt-1">{label} · on hold or under dispute</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-surface border-rule">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+              Net payable
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-ringing-ink">
+              {figure(summary?.netPayable)}
+            </div>
+            <p className="text-xs text-ink-3 mt-1">
+              Payable less {summary ? dollars(summary.returnsPending) : '...'} in returns waiting
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Payout History */}
+      {/* Payment History */}
       <Card className="bg-surface border-rule">
         <CardHeader>
-          <CardTitle>Payout History</CardTitle>
-          <CardDescription>Statement of settlements issued to your accounts.</CardDescription>
+          <CardTitle>Payments</CardTitle>
+          <CardDescription>
+            Every payment your agency has recorded to you, with any returned calls deducted from it.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-rule bg-sunken">
                   <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
-                    Date Issued
+                    Date
                   </th>
                   <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
                     Method
                   </th>
                   <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
-                    Reference / ID
-                  </th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
-                    Date Settled
-                  </th>
-                  <th className="p-4 text-center text-xs font-semibold uppercase tracking-wider text-ink-2">
-                    Status
+                    Reference
                   </th>
                   <th className="p-4 text-right text-xs font-semibold uppercase tracking-wider text-ink-2">
                     Amount
@@ -216,43 +199,51 @@ function PublisherPayoutsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
-                {loading ? (
+                {loading && !history ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-ink-2">
+                    <td colSpan={4} className="py-12 text-center text-sm text-ink-2">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-brand-ink" />
-                        <span>Loading payouts history...</span>
+                        <span>Loading payments...</span>
                       </div>
                     </td>
                   </tr>
-                ) : payouts.length === 0 ? (
+                ) : payments.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-ink-2">
-                      No payout records available yet.
+                    <td colSpan={4} className="py-12 text-center text-sm text-ink-2">
+                      No payments recorded yet.
                     </td>
                   </tr>
                 ) : (
-                  payouts.map(payout => (
-                    <tr key={payout.id} className="hover:bg-sunken transition-colors duration-150">
-                      <td className="p-4 font-mono text-xs text-ink-2">
-                        {new Date(payout.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="p-4 text-xs text-ink-2 uppercase tracking-wider">
-                        {payout.method.replace('_', ' ')}
-                      </td>
-                      <td className="p-4 font-mono text-xs text-ink-2">
-                        {payout.reference || '—'}
-                      </td>
-                      <td className="p-4 font-mono text-xs text-ink-2">
-                        {payout.processedAt
-                          ? new Date(payout.processedAt).toLocaleDateString()
-                          : '—'}
-                      </td>
-                      <td className="p-4 text-center">{getPayoutStatusBadge(payout.status)}</td>
-                      <td className="p-4 text-right font-mono text-xs text-ink font-semibold">
-                        ${Number(payout.amount).toFixed(2)}
-                      </td>
-                    </tr>
+                  payments.map(payment => (
+                    <Fragment key={payment.id}>
+                      <tr className="hover:bg-sunken transition-colors duration-150">
+                        <td className="p-4 font-mono text-xs text-ink-2">
+                          {dateOnly(payment.paidAt)}
+                        </td>
+                        <td className="p-4 text-xs text-ink-2">{payment.method}</td>
+                        <td className="p-4 font-mono text-xs text-ink-2">
+                          {payment.reference || '—'}
+                        </td>
+                        <td className="p-4 text-right font-mono text-xs text-ink font-semibold">
+                          {dollars(payment.amount)}
+                        </td>
+                      </tr>
+                      {payment.deductions.map(deduction => (
+                        <tr key={deduction.id} className="bg-sunken/50">
+                          <td
+                            colSpan={3}
+                            className="py-2 pl-10 pr-4 text-xs text-ink-3"
+                            aria-label="Deducted from this payment"
+                          >
+                            <DeductionLabel deduction={deduction} />
+                          </td>
+                          <td className="py-2 px-4 text-right font-mono text-xs text-dropped-ink">
+                            {deducted(deduction.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))
                 )}
               </tbody>
@@ -260,6 +251,36 @@ function PublisherPayoutsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Returns not yet deducted */}
+      {waiting.length > 0 ? (
+        <Card className="bg-surface border-rule">
+          <CardHeader>
+            <CardTitle>Waiting for next payment</CardTitle>
+            <CardDescription>
+              Returned calls accepted after you were paid for them. They come off your next payment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full">
+              <tbody className="divide-y divide-rule">
+                {waiting.map(deduction => (
+                  <tr key={deduction.id}>
+                    <td className="p-4 text-xs text-ink-2">
+                      <DeductionLabel deduction={deduction} />
+                    </td>
+                    <td className="p-4 text-right font-mono text-xs text-dropped-ink">
+                      {deducted(deduction.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {publisherId ? <StatementsPanel partyType="PUBLISHER" partyId={publisherId} /> : null}
     </div>
   );
 }

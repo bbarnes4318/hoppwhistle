@@ -5,7 +5,17 @@ import * as React from 'react';
 
 import { type Column, DataTable, MoneyCell, StatusChip } from '@/components/domain';
 
-/** The wallet ledger: every credit in and every call charged out. */
+/**
+ * The wallet ledger: every credit in and every call charged out.
+ *
+ * Column sizes are MINIMUMS, not fixed widths. At 390px four fixed widths
+ * (150 + 110 + 120 and the description) added up to more than the screen, and a
+ * fixed-layout cell gives way by crushing its content -- the date wrapped onto
+ * three lines and the amount lost its cents. A minimum keeps each cell whole
+ * and lets the table run wider than the phone, and DataTable's own
+ * `overflow-x-auto` wrapper scrolls it sideways inside the panel instead of
+ * widening the page.
+ */
 
 export interface LedgerRow {
   id: string;
@@ -20,7 +30,8 @@ export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
     {
       id: 'when',
       header: 'When',
-      width: '150px',
+      headClassName: 'min-w-[128px]',
+      cellClassName: 'min-w-[128px] whitespace-nowrap',
       cell: row => (
         <time dateTime={row.createdAt} className="t-data tabular text-ink-2">
           {new Date(row.createdAt).toLocaleString(undefined, {
@@ -35,7 +46,8 @@ export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
     {
       id: 'type',
       header: 'Type',
-      width: '110px',
+      headClassName: 'min-w-[96px]',
+      cellClassName: 'min-w-[96px]',
       cell: row => (
         <StatusChip
           value={row.type}
@@ -55,7 +67,8 @@ export function LedgerTable({ rows }: { rows: LedgerRow[] }) {
       id: 'amount',
       header: 'Amount',
       numeric: true,
-      width: '120px',
+      headClassName: 'min-w-[104px]',
+      cellClassName: 'min-w-[104px] whitespace-nowrap',
       cell: row => <MoneyCell amount={row.amount} unit="major" tone="auto" signed />,
     },
   ];

@@ -3,6 +3,7 @@
 import { HubTabs } from '@/components/hub/hub-tabs';
 import { PlanBillingView } from '@/components/settings/plan-billing-view';
 import { SettingsView } from '@/components/settings/settings-view';
+import { StatementsPanel } from '@/components/statements/statements-panel';
 import { useAuth } from '@/hooks/use-auth';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 
@@ -20,11 +21,40 @@ import { useWhiteLabelView } from '@/hooks/use-white-label-view';
  *
  * Workspace, the demo-mode switch, is a platform admin's alone, here as
  * everywhere; an agency never sees it.
+ *
+ * A downline agency's owner gets its settings beside a Statements tab: the
+ * monthly statement its white-label issues it.
  */
 export default function SettingsPage(): JSX.Element {
   const whiteLabel = useWhiteLabelView();
-  const { isPlatformAdmin } = useAuth();
-  if (!whiteLabel) return <SettingsView />;
+  const { isPlatformAdmin, isChild, isOwner } = useAuth();
+  if (!whiteLabel) {
+    // A downline agency's owner reads the statement its white-label issues it here.
+    if (isChild && isOwner) {
+      return (
+        <HubTabs
+          label="Settings sections"
+          defaultTab="settings"
+          tabs={[
+            { key: 'settings', label: 'Settings', render: () => <SettingsView /> },
+            {
+              key: 'statements',
+              label: 'Statements',
+              render: () => (
+                <div className="page-canvas">
+                  <StatementsPanel
+                    partyType="CHILD_AGENCY"
+                    description="Your calls, applications, agents and number charges, month by month."
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
+      );
+    }
+    return <SettingsView />;
+  }
 
   return (
     <HubTabs

@@ -205,7 +205,6 @@ const SWEEP = [
     redirects: [
       { from: '/publishers', to: '/dashboard' },
       { from: '/buyers', to: '/dashboard' },
-      { from: '/numbers', to: '/dashboard' },
       { from: '/flows', to: '/dashboard' },
       { from: '/voice-studio', to: '/dashboard' },
       { from: '/settings/carriers', to: '/dashboard' },
@@ -247,6 +246,16 @@ const SWEEP = [
        */
       { from: '/admin/live', to: '/dashboard' },
     ],
+    /*
+     * Pages that get more than the sweep's generic reading: what must be on
+     * them, and no console errors while they load.
+     *
+     * `/numbers` was in the redirects above until every agency could buy its
+     * own numbers. The property that replaced "an agency principal is sent
+     * away from it" is "an agency principal can use it" -- asserted, rather
+     * than the redirect merely deleted.
+     */
+    pageChecks: [{ path: '/numbers', check: checkAgencyNumbers }],
   },
   {
     who: 'agent (AGENT, inside one agency)',
@@ -685,15 +694,14 @@ const GSI_STUB = `
 `;
 
 /**
- * What must not be on this page.
+ * Where the emailed reset link lands. "Forgot password?" on /login opens an
+ * inline form that asks the server to send that link; this is the page it
+ * points at.
  *
- * A "forgot password" link is a promise to a route that does not exist, and a
- * refusal a person cannot act on is worse than no control at all.
+ * ── Why "create account" is not forbidden here ────────────────────────────────
  *
- * ── Why "create account" is no longer on this list ───────────────────────────
- *
- * It was, on the reasoning that `POST /api/auth/register` refuses without an
- * activation grant, so a create-account control was a door onto a corridor
+ * It once was, on the reasoning that `POST /api/auth/register` refuses without
+ * an activation grant, so a create-account control was a door onto a corridor
  * with no rooms. That was wrong about who uses it. The grant is real and it is
  * held by the person, not by the link: an invitation code read out over the
  * phone, forwarded as text, or opened in a different browser leaves an invited
@@ -703,7 +711,7 @@ const GSI_STUB = `
  * The refusal still stands where it belongs -- server-side, on a request with
  * no grant -- and `checkLoginTabs` below pins the door open.
  */
-const ABSENT_FROM_LOGIN = [/forgot (your )?password/i, /reset (your )?password/i];
+const RESET_PASSWORD_ROUTE = '/reset-password';
 
 /**
  * What must be on it.
@@ -1348,6 +1356,7 @@ async function openAsOperator(browser, session, path, settleMs = SETTLE_MS) {
 
   const page = await context.newPage();
   const responses = [];
+  const consoleErrors = collectConsoleErrors(page);
   const opened = Date.now();
   page.on('response', r => {
     const url = new URL(r.url());
@@ -1369,7 +1378,29 @@ async function openAsOperator(browser, session, path, settleMs = SETTLE_MS) {
   // reaching this timeout means something is actually wrong.
   await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.waitForTimeout(settleMs);
-  return { context, page, responses };
+  return { context, page, responses, consoleErrors };
+}
+
+/**
+ * Every console error and uncaught exception the page raises, from before the
+ * first navigation. Read by the checks that assert a page loads cleanly.
+ */
+function collectConsoleErrors(page) {
+  const errors = [];
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('pageerror', error => errors.push(`uncaught: ${error.message}`));
+  return errors;
+}
+
+/** A failure naming the console errors a load raised, if it raised any. */
+function reportConsoleErrors(who, consoleErrors) {
+  if (consoleErrors.length === 0) return;
+  fail(
+    `${who}: the console reported ${consoleErrors.length} error(s) while the page loaded:\n` +
+      consoleErrors.map(text => `    ${JSON.stringify(text.slice(0, 300))}`).join('\n')
+  );
 }
 
 // ─── Legibility on a light ground ────────────────────────────────────────────
@@ -1753,6 +1784,84 @@ async function checkRedirect(browser, session, entry, { from, to }) {
   await context.close();
 }
 
+/**
+ * An agency principal on /numbers: stays there, and can use it.
+ *
+ * Every agency buys its own numbers, so the page is theirs -- the list of the
+ * agency's numbers (or the empty state when it has none yet) and the "Buy
+ * numbers" control that opens the purchase dialog, with nothing refused and
+ * nothing in the console.
+ */
+async function checkAgencyNumbers(browser, session, entry, path) {
+  const who = `${entry.who} on ${path}`;
+  const { context, page, responses, consoleErrors } = await openAsOperator(
+    browser,
+    session,
+    path,
+    SWEEP_SETTLE_MS
+  );
+
+  const landed = await page.evaluate(() => window.location.pathname);
+  const settled = landed === path ? await settleOnPath(page, path) : landed;
+  if (settled !== path) {
+    fail(`${who}: was moved to ${settled}. Every agency buys its own numbers; ${path} is theirs.`);
+    await context.close();
+    return;
+  }
+
+  const state = await page.evaluate(() => {
+    const main = document.querySelector('main') ?? document.body;
+    return {
+      body: document.body.innerText,
+      tabs: Array.from(main.querySelectorAll('[role="tab"]')).map(el =>
+        (el.textContent || '').trim()
+      ),
+      buy: Array.from(main.querySelectorAll('button')).some(
+        el => (el.textContent || '').trim() === 'Buy numbers'
+      ),
+      spinning: Array.from(main.querySelectorAll('.animate-spin')).filter(el => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }).length,
+    };
+  });
+
+  if (state.body.includes('could not be displayed') || state.body.includes('Application error')) {
+    fail(`${who}: the page threw:\n  ${JSON.stringify(state.body.slice(0, 300))}`);
+  }
+  if (!state.tabs.includes('Phone Numbers')) {
+    fail(
+      `${who}: there is no "Phone Numbers" tab, so the number list did not render.\n` +
+        `  saw tabs: ${JSON.stringify(state.tabs)}`
+    );
+  }
+  if (state.spinning > 0) {
+    fail(`${who}: the number list is still loading after ${SWEEP_SETTLE_MS}ms.`);
+  } else if (
+    !/No phone numbers found/.test(state.body) &&
+    (await page.locator('main [data-numbers-used], main .grid > *').count()) === 0
+  ) {
+    fail(`${who}: the number list shows neither numbers nor its empty state.`);
+  }
+  if (!state.buy) {
+    fail(`${who}: there is no "Buy numbers" control. An agency buys its own numbers here.`);
+  } else {
+    // The control does what it says: it opens the purchase dialog.
+    await page.getByRole('button', { name: 'Buy numbers' }).click();
+    const dialog = page.getByRole('dialog');
+    const opened = await dialog
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!opened) fail(`${who}: "Buy numbers" did not open the purchase dialog.`);
+    else await page.waitForTimeout(1_000);
+  }
+
+  reportRefusals(who, responses, 'Every request a page load makes must succeed', path);
+  reportConsoleErrors(who, consoleErrors);
+  await context.close();
+}
+
 /** One load, collecting its failures rather than committing them. */
 async function sweepRouteOnce(browser, session, entry, path) {
   const failures = [];
@@ -1972,14 +2081,36 @@ async function checkLoginPage(browser, viewport) {
     );
   }
 
-  // 4. No promise to a route that does not exist.
-  for (const forbidden of ABSENT_FROM_LOGIN) {
-    const offender = state.controls.find(label => forbidden.test(label));
-    if (offender) {
-      fail(
-        `${who}: offers ${JSON.stringify(offender)}, and there is no password-reset route behind ` +
-          'it. Saying who to ask is more use than a link that does not exist.'
-      );
+  // 4. A way back in for someone who has forgotten their password: the link,
+  //    and the inline form it opens. `checkResetPasswordPage` loads the page
+  //    the emailed link points at.
+  if (!state.controls.includes('Forgot password?')) {
+    fail(
+      `${who}: there is no "Forgot password?" control. Someone locked out has no way back in ` +
+        `short of asking.\n  saw controls: ${JSON.stringify(state.controls)}`
+    );
+  } else {
+    await page.getByRole('button', { name: 'Forgot password?' }).click();
+    const form = page.locator('form[aria-labelledby="forgot-heading"]');
+    const opened = await form
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!opened) {
+      fail(`${who}: "Forgot password?" did not open the inline reset form.`);
+    } else {
+      const parts = {
+        heading: await form.getByText('Reset your password').isVisible(),
+        email: await form.locator('#forgot-email').isVisible(),
+        send: await form.getByRole('button', { name: 'Send reset link' }).isVisible(),
+      };
+      const missing = Object.entries(parts)
+        .filter(([, seen]) => !seen)
+        .map(([name]) => name);
+      if (missing.length > 0) {
+        fail(`${who}: the inline reset form is missing its ${missing.join(', ')}.`);
+      }
+      await checkFits(page, `${who}, reset form open`);
     }
   }
 
@@ -1998,6 +2129,59 @@ async function checkLoginPage(browser, viewport) {
   await checkFits(page, who);
   await checkLegibility(page, who);
   reportRefusals(who, responses, 'A signed-out page load must not be refused anything');
+
+  await context.close();
+}
+
+/**
+ * The page a reset email links to, signed out: it loads, asks for the new
+ * password, and raises nothing in the console. Opened without a token, which
+ * it must explain rather than throw on.
+ */
+async function checkResetPasswordPage(browser, viewport) {
+  const who = `${RESET_PASSWORD_ROUTE} at ${viewport.label}`;
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
+  const page = await context.newPage();
+  const consoleErrors = collectConsoleErrors(page);
+  const responses = [];
+  page.on('response', r => {
+    const url = new URL(r.url());
+    if (url.origin === FRONT) responses.push({ path: url.pathname, status: r.status() });
+  });
+
+  const response = await page.goto(`${FRONT}${RESET_PASSWORD_ROUTE}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 120_000,
+  });
+  await page.waitForTimeout(LOGIN_SETTLE_MS);
+
+  const state = await page.evaluate(() => ({
+    pathname: window.location.pathname,
+    body: document.body.innerText,
+    heading: document.querySelector('#reset-heading')?.textContent?.trim() ?? null,
+    password: !!document.querySelector('#reset-password'),
+  }));
+
+  if (!response || response.status() >= 400) {
+    fail(`${who}: answered ${response?.status() ?? 'nothing'}.`);
+  }
+  if (state.pathname !== RESET_PASSWORD_ROUTE) {
+    fail(`${who}: was moved to ${state.pathname}. The emailed link has to land here.`);
+  }
+  if (state.body.includes('could not be displayed') || state.body.includes('Application error')) {
+    fail(`${who}: the page threw:\n  ${JSON.stringify(state.body.slice(0, 300))}`);
+  }
+  if (state.heading !== 'Choose a new password' || !state.password) {
+    fail(
+      `${who}: the reset form did not render (heading ${JSON.stringify(state.heading)}, ` +
+        `password field ${state.password ? 'present' : 'missing'}).`
+    );
+  }
+  await checkFits(page, who);
+  reportRefusals(who, responses, 'A signed-out page load must not be refused anything');
+  reportConsoleErrors(who, consoleErrors);
 
   await context.close();
 }
@@ -2310,6 +2494,7 @@ async function checkFrontDoor(browser, services) {
     const fixture = await seedLogin(services);
 
     await checkLoginPage(browser, viewport);
+    await checkResetPasswordPage(browser, viewport);
     await checkGoogleButton(browser, viewport);
     await checkLoginByKeyboard(browser, fixture, viewport);
 
@@ -2551,6 +2736,8 @@ async function main() {
     // compiled: an uncompiled one takes long enough that the redirect looks
     // like a hang.
     ...SWEEP.flatMap(entry => (entry.redirects ?? []).flatMap(r => [r.from, r.to])),
+    ...SWEEP.flatMap(entry => (entry.pageChecks ?? []).map(c => c.path)),
+    RESET_PASSWORD_ROUTE,
     DARK_SCOPE_ROUTE,
     LOGIN_ROUTE,
   ]);
@@ -2584,6 +2771,9 @@ async function main() {
     }
     for (const redirect of entry.redirects ?? []) {
       await checkRedirect(browser, session, entry, redirect);
+    }
+    for (const { path, check } of entry.pageChecks ?? []) {
+      await check(browser, session, entry, path);
     }
   }
 

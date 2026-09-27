@@ -1,9 +1,9 @@
 /* eslint-disable */
 // Route handlers - placeholder implementations
-import { FastifyInstance, FastifyRequest } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
-import { OPEN_DISPUTE, isOpenDispute } from '../lib/dispute-status.js';
+import { OPEN_DISPUTE } from '../lib/dispute-status.js';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { isPlatformAdminRequest, requirePlatformAdmin } from '../lib/platform-context.js';
 import {
@@ -36,11 +36,16 @@ import type { ApplicationInput } from '../services/applications/input-schema.js'
 import { deliveredCallWhere, submittedApplicationWhere } from '../services/rating/measurement.js';
 import { isSoftphoneCallSid, savePendingDisposition } from '../services/pending-disposition.js';
 import {
-  loadCallMoneyLedger,
-  marginOf,
-  summariseCallMoney,
-  type MoneyBucket,
-} from '../services/reporting/call-money.js';
+  buildBuyerCostsReport,
+  buildCampaignProfitabilityReport,
+  buildPublisherRevenueReport,
+  buyerCostsCsv,
+  campaignFilter,
+  campaignProfitabilityCsv,
+  publisherRevenueCsv,
+  reportPeriodFromQuery,
+  type ReportPeriodQuery,
+} from '../services/reporting/reports.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -63,6 +68,10 @@ function buildCallWhere(params: {
   disposition?: string | null;
   /** Where the call went: `AGENTS`, `BUYERS` or `UNANSWERED`. Anything else is no filter. */
   outcome?: string | null;
+  /** `true` narrows to calls with a canonical recording. Anything else is no filter. */
+  hasRecording?: string | null;
+  /** `true` or `false` narrows by the call's billable flag. Anything else is no filter. */
+  billable?: string | null;
 }) {
   const {
     tenantId,
@@ -80,6 +89,8 @@ function buildCallWhere(params: {
     agentId,
     disposition,
     outcome,
+    hasRecording,
+    billable,
   } = params;
   const where: Record<string, any> = { tenantId };
 
@@ -232,6 +243,29 @@ function buildCallWhere(params: {
     andClauses.push({ answeredAt: null, blocked: false });
   }
 
+  /*
+   * The Recordings item in the publisher and buyer navigation is this list with
+   * `hasRecording=true`. It used to be ignored here, so "Recordings" showed
+   * every call, recorded or not. `primaryRecordingId` is the canonical
+   * recording the player streams; a call without one has nothing to play.
+   *
+   * `billable` is the same: the publisher Calls page filtered it out of the
+   * twenty rows it had been handed, so page 2 of "billable" could be empty
+   * while billable calls sat on page 5. The filter belongs in the query, where
+   * the page count is computed.
+   *
+   * Only the exact strings narrow. A stale or mistyped value is no filter, like
+   * `outcome` above.
+   */
+  if (hasRecording === 'true') {
+    andClauses.push({ primaryRecordingId: { not: null } });
+  }
+  if (billable === 'true') {
+    andClauses.push({ billable: true });
+  } else if (billable === 'false') {
+    andClauses.push({ billable: false });
+  }
+
   if (search && search.trim()) {
     const searchLower = search.trim();
     andClauses.push({
@@ -269,21 +303,6 @@ function buildCallWhere(params: {
  * access the same way; this is a security boundary and a second copy of it
  * would be a second thing to get wrong.
  */
-/**
- * Each campaign's name, as the first of its calls in the set recorded it -- the
- * name the profitability report has always shown for the group.
- */
-function campaignNamesOf(
-  calls: ReadonlyArray<{ campaignId: string | null; campaignName: string | null }>
-): Map<string, string> {
-  const names = new Map<string, string>();
-  for (const call of calls) {
-    const id = call.campaignId || 'unknown';
-    if (!names.has(id)) names.set(id, call.campaignName || 'Unknown Campaign');
-  }
-  return names;
-}
-
 export async function getUserProfile(request: any, prisma: any) {
   const user = request.user;
   let userRoles: string[] = [];
@@ -516,6 +535,32 @@ function mayReadCall(
   return false;
 }
 
+/**
+ * The call metadata keys a buyer may read: its own return and the decision on
+ * it. Everything else on a call's metadata is the agency's -- a return decision
+ * also writes the publisher's original payout, the clawback row and the
+ * operator who decided it, and routing writes the RTB details.
+ */
+const BUYER_METADATA_KEYS = [
+  'disputeReason',
+  'disputedAt',
+  'acceptedByBuyerAt',
+  'disputeDecision',
+  'decidedAt',
+  'decisionNote',
+  'originalBuyerBillableAmount',
+] as const;
+
+export function buyerCallMetadata(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const source = metadata as Record<string, unknown>;
+  const visible: Record<string, unknown> = {};
+  for (const key of BUYER_METADATA_KEYS) {
+    if (source[key] !== undefined) visible[key] = source[key];
+  }
+  return visible;
+}
+
 function mapCallRecord(
   call: any,
   apiBaseUrl: string,
@@ -572,6 +617,7 @@ function mapCallRecord(
   let toNumber = call.toNumber;
   let buyerName = call.buyerName;
   let publisherName: string | null = call.publisherName || call.publisher?.name || null;
+  let metadata: unknown = call.metadata;
 
   let margin: number | null = null;
 
@@ -603,6 +649,7 @@ function mapCallRecord(
         payout = null;
         cost = null;
         profit = null;
+        metadata = buyerCallMetadata(call.metadata);
       } else if (profile.userRoles?.includes('AGENT')) {
         /*
          * Who bought the call, who sold it, and where it was sent are the
@@ -652,7 +699,11 @@ function mapCallRecord(
   const billableReason = call.billable
     ? call.billingRuleSnapshot?.thresholdSource
       ? `Billable via ${call.billingRuleSnapshot.thresholdSource}`
-      : `Connected duration exceeded campaign threshold of ${call.billableDurationThreshold || 60}s`
+      : // The threshold stored on the call, never an assumed one: a call with
+        // none recorded says so rather than quoting a default it was not held to.
+        call.billableDurationThreshold != null
+        ? `Connected duration exceeded campaign threshold of ${call.billableDurationThreshold}s`
+        : 'Connected duration met the billable threshold'
     : call.noPayoutReason || 'Did not meet duration threshold';
 
   return {
@@ -750,7 +801,7 @@ function mapCallRecord(
     startedAt: call.startedAt?.toISOString(),
     answeredAt: call.answeredAt?.toISOString(),
     endedAt: call.endedAt?.toISOString(),
-    metadata: call.metadata,
+    metadata,
     billingRuleSnapshot: call.billingRuleSnapshot,
   };
 }
@@ -3528,9 +3579,29 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const protocol = request.headers['x-forwarded-proto'] || 'https';
         const baseUrl = `${protocol}://${host}`;
 
+        /*
+         * Who a publisher writes to when a call did not price the way they
+         * expected: the agency that pays them, not NetEnroll. The docs page
+         * used to print support@netenroll.com, which sent a white-label
+         * agency's publishers to a platform they have never heard of about a
+         * price only the agency sets. The agency's first active OWNER, in
+         * this tenant; null when it has none, and the page says to contact
+         * the agency instead.
+         */
+        const owner = await prisma.user.findFirst({
+          where: {
+            tenantId,
+            status: 'ACTIVE',
+            roles: { some: { role: { name: 'OWNER' } } },
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { email: true },
+        });
+
         return {
           publisherId,
           publisherCode: publisher.code,
+          supportEmail: owner?.email ?? null,
           pingEndpoint: `${baseUrl}/api/v1/ping`,
           postEndpoint: `${baseUrl}/api/v1/post`,
           docs: {
@@ -3572,6 +3643,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       agentId?: string;
       disposition?: string;
       outcome?: string;
+      hasRecording?: string;
+      billable?: string;
     };
   }>('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3668,6 +3741,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
       disposition: request.query.disposition,
       outcome: request.query.outcome,
+      hasRecording: request.query.hasRecording,
+      billable: request.query.billable,
     });
 
     const [calls, total] = await Promise.all([
@@ -3695,9 +3770,39 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     await attachAnsweredBy(calls, prisma, tenantId);
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
-    const mappedCalls = calls.map(call =>
-      mapCallRecord(call, apiBaseUrl, prisma, request, false, profile)
-    );
+    /*
+     * The sale on each call, for the ledger's Application column: the first
+     * submitted, non-voided application against it, by the same definition
+     * the call detail's `hasSubmittedApplication` uses. One query for the
+     * page, not one per row.
+     */
+    const pageCallIds = calls.map(call => call.id);
+    const submittedApplications = pageCallIds.length
+      ? await prisma.insuranceCarrierApplication.findMany({
+          where: {
+            tenantId,
+            callId: { in: pageCallIds },
+            submittedAt: { not: null },
+            voidedAt: null,
+          },
+          orderBy: { submittedAt: 'asc' },
+          select: { id: true, callId: true, carrier: true },
+        })
+      : [];
+    const applicationByCall = new Map<string, { id: string; carrier: string }>();
+    for (const application of submittedApplications) {
+      if (application.callId && !applicationByCall.has(application.callId)) {
+        applicationByCall.set(application.callId, {
+          id: application.id,
+          carrier: application.carrier,
+        });
+      }
+    }
+
+    const mappedCalls = calls.map(call => ({
+      ...mapCallRecord(call, apiBaseUrl, prisma, request, false, profile),
+      application: applicationByCall.get(call.id) ?? null,
+    }));
 
     return {
       data: mappedCalls,
@@ -3725,6 +3830,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       agentId?: string;
       disposition?: string;
       outcome?: string;
+      hasRecording?: string;
+      billable?: string;
     };
   }>('/api/v1/calls/export.csv', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3797,6 +3904,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       agentId: profile.isAdminOrOwner ? request.query.agentId : undefined,
       disposition: request.query.disposition,
       outcome: request.query.outcome,
+      hasRecording: request.query.hasRecording,
+      billable: request.query.billable,
     });
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
@@ -5345,66 +5454,177 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * The publisher a portal request is about, or null after answering.
+   *
+   * 403 when the caller may not see this publisher at all (another publisher's
+   * id, or a role with no portal); 404 when the publisher is not the acting
+   * tenant's. `requirePublisherAccess` passes an OWNER or ADMIN for ANY id and
+   * those roles are per tenant, so the tenant check is what stops an owner of
+   * one agency reading another agency's publisher by its id.
+   */
+  async function portalPublisher(
+    request: FastifyRequest<{ Params: { publisherId: string } }>,
+    reply: FastifyReply
+  ): Promise<{ tenantId: string; publisherId: string } | null> {
+    const tenantId = getActingTenantId(request);
+    if (!tenantId) {
+      void reply.send(sendTenantRefusal(request, reply));
+      return null;
+    }
+
+    const { publisherId } = request.params;
+    const { requirePublisherAccess } = await import('../middleware/rbac.js');
+    if (!requirePublisherAccess((request as AuthRequest).user, publisherId)) {
+      void reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return null;
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const publisher = await prisma.publisher.findFirst({
+      where: { id: publisherId, tenantId },
+      select: { id: true },
+    });
+    if (!publisher) {
+      void reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Publisher not found' } });
+      return null;
+    }
+
+    return { tenantId, publisherId };
+  }
+
+  /**
+   * The period a portal request asked for, defaulting to This month -- the
+   * range a publisher's statement is about -- rather than the owner screens'
+   * Today.
+   */
+  async function portalPeriod(
+    query: { period?: string; from?: string; to?: string },
+    reply: FastifyReply
+  ) {
+    const { periodFromQuery } = await import('./call-sales.js');
+    return periodFromQuery({ ...query, period: query.period ?? 'THIS_MONTH' }, reply);
+  }
+
+  /**
    * GET /api/v1/publishers/:publisherId/payouts
-   * List payouts for a publisher
+   *
+   *   { data: { payments: [{ id, amount, method, reference, paidAt, periodFrom,
+   *             periodTo, deductions: [{ id, callId, callDate, amount, createdAt }] }],
+   *             waiting: [{ id, callId, callDate, amount, createdAt }] } }
+   *
+   * What the agency recorded paying this publisher on its Payouts screen, from
+   * `publisher_payments`. This used to read `payouts`, a table nothing writes,
+   * so every publisher's history was empty however often they had been paid.
+   * `waiting` is the returns accepted after a payment that the next one will
+   * deduct. See `services/reporting/publisher-portal.ts`.
    */
   fastify.get<{
     Params: { publisherId: string };
   }>('/api/v1/publishers/:publisherId/payouts', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const tenantId = getActingTenantId(request);
+    const scope = await portalPublisher(request, reply);
+    if (!scope) return reply;
 
-    if (!tenantId) {
-      return sendTenantRefusal(request, reply);
-    }
-
-    const { publisherId } = request.params;
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { getPublisherPayments } = await import('../services/reporting/publisher-portal.js');
+    return { data: await getPublisherPayments(prisma, scope.tenantId, scope.publisherId) };
+  });
 
-    // Verify user profile matches publisherId (or admin)
-    const userRecord = await prisma.user.findUnique({
-      where: { id: user?.userId },
-      include: { roles: { include: { role: true } } },
-    });
+  /**
+   * GET /api/v1/publishers/:publisherId/payouts/summary?period=&from=&to=
+   *
+   *   { data: { period: { key, label, from, to, days, complete, startsAt, endsAt },
+   *             payable, payableCalls, held, paid, returnsPending, netPayable } }
+   *
+   * This publisher's row of the owner's Payouts screen for the same period,
+   * from the same `getPayoutsSummary`, so the two cannot disagree. `period`
+   * defaults to THIS_MONTH.
+   */
+  fastify.get<{
+    Params: { publisherId: string };
+    Querystring: { period?: string; from?: string; to?: string };
+  }>('/api/v1/publishers/:publisherId/payouts/summary', async (request, reply) => {
+    const scope = await portalPublisher(request, reply);
+    if (!scope) return reply;
 
-    if (!userRecord) {
-      void reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'User not found' } };
-    }
+    const period = await portalPeriod(request.query, reply);
+    if (!period) return reply;
 
-    const roles = userRecord.roles.map((ur: any) => ur.role.name) || [];
-    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
-
-    if (!isAdminOrOwner && userRecord.publisherId !== publisherId) {
-      void reply.code(403);
-      return { error: { code: 'FORBIDDEN', message: 'Access denied' } };
-    }
-
-    // Find billing account
-    const billingAccount = await prisma.billingAccount.findFirst({
-      where: { tenantId },
-    });
-
-    if (!billingAccount) {
-      return { data: [] };
-    }
-
-    const payouts = await prisma.payout.findMany({
-      where: { billingAccountId: billingAccount.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { getPayoutsSummary } = await import('./payouts.js');
+    const summary = await getPayoutsSummary(prisma, scope.tenantId, period);
+    const row = summary.publishers.find(p => p.publisherId === scope.publisherId);
 
     return {
-      data: payouts.map(p => ({
-        id: p.id,
-        amount: Number(p.amount),
-        currency: p.currency,
-        status: p.status,
-        method: p.method,
-        reference: p.reference,
-        processedAt: p.processedAt?.toISOString() || null,
-        createdAt: p.createdAt.toISOString(),
-      })),
+      data: {
+        period: {
+          key: period.key,
+          label: period.label,
+          from: period.from,
+          to: period.to,
+          days: period.days,
+          complete: period.complete,
+          startsAt: period.start.toISOString(),
+          endsAt: new Date(period.endExclusive.getTime() - 1).toISOString(),
+        },
+        payable: row?.payable ?? 0,
+        payableCalls: row?.payableCalls ?? 0,
+        held: row?.held ?? 0,
+        paid: row?.paid ?? 0,
+        returnsPending: row?.returnsPending ?? 0,
+        netPayable: row?.netPayable ?? 0,
+      },
+    };
+  });
+
+  /**
+   * GET /api/v1/publishers/:publisherId/daily?period=&from=&to=
+   *
+   *   { data: { period: { key, label, from, to, days, complete },
+   *             days: [{ day: 'YYYY-MM-DD', calls, billable, payout }] } }
+   *
+   * The publisher's inbound calls per America/New_York calendar day, every day
+   * of the period present, zero days included. The dashboard's trend chart;
+   * it used to be a sine wave scaled to the period's totals. `period` defaults
+   * to THIS_MONTH, and a range longer than a year is refused 400.
+   */
+  fastify.get<{
+    Params: { publisherId: string };
+    Querystring: { period?: string; from?: string; to?: string };
+  }>('/api/v1/publishers/:publisherId/daily', async (request, reply) => {
+    const scope = await portalPublisher(request, reply);
+    if (!scope) return reply;
+
+    const period = await portalPeriod(request.query, reply);
+    if (!period) return reply;
+
+    const { getPublisherDaily, MAX_DAILY_DAYS } = await import(
+      '../services/reporting/publisher-portal.js'
+    );
+    if (period.days > MAX_DAILY_DAYS) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `The daily series covers at most ${MAX_DAILY_DAYS} days`,
+        },
+      };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const days = await getPublisherDaily(prisma, scope.tenantId, scope.publisherId, period);
+
+    return {
+      data: {
+        period: {
+          key: period.key,
+          label: period.label,
+          from: period.from,
+          to: period.to,
+          days: period.days,
+          complete: period.complete,
+        },
+        days,
+      },
     };
   });
 
@@ -6172,21 +6392,6 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   }
 
-  // Helper to generate CSV
-  function toCsv(headers: string[], rows: any[][]): string {
-    const formatCell = (val: any) => {
-      if (val === null || val === undefined) return '';
-      const str = String(val);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-    const headerLine = headers.map(formatCell).join(',');
-    const rowLines = rows.map(r => r.map(formatCell).join(','));
-    return [headerLine, ...rowLines].join('\n');
-  }
-
   fastify.get<{
     Querystring: {
       startDate?: string;
@@ -6546,15 +6751,19 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   });
 
+  /*
+   * The three money reports. Each is computed once, in
+   * `services/reporting/reports.ts`, on `salesCallWhere`'s calls, and its CSV
+   * renders the same rows. They take `period`/`from`/`to` as
+   * `/api/v1/call-sales/summary` does.
+   */
+  type ReportQuery = ReportPeriodQuery & { campaignId?: string };
+
   // ── Publisher Revenue Report ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-      publisherId?: string;
-    };
-  }>('/api/v1/reports/publisher-revenue', async (request, reply) => {
+  async function publisherRevenueFor(
+    request: FastifyRequest<{ Querystring: ReportQuery & { publisherId?: string } }>,
+    reply: any
+  ) {
     const prisma = getPrismaClient();
     const {
       isAdminOrOwner,
@@ -6563,334 +6772,57 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     } = await getUserProfile(request, prisma);
 
     if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
-      return reply.code(403).send({ error: 'Forbidden' });
+      void reply.code(403).send({ error: 'Forbidden' });
+      return null;
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
+    if (!tenantId) {
+      replyTenantRefusal(request, reply);
+      return null;
+    }
 
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+    const period = reportPeriodFromQuery(request.query, reply);
+    if (!period) return null;
 
     let targetPublisherId = request.query.publisherId || null;
     if (userRoles.includes('PUBLISHER') && !isAdminOrOwner) {
       targetPublisherId = userPubId;
     }
 
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-        ...(targetPublisherId ? { publisherId: targetPublisherId } : {}),
-      },
-      select: {
-        id: true,
-        publisherId: true,
-        publisherName: true,
-        campaignId: true,
-        campaignName: true,
-        did: true,
-        billable: true,
-        publisherPayoutAmount: true,
-        publisherPayoutStatus: true,
-        disputeStatus: true,
-      },
+    return buildPublisherRevenueReport(prisma, tenantId, period, {
+      campaignId: campaignFilter(request.query.campaignId),
+      publisherId: targetPublisherId,
     });
+  }
 
-    const groupsMap = new Map<string, any>();
-    let totalCalls = 0;
-    let billableCalls = 0;
-    let nonBillableCalls = 0;
-    let totalEarnings = new Prisma.Decimal(0);
-    let totalPaid = new Prisma.Decimal(0);
-    let totalPending = new Prisma.Decimal(0);
-    let totalHeld = new Prisma.Decimal(0);
-
-    for (const call of calls) {
-      const pubId = call.publisherId || 'unknown';
-      const pubName = call.publisherName || 'Unknown Publisher';
-      const campId = call.campaignId || 'unknown';
-      const campName = call.campaignName || 'Unknown Campaign';
-      const did = call.did || 'unknown';
-      const key = `${pubId}_${campId}_${did}`;
-
-      totalCalls++;
-      if (call.billable) billableCalls++;
-      else nonBillableCalls++;
-
-      const payout = call.publisherPayoutAmount
-        ? new Prisma.Decimal(call.publisherPayoutAmount)
-        : new Prisma.Decimal(0);
-      totalEarnings = totalEarnings.plus(payout);
-
-      const isPaid = call.publisherPayoutStatus === 'PAID';
-      // A return accepted after the publisher was paid: its payout is zeroed and
-      // the deduction lives in publisher_payments, so it is neither paid nor held.
-      const isClawedBack = call.publisherPayoutStatus === 'CLAWED_BACK';
-      const isHeld =
-        !isClawedBack &&
-        (call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus));
-
-      if (isPaid) totalPaid = totalPaid.plus(payout);
-      else if (isHeld) totalHeld = totalHeld.plus(payout);
-      else if (!isClawedBack) totalPending = totalPending.plus(payout);
-
-      if (!groupsMap.has(key)) {
-        groupsMap.set(key, {
-          publisherId: pubId,
-          publisherName: pubName,
-          campaignId: campId,
-          campaignName: campName,
-          trackingNumber: did,
-          totalCalls: 0,
-          billableCalls: 0,
-          nonBillableCalls: 0,
-          earnings: new Prisma.Decimal(0),
-          paid: new Prisma.Decimal(0),
-          pending: new Prisma.Decimal(0),
-          held: new Prisma.Decimal(0),
-        });
-      }
-
-      const g = groupsMap.get(key);
-      g.totalCalls++;
-      if (call.billable) g.billableCalls++;
-      else g.nonBillableCalls++;
-      g.earnings = g.earnings.plus(payout);
-      if (isPaid) g.paid = g.paid.plus(payout);
-      else if (isHeld) g.held = g.held.plus(payout);
-      else if (!isClawedBack) g.pending = g.pending.plus(payout);
+  fastify.get<{ Querystring: ReportQuery & { publisherId?: string } }>(
+    '/api/v1/reports/publisher-revenue',
+    async (request, reply) => {
+      const report = await publisherRevenueFor(request, reply);
+      if (!report) return reply;
+      return report;
     }
-
-    const rows = [...groupsMap.values()].map(g => {
-      const payoutRate =
-        g.billableCalls > 0 ? g.earnings.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
-      return {
-        publisherId: g.publisherId,
-        publisherName: g.publisherName,
-        campaignId: g.campaignId,
-        campaignName: g.campaignName,
-        trackingNumber: g.trackingNumber,
-        totalCalls: g.totalCalls,
-        billableCalls: g.billableCalls,
-        nonBillableCalls: g.nonBillableCalls,
-        payoutRate,
-        publisherRevenue: g.earnings.toFixed(4),
-        earnings: g.earnings.toFixed(4),
-        paid: g.paid.toFixed(4),
-        pending: g.pending.toFixed(4),
-        held: g.held.toFixed(4),
-      };
-    });
-
-    return {
-      totals: {
-        totalCalls,
-        billableCalls,
-        nonBillableCalls,
-        earnings: totalEarnings.toFixed(4),
-        publisherRevenue: totalEarnings.toFixed(4),
-        paid: totalPaid.toFixed(4),
-        pending: totalPending.toFixed(4),
-        held: totalHeld.toFixed(4),
-      },
-      rows,
-    };
-  });
+  );
 
   // ── Publisher Revenue CSV Export ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-      publisherId?: string;
-    };
-  }>('/api/v1/reports/publisher-revenue/export.csv', async (request, reply) => {
-    const prisma = getPrismaClient();
-    const {
-      isAdminOrOwner,
-      userRoles,
-      publisherId: userPubId,
-    } = await getUserProfile(request, prisma);
-
-    if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
-      return reply.code(403).send({ error: 'Forbidden' });
+  fastify.get<{ Querystring: ReportQuery & { publisherId?: string } }>(
+    '/api/v1/reports/publisher-revenue/export.csv',
+    async (request, reply) => {
+      const report = await publisherRevenueFor(request, reply);
+      if (!report) return reply;
+      void reply
+        .type('text/csv')
+        .header('Content-Disposition', 'attachment; filename="publisher_revenue_report.csv"')
+        .send(publisherRevenueCsv(report));
     }
-
-    const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
-
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
-
-    let targetPublisherId = request.query.publisherId || null;
-    if (userRoles.includes('PUBLISHER') && !isAdminOrOwner) {
-      targetPublisherId = userPubId;
-    }
-
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-        ...(targetPublisherId ? { publisherId: targetPublisherId } : {}),
-      },
-      select: {
-        publisherName: true,
-        campaignName: true,
-        did: true,
-        billable: true,
-        publisherPayoutAmount: true,
-        publisherPayoutStatus: true,
-        disputeStatus: true,
-      },
-    });
-
-    const groupsMap = new Map<string, any>();
-    for (const call of calls) {
-      const pubName = call.publisherName || 'Unknown Publisher';
-      const campName = call.campaignName || 'Unknown Campaign';
-      const did = call.did || 'unknown';
-      const key = `${pubName}_${campName}_${did}`;
-
-      const payout = call.publisherPayoutAmount
-        ? new Prisma.Decimal(call.publisherPayoutAmount)
-        : new Prisma.Decimal(0);
-
-      const isPaid = call.publisherPayoutStatus === 'PAID';
-      // A return accepted after the publisher was paid: its payout is zeroed and
-      // the deduction lives in publisher_payments, so it is neither paid nor held.
-      const isClawedBack = call.publisherPayoutStatus === 'CLAWED_BACK';
-      const isHeld =
-        !isClawedBack &&
-        (call.publisherPayoutStatus === 'HELD' || isOpenDispute(call.disputeStatus));
-
-      if (!groupsMap.has(key)) {
-        groupsMap.set(key, {
-          publisherName: pubName,
-          campaignName: campName,
-          trackingNumber: did,
-          totalCalls: 0,
-          billableCalls: 0,
-          nonBillableCalls: 0,
-          earnings: new Prisma.Decimal(0),
-          paid: new Prisma.Decimal(0),
-          pending: new Prisma.Decimal(0),
-          held: new Prisma.Decimal(0),
-        });
-      }
-
-      const g = groupsMap.get(key);
-      g.totalCalls++;
-      if (call.billable) g.billableCalls++;
-      else g.nonBillableCalls++;
-      g.earnings = g.earnings.plus(payout);
-      if (isPaid) g.paid = g.paid.plus(payout);
-      else if (isHeld) g.held = g.held.plus(payout);
-      else if (!isClawedBack) g.pending = g.pending.plus(payout);
-    }
-
-    let totalCalls = 0;
-    let billableCalls = 0;
-    let nonBillableCalls = 0;
-    let totalEarnings = new Prisma.Decimal(0);
-    let totalPaid = new Prisma.Decimal(0);
-    let totalPending = new Prisma.Decimal(0);
-    let totalHeld = new Prisma.Decimal(0);
-
-    const rows = [...groupsMap.values()].map(g => {
-      const payoutRate =
-        g.billableCalls > 0 ? g.earnings.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
-
-      totalCalls += g.totalCalls;
-      billableCalls += g.billableCalls;
-      nonBillableCalls += g.nonBillableCalls;
-      totalEarnings = totalEarnings.plus(g.earnings);
-      totalPaid = totalPaid.plus(g.paid);
-      totalPending = totalPending.plus(g.pending);
-      totalHeld = totalHeld.plus(g.held);
-
-      return [
-        g.publisherName,
-        g.campaignName,
-        g.trackingNumber,
-        g.totalCalls,
-        g.billableCalls,
-        g.nonBillableCalls,
-        payoutRate,
-        g.earnings.toFixed(4),
-        g.paid.toFixed(4),
-        g.pending.toFixed(4),
-        g.held.toFixed(4),
-      ];
-    });
-
-    const overallPayoutRate =
-      billableCalls > 0 ? totalEarnings.dividedBy(billableCalls).toFixed(4) : '0.0000';
-
-    rows.push([
-      'Report Totals',
-      '',
-      '',
-      totalCalls,
-      billableCalls,
-      nonBillableCalls,
-      overallPayoutRate,
-      totalEarnings.toFixed(4),
-      totalPaid.toFixed(4),
-      totalPending.toFixed(4),
-      totalHeld.toFixed(4),
-    ]);
-
-    const csvHeaders = [
-      'Publisher',
-      'Campaign',
-      'Tracking Number',
-      'Total Calls',
-      'Billable Calls',
-      'Non-Billable Calls',
-      'Payout / Billable Call ($)',
-      'Earnings ($)',
-      'Paid ($)',
-      'Pending ($)',
-      'Held/Disputed ($)',
-    ];
-    const csvContent = toCsv(csvHeaders, rows);
-    void reply
-      .type('text/csv')
-      .header('Content-Disposition', 'attachment; filename="publisher_revenue_report.csv"')
-      .send(csvContent);
-  });
+  );
 
   // ── Buyer Costs Report ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-      buyerId?: string;
-    };
-  }>('/api/v1/reports/buyer-costs', async (request, reply) => {
+  async function buyerCostsFor(
+    request: FastifyRequest<{ Querystring: ReportQuery & { buyerId?: string } }>,
+    reply: any
+  ) {
     const prisma = getPrismaClient();
     const {
       isAdminOrOwner,
@@ -6899,626 +6831,101 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     } = await getUserProfile(request, prisma);
 
     if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
-      return reply.code(403).send({ error: 'Forbidden' });
+      void reply.code(403).send({ error: 'Forbidden' });
+      return null;
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
+    if (!tenantId) {
+      replyTenantRefusal(request, reply);
+      return null;
+    }
 
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+    const period = reportPeriodFromQuery(request.query, reply);
+    if (!period) return null;
 
     let targetBuyerId = request.query.buyerId || null;
     if (userRoles.includes('BUYER') && !isAdminOrOwner) {
-      targetBuyerId = userBuyerId;
+      // A buyer with no linked buyer reads nothing, never every buyer's calls.
+      targetBuyerId = userBuyerId || 'none';
     }
 
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-        ...(targetBuyerId ? { buyerId: targetBuyerId } : {}),
-      },
-      select: {
-        id: true,
-        buyerId: true,
-        buyerName: true,
-        campaignId: true,
-        campaignName: true,
-        targetNumber: true,
-        billable: true,
-        buyerBillableAmount: true,
-        buyerChargeStatus: true,
-        disputeStatus: true,
-        connectedDuration: true,
-        duration: true,
-        buyer: {
-          select: {
-            billingType: true,
-          },
-        },
-      },
+    return buildBuyerCostsReport(prisma, tenantId, period, {
+      campaignId: campaignFilter(request.query.campaignId),
+      buyerId: targetBuyerId,
     });
+  }
 
-    const groupsMap = new Map<string, any>();
-    let totalCalls = 0;
-    let billableCalls = 0;
-    let nonBillableCalls = 0;
-    let totalCost = new Prisma.Decimal(0);
-    let totalDuration = 0;
-    let totalWalletDebits = new Prisma.Decimal(0);
-    let totalInvoiced = new Prisma.Decimal(0);
-    let totalPendingInvoice = new Prisma.Decimal(0);
-    let totalDisputes = new Prisma.Decimal(0);
-
-    for (const call of calls) {
-      const bId = call.buyerId || 'unknown';
-      const bName = call.buyerName || 'Unknown Buyer';
-      const campId = call.campaignId || 'unknown';
-      const campName = call.campaignName || 'Unknown Campaign';
-      const dest = call.targetNumber || 'unknown';
-      const key = `${bId}_${campId}_${dest}`;
-
-      totalCalls++;
-      if (call.billable) billableCalls++;
-      else nonBillableCalls++;
-
-      const cost = call.buyerBillableAmount
-        ? new Prisma.Decimal(call.buyerBillableAmount)
-        : new Prisma.Decimal(0);
-      totalCost = totalCost.plus(cost);
-
-      const dur =
-        call.connectedDuration !== null && call.connectedDuration !== undefined
-          ? call.connectedDuration
-          : call.duration || 0;
-      totalDuration += dur;
-
-      const isUpfront = call.buyer?.billingType === 'UPFRONT';
-      if (isUpfront) {
-        if (call.buyerChargeStatus === 'CHARGED') {
-          totalWalletDebits = totalWalletDebits.plus(cost);
-        }
-      } else {
-        if (call.buyerChargeStatus === 'INVOICED') {
-          totalInvoiced = totalInvoiced.plus(cost);
-        } else if (call.buyerChargeStatus === 'CHARGED') {
-          totalPendingInvoice = totalPendingInvoice.plus(cost);
-        }
-      }
-
-      if (isOpenDispute(call.disputeStatus)) {
-        totalDisputes = totalDisputes.plus(cost);
-      }
-
-      if (!groupsMap.has(key)) {
-        groupsMap.set(key, {
-          buyerId: bId,
-          buyerName: bName,
-          campaignId: campId,
-          campaignName: campName,
-          destinationNumber: dest,
-          totalCalls: 0,
-          billableCalls: 0,
-          nonBillableCalls: 0,
-          totalDuration: 0,
-          buyerCost: new Prisma.Decimal(0),
-          walletDebits: new Prisma.Decimal(0),
-          invoiced: new Prisma.Decimal(0),
-          pendingInvoice: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-        });
-      }
-
-      const g = groupsMap.get(key);
-      g.totalCalls++;
-      if (call.billable) g.billableCalls++;
-      else g.nonBillableCalls++;
-      g.totalDuration += dur;
-      g.buyerCost = g.buyerCost.plus(cost);
-
-      if (isUpfront) {
-        if (call.buyerChargeStatus === 'CHARGED') {
-          g.walletDebits = g.walletDebits.plus(cost);
-        }
-      } else {
-        if (call.buyerChargeStatus === 'INVOICED') {
-          g.invoiced = g.invoiced.plus(cost);
-        } else if (call.buyerChargeStatus === 'CHARGED') {
-          g.pendingInvoice = g.pendingInvoice.plus(cost);
-        }
-      }
-
-      if (isOpenDispute(call.disputeStatus)) {
-        g.disputes = g.disputes.plus(cost);
-      }
+  fastify.get<{ Querystring: ReportQuery & { buyerId?: string } }>(
+    '/api/v1/reports/buyer-costs',
+    async (request, reply) => {
+      const report = await buyerCostsFor(request, reply);
+      if (!report) return reply;
+      return report;
     }
-
-    const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
-      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const pricePerBillableCall =
-        g.billableCalls > 0 ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
-
-      return {
-        buyerId: g.buyerId,
-        buyerName: g.buyerName,
-        campaignId: g.campaignId,
-        campaignName: g.campaignName,
-        destinationNumber: g.destinationNumber,
-        totalCalls: g.totalCalls,
-        billableCalls: g.billableCalls,
-        nonBillableCalls: g.nonBillableCalls,
-        billableRate,
-        averageDuration,
-        pricePerBillableCall,
-        buyerCost: g.buyerCost.toFixed(4),
-        walletDebits: g.walletDebits.toFixed(4),
-        invoiced: g.invoiced.toFixed(4),
-        pendingInvoice: g.pendingInvoice.toFixed(4),
-        disputes: g.disputes.toFixed(4),
-      };
-    });
-
-    const overallBillableRate = totalCalls > 0 ? billableCalls / totalCalls : 0;
-    const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
-
-    return {
-      totals: {
-        totalCalls,
-        billableCalls,
-        nonBillableCalls,
-        averageDuration: overallAvgDuration,
-        billableRate: overallBillableRate,
-        buyerCost: totalCost.toFixed(4),
-        walletDebits: totalWalletDebits.toFixed(4),
-        invoiced: totalInvoiced.toFixed(4),
-        pendingInvoice: totalPendingInvoice.toFixed(4),
-        disputes: totalDisputes.toFixed(4),
-      },
-      rows,
-    };
-  });
+  );
 
   // ── Buyer Costs CSV Export ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-      buyerId?: string;
-    };
-  }>('/api/v1/reports/buyer-costs/export.csv', async (request, reply) => {
-    const prisma = getPrismaClient();
-    const {
-      isAdminOrOwner,
-      userRoles,
-      buyerId: userBuyerId,
-    } = await getUserProfile(request, prisma);
-
-    if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
-      return reply.code(403).send({ error: 'Forbidden' });
+  fastify.get<{ Querystring: ReportQuery & { buyerId?: string } }>(
+    '/api/v1/reports/buyer-costs/export.csv',
+    async (request, reply) => {
+      const report = await buyerCostsFor(request, reply);
+      if (!report) return reply;
+      void reply
+        .type('text/csv')
+        .header('Content-Disposition', 'attachment; filename="buyer_costs_report.csv"')
+        .send(buyerCostsCsv(report));
     }
-
-    const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
-
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
-
-    let targetBuyerId = request.query.buyerId || null;
-    if (userRoles.includes('BUYER') && !isAdminOrOwner) {
-      targetBuyerId = userBuyerId;
-    }
-
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-        ...(targetBuyerId ? { buyerId: targetBuyerId } : {}),
-      },
-      select: {
-        buyerName: true,
-        campaignName: true,
-        targetNumber: true,
-        billable: true,
-        buyerBillableAmount: true,
-        buyerChargeStatus: true,
-        disputeStatus: true,
-        connectedDuration: true,
-        duration: true,
-        buyer: {
-          select: {
-            billingType: true,
-          },
-        },
-      },
-    });
-
-    const groupsMap = new Map<string, any>();
-    for (const call of calls) {
-      const bName = call.buyerName || 'Unknown Buyer';
-      const campName = call.campaignName || 'Unknown Campaign';
-      const dest = call.targetNumber || 'unknown';
-      const key = `${bName}_${campName}_${dest}`;
-
-      const cost = call.buyerBillableAmount
-        ? new Prisma.Decimal(call.buyerBillableAmount)
-        : new Prisma.Decimal(0);
-      const dur =
-        call.connectedDuration !== null && call.connectedDuration !== undefined
-          ? call.connectedDuration
-          : call.duration || 0;
-
-      const isUpfront = call.buyer?.billingType === 'UPFRONT';
-
-      if (!groupsMap.has(key)) {
-        groupsMap.set(key, {
-          buyerName: bName,
-          campaignName: campName,
-          destinationNumber: dest,
-          totalCalls: 0,
-          billableCalls: 0,
-          nonBillableCalls: 0,
-          totalDuration: 0,
-          buyerCost: new Prisma.Decimal(0),
-          walletDebits: new Prisma.Decimal(0),
-          invoiced: new Prisma.Decimal(0),
-          pendingInvoice: new Prisma.Decimal(0),
-          disputes: new Prisma.Decimal(0),
-        });
-      }
-
-      const g = groupsMap.get(key);
-      g.totalCalls++;
-      if (call.billable) g.billableCalls++;
-      else g.nonBillableCalls++;
-      g.totalDuration += dur;
-      g.buyerCost = g.buyerCost.plus(cost);
-
-      if (isUpfront) {
-        if (call.buyerChargeStatus === 'CHARGED') {
-          g.walletDebits = g.walletDebits.plus(cost);
-        }
-      } else {
-        if (call.buyerChargeStatus === 'INVOICED') {
-          g.invoiced = g.invoiced.plus(cost);
-        } else if (call.buyerChargeStatus === 'CHARGED') {
-          g.pendingInvoice = g.pendingInvoice.plus(cost);
-        }
-      }
-
-      if (isOpenDispute(call.disputeStatus)) {
-        g.disputes = g.disputes.plus(cost);
-      }
-    }
-
-    let totalCalls = 0;
-    let billableCalls = 0;
-    let nonBillableCalls = 0;
-    let totalDuration = 0;
-    let totalCost = new Prisma.Decimal(0);
-    let totalWalletDebits = new Prisma.Decimal(0);
-    let totalInvoiced = new Prisma.Decimal(0);
-    let totalPendingInvoice = new Prisma.Decimal(0);
-    let totalDisputes = new Prisma.Decimal(0);
-
-    const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
-      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const pricePerBillableCall =
-        g.billableCalls > 0 ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
-
-      totalCalls += g.totalCalls;
-      billableCalls += g.billableCalls;
-      nonBillableCalls += g.nonBillableCalls;
-      totalDuration += g.totalDuration;
-      totalCost = totalCost.plus(g.buyerCost);
-      totalWalletDebits = totalWalletDebits.plus(g.walletDebits);
-      totalInvoiced = totalInvoiced.plus(g.invoiced);
-      totalPendingInvoice = totalPendingInvoice.plus(g.pendingInvoice);
-      totalDisputes = totalDisputes.plus(g.disputes);
-
-      return [
-        g.buyerName,
-        g.campaignName,
-        g.destinationNumber,
-        g.totalCalls,
-        g.billableCalls,
-        g.nonBillableCalls,
-        (billableRate * 100).toFixed(2) + '%',
-        averageDuration,
-        pricePerBillableCall,
-        g.buyerCost.toFixed(4),
-        g.walletDebits.toFixed(4),
-        g.invoiced.toFixed(4),
-        g.pendingInvoice.toFixed(4),
-        g.disputes.toFixed(4),
-      ];
-    });
-
-    const overallBillableRate =
-      totalCalls > 0 ? ((billableCalls / totalCalls) * 100).toFixed(2) + '%' : '0.00%';
-    const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
-    const overallPricePerBillableCall =
-      billableCalls > 0 ? totalCost.dividedBy(billableCalls).toFixed(4) : '0.0000';
-
-    rows.push([
-      'Report Totals',
-      '',
-      '',
-      totalCalls,
-      billableCalls,
-      nonBillableCalls,
-      overallBillableRate,
-      overallAvgDuration,
-      overallPricePerBillableCall,
-      totalCost.toFixed(4),
-      totalWalletDebits.toFixed(4),
-      totalInvoiced.toFixed(4),
-      totalPendingInvoice.toFixed(4),
-      totalDisputes.toFixed(4),
-    ]);
-
-    const csvHeaders = [
-      'Buyer',
-      'Campaign',
-      'Destination Number',
-      'Total Calls',
-      'Billable Calls',
-      'Non-Billable Calls',
-      'Billable Rate (%)',
-      'Avg Duration (s)',
-      'Cost / Billable Call ($)',
-      'Total Cost ($)',
-      'Wallet Debits ($)',
-      'Invoiced ($)',
-      'Pending Invoice ($)',
-      'Disputes ($)',
-    ];
-    const csvContent = toCsv(csvHeaders, rows);
-    void reply
-      .type('text/csv')
-      .header('Content-Disposition', 'attachment; filename="buyer_costs_report.csv"')
-      .send(csvContent);
-  });
+  );
 
   // ── Campaign Profitability Report ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-    };
-  }>('/api/v1/reports/campaign-profitability', async (request, reply) => {
+  async function campaignProfitabilityFor(
+    request: FastifyRequest<{ Querystring: ReportQuery }>,
+    reply: any
+  ) {
     const prisma = getPrismaClient();
     const { isAdminOrOwner } = await getUserProfile(request, prisma);
 
     if (!isAdminOrOwner) {
-      return reply.code(403).send({ error: 'Forbidden' });
+      void reply.code(403).send({ error: 'Forbidden' });
+      return null;
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
+    if (!tenantId) {
+      replyTenantRefusal(request, reply);
+      return null;
+    }
 
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+    const period = reportPeriodFromQuery(request.query, reply);
+    if (!period) return null;
 
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-      },
-      select: {
-        id: true,
-        campaignId: true,
-        campaignName: true,
-        billable: true,
-        buyerBillableAmount: true,
-        publisherPayoutAmount: true,
-        cost: true,
-        connectedDuration: true,
-        disputeStatus: true,
-      },
+    return buildCampaignProfitabilityReport(prisma, tenantId, period, {
+      campaignId: campaignFilter(request.query.campaignId),
     });
+  }
 
-    /*
-     * The per-call arithmetic lives in `services/reporting/call-money.ts`, which
-     * `/api/v1/call-sales/summary` runs on too, so the two cannot disagree.
-     * `__tests__/call-money.test.ts` pins this response byte for byte to what it
-     * answered before the move.
-     */
-    const ledgerEntries = await loadCallMoneyLedger(
-      prisma,
-      tenantId,
-      calls.map(c => c.id)
-    );
-    const money = summariseCallMoney(calls, ledgerEntries, call => call.campaignId || 'unknown');
-    const campaignNames = campaignNamesOf(calls);
-
-    const rows = [...money.groups].map(([campaignId, g]) => ({
-      campaignId,
-      campaignName: campaignNames.get(campaignId)!,
-      totalCalls: g.totalCalls,
-      connectedCalls: g.connectedCalls,
-      billableCalls: g.billableCalls,
-      buyerRevenue: g.revenue.toFixed(4),
-      publisherPayout: g.payout.toFixed(4),
-      callCost: g.callCost.toFixed(4),
-      otherCosts: g.otherCosts.toFixed(4),
-      profit: g.profit.toFixed(4),
-      margin: marginOf(g),
-      disputes: g.disputes.toFixed(4),
-      disputesCount: g.disputesCount,
-      adjustments: g.adjustments.toFixed(4),
-      netPayableReceivable: g.netPayableReceivable.toFixed(4),
-    }));
-
-    const t = money.totals;
-    return {
-      totals: {
-        totalCalls: t.totalCalls,
-        connectedCalls: t.connectedCalls,
-        billableCalls: t.billableCalls,
-        buyerRevenue: t.revenue.toFixed(4),
-        publisherPayout: t.payout.toFixed(4),
-        callCost: t.callCost.toFixed(4),
-        otherCosts: t.otherCosts.toFixed(4),
-        profit: t.profit.toFixed(4),
-        margin: marginOf(t),
-        disputes: t.disputes.toFixed(4),
-        disputesCount: t.disputesCount,
-        adjustments: t.adjustments.toFixed(4),
-        netPayableReceivable: t.netPayableReceivable.toFixed(4),
-      },
-      rows,
-    };
-  });
+  fastify.get<{ Querystring: ReportQuery }>(
+    '/api/v1/reports/campaign-profitability',
+    async (request, reply) => {
+      const report = await campaignProfitabilityFor(request, reply);
+      if (!report) return reply;
+      return { totals: report.totals, rows: report.rows };
+    }
+  );
 
   // ── Campaign Profitability CSV Export ──
-  fastify.get<{
-    Querystring: {
-      startDate?: string;
-      endDate?: string;
-      campaignId?: string;
-    };
-  }>('/api/v1/reports/campaign-profitability/export.csv', async (request, reply) => {
-    const prisma = getPrismaClient();
-    const { isAdminOrOwner } = await getUserProfile(request, prisma);
-
-    if (!isAdminOrOwner) {
-      return reply.code(403).send({ error: 'Forbidden' });
+  fastify.get<{ Querystring: ReportQuery }>(
+    '/api/v1/reports/campaign-profitability/export.csv',
+    async (request, reply) => {
+      const report = await campaignProfitabilityFor(request, reply);
+      if (!report) return reply;
+      void reply
+        .type('text/csv')
+        .header('Content-Disposition', 'attachment; filename="campaign_profitability_report.csv"')
+        .send(campaignProfitabilityCsv(report));
     }
-
-    const tenantId = getActingTenantId(request);
-    if (!tenantId) return replyTenantRefusal(request, reply);
-
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
-
-    const campaignIdParam =
-      request.query.campaignId &&
-      request.query.campaignId !== 'all-campaigns' &&
-      request.query.campaignId !== 'all'
-        ? request.query.campaignId
-        : undefined;
-
-    const calls = await prisma.call.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
-        ...(campaignIdParam ? { campaignId: campaignIdParam } : {}),
-      },
-      select: {
-        id: true,
-        campaignId: true,
-        campaignName: true,
-        billable: true,
-        buyerBillableAmount: true,
-        publisherPayoutAmount: true,
-        cost: true,
-        connectedDuration: true,
-        disputeStatus: true,
-      },
-    });
-
-    // The same arithmetic as the JSON report above, from the same module.
-    const ledgerEntries = await loadCallMoneyLedger(
-      prisma,
-      tenantId,
-      calls.map(c => c.id)
-    );
-    const money = summariseCallMoney(calls, ledgerEntries, call => call.campaignId || 'unknown');
-    const campaignNames = campaignNamesOf(calls);
-    const marginText = (bucket: MoneyBucket) =>
-      bucket.revenue.gt(0) ? (marginOf(bucket) * 100).toFixed(2) + '%' : '0.00%';
-
-    const rows: Array<Array<string | number>> = [...money.groups].map(([campaignId, g]) => [
-      campaignNames.get(campaignId)!,
-      g.totalCalls,
-      g.connectedCalls,
-      g.billableCalls,
-      g.revenue.toFixed(4),
-      g.payout.toFixed(4),
-      g.callCost.toFixed(4),
-      g.otherCosts.toFixed(4),
-      g.profit.toFixed(4),
-      marginText(g),
-      g.disputes.toFixed(4),
-      g.adjustments.toFixed(4),
-      g.netPayableReceivable.toFixed(4),
-    ]);
-
-    const t = money.totals;
-    rows.push([
-      'Report Totals',
-      t.totalCalls,
-      t.connectedCalls,
-      t.billableCalls,
-      t.revenue.toFixed(4),
-      t.payout.toFixed(4),
-      t.callCost.toFixed(4),
-      t.otherCosts.toFixed(4),
-      t.profit.toFixed(4),
-      marginText(t),
-      t.disputes.toFixed(4),
-      t.adjustments.toFixed(4),
-      t.netPayableReceivable.toFixed(4),
-    ]);
-
-    const csvHeaders = [
-      'Campaign',
-      'Total Calls',
-      'Connected Calls',
-      'Billable Calls',
-      'Buyer Revenue ($)',
-      'Publisher Payout ($)',
-      'Carrier Cost ($)',
-      'Other Costs ($)',
-      'Gross Profit ($)',
-      'Margin (%)',
-      'Disputes ($)',
-      'Adjustments ($)',
-      'Net Payable/Receivable ($)',
-    ];
-    const csvContent = toCsv(csvHeaders, rows);
-    void reply
-      .type('text/csv')
-      .header('Content-Disposition', 'attachment; filename="campaign_profitability_report.csv"')
-      .send(csvContent);
-  });
+  );
 
   // ── Reconciliation Report ──
   fastify.get('/api/v1/reports/reconciliation', async (request, reply) => {

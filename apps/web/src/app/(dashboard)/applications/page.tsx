@@ -1,7 +1,9 @@
 'use client';
 
 import { Building2, Calculator, DollarSign, Download, FileText, Loader2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Ledger, count, dollars } from '@/components/delivery/ledger';
 import {
@@ -21,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { formatDayRange } from '@/lib/format-time';
+import { lastNewYorkDays } from '@/lib/new-york-day';
 import { cn } from '@/lib/utils';
 
 /**
@@ -115,12 +118,24 @@ const MODE_LABELS: Record<string, string> = {
   ANNUAL: 'Annual',
 };
 
-/** Today and thirty days back, in the platform's day keys. */
+/**
+ * The last thirty calendar days, ending today, in America/New_York -- the
+ * clock the API reads `from` and `to` on. Not the browser's zone, and not UTC,
+ * which names tomorrow for five hours every evening.
+ */
 function defaultRange(): { from: string; to: string } {
-  const today = new Date();
-  const to = today.toISOString().slice(0, 10);
-  const from = new Date(today.getTime() - 29 * 86400_000).toISOString().slice(0, 10);
-  return { from, to };
+  return lastNewYorkDays(30);
+}
+
+/** Rows per page. "Load more" fetches the next page after the last row shown. */
+const PAGE_SIZE = 100;
+
+/** The filters the table and the tiles were last loaded with. */
+interface AppliedFilters {
+  from: string;
+  to: string;
+  carrier: string;
+  agentId: string;
 }
 
 /** A CSV cell a spreadsheet cannot read as a formula. */
@@ -189,67 +204,146 @@ function submitted(value: string | null): string {
 const ALL = 'all';
 
 export default function ApplicationsPage() {
+  const router = useRouter();
+  // The range being typed, and the filters the page was last loaded with.
   const [range, setRange] = useState(defaultRange);
-  const [carrier, setCarrier] = useState('');
-  const [agentId, setAgentId] = useState('');
+  const [applied, setApplied] = useState<AppliedFilters>(() => ({
+    ...defaultRange(),
+    carrier: '',
+    agentId: '',
+  }));
+  const { carrier, agentId } = applied;
   const [rows, setRows] = useState<ApplicationRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [summary, setSummary] = useState<ApplicationsSummary | null>(null);
+  /*
+   * The range's summary without the carrier and agent filters, which is what
+   * the two selects list. Taken from the filtered summary it would collapse
+   * to the one carrier chosen, and the agent filter would vanish the moment an
+   * agent was picked.
+   */
+  const [options, setOptions] = useState<ApplicationsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Only the latest load may write; an older one answering late is dropped. */
+  const loadSeq = useRef(0);
+
+  const listQuery = useCallback(
+    (cursor?: string) => {
+      const query = new URLSearchParams({
+        from: applied.from,
+        to: applied.to,
+        limit: String(PAGE_SIZE),
+      });
+      if (applied.carrier) query.set('carrier', applied.carrier);
+      if (applied.agentId) query.set('agentId', applied.agentId);
+      if (cursor) query.set('cursor', cursor);
+      return query;
+    },
+    [applied]
+  );
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
 
-    const query = new URLSearchParams({ from: range.from, to: range.to, limit: '500' });
-    if (carrier) query.set('carrier', carrier);
-    if (agentId) query.set('agentId', agentId);
-
-    const summaryQuery = new URLSearchParams({ from: range.from, to: range.to });
+    // The tiles take the table's filters, so the totals are the rows' totals.
+    const summaryQuery = new URLSearchParams({ from: applied.from, to: applied.to });
+    if (applied.carrier) summaryQuery.set('carrier', applied.carrier);
+    if (applied.agentId) summaryQuery.set('agentId', applied.agentId);
+    const filtered = Boolean(applied.carrier || applied.agentId);
+    const optionsQuery = new URLSearchParams({ from: applied.from, to: applied.to });
 
     try {
-      const [list, totals] = await Promise.all([
-        apiClient.get<Envelope<ApplicationsResponse>>(`/api/v1/applications?${query.toString()}`),
+      const [list, totals, unfiltered] = await Promise.all([
+        apiClient.get<Envelope<ApplicationsResponse>>(
+          `/api/v1/applications?${listQuery().toString()}`
+        ),
         apiClient.get<Envelope<ApplicationsSummary>>(
           `/api/v1/applications/summary?${summaryQuery.toString()}`
         ),
+        filtered
+          ? apiClient.get<Envelope<ApplicationsSummary>>(
+              `/api/v1/applications/summary?${optionsQuery.toString()}`
+            )
+          : Promise.resolve(null),
       ]);
 
+      if (seq !== loadSeq.current) return;
       if (list.error) throw new Error(list.error.message);
       if (totals.error) throw new Error(totals.error.message);
 
       setRows(payload(list)?.applications ?? []);
-      setSummary(payload(totals) ?? null);
+      setNextCursor(payload(list)?.nextCursor ?? null);
+      const totalsBody = payload(totals) ?? null;
+      setSummary(totalsBody);
+      setOptions(unfiltered && !unfiltered.error ? (payload(unfiltered) ?? null) : totalsBody);
     } catch (err) {
+      if (seq !== loadSeq.current) return;
+      setRows([]);
+      setNextCursor(null);
       setError(err instanceof Error ? err.message : 'Could not load applications.');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [range.from, range.to, carrier, agentId]);
+  }, [applied, listQuery]);
+
+  /** The next page, after the last row shown, under the same filters. */
+  const loadMore = useCallback(async () => {
+    if (!nextCursor) return;
+    const seq = loadSeq.current;
+    setLoadingMore(true);
+    try {
+      const list = await apiClient.get<Envelope<ApplicationsResponse>>(
+        `/api/v1/applications?${listQuery(nextCursor).toString()}`
+      );
+      // A filter changed while this was in flight: its rows belong to nothing on screen.
+      if (seq !== loadSeq.current) return;
+      if (list.error) {
+        setError(list.error.message);
+        return;
+      }
+      setRows(prev => [...prev, ...(payload(list)?.applications ?? [])]);
+      setNextCursor(payload(list)?.nextCursor ?? null);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [listQuery, nextCursor]);
 
   /*
-   * One load on mount and one per Apply, rather than a poll. This is a
-   * reconciliation screen read against a paper statement, not a live board, and
-   * a table that reorders itself under the reader's finger is worse than a
-   * table that is a minute old.
+   * One load on mount and one per change of the applied filters, rather than
+   * a poll. This is a reconciliation screen read against a paper statement,
+   * not a live board, and a table that reorders itself under the reader's
+   * finger is worse than a table that is a minute old. The dates apply on
+   * Apply, so a half-typed date does not load; a carrier or agent picked from
+   * a list applies at once. Either way the table starts again from its first
+   * page.
    */
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: on mount and on Apply only
-  }, []);
+  }, [load]);
 
   /*
    * The agent filter is hidden when every row belongs to one agent, which is
    * what an AGENT's server-narrowed reading looks like. The narrowing itself is
    * server-side; this only avoids rendering a control that cannot do anything.
    */
-  const agents = useMemo(() => summary?.byAgent ?? [], [summary]);
+  const agents = useMemo(() => options?.byAgent ?? [], [options]);
   const showAgentFilter = agents.length > 1;
 
   const carriers = useMemo(
-    () => (summary?.byCarrier ?? []).map(row => row.carrier).sort((a, b) => a.localeCompare(b)),
-    [summary]
+    () => (options?.byCarrier ?? []).map(row => row.carrier).sort((a, b) => a.localeCompare(b)),
+    [options]
   );
+
+  /*
+   * "Entered" tells the automation's rows from the agents' own. When every row
+   * on screen was logged by an agent it says the same thing on each one, so
+   * the column is left out until an automation row is there to tell apart.
+   */
+  const showEntered = rows.some(row => row.source === 'AUTOMATION');
 
   const exportCsv = useCallback(() => {
     const body = rows.map(row => csvRow(row).map(csvCell).join(','));
@@ -257,10 +351,11 @@ export default function ApplicationsPage() {
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `applications-${range.from}-to-${range.to}.csv`;
+    // The range the rows were loaded for, not whatever is typed in the inputs.
+    link.download = `applications-${applied.from}-to-${applied.to}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [rows, range.from, range.to]);
+  }, [rows, applied.from, applied.to]);
 
   return (
     <div className="page-canvas">
@@ -276,7 +371,7 @@ export default function ApplicationsPage() {
           label="Carrier"
           allLabel="All carriers"
           value={carrier || ALL}
-          onChange={value => setCarrier(value === ALL ? '' : value)}
+          onChange={value => setApplied(prev => ({ ...prev, carrier: value === ALL ? '' : value }))}
           options={carriers.map(name => ({ value: name, label: name }))}
           allValue={ALL}
         />
@@ -285,7 +380,9 @@ export default function ApplicationsPage() {
             label="Agent"
             allLabel="All agents"
             value={agentId || ALL}
-            onChange={value => setAgentId(value === ALL ? '' : value)}
+            onChange={value =>
+              setApplied(prev => ({ ...prev, agentId: value === ALL ? '' : value }))
+            }
             // An unattributed bucket has no id the API can filter on, so it is not an option.
             options={agents.flatMap(agent =>
               agent.agentId ? [{ value: agent.agentId, label: agent.agentName }] : []
@@ -298,7 +395,8 @@ export default function ApplicationsPage() {
           size="sm"
           className="h-8 shrink-0 text-xs"
           onClick={() => {
-            void load();
+            // A new object even when nothing changed: Apply always reloads.
+            setApplied(prev => ({ ...prev, from: range.from, to: range.to }));
           }}
           disabled={loading}
         >
@@ -327,7 +425,7 @@ export default function ApplicationsPage() {
           data-figure-label="Applications"
           data-figure-value={count(summary?.count)}
           icon={FileText}
-          sub={formatDayRange(range.from, range.to)}
+          sub={formatDayRange(applied.from, applied.to)}
         />
         <StatTile
           label="Annualized premium"
@@ -372,13 +470,15 @@ export default function ApplicationsPage() {
               <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
               Loading applications…
             </div>
-          ) : rows.length === 0 ? (
+          ) : rows.length === 0 && !error ? (
+            // Only a load that succeeded may say there is nothing; a failed
+            // one is the notice above, not an empty range.
             <EmptyState
               headline="No applications submitted in this range."
               body="Applications appear here as agents enter them at the end of a call."
               icon={FileText}
             />
-          ) : (
+          ) : rows.length === 0 ? null : (
             <div className="overflow-x-auto">
               <Ledger
                 className={cn(
@@ -404,19 +504,25 @@ export default function ApplicationsPage() {
                       Annualized
                     </th>
                     <th scope="col">Agent</th>
-                    <th scope="col">Entered</th>
+                    {showEntered && <th scope="col">Entered</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map(row => {
                     const voided = row.voidedAt !== null;
+                    // The call the business was written on, opened in the call log's drawer.
+                    const callHref = row.callId
+                      ? `/calls?call=${encodeURIComponent(row.callId)}`
+                      : null;
                     return (
                       <tr
                         key={row.id}
                         className={cn(
                           'transition-colors duration-150 ease-out hover:bg-sunken',
+                          callHref && 'cursor-pointer',
                           voided && 'line-through opacity-60'
                         )}
+                        onClick={callHref ? () => router.push(callHref) : undefined}
                         title={
                           voided
                             ? `Voided${row.voidReason ? `: ${row.voidReason}` : ''}. Excluded from the ` +
@@ -426,7 +532,19 @@ export default function ApplicationsPage() {
                         }
                       >
                         <td className="t-data whitespace-nowrap !text-ink-2">
-                          {submitted(row.submittedAt)}
+                          {callHref ? (
+                            // The keyboard's way to the call; the row's click is the pointer's.
+                            <Link
+                              href={callHref}
+                              className="hover:underline"
+                              title="Open the call"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {submitted(row.submittedAt)}
+                            </Link>
+                          ) : (
+                            submitted(row.submittedAt)
+                          )}
                         </td>
                         <td className="font-medium text-ink">{row.carrier}</td>
                         <td className="!text-ink-2">
@@ -446,33 +564,51 @@ export default function ApplicationsPage() {
                         <td className="max-w-[12rem] truncate !text-ink-2">
                           {row.agentName ?? '—'}
                         </td>
-                        <td>
-                          {/*
-                            A label, and only a label. Both paths count identically
-                            in the closing percentage; this says which one to go and
-                            check when a number does not match a statement.
-                          */}
-                          <span
-                            className={cn(
-                              'inline-flex h-[22px] items-center rounded-full px-2 t-meta font-medium',
-                              row.source === 'AGENT_ENTRY'
-                                ? 'bg-sunken text-ink-2'
-                                : 'bg-brand-tint text-brand-ink'
-                            )}
-                            title={
-                              row.source === 'AGENT_ENTRY'
-                                ? 'Logged by the agent after they wrote the business'
-                                : 'Submitted by the carrier automation'
-                            }
-                          >
-                            {row.source === 'AGENT_ENTRY' ? 'Agent' : 'Automation'}
-                          </span>
-                        </td>
+                        {showEntered && (
+                          <td>
+                            {/*
+                              A label, and only a label. Both paths count identically
+                              in the closing percentage; this says which one to go and
+                              check when a number does not match a statement.
+                            */}
+                            <span
+                              className={cn(
+                                'inline-flex h-[22px] items-center rounded-full px-2 t-meta font-medium',
+                                row.source === 'AGENT_ENTRY'
+                                  ? 'bg-sunken text-ink-2'
+                                  : 'bg-brand-tint text-brand-ink'
+                              )}
+                              title={
+                                row.source === 'AGENT_ENTRY'
+                                  ? 'Logged by the agent after they wrote the business'
+                                  : 'Submitted by the carrier automation'
+                              }
+                            >
+                              {row.source === 'AGENT_ENTRY' ? 'Agent' : 'Automation'}
+                            </span>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
                 </tbody>
               </Ledger>
+            </div>
+          )}
+          {nextCursor && rows.length > 0 && (
+            <div className="flex justify-center border-t border-rule px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  void loadMore();
+                }}
+                disabled={loadingMore || loading}
+              >
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </Button>
             </div>
           )}
         </PanelBody>

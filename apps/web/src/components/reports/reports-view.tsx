@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  Calendar,
-  Download,
-  Loader2,
-  RefreshCw,
-  TrendingUp,
-  DollarSign,
-  Phone,
-  Users,
-} from 'lucide-react';
+import { Download, Loader2, RefreshCw, TrendingUp, DollarSign, Phone, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -17,7 +8,6 @@ import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -35,16 +25,18 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
+import { PeriodToolbar, usePeriod } from '@/components/white-label/period-toolbar';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-// Helper to get formatted dates
-const getPastDateStr = (daysAgo: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().split('T')[0];
-};
+/**
+ * The period part of an export's file name: the custom range's two days, or
+ * the period's name. Never a date the browser computed.
+ */
+export function reportFileSpan(period: string, from: string, to: string): string {
+  return period === 'CUSTOM' ? `${from}-to-${to}` : period.toLowerCase().replace(/_/g, '-');
+}
 
 interface Campaign {
   id: string;
@@ -180,11 +172,11 @@ function ReportsPage() {
         : 'buyer-costs'
   );
 
-  // Filter States
-  const [startDate, setStartDate] = useState(getPastDateStr(30));
-  const [endDate, setEndDate] = useState(getPastDateStr(0));
+  // Filter States. The period is a name the server resolves in New York days,
+  // the same picker the Revenue overview uses; the browser computes no range.
+  const periodState = usePeriod('THIS_MONTH');
+  const { sendable: periodSendable, query: periodParams } = periodState;
   const [campaignId, setCampaignId] = useState('');
-  const [datePreset, setDatePreset] = useState('last-30');
 
   // Data States
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -208,12 +200,10 @@ function ReportsPage() {
   }, []);
 
   const fetchReport = useCallback(async () => {
+    if (!periodSendable) return;
     setLoading(true);
     try {
-      const query = new URLSearchParams({
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate + 'T23:59:59').toISOString(),
-      });
+      const query = new URLSearchParams(periodParams);
       if (campaignId) {
         query.append('campaignId', campaignId);
       }
@@ -246,8 +236,8 @@ function ReportsPage() {
     }
   }, [
     activeTab,
-    startDate,
-    endDate,
+    periodSendable,
+    periodParams,
     campaignId,
     showProfitability,
     showPublisherRevenue,
@@ -263,42 +253,10 @@ function ReportsPage() {
     void fetchReport();
   }, [fetchReport, activeTab]);
 
-  const handlePresetSelect = (preset: string) => {
-    setDatePreset(preset);
-    let start = getPastDateStr(0);
-    let end = getPastDateStr(0);
-
-    switch (preset) {
-      case 'today':
-        start = getPastDateStr(0);
-        break;
-      case 'yesterday':
-        start = getPastDateStr(1);
-        end = getPastDateStr(1);
-        break;
-      case 'last-7':
-        start = getPastDateStr(7);
-        break;
-      case 'last-30':
-        start = getPastDateStr(30);
-        break;
-      case 'this-month': {
-        const now = new Date();
-        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        break;
-      }
-    }
-    setStartDate(start);
-    setEndDate(end);
-  };
-
   const handleCsvExport = async () => {
     setExporting(true);
     try {
-      const query = new URLSearchParams({
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate + 'T23:59:59').toISOString(),
-      });
+      const query = new URLSearchParams(periodParams);
       if (campaignId) {
         query.append('campaignId', campaignId);
       }
@@ -340,7 +298,11 @@ function ReportsPage() {
         return;
       }
 
-      const filename = `${target.prefix}-${startDate}-to-${endDate}.csv`;
+      const filename = `${target.prefix}-${reportFileSpan(
+        periodState.period,
+        periodState.from,
+        periodState.to
+      )}.csv`;
 
       const response = await apiClient.get<string>(`${target.endpoint}?${query.toString()}`, {
         responseType: 'text',
@@ -405,95 +367,35 @@ function ReportsPage() {
         }
       />
 
-      {/* Date & Filter Controls Bar */}
-      <div className="bg-surface border border-rule rounded-card shadow-card p-2 flex flex-col gap-2.5 md:flex-row md:items-center justify-between flex-shrink-0">
-        <div className="flex flex-wrap gap-3 items-center flex-1">
-          {/* Start Date */}
-          <div className="flex items-center gap-1.5">
-            <span className="t-label text-ink-3">Start:</span>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
-              <Input
-                type="date"
-                value={startDate}
-                onChange={e => {
-                  setStartDate(e.target.value);
-                  setDatePreset('custom');
-                }}
-                className="pl-8 h-7 text-xs w-32 border-rule text-ink"
-              />
-            </div>
-          </div>
-
-          {/* End Date */}
-          <div className="flex items-center gap-1.5">
-            <span className="t-label text-ink-3">End:</span>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
-              <Input
-                type="date"
-                value={endDate}
-                onChange={e => {
-                  setEndDate(e.target.value);
-                  setDatePreset('custom');
-                }}
-                className="pl-8 h-7 text-xs w-32 border-rule text-ink"
-              />
-            </div>
-          </div>
-
-          {/* Campaign Select */}
-          <div className="flex items-center gap-1.5">
-            <span className="t-label text-ink-3">Campaign:</span>
-            <Select
-              value={campaignId || 'all-campaigns'}
-              onValueChange={val => setCampaignId(val === 'all-campaigns' ? '' : val)}
-            >
-              <SelectTrigger className="h-7 text-xs w-40 border-rule text-ink">
-                <SelectValue placeholder="All Campaigns" />
-              </SelectTrigger>
-              <SelectContent className="bg-surface border-rule text-ink text-xs">
-                <SelectItem value="all-campaigns">All Campaigns</SelectItem>
-                {campaigns.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Date presets and refresh */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex bg-sunken p-0.5 rounded border border-rule">
-            {['today', 'yesterday', 'last-7', 'last-30', 'this-month'].map(p => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => handlePresetSelect(p)}
-                className={cn(
-                  't-meta px-2 py-0.5 font-medium rounded capitalize transition-colors',
-                  datePreset === p ? 'bg-surface text-ink shadow-card' : 'text-ink-3 hover:text-ink'
-                )}
-              >
-                {p.replace('-', ' ')}
-              </button>
+      {/* Period & filter controls: the Revenue overview's toolbar */}
+      <PeriodToolbar state={periodState} resolved={null} label="Report filters">
+        <Select
+          value={campaignId || 'all-campaigns'}
+          onValueChange={val => setCampaignId(val === 'all-campaigns' ? '' : val)}
+        >
+          <SelectTrigger className="h-7 w-40 border-rule text-xs text-ink" aria-label="Campaign">
+            <SelectValue placeholder="All Campaigns" />
+          </SelectTrigger>
+          <SelectContent className="border-rule bg-surface text-xs text-ink">
+            <SelectItem value="all-campaigns">All Campaigns</SelectItem>
+            {campaigns.map(c => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
             ))}
-          </div>
-
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 border-rule text-ink-3"
-            aria-label="Refresh report"
-            onClick={() => void fetchReport()}
-            disabled={loading}
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-          </Button>
-        </div>
-      </div>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 border-rule text-ink-3"
+          aria-label="Refresh report"
+          onClick={() => void fetchReport()}
+          disabled={loading || !periodSendable}
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+        </Button>
+      </PeriodToolbar>
 
       {/* Tabs Layout */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col gap-3">

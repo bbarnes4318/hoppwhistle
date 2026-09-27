@@ -48,6 +48,7 @@ import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { requireWhiteLabelOperator } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import type { ResolvedPeriod } from '../services/leaderboard/period.js';
+import { salesCallWhere } from '../services/reporting/call-money.js';
 
 import { periodFromQuery, type PeriodQuery } from './call-sales.js';
 
@@ -171,11 +172,8 @@ export async function getPayoutsSummary(
       orderBy: { name: 'asc' },
     }),
     prisma.call.findMany({
-      where: {
-        tenantId,
-        publisherId: { not: null },
-        createdAt: { gte: period.start, lt: period.endExclusive },
-      },
+      // The one call set every money screen reads, narrowed to calls with a publisher.
+      where: { ...salesCallWhere(tenantId, period), publisherId: { not: null } },
       select: {
         publisherId: true,
         publisherPayoutAmount: true,

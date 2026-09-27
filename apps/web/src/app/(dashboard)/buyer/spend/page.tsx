@@ -23,6 +23,7 @@ import { ChartSkeleton, StatTileRowSkeleton, TableSkeleton } from '../_component
 import { NoBuyerScope, PanelError } from '../_components/states';
 import { UrlFilterBar } from '../_components/url-filter-bar';
 import { firstParam, RANGE_OPTIONS, resolveRange } from '../_lib/range';
+import { chargedSpend } from '../_lib/spend';
 
 import { CampaignSpendTable, type CampaignSpendRow } from './campaign-table';
 import { HourProfile, type HourBucket } from './hour-profile';
@@ -33,6 +34,10 @@ import { HourProfile, type HourBucket } from './hour-profile';
  * Two cuts of the same window. By campaign says which of your sources you are
  * paying for; by hour says when the spend actually happens, which is what you
  * change if you want a different bill without changing what you buy.
+ *
+ * Spend is what you were charged: calls whose charge went through, not every
+ * call priced in the window. A call refunded on an accepted return, or never
+ * charged, is not spend. See ../_lib/spend.
  */
 
 export const dynamic = 'force-dynamic';
@@ -111,7 +116,10 @@ async function SpendTotals({ rangeLabel, ...args }: PanelArgs & { rangeLabel: st
   }
 
   const { totals } = data;
-  const spend = toMajor(totals.buyerCost);
+  const spend = chargedSpend(totals);
+  // The price the billable calls carried, charged yet or not.
+  const perBillable =
+    totals.billableCalls > 0 ? toMajor(totals.buyerCost) / totals.billableCalls : 0;
   const disputed = toMajor(totals.disputes);
 
   return (
@@ -130,7 +138,7 @@ async function SpendTotals({ rangeLabel, ...args }: PanelArgs & { rangeLabel: st
       />
       <StatTile
         label="Per billable call"
-        figure={`$${(totals.billableCalls > 0 ? spend / totals.billableCalls : 0).toFixed(2)}`}
+        figure={`$${perBillable.toFixed(2)}`}
         sub={`Average connect ${totals.averageDuration}s`}
       />
       <StatTile
@@ -169,7 +177,7 @@ async function ByCampaign(args: PanelArgs) {
       billableRate: row.billableRate,
       averageDuration: row.averageDuration,
       pricePerBillableCall: toMajor(row.pricePerBillableCall),
-      cost: toMajor(row.buyerCost),
+      cost: chargedSpend(row),
       disputes: toMajor(row.disputes),
     }))
     .sort((a, b) => b.cost - a.cost);
@@ -257,7 +265,7 @@ function bucketByHour(calls: BuyerCall[]): HourBucket[] {
     const bucket = buckets[at.getUTCHours()];
     bucket.calls += 1;
     if (call.billable) bucket.billableCalls += 1;
-    bucket.cost += call.buyerBillableAmount ?? 0;
+    if (call.buyerChargeStatus === 'CHARGED') bucket.cost += call.buyerBillableAmount ?? 0;
   }
 
   return buckets;

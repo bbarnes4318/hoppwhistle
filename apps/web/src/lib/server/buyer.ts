@@ -27,14 +27,34 @@ export function toMajor(value: string | number | null | undefined): number {
 
 /* ------------------------------------------------------------------ types */
 
+/** Why a buyer is paused: its wallet ran out, or its agency paused it by hand. */
+export type BuyerPauseReason = 'WALLET_EMPTY' | 'MANUAL';
+
+/**
+ * Whether a prepaid wallet is running low, decided by the API: below five
+ * calls at the buyer's average price (its last 30 days of billable calls, else
+ * its configured campaign price). Null for a buyer on terms.
+ */
+export interface LowBalanceWarning {
+  isLow: boolean;
+  threshold: number | null;
+  averageCallPrice: number | null;
+  basis: 'RECENT_CALLS' | 'CONFIGURED_PRICE' | null;
+}
+
 export interface BuyerProfile {
   id: string;
   name: string;
   code: string;
   status: string;
+  /** Set only while `status` is PAUSED. Older API builds omit it. */
+  pauseReason?: BuyerPauseReason | null;
+  /** The agency's name for a MANUAL pause: "Paused by <pausedBy>". */
+  pausedBy?: string | null;
   billingType: 'TERMS' | 'UPFRONT';
   leadsRemaining: number;
   walletBalance: number;
+  lowBalance?: LowBalanceWarning | null;
   /** Seconds a call must connect for before it is billable. The threshold. */
   billableDuration: number;
   canPauseTargets: boolean;
@@ -100,6 +120,9 @@ export interface CostRow {
   averageDuration: number;
   pricePerBillableCall: string;
   buyerCost: string;
+  /** Charged calls, per billing type: see buyer/_lib/spend.ts. */
+  walletDebits: string;
+  pendingInvoice: string;
   disputes: string;
 }
 
@@ -168,6 +191,8 @@ export interface CallQuery {
   search?: string;
   campaignId?: string;
   disputeStatus?: string;
+  /** Only calls with a recording: the Recordings nav item (`?hasRecording=true`). */
+  hasRecording?: boolean;
 }
 
 function callQueryString(q: CallQuery): string {
@@ -181,6 +206,7 @@ function callQueryString(q: CallQuery): string {
   if (q.search) params.set('search', q.search);
   if (q.campaignId) params.set('campaignId', q.campaignId);
   if (q.disputeStatus) params.set('disputeStatus', q.disputeStatus);
+  if (q.hasRecording) params.set('hasRecording', 'true');
   return params.toString();
 }
 

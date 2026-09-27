@@ -74,6 +74,14 @@ const VoidSchema = z.object({
   reason: z.string().min(5).max(500),
 });
 
+/** The summary's filters: the table's, less its paging. */
+interface SummaryQuery {
+  from?: string;
+  to?: string;
+  carrier?: string;
+  agentId?: string;
+}
+
 /** A number off a Prisma Decimal, or null. */
 function toNumber(value: Prisma.Decimal | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
@@ -346,15 +354,19 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
    * agency reconciling a statement needs to see that a row was voided rather
    * than find it missing; a total that included them would reconcile with
    * nothing.
+   *
+   * It takes the same `carrier` and `agentId` as the table, on the same terms,
+   * so the tiles above a filtered table add up to the rows under them. An
+   * agent's `agentId` is overwritten with their own id exactly as it is there.
    */
-  fastify.get<{ Querystring: { from?: string; to?: string } }>(
+  fastify.get<{ Querystring: SummaryQuery }>(
     '/api/v1/applications/summary',
     { preHandler: [authenticate] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
-      const { from, to } = request.query;
+      const { from, to, carrier } = request.query;
       for (const [name, value] of [
         ['from', from],
         ['to', to],
@@ -368,13 +380,15 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
 
       const roles = rolesOf(request as { user?: RoutePrincipal });
       const isPrincipal = roles.some(role => AGENCY_PRINCIPAL_ROLES.includes(role));
-      const agentId = isPrincipal ? undefined : (getActingUserId(request) ?? ' ');
+      // The same overwrite as the list: see `GET /api/v1/applications`.
+      const agentId = isPrincipal ? request.query.agentId : (getActingUserId(request) ?? ' ');
 
       const where: Prisma.InsuranceCarrierApplicationWhereInput = {
         tenantId,
         submittedAt: { not: null, ...rangeFor(from, to) },
         voidedAt: null,
         ...(agentId ? { createdById: agentId } : {}),
+        ...(carrier ? { carrier } : {}),
       };
 
       const [byCarrier, byAgent] = await Promise.all([
