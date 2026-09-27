@@ -31,8 +31,11 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
  React.ElementRef<typeof DialogPrimitive.Content>,
- React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+ React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+ /** Leave out the built-in corner X, for a dialog whose header carries its own Close. */
+ hideClose?: boolean;
+ }
+>(({ className, children, hideClose = false, ...props }, ref) => (
  <DialogPortal>
  <DialogOverlay />
  <DialogPrimitive.Content
@@ -44,10 +47,12 @@ const DialogContent = React.forwardRef<
  {...props}
  >
  {children}
+ {hideClose ? null : (
  <DialogPrimitive.Close className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-control text-ink-3 transition-colors duration-150 hover:bg-sunken hover:text-ink focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
  <X className="h-4 w-4" />
  <span className="sr-only">Close</span>
  </DialogPrimitive.Close>
+ )}
  </DialogPrimitive.Content>
  </DialogPortal>
 ));
