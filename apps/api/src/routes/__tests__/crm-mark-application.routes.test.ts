@@ -16,6 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const recordAgentApplication = vi.fn();
 
 const mockPrisma = {
+  // The acting tenant has the Power Dialer upgrade these routes sit behind
+  // (`requireUpgrade('POWER_DIALER')`); see power-dialer-upgrade.test.ts.
+  tenant: {
+    findUnique: () => Promise.resolve({ metadata: { upgrades: ['POWER_DIALER'] } }),
+  },
   insuranceLead: {
     findFirst: vi.fn(),
     findFirstOrThrow: vi.fn(),

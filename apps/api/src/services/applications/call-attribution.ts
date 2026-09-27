@@ -114,8 +114,15 @@ export async function attributeCall(
    * principal decides coaching and pay from describe the wrong people.
    */
   if (claimedCallId) {
+    // A softphone names its call by the callSid the CDR writes it under,
+    // `fs-<uuid>`; anything else is a call row id.
+    const byCallSid = /^fs-[0-9a-f-]{8,}$/i.test(claimedCallId);
     const call = await prisma.call.findFirst({
-      where: { id: claimedCallId, tenantId, answeredByUserId: agentId },
+      where: {
+        ...(byCallSid ? { callSid: claimedCallId } : { id: claimedCallId }),
+        tenantId,
+        answeredByUserId: agentId,
+      },
       select: { id: true },
     });
 

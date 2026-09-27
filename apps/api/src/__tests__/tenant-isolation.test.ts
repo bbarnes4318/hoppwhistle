@@ -169,7 +169,13 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
     const slug = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const tenant = await prisma.tenant.create({
-      data: { name: `${label} Insurance`, slug, status: 'ACTIVE' },
+      // The CRM routes sit behind the Power Dialer upgrade (`requireUpgrade`).
+      data: {
+        name: `${label} Insurance`,
+        slug,
+        status: 'ACTIVE',
+        metadata: { upgrades: ['POWER_DIALER'] },
+      },
     });
 
     const owner = await prisma.user.create({

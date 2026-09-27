@@ -116,10 +116,11 @@ REQUIRED_MIGRATIONS="
 20260926000000_tenant_white_label
 20260927000000_publisher_payment_clawbacks
 20260928000000_clawback_check_callid
-20260929000000_activation_grant_portal_links
-20260929010000_phone_number_released
-20260929020000_number_charges
-20260929030000_password_reset_tokens
+20260929000000_pending_call_dispositions
+20260930000000_activation_grant_portal_links
+20260930010000_phone_number_released
+20260930020000_number_charges
+20260930030000_password_reset_tokens
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -468,6 +469,9 @@ migration_applied() {
       echo "SELECT COALESCE((SELECT pg_get_constraintdef(oid) NOT LIKE '%callId%'
               FROM pg_constraint
               WHERE conname = 'publisher_payments_kind_amount_check'), false)" ;;
+    *_pending_call_dispositions)
+      # One transaction: the table, its unique index and its foreign key.
+      echo "SELECT to_regclass('public.pending_call_dispositions') IS NOT NULL" ;;
     *_activation_grant_portal_links)
       # One ALTER TABLE adding two nullable columns, so atomic; both are
       # probed anyway, so a hand-applied half cannot read as done.

@@ -397,6 +397,8 @@ describe.skipIf(!gate.available)('White-label tier', () => {
           answeredByAgents: 0,
           sentToBuyers: 2,
           billable: 1,
+          billableAgentAnswered: 0,
+          billableToBuyers: 1,
           payout: 20,
           revenue: 50,
           profit: 29.35,
@@ -407,7 +409,11 @@ describe.skipIf(!gate.available)('White-label tier', () => {
           calls: 2,
           answeredByAgents: 1,
           sentToBuyers: 1,
-          billable: 1,
+          // Both calls are billable and both are paid for: the one Zen took
+          // and the one the agency's agent took. `payout` below is 15 + 10.
+          billable: 2,
+          billableAgentAnswered: 1,
+          billableToBuyers: 1,
           payout: 25,
           revenue: 40,
           profit: 14.3,
@@ -467,7 +473,7 @@ describe.skipIf(!gate.available)('White-label tier', () => {
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/csv');
       expect(response.body).toContain('"Acme Senior",2,1,50,50.00');
-      expect(response.body).toContain('"Beta Leads",2,1,1,1,25.00,40.00,14.30');
+      expect(response.body).toContain('"Beta Leads",2,1,1,2,1,1,25.00,40.00,14.30');
     });
 
     it('guards a name that reads as a formula', async () => {

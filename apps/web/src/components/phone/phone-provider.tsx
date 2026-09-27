@@ -22,6 +22,8 @@ import {
   type SessionDescriptionHandlerOptions,
 } from 'sip.js';
 
+import { inboundCallSid } from '@/lib/softphone-call-id';
+
 /**
  * REGISTER, and resolve only when the registrar ACCEPTS it.
  *
@@ -737,7 +739,13 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       const callerName = remoteIdentity.displayName || 'Unknown';
 
       const callInfo: CallInfo = {
-        callId: invitation.request.headers['Call-ID']?.[0]?.raw || `call_${Date.now()}`,
+        // The id the CDR records this call under (`fs-<uuid>`, from X-Call-Id),
+        // so the disposition and any application land on that row. The SIP
+        // Call-ID only when FreeSWITCH sent none.
+        callId:
+          inboundCallSid(invitation.request) ||
+          invitation.request.headers['Call-ID']?.[0]?.raw ||
+          `call_${Date.now()}`,
         direction: 'inbound',
         state: 'ringing',
         phoneNumber: callerNumber,

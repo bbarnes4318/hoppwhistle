@@ -1024,18 +1024,6 @@ export function CustomerCrmPanel({
             </h2>
           </div>
           <div className="space-y-3">
-            <div className="p-3 bg-ringing-tint border border-ringing text-ringing-ink rounded-lg text-xs flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold uppercase tracking-wide">
-                  External delivery disabled by owner request
-                </p>
-                <p className="text-ink-2 mt-0.5">
-                  Outbound lead post/retry workflows to Ameriquote/Boberdoo are deactivated.
-                </p>
-              </div>
-            </div>
-
             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
               {data.submissions.length === 0 ? (
                 <p className="text-xs text-ink-2 italic">

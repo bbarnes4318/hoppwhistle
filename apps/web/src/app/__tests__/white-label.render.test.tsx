@@ -69,6 +69,8 @@ const SALES: CallSalesSummary = {
       answeredByAgents: 0,
       sentToBuyers: 2,
       billable: 1,
+      billableAgentAnswered: 0,
+      billableToBuyers: 1,
       payout: 20,
       revenue: 50,
       profit: 29.35,
@@ -363,6 +365,11 @@ describe('white-label screens', () => {
       expect(buyerLink?.getAttribute('href')).toBe('/buyers?id=buyer-acme');
       expect(screen.getByText('Alpha Media')).toBeTruthy();
       expect(screen.getByText('$29.35')).toBeTruthy();
+
+      // Billable counts every call the publisher is paid for; the split says
+      // how many the agency's agents took and how many went to buyers.
+      expect(screen.getByRole('columnheader', { name: 'Billable, your agents' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Billable to buyers' })).toBeTruthy();
 
       expect(requested).toContain('/api/v1/call-sales/summary?period=TODAY');
       expect(screen.getByRole('button', { name: /Export CSV/i })).toBeTruthy();

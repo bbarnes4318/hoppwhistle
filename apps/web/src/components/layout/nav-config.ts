@@ -289,7 +289,8 @@ function lockedItem(href: string, name: string, blurb: string): NavItem {
  * not open anything the redirect closes.
  *
  * The one exception is Power Dialer. `/call-center` is where an agency's AGENTS
- * work, it is in AGENT_NAV untouched, and it stays reachable by URL. What is
+ * work, it is in AGENT_NAV (for an agency with the POWER_DIALER upgrade -- see
+ * `agentNav`), and it stays reachable by URL. What is
  * locked is the owner's sidebar entry for running a dialer campaign, not the
  * page.
  *
@@ -680,6 +681,24 @@ export const AGENT_NAV: NavGroup[] = [
   { label: 'Build', items: [{ name: 'Settings', href: '/settings', icon: Settings }] },
 ];
 
+/** AGENT_NAV's entries that exist only with the POWER_DIALER upgrade. */
+const AGENT_POWER_DIALER_HREFS: readonly string[] = ['/call-center', '/insurance-leads'];
+
+/**
+ * AGENT_NAV, less what this agency's upgrades do not include.
+ *
+ * Power Dialer and the CRM it dials from are the POWER_DIALER upgrade: an
+ * agent of an agency without it is not shown either (the API answers both
+ * with 403 UPGRADE_REQUIRED). With the upgrade this returns AGENT_NAV itself.
+ */
+export function agentNav(upgrades: readonly string[] = []): NavGroup[] {
+  if (upgrades.includes('POWER_DIALER')) return AGENT_NAV;
+  return AGENT_NAV.map(group => ({
+    ...group,
+    items: group.items.filter(item => !AGENT_POWER_DIALER_HREFS.includes(item.href)),
+  }));
+}
+
 /** Every item a person can actually open: not pending, not locked. */
 export function allNavItems(groups: NavGroup[]): NavItem[] {
   return groups.flatMap(group => group.items).filter(item => !item.pending && !item.locked);
@@ -705,7 +724,7 @@ export interface NavViewer {
   isAgentOnly: boolean;
   isReadonlyOnly: boolean;
   canViewRecordings: boolean;
-  /** The upgrades turned on for this agency. See `whiteLabelOwnerNav`. */
+  /** The upgrades turned on for this agency. See `whiteLabelOwnerNav` and `agentNav`. */
   upgrades?: readonly string[];
   /** The agency is a white-label agency's downline. See `CHILD_AGENCY_OWNER_NAV`. */
   isChild?: boolean;
@@ -734,7 +753,7 @@ export function navFor(viewer: NavViewer): NavGroup[] {
   }
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
-  if (viewer.isAgentOnly) return AGENT_NAV;
+  if (viewer.isAgentOnly) return agentNav(viewer.upgrades);
   if (viewer.isReadonlyOnly) {
     /*
      * Dashboard alone.

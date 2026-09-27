@@ -24,6 +24,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
+import { toast } from '@/components/ui/use-toast';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
@@ -62,6 +63,7 @@ import type {
   ProspectData,
   SelectedScript,
 } from './types';
+import { DEFAULT_SCRIPT } from './types';
 import { UnderwritingScriptPanel } from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
@@ -276,6 +278,14 @@ export function CallCenterPortal(): JSX.Element {
   const dispositionCallIdRef = useRef<string | null>(null);
 
   /*
+   * The live call's direction, remembered past its end. The disposition is
+   * often saved after hang-up -- by the agent, or automatically -- when
+   * `currentCall` has already gone, and the post has to say which way the
+   * call went rather than calling every call outbound.
+   */
+  const callDirectionRef = useRef<'inbound' | 'outbound' | null>(null);
+
+  /*
    * What the quote and the call already know, so the agent retypes none of it.
    *
    * `activeCallData` is a bag with an `unknown` index signature -- the script
@@ -351,7 +361,7 @@ export function CallCenterPortal(): JSX.Element {
     return 0;
   });
 
-  const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
+  const [selectedScript, setSelectedScript] = useState<SelectedScript>(DEFAULT_SCRIPT);
   const [leadLists, setLeadLists] = useState<LeadListSummary[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>('');
 
@@ -510,6 +520,7 @@ export function CallCenterPortal(): JSX.Element {
       }
 
       hasHadActiveSessionRef.current = true; // Mark as having a live session
+      callDirectionRef.current = currentCall.direction;
 
       if (currentCall.state === 'active') {
         wasAnsweredRef.current = true;
@@ -523,9 +534,8 @@ export function CallCenterPortal(): JSX.Element {
         setActiveCallData({
           caller_id: currentCall.phoneNumber,
           first_name:
-            currentCall.callerName || currentCall.direction === 'outbound'
-              ? 'Outbound'
-              : 'Incoming',
+            currentCall.callerName ||
+            (currentCall.direction === 'outbound' ? 'Outbound' : 'Incoming'),
           last_name: 'Call',
           phone: currentCall.phoneNumber,
           ...currentCall.prospectData,
@@ -777,7 +787,8 @@ export function CallCenterPortal(): JSX.Element {
       console.error('Failed to answer call:', e);
     }
     // Set first script based on defaultScript preference
-    const initialScript = defaultScript || (position === 'Retention' ? 'retention' : 'sales');
+    const initialScript =
+      defaultScript || (position === 'Retention' ? 'retention' : DEFAULT_SCRIPT);
     setSelectedScript(initialScript as SelectedScript);
 
     // State updates happen via useEffect watching currentCall
@@ -891,7 +902,11 @@ export function CallCenterPortal(): JSX.Element {
         notes,
         duration: callTimer,
         callerNumber: activeCallData?.caller_id || activeCallData?.phone,
-        direction: 'OUTBOUND',
+        // The API reads 'INBOUND' and treats anything else as outbound.
+        direction:
+          (currentCall?.direction ?? callDirectionRef.current) === 'inbound'
+            ? 'INBOUND'
+            : 'OUTBOUND',
         callSource: 'CALL_CENTER',
         followUpAt,
         ...(wroteApplication && applicationPayload ? { application: applicationPayload } : {}),
@@ -905,6 +920,11 @@ export function CallCenterPortal(): JSX.Element {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'The call could not be saved.';
       console.error('[CallCenter] Disposition save failed:', message);
+      toast({
+        title: 'The disposition was not saved',
+        description: message,
+        variant: 'destructive',
+      });
 
       /*
        * A failed save with business on it stops here, with the form exactly as
@@ -1589,7 +1609,9 @@ export function CallCenterPortal(): JSX.Element {
                 <div>
                   <label className="block text-sm text-ink-2 mb-2">Default Script Preference</label>
                   <select
-                    value={defaultScript || (position === 'Retention' ? 'retention' : 'sales')}
+                    value={
+                      defaultScript || (position === 'Retention' ? 'retention' : DEFAULT_SCRIPT)
+                    }
                     onChange={e => {
                       const val = e.target.value;
                       void (async () => {
@@ -1605,7 +1627,7 @@ export function CallCenterPortal(): JSX.Element {
                     }}
                     className="flex h-10 w-full rounded-md border border-rule bg-sunken px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    <option value="sales">Contractor Script</option>
+                    <option value="sales">Final Expense Script</option>
                     <option value="retention">Retention Script</option>
                     <option value="underwriting">Underwriting Script</option>
                   </select>
@@ -1626,7 +1648,7 @@ export function CallCenterPortal(): JSX.Element {
                       onChange={e => handleScriptTypeChange(e.target.value as 'sales' | 'retention' | 'underwriting')}
                       className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                      <option value="sales">Contractor Script</option>
+                      <option value="sales">Final Expense Script</option>
                       <option value="retention">Retention Script</option>
                       <option value="underwriting">Underwriting Script</option>
                     </select>
@@ -1995,6 +2017,13 @@ export function CallCenterPortal(): JSX.Element {
                           setCallNotes={setCallNotes}
                           setShowDisposition={setShowDisposition}
                         />
+                      ) : selectedScript === 'medicare' || selectedScript === 'aca' ? (
+                        <div className="flex h-full items-center justify-center rounded-card border border-rule bg-sunken p-8 text-center text-ink-2">
+                          <p className="text-sm">
+                            There is no {selectedScript === 'medicare' ? 'Medicare' : 'ACA'} script
+                            in the console yet. Work the call from Target Profile.
+                          </p>
+                        </div>
                       ) : (
                         <IntegratedScriptPanel
                           prospectData={activeCallData}

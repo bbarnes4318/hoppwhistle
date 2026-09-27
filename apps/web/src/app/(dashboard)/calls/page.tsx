@@ -203,7 +203,9 @@ const CALL_OUTCOMES = [
 ] as const;
 
 export default function OperationsCallLogsPage() {
-  const { user, isAdmin, isOwner, isPlatformAdmin } = useAuth();
+  const { user, isAdmin, isOwner, isPlatformAdmin, upgrades } = useAuth();
+  // Lead lists are the Power Dialer upgrade's; without it the API refuses them.
+  const hasPowerDialer = isPlatformAdmin || upgrades.includes('POWER_DIALER');
   // A white-label owner decides returns; the call detail offers it on the call.
   const whiteLabelView = useWhiteLabelView();
 
@@ -470,10 +472,12 @@ export default function OperationsCallLogsPage() {
           setCampaigns(list);
         }
 
-        const listsRes = await apiClient.get<OptionListBody>('/api/v1/lead-lists');
-        if (listsRes.data) {
-          const list = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data.data || [];
-          setLeadLists(list);
+        if (hasPowerDialer) {
+          const listsRes = await apiClient.get<OptionListBody>('/api/v1/lead-lists');
+          if (listsRes.data) {
+            const list = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data.data || [];
+            setLeadLists(list);
+          }
         }
 
         if (isAdminOrOwner) {
@@ -515,7 +519,7 @@ export default function OperationsCallLogsPage() {
       }
     };
     void loadFilters();
-  }, [isAdminOrOwner]);
+  }, [isAdminOrOwner, hasPowerDialer]);
 
   const fetchCalls = useCallback(async () => {
     setLoading(true);

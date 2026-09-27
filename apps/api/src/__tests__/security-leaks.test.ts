@@ -141,7 +141,13 @@ describe.skipIf(!gate.available)('Security: data leaks', () => {
 
     const slug = `leaks-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const tenant = await prisma.tenant.create({
-      data: { name: 'Leaks Insurance', slug, status: 'ACTIVE' },
+      // The CRM routes sit behind the Power Dialer upgrade (`requireUpgrade`).
+      data: {
+        name: 'Leaks Insurance',
+        slug,
+        status: 'ACTIVE',
+        metadata: { upgrades: ['POWER_DIALER'] },
+      },
     });
     tenantId = tenant.id;
 

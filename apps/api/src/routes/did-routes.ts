@@ -44,7 +44,14 @@ import {
 import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-cause.js';
 import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { sanitizeDestinationString } from '../lib/route-destination.js';
+import {
+  DEFAULT_AGENT_RING_SECONDS,
+  DEFAULT_BUYER_RING_SECONDS,
+  isInternalLeg,
+  sanitizeDestinationString,
+  stripLegVars,
+  tagDestinationLegs,
+} from '../lib/route-destination.js';
 import {
   didActiveElsewhere,
   extensionsOutsideTenant,
@@ -67,6 +74,39 @@ type RtbMetadata = {
   postAcceptedAt?: string | null;
   routeType?: string | null;
 };
+
+/**
+ * Tag a static route's legs with who they ring: an extension is the agent who
+ * holds it, anything else is the route's buyer. A leg nobody can be named for
+ * goes untagged, and answering it credits nobody.
+ */
+async function tagStaticDestination(
+  tenantId: string,
+  destination: string,
+  buyerId: string | null
+): Promise<string> {
+  if (!destination) return '';
+  const agentsByExtension = new Map<string, string>();
+  try {
+    const credentials = await getPrismaClient().agentSipCredential.findMany({
+      where: { tenantId, status: 'ACTIVE' },
+      select: { extension: true, userId: true },
+    });
+    for (const credential of credentials ?? []) {
+      agentsByExtension.set(credential.extension, credential.userId);
+    }
+  } catch (err) {
+    console.warn('[FS-LOOKUP] Could not read SIP credentials to tag a static route:', err);
+  }
+  return tagDestinationLegs(destination, leg => {
+    const bare = stripLegVars(leg);
+    if (isInternalLeg(bare)) {
+      const userId = agentsByExtension.get(bare);
+      return { party: userId ? `agent:${userId}` : null, timeout: DEFAULT_AGENT_RING_SECONDS };
+    }
+    return { party: buyerId ? `buyer:${buyerId}` : null, timeout: DEFAULT_BUYER_RING_SECONDS };
+  });
+}
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDidRouteRoutes(server: FastifyInstance) {
@@ -535,8 +575,19 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
 
       const rtbCarriers = await getInboundCarrierChain(routeInfo.tenant_id);
 
+      // The auction winner is the only party on an RTB leg; tagging it lets
+      // the CDR credit the buyer only when that leg actually answered.
+      const rtbDialString = routeInfo.buyer_destination
+        ? tagDestinationLegs(routeInfo.buyer_destination, () => ({
+            party: routeInfo.buyer_id ? `buyer:${routeInfo.buyer_id}` : null,
+            target: routeInfo.buyer_endpoint_id || null,
+            timeout: DEFAULT_BUYER_RING_SECONDS,
+          }))
+        : '';
+
       return reply.send({
         destination: routeInfo.buyer_destination,
+        dialString: rtbDialString,
         externalGateways: rtbCarriers.gatewaysCsv,
         externalBridgeTemplate: rtbCarriers.bridgeTemplate,
         recordingEnabled: recordingEnabled,
@@ -601,16 +652,23 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     let buyerId = route.buyerId || null;
     let targetId: string | null = null;
     let agentCellKeys: string[] = [];
+    // The plan with every leg tagged with who it rings. Set by campaign
+    // routing; a static route is tagged below.
+    let dialString: string | null = null;
 
     if (route.campaignId) {
       try {
         const { routingService } = await import('../services/routing.js');
-        const bestBuyer = await routingService.selectBestBuyer(route.tenantId, route.campaignId, {
-          callerId: caller,
-        });
+        const bestBuyer = await routingService.selectBestBuyer(
+          route.tenantId,
+          route.campaignId,
+          { callerId: caller },
+          { throwOnError: true }
+        );
 
         if (bestBuyer) {
           destination = bestBuyer.endpoint;
+          dialString = bestBuyer.dialString || null;
           buyerId = bestBuyer.buyerId;
           targetId = bestBuyer.targetId || null;
           agentCellKeys = bestBuyer.agentCellKeys ?? [];
@@ -618,23 +676,17 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
           );
         } else {
-          const allCampaignBuyers = await prisma.campaignBuyer.findMany({
-            where: { campaignId: route.campaignId, status: 'ACTIVE', tenantId: route.tenantId },
-            select: { destinationNumber: true, buyerId: true },
-          });
-
-          if (allCampaignBuyers.length > 0) {
-            const destList = allCampaignBuyers.map(b => b.destinationNumber.trim()).filter(Boolean);
-            destination = destList.join(',');
-            buyerId = allCampaignBuyers[0]?.buyerId || null;
-            console.log(
-              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} fallback → ringing all campaign extensions: ${destination}`
-            );
-          } else {
-            console.log(
-              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} returned no active buyers. Falling back to static route: ${destination}`
-            );
-          }
+          /*
+           * Nobody passed the gates. This used to ring every buyer on the
+           * campaign with no gates at all -- paused, capped, closed and broke
+           * buyers included -- which is exactly the set routing had just
+           * refused. Now the call is recorded as unanswered instead.
+           */
+          destination = '';
+          buyerId = null;
+          console.log(
+            `[FS-LOOKUP] Dynamic route returned no eligible destinations; refusing to bypass routing filters for campaign=${route.campaignId} caller=${caller}`
+          );
         }
       } catch (routingErr) {
         console.error(
@@ -681,8 +733,16 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
 
     const inboundCarriers = await getInboundCarrierChain(route.tenantId);
 
+    if (!dialString) {
+      dialString = await tagStaticDestination(route.tenantId, sanitized.destination, buyerId);
+    }
+    const sanitizedDial = sanitizeDestinationString(dialString);
+
     return reply.send({
       destination: sanitized.destination,
+      // Preferred by inbound_route.lua: the same plan, every leg tagged with
+      // the party it rings, so the CDR can say who actually answered.
+      dialString: sanitizedDial.destination || '',
       externalGateways: inboundCarriers.gatewaysCsv,
       externalBridgeTemplate: inboundCarriers.bridgeTemplate,
       // Ten-digit keys of legs that are agents' own cells, comma-separated.
@@ -743,6 +803,18 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       bridgeChannelName?: string;
       /** Gateway the call actually used, when the Lua could name it directly. */
       gateway?: string;
+      /**
+       * Who answered: `buyer:<id>`, `agent:<userId>`, or empty when nobody
+       * did. Read by inbound_route.lua off the answered leg's `x_leg_party`.
+       * When present it is the ONLY source of attribution; see
+       * services/cdr-attribution.ts. Absent only from a script that predates
+       * per-leg tagging.
+       */
+      answeredParty?: string;
+      /** The number the answered leg dialed (`x_leg_number`). */
+      answeredNumber?: string;
+      /** The buyer endpoint of the answered leg (`x_leg_target`), when it was a buyer. */
+      answeredTarget?: string;
     };
 
     if (!body.callId || !body.routeId || !body.tenantId) {
@@ -773,8 +845,17 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         NO_ANSWER: 'NO_ANSWER',
         CALL_REJECTED: 'FAILED',
         ORIGINATOR_CANCEL: 'CANCELLED',
+        // The no-agent prompt: every leg was rung and none answered.
+        NO_USER_RESPONSE: 'NO_ANSWER',
       };
-      const callStatus = statusMap[body.hangupCause] || 'COMPLETED';
+      let callStatus = statusMap[body.hangupCause] || 'COMPLETED';
+
+      // A CDR that names who answered (possibly nobody) comes from the current
+      // inbound_route.lua, which sends `answeredAt` only when a leg answered.
+      const attributesByAnsweredLeg = typeof body.answeredParty === 'string';
+      if (attributesByAnsweredLeg && !body.answeredAt && callStatus === 'COMPLETED') {
+        callStatus = 'NO_ANSWER';
+      }
 
       // The status map collapses five causes into a CallStatus and throws the
       // rest away, which is why abandon rate was never sourceable: CANCELLED
@@ -923,11 +1004,45 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         buyerName = route.label || null;
       }
 
+      // Who answered, from the answered leg. When the CDR carries it, it
+      // replaces everything above: the plan's first buyer is not who answered.
+      let answeredByUserId: string | null = null;
+      let answeredVia: string | null = null;
+      let answeredAttribution: import('../services/cdr-attribution.js').AnsweredAttribution | null =
+        null;
+      if (attributesByAnsweredLeg) {
+        const { resolveAnsweredParty } = await import('../services/cdr-attribution.js');
+        buyerId = null;
+        buyerName = null;
+        targetId = null;
+        if (body.answeredAt) {
+          try {
+            answeredAttribution = await resolveAnsweredParty(prisma, {
+              tenantId,
+              answeredParty: body.answeredParty,
+              answeredTarget: sanitizeFk(body.answeredTarget),
+              answeredNumber: body.answeredNumber,
+            });
+            buyerId = answeredAttribution.buyerId;
+            buyerName = answeredAttribution.buyerName;
+            targetId = answeredAttribution.targetId;
+            answeredByUserId = answeredAttribution.answeredByUserId;
+            if (answeredByUserId) {
+              answeredVia = /^\d{4}$/.test((body.answeredNumber ?? '').trim())
+                ? 'softphone'
+                : 'agent_cell';
+            }
+          } catch (attrErr) {
+            console.error('[FS-CDR] Failed to resolve the answering party:', attrErr);
+          }
+        }
+      }
+
       // Resolve buyer name from buyer record if we have a buyerId. The id must
       // name a real buyer: when the routed party was a campaign AGENT, routing
       // hands back the agent's user id in this slot, and writing that to
       // calls.buyerId violates its foreign key and loses the whole call row.
-      if (buyerId) {
+      if (buyerId && !attributesByAnsweredLeg) {
         try {
           const buyer = await prisma.buyer.findUnique({
             where: { id: buyerId },
@@ -947,8 +1062,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       // path attributes on disposition; a cell has no disposition screen, so
       // the bridged leg's dialed number is matched against the campaign's
       // cell-forwarding agents here.
-      let answeredByUserId: string | null = null;
-      if (body.answeredAt && campaignId) {
+      if (!attributesByAnsweredLeg && body.answeredAt && campaignId) {
         const dialedKey = dialedKeyFromChannelName(body.bridgeChannelName);
         if (dialedKey) {
           try {
@@ -961,6 +1075,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             );
             if (matches.length === 1) {
               answeredByUserId = matches[0].userId;
+              answeredVia = 'agent_cell';
             } else if (matches.length > 1) {
               console.warn(
                 `[FS-CDR] ${matches.length} agents on campaign ${campaignId} share cell ${dialedKey}; not attributing call ${body.callId}`
@@ -983,7 +1098,9 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           toNumber: body.destination,
           callerId: body.callerNumber,
           did: body.did || (rtbMetadata ? rtbMetadata.transferNumber : null),
-          targetNumber: body.destination,
+          targetNumber: attributesByAnsweredLeg
+            ? stripLegVars(body.answeredNumber ?? '') || null
+            : body.destination,
           duration: body.duration || 0,
           connectedDuration: body.connectedDuration || 0,
           campaignId: campaignId,
@@ -1008,12 +1125,34 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
               ? {
                   ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
                   ...(answeredByUserId
-                    ? { answeredByAgentId: answeredByUserId, answeredVia: 'agent_cell' }
+                    ? { answeredByAgentId: answeredByUserId, answeredVia: answeredVia ?? 'agent_cell' }
                     : {}),
                 }
               : undefined,
         },
       });
+
+      // A buyer endpoint that answered has taken one call against its cap.
+      if (answeredAttribution?.endpoint && call.answeredAt) {
+        const { countDelivery } = await import('../services/cdr-attribution.js');
+        await countDelivery(answeredAttribution, call.answeredAt);
+      }
+
+      // A softphone disposition saved before this CDR landed waits for it.
+      try {
+        const { isSoftphoneCallSid, mergePendingDisposition } = await import(
+          '../services/pending-disposition.js'
+        );
+        if (isSoftphoneCallSid(call.callSid)) {
+          await mergePendingDisposition(prisma, {
+            tenantId,
+            callSid: call.callSid,
+            callId: call.id,
+          });
+        }
+      } catch (mergeErr) {
+        console.error('[FS-CDR] Failed to merge a pending disposition:', mergeErr);
+      }
 
       // Calculate call billing
       try {

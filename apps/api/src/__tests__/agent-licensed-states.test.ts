@@ -100,7 +100,13 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
   async function seedAgency(label: string, roleIds: Record<string, string>): Promise<Agency> {
     const slug = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const tenant = await prisma.tenant.create({
-      data: { name: `${label} Insurance`, slug, status: 'ACTIVE' },
+      // The CRM routes sit behind the Power Dialer upgrade (`requireUpgrade`).
+      data: {
+        name: `${label} Insurance`,
+        slug,
+        status: 'ACTIVE',
+        metadata: { upgrades: ['POWER_DIALER'] },
+      },
     });
 
     const mkUser = async (name: string, roleId: string, metadata?: any) =>

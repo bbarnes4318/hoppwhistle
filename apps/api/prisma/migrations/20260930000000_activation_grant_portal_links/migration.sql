@@ -8,7 +8,7 @@
 -- every existing grant.
 --
 -- Applied by hand with psql (this database has no _prisma_migrations table):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260929000000_activation_grant_portal_links/migration.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260930000000_activation_grant_portal_links/migration.sql
 --
 -- One ALTER TABLE, so atomic; IF NOT EXISTS, so a second run is a no-op.
 

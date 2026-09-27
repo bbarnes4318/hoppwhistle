@@ -11,7 +11,7 @@
 -- rows; the agency owner's monthly statement reads them.
 --
 -- Applied by hand with psql (this database has no _prisma_migrations table):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260929020000_number_charges/migration.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260930020000_number_charges/migration.sql
 --
 -- Idempotent throughout, and one transaction, so a failure leaves nothing
 -- half-applied and a second run is a no-op.
