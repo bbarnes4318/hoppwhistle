@@ -94,12 +94,11 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
   async function seedAgency(label: string, roleIds: Record<string, string>): Promise<Agency> {
     const slug = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const tenant = await prisma.tenant.create({
-      // The CRM routes sit behind the Power Dialer upgrade (`requireUpgrade`).
+      // No upgrades: every agency has the CRM, Power Dialer or not.
       data: {
         name: `${label} Insurance`,
         slug,
         status: 'ACTIVE',
-        metadata: { upgrades: ['POWER_DIALER'] },
       },
     });
 
@@ -321,6 +320,190 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
         where: { listId: b.listId, tenantId: a.tenantId },
       });
       expect(filed).toBe(0);
+    });
+  });
+
+  describe('every agency has the CRM, upgrade or not', () => {
+    it('answers 200 to an agency with no upgrades', async () => {
+      const tenant = await prisma.tenant.findUnique({ where: { id: a.tenantId } });
+      expect(tenant?.metadata ?? null).toBeNull();
+      expect((await get('/api/v1/insurance-leads', as(a, a.ownerId))).statusCode).toBe(200);
+      expect((await get('/api/v1/insurance-leads', as(a, a.agentId))).statusCode).toBe(200);
+    });
+  });
+
+  describe("an agent's own leads are assigned to them", () => {
+    it("assigns an agent's import to the agent, whatever the body names", async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/import',
+        headers: as(a, a.agentId),
+        payload: {
+          vertical: 'FE',
+          assignedToId: a.otherAgentId,
+          leads: [{ firstName: 'Typed', lastName: 'In', phone: '6155550101', state: 'TN' }],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const lead = await prisma.insuranceLead.findFirst({
+        where: { tenantId: a.tenantId, phone: '6155550101' },
+      });
+      expect(lead?.assignedToId).toBe(a.agentId);
+      expect(lead?.assignedAt).not.toBeNull();
+
+      // ...and so it is in their CRM.
+      const ids = idsIn((await get('/api/v1/insurance-leads?limit=100', as(a, a.agentId))).body);
+      expect(ids).toContain(lead?.id);
+    });
+
+    it("refuses an agent's import that would overwrite a colleague's customer", async () => {
+      const colleague = await prisma.insuranceLead.findUnique({ where: { id: a.colleagueLeadId } });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/import',
+        headers: as(a, a.agentId),
+        payload: {
+          vertical: 'FE',
+          leads: [{ firstName: 'Hijack', phone: colleague!.phone }],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).failCount).toBe(1);
+      const after = await prisma.insuranceLead.findUnique({ where: { id: a.colleagueLeadId } });
+      expect(after?.assignedToId).toBe(a.otherAgentId);
+      expect(after?.firstName).toBe('Colleague');
+    });
+
+    it("assigns an agent's bulk write to the agent", async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/bulk',
+        headers: as(a, a.agentId),
+        payload: { leads: [{ firstName: 'Bulk', phone: '6155550102' }] },
+      });
+      expect(res.statusCode).toBe(200);
+      const lead = await prisma.insuranceLead.findFirst({
+        where: { tenantId: a.tenantId, phone: '6155550102' },
+      });
+      expect(lead?.assignedToId).toBe(a.agentId);
+    });
+
+    it("leaves a principal's import unassigned unless it names an assignee in the agency", async () => {
+      const plain = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/import',
+        headers: as(a, a.ownerId),
+        payload: { vertical: 'FE', leads: [{ firstName: 'Pile', phone: '6155550103' }] },
+      });
+      expect(plain.statusCode).toBe(200);
+      expect(
+        (
+          await prisma.insuranceLead.findFirst({
+            where: { tenantId: a.tenantId, phone: '6155550103' },
+          })
+        )?.assignedToId ?? null
+      ).toBeNull();
+
+      const named = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/import',
+        headers: as(a, a.ownerId),
+        payload: {
+          vertical: 'FE',
+          assignedToId: a.agentId,
+          leads: [{ firstName: 'Given', phone: '6155550104' }],
+        },
+      });
+      expect(named.statusCode).toBe(200);
+      expect(
+        (
+          await prisma.insuranceLead.findFirst({
+            where: { tenantId: a.tenantId, phone: '6155550104' },
+          })
+        )?.assignedToId
+      ).toBe(a.agentId);
+
+      const foreign = await app.inject({
+        method: 'POST',
+        url: '/api/v1/insurance-leads/import',
+        headers: as(a, a.ownerId),
+        payload: {
+          vertical: 'FE',
+          assignedToId: b.agentId,
+          leads: [{ firstName: 'Foreign', phone: '6155550105' }],
+        },
+      });
+      expect(foreign.statusCode).toBe(400);
+    });
+  });
+
+  describe("reassignment is the principal's", () => {
+    const reassign = (id: string, headers: Record<string, string>, assignedToId: string) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/api/v1/insurance-leads/${id}`,
+        headers,
+        payload: { assignedToId },
+      });
+
+    it('refuses an agent reassigning their own customer with 403', async () => {
+      const res = await reassign(a.ownLeadId, as(a, a.agentId), a.otherAgentId);
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).error.message).toBe(
+        'Only the agency owner can reassign a customer.'
+      );
+      const lead = await prisma.insuranceLead.findUnique({ where: { id: a.ownLeadId } });
+      expect(lead?.assignedToId).toBe(a.agentId);
+    });
+
+    it('lets the principal reassign within the agency, and stamps it', async () => {
+      const res = await reassign(a.unassignedLeadId, as(a, a.ownerId), a.agentId);
+      expect(res.statusCode).toBe(200);
+      const lead = await prisma.insuranceLead.findUnique({ where: { id: a.unassignedLeadId } });
+      expect(lead?.assignedToId).toBe(a.agentId);
+      expect(lead?.assignedAt).not.toBeNull();
+      // Put it back for the cases that rely on it being unassigned.
+      await prisma.insuranceLead.update({
+        where: { id: a.unassignedLeadId },
+        data: { assignedToId: null, assignedAt: null },
+      });
+    });
+
+    it('refuses the principal an assignee outside the agency', async () => {
+      expect((await reassign(a.colleagueLeadId, as(a, a.ownerId), b.agentId)).statusCode).toBe(400);
+    });
+  });
+
+  describe('sending leads to a buyer is an owner action', () => {
+    it('refuses an agent delivery/send, delivery/preflight and the delivery report', async () => {
+      for (const url of [
+        '/api/v1/insurance-leads/delivery/send',
+        '/api/v1/insurance-leads/delivery/preflight',
+      ]) {
+        const res = await app.inject({
+          method: 'POST',
+          url,
+          headers: as(a, a.agentId),
+          payload: { listId: a.listId },
+        });
+        expect(res.statusCode, url).toBe(403);
+      }
+      expect(
+        (await get('/api/v1/insurance-leads/delivery-report', as(a, a.agentId))).statusCode
+      ).toBe(403);
+    });
+  });
+
+  describe("lead list counts are the caller's", () => {
+    it("counts only an agent's own leads on each list", async () => {
+      const lists = (as_: Record<string, string>) =>
+        get('/api/v1/lead-lists', as_).then(
+          res => JSON.parse(res.body) as Array<{ id: string; _count: { leads: number } }>
+        );
+      const agentList = (await lists(as(a, a.agentId))).find(l => l.id === a.listId);
+      const ownerList = (await lists(as(a, a.ownerId))).find(l => l.id === a.listId);
+      expect(agentList?._count.leads).toBe(1);
+      expect(ownerList?._count.leads).toBe(3);
     });
   });
 });

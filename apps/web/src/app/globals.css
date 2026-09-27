@@ -571,6 +571,15 @@
   }
 
   /*
+   * A hub tab's view, under the hub's own tab list. The tab list already
+   * carries the top gutter, so the view's canvas starts 12px under it rather
+   * than repeating a full gutter and leaving a tall empty band.
+   */
+  .hub-panel > .page-canvas {
+    padding-top: 12px;
+  }
+
+  /*
    * Tooltip. The text lives in `data-tooltip` and is painted by ::after, so it
    * adds no text node to the document: it never changes an accessible name and
    * never duplicates a string a test looks for. Shown on hover and on keyboard

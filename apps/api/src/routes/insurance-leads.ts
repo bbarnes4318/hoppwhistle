@@ -20,9 +20,8 @@ import {
   type StateAuthority,
 } from '../lib/licensed-states.js';
 import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
-import { requireUpgrade } from '../lib/tenant-upgrades.js';
+import type { IngestOwnership } from '../services/insurance-lead-service.js';
 import { calendarDayBounds } from '../services/rating/calendar-day.js';
-
 
 /**
  * The acting tenant, from `lib/tenant-context.ts`.
@@ -104,6 +103,67 @@ async function requireReachableLead(
   }
 
   return { ok: true, leadId: lead.id };
+}
+
+/**
+ * Who the leads an import or bulk write creates belong to.
+ *
+ * An AGENT's own leads are theirs: assigned to the caller, overwriting
+ * whatever the body said, so a lead an agent types in lands in their own CRM
+ * rather than in the agency's unassigned pile where they can no longer see it.
+ * A principal's stay unassigned unless the body names an assignee, who must be
+ * a user in this agency. A credential with no person behind it (an API key)
+ * imports unassigned, as it always has.
+ *
+ * Returns null once it has sent a 400 for an assignee outside the agency.
+ */
+async function importOwnership(
+  request: FastifyRequest,
+  reply: { code: (n: number) => unknown },
+  tenantId: string,
+  requestedAssignee: unknown
+): Promise<IngestOwnership | null> {
+  if (!isAgencyPrincipal(request)) {
+    const userId = getActingUserId(request);
+    return userId ? { assignToId: userId, agentScoped: true } : {};
+  }
+  if (requestedAssignee === undefined || requestedAssignee === null || requestedAssignee === '') {
+    return {};
+  }
+  if (typeof requestedAssignee !== 'string' || !(await isTenantUser(tenantId, requestedAssignee))) {
+    void reply.code(400);
+    return null;
+  }
+  return { assignToId: requestedAssignee };
+}
+
+/** Whether `userId` is a user of this agency. */
+async function isTenantUser(tenantId: string, userId: string): Promise<boolean> {
+  const { getPrismaClient } = await import('../lib/prisma.js');
+  const user = await getPrismaClient().user.findFirst({
+    where: { id: userId, tenantId },
+    select: { id: true },
+  });
+  return !!user;
+}
+
+const ASSIGNEE_NOT_IN_AGENCY = {
+  error: { code: 'VALIDATION_ERROR', message: 'The assignee is not a user in this agency.' },
+};
+
+/** Sending leads to a buyer is an owner action; an agent is refused. */
+function refuseAgentDelivery(
+  request: FastifyRequest,
+  reply: { code: (n: number) => unknown }
+): { error: { code: string; message: string } } | null {
+  if (isAgencyPrincipal(request)) return null;
+  void reply.code(403);
+  return {
+    error: {
+      code: 'FORBIDDEN',
+      message: 'Only the agency owner or an administrator can send leads to a buyer.',
+    },
+  };
 }
 
 interface DeliverySelector {
@@ -272,16 +332,11 @@ function runPreClosedPython(leads: any[]): Promise<any[]> {
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
-  // The CRM and its lead lists are the Power Dialer upgrade (they are what the
-  // dialer dials). Every route in this plugin but the inbound webhook, which is
-  // API-key ingestion from a lead vendor: refusing it would drop leads the
-  // vendor has already sent, not hide a screen.
-  fastify.addHook(
-    'preHandler',
-    requireUpgrade('POWER_DIALER', {
-      skip: request => request.url.startsWith('/api/v1/insurance-leads/inbound/'),
-    })
-  );
+  /*
+   * No upgrade gate. Every agency has the CRM and every agent has theirs --
+   * narrowed to the customers assigned to them (`lib/agent-scope.ts`). Only
+   * the Power Dialer (`routes/call-center.ts`) is an upgrade.
+   */
 
   // -----------------------------------------------------------------------
   // POST /api/v1/insurance-leads/inbound/:vertical — Inbound webhook
@@ -376,6 +431,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       listId?: string;
       deliver?: boolean;
       force?: boolean;
+      assignedToId?: string;
     };
   }>('/api/v1/insurance-leads/import', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -412,6 +468,15 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         },
       };
     }
+
+    // Delivering to a buyer as part of the import is the owner's action too.
+    if (deliver === true) {
+      const refused = refuseAgentDelivery(request, reply);
+      if (refused) return refused;
+    }
+
+    const ownership = await importOwnership(request, reply, tenantId, request.body.assignedToId);
+    if (!ownership) return ASSIGNEE_NOT_IN_AGENCY;
 
     const vertical = rawVertical.toUpperCase();
     if (vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
@@ -512,7 +577,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             // list name — a mapped Source column still wins.
             ...(lead.source || !listRecord ? {} : { source: listRecord.name }),
           };
-          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', payload);
+          const result = await ingestLead(
+            tenantId,
+            vertical as 'ACA' | 'FE' | 'B2B',
+            payload,
+            ownership
+          );
           results.push({
             success: result.validationStatus === 'VALID',
             phone: String(lead.phone || ''),
@@ -597,6 +667,8 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       followUp?: string;
       listId?: string;
       pipeline?: string;
+      /** A principal's Agent filter. Ignored for an agent, who is always narrowed to themselves. */
+      agentId?: string;
       format?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
@@ -617,7 +689,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
      * same breath. An export that ignored it would be the whole agency's book
      * in a CSV, reached from a page that only ever showed the agent forty rows.
      */
-    const assignedToId = agentScopeFor(request) ?? undefined;
+    const assignedToId = agentScopeFor(request) ?? (q.agentId || undefined);
 
     /*
      * And which states. The second narrowing is ANDed with the first, not an
@@ -727,6 +799,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return sendTenantRefusal(request, reply);
     }
 
+    const refused = refuseAgentDelivery(request, reply);
+    if (refused) return refused;
+
     const q = request.query;
     const wantsCsv = q.format?.toLowerCase() === 'csv';
 
@@ -788,11 +863,17 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
+    /*
+     * The list names are the agency's; the counts are the caller's. An agent's
+     * `_count.leads` counts only the leads assigned to them, so a list does not
+     * advertise how much of the book they cannot open.
+     */
+    const ownerId = agentScopeFor(request);
     const lists = await prisma.leadList.findMany({
       where: { tenantId },
       include: {
         _count: {
-          select: { leads: true },
+          select: { leads: ownerId ? { where: { assignedToId: ownerId } } : true },
         },
       },
       orderBy: { name: 'asc' },
@@ -1090,7 +1171,11 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { getLeadById } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const lead = await getLeadById(tenantId, request.params.id, agentScopeFor(request) ?? undefined);
+    const lead = await getLeadById(
+      tenantId,
+      request.params.id,
+      agentScopeFor(request) ?? undefined
+    );
 
     if (!lead) {
       void reply.code(404);
@@ -1126,6 +1211,34 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     // work the state it is in.
     const gate = await requireReachableLead(request, reply, tenantId, request.params.id);
     if (!gate.ok) return gate.body;
+
+    /*
+     * Reassignment is the principal's. An agent cannot hand their customer to
+     * a colleague (or take one); a principal may name only someone in the
+     * agency, and the hand-over is stamped.
+     */
+    const body = request.body ?? {};
+    if (Object.prototype.hasOwnProperty.call(body, 'assignedToId')) {
+      if (!isAgencyPrincipal(request)) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only the agency owner can reassign a customer.',
+          },
+        };
+      }
+      const assignee = body.assignedToId;
+      if (assignee === null || assignee === '') {
+        body.assignedToId = null;
+        body.assignedAt = null;
+      } else if (typeof assignee !== 'string' || !(await isTenantUser(tenantId, assignee))) {
+        void reply.code(400);
+        return ASSIGNEE_NOT_IN_AGENCY;
+      } else {
+        body.assignedAt = new Date().toISOString();
+      }
+    }
 
     // A third question only a write can raise: where is the agent trying to
     // leave it? Without this, `PATCH { state: 'TN' }` on a lead a
@@ -1194,6 +1307,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return sendTenantRefusal(request, reply);
     }
 
+    const refused = refuseAgentDelivery(request, reply);
+    if (refused) return refused;
+
     const selector = parseDeliverySelector(request.body || {});
     if ('error' in selector) {
       void reply.code(400);
@@ -1235,6 +1351,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
     }
+
+    const refused = refuseAgentDelivery(request, reply);
+    if (refused) return refused;
 
     const body = request.body || {};
     const selector = parseDeliverySelector(body);
@@ -1533,7 +1652,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // POST /api/v1/insurance-leads/bulk — Bulk import leads
   // -----------------------------------------------------------------------
   fastify.post<{
-    Body: { leads: Array<Record<string, unknown>> };
+    Body: { leads: Array<Record<string, unknown>>; assignedToId?: string };
   }>('/api/v1/insurance-leads/bulk', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
@@ -1546,9 +1665,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'INVALID_BODY', message: 'leads must be an array of objects' } };
     }
 
+    const ownership = await importOwnership(request, reply, tenantId, request.body.assignedToId);
+    if (!ownership) return ASSIGNEE_NOT_IN_AGENCY;
+
     try {
       const { bulkImportLeads } = await import('../services/insurance-lead-service.js');
-      const result = await bulkImportLeads(tenantId, leads);
+      const result = await bulkImportLeads(tenantId, leads, ownership);
       return result;
     } catch (error: unknown) {
       void reply.code(500);
