@@ -546,6 +546,85 @@ describe.skipIf(!gate.available)('Buyer portal', () => {
       expect(list.body).not.toContain('Not yours');
     });
 
+    it("shows the buyer its return's decision, and none of the agency's own metadata", async () => {
+      const publisher = await prisma.publisher.create({
+        data: { tenantId: agency.id, name: 'Alpha Media', code: `pub-${++seq}` },
+      });
+      // Paid to the publisher already, so accepting the return writes a clawback.
+      const callId = await call({
+        buyerId: agency.buyerId,
+        publisherId: publisher.id,
+        billable: true,
+        buyerBillableAmount: new Prisma.Decimal('45'),
+        revenue: new Prisma.Decimal('45'),
+        publisherPayoutAmount: new Prisma.Decimal('18'),
+        payout: new Prisma.Decimal('18'),
+        publisherPayoutStatus: 'PAID',
+        buyerChargeStatus: 'CHARGED',
+        disputeStatus: 'DISPUTED',
+        metadata: {
+          disputeReason: 'Out of state',
+          disputedAt: '2026-09-12T14:00:00.000Z',
+          rtb: { pingId: 'ping-1', buyerBidId: 'bid-1', bidAmount: 45 },
+        },
+      });
+      const decided = await app.inject({
+        method: 'POST',
+        url: `/api/v1/returns/${callId}/decision`,
+        headers: as(agency.ownerId),
+        payload: { decision: 'ACCEPT', note: 'Caller was out of the licensed states' },
+      });
+      expect(decided.statusCode, decided.body).toBe(200);
+
+      const stored = (await prisma.call.findUniqueOrThrow({ where: { id: callId } }))
+        .metadata as Record<string, unknown>;
+      expect(stored).toHaveProperty('originalPublisherPayout');
+      expect(stored).toHaveProperty('clawbackPaymentId');
+      expect(stored).toHaveProperty('decidedBy');
+
+      const list = await app.inject({
+        method: 'GET',
+        url: `/api/v1/calls?buyerId=${agency.buyerId}&disputeStatus=ANY&limit=50`,
+        headers: as(agency.buyerUserId),
+      });
+      expect(list.statusCode, list.body).toBe(200);
+      const listed = (list.json().data as any[]).find(r => r.id === callId);
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/api/v1/calls/${callId}`,
+        headers: as(agency.buyerUserId),
+      });
+      expect(detail.statusCode, detail.body).toBe(200);
+      const body = detail.json();
+      const detailed = body.data ?? body;
+
+      for (const row of [listed, detailed]) {
+        expect(row.metadata).toMatchObject({
+          disputeReason: 'Out of state',
+          disputeDecision: 'ACCEPT',
+          decisionNote: 'Caller was out of the licensed states',
+        });
+        expect(Number(row.metadata.originalBuyerBillableAmount)).toBe(45);
+        for (const key of ['originalPublisherPayout', 'clawbackPaymentId', 'decidedBy', 'rtb']) {
+          expect(row.metadata).not.toHaveProperty(key);
+        }
+      }
+      expect(list.body).not.toContain(agency.ownerEmail);
+      expect(detail.body).not.toContain(agency.ownerEmail);
+
+      // The agency still reads all of it.
+      const owner = await app.inject({
+        method: 'GET',
+        url: `/api/v1/calls?disputeStatus=ANY&limit=50`,
+        headers: as(agency.ownerId),
+      });
+      expect(owner.statusCode, owner.body).toBe(200);
+      const ownerRow = (owner.json().data as any[]).find(r => r.id === callId);
+      expect(ownerRow.metadata).toHaveProperty('originalPublisherPayout');
+      expect(ownerRow.metadata).toHaveProperty('clawbackPaymentId');
+      expect(ownerRow.metadata).toHaveProperty('decidedBy');
+    });
+
     it('does not overwrite an original amount already on the call', async () => {
       const callId = await call({
         buyerId: agency.buyerId,

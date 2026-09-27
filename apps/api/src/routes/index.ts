@@ -535,6 +535,32 @@ function mayReadCall(
   return false;
 }
 
+/**
+ * The call metadata keys a buyer may read: its own return and the decision on
+ * it. Everything else on a call's metadata is the agency's -- a return decision
+ * also writes the publisher's original payout, the clawback row and the
+ * operator who decided it, and routing writes the RTB details.
+ */
+const BUYER_METADATA_KEYS = [
+  'disputeReason',
+  'disputedAt',
+  'acceptedByBuyerAt',
+  'disputeDecision',
+  'decidedAt',
+  'decisionNote',
+  'originalBuyerBillableAmount',
+] as const;
+
+export function buyerCallMetadata(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const source = metadata as Record<string, unknown>;
+  const visible: Record<string, unknown> = {};
+  for (const key of BUYER_METADATA_KEYS) {
+    if (source[key] !== undefined) visible[key] = source[key];
+  }
+  return visible;
+}
+
 function mapCallRecord(
   call: any,
   apiBaseUrl: string,
@@ -591,6 +617,7 @@ function mapCallRecord(
   let toNumber = call.toNumber;
   let buyerName = call.buyerName;
   let publisherName: string | null = call.publisherName || call.publisher?.name || null;
+  let metadata: unknown = call.metadata;
 
   let margin: number | null = null;
 
@@ -622,6 +649,7 @@ function mapCallRecord(
         payout = null;
         cost = null;
         profit = null;
+        metadata = buyerCallMetadata(call.metadata);
       } else if (profile.userRoles?.includes('AGENT')) {
         /*
          * Who bought the call, who sold it, and where it was sent are the
@@ -773,7 +801,7 @@ function mapCallRecord(
     startedAt: call.startedAt?.toISOString(),
     answeredAt: call.answeredAt?.toISOString(),
     endedAt: call.endedAt?.toISOString(),
-    metadata: call.metadata,
+    metadata,
     billingRuleSnapshot: call.billingRuleSnapshot,
   };
 }
