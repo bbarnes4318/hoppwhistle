@@ -127,7 +127,7 @@ describe.skipIf(!gate.available)('Application customer link', () => {
     otherAgentId = (await mk(`other-${tenantId}@t.local`, agentRole.id)).id;
   });
 
-  it("returns the customer an application is already linked to", async () => {
+  it('returns the customer an application is already linked to', async () => {
     const lead = await prisma.insuranceLead.create({
       data: { tenantId, vertical: 'FE', phone: '6155550142', assignedToId: agentId },
     });
@@ -238,5 +238,22 @@ describe.skipIf(!gate.available)('Application customer link', () => {
 
     const second = await backfillApplicationCustomers(prisma, { tenantId });
     expect(second).toMatchObject({ created: 0, linked: 0, skippedNoPhone: 1 });
+  });
+
+  it('links every application across pages, not one short per page', async () => {
+    // Seven applications, three per page: the pages end on rows the loop has
+    // just linked. Paging with Prisma's cursor + skip: 1 dropped the first
+    // unlinked row after each one -- in production, one application per 200.
+    for (let i = 0; i < 7; i++) {
+      await seedApplication({ firstName: `Page${i}`, phone: `615555020${i}` });
+    }
+
+    const counts = await backfillApplicationCustomers(prisma, { tenantId, batchSize: 3 });
+    expect(counts.created).toBe(7);
+    expect(
+      await prisma.insuranceCarrierApplication.count({
+        where: { tenantId, insuranceLeadId: null },
+      })
+    ).toBe(0);
   });
 });
