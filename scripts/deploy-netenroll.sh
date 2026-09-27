@@ -123,6 +123,7 @@ REQUIRED_MIGRATIONS="
 20260930030000_password_reset_tokens
 20261001000000_statements
 20261002000000_upgrade_catalog
+20261003000000_upgrade_price_units
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -507,6 +508,12 @@ migration_applied() {
       echo "SELECT to_regclass('public.upgrade_prices') IS NOT NULL
             AND to_regclass('public.upgrade_requests') IS NOT NULL
             AND to_regclass('public.upgrade_requests_open_tenant_key') IS NOT NULL" ;;
+    *_upgrade_price_units)
+      # Both columns: the launch price rows are ON CONFLICT DO NOTHING and prove
+      # nothing about whether this ran.
+      echo "SELECT count(*) = 2 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'upgrade_prices'
+              AND column_name IN ('priceUnit', 'usageNote')" ;;
     *)
       echo "" ;;
   esac
