@@ -150,6 +150,9 @@ const DATABASE_BACKED = [
   // saved without a publisher, and a publisher's stats against its Sales row.
   '**/src/__tests__/buyer-publisher-optional.test.ts',
   '**/src/__tests__/publisher-stats.test.ts',
+  // Truncates `tenants`, `phone_numbers`, `number_charges` and `statements`:
+  // the API's 1st-of-the-month run of billMonth and closeMonth.
+  '**/src/__tests__/monthly-close.test.ts',
 ];
 
 export default defineConfig({
