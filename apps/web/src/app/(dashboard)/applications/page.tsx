@@ -364,7 +364,10 @@ export default function ApplicationsPage() {
       setOpening(row.id);
       try {
         const res = await apiClient.post<Envelope<{ customerId: string }>>(
-          `/api/v1/applications/${encodeURIComponent(row.id)}/customer`
+          `/api/v1/applications/${encodeURIComponent(row.id)}/customer`,
+          // An empty object, not no body: the client always sends a JSON
+          // content type, and the API refuses an empty JSON body with 400.
+          {}
         );
         const customerId = payload(res)?.customerId;
         if (res.error || !customerId) {

@@ -50,7 +50,9 @@ export default function UpgradesPage(): JSX.Element {
     setSending(key);
     try {
       const response = await apiClient.post<Envelope<{ id: string; status: string }>>(
-        `/api/v1/upgrades/${key}/request`
+        `/api/v1/upgrades/${key}/request`,
+        // An empty object, not no body: see the applications page.
+        {}
       );
       if (response.error) {
         toast.error('The request was not sent', response.error.message);

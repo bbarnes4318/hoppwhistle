@@ -165,3 +165,14 @@ describe("the viewer's own nav names its pages first", () => {
     expect(pageTitleFor(campaign, AGENCY_OWNER_NAV)).toBe('Campaigns');
   });
 });
+
+describe("an agent's CRM", () => {
+  it('is titled "My customers" by their own nav, detail page included', () => {
+    expect(pageTitleFor('/insurance-leads', AGENT_NAV)).toBe('My customers');
+    expect(pageTitleFor('/insurance-leads/0f8c1d2e-aaaa-4bbb-8ccc-123456789abc', AGENT_NAV)).toBe(
+      'My customers'
+    );
+    // An owner's CRM is still the CRM.
+    expect(pageTitleFor('/insurance-leads', WHITE_LABEL_OWNER_NAV)).toBe('CRM');
+  });
+});

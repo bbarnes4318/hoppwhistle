@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 
 import { CommandPalette, useCommandPalette } from './command-palette';
 import { MobileNav } from './mobile-nav';
-import { WHITE_LABEL_OWNER_NAV } from './nav-config';
+import { AGENT_NAV, WHITE_LABEL_OWNER_NAV } from './nav-config';
 import { pageTitleFor } from './page-title';
 
 /**
@@ -41,12 +41,16 @@ import { pageTitleFor } from './page-title';
  */
 export function Topbar() {
   const pathname = usePathname();
-  const { user, isBuyerOnly, isPublisherOnly } = useAuth();
+  const { user, isBuyerOnly, isPublisherOnly, isAgentOnly } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
-  // A white-label owner's pages are named as their own sidebar names them.
+  // A white-label owner's pages, and an agent's, are named as their own
+  // sidebar names them: the CRM is "My customers" to an agent.
   const whiteLabel = useWhiteLabelView();
-  const title = pageTitleFor(pathname, whiteLabel ? WHITE_LABEL_OWNER_NAV : undefined);
+  const title = pageTitleFor(
+    pathname,
+    whiteLabel ? WHITE_LABEL_OWNER_NAV : isAgentOnly ? AGENT_NAV : undefined
+  );
 
   // The tab is named after the page, then the product, so a floor with six
   // NetEnroll tabs open can tell them apart. Set here because every page under
