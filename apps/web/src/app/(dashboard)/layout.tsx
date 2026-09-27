@@ -28,6 +28,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isBuyerOnly,
     isAgentOnly,
     isWhiteLabel,
+    isChild,
+    hasFullAccess,
     status: authStatus,
     loading: authLoading,
   } = useAuth();
@@ -150,7 +152,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ) {
       router.replace('/dashboard');
     } else if (
-      isRouteBlockedFor(path, { isPlatformAdmin: platform.isPlatformAdmin, isWhiteLabel })
+      isRouteBlockedFor(path, {
+        isPlatformAdmin: platform.isPlatformAdmin,
+        isWhiteLabel,
+        isChildOwner: isChild && hasFullAccess,
+      })
     ) {
       /*
        * NetEnroll's own screens, reached by URL.
@@ -183,6 +189,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isBuyerOnly,
     isAgentOnly,
     isWhiteLabel,
+    isChild,
+    hasFullAccess,
     authStatus,
     authLoading,
     pathname,

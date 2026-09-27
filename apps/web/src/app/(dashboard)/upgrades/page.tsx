@@ -12,7 +12,11 @@ import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
-import { upgradePriceLine, type UpgradeCatalogRow } from '@/lib/upgrade-catalog';
+import {
+  upgradePriceLine,
+  type UpgradeCatalogMeta,
+  type UpgradeCatalogRow,
+} from '@/lib/upgrade-catalog';
 
 /**
  * Upgrades: what an agency can have turned on, what each costs, and a button
@@ -23,17 +27,23 @@ import { upgradePriceLine, type UpgradeCatalogRow } from '@/lib/upgrade-catalog'
  * WHITE_LABEL_UPGRADES, so they match the switches staff and a parent flip.
  * "Request this upgrade" does not turn anything on: it records the request and
  * emails whoever can (NetEnroll, or the agency above a downline agency), and
- * the card then reads "Requested" until it is.
+ * the card then reads "Requested" until it is. A downline's page names its
+ * parent agency, since that is who receives the request and sets it up.
  */
 export default function UpgradesPage(): JSX.Element {
   const { upgrades: sessionUpgrades } = useAuth();
   const [catalog, setCatalog] = useState<Record<string, UpgradeCatalogRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  // A downline's parent agency: its owners receive the requests, not NetEnroll.
+  const [parentName, setParentName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const response = await apiClient.get<Envelope<UpgradeCatalogRow[]>>('/api/v1/upgrades');
+    const response = await apiClient.get<
+      Envelope<UpgradeCatalogRow[]> & { meta?: UpgradeCatalogMeta }
+    >('/api/v1/upgrades');
     const rows = payload(response);
+    setParentName(response.data?.meta?.parentTenantName ?? null);
     if (response.error || !Array.isArray(rows)) {
       setError(response.error?.message ?? 'Could not read the upgrades.');
       return;
@@ -58,7 +68,11 @@ export default function UpgradesPage(): JSX.Element {
         toast.error('The request was not sent', response.error.message);
         return;
       }
-      toast.success("Request sent. We'll be in touch to set it up.");
+      toast.success(
+        parentName
+          ? `Request sent to your agency's account manager at ${parentName}.`
+          : "Request sent. We'll be in touch to set it up."
+      );
       setCatalog(current =>
         current && current[key]
           ? { ...current, [key]: { ...current[key], requestOpen: true } }
@@ -71,7 +85,16 @@ export default function UpgradesPage(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Features you can add to your agency, and what they cost." />
+      <PageHeader
+        description="Features you can add to your agency, and what they cost."
+        meta={
+          parentName ? (
+            <span className="t-meta text-ink-3" data-upgrade-contact="parent">
+              {`Your agency's account manager at ${parentName} sets these up for you.`}
+            </span>
+          ) : null
+        }
+      />
       {error ? <Notice tone="error" title={error} /> : null}
       <section
         className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
@@ -100,9 +123,16 @@ export default function UpgradesPage(): JSX.Element {
                 </div>
                 <p className="t-body text-ink-2">{item.locked?.blurb}</p>
                 {note ? <p className="t-body text-ink-2">{note}</p> : null}
-                <p className="mt-auto t-meta tabular-nums text-ink" data-upgrade-price={key}>
-                  {row ? upgradePriceLine(row) : ' '}
-                </p>
+                <div className="mt-auto">
+                  <p className="t-meta tabular-nums text-ink" data-upgrade-price={key}>
+                    {row ? upgradePriceLine(row) : ' '}
+                  </p>
+                  {row?.usageNote ? (
+                    <p className="t-meta text-ink-3" data-upgrade-note={key}>
+                      {row.usageNote}
+                    </p>
+                  ) : null}
+                </div>
                 {on ? (
                   <>
                     <p className="t-meta text-ink-3">Turned on for your agency.</p>

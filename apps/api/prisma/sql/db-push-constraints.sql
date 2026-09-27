@@ -184,3 +184,18 @@ BEGIN
       CHECK ("status" IN ('OPEN', 'DONE', 'DECLINED'));
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Upgrade prices: what a price is per.
+--
+-- Mirrors prisma/migrations/20261003000000_upgrade_price_units/migration.sql.
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'upgrade_prices_price_unit_check') THEN
+    ALTER TABLE "upgrade_prices"
+      ADD CONSTRAINT "upgrade_prices_price_unit_check"
+      CHECK ("priceUnit" IN ('AGENCY', 'AGENT'));
+  END IF;
+END $$;

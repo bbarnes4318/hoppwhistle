@@ -22,23 +22,39 @@ import {
   centsFromDollars,
   dollarsFromCents,
   type AdminUpgradeRequest,
+  type PriceUnit,
   type UpgradePriceRow,
 } from '@/lib/upgrade-catalog';
 
-type Draft = Record<string, { monthly: string; setup: string }>;
+interface DraftRow {
+  monthly: string;
+  setup: string;
+  unit: PriceUnit;
+  note: string;
+}
+type Draft = Record<string, DraftRow>;
+
+const EMPTY_ROW: DraftRow = { monthly: '', setup: '', unit: 'AGENCY', note: '' };
 
 function draftFrom(rows: UpgradePriceRow[]): Draft {
   return Object.fromEntries(
     rows.map(row => [
       row.key,
-      { monthly: dollarsFromCents(row.monthlyCents), setup: dollarsFromCents(row.setupCents) },
+      {
+        monthly: dollarsFromCents(row.monthlyCents),
+        setup: dollarsFromCents(row.setupCents),
+        unit: row.priceUnit ?? 'AGENCY',
+        note: row.usageNote ?? '',
+      },
     ])
   );
 }
 
 /**
  * Upgrade prices: NetEnroll's monthly and setup price for each upgrade, in
- * dollars, as agencies read them on /upgrades. Empty means "Ask for pricing".
+ * dollars, as agencies read them on /upgrades. Empty means "Ask for pricing";
+ * 0 reads "Included". Each price is per agency or per agent, and may carry a
+ * one-line note (the minutes it includes) shown under it.
  * One Save for the whole table, through `PUT /api/v1/admin/upgrade-prices`.
  */
 export function UpgradePricesPanel(): JSX.Element {
@@ -81,6 +97,8 @@ export function UpgradePricesPanel(): JSX.Element {
         key,
         monthlyCents: centsFromDollars(draft[key]?.monthly ?? '') ?? null,
         setupCents: centsFromDollars(draft[key]?.setup ?? '') ?? null,
+        priceUnit: draft[key]?.unit ?? 'AGENCY',
+        usageNote: draft[key]?.note.trim() || null,
       }));
       const res = await apiClient.put<Envelope<UpgradePriceRow[]>>('/api/v1/admin/upgrade-prices', {
         prices,
@@ -99,10 +117,10 @@ export function UpgradePricesPanel(): JSX.Element {
     }
   }
 
-  const set = (key: string, field: 'monthly' | 'setup', value: string) =>
+  const set = <F extends keyof DraftRow>(key: string, field: F, value: DraftRow[F]) =>
     setDraft(current => ({
       ...current,
-      [key]: { ...(current[key] ?? { monthly: '', setup: '' }), [field]: value },
+      [key]: { ...(current[key] ?? EMPTY_ROW), [field]: value },
     }));
 
   return (
@@ -117,33 +135,57 @@ export function UpgradePricesPanel(): JSX.Element {
       >
         <PanelTitle>Upgrade prices</PanelTitle>
         <PanelDescription>
-          In dollars. Leave a price empty and agencies read &ldquo;Ask for pricing&rdquo;.
+          In dollars. Leave a price empty and agencies read &ldquo;Ask for pricing&rdquo;; 0 reads
+          &ldquo;Included&rdquo;.
         </PanelDescription>
       </PanelHeader>
       <PanelBody>
         {error ? <p className="t-meta text-dropped-ink">{error}</p> : null}
-        <div className="grid grid-cols-[minmax(0,1fr)_7rem_7rem] items-center gap-x-3 gap-y-2">
-          <span className="t-label text-ink-3">Upgrade</span>
-          <span className="t-label text-ink-3">Monthly</span>
-          <span className="t-label text-ink-3">Setup</span>
+        <div className="flex flex-col divide-y divide-rule">
           {WHITE_LABEL_UPGRADES.map(({ key, item }) => {
-            const row = draft[key] ?? { monthly: '', setup: '' };
+            const row = draft[key] ?? EMPTY_ROW;
+            const disabled = saved === null || busy;
             return (
-              <div key={key} className="contents" data-upgrade-price-row={key}>
-                <span className="truncate t-body text-ink">{item.name}</span>
+              <div
+                key={key}
+                className="grid grid-cols-2 gap-x-3 gap-y-2 py-3 first:pt-0 sm:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_8rem]"
+                data-upgrade-price-row={key}
+              >
+                <span className="col-span-2 self-center truncate t-body text-ink sm:col-span-1">
+                  {item.name}
+                </span>
                 {(['monthly', 'setup'] as const).map(field => (
                   <Input
                     key={field}
                     aria-label={`${item.name} ${field === 'monthly' ? 'monthly' : 'setup'} price`}
                     inputMode="decimal"
-                    placeholder="—"
+                    placeholder={field === 'monthly' ? 'Monthly' : 'Setup'}
                     value={row[field]}
-                    disabled={saved === null || busy}
+                    disabled={disabled}
                     aria-invalid={centsFromDollars(row[field]) === undefined}
                     onChange={event => set(key, field, event.target.value)}
                     className="h-8"
                   />
                 ))}
+                <select
+                  aria-label={`${item.name} price is per`}
+                  value={row.unit}
+                  disabled={disabled}
+                  onChange={event => set(key, 'unit', event.target.value as PriceUnit)}
+                  className="col-span-2 h-8 rounded-control border border-rule bg-surface px-2 t-body text-ink sm:col-span-1"
+                >
+                  <option value="AGENCY">per agency</option>
+                  <option value="AGENT">per agent</option>
+                </select>
+                <Input
+                  aria-label={`${item.name} note`}
+                  placeholder="Note under the price (optional)"
+                  value={row.note}
+                  maxLength={300}
+                  disabled={disabled}
+                  onChange={event => set(key, 'note', event.target.value)}
+                  className="col-span-2 h-8 sm:col-span-4"
+                />
               </div>
             );
           })}

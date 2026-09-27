@@ -1057,6 +1057,8 @@ describe('the white-label portal', () => {
         key,
         monthlyCents: null,
         setupCents: null,
+        priceUnit: 'AGENCY',
+        usageNote: null,
         on: false,
         requestOpen: false,
         ...overrides[key],
@@ -1064,7 +1066,20 @@ describe('the white-label portal', () => {
 
     it('lists the six upgrades, each with its price and a request button', async () => {
       answers['GET /api/v1/upgrades'] = {
-        data: CATALOG({ POWER_DIALER: { monthlyCents: 9900, setupCents: 25000 } }),
+        data: CATALOG({
+          POWER_DIALER: {
+            monthlyCents: 9900,
+            setupCents: 0,
+            priceUnit: 'AGENT',
+            usageNote: 'Includes 5,000 outbound minutes per agent, then $0.01/min.',
+          },
+          CARRIER_ROUTING: { monthlyCents: 19900, setupCents: 25000 },
+          VOICE_STUDIO: {
+            monthlyCents: 0,
+            setupCents: 0,
+            usageNote: 'Included with Voice Agents.',
+          },
+        }),
       };
       await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
       await waitFor(() =>
@@ -1083,10 +1098,33 @@ describe('the white-label portal', () => {
       expect(screen.getByText('Includes lead lists your agents dial.')).toBeTruthy();
       expect(screen.queryByText(/CRM/)).toBeNull();
       expect(screen.getByText('Early access')).toBeTruthy();
-      expect(document.querySelector('[data-upgrade-price="POWER_DIALER"]')?.textContent).toBe(
-        '$99/month · $250 setup'
+      const price = (key: string) =>
+        document.querySelector(`[data-upgrade-price="${key}"]`)?.textContent;
+      // Per agent, and a setup of 0 left off rather than read as "$0 setup".
+      expect(price('POWER_DIALER')).toBe('$99 per agent / month');
+      expect(document.querySelector('[data-upgrade-note="POWER_DIALER"]')?.textContent).toBe(
+        'Includes 5,000 outbound minutes per agent, then $0.01/min.'
       );
-      expect(screen.getAllByText('Ask for pricing')).toHaveLength(5);
+      expect(price('CARRIER_ROUTING')).toBe('$199 / month · $250 setup');
+      // A price of 0 is "Included", never "$0".
+      expect(price('VOICE_STUDIO')).toBe('Included');
+      expect(document.body.textContent).not.toMatch(/\$0(?![.\d])/);
+      expect(screen.getAllByText('Ask for pricing')).toHaveLength(3);
+      // A direct agency's requests go to NetEnroll: no parent agency named.
+      expect(document.querySelector('[data-upgrade-contact]')).toBeNull();
+    });
+
+    it("names a downline's parent agency as who sets its upgrades up", async () => {
+      answers['GET /api/v1/upgrades'] = {
+        data: CATALOG(),
+        meta: { parentTenantName: 'Life Leads Plus' },
+      };
+      await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
+      await waitFor(() =>
+        expect(document.querySelector('[data-upgrade-contact="parent"]')?.textContent).toBe(
+          "Your agency's account manager at Life Leads Plus sets these up for you."
+        )
+      );
     });
 
     it('sends a request, and the card then reads Requested', async () => {

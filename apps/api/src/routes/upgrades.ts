@@ -5,7 +5,7 @@
  *   POST  /api/v1/upgrades/:key/request           ask for one (OWNER/ADMIN)
  *
  *   GET   /api/v1/admin/upgrade-prices            NetEnroll's price per upgrade
- *   PUT   /api/v1/admin/upgrade-prices            { prices: [{ key, monthlyCents, setupCents }] }
+ *   PUT   /api/v1/admin/upgrade-prices            { prices: [{ key, monthlyCents, setupCents, priceUnit, usageNote }] }
  *   GET   /api/v1/admin/upgrade-requests          every agency's requests, OPEN first
  *   PATCH /api/v1/admin/upgrade-requests/:id      { status: 'DONE' | 'DECLINED' }
  *
@@ -55,16 +55,33 @@ function isCents(value: unknown): value is number | null {
   );
 }
 
+/** What a monthly price is per: the agency, or each of its agents. */
+export const PRICE_UNITS = ['AGENCY', 'AGENT'] as const;
+export type PriceUnit = (typeof PRICE_UNITS)[number];
+const MAX_NOTE_LENGTH = 300;
+
+export interface PriceRow {
+  key: string;
+  monthlyCents: number | null;
+  setupCents: number | null;
+  priceUnit: PriceUnit;
+  usageNote: string | null;
+}
+
+function unitOf(value: string | null | undefined): PriceUnit {
+  return value === 'AGENT' ? 'AGENT' : 'AGENCY';
+}
+
 /** Every key with its price, null where none is set. */
-async function priceTable(): Promise<
-  Array<{ key: string; monthlyCents: number | null; setupCents: number | null }>
-> {
+async function priceTable(): Promise<PriceRow[]> {
   const rows = await getPrismaClient().upgradePrice.findMany();
   const byKey = new Map(rows.map(row => [row.key, row]));
   return TENANT_UPGRADES.map(key => ({
     key,
     monthlyCents: byKey.get(key)?.monthlyCents ?? null,
     setupCents: byKey.get(key)?.setupCents ?? null,
+    priceUnit: unitOf(byKey.get(key)?.priceUnit),
+    usageNote: byKey.get(key)?.usageNote ?? null,
   }));
 }
 
@@ -107,7 +124,10 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
     if (!tenantId) return;
 
     const [tenant, prices, open] = await Promise.all([
-      prisma.tenant.findUnique({ where: { id: tenantId }, select: { metadata: true } }),
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { metadata: true, parent: { select: { name: true } } },
+      }),
       priceTable(),
       prisma.upgradeRequest.findMany({
         where: { tenantId, status: 'OPEN' },
@@ -123,6 +143,11 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
         on: on.has(price.key),
         requestOpen: !on.has(price.key) && requested.has(price.key),
       })),
+      /*
+       * Who a request goes to. A downline's goes to its parent agency's owners,
+       * so its page names that agency; everyone else's goes to NetEnroll.
+       */
+      meta: { parentTenantName: tenant?.parent?.name ?? null },
     });
   });
 
@@ -224,6 +249,7 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
         requestedBy: requesterName,
         monthlyCents: price?.monthlyCents ?? null,
         setupCents: price?.setupCents ?? null,
+        priceUnit: unitOf(price?.priceUnit),
       });
 
       return reply.code(201).send({ data: { ...requestView(created), created: true, emailed } });
@@ -241,10 +267,12 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
 
   /**
    * PUT /api/v1/admin/upgrade-prices
-   *   { prices: [{ key, monthlyCents: number | null, setupCents: number | null }] }
+   *   { prices: [{ key, monthlyCents: number | null, setupCents: number | null,
+   *               priceUnit?: 'AGENCY' | 'AGENT', usageNote?: string | null }] }
    *
    * Sets the keys it names and leaves the others as they are. Whole cents from
-   * 0 to $1,000,000, or null to clear. Answers the whole table.
+   * 0 to $1,000,000, or null to clear. `priceUnit` and `usageNote` are left as
+   * they are when not sent. Answers the whole table.
    */
   fastify.put<{ Body: { prices?: unknown } }>(
     '/api/v1/admin/upgrade-prices',
@@ -267,6 +295,21 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
           if (!isCents(entry.setupCents)) {
             problems.push(`${key}: setupCents must be whole cents, 0 or more, or null`);
           }
+          if (
+            entry.priceUnit !== undefined &&
+            !(PRICE_UNITS as readonly unknown[]).includes(entry.priceUnit)
+          ) {
+            problems.push(`${key}: priceUnit must be AGENCY or AGENT`);
+          }
+          if (
+            entry.usageNote !== undefined &&
+            entry.usageNote !== null &&
+            (typeof entry.usageNote !== 'string' || entry.usageNote.length > MAX_NOTE_LENGTH)
+          ) {
+            problems.push(
+              `${key}: usageNote must be text of at most ${MAX_NOTE_LENGTH} characters, or null`
+            );
+          }
         }
       }
       if (problems.length > 0) {
@@ -281,24 +324,33 @@ export async function registerUpgradeRoutes(fastify: FastifyInstance): Promise<v
         key: string;
         monthlyCents: number | null;
         setupCents: number | null;
+        priceUnit?: PriceUnit;
+        usageNote?: string | null;
       }>;
       await prisma.$transaction(
-        rows.map(row =>
-          prisma.upgradePrice.upsert({
+        rows.map(row => {
+          const note =
+            row.usageNote === undefined ? {} : { usageNote: row.usageNote?.trim() || null };
+          const unit = row.priceUnit === undefined ? {} : { priceUnit: row.priceUnit };
+          return prisma.upgradePrice.upsert({
             where: { key: row.key },
             create: {
               key: row.key,
               monthlyCents: row.monthlyCents,
               setupCents: row.setupCents,
+              ...unit,
+              ...note,
               updatedByUserId: userId,
             },
             update: {
               monthlyCents: row.monthlyCents,
               setupCents: row.setupCents,
+              ...unit,
+              ...note,
               updatedByUserId: userId,
             },
-          })
-        )
+          });
+        })
       );
       const after = await priceTable();
 

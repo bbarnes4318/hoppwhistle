@@ -430,6 +430,17 @@ describe('isRouteBlockedFor', () => {
   const NORMAL = { isPlatformAdmin: false, isWhiteLabel: false };
   const STAFF = { isPlatformAdmin: true, isWhiteLabel: false };
 
+  it("opens /upgrades, and nothing else of the hubs, to a downline agency's owner", () => {
+    const CHILD = { isPlatformAdmin: false, isWhiteLabel: false, isChildOwner: true };
+    expect(isRouteBlockedFor('/upgrades', CHILD)).toBe(false);
+    expect(isRouteBlockedFor('/upgrades/', CHILD)).toBe(false);
+    for (const path of ['/agents', '/revenue', '/routing', '/publishers', '/network/agencies']) {
+      expect(isRouteBlockedFor(path, CHILD), path).toBe(true);
+    }
+    // A downline's agent or read-only account is not its owner.
+    expect(isRouteBlockedFor('/upgrades', { ...CHILD, isChildOwner: false })).toBe(true);
+  });
+
   it('is the routes asked for, the four hubs included', () => {
     expect([...WHITE_LABEL_ROUTES]).toEqual(OPENED);
   });

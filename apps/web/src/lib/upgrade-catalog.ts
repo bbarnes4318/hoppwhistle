@@ -5,13 +5,25 @@
  * on Admin -> Agencies, so the two say the same thing about the same price.
  */
 
+/** What a monthly price is per: the agency, or each of its agents. */
+export type PriceUnit = 'AGENCY' | 'AGENT';
+
 /** One row of `GET /api/v1/upgrades`. */
 export interface UpgradeCatalogRow {
   key: string;
   monthlyCents: number | null;
   setupCents: number | null;
+  priceUnit: PriceUnit;
+  /** The line under the price, e.g. the minutes it includes. */
+  usageNote: string | null;
   on: boolean;
   requestOpen: boolean;
+}
+
+/** `meta` on `GET /api/v1/upgrades`: who a request goes to. */
+export interface UpgradeCatalogMeta {
+  /** A downline's parent agency, whose owners receive its requests. Null otherwise. */
+  parentTenantName: string | null;
 }
 
 /** One row of `GET /api/v1/admin/upgrade-prices`. */
@@ -19,6 +31,8 @@ export interface UpgradePriceRow {
   key: string;
   monthlyCents: number | null;
   setupCents: number | null;
+  priceUnit: PriceUnit;
+  usageNote: string | null;
 }
 
 /** One row of `GET /api/v1/admin/upgrade-requests`. */
@@ -44,14 +58,31 @@ export function formatCents(cents: number): string {
   }).format(cents / 100);
 }
 
-/** "$99/month · $250 setup", either half alone, or "Ask for pricing". */
+/**
+ * How a price reads on /upgrades:
+ *
+ *   "$99 per agent / month", "$199 / month", "$199 / month · $250 setup"
+ *   "Included"         a monthly price of 0 -- never "$0"
+ *   "Ask for pricing"  nothing set
+ *
+ * A setup price of 0 is left off rather than read as "$0 setup".
+ */
 export function upgradePriceLine(
-  row: Pick<UpgradePriceRow, 'monthlyCents' | 'setupCents'>
+  row: Pick<UpgradePriceRow, 'monthlyCents' | 'setupCents'> & { priceUnit?: PriceUnit }
 ): string {
   const parts: string[] = [];
-  if (row.monthlyCents !== null) parts.push(`${formatCents(row.monthlyCents)}/month`);
-  if (row.setupCents !== null) parts.push(`${formatCents(row.setupCents)} setup`);
-  return parts.length > 0 ? parts.join(' · ') : 'Ask for pricing';
+  if (row.monthlyCents === 0) {
+    parts.push('Included');
+  } else if (row.monthlyCents !== null) {
+    const per = row.priceUnit === 'AGENT' ? ' per agent' : '';
+    parts.push(`${formatCents(row.monthlyCents)}${per} / month`);
+  }
+  if (row.setupCents !== null && row.setupCents > 0) {
+    parts.push(`${formatCents(row.setupCents)} setup`);
+  }
+  if (parts.length > 0) return parts.join(' · ');
+  // A setup price of 0 alone is a price the admin set: nothing to pay.
+  return row.setupCents === 0 ? 'Included' : 'Ask for pricing';
 }
 
 /**

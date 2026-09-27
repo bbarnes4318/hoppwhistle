@@ -73,6 +73,16 @@ describe.skipIf(!gate.available)('constraints db push cannot create', () => {
     expect(rows[0].indexdef).toMatch(/WHERE\s*\(?\s*status\s*=\s*'OPEN'/i);
   });
 
+  it('upgrade_prices refuses a price unit that is neither AGENCY nor AGENT', async () => {
+    const rows = await prisma.$queryRaw<Array<{ conname: string }>>`
+      SELECT conname FROM pg_constraint WHERE conname = 'upgrade_prices_price_unit_check'
+    `;
+    expect(
+      rows,
+      'Run `pnpm --filter @hopwhistle/api db:constraints` after `prisma db push`.'
+    ).toHaveLength(1);
+  });
+
   /*
    * Phase 3 puts three triggers in the same file, for the same reason: a
    * trigger cannot be expressed in schema.prisma either, so `db push` builds a
