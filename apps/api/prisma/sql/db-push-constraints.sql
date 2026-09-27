@@ -159,3 +159,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS "publisher_payments_clawback_call_key"
 CREATE INDEX IF NOT EXISTS "publisher_payments_unapplied_idx"
   ON "publisher_payments"("tenantId", "publisherId")
   WHERE "kind" = 'CLAWBACK' AND "appliedToPaymentId" IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Upgrade requests: one OPEN request per agency per upgrade.
+--
+-- "Request this upgrade" pressed twice returns the same open request rather
+-- than a second one; the route relies on this index to settle the race. The
+-- status CHECK is here too, since schema.prisma declares status as plain text.
+--
+-- Mirrors prisma/migrations/20261002000000_upgrade_catalog/migration.sql,
+-- which is where they are applied to production.
+-- ---------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX IF NOT EXISTS "upgrade_requests_open_tenant_key"
+  ON "upgrade_requests"("tenantId", "upgradeKey")
+  WHERE "status" = 'OPEN';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'upgrade_requests_status_check') THEN
+    ALTER TABLE "upgrade_requests"
+      ADD CONSTRAINT "upgrade_requests_status_check"
+      CHECK ("status" IN ('OPEN', 'DONE', 'DECLINED'));
+  END IF;
+END $$;

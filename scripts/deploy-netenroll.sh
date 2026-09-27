@@ -122,6 +122,7 @@ REQUIRED_MIGRATIONS="
 20260930020000_number_charges
 20260930030000_password_reset_tokens
 20261001000000_statements
+20261002000000_upgrade_catalog
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -500,6 +501,12 @@ migration_applied() {
       # with the unique index statements:close relies on probed alongside it.
       echo "SELECT to_regclass('public.statements') IS NOT NULL
             AND to_regclass('public.\"statements_tenantId_partyType_partyId_month_key\"') IS NOT NULL" ;;
+    *_upgrade_catalog)
+      # Wrapped BEGIN..COMMIT; both tables are probed, with the partial unique
+      # index that keeps one OPEN request per agency per upgrade alongside them.
+      echo "SELECT to_regclass('public.upgrade_prices') IS NOT NULL
+            AND to_regclass('public.upgrade_requests') IS NOT NULL
+            AND to_regclass('public.upgrade_requests_open_tenant_key') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac

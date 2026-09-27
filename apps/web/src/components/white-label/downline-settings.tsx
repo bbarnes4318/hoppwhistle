@@ -22,7 +22,14 @@ import type { Envelope } from '@/lib/api';
  * exactly the upgrades staff are, named the same way. Each switch saves when
  * flipped; the numbers limit saves on its button.
  */
-export function DownlineSettings({ agency }: { agency: NetworkAgencyRow }): JSX.Element {
+export function DownlineSettings({
+  agency,
+  onSaved,
+}: {
+  agency: Pick<NetworkAgencyRow, 'tenantId' | 'name'>;
+  /** Called after each successful save, e.g. to re-read the open requests it closes. */
+  onSaved?: (settings: NetworkAgencySettings) => void;
+}): JSX.Element {
   // Null until the settings have loaded; every control is disabled until then.
   const [upgrades, setUpgrades] = useState<string[] | null>(null);
   const [limit, setLimit] = useState<number | null>(null);
@@ -74,6 +81,7 @@ export function DownlineSettings({ agency }: { agency: NetworkAgencyRow }): JSX.
         return null;
       }
       adopt(data);
+      onSaved?.(data);
       return data;
     } finally {
       setSaving(null);

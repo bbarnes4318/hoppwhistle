@@ -55,6 +55,24 @@ describe.skipIf(!gate.available)('constraints db push cannot create', () => {
     expect(rows[0].indexdef).toMatch(/WHERE\s*\(?\s*"releasedAt"\s+IS\s+NULL/i);
   });
 
+  it('upgrade_requests has the partial unique index on the open request', async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+      SELECT indexdef FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND tablename = 'upgrade_requests'
+        AND indexname = 'upgrade_requests_open_tenant_key'
+    `;
+
+    expect(
+      rows,
+      'Run `pnpm --filter @hopwhistle/api db:constraints` after `prisma db push`. ' +
+        'Without this index, one agency can hold several open requests for the same upgrade.'
+    ).toHaveLength(1);
+    expect(rows[0].indexdef).toMatch(/CREATE UNIQUE INDEX/i);
+    expect(rows[0].indexdef).toMatch(/"tenantId",\s*"upgradeKey"/i);
+    expect(rows[0].indexdef).toMatch(/WHERE\s*\(?\s*status\s*=\s*'OPEN'/i);
+  });
+
   /*
    * Phase 3 puts three triggers in the same file, for the same reason: a
    * trigger cannot be expressed in schema.prisma either, so `db push` builds a

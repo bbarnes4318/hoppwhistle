@@ -8,6 +8,7 @@ import {
   FIRST_UPGRADE_GROUP,
   WHITE_LABEL_OWNER_NAV,
   WHITE_LABEL_UPGRADES,
+  UPGRADE_KEYS,
   allNavItems,
   firstUpgradeGroupOf,
   isLockedGroup,
@@ -16,6 +17,7 @@ import {
   whiteLabelOwnerNav,
   type NavGroup,
 } from '@/components/layout/nav-config';
+import { pageTitleFor } from '@/components/layout/page-title';
 import {
   isRouteBlockedFor,
   isStaffOnlyRoute,
@@ -54,6 +56,7 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
     [
       ['Calls', '/calls', undefined],
       ['Applications', '/applications', undefined],
+      ['CRM', '/insurance-leads', undefined],
       ['Agents', '/agents', 'How your agents are doing, and who can take a call'],
     ],
   ],
@@ -94,10 +97,10 @@ describe('WHITE_LABEL_OWNER_NAV', () => {
     );
   });
 
-  it('has exactly eleven items, none of them locked or pending', () => {
-    expect(items).toHaveLength(11);
+  it('has exactly twelve items, none of them locked or pending', () => {
+    expect(items).toHaveLength(12);
     expect(items.filter(item => item.locked || item.pending)).toEqual([]);
-    expect(allNavItems(WHITE_LABEL_OWNER_NAV)).toHaveLength(11);
+    expect(allNavItems(WHITE_LABEL_OWNER_NAV)).toHaveLength(12);
   });
 
   it.each(EXPECTED.map(([label, want]) => [label ?? '(unlabelled)', want] as const))(
@@ -132,7 +135,6 @@ describe('WHITE_LABEL_OWNER_NAV', () => {
     for (const href of [
       '/live',
       '/leaderboard',
-      '/insurance-leads',
       '/sales',
       '/campaigns',
       '/reports',
@@ -183,39 +185,46 @@ describe('WHITE_LABEL_OWNER_NAV', () => {
 });
 
 describe('the white-label upgrades', () => {
-  it('lists the five old locked items, with the blurbs a normal agency is shown', () => {
+  it('lists the five old locked items, with the blurbs a normal agency is shown, and the Predictive Dialer', () => {
     const agency = new Map(
       AGENCY_OWNER_NAV.flatMap(group => group.items).map(item => [item.href, item] as const)
     );
     expect(WHITE_LABEL_UPGRADES.map(u => u.item.name)).toEqual([
       'Power Dialer',
+      'Predictive Dialer',
       'VOIP Carrier Routing',
       'Voice Agents',
       'Voice Studio',
       'Payroll Admin',
     ]);
+    expect(WHITE_LABEL_UPGRADES.map(u => u.key)).toEqual([...UPGRADE_KEYS]);
     for (const upgrade of WHITE_LABEL_UPGRADES) {
+      // The Predictive Dialer has no screen, so no locked agency entry to match.
+      if (upgrade.key === 'PREDICTIVE_DIALER') continue;
       expect(upgrade.item.locked?.blurb, upgrade.key).toBe(
         agency.get(upgrade.item.href)?.locked?.blurb
       );
     }
-    expect(WHITE_LABEL_UPGRADES[0].note).toBe('Includes the CRM and lead lists your agents dial.');
+    expect(WHITE_LABEL_UPGRADES[0].note).toBe('Includes lead lists your agents dial.');
+    const predictive = WHITE_LABEL_UPGRADES[1];
+    expect(predictive.badge).toBe('Early access');
+    expect(predictive.item.locked?.blurb).toBe(
+      'Dials several numbers per agent at once and connects your agents only to calls a live person answers.'
+    );
   });
 
-  it('adds the CRM to the floor only once Power Dialer is on', () => {
+  it('has the CRM on the floor whatever the upgrades', () => {
     expect(whiteLabelOwnerNav([])).toBe(WHITE_LABEL_OWNER_NAV);
-    expect(whiteLabelOwnerNav(['VOICE_STUDIO'])).toBe(WHITE_LABEL_OWNER_NAV);
+    expect(whiteLabelOwnerNav(['POWER_DIALER'])).toBe(WHITE_LABEL_OWNER_NAV);
 
-    const unlocked = whiteLabelOwnerNav(['POWER_DIALER']);
-    const floor = unlocked.find(group => group.label === 'Floor')!;
+    const floor = WHITE_LABEL_OWNER_NAV.find(group => group.label === 'Floor')!;
     expect(floor.items.map(item => item.href)).toEqual([
       '/calls',
       '/applications',
-      '/agents',
       '/insurance-leads',
+      '/agents',
     ]);
-    // The constant itself is not touched.
-    expect(WHITE_LABEL_OWNER_NAV.flatMap(g => g.items)).toHaveLength(11);
+    expect(WHITE_LABEL_OWNER_NAV.flatMap(g => g.items)).toHaveLength(12);
   });
 });
 
@@ -375,7 +384,7 @@ describe('navFor with the white-label tier', () => {
     ).toBe(WHITE_LABEL_OWNER_NAV);
   });
 
-  it('adds the CRM for a white-label owner whose agency has Power Dialer', () => {
+  it('gives a white-label owner the CRM with or without Power Dialer', () => {
     const groups = navFor({
       ...NOBODY,
       hasFullAccess: true,
@@ -385,7 +394,7 @@ describe('navFor with the white-label tier', () => {
     expect(allNavItems(groups).map(item => item.href)).toContain('/insurance-leads');
     expect(
       allNavItems(navFor({ ...NOBODY, hasFullAccess: true, isWhiteLabel: true })).map(i => i.href)
-    ).not.toContain('/insurance-leads');
+    ).toContain('/insurance-leads');
     // A normal agency's nav does not read upgrades at all.
     expect(navFor({ ...NOBODY, hasFullAccess: true, upgrades: ['POWER_DIALER'] })).toBe(
       AGENCY_OWNER_NAV
@@ -469,6 +478,15 @@ describe('isRouteBlockedFor', () => {
     ]) {
       expect(isRouteBlockedFor(path, WL), path).toBe(true);
     }
+  });
+
+  it("opens one downline agency's own page to a white-label owner, and titles it Agencies", () => {
+    const path = '/network/agencies/0b5f3c1e-8d2a-4f7b-9c1e-2a3b4c5d6e7f';
+    expect(hasPage('/network/agencies/[tenantId]')).toBe(true);
+    expect(isRouteBlockedFor(path, WL)).toBe(false);
+    expect(isRouteBlockedFor(path, NORMAL)).toBe(true);
+    expect(whiteLabelRedirectFor(path)).toBeNull();
+    expect(pageTitleFor(path, WHITE_LABEL_OWNER_NAV)).toBe('Agencies');
   });
 
   it('matches whole segments, not a bare prefix', () => {

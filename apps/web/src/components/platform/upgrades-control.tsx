@@ -101,7 +101,7 @@ export function UpgradesControl({
 }
 
 /**
- * The five upgrade switches, and nothing about where they save.
+ * The upgrade switches, one per upgrade,, and nothing about where they save.
  *
  * Shared by this control (NetEnroll staff, any agency) and a white-label
  * parent's Agencies screen (its own downline, through

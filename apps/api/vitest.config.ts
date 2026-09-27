@@ -133,10 +133,23 @@ const DATABASE_BACKED = [
   '**/src/__tests__/password.test.ts',
   '**/src/__tests__/agency-numbers.test.ts',
   '**/src/__tests__/child-agency.test.ts',
+  // Truncates `tenants`, `roles`, `audit_logs` and `upgrade_requests`: a
+  // parent's page for one child agency, and editing its record.
+  '**/src/__tests__/network-agency-detail.test.ts',
+  // Truncates `tenants`, `roles`, `audit_logs`, `platform_admins` and both
+  // upgrade tables: the upgrades catalog, requests and prices.
+  '**/src/__tests__/upgrade-catalog.test.ts',
   // Each truncates `tenants` and `roles`: an agency's buyers with their
   // wallets, calls and top-ups, and branded tenants on their own domains.
   '**/src/__tests__/buyer-balances.test.ts',
   '**/src/__tests__/public-brand.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `insurance_leads` and
+  // `insurance_carrier_applications`: an application opening its customer.
+  '**/src/__tests__/application-customer.test.ts',
+  // Each truncates `tenants`, `roles` and `audit_logs`: buyers created and
+  // saved without a publisher, and a publisher's stats against its Sales row.
+  '**/src/__tests__/buyer-publisher-optional.test.ts',
+  '**/src/__tests__/publisher-stats.test.ts',
 ];
 
 export default defineConfig({

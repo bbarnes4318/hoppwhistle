@@ -263,6 +263,10 @@ async function buildServer() {
   await server.register(registerStatementRoutes);
   const { registerNetworkRoutes } = await import('./routes/network.js');
   await server.register(registerNetworkRoutes);
+  // The upgrades catalog: prices, an agency's request for one, and the
+  // platform admin's side of both. See routes/upgrades.ts.
+  const { registerUpgradeRoutes } = await import('./routes/upgrades.js');
+  await server.register(registerUpgradeRoutes);
   // Returns (a buyer's disputed call, and the agency's decision on it) and the
   // Today screen. Same access and scoping as the three above.
   const { registerReturnRoutes } = await import('./routes/returns.js');

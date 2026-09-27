@@ -15,6 +15,10 @@ import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/compone
 import { PageHeader } from '@/components/layout/page-header';
 import { BrandThemeControl } from '@/components/platform/brand-theme-control';
 import { NumbersAllowanceControl } from '@/components/platform/numbers-allowance-control';
+import {
+  UpgradePricesPanel,
+  UpgradeRequestsPanel,
+} from '@/components/platform/upgrade-catalog-admin';
 import { UpgradesControl } from '@/components/platform/upgrades-control';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -761,6 +765,11 @@ export default function PlatformAgenciesPage(): JSX.Element {
           </Table>
         </PanelBody>
       </Panel>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <UpgradePricesPanel />
+        <UpgradeRequestsPanel />
+      </div>
 
       <Dialog
         open={marking !== null}

@@ -91,7 +91,7 @@ describe('the Upgrades switches', () => {
       expect(switchFor('VOICE_STUDIO')?.getAttribute('data-state')).toBe('checked')
     );
     expect(switchFor('POWER_DIALER')?.getAttribute('data-state')).toBe('unchecked');
-    expect(document.querySelectorAll('[data-upgrade-switch]')).toHaveLength(5);
+    expect(document.querySelectorAll('[data-upgrade-switch]')).toHaveLength(6);
 
     fireEvent.click(switchFor('POWER_DIALER') as HTMLElement);
     await waitFor(() => expect(puts).toEqual([{ upgrades: ['VOICE_STUDIO', 'POWER_DIALER'] }]));

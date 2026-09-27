@@ -210,3 +210,50 @@ export interface WhiteLabelToday {
     amount?: number;
   }>;
 }
+
+/** One upgrade an agency has asked for and not yet been given. */
+export interface UpgradeRequestView {
+  id: string;
+  upgradeKey: string;
+  upgradeName: string;
+  status: 'OPEN' | 'DONE' | 'DECLINED';
+  userId: string | null;
+  createdAt: string;
+}
+
+/** A child agency's own record, as it was filled in when it was onboarded. */
+export interface NetworkAgencyProfile {
+  legalName: string;
+  state: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  licensedAgentCount: number;
+  deliveryDays: string[];
+  deliveryStartTime: string;
+  deliveryEndTime: string;
+  deliveryTimeZone: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * `GET /api/v1/network/agencies/:tenantId`: one child's page. `stats` are the
+ * same counts as its row in the list, over `period`; `settings` is the same
+ * payload as `.../settings`.
+ */
+export interface NetworkAgencyDetail {
+  tenantId: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  profile: NetworkAgencyProfile | null;
+  owner: NetworkAgencyRow['owner'];
+  settings: NetworkAgencySettings;
+  period: ResolvedPeriodView;
+  stats: Pick<
+    NetworkAgencyRow,
+    'agents' | 'inboundCalls' | 'answeredByAgents' | 'applications' | 'closingPct'
+  >;
+  openUpgradeRequests: UpgradeRequestView[];
+}

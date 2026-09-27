@@ -1,34 +1,86 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
 
-import { Panel, PanelBody, StatusChip } from '@/components/domain';
+import { Notice, Panel, PanelBody, StatusChip } from '@/components/domain';
 import { WHITE_LABEL_UPGRADES } from '@/components/layout/nav-config';
 import { PageHeader } from '@/components/layout/page-header';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
+import { upgradePriceLine, type UpgradeCatalogRow } from '@/lib/upgrade-catalog';
 
 /**
- * Upgrades: what a white-label agency can have turned on.
+ * Upgrades: what an agency can have turned on, what each costs, and a button
+ * to ask for it.
  *
- * These five used to sit at the foot of the sidebar as locked entries. They
- * are one page now, with the same blurbs. Nothing here turns anything on --
- * the agency's account manager does -- so each card says who to ask, and one
- * that is already on says so. Which are on comes from the session
- * (`/api/auth/me` `upgrades`).
+ * The catalog, prices and which are on or asked for come from
+ * `GET /api/v1/upgrades`; the names, icons and blurbs from
+ * WHITE_LABEL_UPGRADES, so they match the switches staff and a parent flip.
+ * "Request this upgrade" does not turn anything on: it records the request and
+ * emails whoever can (NetEnroll, or the agency above a downline agency), and
+ * the card then reads "Requested" until it is.
  */
 export default function UpgradesPage(): JSX.Element {
-  const { upgrades } = useAuth();
+  const { upgrades: sessionUpgrades } = useAuth();
+  const [catalog, setCatalog] = useState<Record<string, UpgradeCatalogRow> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const response = await apiClient.get<Envelope<UpgradeCatalogRow[]>>('/api/v1/upgrades');
+    const rows = payload(response);
+    if (response.error || !Array.isArray(rows)) {
+      setError(response.error?.message ?? 'Could not read the upgrades.');
+      return;
+    }
+    setError(null);
+    setCatalog(Object.fromEntries(rows.map(row => [row.key, row])));
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function request(key: string): Promise<void> {
+    setSending(key);
+    try {
+      const response = await apiClient.post<Envelope<{ id: string; status: string }>>(
+        `/api/v1/upgrades/${key}/request`
+      );
+      if (response.error) {
+        toast.error('The request was not sent', response.error.message);
+        return;
+      }
+      toast.success("Request sent. We'll be in touch to set it up.");
+      setCatalog(current =>
+        current && current[key]
+          ? { ...current, [key]: { ...current[key], requestOpen: true } }
+          : current
+      );
+    } finally {
+      setSending(null);
+    }
+  }
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Features you can add. Your account manager turns them on." />
+      <PageHeader description="Features you can add to your agency, and what they cost." />
+      {error ? <Notice tone="error" title={error} /> : null}
       <section
         className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
         aria-label="Upgrades"
       >
-        {WHITE_LABEL_UPGRADES.map(({ key, item, note }) => {
+        {WHITE_LABEL_UPGRADES.map(({ key, item, note, badge }) => {
           const Icon = item.icon;
-          const on = upgrades.includes(key);
+          const row = catalog?.[key] ?? null;
+          // The session knows what is on before the catalog has loaded.
+          const on = row ? row.on : sessionUpgrades.includes(key);
+          const requested = row?.requestOpen === true;
           return (
             <Panel key={key} data-upgrade={key}>
               <PanelBody className="flex h-full flex-col gap-3">
@@ -38,22 +90,45 @@ export default function UpgradesPage(): JSX.Element {
                   </span>
                   {on ? <StatusChip value="ACTIVE" label="On" tone="live" size="sm" /> : null}
                 </div>
-                <h2 className="t-title text-ink">{item.name}</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="t-title text-ink">{item.name}</h2>
+                  {badge ? (
+                    <StatusChip value="EARLY_ACCESS" label={badge} tone="neutral" size="sm" />
+                  ) : null}
+                </div>
                 <p className="t-body text-ink-2">{item.locked?.blurb}</p>
                 {note ? <p className="t-body text-ink-2">{note}</p> : null}
-                <p className="mt-auto t-meta text-ink-3">
-                  {on ? 'Turned on for your agency.' : 'Ask your account manager to turn this on.'}
+                <p className="mt-auto t-meta tabular-nums text-ink" data-upgrade-price={key}>
+                  {row ? upgradePriceLine(row) : ' '}
                 </p>
-                {on && key === 'POWER_DIALER' ? (
-                  <div className="flex flex-wrap gap-3 t-meta">
-                    <Link href="/call-center" className="text-brand-ink hover:underline">
-                      Open the Power Dialer
-                    </Link>
-                    <Link href="/insurance-leads" className="text-brand-ink hover:underline">
-                      Open the CRM
-                    </Link>
-                  </div>
-                ) : null}
+                {on ? (
+                  <>
+                    <p className="t-meta text-ink-3">Turned on for your agency.</p>
+                    {key === 'POWER_DIALER' ? (
+                      <div className="flex flex-wrap gap-3 t-meta">
+                        <Link href="/call-center" className="text-brand-ink hover:underline">
+                          Open the Power Dialer
+                        </Link>
+                      </div>
+                    ) : null}
+                  </>
+                ) : requested ? (
+                  <Button size="sm" variant="outline" className="self-start" disabled>
+                    Requested
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="self-start"
+                    disabled={!row || sending !== null}
+                    onClick={() => void request(key)}
+                  >
+                    {sending === key ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    Request this upgrade
+                  </Button>
+                )}
               </PanelBody>
             </Panel>
           );
