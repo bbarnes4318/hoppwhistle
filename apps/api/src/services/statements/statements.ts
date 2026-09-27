@@ -21,8 +21,10 @@
  * stored under the parent's tenant id.
  */
 
+import { existsSync } from 'node:fs';
+
 import type { PrismaClient } from '@prisma/client';
-import { launch } from 'puppeteer';
+import { executablePath, launch } from 'puppeteer';
 
 import { emailBrandForTenant } from '../email-brand.js';
 
@@ -149,18 +151,43 @@ export function statementCsv(document: StatementDocument): string {
   return renderStatementCsv(document.data);
 }
 
+/** System Chromes, for a host where puppeteer's own download is not installed. */
+const SYSTEM_CHROMES = [
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+];
+
+/**
+ * The Chrome to print with: `PUPPETEER_EXECUTABLE_PATH` when set, puppeteer's
+ * own download when it is installed, else a system Chrome. Undefined leaves the
+ * choice to puppeteer, which then says plainly what it could not find.
+ *
+ * `pnpm install` does not always fetch puppeteer's Chrome -- a cached store, a
+ * CI runner, a slim image -- and without this fallback every PDF on such a
+ * host fails even though a perfectly good Chrome is installed beside it.
+ */
+export function chromeExecutable(): string | undefined {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  try {
+    const bundled = executablePath();
+    if (bundled && existsSync(bundled)) return bundled;
+  } catch {
+    // Not downloaded: fall through to the system's.
+  }
+  return SYSTEM_CHROMES.find(path => existsSync(path));
+}
+
 /**
  * The PDF of a statement's page, through the same headless Chrome the invoice
- * PDFs use (`routes/admin-billing.ts`). `PUPPETEER_EXECUTABLE_PATH` points it at
- * a system Chrome where puppeteer's own download is not installed.
+ * PDFs use (`routes/admin-billing.ts`), found by `chromeExecutable`.
  */
 export async function statementPdf(html: string): Promise<Buffer> {
   const browser = await launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    ...(process.env.PUPPETEER_EXECUTABLE_PATH
-      ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
-      : {}),
+    executablePath: chromeExecutable(),
   });
   try {
     const page = await browser.newPage();

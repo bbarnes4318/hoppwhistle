@@ -215,7 +215,21 @@ export async function registerStatementRoutes(fastify: FastifyInstance): Promise
       if (file.format === 'csv') {
         return reply.type('text/csv; charset=utf-8').send(statementCsv(document));
       }
-      return reply.type('application/pdf').send(await statementPdf(document.html));
+      let pdf: Buffer;
+      try {
+        pdf = await statementPdf(document.html);
+      } catch (error) {
+        // No Chrome, or it would not start: say so, rather than a bare 500.
+        logger.error({ msg: 'statement: PDF could not be printed', party, error: String(error) });
+        void reply.removeHeader('Content-Disposition');
+        return reply.code(503).send({
+          error: {
+            code: 'PDF_UNAVAILABLE',
+            message: 'The PDF could not be produced right now. The CSV is available.',
+          },
+        });
+      }
+      return reply.type('application/pdf').send(pdf);
     }
   );
 }
