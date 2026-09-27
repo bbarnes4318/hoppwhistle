@@ -1,3 +1,5 @@
+import type { Prisma, PrismaClient } from '@prisma/client';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { auditLog } from './audit.js';
@@ -16,6 +18,19 @@ export interface BudgetCheckResult {
   current?: number;
   limit?: number;
   percentage?: number;
+}
+
+/**
+ * The numbers that count against a tenant's phone-number quota: every ACTIVE
+ * number, and every INACTIVE one the carrier still holds (not yet released,
+ * `releasedAt` null). A number switched off is still a number the agency has.
+ * RELEASED numbers are gone and do not count.
+ */
+export function phoneNumbersHeldWhere(tenantId: string): Prisma.PhoneNumberWhereInput {
+  return {
+    tenantId,
+    OR: [{ status: 'ACTIVE' }, { status: 'INACTIVE', releasedAt: null }],
+  };
 }
 
 /**
@@ -236,9 +251,15 @@ export class QuotaService {
    */
   async checkPhoneNumberQuota(
     tenantId: string,
-    overrideToken?: string
+    overrideToken?: string,
+    /**
+     * The client to count with. The agency purchase path passes its
+     * transaction, so the count is taken under the per-tenant advisory lock it
+     * holds and two concurrent purchases cannot both see room for one more.
+     */
+    client?: Pick<PrismaClient, 'tenant' | 'phoneNumber'>
   ): Promise<QuotaCheckResult> {
-    const prisma = getPrismaClient();
+    const prisma = client ?? getPrismaClient();
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -284,10 +305,7 @@ export class QuotaService {
     }
 
     const currentNumbers = await prisma.phoneNumber.count({
-      where: {
-        tenantId,
-        status: 'ACTIVE',
-      },
+      where: phoneNumbersHeldWhere(tenantId),
     });
 
     if (currentNumbers >= maxNumbers) {

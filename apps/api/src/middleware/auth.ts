@@ -5,7 +5,8 @@ import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { loadPlatformContext } from '../lib/platform-admin.js';
 import { authorizationFromUser } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { loadTenantWhiteLabel } from '../lib/white-label.js';
+import { isTokenRevoked, SESSION_REVOKED } from '../lib/token-version.js';
+import { loadTenantIsChild, loadTenantWhiteLabel } from '../lib/white-label.js';
 import { auditLog } from '../services/audit.js';
 
 import { enforceReadOnlyPreview } from './read-only-preview.js';
@@ -55,6 +56,8 @@ export interface AuthenticatedUser {
    * or ADMIN.
    */
   tenantWhiteLabel?: boolean;
+  /** The acting tenant is a downline agency. See `lib/white-label.ts`. */
+  tenantIsChild?: boolean;
 
   /**
    * When the presenting credential stops being accepted, in seconds since the
@@ -129,6 +132,13 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         return;
       }
 
+      // Signed before this user's sessions were revoked -- a password change
+      // or reset bumps the counter. See `lib/token-version.ts`.
+      if (isTokenRevoked(decoded, user.metadata)) {
+        void reply.code(401).send({ error: SESSION_REVOKED });
+        return;
+      }
+
       if (user.status !== 'ACTIVE') {
         void reply.code(403).send({
           error: {
@@ -197,6 +207,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         // tenant this request acts as. This path REBUILDS `request.user`, so
         // without it a route behind `authenticate` would lose the flag.
         tenantWhiteLabel: await loadTenantWhiteLabel(actingTenantId),
+        tenantIsChild: await loadTenantIsChild(actingTenantId),
         /*
          * Carried through from the verified token so a handler can say when
          * this session lapses -- `/api/auth/me` reports it, and the client

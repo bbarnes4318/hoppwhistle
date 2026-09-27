@@ -34,6 +34,7 @@ import type { Transporter } from 'nodemailer';
 
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
+import { emailBrandForTenant, type EmailBrand } from '../email-brand.js';
 
 export interface BillingNotice {
   tenantId: string;
@@ -102,7 +103,12 @@ async function platformRecipients(prisma: PrismaClient): Promise<string[]> {
   return users.map(u => u.email).filter(Boolean);
 }
 
-async function sendEmail(to: string[], subject: string, body: string): Promise<boolean> {
+async function sendEmail(
+  to: string[],
+  subject: string,
+  body: string,
+  from: string = process.env.SMTP_FROM || 'noreply@netenroll.com'
+): Promise<boolean> {
   if (to.length === 0) return false;
   const transport = transporter();
   if (!transport) {
@@ -110,12 +116,35 @@ async function sendEmail(to: string[], subject: string, body: string): Promise<b
     return false;
   }
   await transport.sendMail({
-    from: process.env.SMTP_FROM || 'noreply@netenroll.com',
+    from,
     to: to.join(', '),
     subject,
     text: body,
   });
   return true;
+}
+
+/**
+ * The agency's copy of a notice, in the agency's brand.
+ *
+ * A branded agency's administrators read their own product's name: every
+ * "NetEnroll" in the notice becomes the brand name, the From display name is
+ * the brand, and the message is signed by the brand's team. An unbranded
+ * agency gets the notice as written. The ROW keeps the original text; this is
+ * only how the email reads. NetEnroll staff always get the original.
+ */
+export function brandNotice(
+  brand: EmailBrand,
+  subject: string,
+  body: string
+): { subject: string; body: string; from: string } {
+  if (!brand.branded) return { subject, body, from: brand.from };
+  const rename = (text: string) => text.replace(/NetEnroll/g, brand.productName);
+  return {
+    subject: rename(subject),
+    body: `${rename(body)}\n\n${brand.signOff}`,
+    from: brand.from,
+  };
 }
 
 async function sendSlack(subject: string, body: string): Promise<boolean> {
@@ -183,13 +212,27 @@ export async function notify(
 
   const sentVia: string[] = [];
 
+  // Two messages, not one: the agency's is in its own brand, and NetEnroll
+  // staff must not receive a copy dressed as somebody else's product.
+  let emailed = false;
   try {
-    if (await sendEmail([...agency, ...platform], notice.subject, notice.body)) {
-      sentVia.push('email');
+    if (agency.length > 0) {
+      const branded = brandNotice(
+        await emailBrandForTenant(notice.tenantId),
+        notice.subject,
+        notice.body
+      );
+      if (await sendEmail(agency, branded.subject, branded.body, branded.from)) emailed = true;
     }
   } catch (error) {
     logger.error({ msg: 'Billing notification email failed', error, notificationId });
   }
+  try {
+    if (await sendEmail(platform, notice.subject, notice.body)) emailed = true;
+  } catch (error) {
+    logger.error({ msg: 'Billing notification email failed', error, notificationId });
+  }
+  if (emailed) sentVia.push('email');
 
   try {
     if (notice.toPlatform && (await sendSlack(notice.subject, notice.body))) {

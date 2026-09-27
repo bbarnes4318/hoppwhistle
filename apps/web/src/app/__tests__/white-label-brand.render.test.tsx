@@ -218,7 +218,7 @@ describe('a branded agency never reads "NetEnroll"', () => {
       import('@/components/rating/rating-view'),
       import('../(dashboard)/settings/quotas/page'),
       import('@/components/numbers/create-route-dialog'),
-      import('@/components/numbers/bulkvs-purchase-dialog'),
+      import('@/components/numbers/buy-numbers-dialog'),
       import('@/components/leads/manual-lead-entry-form-v2'),
       import('../(dashboard)/publisher/docs/page'),
     ]);
@@ -396,13 +396,29 @@ describe('a branded agency never reads "NetEnroll"', () => {
     expect(everything()).not.toContain('NetEnroll');
   });
 
-  it('the number dialog names the brand', async () => {
-    const { BulkvsPurchaseDialog } = await import('@/components/numbers/bulkvs-purchase-dialog');
-    await mount(<BulkvsPurchaseDialog open onOpenChange={() => undefined} />);
-    await waitFor(() =>
-      expect(screen.getByText('Add Phone Number (Life Leads Plus)')).toBeTruthy()
-    );
-    expect(everything()).not.toContain('NetEnroll');
+  /*
+   * The number dialog used to name the brand as the carrier ("Add Phone Number
+   * (Life Leads Plus)"). It names no carrier at all now -- the tabs say what
+   * kind of number it is -- so there is neither a carrier nor NetEnroll in it.
+   */
+  it('the number dialog names no carrier and not NetEnroll', async () => {
+    answers['/api/v1/numbers/pricing'] = {
+      data: {
+        setup: 2.49,
+        monthly: 1.49,
+        firstMonth: 0.5,
+        currency: 'USD',
+        numbersUsed: 3,
+        numbersLimit: 10,
+      },
+    };
+    const { BuyNumbersDialog } = await import('@/components/numbers/buy-numbers-dialog');
+    await mount(<BuyNumbersDialog open onOpenChange={() => undefined} isStaff={false} />);
+    await waitFor(() => expect(screen.getByText('3 of 10 numbers used')).toBeTruthy());
+    expect(screen.getByRole('tab', { name: 'Local' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Toll-free' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'More local inventory' })).toBeTruthy();
+    expect(everything()).not.toMatch(/NetEnroll|FracTEL|BulkVS|Anveo/i);
   });
 
   it('the manual lead form names the brand', async () => {

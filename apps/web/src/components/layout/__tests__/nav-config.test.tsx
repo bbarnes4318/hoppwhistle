@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENCY_OWNER_NAV,
   AGENT_NAV,
+  CHILD_AGENCY_OWNER_NAV,
   FIRST_UPGRADE_GROUP,
   PLATFORM_NAV,
   allNavItems,
@@ -132,6 +133,7 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
       'Sales',
       [
         ['Campaigns', '/campaigns', false],
+        ['Numbers', '/numbers', false],
         ['Power Dialer', '/call-center', true],
       ],
     ],
@@ -157,7 +159,6 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
       [
         ['Publishers', '/publishers', true],
         ['Buyers', '/buyers', true],
-        ['Numbers', '/numbers', true],
         ['VOIP Carrier Routing', '/settings/carriers', true],
       ],
     ],
@@ -249,7 +250,7 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
     }
   );
 
-  it('leaves /call-center reachable and AGENT_NAV\'s Power Dialer untouched', () => {
+  it("leaves /call-center reachable and AGENT_NAV's Power Dialer untouched", () => {
     expect(isStaffOnlyRoute('/call-center')).toBe(false);
     const agentDialer = AGENT_NAV.flatMap(group => group.items).find(
       item => item.href === '/call-center'
@@ -371,6 +372,65 @@ describe('navFor: which nav each viewer gets', () => {
     const withUpgrade = names(['POWER_DIALER']);
     expect(withUpgrade).toContain('Power Dialer');
     expect(withUpgrade).toContain('CRM');
+  });
+});
+
+describe('Numbers: every agency buys its own', () => {
+  it('gives a normal agency owner /numbers as a working, unlocked item', () => {
+    const numbers = AGENCY_OWNER_NAV.flatMap(group => group.items).find(
+      item => item.href === '/numbers'
+    );
+    expect(numbers, 'no /numbers in AGENCY_OWNER_NAV').toBeDefined();
+    expect(numbers!.locked).toBeUndefined();
+    expect(allNavItems(AGENCY_OWNER_NAV).map(item => item.href)).toContain('/numbers');
+    expect(isStaffOnlyRoute('/numbers')).toBe(false);
+  });
+});
+
+describe('a downline (child) agency owner', () => {
+  const OWNER = {
+    isPlatformAdmin: false,
+    previewing: false,
+    hasFullAccess: true,
+    isWhiteLabel: false,
+    isPublisherOnly: false,
+    isBuyerOnly: false,
+    isAgentOnly: false,
+    isReadonlyOnly: false,
+    canViewRecordings: false,
+  };
+  const childNav = navFor({ ...OWNER, isChild: true });
+  const hrefs = childNav.flatMap(group => group.items).map(item => item.href);
+
+  it('gets the child nav, and a normal owner does not', () => {
+    expect(childNav).toBe(CHILD_AGENCY_OWNER_NAV);
+    expect(navFor({ ...OWNER, isChild: false })).toBe(AGENCY_OWNER_NAV);
+    expect(navFor(OWNER)).toBe(AGENCY_OWNER_NAV);
+  });
+
+  it('has no Money group: Rate, Delivery, Settlements and Billing are the parent’s', () => {
+    expect(childNav.map(group => group.label)).not.toContain('Money');
+    for (const href of ['/rating', '/delivery', '/delivery/settlements', '/billing']) {
+      expect(hrefs, href).not.toContain(href);
+    }
+  });
+
+  it('keeps Team, as a working item', () => {
+    const team = childNav.flatMap(group => group.items).find(item => item.name === 'Team');
+    expect(team?.href).toBe('/delivery/team');
+    expect(team?.locked).toBeUndefined();
+  });
+
+  it('has no locked Agency Network items', () => {
+    expect(childNav.map(group => group.label)).not.toContain('Agency Network');
+    expect(hrefs).not.toContain('/admin/agencies');
+    expect(hrefs).not.toContain('/admin/onboarding');
+  });
+
+  it('keeps Campaigns and Numbers working', () => {
+    const offered = allNavItems(childNav).map(item => item.href);
+    expect(offered).toContain('/campaigns');
+    expect(offered).toContain('/numbers');
   });
 });
 

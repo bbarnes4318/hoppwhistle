@@ -1,5 +1,9 @@
 import { createTransport } from 'nodemailer';
 
+import { logger } from '../lib/logger.js';
+
+import { emailBrandForTenant, netEnrollEmailBrand, type EmailBrand } from './email-brand.js';
+
 /**
  * Publisher Email Service
  * Handles sending welcome and notification emails to publishers
@@ -10,6 +14,10 @@ interface WelcomeEmailPayload {
   publisherName: string;
   publisherId: string;
   accessToRecordings: boolean;
+  /** The agency the publisher was added to. Decides the brand. */
+  tenantId?: string | null;
+  /** Its display name, for the body. */
+  agencyName?: string | null;
 }
 
 // Create a transporter using environment variables if set
@@ -36,72 +44,75 @@ function getTransporter() {
 }
 
 /**
- * Sends a welcome email to a newly created publisher.
- * Falls back to console logging if SMTP environment variables are not configured.
+ * Tells a publisher they have been added to an agency's call network.
+ *
+ * It does NOT give them a login. A publisher record is the party that sends
+ * calls; a person signing in to see them is a separate act -- a portal-access
+ * invitation, which sends its own activation link. So this says "you have been
+ * added", never "sign in".
+ *
+ * Branded as the agency (`services/email-brand.ts`). Throws on an SMTP failure;
+ * the caller decides whether that matters (publisher creation does not).
  */
 export async function sendWelcomeEmail(payload: WelcomeEmailPayload): Promise<void> {
   const { email, publisherName, publisherId, accessToRecordings } = payload;
-  const fromAddress = process.env.SMTP_FROM || 'noreply@netenroll.com';
+  const brand = payload.tenantId
+    ? await emailBrandForTenant(payload.tenantId)
+    : netEnrollEmailBrand();
+  const agency = payload.agencyName?.trim() || brand.productName;
 
-  const portalUrl = process.env.API_PUBLIC_URL || 'https://agents.netenroll.com';
-
-  const subject = 'Your NetEnroll publisher account is ready';
+  const subject = `You've been added as a publisher with ${agency}`;
   const text = `Hello ${publisherName},
 
-Your NetEnroll publisher account has been created. You can sign in at
-${portalUrl}/login.
+You've been added as a publisher with ${agency} on ${brand.productName}.
 
 Account details:
   - Publisher ID: ${publisherId}
   - Access to recordings: ${accessToRecordings ? 'Enabled' : 'Disabled'}
 
 Your Publisher ID identifies the calls you send. Use it when you ping and post,
-and the portal will report every call back against it, along with what each one
-earned.
+and every call will be reported back against it, along with what each one
+earned. If you are given access to the publisher portal, you will receive a
+separate invitation to set up your sign-in.
 
 If anything looks wrong, please reply to this message and we will look into it.
 
 Kind regards,
-The NetEnroll team`;
+${brand.signOff}`;
 
   const html = renderEmail({
-    title: 'Your publisher account is ready',
+    brand,
+    title: "You've been added as a publisher",
     body: `<p>Hello <strong>${escapeHtml(publisherName)}</strong>,</p>
-<p>Your NetEnroll publisher account has been created. You can sign in at
-<a href="${portalUrl}/login" style="color:#047857;">${escapeHtml(portalUrl)}/login</a>.</p>
+<p>You've been added as a publisher with <strong>${escapeHtml(agency)}</strong> on ${escapeHtml(brand.productName)}.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;font-size:14px;">
   <tr><td style="padding:6px 16px 6px 0;color:#55524b;">Publisher ID</td><td style="padding:6px 0;font-family:'IBM Plex Mono',SFMono-Regular,Menlo,monospace;color:#171614;">${escapeHtml(publisherId)}</td></tr>
   <tr><td style="padding:6px 16px 6px 0;color:#55524b;">Access to recordings</td><td style="padding:6px 0;color:#171614;">${accessToRecordings ? 'Enabled' : 'Disabled'}</td></tr>
 </table>
 <p>Your Publisher ID identifies the calls you send. Use it when you ping and post,
-and the portal will report every call back against it, along with what each one
-earned.</p>
+and every call will be reported back against it, along with what each one
+earned. If you are given access to the publisher portal, you will receive a
+separate invitation to set up your sign-in.</p>
 <p>If anything looks wrong, please reply to this message and we will look into it.</p>`,
   });
 
   const transporter = getTransporter();
 
   if (transporter) {
-    console.log(`Sending real welcome email to ${email} via SMTP...`);
     await transporter.sendMail({
-      from: fromAddress,
+      from: brand.from,
       to: email,
       subject,
       text,
       html,
     });
-    console.log(`✓ Email sent to ${email}`);
+    logger.info({ msg: 'Publisher welcome email sent', email, publisherId });
   } else {
-    // Mock email service - logs to server console
-    console.log('========================================');
-    console.log('📧 PUBLISHER WELCOME EMAIL (SIMULATED - SMTP NOT CONFIG)');
-    console.log('========================================');
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${subject}`);
-    console.log('');
-    console.log('Email Body:');
-    console.log(text);
-    console.log('========================================');
+    logger.info({
+      msg: 'Publisher welcome email not sent: SMTP is not configured',
+      email,
+      publisherId,
+    });
   }
 }
 
@@ -119,33 +130,50 @@ export function escapeHtml(value: string): string {
 }
 
 /**
- * The NetEnroll email shell: light, one column, the wordmark at the top.
+ * The email shell: light, one column, the wordmark at the top.
  *
  * Inline styles and a table, because email clients render nothing else
  * reliably. The colours are the product's light tokens (--paper, --surface,
- * --ink, --ink-2, --rule) and the wordmark is set as text — "net" in black,
- * "Enroll" in brand green — so it renders with images blocked. Brand green
- * appears nowhere else: the mark is the accent, and a second green would
- * compete with it.
+ * --ink, --ink-2, --rule).
+ *
+ * Unbranded, the wordmark is set as text — "net" in black, "Enroll" in brand
+ * green — so it renders with images blocked. Branded (see
+ * `services/email-brand.ts`), the header is the agency's logo with its name as
+ * the alt text, and the title, sign-off and footer carry the agency's name:
+ * a branded email says "NetEnroll" nowhere.
  */
-export function renderEmail({ title, body }: { title: string; body: string }): string {
+export function renderEmail({
+  title,
+  body,
+  brand,
+}: {
+  title: string;
+  body: string;
+  brand?: EmailBrand;
+}): string {
+  const b = brand ?? netEnrollEmailBrand();
+  const header =
+    b.branded && b.logoUrl
+      ? `<img src="${escapeHtml(b.logoUrl)}" alt="${escapeHtml(b.productName)}" height="40" style="display:block;height:40px;width:auto;border:0;">`
+      : '<span style="color:#000000;">net</span><span style="color:#10b981;">Enroll</span>';
+
   return `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(title)} · NetEnroll</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(title)} · ${escapeHtml(b.productName)}</title></head>
 <body style="margin:0;padding:0;background:#fbfaf8;color:#171614;font-family:Inter,'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.5;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fbfaf8;">
     <tr><td align="center" style="padding:32px 16px;">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:560px;width:100%;">
         <tr><td style="padding:0 0 20px 0;font-size:22px;font-weight:600;letter-spacing:-0.02em;">
-          <span style="color:#000000;">net</span><span style="color:#10b981;">Enroll</span>
+          ${header}
         </td></tr>
         <tr><td style="background:#ffffff;border:1px solid #e4e0d8;border-radius:6px;padding:24px;">
           <h1 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#171614;">${escapeHtml(title)}</h1>
           ${body}
-          <p style="margin:20px 0 0 0;">Best regards,<br>The NetEnroll team</p>
+          <p style="margin:20px 0 0 0;">Best regards,<br>${escapeHtml(b.signOff)}</p>
         </td></tr>
         <tr><td style="padding:16px 0 0 0;font-size:12px;color:#8a867c;">
-          This message was sent by NetEnroll. If you were not expecting it, you can ignore it.
+          This message was sent by ${escapeHtml(b.productName)}. If you were not expecting it, you can ignore it.
         </td></tr>
       </table>
     </td></tr>

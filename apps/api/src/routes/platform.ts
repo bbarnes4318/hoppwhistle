@@ -596,6 +596,105 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       return reply.send({ data: { tenantId, upgrades } });
     }
   );
+
+  /**
+   * GET /api/v1/admin/tenants/:tenantId/numbers
+   * PUT /api/v1/admin/tenants/:tenantId/numbers
+   *   { maxPhoneNumbers?: number, pricing?: { setup: number, monthly: number } }
+   *
+   * An agency's phone-number limit and what its numbers cost, set on Admin ->
+   * Agencies beside the Upgrades switches. Every agency without a limit gets
+   * 25 on its first purchase; this is where NetEnroll changes that, and
+   * overrides the default $2.49 setup / $1.49 a month. Platform admins only,
+   * audited with before and after.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/admin/tenants/:tenantId/numbers',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { readNumberSettings } = await import('../services/numbers/number-settings.js');
+      const settings = await readNumberSettings(prisma, request.params.tenantId);
+      if (!settings) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+      return reply.send({ data: { tenantId: request.params.tenantId, ...settings } });
+    }
+  );
+
+  fastify.put<{
+    Params: { tenantId: string };
+    Body: { maxPhoneNumbers?: unknown; pricing?: { setup?: unknown; monthly?: unknown } };
+  }>(
+    '/api/v1/admin/tenants/:tenantId/numbers',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const body = request.body ?? {};
+      const {
+        parseNumberLimit,
+        parsePrice,
+        readNumberSettings,
+        writeNumberLimit,
+        writeNumberPricing,
+      } = await import('../services/numbers/number-settings.js');
+
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { metadata: true },
+      });
+      if (!tenant) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+
+      let limit: number | undefined;
+      if (body.maxPhoneNumbers !== undefined) {
+        const parsed = parseNumberLimit(body.maxPhoneNumbers);
+        if (!parsed.ok) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'maxPhoneNumbers must be a whole number from 0 to 10000',
+            },
+          });
+        }
+        limit = parsed.value;
+      }
+
+      let pricing: { setup: number; monthly: number } | undefined;
+      if (body.pricing !== undefined) {
+        const setup = parsePrice(body.pricing?.setup);
+        const monthly = parsePrice(body.pricing?.monthly);
+        if (setup === null || monthly === null) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'pricing.setup and pricing.monthly must be amounts in dollars',
+            },
+          });
+        }
+        pricing = { setup, monthly };
+      }
+
+      const before = await readNumberSettings(prisma, tenantId);
+      if (limit !== undefined) await writeNumberLimit(prisma, tenantId, limit);
+      if (pricing) await writeNumberPricing(prisma, tenantId, tenant.metadata, pricing);
+      const after = await readNumberSettings(prisma, tenantId);
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.tenant.numbers_changed',
+        entityType: 'tenant',
+        entityId: tenantId,
+        changes: {
+          before: { numbersLimit: before?.numbersLimit, pricing: before?.pricing },
+          after: { numbersLimit: after?.numbersLimit, pricing: after?.pricing },
+        },
+      });
+
+      return reply.send({ data: { tenantId, ...after } });
+    }
+  );
   /**
    * POST /api/v1/platform/acting-tenant
    *

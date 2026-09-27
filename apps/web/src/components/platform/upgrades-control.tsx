@@ -90,26 +90,55 @@ export function UpgradesControl({
   return (
     <div className="flex flex-col gap-2 border-t border-rule pt-3" data-testid="upgrades-control">
       <span className="text-xs font-medium text-ink-2">Upgrades</span>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
-        {WHITE_LABEL_UPGRADES.map(({ key, item }) => (
-          <label
-            key={key}
-            className="flex items-center gap-2 text-xs text-ink-3"
-            title={item.locked?.blurb}
-          >
-            <Switch
-              checked={saved?.includes(key) === true}
-              onCheckedChange={checked => void toggle(key, item.name, checked)}
-              disabled={saved === null || saving !== null}
-              aria-label={item.name}
-              data-upgrade-switch={key}
-            />
-            {item.name}
-            {saving === key ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-          </label>
-        ))}
-      </div>
+      <UpgradeSwitches
+        value={saved}
+        saving={saving}
+        onToggle={(key, name, on) => void toggle(key, name, on)}
+      />
       {error ? <p className="text-[13px] text-ink-3">{error}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The five upgrade switches, and nothing about where they save.
+ *
+ * Shared by this control (NetEnroll staff, any agency) and a white-label
+ * parent's Agencies screen (its own downline, through
+ * `PUT /api/v1/network/agencies/:tenantId/settings`), so the two cannot offer
+ * different upgrades or name them differently. `value` null means "not loaded
+ * yet", and every switch is disabled until it is.
+ */
+export function UpgradeSwitches({
+  value,
+  saving,
+  onToggle,
+  disabled = false,
+}: {
+  value: readonly string[] | null;
+  saving: string | null;
+  onToggle: (key: string, name: string, on: boolean) => void;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2">
+      {WHITE_LABEL_UPGRADES.map(({ key, item }) => (
+        <label
+          key={key}
+          className="flex items-center gap-2 text-xs text-ink-3"
+          title={item.locked?.blurb}
+        >
+          <Switch
+            checked={value?.includes(key) === true}
+            onCheckedChange={checked => onToggle(key, item.name, checked)}
+            disabled={disabled || value === null || saving !== null}
+            aria-label={item.name}
+            data-upgrade-switch={key}
+          />
+          {item.name}
+          {saving === key ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+        </label>
+      ))}
     </div>
   );
 }

@@ -133,6 +133,20 @@ export interface NetworkAgencyRow {
   };
 }
 
+/**
+ * `GET/PUT /api/v1/network/agencies/:tenantId/settings`: what a white-label
+ * parent sets for one child -- its phone-number limit (null for none) and its
+ * upgrades -- and how many numbers it holds. Not on the agencies list, which
+ * is aggregates only.
+ */
+export interface NetworkAgencySettings {
+  tenantId: string;
+  numbersLimit: number | null;
+  /** On the GET; the PUT's answer may leave it out. */
+  numbersUsed?: number;
+  upgrades: string[];
+}
+
 export interface NetworkAgencies {
   period: ResolvedPeriodView;
   agencies: NetworkAgencyRow[];

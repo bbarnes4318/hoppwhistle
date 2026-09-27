@@ -114,6 +114,13 @@ const DATABASE_BACKED = [
   // `publishers`, `campaigns` and `insurance_leads`, seeding one agency with
   // an owner, agents, buyers and a publisher once for the whole file.
   '**/src/__tests__/security-leaks.test.ts',
+  // Each truncates `tenants`, `roles` and `audit_logs` to seed agencies with
+  // owners: password change and reset, an agency buying and releasing
+  // numbers (with a white-label parent and a child), and a child agency's
+  // campaigns, brand and limits.
+  '**/src/__tests__/password.test.ts',
+  '**/src/__tests__/agency-numbers.test.ts',
+  '**/src/__tests__/child-agency.test.ts',
 ];
 
 export default defineConfig({

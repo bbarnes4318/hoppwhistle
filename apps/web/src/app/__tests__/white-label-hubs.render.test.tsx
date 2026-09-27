@@ -542,9 +542,9 @@ describe('the white-label portal', () => {
         'ANALYST',
         'AGENT',
       ]);
+      // OWNER is never invitable: a second principal is arranged with NetEnroll.
       expect(rolesOffered().map(role => role.value)).toEqual([
         'ADMIN',
-        'OWNER',
         'ANALYST',
         'AGENT',
         'BUYER',
@@ -725,8 +725,9 @@ describe('the white-label portal', () => {
       await mount('/routing?tab=numbers', () => import('../(dashboard)/routing/page'));
       await waitFor(() => expect(asked('GET /api/v1/numbers?')).toBe(true));
       expect(activeTab()).toBe('numbers');
-      // Buying, adding and syncing numbers stay with platform admins.
-      expect(screen.queryByRole('button', { name: /Buy Number/ })).toBeNull();
+      // An agency's owner buys its own numbers; adding existing ones and the
+      // Anveo sync stay with platform admins.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Buy numbers' })).toBeTruthy());
       expect(screen.queryByRole('button', { name: /Add existing/ })).toBeNull();
       expect(screen.queryByRole('button', { name: /Sync Anveo/ })).toBeNull();
     });
@@ -1013,8 +1014,9 @@ describe('the old URLs', () => {
     await visit(from);
     const hubs = Object.values(WHITE_LABEL_REDIRECTS);
     expect(redirects.filter(to => hubs.includes(to) && to !== '/dashboard')).toEqual([]);
-    // The screens a normal agency always had stay where they are.
-    if (['/sales', '/reports', '/payouts', '/numbers'].includes(from)) {
+    // The screens a normal agency always had stay where they are, and so does
+    // /numbers, which every agency has now.
+    if (['/sales', '/reports', '/payouts'].includes(from)) {
       expect(redirects).toEqual(['/dashboard']);
     } else {
       expect(redirects).toEqual([]);

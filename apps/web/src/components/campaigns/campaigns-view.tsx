@@ -115,10 +115,12 @@ function CampaignsPage() {
    *
    * A white-label agency's OWNER and ADMIN are the exception: they run a call
    * network of their own, the API lets their campaign writes through
-   * (WHITE_LABEL_ALLOWED), and they get every control staff do.
+   * (WHITE_LABEL_ALLOWED), and they get every control staff do. So does a
+   * downline (child) agency's OWNER and ADMIN: the API lets a child write its
+   * own campaigns, attributed to its own "(direct)" publisher.
    */
-  const { isPlatformAdmin, isWhiteLabel } = useAuth();
-  const canManage = isPlatformAdmin || isWhiteLabel;
+  const { isPlatformAdmin, isWhiteLabel, isChild, hasFullAccess } = useAuth();
+  const canManage = isPlatformAdmin || isWhiteLabel || (isChild && hasFullAccess);
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());

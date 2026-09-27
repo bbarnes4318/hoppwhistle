@@ -62,9 +62,13 @@ export const STAFF_ONLY_ROUTES = [
   // campaign write on the API is still refused to them (STAFF_ONLY_AREAS in
   // apps/api/src/lib/staff-only-endpoints.ts). Removing it here also opens
   // `/campaigns/[id]`.
+  //
+  // `/numbers` is no longer here either. Every agency's OWNER and ADMIN buys,
+  // assigns and releases its own numbers, within the limit and at the price
+  // set for it; only "add existing" and the Anveo sync on that page stay
+  // staff's, and the page draws them for staff alone.
   '/publishers',
   '/buyers',
-  '/numbers',
 
   // Build. Call routing and voice-AI authoring are platform configuration.
   '/flows',
@@ -189,14 +193,13 @@ export const STAFF_ONLY_ROUTES = [
  * normal agency is redirected off each exactly as before.
  *
  * The API decides what those screens may DO, separately and on the server:
- * `WHITE_LABEL_ALLOWED` in apps/api/src/lib/staff-only-endpoints.ts. Buying or
- * releasing numbers, flows, voice tooling and carrier routing stay NetEnroll's
- * for everyone.
+ * `WHITE_LABEL_ALLOWED` in apps/api/src/lib/staff-only-endpoints.ts. Flows,
+ * voice tooling and carrier routing stay NetEnroll's for everyone. `/numbers`
+ * is not here because it is not staff-only at all any more: every agency has it.
  */
 export const WHITE_LABEL_ROUTES = [
   '/publishers',
   '/buyers',
-  '/numbers',
   '/payouts',
   '/reports',
   '/sales',
