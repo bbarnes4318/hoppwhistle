@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
 import { RoleName } from '@prisma/client';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { signRecordingToken } from '../lib/recording-token.js';
@@ -358,27 +358,23 @@ describe.skipIf(!gate.available)('Security: data leaks', () => {
       expect(bearer.json().user).toBeNull();
     });
 
-    describe('expiry', () => {
-      afterEach(() => {
-        vi.useRealTimers();
-      });
+    it('stops working after 15 minutes', async () => {
+      const claims = { tenantId, userId: owner.id, email: owner.email, recordingId };
+      const minutesAgo = (m: number) => Date.now() - m * 60 * 1000;
+      const streamWith = async (pass: string): Promise<{ userId?: string } | null> =>
+        (
+          await probe.inject({
+            method: 'GET',
+            url: `/api/v1/recordings/${recordingId}/stream?token=${pass}`,
+          })
+        ).json<{ user: { userId?: string } | null }>().user;
 
-      it('stops working after 15 minutes', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        const pass = signRecordingToken(app, {
-          tenantId,
-          userId: owner.id,
-          email: owner.email,
-          recordingId,
-        });
-        const url = `/api/v1/recordings/${recordingId}/stream?token=${pass}`;
-
-        vi.setSystemTime(Date.now() + 14 * 60 * 1000);
-        expect((await probe.inject({ method: 'GET', url })).json().user?.userId).toBe(owner.id);
-
-        vi.setSystemTime(Date.now() + 2 * 60 * 1000);
-        expect((await probe.inject({ method: 'GET', url })).json().user).toBeNull();
-      });
+      // Issued 14 minutes ago: still good.
+      expect((await streamWith(signRecordingToken(app, claims, minutesAgo(14))))?.userId).toBe(
+        owner.id
+      );
+      // Issued 16 minutes ago: expired.
+      expect(await streamWith(signRecordingToken(app, claims, minutesAgo(16)))).toBeNull();
     });
   });
 

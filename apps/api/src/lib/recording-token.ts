@@ -79,11 +79,24 @@ function purposeKey(server: FastifyInstance): string {
   return key;
 }
 
-export function signRecordingToken(server: FastifyInstance, claims: RecordingTokenClaims): string {
+/**
+ * `issuedAt` (epoch milliseconds) defaults to now. It exists so a test can mint
+ * a pass that has already expired without faking the clock under a live
+ * database client.
+ */
+export function signRecordingToken(
+  server: FastifyInstance,
+  claims: RecordingTokenClaims,
+  issuedAt?: number
+): string {
   const jwt = server.jwt as unknown as JwtLike;
   return jwt.sign(
     { ...claims, purpose: RECORDING_TOKEN_PURPOSE },
-    { key: purposeKey(server), expiresIn: RECORDING_TOKEN_TTL_SECONDS }
+    {
+      key: purposeKey(server),
+      expiresIn: RECORDING_TOKEN_TTL_SECONDS,
+      ...(issuedAt !== undefined ? { clockTimestamp: issuedAt } : {}),
+    }
   );
 }
 
