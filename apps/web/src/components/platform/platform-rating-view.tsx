@@ -192,7 +192,10 @@ export function PlatformRatingView(): JSX.Element {
                   return a.name.localeCompare(b.name);
                 })
                 .map(row => (
-                  <TableRow key={row.tenantId} className={cn(row.underReview && 'bg-ringing-tint')}>
+                  <TableRow
+                    key={row.tenantId}
+                    className={cn(row.underReview && 'border-ringing bg-ringing-tint')}
+                  >
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium">{row.name}</span>
