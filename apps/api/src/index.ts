@@ -259,6 +259,8 @@ async function buildServer() {
   await server.register(registerCallSalesRoutes);
   const { registerPayoutRoutes } = await import('./routes/payouts.js');
   await server.register(registerPayoutRoutes);
+  const { registerStatementRoutes } = await import('./routes/statements.js');
+  await server.register(registerStatementRoutes);
   const { registerNetworkRoutes } = await import('./routes/network.js');
   await server.register(registerNetworkRoutes);
   // Returns (a buyer's disputed call, and the agency's decision on it) and the
@@ -354,6 +356,14 @@ async function buildServer() {
   // Register Buyer Billing routes (buyers, targets, stats, live-status)
   const { registerBuyerBillingRoutes } = await import('./routes/buyer-billing.js');
   await server.register(registerBuyerBillingRoutes);
+
+  // Buyers -> Buyer balances: every buyer's wallet or month-to-date billing.
+  const { registerBuyerBalanceRoutes } = await import('./routes/buyer-balances.js');
+  await server.register(registerBuyerBalanceRoutes);
+
+  // The brand a host is drawn in before sign-in. Public: see routes/public-brand.ts.
+  const { registerPublicBrandRoutes } = await import('./routes/public-brand.js');
+  await server.register(registerPublicBrandRoutes);
 
   // Register Automation routes (carrier application RPA)
   const { registerAutomationRoutes } = await import('./routes/automation.js');

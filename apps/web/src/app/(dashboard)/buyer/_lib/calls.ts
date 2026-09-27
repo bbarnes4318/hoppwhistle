@@ -67,6 +67,37 @@ export function disputeReasonOf(call: BuyerCall): string | null {
   return typeof meta?.disputeReason === 'string' ? meta.disputeReason : null;
 }
 
+/**
+ * What the call was billed before its return was decided.
+ *
+ * Deciding a return writes the call's amount to
+ * `metadata.originalBuyerBillableAmount` before an acceptance zeroes it, so an
+ * accepted return would otherwise read $0.00 -- as if the call had never cost
+ * anything, rather than cost this and been given back. Null when the call
+ * carries none (undecided, or decided before the field existed).
+ */
+export function originalAmountOf(call: BuyerCall): number | null {
+  const meta = call.metadata as { originalBuyerBillableAmount?: unknown } | null;
+  const raw = meta?.originalBuyerBillableAmount;
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null;
+  const n = typeof raw === 'number' ? raw : parseFloat(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The amount a row shows: the original for a decided return, else the current one. */
+export function displayAmountOf(call: BuyerCall): number | null {
+  const decided = call.disputeStatus === 'ACCEPTED' || call.disputeStatus === 'DENIED';
+  return (decided ? originalAmountOf(call) : null) ?? call.buyerBillableAmount;
+}
+
+/** The note the agency left when it decided this call's return. */
+export function decisionNoteOf(call: BuyerCall): string | null {
+  const meta = call.metadata as { decisionNote?: unknown } | null;
+  return typeof meta?.decisionNote === 'string' && meta.decisionNote.trim() !== ''
+    ? meta.decisionNote
+    : null;
+}
+
 export function disputedAtOf(call: BuyerCall): string | null {
   const meta = call.metadata as { disputedAt?: unknown } | null;
   return typeof meta?.disputedAt === 'string' ? meta.disputedAt : null;

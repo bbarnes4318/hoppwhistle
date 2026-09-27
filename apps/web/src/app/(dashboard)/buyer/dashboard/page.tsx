@@ -26,8 +26,9 @@ import { PageHeader } from '../_components/page-header';
 import { RecentCallsTable, type RecentCallRow } from '../_components/recent-calls-table';
 import { PanelSkeleton, StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
-import { durationScale, thresholdFor } from '../_lib/calls';
-import { resolveRange } from '../_lib/range';
+import { displayAmountOf, durationScale, thresholdFor } from '../_lib/calls';
+import { newYorkMonthToDate, resolveRange } from '../_lib/range';
+import { chargedSpend } from '../_lib/spend';
 
 /**
  * Dashboard — am I getting what I'm paying for?
@@ -136,8 +137,11 @@ async function ValueSummary({
   }
 
   const { totals } = report.data;
-  const spend = toMajor(totals.buyerCost);
-  const perBillable = totals.billableCalls > 0 ? spend / totals.billableCalls : 0;
+  // Spend is what was charged; the per-call figure is the price the billable
+  // calls carried, charged yet or not. See ../_lib/spend.
+  const spend = chargedSpend(totals);
+  const perBillable =
+    totals.billableCalls > 0 ? toMajor(totals.buyerCost) / totals.billableCalls : 0;
   const openDisputes = disputes.data?.total ?? 0;
 
   return (
@@ -254,9 +258,11 @@ async function BalancePanel({
   startISO: string;
   endISO: string;
 }) {
-  const [profileResult, reportResult] = await Promise.all([
+  const month = newYorkMonthToDate();
+  const [profileResult, reportResult, monthResult] = await Promise.all([
     settle(fetchBuyerProfile(token, buyerId)),
     settle(fetchCostReport(token, { buyerId, startDate: startISO, endDate: endISO })),
+    settle(fetchCostReport(token, { buyerId, startDate: month.startISO, endDate: month.endISO })),
   ]);
 
   if (profileResult.error || !profileResult.data) {
@@ -264,10 +270,13 @@ async function BalancePanel({
   }
 
   const profile = profileResult.data;
-  const spend = toMajor(reportResult.data?.totals.buyerCost ?? '0');
+  const spend = reportResult.data ? chargedSpend(reportResult.data.totals) : 0;
   const burnPerDay = spend / 30;
   const runwayDays = burnPerDay > 0 ? Math.floor(profile.walletBalance / burnPerDay) : null;
   const upfront = profile.billingType === 'UPFRONT';
+  // A buyer on terms is shown what it has been billed this calendar month in
+  // New York, not an "unbilled" figure it has no invoice date to read against.
+  const billedThisMonth = monthResult.data ? chargedSpend(monthResult.data.totals) : null;
 
   return (
     <Panel>
@@ -282,21 +291,17 @@ async function BalancePanel({
       </PanelHeader>
       <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <p className="t-label text-ink-3">{upfront ? 'Balance' : 'Unbilled'}</p>
+          <p className="t-label text-ink-3">{upfront ? 'Balance' : 'Billed this month'}</p>
           <p className="t-figure mt-1.5 text-ink">
             <MoneyCell
-              amount={
-                upfront
-                  ? profile.walletBalance
-                  : toMajor(reportResult.data?.totals.pendingInvoice ?? '0')
-              }
+              amount={upfront ? profile.walletBalance : billedThisMonth}
               unit="major"
               size="figure"
               tone="auto"
             />
           </p>
           <p className="t-meta mt-1 text-ink-3">
-            {upfront ? 'Prepaid funds on hand' : 'Accrued since your last invoice'}
+            {upfront ? 'Prepaid funds on hand' : 'Charged since the 1st'}
           </p>
         </div>
         <div>
@@ -340,7 +345,7 @@ async function LatestCalls({ token, buyerId }: { token: string; buyerId: string 
     campaignName: call.campaignName,
     connectedSeconds: call.connectedDuration ?? call.duration ?? 0,
     thresholdSeconds: thresholdFor(call, profile),
-    amount: call.buyerBillableAmount,
+    amount: displayAmountOf(call),
   }));
 
   return (
@@ -384,9 +389,10 @@ async function TopCampaigns({
   }
 
   const rows = [...data.rows]
-    .sort((a, b) => toMajor(b.buyerCost) - toMajor(a.buyerCost))
+    .filter(row => chargedSpend(row) > 0)
+    .sort((a, b) => chargedSpend(b) - chargedSpend(a))
     .slice(0, 5);
-  const top = toMajor(rows[0]?.buyerCost ?? '0');
+  const top = rows[0] ? chargedSpend(rows[0]) : 0;
 
   return (
     <Panel>
@@ -409,7 +415,7 @@ async function TopCampaigns({
         ) : (
           <ul className="space-y-2.5">
             {rows.map(row => {
-              const cost = toMajor(row.buyerCost);
+              const cost = chargedSpend(row);
               const width = top > 0 ? Math.max(2, (cost / top) * 100) : 0;
               return (
                 <li key={`${row.campaignId}-${row.destinationNumber}`}>

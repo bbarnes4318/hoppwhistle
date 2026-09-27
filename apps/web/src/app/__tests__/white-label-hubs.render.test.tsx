@@ -673,9 +673,12 @@ describe('the white-label portal', () => {
 
     it('shows buyer balances on the wallets tab', async () => {
       await mount('/buyers?tab=wallets', () => import('../(dashboard)/buyers/page'));
-      await waitFor(() => expect(asked('GET /api/v1/billing/balance')).toBe(true));
+      await waitFor(() => expect(asked('GET /api/v1/buyers/balances')).toBe(true));
       expect(activeTab()).toBe('wallets');
-      expect(screen.getByText('Invoices')).toBeTruthy();
+      // The agency's own invoices and the unwritten `balances` table are gone.
+      expect(asked('GET /api/v1/billing/balance')).toBe(false);
+      expect(asked('GET /api/v1/billing/invoices')).toBe(false);
+      expect(screen.queryByText('Invoices')).toBeNull();
     });
 
     it('is the plain buyers screen for anybody else', async () => {

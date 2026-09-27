@@ -32,7 +32,10 @@ export interface FiledDisputeRow {
   filedAt: string | null;
   status: string;
   reason: string | null;
+  /** What the call was billed -- for a decided return, before the decision. */
   amount: number | null;
+  /** What the agency said when it decided, if anything. */
+  decisionNote: string | null;
   connectedSeconds: number;
   thresholdSeconds: number | null;
   scaleSeconds: number;
@@ -97,7 +100,7 @@ export function FiledDisputesTable({ rows }: { rows: FiledDisputeRow[] }) {
     },
     {
       id: 'amount',
-      header: 'At stake',
+      header: 'Amount',
       numeric: true,
       width: '100px',
       cell: row => <MoneyCell amount={row.amount} unit="major" />,
@@ -142,7 +145,7 @@ export function FiledDisputesTable({ rows }: { rows: FiledDisputeRow[] }) {
                   size="sm"
                 />
               </DrawerField>
-              <DrawerField label="At stake">
+              <DrawerField label={disputeOutcome(detail.status).decided ? 'Billed' : 'At stake'}>
                 <MoneyCell amount={detail.amount} unit="major" tone="auto" />
               </DrawerField>
               <p className="t-meta mt-2 text-ink-3">
@@ -153,6 +156,14 @@ export function FiledDisputesTable({ rows }: { rows: FiledDisputeRow[] }) {
                     : "The charge stands while this is reviewed, and the publisher's payout is held. The outcome appears here once it is decided."}
               </p>
             </DrawerSection>
+
+            {detail.decisionNote ? (
+              <DrawerSection title="Why it was decided this way">
+                <p className="t-body whitespace-pre-wrap break-words text-ink">
+                  {detail.decisionNote}
+                </p>
+              </DrawerSection>
+            ) : null}
 
             <DrawerSection title="The call">
               <div className="pb-3">

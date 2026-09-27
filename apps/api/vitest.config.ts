@@ -36,6 +36,9 @@ const DATABASE_BACKED = [
   // default pool the two would delete each other's fixtures.
   '**/src/__tests__/role-preview.test.ts',
   '**/src/__tests__/publisher-portal-access.test.ts',
+  // Truncates `tenants` and `roles` to seed a white-label agency, its children
+  // and another agency, and writes `statements`.
+  '**/src/__tests__/statements.test.ts',
   // Seeds two agencies with users, calls, recordings and analyzer uploads, and
   // truncates `tenants`, `roles` and `recordings` to do it. Left off this list
   // it ran beside tenant-isolation.test.ts and the two deleted each other's
@@ -72,6 +75,9 @@ const DATABASE_BACKED = [
   // Truncates `insurance_carrier_applications`, `calls`, `tenants`, `roles`
   // and `users` to seed one agency and its agents.
   '**/src/__tests__/application-disposition.test.ts',
+  // Truncates `insurance_carrier_applications`, `tenants`, `roles` and `users`
+  // to seed one agency, its owner and two agents' applications.
+  '**/src/__tests__/applications-read.test.ts',
   // Truncates `calls`, `did_routes`, `tenants`, `roles` and `users` to seed one
   // agency, its agent and a tracking DID, then drives the CDR and the
   // disposition endpoint against them.
@@ -102,6 +108,12 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles` and `audit_logs` to seed two white-label
   // agencies with publishers, payable calls and clawbacks.
   '**/src/__tests__/payout-clawbacks.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed a white-label agency,
+  // its owner, two prepaid buyers and their portal users.
+  '**/src/__tests__/buyer-portal.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed two agencies, their
+  // owners, a publisher user, calls, payments and clawbacks.
+  '**/src/__tests__/publisher-portal-money.test.ts',
   // Truncates `tenants`, `roles` and `audit_logs` to seed a white-label and a
   // normal agency, each with an owner and DNC lists.
   '**/src/__tests__/dnc-lists-access.test.ts',
@@ -121,6 +133,10 @@ const DATABASE_BACKED = [
   '**/src/__tests__/password.test.ts',
   '**/src/__tests__/agency-numbers.test.ts',
   '**/src/__tests__/child-agency.test.ts',
+  // Each truncates `tenants` and `roles`: an agency's buyers with their
+  // wallets, calls and top-ups, and branded tenants on their own domains.
+  '**/src/__tests__/buyer-balances.test.ts',
+  '**/src/__tests__/public-brand.test.ts',
 ];
 
 export default defineConfig({

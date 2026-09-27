@@ -28,7 +28,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface Stats {
@@ -64,11 +65,34 @@ interface Stats {
 
 type DatePreset = 'last-7' | 'last-30' | 'last-90' | 'custom';
 
+/** One New York calendar day of this publisher's inbound calls. */
+interface DailyEntry {
+  day: string;
+  calls: number;
+  billable: number;
+  payout: number;
+}
+
+/**
+ * "Mar 4" for a `YYYY-MM-DD` day key. Read as a UTC date on purpose: the key
+ * already names the calendar day, and letting the browser's zone near it would
+ * shift every label a day for a reader west of Greenwich.
+ */
+function dayLabel(key: string): string {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 function PublisherDashboard() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
   const [stats, setStats] = useState<Stats | null>(null);
+  const [daily, setDaily] = useState<DailyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>('last-30');
@@ -97,14 +121,20 @@ function PublisherDashboard() {
         end = today;
       }
 
-      const res = await apiClient.get<Stats>(
-        `/api/v1/publishers/${publisherId}/stats?startDate=${start}&endDate=${end}`
-      );
+      const [res, dailyRes] = await Promise.all([
+        apiClient.get<Stats>(
+          `/api/v1/publishers/${publisherId}/stats?startDate=${start}&endDate=${end}`
+        ),
+        apiClient.get<Envelope<{ days: DailyEntry[] }>>(
+          `/api/v1/publishers/${publisherId}/daily?period=CUSTOM&from=${start}&to=${end}`
+        ),
+      ]);
       if (res.data) {
         setStats(res.data);
       } else if (res.error) {
         toast.error('Failed to load dashboard stats', res.error.message);
       }
+      setDaily(payload(dailyRes)?.days ?? []);
     } catch (err) {
       console.error('Failed to fetch publisher dashboard stats:', err);
     } finally {
@@ -161,40 +191,21 @@ function PublisherDashboard() {
     }
   };
 
-  // Mock chart data generation based on total stats
-  const chartData = useMemo(() => {
-    if (!stats) return [];
-    const count = datePreset === 'last-7' ? 7 : datePreset === 'last-90' ? 12 : 30;
-    const items = [];
-    const baseVal = Math.floor(stats.totalCalls / count);
-    const billableBase = Math.floor(stats.billableCalls / count);
-
-    for (let i = count - 1; i >= 0; i--) {
-      const date = new Date();
-      if (datePreset === 'last-90') {
-        date.setDate(date.getDate() - i * 7);
-      } else {
-        date.setDate(date.getDate() - i);
-      }
-
-      const label =
-        datePreset === 'last-90'
-          ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-          : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-
-      // Add slight randomness
-      const randSeed = Math.sin(i) * 0.4 + 1.0;
-      const total = Math.max(1, Math.round(baseVal * randSeed));
-      const billable = Math.max(0, Math.min(total, Math.round(billableBase * randSeed)));
-
-      items.push({
-        name: label,
-        Total: total,
-        Billable: billable,
-      });
-    }
-    return items;
-  }, [stats, datePreset]);
+  /*
+   * The trend chart plots the publisher's real calls per day, from
+   * `GET /api/v1/publishers/:id/daily`. It used to be a curve made up from the
+   * period's totals, which drew a trend on days that had none; a day with no
+   * calls is in the series as a zero, so a gap in traffic shows as one.
+   */
+  const chartData = useMemo(
+    () =>
+      daily.map(entry => ({
+        name: dayLabel(entry.day),
+        Total: entry.calls,
+        Billable: entry.billable,
+      })),
+    [daily]
+  );
 
   if (loading && !stats) {
     return (
@@ -370,30 +381,45 @@ function PublisherDashboard() {
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                {/*
+                 * Colours are the agency's brand tokens, not hex: a white-label
+                 * agency's publishers see its brand here, and dark mode swaps
+                 * the grid and tooltip with the rest of the page.
+                 */}
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="var(--brand)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorBillable" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0e7355" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#0e7355" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--brand-ink)" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="var(--brand-ink)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e0d8" />
-                <XAxis dataKey="name" stroke="#8a867c" style={{ fontSize: 10 }} tickLine={false} />
-                <YAxis stroke="#8a867c" style={{ fontSize: 10 }} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--rule)" />
+                <XAxis
+                  dataKey="name"
+                  stroke="var(--ink-3)"
+                  style={{ fontSize: 10 }}
+                  tickLine={false}
+                />
+                <YAxis
+                  stroke="var(--ink-3)"
+                  style={{ fontSize: 10 }}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderColor: '#e4e0d8',
-                    color: '#171614',
+                    backgroundColor: 'var(--surface)',
+                    borderColor: 'var(--rule)',
+                    color: 'var(--ink)',
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="Total"
-                  stroke="#10b981"
+                  stroke="var(--brand)"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorTotal)"
@@ -402,7 +428,7 @@ function PublisherDashboard() {
                 <Area
                   type="monotone"
                   dataKey="Billable"
-                  stroke="#0e7355"
+                  stroke="var(--brand-ink)"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorBillable)"

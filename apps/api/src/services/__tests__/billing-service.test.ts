@@ -46,6 +46,11 @@ const mockPrisma = {
     findFirst: vi.fn(),
     create: vi.fn(),
   },
+  // A paused buyer with no recorded pause reason is resolved from its audit
+  // trail (services/buyer-pause.ts).
+  auditLog: {
+    findFirst: vi.fn(),
+  },
   publisher: {
     findUnique: vi.fn(),
   },
@@ -377,6 +382,47 @@ describe('BillingService Unit Tests', () => {
       );
     });
 
+    it('marks an estimated cost as estimated, and leaves a carrier cost unmarked', async () => {
+      mockPrisma.call.findUnique.mockResolvedValue({ ...defaultCall, cost: null });
+      await billingService.calculateCallBilling('call-1');
+      const estimated = mockPrisma.call.update.mock.calls.at(-1)?.[0] as {
+        data: { metadata?: Record<string, unknown> };
+      };
+      expect(estimated.data.metadata).toMatchObject({ costEstimated: true });
+
+      mockPrisma.call.update.mockClear();
+      mockPrisma.call.findUnique.mockResolvedValue({
+        ...defaultCall,
+        cost: new Prisma.Decimal('0.4200'),
+      });
+      await billingService.calculateCallBilling('call-1');
+      const carrier = mockPrisma.call.update.mock.calls.at(-1)?.[0] as {
+        data: { metadata?: unknown };
+      };
+      expect(carrier.data.metadata).toBeUndefined();
+    });
+
+    it('dates its ledger rows by the New York calendar day, not UTC midnight', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // 01:30 UTC on 3 September is still 2 September in New York.
+      vi.setSystemTime(new Date('2026-09-03T01:30:00Z'));
+      try {
+        const periodDates: Date[] = [];
+        mockPrisma.accrualLedger.findUnique.mockResolvedValue(null);
+        mockPrisma.accrualLedger.create.mockImplementation(args => {
+          periodDates.push(args.data.periodDate);
+          return Promise.resolve(args.data);
+        });
+        await billingService.calculateCallBilling('call-1');
+        expect(periodDates.length).toBeGreaterThan(0);
+        for (const date of periodDates) {
+          expect(date.toISOString()).toBe('2026-09-02T00:00:00.000Z');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should insert accrual ledger entries idempotently using unique idempotencyKey', async () => {
       const createdKeys: string[] = [];
       mockPrisma.accrualLedger.create.mockImplementation(args => {
@@ -586,7 +632,7 @@ describe('BuyerBillingService Unit Tests', () => {
       expect(mockPrisma.buyer.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'buyer-1' },
-          data: { status: 'PAUSED' },
+          data: { status: 'PAUSED', metadata: { pauseReason: 'WALLET_EMPTY' } },
         })
       );
     });
@@ -599,15 +645,17 @@ describe('BuyerBillingService Unit Tests', () => {
       walletBalance: new Prisma.Decimal('10.00'),
       leadsRemaining: 10,
       status: 'PAUSED',
+      metadata: { pauseReason: 'WALLET_EMPTY' },
     };
 
     beforeEach(() => {
       mockPrisma.buyer.findUnique.mockResolvedValue(defaultBuyer);
       mockPrisma.buyer.update.mockResolvedValue({});
       mockPrisma.buyerTransaction.create.mockResolvedValue({});
+      mockPrisma.auditLog.findFirst.mockResolvedValue(null);
     });
 
-    it('should add amount to walletBalance, sync leadsRemaining, and reactivate if PAUSED', async () => {
+    it('should add amount to walletBalance, sync leadsRemaining, and reactivate a wallet pause', async () => {
       const res = await buyerBillingService.addCredits('buyer-1', 50.5, 'admin-1', 'Deposit');
 
       expect(res.success).toBe(true);
@@ -620,6 +668,7 @@ describe('BuyerBillingService Unit Tests', () => {
             walletBalance: expect.any(Object), // Decimal
             leadsRemaining: 60, // Math.floor(60.50)
             status: 'ACTIVE', // Reactivated
+            metadata: {}, // pauseReason cleared
           }),
         })
       );
@@ -633,6 +682,34 @@ describe('BuyerBillingService Unit Tests', () => {
           }),
         })
       );
+    });
+
+    it('leaves a buyer its owner paused by hand paused', async () => {
+      mockPrisma.buyer.findUnique.mockResolvedValue({
+        ...defaultBuyer,
+        metadata: { pauseReason: 'MANUAL' },
+      });
+
+      const res = await buyerBillingService.addCredits('buyer-1', 50, 'admin-1');
+
+      expect(res.success).toBe(true);
+      const data = mockPrisma.buyer.update.mock.calls[0][0].data;
+      expect(data.status).toBeUndefined();
+      expect(data.metadata).toBeUndefined();
+    });
+
+    it('reads a paused buyer with no recorded reason from its audit trail', async () => {
+      mockPrisma.buyer.findUnique.mockResolvedValue({ ...defaultBuyer, metadata: null });
+
+      // No audit row either way: stays paused, as a manual pause would.
+      mockPrisma.auditLog.findFirst.mockResolvedValueOnce(null);
+      await buyerBillingService.addCredits('buyer-1', 50, 'admin-1');
+      expect(mockPrisma.buyer.update.mock.calls[0][0].data.status).toBeUndefined();
+
+      // The billing service paused it last: the wallet's pause to lift.
+      mockPrisma.auditLog.findFirst.mockResolvedValueOnce({ action: 'buyer.status.autopaused' });
+      await buyerBillingService.addCredits('buyer-1', 50, 'admin-1');
+      expect(mockPrisma.buyer.update.mock.calls[1][0].data.status).toBe('ACTIVE');
     });
   });
 });

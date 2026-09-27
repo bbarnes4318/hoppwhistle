@@ -48,9 +48,12 @@ export interface CallRowView {
   thresholdSeconds: number | null;
   billable: boolean;
   billableReason: string | null;
+  /** What the call was billed. For a decided return, before the decision. */
   amount: number | null;
   chargeStatus: string | null;
   disputeStatus: string | null;
+  /** What the agency said when it decided this call's return, if anything. */
+  decisionNote: string | null;
   disposition: string | null;
   /** The buyer has accepted this call. See `acceptedByBuyer`. */
   accepted: boolean;
@@ -79,6 +82,24 @@ function outcomeChip(row: CallRowView): React.ReactNode {
     <StatusChip value="BILLABLE" tone="live" label="Billable" size="sm" />
   ) : (
     <StatusChip value="NOT_BILLABLE" tone="neutral" label="Not billable" size="sm" />
+  );
+}
+
+/**
+ * The amount on a row. An accepted return shows what the call was billed,
+ * struck through: it cost that, and was given back. A bare $0.00 there read as
+ * a call that never cost anything.
+ */
+function ChargedAmount({ row, tone }: { row: CallRowView; tone?: 'auto' }) {
+  const returned = row.disputeStatus === 'ACCEPTED';
+  return (
+    <MoneyCell
+      amount={row.amount}
+      unit="major"
+      tone={tone}
+      className={returned ? 'text-ink-3 line-through' : undefined}
+      title={returned ? 'Returned: refunded, or never charged' : undefined}
+    />
   );
 }
 
@@ -229,8 +250,12 @@ export function CallsTable({
     {
       id: 'duration',
       header: 'Duration',
-      cellClassName: 'px-2 sm:px-3 w-[98px] sm:w-[160px]',
-      headClassName: 'px-2 sm:px-3 w-[98px] sm:w-[160px]',
+      // Below `sm` the row keeps the outcome and drops the bar: on a phone,
+      // whether a call was billable, disputed or returned is the question,
+      // and the drawer still draws the duration against the threshold.
+      hideBelow: 'sm',
+      cellClassName: 'px-2 sm:px-3 sm:w-[160px]',
+      headClassName: 'px-2 sm:px-3 sm:w-[160px]',
       cell: row => (
         <DurationBar
           seconds={row.connectedSeconds}
@@ -244,8 +269,8 @@ export function CallsTable({
     {
       id: 'outcome',
       header: 'Outcome',
-      hideBelow: 'sm',
-      width: '130px',
+      cellClassName: 'px-2 sm:px-3 w-[98px] sm:w-[130px]',
+      headClassName: 'px-2 sm:px-3 w-[98px] sm:w-[130px]',
       cell: outcomeChip,
     },
     {
@@ -254,7 +279,7 @@ export function CallsTable({
       numeric: true,
       cellClassName: 'px-2 sm:px-3 w-[68px] sm:w-[100px]',
       headClassName: 'px-2 sm:px-3 w-[68px] sm:w-[100px]',
-      cell: row => <MoneyCell amount={row.amount} unit="major" />,
+      cell: row => <ChargedAmount row={row} />,
     },
     {
       id: 'actions',
@@ -402,9 +427,14 @@ function CallDetailDrawer({
           />
         </div>
         <DrawerField label="Outcome">{outcomeChip(row)}</DrawerField>
-        <DrawerField label="Charged">
-          <MoneyCell amount={row.amount} unit="major" tone="auto" />
+        <DrawerField label={row.disputeStatus === 'ACCEPTED' ? 'Billed, then returned' : 'Charged'}>
+          <ChargedAmount row={row} tone="auto" />
         </DrawerField>
+        {row.decisionNote ? (
+          <DrawerField label="Return decision">
+            <span className="whitespace-pre-wrap break-words">{row.decisionNote}</span>
+          </DrawerField>
+        ) : null}
         <DrawerField label="Threshold">
           {row.thresholdSeconds != null ? `${row.thresholdSeconds}s connected` : 'Not configured'}
         </DrawerField>

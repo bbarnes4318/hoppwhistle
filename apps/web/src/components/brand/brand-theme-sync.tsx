@@ -9,8 +9,9 @@ import { useBrand } from '@/hooks/use-brand';
  * is what the palette blocks in globals.css answer to, and the favicon and
  * apple-touch-icon.
  *
- * Mounted by the authenticated shell only. The login page is never branded --
- * the tenant is unknown until somebody signs in -- and leaving the shell removes
+ * Mounted by the authenticated shell only. The login page has no session and is
+ * branded by its host instead (components/brand/login-brand.tsx), on its own
+ * subtree rather than on <html>. Leaving the shell removes
  * everything this set, so a brand cannot outlive the session that was given it.
  * Switching to "All agencies" and signing out both reload the page, and the
  * next `/api/auth/me` answers with no brand, which removes it too.

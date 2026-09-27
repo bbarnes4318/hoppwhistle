@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  DollarSign,
-  Download,
-  Loader2,
-  RefreshCw,
-  TrendingUp,
-} from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -19,7 +11,7 @@ import {
   PanelBody,
   PanelHeader,
   PanelTitle,
-  StatTile,
+  StatusChip,
   TOOLBAR_CELL,
   Toolbar,
   ToolbarActions,
@@ -45,38 +37,45 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload, type Envelope } from '@/lib/api';
+import { nyDayBounds } from '@/lib/ny-day';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 
-interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  status: string;
-  period: { start: string; end: string };
-  total: string;
-  dueDate: string;
-  paidAt: string | null;
-}
-
-interface Balance {
-  billingAccountId: string | null;
-  currency: string;
-  available: string;
-  pending: string;
-  held: string;
-  total: string;
-}
-
-interface BuyerOption {
+/** One row of `GET /api/v1/buyers/balances`. */
+export interface BuyerBalanceRow {
   id: string;
   name: string;
   code: string;
-  billingType: string;
+  billingType: 'UPFRONT' | 'TERMS';
+  /** UPFRONT only: the wallet now. */
+  walletBalance: number | null;
+  /** TERMS only: billed so far this calendar month (New York). */
+  billedThisMonth: number | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'PAUSED';
+  pauseReason: 'WALLET_EMPTY' | 'MANUAL' | null;
+  lastTopUp: { amount: number; at: string } | null;
+}
+
+const BILLING_LABEL: Record<BuyerBalanceRow['billingType'], string> = {
+  UPFRONT: 'Prepaid',
+  TERMS: 'Terms',
+};
+
+const PAUSE_REASON_LABEL: Record<NonNullable<BuyerBalanceRow['pauseReason']>, string> = {
+  WALLET_EMPTY: 'Wallet empty',
+  MANUAL: 'Paused by you',
+};
+
+function statusLabel(row: Pick<BuyerBalanceRow, 'status' | 'pauseReason'>): string {
+  if (row.status === 'ACTIVE') return 'Active';
+  if (row.status === 'INACTIVE') return 'Inactive';
+  return row.pauseReason ? `Paused · ${PAUSE_REASON_LABEL[row.pauseReason]}` : 'Paused';
 }
 
 interface BuyerTransaction {
   id: string;
-  amount: number;
+  /** Decimal on the wire: a string, or a number from an older build. */
+  amount: number | string;
   type: 'CREDIT' | 'DEBIT';
   description: string;
   callId: string | null;
@@ -91,25 +90,39 @@ interface TransactionsResponse {
     code: string;
     publisherName: string;
     billingType: string;
-    leadsRemaining: number;
+    walletBalance: number;
     status: string;
   };
   data: BuyerTransaction[];
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
-interface BuyersResponse {
-  data: BuyerOption[];
+/**
+ * The transaction filter's dates as instants: from the start of the first New
+ * York day to the end of the last. The endpoint reads `endDate` inclusively
+ * (`lte`), so it is sent as the last millisecond of the day rather than the
+ * next day's first instant.
+ */
+export function ledgerDateParams(
+  startDate: string,
+  endDate: string
+): { startDate?: string; endDate?: string } {
+  const start = startDate ? nyDayBounds(startDate) : null;
+  const end = endDate ? nyDayBounds(endDate) : null;
+  return {
+    ...(start ? { startDate: start.start.toISOString() } : {}),
+    ...(end ? { endDate: new Date(end.endExclusive.getTime() - 1).toISOString() } : {}),
+  };
 }
 
 function BillingPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [balance, setBalance] = useState<Balance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Every buyer in the agency, with its balance. Also the ledger's buyer list.
+  const [buyers, setBuyers] = useState<BuyerBalanceRow[]>([]);
+
   // Transaction ledger state
-  const [buyers, setBuyers] = useState<BuyerOption[]>([]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string>('');
   const [transactions, setTransactions] = useState<BuyerTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
@@ -123,25 +136,11 @@ function BillingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [invoicesResponse, balanceResponse, buyersResponse] = await Promise.all([
-        apiClient.get<{ data: Invoice[]; meta: { page: number; limit: number; total: number } }>(
-          '/api/v1/billing/invoices'
-        ),
-        apiClient.get<Balance>('/api/v1/billing/balance'),
-        apiClient.get<BuyersResponse>('/api/v1/buyers?billingType=UPFRONT&limit=100'),
-      ]);
-
-      if (invoicesResponse.data) {
-        setInvoices(invoicesResponse.data.data || []);
-      }
-      if (balanceResponse.data) {
-        setBalance(balanceResponse.data);
-      }
-      if (buyersResponse.data) {
-        setBuyers(buyersResponse.data.data || []);
-      }
+      const response = await apiClient.get<Envelope<BuyerBalanceRow[]>>('/api/v1/buyers/balances');
+      if (response.error) setError(response.error.message);
+      setBuyers(payload(response) ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load billing data');
+      setError(err instanceof Error ? err.message : 'Failed to load buyer balances');
     } finally {
       setLoading(false);
     }
@@ -160,8 +159,9 @@ function BillingPage() {
         page: transactionPage.toString(),
         limit: '25',
       });
-      if (startDate) params.append('startDate', new Date(startDate).toISOString());
-      if (endDate) params.append('endDate', new Date(endDate).toISOString());
+      for (const [name, value] of Object.entries(ledgerDateParams(startDate, endDate))) {
+        params.append(name, value);
+      }
 
       const response = await apiClient.get<TransactionsResponse>(
         `/api/v1/buyers/${selectedBuyerId}/transactions?${params.toString()}`
@@ -201,29 +201,75 @@ function BillingPage() {
       {/* No header row: the page title is already in the topbar. */}
       {error && <Notice tone="error">Error: {error}</Notice>}
 
-      {/* Balance Cards */}
-      {balance && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <StatTile
-            label="Available Balance"
-            icon={DollarSign}
-            tone="money"
-            figure={formatCurrency(parseFloat(balance.available))}
+      {/*
+        Every buyer in the agency and where its money stands: a prepaid buyer's
+        wallet, or what a terms buyer has been billed this month.
+      */}
+      <Panel className="min-w-0">
+        <PanelHeader>
+          <PanelTitle>Buyer balances</PanelTitle>
+        </PanelHeader>
+        {buyers.length === 0 ? (
+          <EmptyState
+            headline="No buyers yet"
+            body="Buyers appear here with their balance once they are added."
           />
-
-          <StatTile
-            label="Pending"
-            icon={TrendingUp}
-            figure={formatCurrency(parseFloat(balance.pending))}
-          />
-
-          <StatTile
-            label="Held"
-            icon={DollarSign}
-            figure={formatCurrency(parseFloat(balance.held))}
-          />
-        </div>
-      )}
+        ) : (
+          <PanelBody flush className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Buyer</TableHead>
+                  <TableHead>Billing</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last top-up</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {buyers.map(row => (
+                  <TableRow key={row.id} data-testid="buyer-balance-row">
+                    <TableCell className="font-medium text-ink">{row.name}</TableCell>
+                    <TableCell className="text-ink-2">{BILLING_LABEL[row.billingType]}</TableCell>
+                    <TableCell className="t-num whitespace-nowrap text-right">
+                      {row.billingType === 'UPFRONT' ? (
+                        <span className="font-semibold text-ink">
+                          {formatCurrency(row.walletBalance ?? 0)}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="font-semibold text-ink">
+                            {formatCurrency(row.billedThisMonth ?? 0)}
+                          </span>{' '}
+                          <span className="t-meta text-ink-3">billed this month</span>
+                        </>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip
+                        value={row.status}
+                        enumName="BuyerStatus"
+                        label={statusLabel(row)}
+                        size="sm"
+                      />
+                    </TableCell>
+                    <TableCell className="t-num whitespace-nowrap text-ink-2">
+                      {row.lastTopUp ? (
+                        <>
+                          {formatCurrency(row.lastTopUp.amount)}{' '}
+                          <span className="text-ink-3">· {formatDate(row.lastTopUp.at)}</span>
+                        </>
+                      ) : (
+                        <span className="text-ink-3">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </PanelBody>
+        )}
+      </Panel>
 
       {/* Buyer Transaction Ledger */}
       <Panel className="min-w-0">
@@ -303,12 +349,21 @@ function BillingPage() {
                 <div className="t-label text-ink-3">Publisher</div>
                 <div className="t-body text-ink">{buyerInfo.publisherName}</div>
               </div>
-              <div>
-                <div className="t-label text-ink-3">Current Balance</div>
-                <div className="t-body font-semibold tabular-nums text-ink">
-                  {buyerInfo.leadsRemaining.toLocaleString()} leads
+              {buyerInfo.billingType === 'UPFRONT' ? (
+                <div>
+                  <div className="t-label text-ink-3">Current Balance</div>
+                  <div className="t-body font-semibold tabular-nums text-ink">
+                    {formatCurrency(Number(buyerInfo.walletBalance))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <div className="t-label text-ink-3">Billed this month</div>
+                  <div className="t-body font-semibold tabular-nums text-ink">
+                    {formatCurrency(buyers.find(b => b.id === buyerInfo.id)?.billedThisMonth ?? 0)}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="t-label text-ink-3">Status</div>
                 <Badge variant={buyerInfo.status === 'ACTIVE' ? 'default' : 'secondary'}>
@@ -370,7 +425,7 @@ function BillingPage() {
                         )}
                       >
                         {tx.type === 'CREDIT' ? '+' : ''}
-                        {tx.amount}
+                        {formatCurrency(Number(tx.amount))}
                       </TableCell>
                       <TableCell className="text-ink">{tx.description}</TableCell>
                       <TableCell className="text-ink-3">{tx.createdByEmail || 'System'}</TableCell>
@@ -405,64 +460,6 @@ function BillingPage() {
               </div>
             )}
           </>
-        )}
-      </Panel>
-
-      {/* Invoices */}
-      <Panel className="min-w-0">
-        <PanelHeader>
-          <PanelTitle>Invoices</PanelTitle>
-        </PanelHeader>
-        {invoices.length === 0 ? (
-          <EmptyState
-            headline="No invoices found"
-            body="Invoices appear here once charging is turned on."
-          />
-        ) : (
-          <PanelBody flush className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice Number</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map(invoice => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="t-data font-medium text-ink">
-                      {invoice.invoiceNumber}
-                    </TableCell>
-                    <TableCell className="t-num whitespace-nowrap text-ink-2">
-                      {formatDate(invoice.period.start)} - {formatDate(invoice.period.end)}
-                    </TableCell>
-                    <TableCell className="t-num font-medium text-ink">
-                      {formatCurrency(parseFloat(invoice.total))}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={invoice.status === 'paid' ? 'success' : 'warning'}>
-                        {invoice.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="t-num whitespace-nowrap text-ink-2">
-                      {formatDate(invoice.dueDate)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Tooltip content="Download invoice" align="end">
-                        <Button variant="ghost" size="sm">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </PanelBody>
         )}
       </Panel>
     </div>

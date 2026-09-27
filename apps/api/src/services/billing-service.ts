@@ -2,6 +2,7 @@
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { calendarDayOf } from './rating/calendar-day.js';
 
 export interface BillingCalculationResult {
   success: boolean;
@@ -411,6 +412,12 @@ export class BillingService {
         // 7. Resolve Carrier / Live-Transfer Cost
         let cost = new Prisma.Decimal(0);
         let costSource = 'estimated_rate_card';
+        /*
+         * Set when no carrier figure exists and the cost below is the per-minute
+         * estimate. Stored as `metadata.costEstimated` so the Revenue overview
+         * can say "Call cost (estimated)" rather than present a guess as a bill.
+         */
+        let costEstimated = false;
 
         const callMetadata = (call.metadata as any) || {};
 
@@ -440,6 +447,7 @@ export class BillingService {
           const durationSeconds = call.duration || 0;
           cost = new Prisma.Decimal((durationSeconds / 60) * rate);
           costSource = 'estimated_rate_card';
+          costEstimated = true;
         }
 
         // 8. Calculate final amounts
@@ -509,6 +517,9 @@ export class BillingService {
             noConversionReason: billable ? null : noConversionReason,
             billingCalculatedAt: new Date(),
             billingRuleSnapshot: billingRuleSnapshot as any,
+            ...(costEstimated
+              ? { metadata: { ...callMetadata, costEstimated: true } as Prisma.InputJsonValue }
+              : {}),
             buyerChargeStatus,
             publisherPayoutStatus,
             publisherPayableAt,
@@ -540,8 +551,9 @@ export class BillingService {
           billingAccountId = newAccount.id;
         }
 
-        const periodDate = new Date();
-        periodDate.setHours(0, 0, 0, 0);
+        // The America/New_York calendar day the call is billed on, stored as that
+        // day's label (UTC midnight of YYYY-MM-DD), not the server's midnight.
+        const periodDate = new Date(`${calendarDayOf(new Date())}T00:00:00.000Z`);
 
         const upsertLedgerEntry = async (
           type: 'BUYER_REVENUE' | 'PUBLISHER_PAYOUT' | 'CARRIER_COST' | 'PLATFORM_PROFIT',

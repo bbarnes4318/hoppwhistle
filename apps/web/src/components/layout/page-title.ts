@@ -29,7 +29,8 @@ import {
 const EXPLICIT: Record<string, string> = {
   '/calls/my': 'My calls',
   '/design-preview': 'Design system',
-  '/publisher/tester': 'Request tester',
+  // Not a sandbox: a post here leases a real number and can route a real call.
+  '/publisher/tester': 'Live post test',
   /*
    * The AI campaign screens have no nav entry, so the fallback would humanise
    * the last segment and title them "Ai campaigns" and "New" -- the first

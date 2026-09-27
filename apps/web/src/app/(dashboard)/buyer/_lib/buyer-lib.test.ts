@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { acceptedByBuyer, durationScale, recordingIdFromUrl } from './calls';
+import {
+  acceptedByBuyer,
+  decisionNoteOf,
+  displayAmountOf,
+  durationScale,
+  recordingIdFromUrl,
+} from './calls';
 import { composeDisputeReason, disputeOutcome } from './dispute';
-import { resolveRange } from './range';
+import { newYorkMonthToDate, resolveRange } from './range';
+import { chargedSpend } from './spend';
 import { normalizeToken } from './token';
 
 /**
@@ -176,5 +183,70 @@ describe('recordingIdFromUrl', () => {
   it('leaves any other URL alone', () => {
     expect(recordingIdFromUrl('https://carrier.example.com/audio/123.wav')).toBeNull();
     expect(recordingIdFromUrl(null)).toBeNull();
+  });
+});
+
+describe('decided returns', () => {
+  const call = (
+    disputeStatus: string | null,
+    buyerBillableAmount: number | null,
+    metadata: Record<string, unknown> | null
+  ) =>
+    ({ disputeStatus, buyerBillableAmount, metadata }) as unknown as Parameters<
+      typeof displayAmountOf
+    >[0];
+
+  it('shows an accepted return at what it was billed, not the $0 it was zeroed to', () => {
+    expect(displayAmountOf(call('ACCEPTED', 0, { originalBuyerBillableAmount: '40.00' }))).toBe(40);
+    expect(displayAmountOf(call('DENIED', 30, { originalBuyerBillableAmount: '30' }))).toBe(30);
+  });
+
+  it('falls back to the current amount when no original was kept', () => {
+    expect(displayAmountOf(call('ACCEPTED', 0, null))).toBe(0);
+    // An open dispute is not decided: its own amount is the one that stands.
+    expect(displayAmountOf(call('DISPUTED', 25, { originalBuyerBillableAmount: '99' }))).toBe(25);
+  });
+
+  it("reads the agency's note, and nothing for a blank one", () => {
+    expect(decisionNoteOf(call('DENIED', 30, { decisionNote: 'Connected 3 minutes' }))).toBe(
+      'Connected 3 minutes'
+    );
+    expect(decisionNoteOf(call('DENIED', 30, { decisionNote: '  ' }))).toBeNull();
+    expect(decisionNoteOf(call('DENIED', 30, null))).toBeNull();
+  });
+});
+
+describe('chargedSpend', () => {
+  it('counts the charged calls of either billing type, from the decimal strings', () => {
+    expect(chargedSpend({ walletDebits: '120.5000', pendingInvoice: '0.0000' })).toBe(120.5);
+    expect(chargedSpend({ walletDebits: '0.0000', pendingInvoice: '75.2500' })).toBe(75.25);
+  });
+});
+
+describe('newYorkMonthToDate', () => {
+  it('starts at midnight on the 1st in New York, in daylight time and out of it', () => {
+    // 27 September, EDT (UTC-4).
+    expect(newYorkMonthToDate(new Date('2026-09-27T12:00:00Z'))).toEqual({
+      startISO: '2026-09-01T04:00:00.000Z',
+      endISO: '2026-09-27T12:00:00.000Z',
+    });
+    // 15 January, EST (UTC-5).
+    expect(newYorkMonthToDate(new Date('2026-01-15T12:00:00Z')).startISO).toBe(
+      '2026-01-01T05:00:00.000Z'
+    );
+  });
+
+  it('is still the old month in New York for the first hours of the 1st in UTC', () => {
+    // 02:00 UTC on 1 October is 22:00 on 30 September in New York.
+    expect(newYorkMonthToDate(new Date('2026-10-01T02:00:00Z')).startISO).toBe(
+      '2026-09-01T04:00:00.000Z'
+    );
+  });
+
+  it('crosses a DST change inside the month', () => {
+    // March 2026: EST on the 1st, EDT from the 8th.
+    expect(newYorkMonthToDate(new Date('2026-03-20T12:00:00Z')).startISO).toBe(
+      '2026-03-01T05:00:00.000Z'
+    );
   });
 });

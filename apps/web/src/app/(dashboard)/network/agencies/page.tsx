@@ -7,6 +7,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { count, pct } from '@/components/delivery/ledger';
 import { EmptyState, Notice, Panel, PanelBody, StatusChip } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
+import { ChildStatementButton } from '@/components/statements/statements-view';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -141,6 +142,9 @@ export default function NetworkAgenciesPage(): JSX.Element {
                     <TableHead className="text-right">Closing</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead>Onboarded</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -182,9 +186,12 @@ export default function NetworkAgenciesPage(): JSX.Element {
                           <TableCell className="t-meta text-ink-2">
                             {formatDisplayDate(agency.createdAt)}
                           </TableCell>
+                          <TableCell className="text-right">
+                            <ChildStatementButton tenantId={agency.tenantId} name={agency.name} />
+                          </TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell colSpan={9} className="pt-0">
+                          <TableCell colSpan={10} className="pt-0">
                             <DownlineSettings agency={agency} />
                           </TableCell>
                         </TableRow>

@@ -1,0 +1,215 @@
+/**
+ * The call ledger's pure pieces: return badges and the Returns filter, the
+ * billing chips, the recording predicate, the default columns per role, and
+ * the export's file name.
+ *
+ * Each of these was wrong on the screen in a way a person acted on: a return
+ * the agency had accepted read as "DISPUTED - Resolved"-style jargon or as a
+ * bare enum; a call with no charge status read "Pending"; a call with no
+ * recording offered a play button that asked the server for the CALL's id as
+ * a recording; and an owner opening the ledger saw the notes column and not
+ * the money.
+ */
+import { describe, expect, it } from 'vitest';
+
+import {
+  AGENT_DEFAULT_COLUMNS,
+  CALL_COLUMNS,
+  DISPUTE_FILTER_OPTIONS,
+  OWNER_DEFAULT_COLUMNS,
+  answeredByOf,
+  chargeStatusBadge,
+  columnRoleOf,
+  defaultVisibleColumns,
+  disputeBadge,
+  exportFilename,
+  localDayKey,
+  payoutStatusBadge,
+  recordingIdOf,
+  visibleColumnsFor,
+  type CallsViewer,
+} from '../(dashboard)/calls/call-columns';
+
+const OWNER: CallsViewer = {
+  isAgent: false,
+  isAdminOrOwner: true,
+  isBuyer: false,
+  isPublisher: false,
+};
+const AGENT: CallsViewer = {
+  isAgent: true,
+  isAdminOrOwner: false,
+  isBuyer: false,
+  isPublisher: false,
+};
+
+/** The labels a role's table opens with, in table order. */
+function defaultLabels(viewer: CallsViewer): string[] {
+  const visible = defaultVisibleColumns(columnRoleOf(viewer));
+  return visibleColumnsFor(viewer)
+    .filter(col => visible[col.id])
+    .map(col => col.label);
+}
+
+describe('return badges', () => {
+  it('names each state of a buyer return', () => {
+    expect(disputeBadge('DISPUTED')?.label).toBe('Return requested');
+    expect(disputeBadge('ACCEPTED')?.label).toBe('Return accepted');
+    expect(disputeBadge('DENIED')?.label).toBe('Return denied');
+  });
+
+  it('renders nothing for a call no return was requested on', () => {
+    expect(disputeBadge(null)).toBeNull();
+    expect(disputeBadge(undefined)).toBeNull();
+    expect(disputeBadge('')).toBeNull();
+  });
+
+  it('marks the open request as waiting and the accepted one as money lost', () => {
+    expect(disputeBadge('DISPUTED')?.tone).toBe('ringing');
+    expect(disputeBadge('ACCEPTED')?.tone).toBe('dropped');
+  });
+});
+
+describe('the Returns filter', () => {
+  it('offers None, Open, Accepted, Denied and Any, as the API reads them', () => {
+    expect(DISPUTE_FILTER_OPTIONS.map(o => [o.value, o.label])).toEqual([
+      ['NONE', 'None'],
+      ['DISPUTED', 'Open'],
+      ['ACCEPTED', 'Accepted'],
+      ['DENIED', 'Denied'],
+      ['ANY', 'Any'],
+    ]);
+  });
+});
+
+describe('billing status chips', () => {
+  it('renders nothing for a call with no status rather than "Pending"', () => {
+    expect(chargeStatusBadge(null)).toBeNull();
+    expect(payoutStatusBadge(null)).toBeNull();
+  });
+
+  it('names the charge outcomes a return or a decision can leave behind', () => {
+    expect(chargeStatusBadge('REFUNDED')?.label).toBe('Refunded');
+    expect(chargeStatusBadge('WAIVED')?.label).toBe('Waived');
+    expect(chargeStatusBadge('NOT_BILLABLE')?.label).toBe('Not billable');
+  });
+
+  it('names a clawed-back payout', () => {
+    const badge = payoutStatusBadge('CLAWED_BACK');
+    expect(badge?.label).toBe('Clawed back');
+    expect(badge?.tone).toBe('dropped');
+  });
+
+  it('still renders a value it does not know, humanised', () => {
+    expect(chargeStatusBadge('SOMETHING_NEW')?.label).toBe('Something new');
+  });
+});
+
+describe('the recording buttons', () => {
+  it('act on the primary recording', () => {
+    expect(recordingIdOf({ primaryRecordingId: 'rec-1' })).toBe('rec-1');
+  });
+
+  it('are not offered without one, whatever else the call carries', () => {
+    // A recording URL with no recording id is still no recording to fetch;
+    // the call id is never a stand-in for one.
+    expect(recordingIdOf({ primaryRecordingId: null })).toBeNull();
+    expect(recordingIdOf({ primaryRecordingId: '' })).toBeNull();
+    const withUrlOnly = {
+      id: 'call-1',
+      recordingUrl: '/recordings/x.wav',
+      primaryRecordingId: null,
+    };
+    expect(recordingIdOf(withUrlOnly)).toBeNull();
+  });
+});
+
+describe('default columns', () => {
+  it('opens an owner on the money and the returns', () => {
+    expect(defaultLabels(OWNER)).toEqual([
+      'Time',
+      'Caller',
+      'Campaign',
+      'Answered by',
+      'Duration',
+      'Disposition',
+      'Revenue',
+      'Payout',
+      'Return',
+    ]);
+  });
+
+  it('keeps the rest of an owner`s columns in the picker, off', () => {
+    const visible = defaultVisibleColumns('owner');
+    for (const id of [
+      'billable',
+      'connectedDuration',
+      'cost',
+      'profit',
+      'margin',
+      'did',
+      'toNumber',
+    ] as const) {
+      expect(visible[id], id).toBe(false);
+      expect(
+        visibleColumnsFor(OWNER).some(col => col.id === id),
+        id
+      ).toBe(true);
+    }
+  });
+
+  it('opens an agent on their calls and the applications they wrote', () => {
+    expect(defaultLabels(AGENT)).toEqual([
+      'Time',
+      'Caller',
+      'Campaign',
+      'Duration',
+      'Disposition',
+      'Application',
+    ]);
+  });
+
+  it('never offers an agent the Status, Return or money columns', () => {
+    const ids = visibleColumnsFor(AGENT).map(col => col.id);
+    for (const id of ['status', 'dispute', 'revenue', 'payout', 'cost', 'profit', 'margin']) {
+      expect(ids, id).not.toContain(id);
+    }
+  });
+
+  it('lists only columns that exist', () => {
+    const ids = new Set(CALL_COLUMNS.map(col => col.id));
+    for (const id of [...OWNER_DEFAULT_COLUMNS, ...AGENT_DEFAULT_COLUMNS]) {
+      expect(ids.has(id), id).toBe(true);
+    }
+  });
+});
+
+describe('answered by', () => {
+  it('is the agent, else the buyer the call was sold to', () => {
+    expect(answeredByOf({ agentName: 'Marisol Vance', buyerName: 'Acme' })?.name).toBe(
+      'Marisol Vance'
+    );
+    expect(answeredByOf({ agentName: null, buyerName: 'Acme' })).toEqual({
+      name: 'Acme',
+      kind: 'buyer',
+    });
+    expect(answeredByOf({ agentName: null, buyerName: 'Masked' })).toBeNull();
+    expect(answeredByOf({})).toBeNull();
+  });
+});
+
+describe('the export file name', () => {
+  it('is the applied range', () => {
+    expect(exportFilename({ from: '2026-09-01', to: '2026-09-27' })).toBe(
+      'calls-2026-09-01-2026-09-27.csv'
+    );
+    expect(exportFilename({ from: '', to: '' })).toBe('calls-all.csv');
+  });
+
+  it('takes a preset`s local day, not its UTC instant`s', () => {
+    // Late evening local time: toISOString would name the next day anywhere
+    // west of UTC. The local day key must not.
+    const lateEvening = new Date(2026, 8, 27, 23, 30);
+    expect(localDayKey(lateEvening)).toBe('2026-09-27');
+  });
+});

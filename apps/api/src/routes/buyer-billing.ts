@@ -20,9 +20,21 @@ import {
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { liveStatusService } from '../services/buyer-live-status-service.js';
+import {
+  pausedByName,
+  recordedPauseReason,
+  resolvePauseReason,
+  withPauseReason,
+} from '../services/buyer-pause.js';
 import { buyerStatsService } from '../services/buyer-stats-service.js';
+import { sendTopUpRequestEmail } from '../services/buyer-top-up-request.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
+
+/** The most a buyer can ask for in one top-up request, in dollars. */
+export const TOP_UP_REQUEST_MAX = 1_000_000;
+/** How long after a sent request the next one for the same buyer is refused. */
+export const TOP_UP_REQUEST_INTERVAL_MS = 60_000;
 
 export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -363,6 +375,138 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   });
 
   /**
+   * POST /api/v1/buyers/:buyerId/top-up-request   { amount }
+   *
+   * A prepaid buyer asking its agency to credit its wallet. Emails the
+   * agency's OWNER users (services/buyer-top-up-request.ts) and audits the
+   * request; it moves no money -- crediting stays `/credits`, which is staff's.
+   *
+   * Only the buyer itself may ask: the caller's own user record must name this
+   * buyer, whatever roles it holds. An owner or admin crediting a wallet has
+   * `/credits` and nobody to ask. The buyer must also be in the acting tenant;
+   * another agency's buyer is a 404, the same as one that does not exist.
+   *
+   * One request a minute per buyer. The email lands in an owner's inbox, and
+   * a double-click or a retry loop should not land it there twice.
+   */
+  fastify.post<{
+    Params: { buyerId: string };
+    Body: { amount?: unknown };
+  }>('/api/v1/buyers/:buyerId/top-up-request', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const tenantId = getActingTenantId(request);
+
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
+    }
+
+    const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    if (!user?.userId || profile.buyerId !== buyerId) {
+      void reply.code(403);
+      return {
+        error: { code: 'FORBIDDEN', message: 'You can only request a top-up for your own account' },
+      };
+    }
+
+    const amount = typeof request.body?.amount === 'number' ? request.body.amount : NaN;
+    if (!Number.isFinite(amount) || amount <= 0 || amount > TOP_UP_REQUEST_MAX) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Amount must be more than $0 and at most $${TOP_UP_REQUEST_MAX.toLocaleString('en-US')}`,
+        },
+      };
+    }
+    const rounded = Math.round(amount * 100) / 100;
+
+    const buyer = await prisma.buyer.findFirst({ where: { id: buyerId, tenantId } });
+    if (!buyer) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Buyer not found' } };
+    }
+    if (buyer.billingType !== 'UPFRONT') {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_BILLING_TYPE',
+          message: 'Only a prepaid account has a balance to top up',
+        },
+      };
+    }
+
+    const recent = await prisma.auditLog.findFirst({
+      where: {
+        tenantId,
+        action: 'buyer.topup.requested',
+        entityType: 'Buyer',
+        entityId: buyerId,
+        success: true,
+        createdAt: { gte: new Date(Date.now() - TOP_UP_REQUEST_INTERVAL_MS) },
+      },
+      select: { id: true },
+    });
+    if (recent) {
+      void reply.code(429);
+      return {
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'A top-up request was just sent. Give your account team a minute.',
+        },
+      };
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { email: true },
+    });
+    const emailed = await sendTopUpRequestEmail({
+      tenantId,
+      buyerId,
+      buyerName: buyer.name,
+      amount: rounded,
+      walletBalance: Number(buyer.walletBalance),
+      requestedBy: requester?.email ?? null,
+    });
+
+    // Written whether or not the email went: a request that could not be
+    // delivered is still one the buyer made, and the row says which.
+    const { auditLog } = await import('../services/audit.js');
+    await auditLog({
+      tenantId,
+      userId: user.userId,
+      action: 'buyer.topup.requested',
+      entityType: 'Buyer',
+      entityId: buyerId,
+      resource: request.url,
+      method: request.method,
+      changes: {
+        amount: rounded.toFixed(2),
+        walletBalance: buyer.walletBalance.toString(),
+        emailedOwners: emailed,
+      },
+      ipAddress: request.ip,
+      requestId: request.id,
+      success: emailed > 0,
+      error: emailed > 0 ? undefined : 'No owner could be emailed',
+    });
+
+    if (emailed === 0) {
+      void reply.code(503);
+      return {
+        error: {
+          code: 'NOT_SENT',
+          message: 'Your request could not be sent. Contact your account manager directly.',
+        },
+      };
+    }
+
+    void reply.code(201);
+    return { data: { buyerId, amount: rounded, emailedOwners: emailed } };
+  });
+
+  /**
    * GET /api/v1/buyers
    * Get all buyers with billing info
    */
@@ -618,14 +762,32 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       return reply.code(404).send({ error: 'Buyer not found' });
     }
 
+    /*
+     * What the buyer portal's banner and low-balance warning read. Why the
+     * buyer is paused and who it reads as paused by are decided here, not in
+     * the browser: the legacy lookup reads the audit trail, and the name is
+     * the agency's brand, neither of which a buyer's session can reach.
+     */
+    const pauseReason = await resolvePauseReason(prisma, buyer);
+    const [pausedBy, lowBalance] = await Promise.all([
+      pauseReason === 'MANUAL' ? pausedByName(tenantId) : Promise.resolve(null),
+      buyerBillingService.getLowBalanceWarning(buyer),
+    ]);
+
     return {
       id: buyer.id,
       name: buyer.name,
       code: buyer.code,
       status: buyer.status,
+      /** Why the buyer is PAUSED: 'WALLET_EMPTY' | 'MANUAL'. Null when it is not paused. */
+      pauseReason,
+      /** Who a MANUAL pause reads as being by ("Paused by <pausedBy>"). Null otherwise. */
+      pausedBy,
       billingType: buyer.billingType,
       leadsRemaining: buyer.leadsRemaining,
       walletBalance: Number(buyer.walletBalance),
+      /** UPFRONT only: whether the wallet covers fewer than five average calls. */
+      lowBalance,
       billableDuration: buyer.billableDuration,
       canPauseTargets: buyer.canPauseTargets,
       canSetCaps: buyer.canSetCaps,
@@ -698,7 +860,21 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     if (name !== undefined) updateData.name = name.trim();
     if (code !== undefined) updateData.code = code.trim();
     if (subId !== undefined) updateData.subId = subId.trim() || null;
-    if (status !== undefined) updateData.status = status;
+    if (status !== undefined) {
+      updateData.status = status;
+      /*
+       * A pause set here is the owner's, and a later top-up must not lift it
+       * (services/buyer-pause.ts). Only a CHANGE to PAUSED records it: the
+       * edit form sends the status it loaded, and re-saving a buyer the
+       * wallet paused must leave that a wallet pause. Leaving PAUSED, by any
+       * route, clears the reason.
+       */
+      if (status === 'PAUSED' && existing.status !== 'PAUSED') {
+        updateData.metadata = withPauseReason(existing.metadata, 'MANUAL');
+      } else if (status !== 'PAUSED' && recordedPauseReason(existing.metadata)) {
+        updateData.metadata = withPauseReason(existing.metadata, null);
+      }
+    }
     if (billingType !== undefined) updateData.billingType = billingType;
     if (billableDuration !== undefined) updateData.billableDuration = billableDuration;
     if (leadsRemaining !== undefined) {

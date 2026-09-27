@@ -24,8 +24,16 @@ import { StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
 import { UrlFilterBar } from '../_components/url-filter-bar';
 import { UrlPagination } from '../_components/url-pagination';
-import { acceptedByBuyer, durationScale, recordingUrlFor, thresholdFor } from '../_lib/calls';
+import {
+  acceptedByBuyer,
+  decisionNoteOf,
+  displayAmountOf,
+  durationScale,
+  recordingUrlFor,
+  thresholdFor,
+} from '../_lib/calls';
 import { firstParam, parsePage, RANGE_OPTIONS, resolveRange } from '../_lib/range';
+import { chargedSpend } from '../_lib/spend';
 
 import { CallsTable, type CallRowView } from './calls-table';
 
@@ -55,6 +63,8 @@ export default async function BuyerCallsPage({ searchParams }: { searchParams: S
   const search = firstParam(searchParams.q);
   const campaignId = firstParam(searchParams.campaign);
   const disputeStatus = firstParam(searchParams.outcome);
+  // The Recordings nav item is this page with `?hasRecording=true`.
+  const hasRecording = firstParam(searchParams.hasRecording) === 'true';
 
   const header = (
     <PageHeader purpose="Review what came in, then accept it or dispute it. Both are one click from the row — the detail panel is there when you want it, not because you need it to act." />
@@ -69,7 +79,14 @@ export default async function BuyerCallsPage({ searchParams }: { searchParams: S
     );
   }
 
-  const filterKey = [range.startISO, range.endISO, search, campaignId, disputeStatus].join('|');
+  const filterKey = [
+    range.startISO,
+    range.endISO,
+    search,
+    campaignId,
+    disputeStatus,
+    hasRecording,
+  ].join('|');
 
   return (
     <>
@@ -100,6 +117,7 @@ export default async function BuyerCallsPage({ searchParams }: { searchParams: S
           search={search}
           campaignId={campaignId}
           disputeStatus={disputeStatus}
+          hasRecording={hasRecording}
         />
       </Suspense>
     </>
@@ -130,8 +148,10 @@ async function CallsSummary({
   }
 
   const { totals } = data;
-  const spend = toMajor(totals.buyerCost);
-  const avg = totals.billableCalls > 0 ? spend / totals.billableCalls : 0;
+  // Spend is what was charged; the per-call figure is the price the billable
+  // calls carried, charged yet or not. See ../_lib/spend.
+  const spend = chargedSpend(totals);
+  const avg = totals.billableCalls > 0 ? toMajor(totals.buyerCost) / totals.billableCalls : 0;
 
   return (
     <StatTileRow>
@@ -171,6 +191,7 @@ async function CallsPanel({
   search,
   campaignId,
   disputeStatus,
+  hasRecording,
 }: {
   token: string;
   buyerId: string;
@@ -181,6 +202,7 @@ async function CallsPanel({
   search?: string;
   campaignId?: string;
   disputeStatus?: string;
+  hasRecording: boolean;
 }) {
   const [profileResult, callsResult, campaignsResult] = await Promise.all([
     settle(fetchBuyerProfile(token, buyerId)),
@@ -194,6 +216,7 @@ async function CallsPanel({
         search,
         campaignId,
         disputeStatus,
+        hasRecording,
       })
     ),
     settle(fetchCampaigns(token)),
@@ -219,15 +242,16 @@ async function CallsPanel({
     thresholdSeconds: thresholdFor(call, profile),
     billable: call.billable,
     billableReason: call.billableReason,
-    amount: call.buyerBillableAmount,
+    amount: displayAmountOf(call),
     chargeStatus: call.buyerChargeStatus,
     disputeStatus: call.disputeStatus,
+    decisionNote: decisionNoteOf(call),
     disposition: call.disposition,
     accepted: acceptedByBuyer(call),
     recordingUrl: recordingUrlFor(call, canViewRecordings),
   }));
 
-  const filtered = Boolean(search || campaignId || disputeStatus);
+  const filtered = Boolean(search || campaignId || disputeStatus || hasRecording);
 
   return (
     <Panel>
@@ -238,7 +262,7 @@ async function CallsPanel({
           </span>
         }
       >
-        <PanelTitle>Calls</PanelTitle>
+        <PanelTitle>{hasRecording ? 'Calls with recordings' : 'Calls'}</PanelTitle>
       </PanelHeader>
 
       <UrlFilterBar

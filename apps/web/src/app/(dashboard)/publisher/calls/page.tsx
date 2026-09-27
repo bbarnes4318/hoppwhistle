@@ -1,15 +1,9 @@
 'use client';
 
-import {
-  Download,
-  Loader2,
-  Play,
-  Pause,
-  Search,
-  Volume2,
-  AlertCircle,
-} from 'lucide-react';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { Download, Loader2, Play, Pause, Search, Volume2, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState, useRef } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Badge } from '@/components/ui/badge';
@@ -59,16 +53,35 @@ interface CallRecord {
 }
 
 type DatePreset = 'last-7' | 'last-30' | 'last-90' | 'custom';
+type BillableFilter = 'all' | 'billable' | 'non-billable';
+
+/**
+ * The filters the calls API applies itself, as query parameters.
+ *
+ * Billable and "with recordings" used to be decided here, by dropping rows from
+ * the twenty the API had already paged -- so "Billable" could show an empty
+ * page 2 while billable calls sat on page 5, and the Recordings nav item
+ * (`?hasRecording=true`) showed every call. The API filters now, before it
+ * counts pages, and the CSV export sends the same parameters.
+ */
+function listFilters(billableFilter: BillableFilter, hasRecording: boolean): URLSearchParams {
+  const params = new URLSearchParams();
+  if (billableFilter === 'billable') params.set('billable', 'true');
+  if (billableFilter === 'non-billable') params.set('billable', 'false');
+  if (hasRecording) params.set('hasRecording', 'true');
+  return params;
+}
 
 function PublisherCallsPage() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
+  const hasRecording = useSearchParams()?.get('hasRecording') === 'true';
 
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState('');
-  const [billableFilter, setBillableFilter] = useState<'all' | 'billable' | 'non-billable'>('all');
+  const [billableFilter, setBillableFilter] = useState<BillableFilter>('all');
   const [datePreset, setDatePreset] = useState<DatePreset>('last-30');
 
   // Custom Date range
@@ -104,12 +117,11 @@ function PublisherCallsPage() {
         end = today;
       }
 
-      const queryParams = new URLSearchParams({
-        page: String(page),
-        limit: '20',
-        startDate: `${start}T00:00:00.000Z`,
-        endDate: `${end}T23:59:59.999Z`,
-      });
+      const queryParams = listFilters(billableFilter, hasRecording);
+      queryParams.set('page', String(page));
+      queryParams.set('limit', '20');
+      queryParams.set('startDate', `${start}T00:00:00.000Z`);
+      queryParams.set('endDate', `${end}T23:59:59.999Z`);
 
       if (search.trim()) {
         queryParams.append('search', search.trim());
@@ -120,13 +132,7 @@ function PublisherCallsPage() {
       );
 
       if (response.data) {
-        let filteredData = response.data.data || [];
-        if (billableFilter === 'billable') {
-          filteredData = filteredData.filter(c => c.billable);
-        } else if (billableFilter === 'non-billable') {
-          filteredData = filteredData.filter(c => !c.billable);
-        }
-        setCalls(filteredData);
+        setCalls(response.data.data || []);
         setTotalPages(response.data.meta?.totalPages || 1);
       }
     } catch (err) {
@@ -140,12 +146,18 @@ function PublisherCallsPage() {
     page,
     search,
     billableFilter,
+    hasRecording,
     datePreset,
     startDate,
     endDate,
     today,
     thirtyDaysAgo,
   ]);
+
+  // Moving between Calls and Recordings in the nav starts again from page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [hasRecording]);
 
   useEffect(() => {
     void fetchCalls();
@@ -171,7 +183,11 @@ function PublisherCallsPage() {
 
       const token = localStorage.getItem('token');
       // In the header, not the query string: `?token=` is no longer a login.
-      const url = `/api/v1/calls/export.csv?startDate=${start}&endDate=${end}`;
+      const exportParams = listFilters(billableFilter, hasRecording);
+      exportParams.set('startDate', `${start}T00:00:00.000Z`);
+      exportParams.set('endDate', `${end}T23:59:59.999Z`);
+      if (search.trim()) exportParams.set('search', search.trim());
+      const url = `/api/v1/calls/export.csv?${exportParams.toString()}`;
 
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -256,6 +272,20 @@ function PublisherCallsPage() {
           <p className="text-sm text-ink-2">
             Monitor incoming calls, track conversion details, and listen to recordings.
           </p>
+          {hasRecording ? (
+            <p className="mt-2 flex items-center gap-2 text-xs text-ink-2">
+              <Badge variant="outline" className="bg-brand-tint text-brand-ink border-brand/40">
+                With recordings
+              </Badge>
+              Showing only calls that have a recording.
+              <Link
+                href="/publisher/calls"
+                className="text-brand-ink underline-offset-2 hover:underline"
+              >
+                Show all calls
+              </Link>
+            </p>
+          ) : null}
         </div>
         <Button
           onClick={() => void handleExportCSV()}
@@ -562,7 +592,10 @@ function PublisherCallsPage() {
 export default function GuardedPublisherCallsPage() {
   return (
     <RoleGuard allowedRoles={['PUBLISHER']}>
-      <PublisherCallsPage />
+      {/* `useSearchParams` reads `?hasRecording`, which needs a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <PublisherCallsPage />
+      </Suspense>
     </RoleGuard>
   );
 }

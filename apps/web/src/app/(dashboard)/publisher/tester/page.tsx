@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertTriangle,
   Send,
   Terminal,
   Play,
@@ -23,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
+import { acceptedPost } from '@/lib/publisher-post-result';
 
 interface ApiKeyRecord {
   id: string;
@@ -206,10 +208,11 @@ function PublisherTesterPage() {
       const data = await response.json();
       setPostResponsePayload(JSON.stringify(data, null, 2));
 
-      if (response.ok && data.status === 'LEASED') {
+      const accepted = response.ok ? acceptedPost(data) : null;
+      if (accepted) {
         setPostSuccess(true);
-        setLeasedNumber(data.leased_number || data.number);
-        toast.success('Post success! DID leased.');
+        setLeasedNumber(accepted.transferNumber);
+        toast.success('Post accepted. Transfer number leased.');
       } else {
         setPostSuccess(false);
         toast.error(data.error?.message || data.message || 'Post failed');
@@ -237,7 +240,7 @@ function PublisherTesterPage() {
     setPostSuccess(null);
     setLeasedNumber(null);
     setActiveTab('ping');
-    toast.success('Playground reset');
+    toast.success('Tester reset');
   };
 
   const handleCopyText = (text: string, type: string) => {
@@ -251,9 +254,21 @@ function PublisherTesterPage() {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="space-y-2">
           <p className="text-sm text-ink-2">
-            Simulate publisher integrations and verify campaign routing bidding auctions.
+            Send a real ping and post with your API key to check your integration end to end.
+          </p>
+          {/*
+           * There is no sandbox behind this page. The ping runs the live auction
+           * and the post leases a real transfer number from the pool, so a call
+           * placed to it reaches the winning buyer.
+           */}
+          <p
+            role="note"
+            className="flex items-center gap-2 rounded-control border border-ringing/40 bg-ringing-tint px-3 py-2 text-xs font-medium text-ringing-ink"
+          >
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            This leases a real number and may route a real call.
           </p>
         </div>
         <Button
@@ -497,7 +512,7 @@ function PublisherTesterPage() {
                         <>
                           <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-bold">Post Successful: DID Leased</p>
+                            <p className="font-bold">Post accepted: transfer number leased</p>
                             <p className="text-ink-2">
                               Send your call traffic directly to the following number to route to
                               the winning buyer:

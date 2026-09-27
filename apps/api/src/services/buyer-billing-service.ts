@@ -4,6 +4,8 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { auditLog } from './audit.js';
+import { resolvePauseReason, withPauseReason } from './buyer-pause.js';
+import { expectedBuyerPrice } from './routing-buyer-gates.js';
 
 /**
  * Buyer Billing Service
@@ -31,6 +33,25 @@ export interface UpfrontBuyerBalance {
   walletBalance: number;
   status: string;
   isLowBalance: boolean;
+}
+
+/** How many calls' worth of balance an UPFRONT buyer is warned below. */
+export const LOW_BALANCE_CALLS = 5;
+/** The window a buyer's average call price is taken over. */
+export const AVERAGE_PRICE_WINDOW_DAYS = 30;
+
+export interface LowBalanceWarning {
+  /** The wallet is below `threshold`. */
+  isLow: boolean;
+  /** `LOW_BALANCE_CALLS` times `averageCallPrice`, or null when there is no price to go on. */
+  threshold: number | null;
+  averageCallPrice: number | null;
+  /**
+   * Where the average came from: the buyer's own billable calls over the last
+   * `AVERAGE_PRICE_WINDOW_DAYS` days, or -- with none -- the prices configured
+   * on the campaigns it is assigned to.
+   */
+  basis: 'RECENT_CALLS' | 'CONFIGURED_PRICE' | null;
 }
 
 export class BuyerBillingService {
@@ -167,11 +188,16 @@ export class BuyerBillingService {
             callId,
           });
 
-          // Auto-pause if not already paused
+          // Auto-pause if not already paused. The reason goes beside the
+          // status so a later credit knows this pause is the wallet's to
+          // lift (see services/buyer-pause.ts).
           if (buyer.status !== 'PAUSED') {
             await tx.buyer.update({
               where: { id: buyer.id },
-              data: { status: 'PAUSED' },
+              data: {
+                status: 'PAUSED',
+                metadata: withPauseReason(buyer.metadata, 'WALLET_EMPTY'),
+              },
             });
 
             await auditLog({
@@ -204,8 +230,11 @@ export class BuyerBillingService {
         const newBalance = buyer.walletBalance.minus(chargeAmount);
         const newLeadsRemaining = Math.floor(Number(newBalance));
 
-        // Determine if buyer should be auto-paused after deduction
-        const shouldPause = newBalance.lessThanOrEqualTo(0);
+        // Determine if buyer should be auto-paused after deduction. A buyer
+        // already paused keeps the pause it has: a charge landing on a buyer
+        // an owner paused by hand (a call that was in flight) must not turn
+        // that into a wallet pause the next top-up would lift.
+        const shouldPause = newBalance.lessThanOrEqualTo(0) && buyer.status !== 'PAUSED';
 
         // Update buyer
         await tx.buyer.update({
@@ -213,7 +242,9 @@ export class BuyerBillingService {
           data: {
             walletBalance: newBalance,
             leadsRemaining: newLeadsRemaining,
-            status: shouldPause ? 'PAUSED' : buyer.status,
+            ...(shouldPause
+              ? { status: 'PAUSED', metadata: withPauseReason(buyer.metadata, 'WALLET_EMPTY') }
+              : {}),
           },
         });
 
@@ -345,14 +376,26 @@ export class BuyerBillingService {
         const newBalance = previousBalance.plus(amount);
         const newLeads = Math.floor(Number(newBalance));
 
+        /*
+         * Reactivate only a buyer the WALLET paused, and only once the credit
+         * leaves something to spend. A buyer its owner paused by hand stays
+         * paused however much is added -- that pause is not about money, and
+         * lifting it is the owner's call. A paused buyer with no recorded
+         * reason is resolved from the audit trail, and reads as a manual pause
+         * when that cannot say (services/buyer-pause.ts).
+         */
+        const pauseReason = await resolvePauseReason(tx, buyer);
+        const resume = pauseReason === 'WALLET_EMPTY' && newBalance.greaterThan(0);
+
         // Update buyer balance
         await tx.buyer.update({
           where: { id: buyerId },
           data: {
             walletBalance: newBalance,
             leadsRemaining: newLeads,
-            // Reactivate if was paused due to zero balance
-            status: buyer.status === 'PAUSED' ? 'ACTIVE' : buyer.status,
+            ...(resume
+              ? { status: 'ACTIVE', metadata: withPauseReason(buyer.metadata, null) }
+              : {}),
           },
         });
 
@@ -389,7 +432,7 @@ export class BuyerBillingService {
           await auditLog(audit);
         }
 
-        if (buyer.status === 'PAUSED') {
+        if (resume) {
           logger.info({
             msg: 'Buyer reactivated after deposit',
             buyerId,
@@ -455,6 +498,84 @@ export class BuyerBillingService {
       status: buyer.status,
       isLowBalance: Number(buyer.walletBalance) < lowBalanceThreshold,
     }));
+  }
+
+  /**
+   * Whether an UPFRONT buyer's wallet is running low.
+   *
+   * "Low" is measured in calls, not dollars: a $200 balance is weeks for a
+   * buyer paying $8 a call and two calls for one paying $100. The balance is
+   * low when it covers fewer than `LOW_BALANCE_CALLS` calls at the buyer's
+   * average price -- what it actually paid per billable call over the last 30
+   * days. A buyer with no billable calls in that window is priced from its
+   * campaign assignments instead, resolved the way routing resolves the price
+   * it holds the wallet to (`expectedBuyerPrice`). With neither there is no
+   * price to measure against, and no warning.
+   *
+   * Null for a TERMS buyer: it has no wallet to run out of.
+   */
+  async getLowBalanceWarning(buyer: {
+    id: string;
+    tenantId: string;
+    billingType: string;
+    walletBalance: Prisma.Decimal;
+  }): Promise<LowBalanceWarning | null> {
+    if (buyer.billingType !== 'UPFRONT') return null;
+    const prisma = getPrismaClient();
+
+    const since = new Date(Date.now() - AVERAGE_PRICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const recent = await prisma.call.aggregate({
+      where: {
+        tenantId: buyer.tenantId,
+        buyerId: buyer.id,
+        billable: true,
+        buyerBillableAmount: { gt: 0 },
+        createdAt: { gte: since },
+      },
+      _avg: { buyerBillableAmount: true },
+    });
+
+    let averageCallPrice: number | null = null;
+    let basis: LowBalanceWarning['basis'] = null;
+    const recentAverage = recent._avg.buyerBillableAmount;
+    if (recentAverage && recentAverage.gt(0)) {
+      averageCallPrice = Number(recentAverage.toFixed(2));
+      basis = 'RECENT_CALLS';
+    } else {
+      const assignments = await prisma.campaignBuyer.findMany({
+        where: { tenantId: buyer.tenantId, buyerId: buyer.id, status: 'ACTIVE' },
+        select: {
+          pricePerBillableCall: true,
+          campaign: { select: { buyerPricePerBillableCall: true } },
+          buyerEndpoint: { select: { basePrice: true } },
+        },
+      });
+      const prices = assignments
+        .map(a =>
+          expectedBuyerPrice({
+            campaignBuyerPrice: a.pricePerBillableCall,
+            campaignDefaultPrice: a.campaign?.buyerPricePerBillableCall,
+            endpointBasePrice: a.buyerEndpoint?.basePrice,
+          })
+        )
+        .filter(price => price > 0);
+      if (prices.length > 0) {
+        const mean = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+        averageCallPrice = Number(mean.toFixed(2));
+        basis = 'CONFIGURED_PRICE';
+      }
+    }
+
+    if (averageCallPrice === null) {
+      return { isLow: false, threshold: null, averageCallPrice: null, basis: null };
+    }
+    const threshold = Number((averageCallPrice * LOW_BALANCE_CALLS).toFixed(2));
+    return {
+      isLow: Number(buyer.walletBalance) < threshold,
+      threshold,
+      averageCallPrice,
+      basis,
+    };
   }
 
   /**

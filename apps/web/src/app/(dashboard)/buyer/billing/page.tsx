@@ -10,19 +10,16 @@ import {
   StatTileRow,
   StatusChip,
 } from '@/components/domain';
+import { StatementsPanel } from '@/components/statements/statements-panel';
 import { settle } from '@/lib/server/api';
-import {
-  fetchBuyerProfile,
-  fetchBuyerTransactions,
-  fetchCostReport,
-  toMajor,
-} from '@/lib/server/buyer';
+import { fetchBuyerProfile, fetchBuyerTransactions, fetchCostReport } from '@/lib/server/buyer';
 import { requireBuyerScope } from '@/lib/server/session';
 
 import { PageHeader } from '../_components/page-header';
 import { PanelSkeleton, StatTileRowSkeleton, TableSkeleton } from '../_components/skeletons';
 import { NoBuyerScope, PanelError } from '../_components/states';
-import { resolveRange } from '../_lib/range';
+import { newYorkMonthToDate, resolveRange } from '../_lib/range';
+import { chargedSpend } from '../_lib/spend';
 
 import { LedgerTable, type LedgerRow } from './ledger-table';
 import { TopUpPlanner } from './top-up-planner';
@@ -81,6 +78,12 @@ export default async function BuyerBillingPage() {
       <Suspense fallback={<TableSkeleton title="Transactions" columns={4} rows={8} />}>
         <Ledger token={scope.token} buyerId={scope.buyerId} />
       </Suspense>
+
+      <StatementsPanel
+        partyType="BUYER"
+        partyId={scope.buyerId}
+        description="Every closed month's calls, charges and returns, and this month so far."
+      />
     </>
   );
 }
@@ -92,11 +95,19 @@ interface Args {
   endISO: string;
 }
 
-/** Balance, burn and runway are one calculation, so they load as one panel. */
+/**
+ * Balance, burn and runway are one calculation, so they load as one panel.
+ *
+ * A buyer on terms has no balance; its headline is what it has been billed
+ * this calendar month (New York), from a second read of the report over that
+ * window. Spend and burn count charged calls only -- see ../_lib/spend.
+ */
 async function BalanceSummary({ token, buyerId, startISO, endISO }: Args) {
-  const [profileResult, reportResult] = await Promise.all([
+  const month = newYorkMonthToDate();
+  const [profileResult, reportResult, monthResult] = await Promise.all([
     settle(fetchBuyerProfile(token, buyerId)),
     settle(fetchCostReport(token, { buyerId, startDate: startISO, endDate: endISO })),
+    settle(fetchCostReport(token, { buyerId, startDate: month.startISO, endDate: month.endISO })),
   ]);
 
   if (profileResult.error || !profileResult.data) {
@@ -104,28 +115,25 @@ async function BalanceSummary({ token, buyerId, startISO, endISO }: Args) {
   }
 
   const profile = profileResult.data;
-  const spend = toMajor(reportResult.data?.totals.buyerCost ?? '0');
+  const spend = reportResult.data ? chargedSpend(reportResult.data.totals) : 0;
   const burnPerDay = spend / 30;
   const upfront = profile.billingType === 'UPFRONT';
   const runway = upfront && burnPerDay > 0 ? Math.floor(profile.walletBalance / burnPerDay) : null;
+  const billedThisMonth = monthResult.data ? chargedSpend(monthResult.data.totals) : null;
 
   return (
     <StatTileRow>
       <StatTile
-        label={upfront ? 'Balance' : 'Unbilled'}
+        label={upfront ? 'Balance' : 'Billed this month'}
         figure={
           <MoneyCell
-            amount={
-              upfront
-                ? profile.walletBalance
-                : toMajor(reportResult.data?.totals.pendingInvoice ?? '0')
-            }
+            amount={upfront ? profile.walletBalance : billedThisMonth}
             unit="major"
             size="figure"
             tone="auto"
           />
         }
-        sub={upfront ? 'Prepaid funds on hand' : 'Accrued, not yet invoiced'}
+        sub={upfront ? 'Prepaid funds on hand' : 'Charged since the 1st'}
         emphasis
         className="col-span-2 lg:col-span-1"
       />
@@ -225,7 +233,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
           <p className="t-body mt-1 max-w-2xl text-ink">
             {upfront
               ? 'If a charge would take your balance below zero, the platform pauses your account rather than letting it go negative. Calls stop being routed to you until the balance is topped up. Watch the runway figure above — that is the number that tells you it is coming.'
-              : 'Charges accrue through the billing period and are invoiced at the end of it. Your unbilled figure above is what has accrued since the last invoice.'}
+              : 'Charges accrue through the billing period and are invoiced at the end of it. The billed-this-month figure above is what you have been charged since the 1st.'}
           </p>
         </section>
 
@@ -256,7 +264,7 @@ async function TopUpPanel({ token, buyerId, startISO, endISO }: Args) {
   const profile = profileResult.data;
   if (profile.billingType !== 'UPFRONT') return null;
 
-  const burnPerDay = toMajor(reportResult.data?.totals.buyerCost ?? '0') / 30;
+  const burnPerDay = (reportResult.data ? chargedSpend(reportResult.data.totals) : 0) / 30;
 
   return (
     <Panel>
@@ -264,7 +272,7 @@ async function TopUpPanel({ token, buyerId, startISO, endISO }: Args) {
         <PanelTitle>Top up</PanelTitle>
       </PanelHeader>
       <PanelBody>
-        <TopUpPlanner balance={profile.walletBalance} burnPerDay={burnPerDay} />
+        <TopUpPlanner buyerId={buyerId} balance={profile.walletBalance} burnPerDay={burnPerDay} />
       </PanelBody>
     </Panel>
   );

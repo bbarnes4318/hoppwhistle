@@ -13,9 +13,9 @@
  *   inbound, answered, sent, revenue  getCallSalesSummary     (Sales, TODAY)
  *   agents ready / on a call          readStatuses            (the Agents roster)
  *   agents who can't take calls       agentBlocker            (the Agents roster)
- *   owed to publishers                getPayoutsSummary       (Payouts, THIS_MONTH --
- *                                                              the period that
- *                                                              screen opens on)
+ *   owed to publishers                getPayoutsSummary       (Payouts, net payable
+ *                                                              over all time: what
+ *                                                              is owed now)
  *
  * Buyer caps are the one rule stated here, and it is the rule
  * `routes/live-metrics.ts` already uses for a buyer's own strip: a buyer's
@@ -50,6 +50,7 @@ import { authenticate } from '../middleware/auth.js';
 import { resolvePeriod } from '../services/leaderboard/period.js';
 import { getAgencyLiveBoard, type AgencyLiveBoardRow } from '../services/live/agency-board.js';
 import { getRedisClient } from '../services/redis.js';
+import { ALL_TIME } from '../services/reporting/call-money.js';
 import { getCallSalesSummary } from '../services/reporting/call-sales.js';
 
 import { AGENT_BLOCKER_SELECT, agentBlocker, readStatuses } from './agent-roster.js';
@@ -165,7 +166,7 @@ export async function getWhiteLabelToday(
   const [board, sales, payouts, buyers, dailyCaps, agents, returnsOpen] = await Promise.all([
     getAgencyLiveBoard(tenantId, { prisma, now }),
     getCallSalesSummary(tenantId, resolvePeriod('TODAY', { now }), { prisma }),
-    getPayoutsSummary(prisma, tenantId, resolvePeriod('THIS_MONTH', { now })),
+    getPayoutsSummary(prisma, tenantId, ALL_TIME),
     prisma.buyer.findMany({
       where: { tenantId },
       select: { id: true, status: true, stats: { select: { capConsumedToday: true } } },
@@ -256,13 +257,19 @@ export async function getWhiteLabelToday(
       label: "Agents who can't take calls",
     });
   }
-  if (payouts.totals.payable > 0) {
+  /*
+   * What is owed now, whenever the calls came in, net of the returns waiting
+   * to come out of the next payment: the Payouts screen's `netPayable`, summed
+   * over every publisher. This month's gross read as "owed" while last month's
+   * unpaid calls fell off it on the 1st.
+   */
+  if (payouts.totals.netPayable > 0) {
     attention.push({
       kind: 'payouts_owed',
       count: payouts.totals.payableCalls,
       href: '/publishers?tab=payouts',
       label: 'Owed to publishers',
-      amount: payouts.totals.payable,
+      amount: payouts.totals.netPayable,
     });
   }
 

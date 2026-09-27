@@ -7,6 +7,8 @@
  * 21st with me" is a paste, not a description.
  */
 
+import { PLATFORM_TIME_ZONE, newYorkDayKey } from '@/lib/new-york-day';
+
 export type RangeKey = '7d' | '30d' | '90d' | 'custom';
 
 export interface ResolvedRange {
@@ -105,4 +107,46 @@ export function firstParam(value: string | string[] | undefined): string | undef
 export function parsePage(value: string | string[] | undefined): number {
   const n = parseInt(firstParam(value) ?? '1', 10);
   return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** The offset of New York's wall clock from UTC at an instant, in milliseconds. */
+function newYorkOffsetMs(at: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PLATFORM_TIME_ZONE,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(at);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find(p => p.type === type)?.value ?? 0);
+  const wall = Date.UTC(
+    part('year'),
+    part('month') - 1,
+    part('day'),
+    part('hour'),
+    part('minute'),
+    part('second')
+  );
+  return wall - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/**
+ * This calendar month so far, on the platform's clock: from midnight on the
+ * 1st in New York to now. What "Billed this month" is counted over.
+ *
+ * Midnight in New York is found in two passes, because the offset depends on
+ * the instant being looked for; the second pass settles it across a DST change.
+ */
+export function newYorkMonthToDate(now: Date = new Date()): { startISO: string; endISO: string } {
+  const [year, month] = newYorkDayKey(now).split('-').map(Number);
+  const wallMidnight = Date.UTC(year, month - 1, 1);
+  let start = wallMidnight;
+  for (let i = 0; i < 2; i += 1) {
+    start = wallMidnight - newYorkOffsetMs(new Date(start));
+  }
+  return { startISO: new Date(start).toISOString(), endISO: now.toISOString() };
 }

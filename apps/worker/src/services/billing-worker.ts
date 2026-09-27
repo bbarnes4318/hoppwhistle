@@ -3,6 +3,7 @@ import { Decimal } from 'decimal.js';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 
+import { ledgerPeriodDate } from '../lib/calendar-day.js';
 import { logger } from '../logger.js';
 
 import { AccrualLedgerService } from './accrual-ledger.js';
@@ -327,9 +328,8 @@ export class BillingWorker {
         },
       });
 
-      // Create accrual entries
-      const periodDate = new Date();
-      periodDate.setHours(0, 0, 0, 0);
+      // Create accrual entries, dated by the America/New_York calendar day.
+      const periodDate = ledgerPeriodDate();
 
       // Connection fee
       if (rating.connectionFee.gt(0)) {
@@ -387,14 +387,24 @@ export class BillingWorker {
 
       logger.info(`Created accruals for call ${event.data.callId}: $${rating.total.toFixed(4)}`);
 
-      // Update Call record's cost and profit (total cost of carrier connection, minute rates, and recordings)
+      /*
+       * The call's cost is the minutes charge only. The connection and
+       * recording fees are already on the ledger above as CONNECTION_FEE and
+       * RECORDING_FEE rows, and every report adds those rows to the call's
+       * cost (services/reporting/call-money.ts). Storing `rating.total` here
+       * counted both fees twice. Profit subtracts the fees once, from the rows.
+       */
+      const minutesCharge = this.rateInterpreter.roundAmount(rating.callAmount);
+      const fees = this.rateInterpreter
+        .roundAmount(rating.connectionFee)
+        .plus(this.rateInterpreter.roundAmount(rating.recordingFee));
       await this.pool.query(
         `UPDATE calls
          SET cost = $1,
-             profit = COALESCE(revenue, 0) - COALESCE(payout, 0) - $1,
+             profit = COALESCE(revenue, 0) - COALESCE(payout, 0) - $1 - $3,
              "updatedAt" = NOW()
          WHERE id = $2`,
-        [rating.total.toFixed(4), event.data.callId]
+        [minutesCharge.toFixed(4), event.data.callId, fees.toFixed(4)]
       );
 
       logger.info(`Updated call cost/profit in database for call ${event.data.callId}`);
@@ -450,8 +460,7 @@ export class BillingWorker {
       const cpaAmount = this.rateInterpreter.calculateCPACharge(rateCard);
 
       if (cpaAmount.gt(0)) {
-        const periodDate = new Date();
-        periodDate.setHours(0, 0, 0, 0);
+        const periodDate = ledgerPeriodDate();
 
         await this.accrualLedger.createEntry({
           tenantId: event.tenantId,

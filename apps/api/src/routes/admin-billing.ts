@@ -5,11 +5,13 @@
 // file was a one-line security fix, and rewriting ~100 unrelated lines of
 // billing code alongside it would make that fix unreviewable. Worth clearing
 // separately.
+import { BRAND_THEME_NAMES } from '@hopwhistle/shared';
 import { Decimal } from 'decimal.js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Pool } from 'pg';
 
 import { isDemoTenantAuthEnabled } from '../lib/demo-auth.js';
+import { brandForTenant } from '../lib/tenant-brand.js';
 import { resolveTenant } from '../lib/tenant-context.js';
 
 // Inline services to avoid path issues
@@ -152,7 +154,7 @@ class InvoiceGeneratorService {
     const client = await this.pool.connect();
     try {
       const invoiceResult = await client.query(
-        `SELECT i.id, i."invoiceNumber" as invoice_number, i.status, i."periodStart" as period_start, i."periodEnd" as period_end, i.subtotal, i.tax, i.total, i."dueDate" as due_date, ba.name as account_name, ba.currency, t.name as tenant_name
+        `SELECT i.id, i."invoiceNumber" as invoice_number, i.status, i."periodStart" as period_start, i."periodEnd" as period_end, i.subtotal, i.tax, i.total, i."dueDate" as due_date, ba.name as account_name, ba.currency, t.id as tenant_id, t.name as tenant_name
          FROM invoices i
          JOIN billing_accounts ba ON ba.id = i."billingAccountId"
          JOIN tenants t ON t.id = ba."tenantId"
@@ -165,7 +167,20 @@ class InvoiceGeneratorService {
         'SELECT id, "invoiceId" as invoice_id, description, quantity, "unitPrice" as unit_price, total, "createdAt" as created_at FROM invoice_lines WHERE "invoiceId" = $1 ORDER BY "createdAt" ASC',
         [invoiceId]
       );
-      const html = this.generateInvoiceHTML(invoice, linesResult.rows);
+      /*
+       * The heading names the agency the way its portal does: its brand when it
+       * is white-labelled (its own or its parent's, via brandForTenant), else
+       * the tenant's name. Never a hard-coded product name.
+       */
+      const brand = await brandForTenant(invoice.tenant_id);
+      const issuerName =
+        (brand && (brand.name?.trim() || BRAND_THEME_NAMES[brand.theme])) ||
+        invoice.tenant_name ||
+        'NetEnroll';
+      const html = this.generateInvoiceHTML(
+        { ...invoice, issuer_name: issuerName },
+        linesResult.rows
+      );
       const browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -199,7 +214,7 @@ class InvoiceGeneratorService {
       .totals-row.total{font-weight:bold;font-size:16px;border-top:2px solid #333;padding-top:10px;margin-top:10px}
     </style></head><body>
       <div class="header">
-        <div><h1>${invoice.tenant_name || 'NetEnroll'}</h1><div>Billing Account: ${invoice.account_name}</div></div>
+        <div><h1>${invoice.issuer_name}</h1><div>Billing Account: ${invoice.account_name}</div></div>
         <div class="invoice-info"><div class="invoice-number">Invoice ${invoice.invoice_number}</div><div>Status: ${invoice.status}</div></div>
       </div>
       <div><div>Period: ${new Date(invoice.period_start).toLocaleDateString()} - ${new Date(invoice.period_end).toLocaleDateString()}</div>

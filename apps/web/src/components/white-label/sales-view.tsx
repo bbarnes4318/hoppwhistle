@@ -169,6 +169,14 @@ export function SalesView(): JSX.Element {
   );
 }
 
+/**
+ * The call-cost tile's label. A call with no carrier cost is priced at the
+ * per-minute estimate, and a figure that is partly a guess says so.
+ */
+export function callCostLabel(estimated: boolean): string {
+  return estimated ? 'Call cost (estimated)' : 'Call cost';
+}
+
 /** Everything under the toolbar, once there is at least one call. */
 function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
   const { totals } = data;
@@ -180,7 +188,7 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
   return (
     <>
       <section
-        className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6"
+        className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7"
         aria-label="Sales KPIs"
       >
         <StatTile
@@ -198,6 +206,18 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
           data-figure-value={dollars(totals.profit)}
           tone="money"
           sub={`after ${dollars(totals.publisherPayouts)} in payouts`}
+        />
+        <StatTile
+          label={callCostLabel(totals.callCostEstimated)}
+          figure={dollars(totals.callCost)}
+          data-figure-label={callCostLabel(totals.callCostEstimated)}
+          data-figure-value={dollars(totals.callCost)}
+          tone="money"
+          sub={
+            totals.callCostEstimated
+              ? 'some calls priced at the per-minute estimate'
+              : 'carrier minutes'
+          }
         />
         <StatTile
           label="Margin"
@@ -377,7 +397,12 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                   <TableCell className="text-right tabular-nums">
                     {count(row.sentToBuyers)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{count(row.billable)}</TableCell>
+                  <TableCell
+                    className="text-right tabular-nums"
+                    title={`${count(row.billableToBuyers)} to buyers, ${count(row.billableAgentAnswered)} answered by your agents`}
+                  >
+                    {count(row.billable)}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{dollars(row.revenue)}</TableCell>
                   <TableCell className="text-right tabular-nums">{dollars(row.payout)}</TableCell>
                   <TableCell className="text-right tabular-nums">{dollars(row.profit)}</TableCell>

@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { Logo } from '@/components/brand/logo';
+import { LoginBrandLogo } from '@/components/brand/login-brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -609,8 +609,9 @@ export default function AuthPage() {
       <main className="flex min-h-screen flex-col bg-paper px-4 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center">
           <header className="text-center">
+            {/* The host's agency lockup on its own domain; NetEnroll's anywhere else. */}
             <h1>
-              <Logo width={272} />
+              <LoginBrandLogo />
             </h1>
             <p className="t-body mt-3 text-ink-2">
               The agent portal for licensed insurance agencies.

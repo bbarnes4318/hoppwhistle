@@ -32,11 +32,14 @@ const SALES: CallSalesSummary = {
     inboundCalls: 5,
     answeredByAgents: 1,
     sentToBuyers: 3,
+    billable: 3,
     billableToBuyers: 2,
+    billableAgentAnswered: 1,
     sellThroughPct: 66.67,
     revenue: 90,
     publisherPayouts: 45,
     callCost: 1.3,
+    callCostEstimated: false,
     otherCosts: 0.05,
     adjustments: -2,
     disputes: 40,
@@ -82,6 +85,8 @@ const SALES: CallSalesSummary = {
       inbound: 5,
       sentToBuyers: 3,
       billable: 2,
+      billableToBuyers: 2,
+      billableAgentAnswered: 0,
       revenue: 90,
       payout: 45,
       profit: 43.65,
@@ -375,6 +380,26 @@ describe('white-label screens', () => {
       expect(screen.getByRole('button', { name: /Export CSV/i })).toBeTruthy();
     });
 
+    it('names the call cost, and says so when any of it is the per-minute estimate', async () => {
+      answers['/api/v1/call-sales/summary'] = SALES;
+      await mount(() => import('../(dashboard)/sales/page'));
+      await waitFor(() => expect(screen.getByText('Acme Senior')).toBeTruthy());
+      const tile = (label: string) =>
+        document.querySelector(`[data-figure-label="${label}"]`)?.getAttribute('data-figure-value');
+      expect(tile('Call cost')).toBe('$1.30');
+      expect(tile('Call cost (estimated)')).toBeUndefined();
+      cleanup();
+
+      answers['/api/v1/call-sales/summary'] = {
+        ...SALES,
+        totals: { ...SALES.totals, callCostEstimated: true },
+      };
+      await mount(() => import('../(dashboard)/sales/page'));
+      await waitFor(() => expect(screen.getByText('Acme Senior')).toBeTruthy());
+      expect(tile('Call cost (estimated)')).toBe('$1.30');
+      expect(screen.getByText('Call cost (estimated)')).toBeTruthy();
+    });
+
     it('shows the empty state when there were no inbound calls', async () => {
       answers['/api/v1/call-sales/summary'] = {
         ...SALES,
@@ -509,6 +534,22 @@ describe('white-label screens', () => {
         screen.getAllByRole('link', { name: /Onboard an Agency/i })[0].getAttribute('href')
       ).toBe('/network/onboarding');
       expect(requested).toContain('/api/v1/network/agencies?period=THIS_MONTH');
+    });
+
+    it("opens each child agency's statements from its row", async () => {
+      answers['/api/v1/network/agencies'] = NETWORK;
+      answers['/api/v1/statements'] = {
+        party: { partyType: 'CHILD_AGENCY', partyId: 'child-1', tenantId: 'tenant-a' },
+        months: [{ month: 'current', label: 'Month to date', live: true, createdAt: null }],
+      };
+      await mount(() => import('../(dashboard)/network/agencies/page'));
+      await waitFor(() => expect(screen.getByText('Downline One')).toBeTruthy());
+
+      fireEvent.click(screen.getAllByRole('button', { name: /Statement/ })[0]);
+      await waitFor(() => expect(screen.getByText('Month to date')).toBeTruthy());
+      expect(
+        requested.some(url => url.startsWith('/api/v1/statements?partyType=CHILD_AGENCY'))
+      ).toBe(true);
     });
 
     it("sets each child's numbers limit and upgrades from its own settings", async () => {
