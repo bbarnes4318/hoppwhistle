@@ -12,11 +12,7 @@
 import type { Prisma } from '@prisma/client';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-import {
-  getActingTenantId,
-  replyTenantRefusal,
-  sendTenantRefusal,
-} from '../lib/tenant-context.js';
+import { getActingTenantId, replyTenantRefusal, sendTenantRefusal } from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { liveStatusService } from '../services/buyer-live-status-service.js';
@@ -597,7 +593,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     Body: {
       name: string;
       code: string;
-      publisherId: string;
+      /** Optional: a buyer need not be managed by a publisher. */
+      publisherId?: string | null;
       subId?: string;
       billingType?: 'TERMS' | 'UPFRONT';
       billableDuration?: number;
@@ -643,37 +640,39 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'Code is required' } };
     }
-    if (!publisherId) {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'Publisher ID is required' } };
-    }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-    // Verify publisher exists
-    const publisher = await prisma.publisher.findFirst({
-      where: { id: publisherId, tenantId },
-    });
-    if (!publisher) {
-      void reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+    /*
+     * Publisher is optional (Buyer.publisherId is nullable). When one is
+     * named it must be this tenant's: a publisher from another tenant reads
+     * as not found, never as attached.
+     */
+    if (publisherId) {
+      const publisher = await prisma.publisher.findFirst({
+        where: { id: publisherId, tenantId },
+      });
+      if (!publisher) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+      }
     }
 
-    // Check for duplicate code
+    // Check for duplicate code (unique per tenant, whatever the publisher)
     const existing = await prisma.buyer.findFirst({
-      where: { tenantId, publisherId, code: code.trim() },
+      where: { tenantId, code: code.trim() },
     });
     if (existing) {
       void reply.code(409);
       return {
-        error: { code: 'DUPLICATE', message: 'Buyer code already exists for this publisher' },
+        error: { code: 'DUPLICATE', message: 'Buyer code already exists' },
       };
     }
 
     const buyer = await prisma.buyer.create({
       data: {
         tenantId,
-        publisherId,
+        publisherId: publisherId || null,
         name: name.trim(),
         code: code.trim(),
         subId: subId?.trim() || null,
@@ -807,6 +806,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     Body: {
       name?: string;
       code?: string;
+      /** Empty string or null clears the publisher. */
+      publisherId?: string | null;
       subId?: string;
       status?: 'ACTIVE' | 'INACTIVE' | 'PAUSED';
       billingType?: 'TERMS' | 'UPFRONT';
@@ -835,6 +836,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     const {
       name,
       code,
+      publisherId,
       subId,
       status,
       billingType,
@@ -857,6 +859,19 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const updateData: Record<string, unknown> = {};
+    if (publisherId !== undefined) {
+      // Same tenant check as create; empty string and null both mean none.
+      if (publisherId) {
+        const publisher = await prisma.publisher.findFirst({
+          where: { id: publisherId, tenantId },
+        });
+        if (!publisher) {
+          void reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+        }
+      }
+      updateData.publisherId = publisherId || null;
+    }
     if (name !== undefined) updateData.name = name.trim();
     if (code !== undefined) updateData.code = code.trim();
     if (subId !== undefined) updateData.subId = subId.trim() || null;

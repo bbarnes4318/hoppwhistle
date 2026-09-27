@@ -260,6 +260,8 @@ const NETWORK: NetworkAgencies = {
 /** What each endpoint answers for the case under test. */
 let answers: Record<string, unknown> = {};
 const requested: string[] = [];
+/** Every write, with its body. */
+const sent: Array<{ method: string; path: string; body: unknown }> = [];
 
 function urlOf(input: RequestInfo | URL): URL {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -272,9 +274,17 @@ const json = (body: unknown, status = 200): Response =>
 function installFetch(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL) => {
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       requested.push(`${url.pathname}${url.search}`);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method !== 'GET') {
+        sent.push({
+          method,
+          path: url.pathname,
+          body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+        });
+      }
       if (url.pathname === '/api/auth/me') {
         return json({
           data: {
@@ -293,6 +303,7 @@ function installFetch(): void {
 }
 
 vi.mock('next/navigation', () => ({
+  useParams: () => ({ tenantId: 'child-1' }),
   usePathname: () => '/sales',
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
@@ -552,23 +563,16 @@ describe('white-label screens', () => {
       ).toBe(true);
     });
 
-    it("sets each child's numbers limit and upgrades from its own settings", async () => {
+    it('links each agency to its own page, and keeps the settings off the list', async () => {
       answers['/api/v1/network/agencies'] = NETWORK;
-      answers['/api/v1/network/agencies/child-1/settings'] = {
-        tenantId: 'child-1',
-        numbersLimit: 25,
-        numbersUsed: 7,
-        upgrades: ['POWER_DIALER'],
-      };
       await mount(() => import('../(dashboard)/network/agencies/page'));
 
-      await waitFor(() => expect(screen.getByText('7 in use')).toBeTruthy());
-      expect(requested).toContain('/api/v1/network/agencies/child-1/settings');
-      expect(screen.getByLabelText('Numbers limit')).toBe(screen.getByDisplayValue('25'));
-      expect(document.querySelectorAll('[data-upgrade-switch]')).toHaveLength(5);
-      expect(
-        document.querySelector('[data-upgrade-switch="POWER_DIALER"]')?.getAttribute('data-state')
-      ).toBe('checked');
+      await waitFor(() => expect(screen.getByText('Downline One')).toBeTruthy());
+      expect(screen.getByRole('link', { name: 'Downline One' }).getAttribute('href')).toBe(
+        '/network/agencies/child-1'
+      );
+      expect(document.querySelector('[data-downline-settings]')).toBeNull();
+      expect(requested).not.toContain('/api/v1/network/agencies/child-1/settings');
     });
 
     it('offers onboarding when there are none yet', async () => {
@@ -577,6 +581,117 @@ describe('white-label screens', () => {
       await waitFor(() =>
         expect(screen.getByText('You have not onboarded an agency yet.')).toBeTruthy()
       );
+    });
+  });
+
+  describe('/network/agencies/[tenantId]', () => {
+    const PROFILE = {
+      legalName: 'Downline One LLC',
+      state: 'TX',
+      contactName: 'Dana Down',
+      contactEmail: 'dana@downline.test',
+      contactPhone: '+15125550100',
+      licensedAgentCount: 4,
+      deliveryDays: ['MON', 'TUE'],
+      deliveryStartTime: '09:00',
+      deliveryEndTime: '17:00',
+      deliveryTimeZone: 'America/Chicago',
+      createdAt: null,
+      updatedAt: null,
+    };
+    const DETAIL = {
+      tenantId: 'child-1',
+      name: 'Downline One',
+      status: 'ACTIVE',
+      createdAt: '2026-09-20T15:00:00.000Z',
+      profile: PROFILE,
+      owner: { status: 'PENDING', email: 'owner@downline.test', invitedAt: null },
+      settings: {
+        tenantId: 'child-1',
+        numbersLimit: 25,
+        numbersUsed: 7,
+        upgrades: ['POWER_DIALER'],
+      },
+      period: NETWORK.period,
+      stats: {
+        agents: 4,
+        inboundCalls: 120,
+        answeredByAgents: 100,
+        applications: 9,
+        closingPct: 9,
+      },
+      openUpgradeRequests: [
+        {
+          id: 'req-1',
+          upgradeKey: 'PREDICTIVE_DIALER',
+          upgradeName: 'Predictive Dialer',
+          status: 'OPEN',
+          userId: null,
+          createdAt: '2026-09-25T15:00:00.000Z',
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      sent.length = 0;
+      answers['/api/v1/network/agencies/child-1'] = DETAIL;
+      answers['/api/v1/network/agencies/child-1/settings'] = DETAIL.settings;
+    });
+
+    it('shows the agency, its stats, its settings and its open requests', async () => {
+      await mount(() => import('../(dashboard)/network/agencies/[tenantId]/page'));
+
+      await waitFor(() => expect(screen.getByText('Dana Down')).toBeTruthy());
+      expect(requested).toContain('/api/v1/network/agencies/child-1?period=THIS_MONTH');
+      expect(screen.getByRole('heading', { name: 'Downline One' })).toBeTruthy();
+      expect(screen.getByText('Invite pending')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Resend owner invite' })).toBeTruthy();
+      expect(screen.getByText('120')).toBeTruthy();
+      expect(screen.getByText('9.0%')).toBeTruthy();
+      expect(screen.getByText('Mon, Tue · 09:00–17:00')).toBeTruthy();
+
+      await waitFor(() => expect(screen.getByText('7 in use')).toBeTruthy());
+      expect(document.querySelectorAll('[data-upgrade-switch]')).toHaveLength(6);
+      expect(
+        document.querySelector('[data-upgrade-switch="POWER_DIALER"]')?.getAttribute('data-state')
+      ).toBe('checked');
+      expect(
+        document.querySelector('[data-upgrade-request="PREDICTIVE_DIALER"]')?.textContent
+      ).toContain('Predictive Dialer');
+      // Status is shown, never offered for editing.
+      expect(screen.queryByLabelText(/status/i)).toBeNull();
+    });
+
+    it('edits the details in place and sends only what changed', async () => {
+      await mount(() => import('../(dashboard)/network/agencies/[tenantId]/page'));
+      await waitFor(() => expect(screen.getByText('Dana Down')).toBeTruthy());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Dee Down' } });
+      fireEvent.change(screen.getByLabelText('Licensed agents'), { target: { value: '6' } });
+      const details = document.querySelector('[data-agency-details]') as HTMLElement;
+      fireEvent.click(within(details).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(sent).toHaveLength(1));
+      expect(sent[0]).toEqual({
+        method: 'PATCH',
+        path: '/api/v1/network/agencies/child-1',
+        body: { contactName: 'Dee Down', licensedAgentCount: 6 },
+      });
+      await waitFor(() =>
+        expect(within(details).queryByRole('button', { name: 'Save' })).toBeNull()
+      );
+    });
+
+    it('cancels an edit without sending anything', async () => {
+      await mount(() => import('../(dashboard)/network/agencies/[tenantId]/page'));
+      await waitFor(() => expect(screen.getByText('Dana Down')).toBeTruthy());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Nope' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByText('Dana Down')).toBeTruthy();
+      expect(sent).toHaveLength(0);
     });
   });
 });

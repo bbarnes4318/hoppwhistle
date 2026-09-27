@@ -2,7 +2,7 @@
 
 import { Building2, Handshake, Loader2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { count, pct } from '@/components/delivery/ledger';
 import { EmptyState, Notice, Panel, PanelBody, StatusChip } from '@/components/domain';
@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { DownlineSettings } from '@/components/white-label/downline-settings';
 import { PeriodToolbar, usePeriod } from '@/components/white-label/period-toolbar';
 import type { NetworkAgencies, NetworkAgencyRow } from '@/components/white-label/types';
 import { usePlatformContext } from '@/hooks/use-platform-context';
@@ -45,8 +44,8 @@ const OWNER_LABEL: Record<
  * leads or people. The parent can onboard a child and invite its owner; it
  * cannot enter one.
  *
- * What it can do is set each child's limits: a second row under each agency
- * holds its phone-numbers limit and its upgrades (`DownlineSettings`).
+ * Each agency's name opens its own page (`/network/agencies/<id>`), where the
+ * parent edits its details and sets its phone-numbers limit and upgrades.
  */
 export default function NetworkAgenciesPage(): JSX.Element {
   const state = usePeriod('THIS_MONTH');
@@ -93,6 +92,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
   return (
     <div className="page-canvas">
       <PageHeader
+        compact
         description="Your agencies: calls, applications and closing percentage"
         actions={
           <>
@@ -151,51 +151,51 @@ export default function NetworkAgenciesPage(): JSX.Element {
                   {data.agencies.map(agency => {
                     const owner = OWNER_LABEL[agency.owner.status];
                     return (
-                      <Fragment key={agency.tenantId}>
-                        <TableRow className="border-b-0">
-                          <TableCell className="font-medium">{agency.name}</TableCell>
-                          <TableCell>
-                            <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {count(agency.agents)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {count(agency.inboundCalls)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {count(agency.answeredByAgents)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {count(agency.applications)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {pct(agency.closingPct, 1)}
-                          </TableCell>
-                          <TableCell>
-                            <StatusChip
-                              value={agency.owner.status}
-                              label={owner.label}
-                              tone={owner.tone}
-                              size="sm"
-                            />
-                            {agency.owner.email ? (
-                              <div className="mt-0.5 t-meta text-ink-3">{agency.owner.email}</div>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="t-meta text-ink-2">
-                            {formatDisplayDate(agency.createdAt)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <ChildStatementButton tenantId={agency.tenantId} name={agency.name} />
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell colSpan={10} className="pt-0">
-                            <DownlineSettings agency={agency} />
-                          </TableCell>
-                        </TableRow>
-                      </Fragment>
+                      <TableRow key={agency.tenantId}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/network/agencies/${agency.tenantId}`}
+                            className="text-brand-ink hover:underline"
+                          >
+                            {agency.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {count(agency.agents)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {count(agency.inboundCalls)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {count(agency.answeredByAgents)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {count(agency.applications)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {pct(agency.closingPct, 1)}
+                        </TableCell>
+                        <TableCell>
+                          <StatusChip
+                            value={agency.owner.status}
+                            label={owner.label}
+                            tone={owner.tone}
+                            size="sm"
+                          />
+                          {agency.owner.email ? (
+                            <div className="mt-0.5 t-meta text-ink-3">{agency.owner.email}</div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="t-meta text-ink-2">
+                          {formatDisplayDate(agency.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ChildStatementButton tenantId={agency.tenantId} name={agency.name} />
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                 </TableBody>

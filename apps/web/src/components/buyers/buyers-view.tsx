@@ -129,6 +129,9 @@ interface Publisher {
   name: string;
 }
 
+/** The Select value for "no publisher": Radix refuses an empty-string item value. */
+const NO_PUBLISHER = 'none';
+
 interface Buyer {
   id: string;
   name: string;
@@ -141,7 +144,8 @@ interface Buyer {
   canPauseTargets: boolean;
   canSetCaps: boolean;
   canDisputeConversions: boolean;
-  publisher: { id: string; name: string };
+  /** Null for a buyer no publisher manages, which is every Life Leads Plus buyer. */
+  publisher: { id: string; name: string } | null;
   callCount: number;
   transactionCount: number;
   createdAt: string;
@@ -379,7 +383,12 @@ function BuyersPage() {
   const handleCreateBuyer = async () => {
     setSaving(true);
     try {
-      const response = await apiClient.post('/api/v1/buyers', buyerForm);
+      // Publisher is optional: a buyer with none is sent without the key.
+      const { publisherId, ...rest } = buyerForm;
+      const response = await apiClient.post(
+        '/api/v1/buyers',
+        publisherId ? { ...rest, publisherId } : rest
+      );
       if (response.data) {
         setCreateBuyerOpen(false);
         resetBuyerForm();
@@ -400,7 +409,11 @@ function BuyersPage() {
     if (!selectedBuyer) return;
     setSaving(true);
     try {
-      const response = await apiClient.patch(`/api/v1/buyers/${selectedBuyer.id}`, buyerForm);
+      // Null clears the publisher; the API treats it as "no publisher".
+      const response = await apiClient.patch(`/api/v1/buyers/${selectedBuyer.id}`, {
+        ...buyerForm,
+        publisherId: buyerForm.publisherId || null,
+      });
       if (response.data) {
         setEditBuyerOpen(false);
         resetBuyerForm();
@@ -581,7 +594,7 @@ function BuyersPage() {
       name: buyer.name,
       code: buyer.code,
       subId: buyer.subId || '',
-      publisherId: buyer.publisher.id,
+      publisherId: buyer.publisher?.id ?? '',
       billingType: buyer.billingType,
       billableDuration: buyer.billableDuration,
       canPauseTargets: buyer.canPauseTargets,
@@ -641,7 +654,7 @@ function BuyersPage() {
           buyer.name.toLowerCase().includes(search.toLowerCase()) ||
           buyer.code.toLowerCase().includes(search.toLowerCase()) ||
           (buyer.subId && buyer.subId.toLowerCase().includes(search.toLowerCase())) ||
-          buyer.publisher.name.toLowerCase().includes(search.toLowerCase())
+          buyer.publisher?.name.toLowerCase().includes(search.toLowerCase())
       ),
     [buyers, search]
   );
@@ -1109,15 +1122,21 @@ function BuyersPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="publisher">Publisher *</Label>
+                <Label htmlFor="publisher">Publisher (optional)</Label>
                 <Select
-                  value={buyerForm.publisherId}
-                  onValueChange={value => setBuyerForm(f => ({ ...f, publisherId: value }))}
+                  value={buyerForm.publisherId || NO_PUBLISHER}
+                  onValueChange={value =>
+                    setBuyerForm(f => ({
+                      ...f,
+                      publisherId: value === NO_PUBLISHER ? '' : value,
+                    }))
+                  }
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select publisher" />
+                  <SelectTrigger id="publisher">
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={NO_PUBLISHER}>None</SelectItem>
                     {publishers.map(pub => (
                       <SelectItem key={pub.id} value={pub.id}>
                         {pub.name}
@@ -1204,7 +1223,7 @@ function BuyersPage() {
             </Button>
             <Button
               onClick={() => void handleCreateBuyer()}
-              disabled={saving || !buyerForm.name || !buyerForm.code || !buyerForm.publisherId}
+              disabled={saving || !buyerForm.name || !buyerForm.code}
             >
               {saving ? 'Creating...' : 'Create Buyer'}
             </Button>
@@ -1296,6 +1315,30 @@ function BuyersPage() {
                   min={0}
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-publisher">Publisher (optional)</Label>
+              <Select
+                value={buyerForm.publisherId || NO_PUBLISHER}
+                onValueChange={value =>
+                  setBuyerForm(f => ({
+                    ...f,
+                    publisherId: value === NO_PUBLISHER ? '' : value,
+                  }))
+                }
+              >
+                <SelectTrigger id="edit-publisher">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PUBLISHER}>None</SelectItem>
+                  {publishers.map(pub => (
+                    <SelectItem key={pub.id} value={pub.id}>
+                      {pub.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="border-t border-rule pt-4">
               <Label className="text-sm font-medium mb-3 block">Permissions</Label>

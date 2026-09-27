@@ -13,27 +13,46 @@ import { cn } from '@/lib/utils';
  *
  * Below 768px the actions wrap underneath the description rather than
  * squeezing it, so a subtitle never runs under a button.
+ *
+ * `compact` is for a working list that is not a hub: the description stays on
+ * one line (truncated, never wrapped) and is centred against the actions, with
+ * tighter gaps, so the band above the content is one row tall at md+. Opt-in;
+ * every other page keeps the default.
  */
 export interface PageHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   description?: React.ReactNode;
   actions?: React.ReactNode;
   meta?: React.ReactNode;
+  /** One-line description, centred against the actions, tighter gaps. */
+  compact?: boolean;
 }
 
-export function PageHeader({ description, actions, meta, className, ...props }: PageHeaderProps) {
+export function PageHeader({
+  description,
+  actions,
+  meta,
+  compact = false,
+  className,
+  ...props
+}: PageHeaderProps) {
   if (!description && !actions && !meta) return null;
 
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
+        compact
+          ? 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4'
+          : 'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
         className
       )}
+      data-compact={compact ? '' : undefined}
       {...props}
     >
       {description || meta ? (
         <div className="min-w-0 max-w-[72ch]">
-          {description ? <div className="t-body text-ink-2">{description}</div> : null}
+          {description ? (
+            <div className={cn('t-body text-ink-2', compact && 'md:truncate')}>{description}</div>
+          ) : null}
           {meta ? <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div> : null}
         </div>
       ) : (

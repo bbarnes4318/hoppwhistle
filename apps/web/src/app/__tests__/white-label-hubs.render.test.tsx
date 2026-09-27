@@ -387,6 +387,85 @@ const CAMPAIGN = {
   metadata: null,
 };
 
+/** Three agents: one on a call, one ready, one who cannot take calls. */
+const FLOOR_TODAY = {
+  callsTaken: 0,
+  talkTimeSeconds: 0,
+  applications: 0,
+  annualizedPremium: 0,
+  closingPct: null,
+  availableSeconds: null,
+  occupancyPct: null,
+};
+const FLOOR = {
+  generatedAt: new Date().toISOString(),
+  agency: { callsTaken: 9, applications: 2, closingPct: 22.2 },
+  agents: [
+    {
+      id: 'u-zed',
+      name: 'Zed Blocked',
+      extension: null,
+      softphoneStatus: 'available',
+      statusSince: null,
+      availableForCalls: true,
+      blockedBy: 'NO_CAMPAIGN',
+      blockedReason: 'Not assigned to a campaign',
+      currentCall: null,
+      today: FLOOR_TODAY,
+      lastCallAt: null,
+    },
+    {
+      id: 'u-sam',
+      name: 'Sam Ready',
+      extension: '1043',
+      softphoneStatus: 'available',
+      statusSince: new Date(Date.now() - 60_000).toISOString(),
+      availableForCalls: true,
+      blockedBy: null,
+      blockedReason: null,
+      currentCall: null,
+      today: { ...FLOOR_TODAY, callsTaken: 4, applications: 1, closingPct: 25 },
+      lastCallAt: null,
+    },
+    {
+      id: 'u-dana',
+      name: 'Dana Oncall',
+      extension: '1042',
+      softphoneStatus: 'on-call',
+      statusSince: new Date(Date.now() - 90_000).toISOString(),
+      availableForCalls: true,
+      blockedBy: null,
+      blockedReason: null,
+      currentCall: {
+        callId: 'call-1',
+        callerId: '+16155550100',
+        campaignName: 'Final Expense',
+        buyerName: null,
+        answeredAt: new Date(Date.now() - 90_000).toISOString(),
+        seconds: 90,
+      },
+      today: { ...FLOOR_TODAY, callsTaken: 5, applications: 1, closingPct: 20 },
+      lastCallAt: null,
+    },
+  ],
+};
+
+const SAM_DAY = {
+  stateEvents: [{ status: 'available', occurredAt: new Date(Date.now() - 60_000).toISOString() }],
+  calls: [
+    {
+      id: 'call-7',
+      createdAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+      callerId: '+16155550199',
+      campaignName: 'Final Expense',
+      buyerName: 'Acme Life',
+      connectedDuration: 312,
+      disposition: 'SET_APPOINTMENT',
+      primaryRecordingId: 'rec-7',
+    },
+  ],
+};
+
 /* ── The tests ────────────────────────────────────────────────────────────── */
 
 describe('the white-label portal', () => {
@@ -500,25 +579,70 @@ describe('the white-label portal', () => {
   });
 
   describe('Agents', () => {
-    it('opens on Performance, the Leaderboard', async () => {
+    it('opens on the Floor', async () => {
+      answers['/api/v1/agent-roster/floor'] = { data: FLOOR };
       await mount('/agents', () => import('../(dashboard)/agents/page'));
-      await waitFor(() => expect(asked('GET /api/v1/leaderboard?period=TODAY')).toBe(true));
-      expect(activeTab()).toBe('performance');
+      await waitFor(() => expect(asked('GET /api/v1/agent-roster/floor')).toBe(true));
+      expect(activeTab()).toBe('floor');
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+        'Floor',
         'Performance',
-        'Today',
         'Over a period',
         'Roster',
       ]);
     });
 
-    it('shows Agents today on the Today tab', async () => {
+    it('lands an old ?tab=today link on the Floor', async () => {
+      answers['/api/v1/agent-roster/floor'] = { data: FLOOR };
       await mount('/agents?tab=today', () => import('../(dashboard)/agents/page'));
-      await waitFor(() => expect(screen.getByText('Agents today')).toBeTruthy());
-      expect(activeTab()).toBe('today');
-      expect(asked('GET /api/v1/delivery/agents')).toBe(true);
-      // Only the rows: Delivery's block and rate are on Plan & Billing.
-      expect(asked('GET /api/v1/delivery/today')).toBe(false);
+      await waitFor(() => expect(activeTab()).toBe('floor'));
+      expect(asked('GET /api/v1/delivery/agents')).toBe(false);
+    });
+
+    it('shows every agent on the Floor, on a call first, and opens their day', async () => {
+      answers['/api/v1/agent-roster/floor'] = { data: FLOOR };
+      answers['/api/v1/agent-roster/u-sam/activity'] = { data: SAM_DAY };
+      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(document.querySelectorAll('[data-agent-card]').length).toBe(3));
+
+      const cards = [...document.querySelectorAll('[data-agent-card]')];
+      expect(cards.map(card => card.getAttribute('data-floor-status'))).toEqual([
+        'ON_CALL',
+        'READY',
+        'BLOCKED',
+      ]);
+      expect(cards[0].textContent).toContain('Ext 1042');
+      expect(cards[0].textContent).toContain('(615) 555-0100');
+      expect(cards[0].textContent).toContain('Final Expense');
+      expect(cards[2].textContent).toContain('Not assigned to a campaign');
+      expect(figure('Ready')).toBe('1');
+      expect(figure('On a call')).toBe('1');
+      expect(figure('Calls today')).toBe('9');
+
+      fireEvent.click(cards[1]);
+      await waitFor(() => expect(screen.getByText('Status log')).toBeTruthy());
+      expect(asked('GET /api/v1/agent-roster/u-sam/activity?day=')).toBe(true);
+      await waitFor(() => expect(document.querySelector('[data-call-row="call-7"]')).toBeTruthy());
+      expect(screen.getByRole('link', { name: /Open in Calls/ }).getAttribute('href')).toBe(
+        '/calls?call=call-7'
+      );
+    });
+
+    it('sends an agency with no agents to the Roster', async () => {
+      answers['/api/v1/agent-roster/floor'] = {
+        data: { ...FLOOR, agents: [] },
+      };
+      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(screen.getByText('No agents yet')).toBeTruthy());
+      expect(screen.getByRole('link', { name: 'Go to Roster' }).getAttribute('href')).toBe(
+        '/agents?tab=roster'
+      );
+    });
+
+    it('shows the Leaderboard on the Performance tab', async () => {
+      await mount('/agents?tab=performance', () => import('../(dashboard)/agents/page'));
+      await waitFor(() => expect(asked('GET /api/v1/leaderboard?period=TODAY')).toBe(true));
+      expect(activeTab()).toBe('performance');
     });
 
     it('shows the Team report on the period tab', async () => {
@@ -554,7 +678,7 @@ describe('the white-label portal', () => {
 
     it('shows no outbound tile or Out/Conn columns for an agency that does not dial', async () => {
       answers['/api/v1/leaderboard'] = { data: LEADERBOARD };
-      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await mount('/agents?tab=performance', () => import('../(dashboard)/agents/page'));
       await waitFor(() => expect(screen.getByText('The board')).toBeTruthy());
 
       expect(figure('Outbound calls')).toBeUndefined();
@@ -570,7 +694,7 @@ describe('the white-label portal', () => {
     it('shows them with the Power Dialer', async () => {
       upgrades = ['POWER_DIALER'];
       answers['/api/v1/leaderboard'] = { data: LEADERBOARD };
-      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await mount('/agents?tab=performance', () => import('../(dashboard)/agents/page'));
       await waitFor(() => expect(screen.getByText('The board')).toBeTruthy());
 
       expect(figure('Outbound calls')).toBe('0');
@@ -588,7 +712,7 @@ describe('the white-label portal', () => {
           agency: { ...AGENCY_TOTALS, outboundCalls: 4, outboundConnected: 2 },
         },
       };
-      await mount('/agents', () => import('../(dashboard)/agents/page'));
+      await mount('/agents?tab=performance', () => import('../(dashboard)/agents/page'));
       await waitFor(() => expect(figure('Outbound calls')).toBe('4'));
       const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
       expect(headers).toContain('Out');
@@ -596,7 +720,7 @@ describe('the white-label portal', () => {
 
     it('changes tab by replacing ?tab=', async () => {
       await mount('/agents', () => import('../(dashboard)/agents/page'));
-      await waitFor(() => expect(activeTab()).toBe('performance'));
+      await waitFor(() => expect(activeTab()).toBe('floor'));
       const roster = screen.getByRole('tab', { name: 'Roster' });
       fireEvent.mouseDown(roster);
       fireEvent.click(roster);
@@ -921,33 +1045,95 @@ describe('the white-label portal', () => {
   });
 
   describe('Upgrades', () => {
-    it('lists the five upgrades, each with who to ask', async () => {
+    const CATALOG = (overrides: Record<string, Record<string, unknown>> = {}) =>
+      [
+        'POWER_DIALER',
+        'PREDICTIVE_DIALER',
+        'CARRIER_ROUTING',
+        'VOICE_AGENTS',
+        'VOICE_STUDIO',
+        'PAYROLL_ADMIN',
+      ].map(key => ({
+        key,
+        monthlyCents: null,
+        setupCents: null,
+        on: false,
+        requestOpen: false,
+        ...overrides[key],
+      }));
+
+    it('lists the six upgrades, each with its price and a request button', async () => {
+      answers['GET /api/v1/upgrades'] = {
+        data: CATALOG({ POWER_DIALER: { monthlyCents: 9900, setupCents: 25000 } }),
+      };
       await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
-      await waitFor(() => expect(document.querySelectorAll('[data-upgrade]').length).toBe(5));
+      await waitFor(() =>
+        expect(screen.getAllByRole('button', { name: 'Request this upgrade' })).toHaveLength(6)
+      );
       expect(
         [...document.querySelectorAll('[data-upgrade] h2')].map(heading => heading.textContent)
       ).toEqual([
         'Power Dialer',
+        'Predictive Dialer',
         'VOIP Carrier Routing',
         'Voice Agents',
         'Voice Studio',
         'Payroll Admin',
       ]);
-      expect(screen.getByText('Includes the CRM and lead lists your agents dial.')).toBeTruthy();
-      expect(screen.getAllByText('Ask your account manager to turn this on.')).toHaveLength(5);
+      expect(screen.getByText('Includes lead lists your agents dial.')).toBeTruthy();
+      expect(screen.queryByText(/CRM/)).toBeNull();
+      expect(screen.getByText('Early access')).toBeTruthy();
+      expect(document.querySelector('[data-upgrade-price="POWER_DIALER"]')?.textContent).toBe(
+        '$99/month · $250 setup'
+      );
+      expect(screen.getAllByText('Ask for pricing')).toHaveLength(5);
     });
 
-    it('says which are already on', async () => {
+    it('sends a request, and the card then reads Requested', async () => {
+      answers['GET /api/v1/upgrades'] = { data: CATALOG() };
+      answers['POST /api/v1/upgrades/PREDICTIVE_DIALER/request'] = {
+        data: { id: 'req-1', status: 'OPEN' },
+      };
+      await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
+      const card = await waitFor(() => {
+        const found = document.querySelector('[data-upgrade="PREDICTIVE_DIALER"]') as HTMLElement;
+        expect(found).toBeTruthy();
+        return found;
+      });
+      await waitFor(() =>
+        expect(
+          within(card)
+            .getByRole('button', { name: 'Request this upgrade' })
+            .hasAttribute('disabled')
+        ).toBe(false)
+      );
+      fireEvent.click(within(card).getByRole('button', { name: 'Request this upgrade' }));
+
+      await waitFor(() =>
+        expect(within(card).getByRole('button', { name: 'Requested' })).toBeTruthy()
+      );
+      expect(within(card).getByRole('button', { name: 'Requested' }).hasAttribute('disabled')).toBe(
+        true
+      );
+      expect(posted.map(p => p.path)).toContain('/api/v1/upgrades/PREDICTIVE_DIALER/request');
+    });
+
+    it('says which are on, and which are already requested', async () => {
       upgrades = ['POWER_DIALER'];
+      answers['GET /api/v1/upgrades'] = {
+        data: CATALOG({ POWER_DIALER: { on: true }, VOICE_STUDIO: { requestOpen: true } }),
+      };
       await mount('/upgrades', () => import('../(dashboard)/upgrades/page'));
       await waitFor(() => expect(screen.getByText('Turned on for your agency.')).toBeTruthy());
-      expect(screen.getAllByText('Ask your account manager to turn this on.')).toHaveLength(4);
+      expect(screen.getAllByRole('button', { name: 'Request this upgrade' })).toHaveLength(4);
+      const studio = document.querySelector('[data-upgrade="VOICE_STUDIO"]') as HTMLElement;
+      expect(
+        within(studio).getByRole('button', { name: 'Requested' }).hasAttribute('disabled')
+      ).toBe(true);
       expect(screen.getByRole('link', { name: 'Open the Power Dialer' }).getAttribute('href')).toBe(
         '/call-center'
       );
-      expect(screen.getByRole('link', { name: 'Open the CRM' }).getAttribute('href')).toBe(
-        '/insurance-leads'
-      );
+      expect(screen.queryByRole('link', { name: 'Open the CRM' })).toBeNull();
     });
   });
 });

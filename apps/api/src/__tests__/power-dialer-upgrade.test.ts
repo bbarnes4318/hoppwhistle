@@ -1,9 +1,10 @@
 /**
  * The Power Dialer upgrade, enforced on the server.
  *
- * The call-center console's routes and the CRM / lead-list routes are the
- * POWER_DIALER upgrade: a tenant without it is answered 403 UPGRADE_REQUIRED,
- * a tenant with it is served, and a platform admin is served either way. The
+ * The call-center console's routes are the POWER_DIALER upgrade: a tenant
+ * without it is answered 403 UPGRADE_REQUIRED, a tenant with it is served, and
+ * a platform admin is served either way. The CRM and its lead lists are NOT
+ * the upgrade -- every agency has them -- and that is asserted too. The
  * real route plugins are registered on a bare Fastify instance with Prisma
  * mocked, so this asserts the hook as it is wired, not a copy of it.
  */
@@ -78,7 +79,13 @@ describe('POWER_DIALER on the dialer and lead routes', () => {
       headers: { 'x-test-principal': JSON.stringify(principal) },
     });
 
-  it.each([DIALER_ROUTE, LEAD_ROUTE])(
+  it('serves the CRM lead lists to a tenant without the upgrade', async () => {
+    const res = await get(LEAD_ROUTE, { tenantId: 'tenant-without' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain(UPGRADE_REQUIRED);
+  });
+
+  it.each([DIALER_ROUTE])(
     'answers a tenant without the upgrade 403 UPGRADE_REQUIRED on %s',
     async url => {
       const res = await get(url, { tenantId: 'tenant-without' });
@@ -103,7 +110,7 @@ describe('POWER_DIALER on the dialer and lead routes', () => {
       const res = await get(url, { tenantId: 'tenant-without', isPlatformAdmin: true });
       expect(res.statusCode).toBe(200);
       // Staff are exempt without the tenant's upgrades being read at all.
-      expect(mockPrisma.tenant.findUnique).not.toHaveBeenCalled();
+      if (url === DIALER_ROUTE) expect(mockPrisma.tenant.findUnique).not.toHaveBeenCalled();
     }
   );
 

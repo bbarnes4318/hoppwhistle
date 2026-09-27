@@ -3227,10 +3227,38 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // GET publisher stats
+  /**
+   * GET /api/v1/publishers/:publisherId/stats?period=&from=&to=
+   *
+   *   { period: { key, label, from, to, days, complete },
+   *     totalCalls, billableCalls, billableToBuyers, billableAgentAnswered,
+   *     nonBillableCalls, payout, billableRate, averageConnectedDuration,
+   *     pingCount, noBidCount, topCampaigns, recentCalls,
+   *     revenue?, profit? }
+   *
+   * The counts and the payout are this publisher's row of the Sales screen
+   * (`getCallSalesPublisherRow`): `salesCallWhere`'s calls narrowed to the
+   * publisher, so the owner's stats drawer and Revenue agree call for call.
+   * Billable is split as that row splits it -- to buyers, and answered by the
+   * agency's own agents.
+   *
+   * `revenue` and `profit` are sent to an agency principal (OWNER/ADMIN) only.
+   * The publisher portal's dashboard reads this endpoint too, and a publisher
+   * must never see what the agency sold its calls for.
+   *
+   * The period is named as on `/api/v1/call-sales/summary`, defaulting to
+   * THIS_MONTH. The portal dashboard still sends `startDate`/`endDate` day
+   * keys; with no `period`, those are read as a CUSTOM range.
+   */
   fastify.get<{
     Params: { publisherId: string };
-    Querystring: { startDate?: string; endDate?: string };
+    Querystring: {
+      period?: string;
+      from?: string;
+      to?: string;
+      startDate?: string;
+      endDate?: string;
+    };
   }>('/api/v1/publishers/:publisherId/stats', async (request, reply) => {
     try {
       const user = (request as AuthRequest).user;
@@ -3250,82 +3278,73 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-      const startDate = request.query.startDate
-        ? new Date(request.query.startDate)
-        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+      // An owner may only read their own tenant's publisher.
+      const publisher = await prisma.publisher.findFirst({
+        where: { id: publisherId, tenantId },
+        select: { id: true },
+      });
+      if (!publisher) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+      }
 
-      const callsWhere = {
+      const { periodFromQuery } = await import('./call-sales.js');
+      const { period, from, to, startDate, endDate } = request.query;
+      const legacyRange = !period && !from && !to && startDate && endDate;
+      const resolved = periodFromQuery(
+        legacyRange
+          ? { period: 'CUSTOM', from: startDate.slice(0, 10), to: endDate.slice(0, 10) }
+          : { period: period ?? 'THIS_MONTH', from, to },
+        reply
+      );
+      if (!resolved) return reply;
+
+      const { salesCallWhere } = await import('../services/reporting/call-money.js');
+      const { getCallSalesPublisherRow } = await import('../services/reporting/call-sales.js');
+      const callsWhere = { ...salesCallWhere(tenantId, resolved), publisherId };
+      const pingWhere = {
         publisherId,
-        tenantId,
-        createdAt: { gte: startDate, lte: endDate },
+        createdAt: { gte: resolved.start, lt: resolved.endExclusive },
       };
 
-      const [
-        callsCount,
-        billableCount,
-        totalPayoutSum,
-        avgDurationResult,
-        pingCount,
-        noBidCount,
-        topCampaignsRaw,
-        recentCallsRaw,
-      ] = await Promise.all([
-        prisma.call.count({ where: callsWhere }),
-        prisma.call.count({ where: { ...callsWhere, billable: true } }),
-        prisma.call.aggregate({
-          where: callsWhere,
-          _sum: { publisherPayoutAmount: true },
-        }),
-        prisma.call.aggregate({
-          where: callsWhere,
-          _avg: { connectedDuration: true },
-        }),
-        prisma.pingRequest.count({
-          where: {
-            publisherId,
-            createdAt: { gte: startDate, lte: endDate },
-          },
-        }),
-        prisma.pingRequest.count({
-          where: {
-            publisherId,
-            status: 'NO_BID',
-            createdAt: { gte: startDate, lte: endDate },
-          },
-        }),
-        prisma.call.groupBy({
-          by: ['campaignId', 'campaignName'],
-          where: callsWhere,
-          _count: { id: true },
-          _sum: { publisherPayoutAmount: true },
-          orderBy: { _count: { id: 'desc' } },
-          take: 5,
-        }),
-        prisma.call.findMany({
-          where: callsWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-          include: {
-            campaign: true,
-            fromNumber: true,
-            createdBy: { select: { firstName: true, lastName: true } },
-            recordings: {
-              where: { deletedAt: null },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
+      const [row, avgDurationResult, pingCount, noBidCount, topCampaignsRaw, recentCallsRaw] =
+        await Promise.all([
+          getCallSalesPublisherRow(tenantId, resolved, publisherId, { prisma }),
+          prisma.call.aggregate({
+            where: callsWhere,
+            _avg: { connectedDuration: true },
+          }),
+          prisma.pingRequest.count({ where: pingWhere }),
+          prisma.pingRequest.count({ where: { ...pingWhere, status: 'NO_BID' } }),
+          prisma.call.groupBy({
+            by: ['campaignId', 'campaignName'],
+            where: callsWhere,
+            _count: { id: true },
+            _sum: { publisherPayoutAmount: true },
+            orderBy: { _count: { id: 'desc' } },
+            take: 5,
+          }),
+          prisma.call.findMany({
+            where: callsWhere,
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            include: {
+              campaign: true,
+              fromNumber: true,
+              createdBy: { select: { firstName: true, lastName: true } },
+              recordings: {
+                where: { deletedAt: null },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
             },
-          },
-        }),
-      ]);
+          }),
+        ]);
 
-      const totalCalls = callsCount;
-      const billableCalls = billableCount;
+      const totalCalls = row.calls;
+      const billableCalls = row.billable;
       const nonBillableCalls = totalCalls - billableCalls;
       const billableRate = totalCalls > 0 ? (billableCalls / totalCalls) * 100 : 0;
-      const payout = totalPayoutSum._sum.publisherPayoutAmount
-        ? Number(totalPayoutSum._sum.publisherPayoutAmount)
-        : 0;
       const avgConnectedDuration = avgDurationResult._avg.connectedDuration
         ? Math.round(avgDurationResult._avg.connectedDuration)
         : 0;
@@ -3343,17 +3362,31 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         mapCallRecord(call, apiBaseUrl, prisma, request, true, profile)
       );
 
+      const { isAgencyPrincipal } = await import('../lib/agent-scope.js');
+
       return {
+        period: {
+          key: resolved.key,
+          label: resolved.label,
+          from: resolved.from,
+          to: resolved.to,
+          days: resolved.days,
+          complete: resolved.complete,
+        },
         totalCalls,
         billableCalls,
+        billableToBuyers: row.billableToBuyers,
+        billableAgentAnswered: row.billableAgentAnswered,
         nonBillableCalls,
-        payout,
+        payout: row.payout,
         billableRate,
         averageConnectedDuration: avgConnectedDuration,
         pingCount,
         noBidCount,
         topCampaigns,
         recentCalls,
+        // The agency's side of the call: never sent to a publisher.
+        ...(isAgencyPrincipal(request) ? { revenue: row.revenue, profit: row.profit } : {}),
       };
     } catch (error: unknown) {
       void reply.code(400);

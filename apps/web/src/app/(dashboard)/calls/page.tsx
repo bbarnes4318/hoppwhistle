@@ -1627,7 +1627,9 @@ export default function OperationsCallLogsPage() {
           if (!open) setDetailCallId(null);
         }}
       >
-        <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-rule bg-surface p-0 shadow-pop text-ink translate-x-0 translate-y-0 left-auto top-0 bottom-0">
+        <DialogContent
+          hideClose
+          className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-rule bg-surface p-0 shadow-pop text-ink translate-x-0 translate-y-0 left-auto top-0 bottom-0">
           <div className="h-full flex flex-col overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-rule flex items-center justify-between bg-sunken">
@@ -1652,6 +1654,7 @@ export default function OperationsCallLogsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setDetailCallId(null)}
+                  aria-label="Close"
                   className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
                 >
                   <X className="h-4 w-4" />

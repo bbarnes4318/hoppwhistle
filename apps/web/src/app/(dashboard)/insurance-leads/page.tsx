@@ -48,12 +48,14 @@ import {
   fetchInsuranceLead,
   fetchInsuranceLeads,
   fetchSubmittedApps,
+  fetchUsers,
 } from '@/lib/api/leads';
 import type {
   CrmPipelineSummary,
   InsuranceLeadDetail,
   InsuranceLeadSummary,
   SubmittedAppRow,
+  UserSummary,
 } from '@/lib/api/leads';
 import { formatPhoneNumber } from '@/lib/utils';
 
@@ -146,6 +148,8 @@ interface ProspectFilters {
   leadStage: string;
   followUp: string;
   listId: string;
+  /** The owner's Agent filter. An agent's list is narrowed server-side to their own. */
+  agentId: string;
 }
 
 const EMPTY_PROSPECT_FILTERS: ProspectFilters = {
@@ -153,6 +157,7 @@ const EMPTY_PROSPECT_FILTERS: ProspectFilters = {
   leadStage: 'all',
   followUp: 'all',
   listId: 'all',
+  agentId: 'all',
 };
 
 /** `all` is the toolbar's "no filter"; the API wants nothing at all. */
@@ -212,6 +217,7 @@ export default function CrmPage() {
       leadStage: set(filters.leadStage),
       followUp: set(filters.followUp),
       listId: set(filters.listId),
+      agentId: set(filters.agentId),
       pipeline: 'prospects' as const,
     }),
     [filters]
@@ -265,6 +271,15 @@ export default function CrmPage() {
     }
   }, [range, appSearch, appPage]);
 
+  // The owner's Agent filter lists the agency's users.
+  const [agencyUsers, setAgencyUsers] = useState<UserSummary[]>([]);
+  useEffect(() => {
+    if (!canManageBook) return;
+    fetchUsers()
+      .then(res => setAgencyUsers(res?.data ?? []))
+      .catch(() => setAgencyUsers([]));
+  }, [canManageBook]);
+
   const loadLists = useCallback(async () => {
     const response = await apiClient.get<LeadList[]>('/api/v1/lead-lists').catch(() => null);
     if (response && !response.error && Array.isArray(response.data)) setLeadLists(response.data);
@@ -285,6 +300,15 @@ export default function CrmPage() {
   useEffect(() => {
     void loadLists();
   }, [loadLists]);
+
+  /*
+   * `?lead=<id>` opens that lead's sheet once, at mount -- the address older
+   * links (and bookmarks) used before a customer had a page of its own.
+   */
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('lead');
+    if (requested) setSelectedLeadId(requested);
+  }, []);
 
   useEffect(() => {
     if (!selectedLeadId) {
@@ -321,7 +345,8 @@ export default function CrmPage() {
 
   const activeFilterCount =
     (filters.search ? 1 : 0) +
-    (['leadStage', 'followUp', 'listId'] as const).filter(k => filters[k] !== 'all').length;
+    (['leadStage', 'followUp', 'listId', 'agentId'] as const).filter(k => filters[k] !== 'all')
+      .length;
 
   const clearFilters = () => {
     setFilters(EMPTY_PROSPECT_FILTERS);
@@ -525,6 +550,18 @@ export default function CrmPage() {
               options={FOLLOW_UP_OPTIONS}
               allLabel="Any follow-up"
             />
+            {canManageBook && agencyUsers.length > 0 && (
+              <ToolbarSelect
+                label="Agent"
+                value={filters.agentId}
+                onChange={v => setFilter('agentId', v)}
+                options={agencyUsers.map(u => ({
+                  value: u.id,
+                  label: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+                }))}
+                allLabel="All agents"
+              />
+            )}
             {leadLists.length > 0 && (
               <ToolbarSelect
                 label="List"

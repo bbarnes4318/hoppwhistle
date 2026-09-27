@@ -16,6 +16,7 @@
  * `loadTenantWhiteLabel`.
  */
 
+import type { Prisma } from '@prisma/client';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { logger } from './logger.js';
@@ -23,6 +24,7 @@ import { getPrismaClient } from './prisma.js';
 
 export const TENANT_UPGRADES = [
   'POWER_DIALER',
+  'PREDICTIVE_DIALER',
   'CARRIER_ROUTING',
   'VOICE_AGENTS',
   'VOICE_STUDIO',
@@ -31,7 +33,46 @@ export const TENANT_UPGRADES = [
 
 export type TenantUpgrade = (typeof TENANT_UPGRADES)[number];
 
+/**
+ * What each upgrade is called to a person: in the upgrade-request email, and
+ * wherever the API has to name one. The web's cards carry the same names.
+ */
+export const UPGRADE_NAMES: Record<TenantUpgrade, string> = {
+  POWER_DIALER: 'Power Dialer',
+  PREDICTIVE_DIALER: 'Predictive Dialer',
+  CARRIER_ROUTING: 'VOIP Carrier Routing',
+  VOICE_AGENTS: 'Voice Agents',
+  VOICE_STUDIO: 'Voice Studio',
+  PAYROLL_ADMIN: 'Payroll Admin',
+};
+
 const KNOWN: ReadonlySet<string> = new Set(TENANT_UPGRADES);
+
+/** Whether `value` is one of TENANT_UPGRADES. */
+export function isTenantUpgrade(value: unknown): value is TenantUpgrade {
+  return typeof value === 'string' && KNOWN.has(value);
+}
+
+/**
+ * Close the tenant's OPEN requests for upgrades it now has.
+ *
+ * Called wherever a tenant's upgrades are written (Admin -> Agencies, and a
+ * white-label parent's settings for its child), with the set as saved: a
+ * request for an upgrade that is now on is DONE -- nobody has to go back and
+ * tick it off. Takes the transaction client so it lands with the write.
+ */
+export async function markUpgradeRequestsDone(
+  tx: Pick<Prisma.TransactionClient, 'upgradeRequest'>,
+  tenantId: string,
+  upgrades: readonly string[]
+): Promise<number> {
+  if (upgrades.length === 0) return 0;
+  const { count } = await tx.upgradeRequest.updateMany({
+    where: { tenantId, status: 'OPEN', upgradeKey: { in: [...upgrades] } },
+    data: { status: 'DONE', decidedAt: new Date() },
+  });
+  return count;
+}
 
 /**
  * The known upgrade keys in a tenant's metadata, de-duplicated, in the order

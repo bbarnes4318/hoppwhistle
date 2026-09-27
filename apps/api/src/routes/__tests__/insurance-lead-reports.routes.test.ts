@@ -52,7 +52,10 @@ async function buildApp(): Promise<FastifyInstance> {
   // Reproduction of the demo-tenant hook the production server installs.
   app.addHook('onRequest', (request, _reply, done) => {
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    if (demoTenantId) (request as { user?: unknown }).user = { tenantId: demoTenantId };
+    // The agency's owner: the delivery report is an owner's screen, and an agent is refused it.
+    if (demoTenantId) {
+      (request as { user?: unknown }).user = { tenantId: demoTenantId, roles: ['OWNER'] };
+    }
     done();
   });
   await registerInsuranceLeadRoutes(app);

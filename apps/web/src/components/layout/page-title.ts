@@ -91,6 +91,21 @@ export function pageTitleFor(pathname: string | null, own?: NavGroup[]): string 
     if (hubItem) return hubItem.name;
   }
 
+  // A detail page under one of the viewer's own entries is named as that entry:
+  // an agent's /insurance-leads/<id> reads "My customers", as their sidebar does.
+  const ownPrefix = ownItems
+    .filter(item => !item.href.includes('?') && pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  const deeperShared = ALL_ITEMS.some(item => {
+    const href = item.href.split('?')[0];
+    return (
+      ownPrefix &&
+      href.length > ownPrefix.href.length &&
+      (pathname === href || pathname.startsWith(`${href}/`))
+    );
+  });
+  if (ownPrefix && !deeperShared) return ownPrefix.name;
+
   // Longest matching nav PATH wins, so /publisher/calls beats /publisher.
   // Sorting by the raw href instead would let a filtered variant of a page win
   // on the strength of its query string alone — "Recordings"

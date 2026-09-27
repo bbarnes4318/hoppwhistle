@@ -131,6 +131,38 @@ export interface InsuranceLeadDetail {
   // Timeline & Tasks
   activities: InsuranceActivity[];
   tasks: InsuranceTask[];
+
+  /** Applications linked to this customer. */
+  applications?: InsuranceLeadApplication[];
+  /** Calls to or from this customer's number, newest first. */
+  calls?: InsuranceLeadCall[];
+}
+
+export interface InsuranceLeadApplication {
+  id: string;
+  carrier: string;
+  product: string | null;
+  planType: string | null;
+  faceAmount: number | null;
+  modalPremium: number | null;
+  paymentMode: string;
+  annualizedPremium: number | null;
+  carrierApplicationNumber: string | null;
+  status: string;
+  submittedAt: string | null;
+  createdAt: string;
+  callId: string | null;
+  voidedAt: string | null;
+}
+
+export interface InsuranceLeadCall {
+  id: string;
+  createdAt: string;
+  direction: string;
+  campaignName: string | null;
+  buyerName: string | null;
+  connectedDuration: number | null;
+  disposition: string | null;
 }
 
 export interface InsuranceLeadSubmission {
@@ -199,6 +231,8 @@ export async function fetchInsuranceLeads(params: {
   leadStage?: string;
   followUp?: string;
   listId?: string;
+  /** A principal's Agent filter; the server ignores it for an agent. */
+  agentId?: string;
   /** `prospects` leaves out leads that became submitted applications. */
   pipeline?: 'prospects';
 }): Promise<LeadListResponse> {
@@ -216,6 +250,7 @@ export async function fetchInsuranceLeads(params: {
   if (params.leadStage) queryParts.push(`leadStage=${params.leadStage}`);
   if (params.followUp) queryParts.push(`followUp=${params.followUp}`);
   if (params.listId) queryParts.push(`listId=${params.listId}`);
+  if (params.agentId) queryParts.push(`agentId=${encodeURIComponent(params.agentId)}`);
   if (params.pipeline) queryParts.push(`pipeline=${params.pipeline}`);
 
   const qs = queryParts.length ? `?${queryParts.join('&')}` : '';
@@ -473,8 +508,13 @@ export async function fetchCustomerLookup(phone: string): Promise<CustomerLookup
   return res.data as unknown as CustomerLookupResponse;
 }
 
-export async function deleteInsuranceLeads(ids: string[]): Promise<{ success: boolean; count: number }> {
-  const res = await apiClient.delete<{ success: boolean; count: number }>('/api/v1/insurance-leads', { ids });
+export async function deleteInsuranceLeads(
+  ids: string[]
+): Promise<{ success: boolean; count: number }> {
+  const res = await apiClient.delete<{ success: boolean; count: number }>(
+    '/api/v1/insurance-leads',
+    { ids }
+  );
   if (res.error) throw new Error(res.error.message);
   return res.data as unknown as { success: boolean; count: number };
 }

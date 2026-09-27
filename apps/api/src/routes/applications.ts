@@ -47,6 +47,11 @@ import { recordAgentApplication } from '../services/applications/agent-entry.js'
 import type { PaymentMode } from '../services/applications/agent-entry.js';
 import { UnknownCallError } from '../services/applications/call-attribution.js';
 import {
+  ApplicationHasNoPhoneError,
+  ApplicationNotFoundError,
+  linkApplicationCustomer,
+} from '../services/applications/customer-link.js';
+import {
   CreateApplicationSchema,
   describeApplicationIssues,
 } from '../services/applications/input-schema.js';
@@ -292,6 +297,7 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
         createdById: true,
         callId: true,
         callAttribution: true,
+        insuranceLeadId: true,
         voidedAt: true,
         voidReason: true,
       },
@@ -334,6 +340,8 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
            * claim from an inference -- see `CallAttribution`.
            */
           callAttribution: row.callAttribution,
+          // The customer record this application belongs to, when linked.
+          customerId: row.insuranceLeadId,
           voidedAt: row.voidedAt?.toISOString() ?? null,
           voidReason: row.voidReason,
         })),
@@ -456,6 +464,45 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
             .sort((a, b) => b.count - a.count),
         },
       });
+    }
+  );
+
+  /**
+   * POST /api/v1/applications/:id/customer
+   *
+   * The customer record an application belongs to, linking or creating it on
+   * first open. See `services/applications/customer-link.ts` for the order.
+   *
+   * An AGENT reaches only applications they wrote; anyone else's reads as not
+   * found, the same narrowing as the list.
+   */
+  fastify.post<{ Params: { id: string } }>(
+    '/api/v1/applications/:id/customer',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const roles = rolesOf(request as { user?: RoutePrincipal });
+      const isPrincipal = roles.some(role => AGENCY_PRINCIPAL_ROLES.includes(role));
+      const onlyCreatedById = isPrincipal ? undefined : (getActingUserId(request) ?? ' ');
+
+      try {
+        const result = await linkApplicationCustomer(prisma, {
+          tenantId,
+          applicationId: request.params.id,
+          onlyCreatedById,
+        });
+        return reply.send({ data: { customerId: result.customerId } });
+      } catch (error) {
+        if (error instanceof ApplicationNotFoundError) {
+          return reply.code(404).send({ error: { code: error.code, message: error.message } });
+        }
+        if (error instanceof ApplicationHasNoPhoneError) {
+          return reply.code(409).send({ error: { code: error.code, message: error.message } });
+        }
+        throw error;
+      }
     }
   );
 

@@ -69,7 +69,11 @@ import {
 } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId } from '../lib/tenant-context.js';
-import { TENANT_UPGRADES, tenantUpgrades } from '../lib/tenant-upgrades.js';
+import {
+  markUpgradeRequestsDone,
+  TENANT_UPGRADES,
+  tenantUpgrades,
+} from '../lib/tenant-upgrades.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 
@@ -223,23 +227,29 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
 
       const rows = await Promise.all(
         tenants.map(async tenant => {
-          const [callsTotal, callsAnswered, calls30d, applicationsTotal, applicationsSubmitted, lastCall] =
-            await Promise.all([
-              prisma.call.count({ where: { tenantId: tenant.id } }),
-              prisma.call.count({ where: { tenantId: tenant.id, answeredAt: { not: null } } }),
-              prisma.call.count({
-                where: { tenantId: tenant.id, createdAt: { gte: thirtyDaysAgo } },
-              }),
-              prisma.insuranceCarrierApplication.count({ where: { tenantId: tenant.id } }),
-              prisma.insuranceCarrierApplication.count({
-                where: { tenantId: tenant.id, submittedAt: { not: null } },
-              }),
-              prisma.call.findFirst({
-                where: { tenantId: tenant.id },
-                orderBy: { createdAt: 'desc' },
-                select: { createdAt: true },
-              }),
-            ]);
+          const [
+            callsTotal,
+            callsAnswered,
+            calls30d,
+            applicationsTotal,
+            applicationsSubmitted,
+            lastCall,
+          ] = await Promise.all([
+            prisma.call.count({ where: { tenantId: tenant.id } }),
+            prisma.call.count({ where: { tenantId: tenant.id, answeredAt: { not: null } } }),
+            prisma.call.count({
+              where: { tenantId: tenant.id, createdAt: { gte: thirtyDaysAgo } },
+            }),
+            prisma.insuranceCarrierApplication.count({ where: { tenantId: tenant.id } }),
+            prisma.insuranceCarrierApplication.count({
+              where: { tenantId: tenant.id, submittedAt: { not: null } },
+            }),
+            prisma.call.findFirst({
+              where: { tenantId: tenant.id },
+              orderBy: { createdAt: 'desc' },
+              select: { createdAt: true },
+            }),
+          ]);
 
           return {
             tenantId: tenant.id,
@@ -312,7 +322,7 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
         where: { id: tenantId },
         data: {
           isNonProduction,
-          nonProductionNote: isNonProduction ? request.body?.note ?? null : null,
+          nonProductionNote: isNonProduction ? (request.body?.note ?? null) : null,
           nonProductionMarkedAt: isNonProduction ? new Date() : null,
           nonProductionMarkedByUserId: isNonProduction ? getActingUserId(request) : null,
         },
@@ -503,11 +513,11 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
    * GET /api/v1/admin/tenants/:tenantId/upgrades
    * PUT /api/v1/admin/tenants/:tenantId/upgrades   { upgrades: TenantUpgrade[] }
    *
-   * Which paid upgrades an agency has turned on: Power Dialer, VOIP Carrier
-   * Routing, Voice Agents, Voice Studio, Payroll Admin. `/api/auth/me` sends
-   * the list to the agency's users, and the white-label nav and the Upgrades
-   * page read it -- Power Dialer, for one, puts the CRM in the owner's
-   * sidebar.
+   * Which paid upgrades an agency has turned on: Power Dialer, Predictive
+   * Dialer, VOIP Carrier Routing, Voice Agents, Voice Studio, Payroll Admin.
+   * `/api/auth/me` sends the list to the agency's users, and the white-label
+   * nav and the Upgrades page read it. Turning one on closes the agency's
+   * OPEN request for it (routes/upgrades.ts).
    *
    * ── Platform admins only ─────────────────────────────────────────────────
    *
@@ -576,9 +586,14 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
           ? (before.metadata as Record<string, unknown>)
           : {};
 
-      await prisma.tenant.update({
-        where: { id: tenantId },
-        data: { metadata: { ...metadata, upgrades } as Prisma.InputJsonValue },
+      // An agency that asked for an upgrade it now has is answered: its OPEN
+      // request for that key is DONE, in the same transaction.
+      await prisma.$transaction(async tx => {
+        await tx.tenant.update({
+          where: { id: tenantId },
+          data: { metadata: { ...metadata, upgrades } as Prisma.InputJsonValue },
+        });
+        await markUpgradeRequestsDone(tx, tenantId, upgrades);
       });
 
       await auditLog({

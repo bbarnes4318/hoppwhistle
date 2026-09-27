@@ -134,10 +134,31 @@ function parseSafeDate(val: unknown): Date | null {
 // Ingest Lead — full pipeline
 // ---------------------------------------------------------------------------
 
+/** A lead already held by someone else, which an agent's import may not touch. */
+export class LeadHeldElsewhereError extends Error {
+  constructor() {
+    super('This customer is already in the agency and is not assigned to you.');
+  }
+}
+
+export interface IngestOwnership {
+  /**
+   * Who the lead is assigned to. Set on a lead this call creates, and on an
+   * existing one when `agentScoped` is false (a principal naming an assignee).
+   */
+  assignToId?: string | null;
+  /**
+   * The caller is an agent: a lead that already exists must be theirs, or the
+   * row is refused and nothing about the lead changes.
+   */
+  agentScoped?: boolean;
+}
+
 export async function ingestLead(
   tenantId: string,
   vertical: Vertical,
-  rawPayload: Record<string, unknown>
+  rawPayload: Record<string, unknown>,
+  ownership: IngestOwnership = {}
 ): Promise<IngestResult> {
   const prisma = getPrismaClient();
   const mode = getInsuranceLeadMode();
@@ -220,10 +241,20 @@ export async function ingestLead(
 
   let insuranceLead: { id: string };
 
+  if (existing && ownership.agentScoped && existing.assignedToId !== ownership.assignToId) {
+    throw new LeadHeldElsewhereError();
+  }
+  const assignment = ownership.assignToId
+    ? { assignedToId: ownership.assignToId, assignedAt: new Date() }
+    : {};
+
   if (existing) {
     insuranceLead = await prisma.insuranceLead.update({
       where: { id: existing.id },
       data: {
+        ...(!ownership.agentScoped && existing.assignedToId !== ownership.assignToId
+          ? assignment
+          : {}),
         firstName: firstName || existing.firstName,
         lastName: lastName || existing.lastName,
         fullName: firstName && lastName ? `${firstName} ${lastName}` : existing.fullName,
@@ -302,6 +333,7 @@ export async function ingestLead(
       data: {
         tenantId,
         vertical,
+        ...assignment,
         firstName: firstName || null,
         lastName: lastName || null,
         fullName: firstName && lastName ? `${firstName} ${lastName}` : null,
@@ -610,10 +642,7 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
           },
         },
       },
-      orderBy: [
-        { lastContactedAt: { sort: 'asc', nulls: 'first' } },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ lastContactedAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'desc' }],
       take: limit,
       skip,
     }),
@@ -696,8 +725,9 @@ export async function getLeadById(tenantId: string, id: string, assignedToId?: s
 
   const last10 = lead.phone.replace(/\D/g, '').slice(-10);
   const callActivities: ActivityReturn[] = [];
+  let calls: Awaited<ReturnType<typeof prisma.call.findMany>> = [];
   if (last10.length >= 10) {
-    const calls = await prisma.call.findMany({
+    calls = await prisma.call.findMany({
       where: {
         tenantId,
         OR: [{ callerId: { endsWith: last10 } }, { toNumber: { endsWith: last10 } }],
@@ -719,6 +749,28 @@ export async function getLeadById(tenantId: string, id: string, assignedToId?: s
     }));
     callActivities.push(...mappedCalls);
   }
+
+  // The business written for this customer: every application linked to it.
+  const applications = await prisma.insuranceCarrierApplication.findMany({
+    where: { tenantId, insuranceLeadId: lead.id },
+    orderBy: [{ submittedAt: 'desc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      carrier: true,
+      product: true,
+      planType: true,
+      faceAmount: true,
+      modalPremium: true,
+      paymentMode: true,
+      annualizedPremium: true,
+      carrierApplicationNumber: true,
+      status: true,
+      submittedAt: true,
+      createdAt: true,
+      callId: true,
+      voidedAt: true,
+    },
+  });
 
   const dbActivities: ActivityReturn[] = lead.activities.map(a => ({
     id: a.id,
@@ -749,6 +801,23 @@ export async function getLeadById(tenantId: string, id: string, assignedToId?: s
       updatedAt: s.updatedAt.toISOString(),
     })),
     activities: sortedActivities,
+    applications: applications.map(a => ({
+      ...a,
+      modalPremium: a.modalPremium === null ? null : Number(a.modalPremium),
+      annualizedPremium: a.annualizedPremium === null ? null : Number(a.annualizedPremium),
+      submittedAt: a.submittedAt?.toISOString() ?? null,
+      createdAt: a.createdAt.toISOString(),
+      voidedAt: a.voidedAt?.toISOString() ?? null,
+    })),
+    calls: calls.slice(0, 50).map(c => ({
+      id: c.id,
+      createdAt: c.createdAt.toISOString(),
+      direction: c.direction,
+      campaignName: c.campaignName,
+      buyerName: c.buyerName,
+      connectedDuration: c.connectedDuration ?? c.duration ?? null,
+      disposition: c.disposition,
+    })),
     tasks: lead.tasks.map(t => ({
       ...t,
       dueAt: t.dueAt?.toISOString() || null,
@@ -1023,7 +1092,9 @@ export async function getStats(tenantId: string, assignedToId?: string) {
       where: { ...submissionWhere, validationStatus: 'INVALID' },
     }),
     prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'MATCHED' } }),
-    prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'UNMATCHED' } }),
+    prisma.insuranceLeadSubmission.count({
+      where: { ...submissionWhere, postStatus: 'UNMATCHED' },
+    }),
     prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postStatus: 'ERROR' } }),
     prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postMode: 'TEST' } }),
     prisma.insuranceLeadSubmission.count({ where: { ...submissionWhere, postMode: 'LIVE' } }),
@@ -1048,9 +1119,15 @@ export async function getStats(tenantId: string, assignedToId?: string) {
 // Bulk Import
 // ---------------------------------------------------------------------------
 
-export async function bulkImportLeads(tenantId: string, leads: Array<Record<string, unknown>>) {
+export async function bulkImportLeads(
+  tenantId: string,
+  leads: Array<Record<string, unknown>>,
+  ownership: IngestOwnership = {}
+) {
   const prisma = getPrismaClient();
   let importCount = 0;
+  // Rows an agent sent for a customer someone else holds: left untouched.
+  let heldElsewhere = 0;
 
   const standardFields = [
     'firstName',
@@ -1133,7 +1210,17 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
       where: { tenantId, phone, vertical },
     });
 
+    if (existing && ownership.agentScoped && existing.assignedToId !== ownership.assignToId) {
+      heldElsewhere++;
+      continue;
+    }
+    const assignment =
+      ownership.assignToId && existing?.assignedToId !== ownership.assignToId
+        ? { assignedTo: { connect: { id: ownership.assignToId } }, assignedAt: new Date() }
+        : {};
+
     const data: Prisma.InsuranceLeadUpdateInput = {
+      ...assignment,
       firstName: firstName || (existing ? existing.firstName : null),
       lastName: lastName || (existing ? existing.lastName : null),
       fullName: fullName || (existing ? existing.fullName : null),
@@ -1181,13 +1268,11 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
           : null,
 
       // Store customFields as a JSON object
-      customFields: (
-        Object.keys(customFields).length > 0
-          ? customFields
-          : existing
-            ? (existing.customFields as Prisma.InputJsonValue)
-            : {}
-      ) as Prisma.InputJsonValue,
+      customFields: (Object.keys(customFields).length > 0
+        ? customFields
+        : existing
+          ? (existing.customFields as Prisma.InputJsonValue)
+          : {}) as Prisma.InputJsonValue,
     };
 
     if (existing) {
@@ -1208,5 +1293,5 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
     importCount++;
   }
 
-  return { success: true, count: importCount };
+  return { success: true, count: importCount, heldElsewhere };
 }

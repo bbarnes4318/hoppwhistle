@@ -45,6 +45,7 @@
     "numbers:sync:anveo": "tsx src/cli/numbers-sync-anveo.ts",
     "numbers:bill-month": "tsx src/cli/number-charges-monthly.ts",
     "statements:close": "tsx src/cli/statements-close-month.ts",
+    "applications:link-customers": "tsx src/cli/link-application-customers.ts",
     "quota:test": "tsx src/cli/test-quota-overage.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "hopper:preflight": "tsx src/cli/hopper-preflight.ts"

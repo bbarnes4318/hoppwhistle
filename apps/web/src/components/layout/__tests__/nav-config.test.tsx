@@ -358,20 +358,20 @@ describe('navFor: which nav each viewer gets', () => {
     expect(navFor(NOBODY)).toEqual([]);
   });
 
-  it('gives an agent Power Dialer and the CRM only with the POWER_DIALER upgrade', () => {
+  it('gives an agent the CRM always, and Power Dialer only with the POWER_DIALER upgrade', () => {
     const names = (upgrades: string[]) =>
       allNavItems(navFor({ ...NOBODY, isAgentOnly: true, upgrades })).map(item => item.name);
 
     const without = names([]);
     expect(without).not.toContain('Power Dialer');
-    expect(without).not.toContain('CRM');
+    expect(without).toContain('My customers');
     // The rest of the agent's nav is untouched.
     expect(without).toContain('My calls');
     expect(without).toContain('Leaderboard');
 
     const withUpgrade = names(['POWER_DIALER']);
     expect(withUpgrade).toContain('Power Dialer');
-    expect(withUpgrade).toContain('CRM');
+    expect(withUpgrade).toContain('My customers');
   });
 });
 

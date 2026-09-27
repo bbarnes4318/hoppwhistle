@@ -85,7 +85,7 @@ function HubTabsInner({ tabs, defaultTab, label }: HubTabsProps): JSX.Element {
         </TabsList>
       </div>
       {tabs.map(tab => (
-        <TabsContent key={tab.key} value={tab.key} className="mt-0 min-w-0">
+        <TabsContent key={tab.key} value={tab.key} className="hub-panel mt-0 min-w-0">
           {tab.key === active ? tab.render() : null}
         </TabsContent>
       ))}

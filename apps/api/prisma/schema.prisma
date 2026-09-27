@@ -129,6 +129,7 @@ model Tenant {
   pendingCallDispositions  PendingCallDisposition[]
   numberCharges            NumberCharge[]
   statements               Statement[]
+  upgradeRequests          UpgradeRequest[]
 
   @@index([slug])
   @@index([status])
@@ -5232,4 +5233,39 @@ model Statement {
   @@unique([tenantId, partyType, partyId, month])
   @@index([partyType, partyId])
   @@map("statements")
+}
+
+/// NetEnroll's price for one paid upgrade, set by a platform admin on
+/// Admin -> Agencies. Null means "ask for pricing". One row per key in
+/// TENANT_UPGRADES (lib/tenant-upgrades.ts); a key with no row has no price.
+/// See migrations/20261002000000_upgrade_catalog.
+model UpgradePrice {
+  key             String   @id
+  monthlyCents    Int?
+  setupCents      Int?
+  updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  updatedByUserId String?
+
+  @@map("upgrade_prices")
+}
+
+/// An agency asking for a paid upgrade from /upgrades. At most one OPEN
+/// request per (tenantId, upgradeKey) -- a partial unique index Prisma cannot
+/// express, so it lives in the migration and prisma/sql/db-push-constraints.sql.
+/// Marked DONE when the upgrade is turned on for the tenant, or DONE/DECLINED
+/// by a platform admin. See migrations/20261002000000_upgrade_catalog.
+model UpgradeRequest {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String
+  userId     String?
+  upgradeKey String
+  /// 'OPEN' | 'DONE' | 'DECLINED'
+  status     String    @default("OPEN")
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  decidedAt  DateTime? @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("upgrade_requests")
 }

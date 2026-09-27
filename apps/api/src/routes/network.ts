@@ -1,9 +1,13 @@
 /**
  * Agency Network: a white-label agency's own downline agencies.
  *
- *   GET  /api/v1/network/agencies?period=<PERIOD_KEY>&from=&to=
- *   POST /api/v1/network/agencies
- *   POST /api/v1/network/agencies/:tenantId/owner      { email }
+ *   GET   /api/v1/network/agencies?period=<PERIOD_KEY>&from=&to=
+ *   POST  /api/v1/network/agencies
+ *   GET   /api/v1/network/agencies/:tenantId?period=<PERIOD_KEY>&from=&to=
+ *   PATCH /api/v1/network/agencies/:tenantId           { name, legalName, ... }
+ *   POST  /api/v1/network/agencies/:tenantId/owner     { email }
+ *   GET   /api/v1/network/agencies/:tenantId/settings
+ *   PUT   /api/v1/network/agencies/:tenantId/settings
  *
  * ── What a child is ──────────────────────────────────────────────────────────
  *
@@ -16,16 +20,18 @@
  *
  * ── What the parent may see and do ───────────────────────────────────────────
  *
- * These three routes, and nothing else. The parent reads its children's
+ * These routes, and nothing else. The parent reads its children's
  * AGGREGATES -- counts and one percentage -- and never a call, a lead, a
- * consumer or a user row across the tenant line. It creates a child, and
+ * consumer or a user row across the tenant line. It reads and edits the
+ * child's own agency record (the AgencyProfile it filled in when it created
+ * the child), but never its status. It creates a child, and
  * invites that child's owner through `issueActivationGrant`, the one
  * invitation path there is. It can never enter a child, act inside it or
  * preview it: the acting-tenant switch is platform staff's alone and nothing
  * here touches it.
  *
- * `:tenantId` in the owner route is the one place a tenant is named on the
- * wire, and it is honoured only for a child of the ACTING tenant -- anything
+ * `:tenantId` is the one place a tenant is named on the wire, and it is
+ * honoured only for a child of the ACTING tenant -- anything
  * else, a sibling's child or an unrelated agency, answers 404, the same as an
  * id that does not exist.
  *
@@ -48,7 +54,11 @@ import {
 } from '../lib/agency-details.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
-import { TENANT_UPGRADES, tenantUpgrades } from '../lib/tenant-upgrades.js';
+import {
+  markUpgradeRequestsDone,
+  TENANT_UPGRADES,
+  tenantUpgrades,
+} from '../lib/tenant-upgrades.js';
 import { requireWhiteLabelOperator, WHITE_LABEL_ONLY } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
@@ -61,6 +71,21 @@ import { submittedApplicationWhere } from '../services/rating/measurement.js';
 import { issueActivationGrant } from '../services/tenant-activation.js';
 
 import { periodFromQuery, type PeriodQuery } from './call-sales.js';
+import { openUpgradeRequests } from './upgrades.js';
+
+type Period = NonNullable<ReturnType<typeof periodFromQuery>>;
+
+/** The period as the list and the detail page both answer it. */
+function periodView(period: Period) {
+  return {
+    key: period.key,
+    label: period.label,
+    from: period.from,
+    to: period.to,
+    days: period.days,
+    complete: period.complete,
+  };
+}
 
 /** Where the child agency's owner stands. */
 export type OwnerActivation = 'NOT_INVITED' | 'PENDING' | 'ACCEPTED' | 'EXPIRED';
@@ -90,6 +115,54 @@ function isTimeZone(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The AgencyProfile fields a parent may edit on its child. */
+const PROFILE_FIELDS = [
+  'legalName',
+  'state',
+  'contactName',
+  'contactEmail',
+  'contactPhone',
+  'licensedAgentCount',
+  'deliveryDays',
+  'deliveryStartTime',
+  'deliveryEndTime',
+  'deliveryTimeZone',
+] as const;
+
+interface ProfileFields {
+  legalName: string;
+  state: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  licensedAgentCount: number;
+  deliveryDays: string[];
+  deliveryStartTime: string;
+  deliveryEndTime: string;
+  deliveryTimeZone: string;
+}
+
+/** A child's profile on the wire, or null when it has none. */
+function profileView(
+  profile: (ProfileFields & { createdAt?: Date; updatedAt?: Date }) | null | undefined
+) {
+  if (!profile) return null;
+  return {
+    legalName: profile.legalName,
+    state: profile.state,
+    contactName: profile.contactName,
+    contactEmail: profile.contactEmail,
+    contactPhone: profile.contactPhone,
+    licensedAgentCount: profile.licensedAgentCount,
+    deliveryDays: profile.deliveryDays,
+    deliveryStartTime: profile.deliveryStartTime,
+    deliveryEndTime: profile.deliveryEndTime,
+    deliveryTimeZone: profile.deliveryTimeZone,
+    createdAt: profile.createdAt?.toISOString() ?? null,
+    updatedAt: profile.updatedAt?.toISOString() ?? null,
+  };
 }
 
 /** Whether the acting tenant itself is on the white-label tier. */
@@ -128,6 +201,53 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
   }
 
   /**
+   * One child's counts over a period: the figures on its row in the list, and
+   * the tiles on its own page. Every query is a `count` scoped to that child.
+   */
+  async function childStats(childId: string, period: Period) {
+    const range = { start: period.start, endExclusive: period.endExclusive };
+    const createdInPeriod = { gte: period.start, lt: period.endExclusive };
+    const [agents, inboundCalls, answeredByAgents, applications] = await Promise.all([
+      prisma.user.count({
+        where: { tenantId: childId, roles: { some: { role: { name: RoleName.AGENT } } } },
+      }),
+      prisma.call.count({
+        where: { tenantId: childId, direction: 'INBOUND', createdAt: createdInPeriod },
+      }),
+      prisma.call.count({
+        where: {
+          tenantId: childId,
+          direction: 'INBOUND',
+          createdAt: createdInPeriod,
+          answeredByUserId: { not: null },
+        },
+      }),
+      prisma.insuranceCarrierApplication.count({
+        where: submittedApplicationWhere(childId, range),
+      }),
+    ]);
+    return {
+      agents,
+      inboundCalls,
+      answeredByAgents,
+      applications,
+      closingPct:
+        answeredByAgents > 0 ? Math.round((applications / answeredByAgents) * 10000) / 100 : null,
+    };
+  }
+
+  /** What GET .../settings answers: the number limit, numbers in use, upgrades. */
+  async function childSettings(child: { id: string; metadata: Prisma.JsonValue }) {
+    const usage = await numberUsage(child.id);
+    return {
+      tenantId: child.id,
+      numbersLimit: usage.limit,
+      numbersUsed: usage.used,
+      upgrades: tenantUpgrades(child.metadata),
+    };
+  }
+
+  /**
    * GET /api/v1/network/agencies
    *
    * The acting tenant's children, each as counts over the period. Every query
@@ -150,30 +270,12 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
         orderBy: { createdAt: 'desc' },
       });
 
-      const range = { start: period.start, endExclusive: period.endExclusive };
-      const createdInPeriod = { gte: period.start, lt: period.endExclusive };
       const now = new Date();
 
       const agencies = await Promise.all(
         children.map(async child => {
-          const [agents, inboundCalls, answeredByAgents, applications, owner] = await Promise.all([
-            prisma.user.count({
-              where: { tenantId: child.id, roles: { some: { role: { name: RoleName.AGENT } } } },
-            }),
-            prisma.call.count({
-              where: { tenantId: child.id, direction: 'INBOUND', createdAt: createdInPeriod },
-            }),
-            prisma.call.count({
-              where: {
-                tenantId: child.id,
-                direction: 'INBOUND',
-                createdAt: createdInPeriod,
-                answeredByUserId: { not: null },
-              },
-            }),
-            prisma.insuranceCarrierApplication.count({
-              where: submittedApplicationWhere(child.id, range),
-            }),
+          const [stats, owner] = await Promise.all([
+            childStats(child.id, period),
             ownerActivation(child.id, now),
           ]);
 
@@ -182,32 +284,13 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
             name: child.name,
             status: child.status,
             createdAt: child.createdAt.toISOString(),
-            agents,
-            inboundCalls,
-            answeredByAgents,
-            applications,
-            closingPct:
-              answeredByAgents > 0
-                ? Math.round((applications / answeredByAgents) * 10000) / 100
-                : null,
+            ...stats,
             owner,
           };
         })
       );
 
-      return reply.send({
-        data: {
-          period: {
-            key: period.key,
-            label: period.label,
-            from: period.from,
-            to: period.to,
-            days: period.days,
-            complete: period.complete,
-          },
-          agencies,
-        },
-      });
+      return reply.send({ data: { period: periodView(period), agencies } });
     }
   );
 
@@ -502,15 +585,7 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
       }
 
-      const usage = await numberUsage(child.id);
-      return reply.send({
-        data: {
-          tenantId: child.id,
-          numbersLimit: usage.limit,
-          numbersUsed: usage.used,
-          upgrades: tenantUpgrades(child.metadata),
-        },
-      });
+      return reply.send({ data: await childSettings(child) });
     }
   );
 
@@ -595,6 +670,8 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
             where: { id: child.id },
             data: { metadata: { ...metadata, upgrades } as Prisma.InputJsonValue },
           });
+          // The child's OPEN request for anything now on is answered.
+          await markUpgradeRequestsDone(tx, child.id, upgrades);
         }
       });
 
@@ -623,6 +700,206 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
       });
 
       return reply.send({ data: { tenantId: child.id, ...after } });
+    }
+  );
+
+  /**
+   * GET /api/v1/network/agencies/:tenantId?period=<PERIOD_KEY>&from=&to=
+   *
+   * One child's page: its record, its owner, the same counts as its row in the
+   * list over the same period, its settings (the same payload as GET
+   * .../settings), and the upgrades it has asked for and not been given.
+   */
+  fastify.get<{ Params: { tenantId: string }; Querystring: PeriodQuery }>(
+    '/api/v1/network/agencies/:tenantId',
+    { preHandler: [authenticate, requireWhiteLabelOperator] },
+    async (request, reply) => {
+      const actingTenantId = resolveTenant(request, reply);
+      if (!actingTenantId) return;
+
+      const child = await prisma.tenant.findFirst({
+        where: { id: request.params.tenantId, parentTenantId: actingTenantId },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          createdAt: true,
+          metadata: true,
+          agencyProfile: true,
+        },
+      });
+      if (!child) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const period = periodFromQuery(request.query, reply);
+      if (!period) return;
+
+      const [stats, owner, settings, openRequests] = await Promise.all([
+        childStats(child.id, period),
+        ownerActivation(child.id, new Date()),
+        childSettings(child),
+        openUpgradeRequests(child.id),
+      ]);
+
+      return reply.send({
+        data: {
+          tenantId: child.id,
+          name: child.name,
+          status: child.status,
+          createdAt: child.createdAt.toISOString(),
+          profile: profileView(child.agencyProfile),
+          owner,
+          settings,
+          period: periodView(period),
+          stats,
+          openUpgradeRequests: openRequests,
+        },
+      });
+    }
+  );
+
+  /**
+   * PATCH /api/v1/network/agencies/:tenantId
+   *   { name?, legalName?, state?, contactName?, contactEmail?, contactPhone?,
+   *     licensedAgentCount?, deliveryDays?, deliveryStartTime?, deliveryEndTime?,
+   *     deliveryTimeZone? }
+   *
+   * The parent correcting its child's record. Only the fields sent change; the
+   * record they make is validated whole, by the same rules onboarding uses, so
+   * an edit cannot leave a record onboarding would have refused. A child with
+   * no profile yet gets one, which then needs every field. Status is not
+   * editable here. Audited on both tenants with the before and after.
+   */
+  fastify.patch<{ Params: { tenantId: string }; Body: Record<string, unknown> }>(
+    '/api/v1/network/agencies/:tenantId',
+    { preHandler: [authenticate, requireWhiteLabelOperator] },
+    async (request, reply) => {
+      const actingTenantId = resolveTenant(request, reply);
+      if (!actingTenantId) return;
+
+      const child = await prisma.tenant.findFirst({
+        where: { id: request.params.tenantId, parentTenantId: actingTenantId },
+        select: { id: true, name: true, agencyProfile: true },
+      });
+      if (!child) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const body = request.body && typeof request.body === 'object' ? request.body : {};
+      const has = (field: string) => body[field] !== undefined;
+      const problems: string[] = [];
+
+      const name = has('name') ? text(body.name) : child.name;
+      if (!name) problems.push('name is required');
+
+      const touchesProfile = PROFILE_FIELDS.some(has);
+      const current = child.agencyProfile;
+      let profile: ProfileFields | null = null;
+
+      if (touchesProfile) {
+        const pick = <T>(field: keyof ProfileFields, fallback: T): unknown =>
+          has(field) ? body[field] : fallback;
+
+        const legalName = text(pick('legalName', current?.legalName ?? ''));
+        const agencyState = text(pick('state', current?.state ?? '')).toUpperCase();
+        const contactName = text(pick('contactName', current?.contactName ?? ''));
+        const contactEmail = text(pick('contactEmail', current?.contactEmail ?? '')).toLowerCase();
+        const contactPhone = text(pick('contactPhone', current?.contactPhone ?? ''));
+        const licensedAgentCount = pick('licensedAgentCount', current?.licensedAgentCount);
+        const rawDays = pick('deliveryDays', current?.deliveryDays ?? []);
+        const start = text(pick('deliveryStartTime', current?.deliveryStartTime ?? ''));
+        const end = text(pick('deliveryEndTime', current?.deliveryEndTime ?? ''));
+        const timezone =
+          text(pick('deliveryTimeZone', current?.deliveryTimeZone ?? '')) || 'America/New_York';
+
+        if (!legalName) problems.push('legalName is required');
+        if (!STATE_PATTERN.test(agencyState)) {
+          problems.push('state must be a two-letter US state code');
+        }
+        if (!contactName) problems.push('contactName is required');
+        if (!EMAIL_PATTERN.test(contactEmail)) {
+          problems.push('contactEmail must be an email address');
+        }
+        if (!contactPhone) problems.push('contactPhone is required');
+        if (!Number.isInteger(licensedAgentCount) || (licensedAgentCount as number) <= 0) {
+          problems.push('licensedAgentCount must be a whole number of agents, one or more');
+        }
+
+        const days = Array.isArray(rawDays)
+          ? rawDays.map(day => String(day).trim().toUpperCase())
+          : [];
+        if (days.length === 0) problems.push('deliveryDays must name at least one day');
+        if (days.some(day => !DELIVERY_DAYS.includes(day as (typeof DELIVERY_DAYS)[number]))) {
+          problems.push(`deliveryDays must be drawn from ${DELIVERY_DAYS.join(', ')}`);
+        }
+
+        if (!TIME_PATTERN.test(start)) problems.push('deliveryStartTime must be HH:MM, 24-hour');
+        if (!TIME_PATTERN.test(end)) problems.push('deliveryEndTime must be HH:MM, 24-hour');
+        if (TIME_PATTERN.test(start) && TIME_PATTERN.test(end) && end <= start) {
+          problems.push('deliveryEndTime must be after deliveryStartTime');
+        }
+        if (!isTimeZone(timezone)) problems.push('deliveryTimeZone must be an IANA time zone');
+
+        profile = {
+          legalName,
+          state: agencyState,
+          contactName,
+          contactEmail,
+          contactPhone,
+          licensedAgentCount: licensedAgentCount as number,
+          deliveryDays: DELIVERY_DAYS.filter(day => days.includes(day)),
+          deliveryStartTime: start,
+          deliveryEndTime: end,
+          deliveryTimeZone: timezone,
+        };
+      }
+
+      if (problems.length > 0) {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: problems.join('; '), problems },
+        });
+      }
+
+      const userId = getActingUserId(request);
+      const saved = await prisma.$transaction(async tx => {
+        if (name !== child.name) {
+          await tx.tenant.update({ where: { id: child.id }, data: { name } });
+        }
+        if (!profile) return current;
+        return tx.agencyProfile.upsert({
+          where: { tenantId: child.id },
+          create: { tenantId: child.id, ...profile, createdByUserId: userId },
+          update: profile,
+        });
+      });
+
+      const changes = {
+        parentTenantId: actingTenantId,
+        childTenantId: child.id,
+        before: { name: child.name, profile: profileView(current) },
+        after: { name, profile: profileView(saved) },
+      };
+      await auditLog({
+        tenantId: actingTenantId,
+        userId: userId ?? undefined,
+        action: 'network.agency.details_changed',
+        entityType: 'tenant',
+        entityId: child.id,
+        changes,
+      });
+      await auditLog({
+        tenantId: child.id,
+        userId: userId ?? undefined,
+        action: 'network.agency.details_changed_by_parent',
+        entityType: 'tenant',
+        entityId: child.id,
+        changes,
+      });
+
+      return reply.send({
+        data: { tenantId: child.id, name, profile: profileView(saved) },
+      });
     }
   );
 }

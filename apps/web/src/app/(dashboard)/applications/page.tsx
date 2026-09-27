@@ -20,6 +20,7 @@ import {
   ToolbarSelect,
 } from '@/components/domain';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { formatDayRange } from '@/lib/format-time';
@@ -82,6 +83,8 @@ interface ApplicationRow {
   agentId: string | null;
   agentName: string | null;
   callId: string | null;
+  /** The customer record this application is linked to, once it is. */
+  customerId: string | null;
   voidedAt: string | null;
   voidReason: string | null;
 }
@@ -345,6 +348,45 @@ export default function ApplicationsPage() {
    */
   const showEntered = rows.some(row => row.source === 'AUTOMATION');
 
+  /*
+   * A row opens its customer. An application not yet linked to one is linked
+   * (or its customer created) by the server on first open, and the row keeps
+   * the id so the next click goes straight there.
+   */
+  const [opening, setOpening] = useState<string | null>(null);
+  const openCustomer = useCallback(
+    async (row: ApplicationRow) => {
+      if (row.customerId) {
+        router.push(`/insurance-leads/${encodeURIComponent(row.customerId)}`);
+        return;
+      }
+      if (opening) return;
+      setOpening(row.id);
+      try {
+        const res = await apiClient.post<Envelope<{ customerId: string }>>(
+          `/api/v1/applications/${encodeURIComponent(row.id)}/customer`,
+          // An empty object, not no body: the client always sends a JSON
+          // content type, and the API refuses an empty JSON body with 400.
+          {}
+        );
+        const customerId = payload(res)?.customerId;
+        if (res.error || !customerId) {
+          toast.error(
+            res.error?.code === 'NO_PHONE'
+              ? 'This application has no phone number to match a customer'
+              : (res.error?.message ?? 'Could not open the customer.')
+          );
+          return;
+        }
+        setRows(prev => prev.map(r => (r.id === row.id ? { ...r, customerId } : r)));
+        router.push(`/insurance-leads/${encodeURIComponent(customerId)}`);
+      } finally {
+        setOpening(null);
+      }
+    },
+    [opening, router]
+  );
+
   const exportCsv = useCallback(() => {
     const body = rows.map(row => csvRow(row).map(csvCell).join(','));
     const text = [CSV_COLUMNS.map(csvCell).join(','), ...body].join('\n');
@@ -518,11 +560,21 @@ export default function ApplicationsPage() {
                       <tr
                         key={row.id}
                         className={cn(
-                          'transition-colors duration-150 ease-out hover:bg-sunken',
-                          callHref && 'cursor-pointer',
-                          voided && 'line-through opacity-60'
+                          'cursor-pointer transition-colors duration-150 ease-out hover:bg-sunken',
+                          voided && 'line-through opacity-60',
+                          opening === row.id && 'opacity-70'
                         )}
-                        onClick={callHref ? () => router.push(callHref) : undefined}
+                        onClick={() => {
+                          void openCustomer(row);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && e.target === e.currentTarget) {
+                            void openCustomer(row);
+                          }
+                        }}
+                        tabIndex={0}
+                        aria-label={`Open ${row.applicant}'s customer record`}
+                        aria-busy={opening === row.id || undefined}
                         title={
                           voided
                             ? `Voided${row.voidReason ? `: ${row.voidReason}` : ''}. Excluded from the ` +
@@ -533,7 +585,7 @@ export default function ApplicationsPage() {
                       >
                         <td className="t-data whitespace-nowrap !text-ink-2">
                           {callHref ? (
-                            // The keyboard's way to the call; the row's click is the pointer's.
+                            // The call stays one click away; the row itself opens the customer.
                             <Link
                               href={callHref}
                               className="hover:underline"

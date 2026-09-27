@@ -53,7 +53,13 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { resolveTenant, getActingUserId } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
+import { getAgentBreakdown } from '../services/billing/delivery-view.js';
 import { agentPriorityFor, answerOrderFromMetadata } from '../services/campaigns/answer-order.js';
+import {
+  calendarDayBounds,
+  currentCalendarDay,
+  type CalendarDayKey,
+} from '../services/rating/calendar-day.js';
 import { getRedisClient } from '../services/redis.js';
 
 /** Mirrors `services/routing.ts`, which reads the same key for the same reason. */
@@ -71,6 +77,38 @@ const CampaignAssignmentSchema = z.object({
    */
   campaignIds: z.array(z.string().uuid()).max(50),
 });
+
+/**
+ * How far back an ANSWERED row still counts as the call an agent is on. A call
+ * whose hangup was never written stays ANSWERED forever; without a horizon the
+ * floor would show an agent on yesterday's call indefinitely.
+ */
+const CURRENT_CALL_HORIZON_MS = 4 * 60 * 60 * 1000;
+
+/** The most calls one agent's day drawer lists. */
+const ACTIVITY_CALL_LIMIT = 200;
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The columns of a call the floor and the day drawer name it by. */
+const CALL_LABEL_SELECT = {
+  id: true,
+  callerId: true,
+  campaignName: true,
+  buyerName: true,
+  campaign: { select: { name: true } },
+  buyer: { select: { name: true } },
+} satisfies Prisma.CallSelect;
+
+type CallLabel = Prisma.CallGetPayload<{ select: typeof CALL_LABEL_SELECT }>;
+
+/** The snapshot name when the call has one, else the live row's. */
+function callLabels(call: CallLabel): { campaignName: string | null; buyerName: string | null } {
+  return {
+    campaignName: call.campaignName ?? call.campaign?.name ?? null,
+    buyerName: call.buyerName ?? call.buyer?.name ?? null,
+  };
+}
 
 const DAY_KEYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
@@ -108,15 +146,25 @@ const AgentSettingsSchema = z
     message: 'Nothing to update',
   });
 
+/** One agent's live presence, as the softphone last wrote it. */
+export interface AgentPresence {
+  status: string;
+  /** When that status was written. Null when the key carried no usable time. */
+  lastUpdated: Date | null;
+  /** The call the softphone says it is on, when it says so. */
+  currentCallId: string | null;
+}
+
 /**
- * Each agent's live softphone status, from the key the softphone writes.
+ * Each agent's live presence, from the key the softphone writes.
  *
- * Exported for the white-label Today screen, which counts agents ready and on
- * a call from the same key; one reader means one idea of where that key lives.
+ * The full reading behind `readStatuses`: the Agents floor needs how long an
+ * agent has been in their state and which call they are on, which the same
+ * key carries beside the status.
  */
-export async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
-  const statuses = new Map<string, string>();
-  if (userIds.length === 0) return statuses;
+export async function readPresence(userIds: string[]): Promise<Map<string, AgentPresence>> {
+  const presence = new Map<string, AgentPresence>();
+  if (userIds.length === 0) return presence;
 
   try {
     const redis = getRedisClient();
@@ -125,8 +173,21 @@ export async function readStatuses(userIds: string[]): Promise<Map<string, strin
       const raw = values[index];
       if (!raw) return;
       try {
-        const parsed = JSON.parse(raw) as { status?: string };
-        if (parsed.status) statuses.set(id, parsed.status);
+        const parsed = JSON.parse(raw) as {
+          status?: string;
+          lastUpdated?: string;
+          currentCallId?: string | null;
+        };
+        if (!parsed.status) return;
+        const at = parsed.lastUpdated ? new Date(parsed.lastUpdated) : null;
+        presence.set(id, {
+          status: parsed.status,
+          lastUpdated: at && !Number.isNaN(at.getTime()) ? at : null,
+          currentCallId:
+            typeof parsed.currentCallId === 'string' && parsed.currentCallId
+              ? parsed.currentCallId
+              : null,
+        });
       } catch {
         // A malformed value is not a status. Absent reads as 'offline', which
         // is the honest reading of "we cannot tell".
@@ -136,7 +197,19 @@ export async function readStatuses(userIds: string[]): Promise<Map<string, strin
     // Redis being unreachable must not fail the roster. Every agent then reads
     // as offline, which is what an unreachable presence store actually means.
   }
-  return statuses;
+  return presence;
+}
+
+/**
+ * Each agent's live softphone status, from the key the softphone writes.
+ *
+ * Exported for the white-label Today screen, which counts agents ready and on
+ * a call from the same key; one reader means one idea of where that key lives.
+ * `readPresence` is the same read with the status's time and current call.
+ */
+export async function readStatuses(userIds: string[]): Promise<Map<string, string>> {
+  const presence = await readPresence(userIds);
+  return new Map([...presence].map(([id, p]) => [id, p.status] as const));
 }
 
 /**
@@ -401,6 +474,276 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
            * than letting somebody assume their own.
            */
           deliveryTimeZone: agencyProfile?.deliveryTimeZone ?? 'America/New_York',
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/agent-roster/floor
+   *
+   * The live floor: every agent, what they are doing right now, and how their
+   * day is going. Polled every few seconds by the Agents screen.
+   *
+   * Today's figures are `getAgentBreakdown`'s, not recomputed here. That is the
+   * table Delivery and the Leaderboard read, and an agent's closing percentage
+   * on the floor must be the same number they are coached from.
+   *
+   * Registered before any `/:userId` route. Fastify prefers the static segment
+   * regardless, but reading the file top to bottom should say the same thing.
+   */
+  fastify.get(
+    '/api/v1/agent-roster/floor',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const now = new Date();
+      const today = calendarDayBounds(currentCalendarDay(now));
+
+      const users = await prisma.user.findMany({
+        where: {
+          tenantId,
+          roles: { some: { role: { name: 'AGENT' } } },
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          ...AGENT_BLOCKER_SELECT,
+          sipCredential: { select: { extension: true, status: true, passwordEncrypted: true } },
+        },
+        orderBy: [{ firstName: 'asc' }, { email: 'asc' }],
+      });
+      const userIds = users.map(u => u.id);
+
+      const [assignments, presence, answeredNow, lastCalls, breakdown] = await Promise.all([
+        prisma.campaignAgent.findMany({
+          where: { tenantId, userId: { in: userIds }, status: 'ACTIVE' },
+          select: { userId: true },
+        }),
+        readPresence(userIds),
+        /*
+         * Source one for "the call they are on": the CDR itself. Newest first,
+         * so an agent with two open rows (a transfer, a missed hangup inside
+         * the horizon) is shown on the one that started last.
+         */
+        prisma.call.findMany({
+          where: {
+            tenantId,
+            answeredByUserId: { in: userIds },
+            status: 'ANSWERED',
+            createdAt: { gte: new Date(now.getTime() - CURRENT_CALL_HORIZON_MS) },
+          },
+          select: {
+            ...CALL_LABEL_SELECT,
+            answeredByUserId: true,
+            answeredAt: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.call.groupBy({
+          by: ['answeredByUserId'],
+          where: {
+            tenantId,
+            answeredByUserId: { in: userIds },
+            createdAt: { gte: today.start, lt: today.endExclusive },
+          },
+          _max: { createdAt: true },
+        }),
+        getAgentBreakdown(tenantId, { prisma, now }),
+      ]);
+
+      type OpenCall = (typeof answeredNow)[number];
+      const openCallByUser = new Map<string, OpenCall>();
+      for (const call of answeredNow) {
+        if (call.answeredByUserId && !openCallByUser.has(call.answeredByUserId)) {
+          openCallByUser.set(call.answeredByUserId, call);
+        }
+      }
+
+      /*
+       * Source two: the call id the softphone wrote into presence. Read back
+       * through the tenant filter, because it is a value from outside the
+       * database and must not name another agency's call onto this floor.
+       */
+      const fallbackIds = users
+        .filter(u => !openCallByUser.has(u.id))
+        .map(u => presence.get(u.id)?.currentCallId)
+        .filter((id): id is string => Boolean(id));
+      const fallbackCalls = fallbackIds.length
+        ? await prisma.call.findMany({
+            where: { tenantId, id: { in: fallbackIds } },
+            select: {
+              ...CALL_LABEL_SELECT,
+              answeredByUserId: true,
+              answeredAt: true,
+              createdAt: true,
+            },
+          })
+        : [];
+      const fallbackById = new Map(fallbackCalls.map(c => [c.id, c]));
+
+      const campaignCount = new Map<string, number>();
+      for (const row of assignments) {
+        campaignCount.set(row.userId, (campaignCount.get(row.userId) ?? 0) + 1);
+      }
+      const lastCallByUser = new Map(
+        lastCalls.map(row => [row.answeredByUserId, row._max.createdAt] as const)
+      );
+      const rowByUser = new Map(breakdown.agents.map(row => [row.userId, row]));
+
+      const agents = users.map(user => {
+        const live = presence.get(user.id);
+        const blocked = agentBlocker(user, campaignCount.get(user.id) ?? 0);
+        const redisCallId = live?.currentCallId;
+        const call =
+          openCallByUser.get(user.id) ?? (redisCallId ? fallbackById.get(redisCallId) : undefined);
+        const row = rowByUser.get(user.id);
+        const answeredAt = call ? (call.answeredAt ?? call.createdAt) : null;
+
+        return {
+          id: user.id,
+          name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+          extension: user.sipCredential?.extension ?? null,
+          softphoneStatus: live?.status ?? 'offline',
+          statusSince: live?.lastUpdated?.toISOString() ?? null,
+          availableForCalls: user.availableForCalls,
+          blockedBy: blocked?.code ?? null,
+          blockedReason: blocked?.reason ?? null,
+          currentCall:
+            call && answeredAt
+              ? {
+                  callId: call.id,
+                  callerId: call.callerId,
+                  ...callLabels(call),
+                  answeredAt: answeredAt.toISOString(),
+                  seconds: Math.max(0, Math.round((now.getTime() - answeredAt.getTime()) / 1000)),
+                }
+              : null,
+          today: {
+            callsTaken: row?.callsTaken ?? 0,
+            talkTimeSeconds: row?.talkTimeSeconds ?? 0,
+            applications: row?.applications ?? 0,
+            annualizedPremium: row?.annualizedPremium ?? 0,
+            closingPct: row?.closingPct ?? null,
+            availableSeconds: row?.availableSeconds ?? null,
+            occupancyPct: row?.occupancyPct ?? null,
+          },
+          lastCallAt: lastCallByUser.get(user.id)?.toISOString() ?? null,
+        };
+      });
+
+      return reply.send({
+        data: {
+          generatedAt: now.toISOString(),
+          agents,
+          /*
+           * The agency's own day, served beside the rows rather than summed
+           * from them: it counts calls no agent is attributed on, so a sum of
+           * the agents would be a different, smaller number.
+           */
+          agency: {
+            callsTaken: breakdown.agencyCallsTaken,
+            applications: breakdown.agencyApplications,
+            closingPct: breakdown.agencyClosingPct,
+          },
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/agent-roster/:userId/activity?day=YYYY-MM-DD
+   *
+   * One agent's day: every state change and every call they answered, for the
+   * floor's drawer. `day` is a platform (New York) calendar day, today when
+   * absent.
+   */
+  fastify.get<{ Params: { userId: string }; Querystring: { day?: string } }>(
+    '/api/v1/agent-roster/:userId/activity',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const rawDay = request.query.day?.trim();
+      let day: CalendarDayKey;
+      let bounds: { start: Date; endExclusive: Date };
+      try {
+        if (rawDay && !DAY_KEY.test(rawDay)) throw new Error('bad day');
+        day = rawDay || currentCalendarDay();
+        bounds = calendarDayBounds(day);
+      } catch {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'day must be YYYY-MM-DD' },
+        });
+      }
+
+      // The same re-validation every `:userId` route here does: an id in a
+      // path must not reach into another agency's roster.
+      const { userId } = request.params;
+      const agent = await prisma.user.findFirst({
+        where: { id: userId, tenantId, roles: { some: { role: { name: 'AGENT' } } } },
+        select: { id: true },
+      });
+      if (!agent) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'No such agent in this agency' },
+        });
+      }
+
+      const [stateEvents, calls] = await Promise.all([
+        prisma.agentStateEvent.findMany({
+          where: { userId, occurredAt: { gte: bounds.start, lt: bounds.endExclusive } },
+          select: { status: true, occurredAt: true },
+          orderBy: { occurredAt: 'asc' },
+        }),
+        prisma.call.findMany({
+          where: {
+            tenantId,
+            answeredByUserId: userId,
+            createdAt: { gte: bounds.start, lt: bounds.endExclusive },
+          },
+          select: {
+            ...CALL_LABEL_SELECT,
+            createdAt: true,
+            connectedDuration: true,
+            disposition: true,
+            primaryRecordingId: true,
+            recordings: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { id: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: ACTIVITY_CALL_LIMIT,
+        }),
+      ]);
+
+      return reply.send({
+        data: {
+          day,
+          stateEvents: stateEvents.map(e => ({
+            status: e.status,
+            occurredAt: e.occurredAt.toISOString(),
+          })),
+          calls: calls.map(call => ({
+            id: call.id,
+            createdAt: call.createdAt.toISOString(),
+            callerId: call.callerId,
+            ...callLabels(call),
+            connectedDuration: call.connectedDuration,
+            disposition: call.disposition,
+            // The same id the Calls ledger plays: the canonical row, else the
+            // newest one still held.
+            primaryRecordingId: call.primaryRecordingId ?? call.recordings[0]?.id ?? null,
+          })),
         },
       });
     }

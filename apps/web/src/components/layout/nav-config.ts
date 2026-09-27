@@ -24,6 +24,7 @@ import {
   MonitorPlay,
   PhoneCall,
   PhoneForwarded,
+  PhoneOutgoing,
   PieChart,
   Radio,
   Receipt,
@@ -445,7 +446,7 @@ export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
 /**
  * A white-label agency principal's navigation.
  *
- * ── An agency that also sells calls, on eleven entries ───────────────────────
+ * ── An agency that also sells calls, on twelve entries ──────────────────────
  *
  * On the white-label tier the OWNER and ADMIN run a call network of their own
  * as well as a sales floor. This nav used to list every screen that involved:
@@ -486,6 +487,8 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
     items: [
       platformItem('/calls'),
       platformItem('/applications'),
+      // Every agency has the CRM; only the Power Dialer is an upgrade.
+      platformItem('/insurance-leads'),
       {
         name: 'Agents',
         href: '/agents',
@@ -544,11 +547,13 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
 
 /**
  * The upgrades a white-label agency can have turned on, as `/api/auth/me`
- * names them. The `/upgrades` page lists all five; `upgrades` on the session
- * says which of them this agency has.
+ * names them -- identical to TENANT_UPGRADES in apps/api/src/lib/tenant-upgrades.ts.
+ * The `/upgrades` page lists all six; `upgrades` on the session says which of
+ * them this agency has.
  */
 export const UPGRADE_KEYS = [
   'POWER_DIALER',
+  'PREDICTIVE_DIALER',
   'CARRIER_ROUTING',
   'VOICE_AGENTS',
   'VOICE_STUDIO',
@@ -563,6 +568,8 @@ export interface Upgrade {
   item: NavItem;
   /** One more line under the blurb, where the blurb does not say it all. */
   note?: string;
+  /** A small tag beside the name, such as "Early access". */
+  badge?: string;
 }
 
 /** The locked AGENCY_OWNER_NAV entry for this href, so the blurbs cannot drift. */
@@ -576,13 +583,29 @@ function agencyUpgrade(href: string): NavItem {
 
 /**
  * What the white-label `/upgrades` page lists, in order: the five items that
- * were locked at the foot of this nav, with the blurbs a normal agency reads.
+ * were locked at the foot of this nav, with the blurbs a normal agency reads,
+ * and the Predictive Dialer, which has no screen yet.
  */
 export const WHITE_LABEL_UPGRADES: Upgrade[] = [
   {
     key: 'POWER_DIALER',
     item: agencyUpgrade('/call-center'),
-    note: 'Includes the CRM and lead lists your agents dial.',
+    note: 'Includes lead lists your agents dial.',
+  },
+  {
+    // Not in AGENCY_OWNER_NAV: it has no screen of its own yet. Turning it on
+    // only marks the agency as enrolled.
+    key: 'PREDICTIVE_DIALER',
+    item: {
+      name: 'Predictive Dialer',
+      href: '/upgrades',
+      icon: PhoneOutgoing,
+      locked: {
+        blurb:
+          'Dials several numbers per agent at once and connects your agents only to calls a live person answers.',
+      },
+    },
+    badge: 'Early access',
   },
   { key: 'CARRIER_ROUTING', item: agencyUpgrade('/settings/carriers') },
   { key: 'VOICE_AGENTS', item: agencyUpgrade('/voice-agents') },
@@ -593,18 +616,12 @@ export const WHITE_LABEL_UPGRADES: Upgrade[] = [
 /**
  * WHITE_LABEL_OWNER_NAV, plus what this agency's upgrades add to it.
  *
- * Today that is one entry: the CRM, which holds the lead lists the Power
- * Dialer dials and means nothing without it. Until Power Dialer is on, the
- * CRM is not in this nav. Without an upgrade that adds an entry, this returns
- * WHITE_LABEL_OWNER_NAV itself.
+ * Nothing, today: the CRM used to be added here with the Power Dialer, and is
+ * now in WHITE_LABEL_OWNER_NAV for every agency. The upgrades are opened from
+ * `/upgrades`. Kept as the one place an upgrade would add an entry.
  */
-export function whiteLabelOwnerNav(upgrades: readonly string[] = []): NavGroup[] {
-  if (!upgrades.includes('POWER_DIALER')) return WHITE_LABEL_OWNER_NAV;
-  return WHITE_LABEL_OWNER_NAV.map(group =>
-    group.label === 'Floor'
-      ? { ...group, items: [...group.items, platformItem('/insurance-leads')] }
-      : group
-  );
+export function whiteLabelOwnerNav(_upgrades: readonly string[] = []): NavGroup[] {
+  return WHITE_LABEL_OWNER_NAV;
 }
 
 /**
@@ -660,7 +677,13 @@ export const AGENT_NAV: NavGroup[] = [
         icon: Trophy,
         title: 'Where you stand on the floor, and what it would take to move up',
       },
-      { name: 'CRM', href: '/insurance-leads', icon: Contact },
+      {
+        // Every agent has the CRM, narrowed server-side to the customers assigned to them.
+        name: 'My customers',
+        href: '/insurance-leads',
+        icon: Contact,
+        title: 'The customers assigned to you',
+      },
     ],
   },
   {
@@ -682,14 +705,14 @@ export const AGENT_NAV: NavGroup[] = [
 ];
 
 /** AGENT_NAV's entries that exist only with the POWER_DIALER upgrade. */
-const AGENT_POWER_DIALER_HREFS: readonly string[] = ['/call-center', '/insurance-leads'];
+const AGENT_POWER_DIALER_HREFS: readonly string[] = ['/call-center'];
 
 /**
  * AGENT_NAV, less what this agency's upgrades do not include.
  *
- * Power Dialer and the CRM it dials from are the POWER_DIALER upgrade: an
- * agent of an agency without it is not shown either (the API answers both
- * with 403 UPGRADE_REQUIRED). With the upgrade this returns AGENT_NAV itself.
+ * The Power Dialer is the POWER_DIALER upgrade: an agent of an agency without
+ * it is not shown it (the API answers 403 UPGRADE_REQUIRED). The CRM is every
+ * agent's, upgrade or not. With the upgrade this returns AGENT_NAV itself.
  */
 export function agentNav(upgrades: readonly string[] = []): NavGroup[] {
   if (upgrades.includes('POWER_DIALER')) return AGENT_NAV;

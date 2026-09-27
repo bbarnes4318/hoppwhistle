@@ -146,6 +146,9 @@ const ROLE_SETS = [['ADMIN'], ['PUBLISHER'], ['BUYER'], ['AGENT']];
  * behind an external SSO iframe or a feature area the brief excludes is not
  * here, and adding one is a one-line change.
  */
+/** The white-label session's downline, at a fixed id so its detail route can be named. */
+const SMOKE_CHILD_ID = '00000000-0000-4000-8000-0000000c41d0';
+
 const SWEEP = [
   {
     who: 'agency principal (ADMIN, inside one agency)',
@@ -298,6 +301,37 @@ const SWEEP = [
        * the list above when the flag is turned on.
        */
       { from: '/payroll', to: '/calls' },
+    ],
+  },
+  {
+    /*
+     * A white-label agency's owner, with no upgrades at all. The Agents hub
+     * opens on its live Floor, the CRM is in the nav without the Power Dialer,
+     * /upgrades offers each upgrade with a request button, and a downline has
+     * a detail page of its own.
+     *
+     * No strip reading is asserted: the white-label owner's strip is its own
+     * reading, and the strip itself is still required on every load.
+     */
+    who: 'white-label owner (OWNER + ADMIN, no upgrades)',
+    roles: ['OWNER', 'ADMIN'],
+    platform: false,
+    whiteLabel: true,
+    strip: null,
+    routes: [
+      '/dashboard',
+      '/applications',
+      '/insurance-leads',
+      '/agents',
+      '/upgrades',
+      '/network/agencies',
+      `/network/agencies/${SMOKE_CHILD_ID}`,
+    ],
+    pageChecks: [
+      { path: '/agents', check: checkAgentsFloor },
+      { path: '/insurance-leads', check: checkCrmInNav },
+      { path: '/upgrades', check: checkUpgradeRequest },
+      { path: `/network/agencies/${SMOKE_CHILD_ID}`, check: checkAgencyDetail },
     ],
   },
   {
@@ -946,19 +980,42 @@ const roles = (process.env.SMOKE_ROLES ?? 'ADMIN').split(',').filter(Boolean);
 const platform = process.env.SMOKE_PLATFORM !== '0';
 const actingTenant = process.env.SMOKE_ACTING_TENANT === '1';
 
-// POWER_DIALER on: the agency roles below load /call-center and
-// /insurance-leads, which are that upgrade's screens, and their lead routes
-// answer 403 UPGRADE_REQUIRED to an agency without it.
+// POWER_DIALER on for a normal agency: its roles below load /call-center,
+// which is that upgrade's screen and answers 403 UPGRADE_REQUIRED without it.
+//
+// The white-label session runs with NO upgrades, on purpose: the CRM is every
+// agency's now, and that session asserts it is in the nav and loads without
+// the Power Dialer.
+const whiteLabel = process.env.SMOKE_WHITE_LABEL === '1';
+const upgrades = whiteLabel ? [] : ['POWER_DIALER'];
 const tenant = await prisma.tenant.upsert({
   where: { slug: 'platform-smoke' },
-  update: { metadata: { upgrades: ['POWER_DIALER'] } },
+  update: { metadata: { upgrades }, whiteLabel },
   create: {
     name: 'Platform Smoke Agency',
     slug: 'platform-smoke',
     status: 'ACTIVE',
-    metadata: { upgrades: ['POWER_DIALER'] },
+    metadata: { upgrades },
+    whiteLabel,
   },
 });
+
+// A downline, for the white-label owner's agency detail page. Its id is fixed
+// so the sweep can name the route.
+await prisma.tenant.upsert({
+  where: { id: process.env.SMOKE_CHILD_ID },
+  update: { parentTenantId: tenant.id },
+  create: {
+    id: process.env.SMOKE_CHILD_ID,
+    name: 'Platform Smoke Downline',
+    slug: 'platform-smoke-downline',
+    status: 'ACTIVE',
+    parentTenantId: tenant.id,
+  },
+});
+// A request left open by a previous run would turn the button under test into
+// "Requested" before it is clicked.
+await prisma.upgradeRequest.deleteMany({ where: { tenantId: tenant.id } });
 
 const passwordHash = await bcrypt.hash(process.env.SMOKE_PASSWORD, 10);
 const user = await prisma.user.upsert({
@@ -1139,6 +1196,8 @@ async function seed(services, roles, options = {}) {
         SMOKE_ROLES: roles.join(','),
         SMOKE_PLATFORM: options.platform === false ? '0' : '1',
         SMOKE_ACTING_TENANT: options.actingTenant ? '1' : '0',
+        SMOKE_WHITE_LABEL: options.whiteLabel ? '1' : '0',
+        SMOKE_CHILD_ID: SMOKE_CHILD_ID,
       },
     });
     child.on('exit', code => (code === 0 ? ok() : fail(new Error(`seed exited ${code}`))));
@@ -1792,6 +1851,106 @@ async function checkRedirect(browser, session, entry, { from, to }) {
  * numbers" control that opens the purchase dialog, with nothing refused and
  * nothing in the console.
  */
+/**
+ * Open a page as the session, fail if it moved or threw, hand the page to
+ * `inspect`, then assert nothing was refused. The shape every white-label
+ * page check shares.
+ */
+async function checkPage(browser, session, entry, path, inspect) {
+  const who = `${entry.who} on ${path}`;
+  const { context, page, responses, consoleErrors } = await openAsOperator(
+    browser,
+    session,
+    path,
+    SWEEP_SETTLE_MS
+  );
+  const landed = await page.evaluate(() => window.location.pathname);
+  const settled = landed === path ? await settleOnPath(page, path) : landed;
+  if (settled !== path) {
+    fail(`${who}: was moved to ${settled}.`);
+    await context.close();
+    return;
+  }
+  const body = await page.evaluate(() => document.body.innerText);
+  if (body.includes('could not be displayed') || body.includes('Application error')) {
+    fail(`${who}: the page threw:\n  ${JSON.stringify(body.slice(0, 300))}`);
+  }
+  await inspect(page, who);
+  reportRefusals(who, responses, 'Every request a page load makes must succeed', path);
+  reportConsoleErrors(who, consoleErrors);
+  await context.close();
+}
+
+/** The Agents hub opens on the live Floor, its first tab. */
+async function checkAgentsFloor(browser, session, entry, path) {
+  await checkPage(browser, session, entry, path, async (page, who) => {
+    const tabs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('main [role="tab"]')).map(el => ({
+        label: (el.textContent || '').trim(),
+        active: el.getAttribute('data-state') === 'active',
+      }))
+    );
+    const labels = tabs.map(tab => tab.label);
+    if (labels.join('|') !== 'Floor|Performance|Over a period|Roster') {
+      fail(
+        `${who}: the Agents tabs are ${JSON.stringify(labels)}, not Floor, Performance, Over a period, Roster.`
+      );
+    }
+    if (tabs.find(tab => tab.active)?.label !== 'Floor') {
+      fail(`${who}: the Agents hub did not open on Floor.`);
+    }
+  });
+}
+
+/** The CRM is in a white-label owner's nav with no upgrade turned on. */
+async function checkCrmInNav(browser, session, entry, path) {
+  await checkPage(browser, session, entry, path, async (page, who) => {
+    const inNav = await page.evaluate(
+      () =>
+        !!document.querySelector('nav a[href="/insurance-leads"], aside a[href="/insurance-leads"]')
+    );
+    if (!inNav) {
+      fail(`${who}: the CRM is not in the navigation. Every agency has it, upgrade or not.`);
+    }
+  });
+}
+
+/** /upgrades offers a request button, and pressing it marks the card Requested. */
+async function checkUpgradeRequest(browser, session, entry, path) {
+  await checkPage(browser, session, entry, path, async (page, who) => {
+    const request = page.getByRole('button', { name: 'Request this upgrade' }).first();
+    if ((await request.count()) === 0) {
+      fail(`${who}: no "Request this upgrade" button on an agency with no upgrades.`);
+      return;
+    }
+    const before = await page.getByRole('button', { name: 'Requested' }).count();
+    await request.click();
+    const marked = await page
+      .waitForFunction(
+        n =>
+          Array.from(document.querySelectorAll('button')).filter(
+            el => (el.textContent || '').trim() === 'Requested'
+          ).length > n,
+        before,
+        { timeout: 10_000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (!marked) fail(`${who}: requesting an upgrade did not mark its card "Requested".`);
+  });
+}
+
+/** A downline's detail page renders its name and the Details panel. */
+async function checkAgencyDetail(browser, session, entry, path) {
+  await checkPage(browser, session, entry, path, async (page, who) => {
+    const body = await page.evaluate(() => document.body.innerText);
+    if (!body.includes('Platform Smoke Downline')) {
+      fail(`${who}: the agency detail page does not name the agency.`);
+    }
+    if (!/Details/.test(body)) fail(`${who}: the agency detail page has no Details panel.`);
+  });
+}
+
 async function checkAgencyNumbers(browser, session, entry, path) {
   const who = `${entry.who} on ${path}`;
   const { context, page, responses, consoleErrors } = await openAsOperator(
@@ -2763,6 +2922,7 @@ async function main() {
     await seed(services, entry.roles, {
       platform: entry.platform,
       actingTenant: entry.actingTenant,
+      whiteLabel: entry.whiteLabel,
     });
     const session = await signIn();
     for (const path of entry.routes) {
