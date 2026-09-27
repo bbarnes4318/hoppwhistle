@@ -227,8 +227,8 @@ describe.skipIf(!gate.available)('Child agencies', () => {
       await prisma.auditLog.count({ where: { action: { startsWith: 'network.agency.settings' } } })
     ).toBe(2);
 
-    const list = await send('GET', '/api/v1/network/agencies', parentOwner());
-    expect(list.json().data.agencies[0]).toMatchObject({ tenantId: child.id, numbersLimit: 40 });
+    const read = await send('GET', `/api/v1/network/agencies/${child.id}/settings`, parentOwner());
+    expect(read.json().data).toMatchObject({ tenantId: child.id, numbersLimit: 40, upgrades: [] });
 
     // Another white-label agency: not its child, so not found.
     const foreign = await send(

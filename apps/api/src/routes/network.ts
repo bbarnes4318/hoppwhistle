@@ -146,7 +146,7 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
 
       const children = await prisma.tenant.findMany({
         where: { parentTenantId: tenantId },
-        select: { id: true, name: true, status: true, createdAt: true, metadata: true },
+        select: { id: true, name: true, status: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
       });
 
@@ -177,17 +177,11 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
             ownerActivation(child.id, now),
           ]);
 
-          const usage = await numberUsage(child.id);
-
           return {
             tenantId: child.id,
             name: child.name,
             status: child.status,
             createdAt: child.createdAt.toISOString(),
-            // What the parent controls from this screen.
-            numbersLimit: usage.limit,
-            numbersUsed: usage.used,
-            upgrades: tenantUpgrades(child.metadata),
             agents,
             inboundCalls,
             answeredByAgents,
@@ -481,6 +475,40 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
           /** False when SMTP is unconfigured or refused it. Hand-deliver then. */
           emailed: delivery.sent,
           emailFailureReason: delivery.reason ?? null,
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/network/agencies/:tenantId/settings
+   *
+   * One child's number limit, numbers in use, and upgrades: what the parent
+   * controls from /network/agencies. A separate read from the list above,
+   * which stays aggregates only. Same scoping as the PUT below.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/network/agencies/:tenantId/settings',
+    { preHandler: [authenticate, requireWhiteLabelOperator] },
+    async (request, reply) => {
+      const actingTenantId = resolveTenant(request, reply);
+      if (!actingTenantId) return;
+
+      const child = await prisma.tenant.findFirst({
+        where: { id: request.params.tenantId, parentTenantId: actingTenantId },
+        select: { id: true, metadata: true },
+      });
+      if (!child) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const usage = await numberUsage(child.id);
+      return reply.send({
+        data: {
+          tenantId: child.id,
+          numbersLimit: usage.limit,
+          numbersUsed: usage.used,
+          upgrades: tenantUpgrades(child.metadata),
         },
       });
     }
