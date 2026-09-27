@@ -14,7 +14,7 @@
 --   month       'YYYY-MM', an America/New_York calendar month
 --
 -- Applied by hand with psql (this database has no _prisma_migrations table):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260930000000_statements/migration.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20261001000000_statements/migration.sql
 --
 -- Idempotent throughout, and one transaction, so a failure leaves nothing
 -- half-applied and a second run is a no-op.

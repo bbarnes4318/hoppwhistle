@@ -6,7 +6,7 @@
 -- tenant_activation_grants.tokenHash gets, and a link lasts sixty minutes.
 --
 -- Applied by hand with psql (this database has no _prisma_migrations table):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260929030000_password_reset_tokens/migration.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20260930030000_password_reset_tokens/migration.sql
 --
 -- Idempotent throughout, and one transaction.
 
