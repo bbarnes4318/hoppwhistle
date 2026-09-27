@@ -938,10 +938,18 @@ const roles = (process.env.SMOKE_ROLES ?? 'ADMIN').split(',').filter(Boolean);
 const platform = process.env.SMOKE_PLATFORM !== '0';
 const actingTenant = process.env.SMOKE_ACTING_TENANT === '1';
 
+// POWER_DIALER on: the agency roles below load /call-center and
+// /insurance-leads, which are that upgrade's screens, and their lead routes
+// answer 403 UPGRADE_REQUIRED to an agency without it.
 const tenant = await prisma.tenant.upsert({
   where: { slug: 'platform-smoke' },
-  update: {},
-  create: { name: 'Platform Smoke Agency', slug: 'platform-smoke', status: 'ACTIVE' },
+  update: { metadata: { upgrades: ['POWER_DIALER'] } },
+  create: {
+    name: 'Platform Smoke Agency',
+    slug: 'platform-smoke',
+    status: 'ACTIVE',
+    metadata: { upgrades: ['POWER_DIALER'] },
+  },
 });
 
 const passwordHash = await bcrypt.hash(process.env.SMOKE_PASSWORD, 10);
