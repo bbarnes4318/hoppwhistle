@@ -16,6 +16,8 @@
  * `loadTenantWhiteLabel`.
  */
 
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
 import { logger } from './logger.js';
 import { getPrismaClient } from './prisma.js';
 
@@ -71,4 +73,60 @@ export async function loadTenantUpgrades(
     });
     return [];
   }
+}
+
+export const UPGRADE_REQUIRED = 'UPGRADE_REQUIRED';
+
+/**
+ * preHandler for the routes behind one upgrade: 403 UPGRADE_REQUIRED unless
+ * the acting tenant has it turned on.
+ *
+ * Registered with `fastify.addHook('preHandler', requireUpgrade(...))` inside a
+ * route plugin, so it covers every route that plugin registers and nothing
+ * else (the plugins are registered without `fastify-plugin`, so the hook stays
+ * encapsulated). By preHandler time the global /api/v1 authentication has
+ * built the principal.
+ *
+ *   - A platform admin passes: staff operate every agency, upgrade or not.
+ *   - No principal, or no acting tenant, passes through to the handler, which
+ *     already answers that caller with its own refusal -- the same posture as
+ *     `middleware/staff-only.ts`, which only turns away someone it can
+ *     identify.
+ *   - Otherwise the tenant's upgrades are read (`loadTenantUpgrades`, which
+ *     fails closed) and a tenant without this one is refused.
+ *
+ * `skip` exempts routes that are not a screen of the upgrade -- API-key lead
+ * ingestion from a partner, for instance, whose leads should not be dropped
+ * because the agency has not turned the dialer on.
+ */
+export function requireUpgrade(
+  upgrade: TenantUpgrade,
+  options: { skip?: (request: FastifyRequest) => boolean } = {}
+) {
+  return async function upgradeGuard(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<FastifyReply | undefined> {
+    if (options.skip?.(request)) return undefined;
+
+    const principal = request.user as
+      | { tenantId?: string | null; isPlatformAdmin?: boolean }
+      | undefined;
+    if (!principal) return undefined;
+    if (principal.isPlatformAdmin === true) return undefined;
+
+    const tenantId = typeof principal.tenantId === 'string' ? principal.tenantId.trim() : '';
+    if (!tenantId) return undefined;
+
+    const upgrades = await loadTenantUpgrades(tenantId);
+    if (upgrades.includes(upgrade)) return undefined;
+
+    return reply.code(403).send({
+      error: {
+        code: UPGRADE_REQUIRED,
+        message: 'This is part of an upgrade your agency does not have turned on.',
+        upgrade,
+      },
+    });
+  };
 }

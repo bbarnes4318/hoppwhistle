@@ -34,6 +34,7 @@ import {
 } from '../services/applications/input-schema.js';
 import type { ApplicationInput } from '../services/applications/input-schema.js';
 import { deliveredCallWhere, submittedApplicationWhere } from '../services/rating/measurement.js';
+import { isSoftphoneCallSid, savePendingDisposition } from '../services/pending-disposition.js';
 import {
   loadCallMoneyLedger,
   marginOf,
@@ -1680,6 +1681,12 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       billableDurationSeconds?: number;
       publisherPayoutPerBillableCall?: number;
       buyerPricePerBillableCall?: number;
+      /**
+       * Only the ring-time settings are accepted here, and they are MERGED
+       * into the campaign's metadata: replacing the object would drop the
+       * answer order and every other routing setting it holds.
+       */
+      metadata?: { agentRingSeconds?: number; buyerRingSeconds?: number };
     };
   }>('/api/v1/campaigns/:campaignId', async (request, reply) => {
     try {
@@ -1768,6 +1775,34 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           return { error: { code: 'VALIDATION_ERROR', message: 'Buyer price must be >= 0' } };
         }
         updateData.buyerPricePerBillableCall = new Prisma.Decimal(body.buyerPricePerBillableCall);
+      }
+
+      // Ring time per routing step: agents' steps and buyer-only steps.
+      if (body.metadata !== undefined && body.metadata !== null) {
+        const ringTimes: Record<string, number> = {};
+        for (const key of ['agentRingSeconds', 'buyerRingSeconds'] as const) {
+          const value = body.metadata[key];
+          if (value === undefined) continue;
+          if (typeof value !== 'number' || !Number.isInteger(value) || value < 10 || value > 120) {
+            void reply.code(400);
+            return {
+              error: {
+                code: 'VALIDATION_ERROR',
+                message: `${key} must be a whole number of seconds from 10 to 120`,
+              },
+            };
+          }
+          ringTimes[key] = value;
+        }
+        if (Object.keys(ringTimes).length > 0) {
+          const existingMeta =
+            existingCampaign.metadata &&
+            typeof existingCampaign.metadata === 'object' &&
+            !Array.isArray(existingCampaign.metadata)
+              ? (existingCampaign.metadata as Record<string, unknown>)
+              : {};
+          updateData.metadata = { ...existingMeta, ...ringTimes };
+        }
       }
 
       // Update campaign
@@ -4483,16 +4518,28 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       }
     }
 
+    /*
+     * The softphone names an inbound call by the id FreeSWITCH gave it --
+     * `fs-<uuid>`, from the INVITE's X-Call-Id -- which is the callSid the CDR
+     * writes the call under. It may arrive in either field.
+     */
+    const softphoneSid = isSoftphoneCallSid(callSid)
+      ? callSid
+      : isSoftphoneCallSid(callId)
+        ? callId
+        : null;
+    const lookupSid = callSid || softphoneSid;
+
     // Find the call by callId or callSid (idempotent — supports repeated saves)
     let call = null;
-    if (callId) {
+    if (callId && !isSoftphoneCallSid(callId)) {
       call = await prisma.call.findFirst({
         where: { id: callId, tenantId },
       });
     }
-    if (!call && callSid) {
+    if (!call && lookupSid) {
       call = await prisma.call.findFirst({
-        where: { callSid, tenantId },
+        where: { callSid: lookupSid, tenantId },
       });
     }
 
@@ -4576,18 +4623,29 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         return { error: { code: recorded.code, message: recorded.message } };
       }
 
+      /*
+       * A row the FreeSWITCH CDR wrote (`fs-<uuid>`) already holds what the
+       * switch measured -- status, times, durations -- and billing has been
+       * calculated from them. The disposition labels that call; it does not
+       * get to re-time it from the browser's clock.
+       */
+      const cdrOwned = isSoftphoneCallSid(call.callSid);
+      const { duration: _clientDuration, ...labelData } = updateData;
+
       // Update existing call record (idempotent upsert pattern)
       const updated = await prisma.call.update({
         where: { id: call.id },
-        data: {
-          ...updateData,
-          ...attribution,
-          status: 'COMPLETED',
-          endedAt: finalEndedAt,
-          duration: finalDuration,
-          connectedDuration: call.answeredAt ? finalDuration : 0,
-          ...recordingStatusUpdate,
-        },
+        data: cdrOwned
+          ? { ...labelData, ...attribution }
+          : {
+              ...updateData,
+              ...attribution,
+              status: 'COMPLETED',
+              endedAt: finalEndedAt,
+              duration: finalDuration,
+              connectedDuration: call.answeredAt ? finalDuration : 0,
+              ...recordingStatusUpdate,
+            },
       });
 
       const rawPhone = callerNumber || call.toNumber || call.callerId;
@@ -4604,6 +4662,42 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         followUpAt: updated.followUpAt?.toISOString() ?? null,
         followUpStatus: updated.followUpStatus,
         updatedAt: updated.updatedAt.toISOString(),
+      };
+    } else if (softphoneSid) {
+      /*
+       * A softphone call whose CDR has not landed yet. Its row will be written
+       * by the CDR under this same callSid, so creating one here would make a
+       * second INBOUND row for the one call -- which is exactly what used to
+       * happen. The disposition waits instead, and the CDR merges it (and
+       * records the application, if there is one) when it arrives.
+       */
+      const pending = await savePendingDisposition(prisma, {
+        tenantId,
+        callSid: softphoneSid,
+        userId: user?.userId ?? null,
+        disposition,
+        notes: notes || null,
+        callSource: callSource || null,
+        followUpAt: followUpAt ? new Date(followUpAt) : null,
+        duration: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
+        application: applicationInput,
+      });
+
+      if (callerNumber) {
+        await propagateLeadDisposition(tenantId, disposition, callerNumber, notes);
+      }
+
+      void reply.code(202);
+      return {
+        id: null,
+        pending: true,
+        callSid: pending.callSid,
+        disposition: pending.disposition,
+        dispositionNotes: pending.notes,
+        callSource: pending.callSource,
+        followUpAt: pending.followUpAt?.toISOString() ?? null,
+        followUpStatus: pending.followUpAt ? 'PENDING' : null,
+        updatedAt: pending.updatedAt.toISOString(),
       };
     } else {
       // Create a new call record if none exists (e.g. softphone call not yet tracked)

@@ -2,12 +2,22 @@ export type CurrentView = 'roleSelect' | 'agentDashboard' | 'publisherSetup' | '
 export type ActiveCallView = 'script' | 'data' | 'captured_data';
 export type SelectedScript =
   | 'sales'
+  | 'medicare'
+  | 'aca'
   | 'retention'
   | 'underwriting'
   | 'verification'
   | 'cold_call_transfer'
   | 'better_plan_callback'
   | 'hvac';
+
+/**
+ * The console's default script: Final Expense. Its value is `'sales'` because
+ * that is what agents' saved `defaultScript` preferences already hold -- the
+ * Final Expense script (`IntegratedScriptPanel`, built on `scriptData.ts`) has
+ * always been the 'sales' entry; it was only labelled "Contractor".
+ */
+export const DEFAULT_SCRIPT: SelectedScript = 'sales';
 
 export interface ProspectData {
   lead_token?: string;

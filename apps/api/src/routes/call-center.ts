@@ -10,6 +10,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { permits, resolveStateAuthority, sendStateRefusal } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { requireUpgrade } from '../lib/tenant-upgrades.js';
 
 
 /**
@@ -27,6 +28,10 @@ function getTenantId(request: FastifyRequest): string | null {
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerCallCenterRoutes(fastify: FastifyInstance) {
+  // The call-center console is the Power Dialer upgrade. Every route in this
+  // plugin, and only these (the hook is encapsulated to the plugin).
+  fastify.addHook('preHandler', requireUpgrade('POWER_DIALER'));
+
   /**
    * GET /api/v1/call-center/customer-lookup
    * Normalizes query phone to last 10 digits and searches CRM records.

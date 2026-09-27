@@ -771,7 +771,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
     const name =
       vertical === 'B2B'
         ? 'b2b_import_template.csv'
-        : `ameriquote_${vertical.toLowerCase()}_lead_template.csv`;
+        : `${vertical.toLowerCase()}_lead_template.csv`;
     link.setAttribute('download', name);
     document.body.appendChild(link);
     link.click();
@@ -1093,7 +1093,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     <p className="text-xs text-ink-2 mt-0.5">
                       {vertical === 'B2B'
                         ? 'Pre-formatted CSV template for B2B prospects'
-                        : `Columns are Ameriquote's ${vertical} (TYPE=${vertical === 'FE' ? '19' : '31'}) field names — send this to your lead vendor`}
+                        : `Columns are the standard ${vertical} lead field names — send this to your lead vendor`}
                     </p>
                   </div>
                 </div>

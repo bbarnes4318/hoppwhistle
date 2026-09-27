@@ -9,6 +9,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPrisma = {
+  // The acting tenant has the Power Dialer upgrade these routes sit behind
+  // (`requireUpgrade('POWER_DIALER')`); see power-dialer-upgrade.test.ts.
+  tenant: {
+    findUnique: () => Promise.resolve({ metadata: { upgrades: ['POWER_DIALER'] } }),
+  },
   insuranceLead: {
     findFirst: vi.fn(),
     findMany: vi.fn(),

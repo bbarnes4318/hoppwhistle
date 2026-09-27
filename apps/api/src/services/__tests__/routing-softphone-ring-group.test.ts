@@ -96,7 +96,9 @@ describe('RoutingService campaign ring groups', () => {
 
     const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
 
-    expect(result?.endpoint).toBe('1000,1001,+14235550100');
+    // The weighted pick rings with the agents; the buyer tied with it is the
+    // next step rather than dropped.
+    expect(result?.endpoint).toBe('1000,1001,+14235550100|+14235550101');
   });
 
   it('keeps mixed lower priorities as sequential failover steps', async () => {
@@ -132,7 +134,8 @@ describe('RoutingService campaign ring groups', () => {
 
       const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
 
-      expect(result?.endpoint).toBe('+14235550100');
+      // One buyer per step: the weighted pick first, the tied buyer after it.
+      expect(result?.endpoint).toBe('+14235550100|+14235550101');
     });
 
     it('rings every external buyer in the step when the campaign opts in', async () => {
@@ -186,7 +189,7 @@ describe('RoutingService campaign ring groups', () => {
 
       const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
 
-      expect(result?.endpoint).toBe('+14235550100');
+      expect(result?.endpoint).toBe('+14235550100|+14235550101');
     });
   });
 
@@ -199,6 +202,81 @@ describe('RoutingService campaign ring groups', () => {
 
     const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
 
-    expect(result?.endpoint).toBe('+14235550100');
+    expect(result?.endpoint).toBe('+14235550100|+14235550101');
+  });
+
+  describe('tied buyers', () => {
+    it('rings the weighted pick first and the others as following steps, before the next priority', async () => {
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('+14235550100', 0, 'buyer-a', 50),
+        endpoint('+14235550101', 0, 'buyer-b', 50),
+        endpoint('+14235550102', 0, 'buyer-c', 50),
+        endpoint('+14235550200', 1, 'buyer-d'),
+      ]);
+      // First draw lands in buyer-b's share, the second in buyer-c's.
+      vi.spyOn(Math, 'random').mockReturnValueOnce(0.5).mockReturnValueOnce(0.9);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('+14235550101|+14235550102|+14235550100|+14235550200');
+    });
+  });
+
+  describe('dial string', () => {
+    it('tags every leg with its party, target, number and the step ring time', async () => {
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        { ...endpoint('1000', 0, 'agent-a'), endpointId: null, answeringUserId: 'agent-a' },
+        endpoint('+14235550100', 0, 'buyer-a'),
+        endpoint('+14235550101', 0, 'buyer-b'),
+      ]);
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.dialString).toBe(
+        '[x_leg_party=agent:agent-a,x_leg_number=1000,leg_timeout=20]1000,' +
+          '[x_leg_party=buyer:buyer-a,x_leg_target=endpoint-+14235550100,x_leg_number=+14235550100,leg_timeout=20]+14235550100|' +
+          '[x_leg_party=buyer:buyer-b,x_leg_target=endpoint-+14235550101,x_leg_number=+14235550101,leg_timeout=30]+14235550101'
+      );
+    });
+
+    it('puts leg_timeout on every step, from the campaign ring-time settings', async () => {
+      (service as unknown as { prisma: unknown }).prisma = {
+        campaign: {
+          findFirst: () =>
+            Promise.resolve({ metadata: { agentRingSeconds: 15, buyerRingSeconds: 45 } }),
+        },
+      };
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        { ...endpoint('1000', 0, 'agent-a'), endpointId: null, answeringUserId: 'agent-a' },
+        endpoint('+14235550100', 1, 'buyer-a'),
+      ]);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+      const steps = result?.dialString?.split('|') ?? [];
+
+      expect(steps).toHaveLength(2);
+      expect(steps[0]).toContain('leg_timeout=15');
+      expect(steps[1]).toContain('leg_timeout=45');
+    });
+
+    it('clamps ring times to 10–120 seconds', async () => {
+      (service as unknown as { prisma: unknown }).prisma = {
+        campaign: {
+          findFirst: () =>
+            Promise.resolve({ metadata: { agentRingSeconds: 3, buyerRingSeconds: 900 } }),
+        },
+      };
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        { ...endpoint('1000', 0, 'agent-a'), endpointId: null, answeringUserId: 'agent-a' },
+        endpoint('+14235550100', 1, 'buyer-a'),
+      ]);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+      const steps = result?.dialString?.split('|') ?? [];
+
+      expect(steps[0]).toContain('leg_timeout=10');
+      expect(steps[1]).toContain('leg_timeout=120');
+    });
   });
 });

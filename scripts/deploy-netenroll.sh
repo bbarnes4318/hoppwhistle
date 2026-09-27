@@ -116,6 +116,7 @@ REQUIRED_MIGRATIONS="
 20260926000000_tenant_white_label
 20260927000000_publisher_payment_clawbacks
 20260928000000_clawback_check_callid
+20260929000000_pending_call_dispositions
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -464,6 +465,9 @@ migration_applied() {
       echo "SELECT COALESCE((SELECT pg_get_constraintdef(oid) NOT LIKE '%callId%'
               FROM pg_constraint
               WHERE conname = 'publisher_payments_kind_amount_check'), false)" ;;
+    *_pending_call_dispositions)
+      # One transaction: the table, its unique index and its foreign key.
+      echo "SELECT to_regclass('public.pending_call_dispositions') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac

@@ -443,7 +443,13 @@ export class BillingService {
         }
 
         // 8. Calculate final amounts
-        const revenue = billable ? buyerPriceRate : new Prisma.Decimal(0);
+        //
+        // Revenue is what a BUYER pays, so a call no buyer answered -- an agent
+        // took it, or nobody did -- earns none, whatever the campaign's buyer
+        // price says. The publisher is still paid below: a publisher is paid for
+        // every billable inbound call from their campaign, whoever answered it.
+        const hasBuyer = !!call.buyerId;
+        const revenue = billable && hasBuyer ? buyerPriceRate : new Prisma.Decimal(0);
         const payout = billable ? publisherPayoutRate : new Prisma.Decimal(0);
         const profit = revenue.minus(payout).minus(cost);
 
@@ -476,7 +482,8 @@ export class BillingService {
         const isUpfront = call.buyer?.billingType === 'UPFRONT';
 
         let buyerChargeStatus = call.buyerChargeStatus;
-        if (!billable) {
+        if (!billable || !hasBuyer) {
+          // Nobody to charge. Never CHARGED: there is no buyer ledger it could be on.
           buyerChargeStatus = 'NOT_BILLABLE';
         } else if (!isUpfront) {
           buyerChargeStatus = 'CHARGED'; // TERMS is immediately accrued/charged

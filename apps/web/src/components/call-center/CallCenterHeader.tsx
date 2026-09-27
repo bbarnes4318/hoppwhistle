@@ -1,4 +1,4 @@
-import { FilePlus2, Headphones, Settings } from 'lucide-react';
+import { FilePlus2, Headphones, LogOut, Settings } from 'lucide-react';
 import React, { useState } from 'react';
 
 import { AvailabilitySwitch } from '@/components/phone';
@@ -120,7 +120,12 @@ export function CallCenterHeader({
   const state = callState(isIncomingCall, isCallActive, availableForCalls);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-rule bg-surface px-4">
+    /*
+     * Wraps rather than overflowing: at a phone's 390px the state block, the
+     * controls and the actions take two or three rows, and the action buttons
+     * drop their labels below `sm` and keep their icons.
+     */
+    <header className="flex h-auto min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-surface px-4 py-2">
       {/* The state. One block, readable from across a desk. */}
       <div
         role="status"
@@ -148,7 +153,7 @@ export function CallCenterHeader({
       </div>
 
       {/* The controls that change it. */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <AvailabilitySwitch
           onChange={setAvailableForCalls}
           className="rounded-control border border-rule bg-surface px-2.5 py-1.5"
@@ -164,8 +169,11 @@ export function CallCenterHeader({
           className={CONTROL}
           title="Select call script"
         >
+          {/* The insurance scripts first; Final Expense is the default. */}
+          <option value="sales">Final Expense</option>
+          <option value="medicare">Medicare</option>
+          <option value="aca">ACA</option>
           <option value="hvac">HVAC</option>
-          <option value="sales">Contractor</option>
           {canAccessRetentionScript && <option value="retention">Retention</option>}
           <option value="underwriting">Underwriting</option>
           <option value="verification">Verification</option>
@@ -184,9 +192,10 @@ export function CallCenterHeader({
           onClick={onLogApplication}
           className="flex items-center gap-1.5 rounded-control border border-rule px-2.5 py-1.5 t-meta font-medium text-ink-2 hover:border-rule-strong hover:bg-sunken hover:text-ink focus-visible:outline-none"
           title="Record business written on a callback, with no call attached"
+          aria-label="Log an application"
         >
           <FilePlus2 aria-hidden className="h-3.5 w-3.5" />
-          Log an application
+          <span className="hidden sm:inline">Log an application</span>
         </button>
         <button
           type="button"
@@ -200,9 +209,12 @@ export function CallCenterHeader({
         <button
           type="button"
           onClick={onExit}
-          className="rounded-control px-2 py-1 t-meta font-medium text-ink-2 hover:bg-sunken hover:text-ink focus-visible:outline-none"
+          className="flex items-center gap-1.5 rounded-control px-2 py-1 t-meta font-medium text-ink-2 hover:bg-sunken hover:text-ink focus-visible:outline-none"
+          title="Exit console"
+          aria-label="Exit console"
         >
-          Exit console
+          <LogOut aria-hidden className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Exit console</span>
         </button>
       </div>
     </header>

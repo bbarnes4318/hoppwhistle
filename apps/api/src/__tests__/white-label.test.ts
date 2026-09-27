@@ -397,6 +397,8 @@ describe.skipIf(!gate.available)('White-label tier', () => {
           answeredByAgents: 0,
           sentToBuyers: 2,
           billable: 1,
+          billableAgentAnswered: 0,
+          billableToBuyers: 1,
           payout: 20,
           revenue: 50,
           profit: 29.35,
@@ -407,7 +409,11 @@ describe.skipIf(!gate.available)('White-label tier', () => {
           calls: 2,
           answeredByAgents: 1,
           sentToBuyers: 1,
-          billable: 1,
+          // Both calls are billable and both are paid for: the one Zen took
+          // and the one the agency's agent took. `payout` below is 15 + 10.
+          billable: 2,
+          billableAgentAnswered: 1,
+          billableToBuyers: 1,
           payout: 25,
           revenue: 40,
           profit: 14.3,

@@ -307,6 +307,8 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                   <TableHead className="text-right">Your agents</TableHead>
                   <TableHead className="text-right">Sent to buyers</TableHead>
                   <TableHead className="text-right">Billable</TableHead>
+                  <TableHead className="text-right">Billable, your agents</TableHead>
+                  <TableHead className="text-right">Billable to buyers</TableHead>
                   <TableHead className="text-right">Payout</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
@@ -324,6 +326,12 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                       {count(row.sentToBuyers)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{count(row.billable)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {count(row.billableAgentAnswered)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {count(row.billableToBuyers)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{dollars(row.payout)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {dollars(row.revenue)}

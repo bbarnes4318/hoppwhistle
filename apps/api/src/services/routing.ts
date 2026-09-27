@@ -3,7 +3,19 @@ import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '..
 import { normalizeLicensedStates } from '../lib/licensed-states.js';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import {
+  DEFAULT_AGENT_RING_SECONDS,
+  DEFAULT_BUYER_RING_SECONDS,
+  tagDestinationLegs,
+} from '../lib/route-destination.js';
 
+import {
+  DEFAULT_BUYER_TIMEZONE,
+  expectedBuyerPrice,
+  hasFundsFor,
+  isWithinHoursOfOperation,
+  readDeliveredCount,
+} from './routing-buyer-gates.js';
 import { agencyClock, isWithinSchedule } from './telephony/agent-schedule.js';
 import type { LocalClock } from './telephony/agent-schedule.js';
 
@@ -13,6 +25,35 @@ const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 function isInternalAgentDestination(destination: string): boolean {
   const normalized = destination.trim();
   return INTERNAL_EXTENSION_RE.test(normalized) || USER_ID_RE.test(normalized);
+}
+
+const MIN_RING_SECONDS = 10;
+const MAX_RING_SECONDS = 120;
+
+/** A campaign's ring-time setting, clamped to 10–120 s; anything unusable is the default. */
+export function ringSeconds(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(MAX_RING_SECONDS, Math.max(MIN_RING_SECONDS, Math.round(parsed)));
+}
+
+/**
+ * One leg of the dial string, tagged with who it rings.
+ *
+ * An agent leg (softphone, cell or assigned DID) is `agent:<userId>`; anything
+ * else is `buyer:<buyerId>` with the endpoint it belongs to. A leg that rings
+ * an internal extension nobody could be resolved for carries no party at all,
+ * so answering it credits nobody rather than the wrong somebody.
+ */
+export function taggedLeg(endpoint: EligibleEndpoint, legTimeoutSeconds: number): string {
+  const destination = endpoint.destination.trim();
+  const agentId = endpoint.answeringUserId ?? endpoint.agentUserId;
+  const isBuyerLeg = !agentId && !isInternalAgentDestination(destination);
+  return tagDestinationLegs(destination, () => ({
+    party: agentId ? `agent:${agentId}` : isBuyerLeg ? `buyer:${endpoint.buyerId}` : null,
+    target: isBuyerLeg ? endpoint.endpointId : null,
+    timeout: legTimeoutSeconds,
+  }));
 }
 
 /**
@@ -58,6 +99,13 @@ export interface EligibleEndpoint {
   agentUserId?: string;
   /** The destination is the agent's own cell (`metadata.cellForwardNumber`), not their softphone. */
   agentCell?: boolean;
+  /**
+   * The agent this leg actually rings, however it was reached: a
+   * `CampaignAgent` row, or a buyer row whose destination is an agent's
+   * extension, user id or assigned DID. Set by the agent gates; absent on a
+   * leg that rings a buyer.
+   */
+  answeringUserId?: string;
 }
 
 /** Normalize phone-number-ish strings to their last 10 digits for comparison. */
@@ -123,6 +171,9 @@ export class RoutingService {
             id: true,
             name: true,
             status: true,
+            billingType: true,
+            walletBalance: true,
+            stats: { select: { capConsumedToday: true } },
           },
         },
         buyerEndpoint: {
@@ -133,15 +184,30 @@ export class RoutingService {
             maxConcurrency: true,
             acceptedStates: true,
             weight: true,
+            maxCap: true,
+            capPeriod: true,
+            hoursOfOperation: true,
+            timezone: true,
+            basePrice: true,
           },
+        },
+        campaign: {
+          select: { buyerPricePerBillableCall: true },
         },
       },
     });
 
     const allEndpoints: EligibleEndpoint[] = [];
+    const now = new Date();
 
     for (const assignment of campaignBuyers) {
       if (assignment.buyer.status !== 'ACTIVE') {
+        logger.info({
+          msg: 'Buyer-routing: Endpoint EXCLUDED (buyer is not ACTIVE)',
+          buyerId: assignment.buyerId,
+          status: assignment.buyer.status,
+          campaignId,
+        });
         continue;
       }
 
@@ -150,6 +216,53 @@ export class RoutingService {
       }
 
       const ep = assignment.buyerEndpoint;
+
+      if (ep && !isWithinHoursOfOperation(ep.hoursOfOperation, ep.timezone, now)) {
+        logger.info({
+          msg: 'Buyer-routing: Endpoint EXCLUDED (outside hours of operation)',
+          buyerId: assignment.buyerId,
+          endpointId: ep.id,
+          timezone: ep.timezone || DEFAULT_BUYER_TIMEZONE,
+          campaignId,
+        });
+        continue;
+      }
+
+      if (ep && ep.maxCap > 0) {
+        const redisCount = await readDeliveredCount(ep.id, ep.capPeriod, ep.timezone, now);
+        const delivered = redisCount ?? assignment.buyer.stats?.capConsumedToday ?? 0;
+        if (delivered >= ep.maxCap) {
+          logger.info({
+            msg: 'Buyer-routing: Endpoint EXCLUDED (at cap)',
+            buyerId: assignment.buyerId,
+            endpointId: ep.id,
+            delivered,
+            maxCap: ep.maxCap,
+            capPeriod: ep.capPeriod,
+            source: redisCount === null ? 'buyer_stats' : 'redis',
+            campaignId,
+          });
+          continue;
+        }
+      }
+
+      if (assignment.buyer.billingType === 'UPFRONT') {
+        const price = expectedBuyerPrice({
+          campaignBuyerPrice: assignment.pricePerBillableCall,
+          campaignDefaultPrice: assignment.campaign?.buyerPricePerBillableCall,
+          endpointBasePrice: ep?.basePrice,
+        });
+        if (!hasFundsFor(assignment.buyer.billingType, assignment.buyer.walletBalance, price)) {
+          logger.info({
+            msg: 'Buyer-routing: Endpoint EXCLUDED (UPFRONT wallet below call price)',
+            buyerId: assignment.buyerId,
+            walletBalance: String(assignment.buyer.walletBalance),
+            price,
+            campaignId,
+          });
+          continue;
+        }
+      }
       const acceptedStates = ep?.acceptedStates || [];
 
       allEndpoints.push({
@@ -640,6 +753,10 @@ export class RoutingService {
               return { ep: normalizedEndpoint, eligible: true };
             }
 
+            // This leg rings an agent, whatever row it came from; the dial
+            // string tags it with them so the CDR credits whoever picks up.
+            normalizedEndpoint = { ...normalizedEndpoint, answeringUserId: userId };
+
             /*
              * Licence gate: an agent is not rung for a state they cannot write.
              *
@@ -897,6 +1014,14 @@ export class RoutingService {
     targetId?: string | null;
     callerState?: string | null;
     /**
+     * The same plan as `endpoint`, with every leg tagged for FreeSWITCH:
+     * `[x_leg_party=buyer:<id>,x_leg_target=<endpointId>,x_leg_number=<n>,leg_timeout=<s>]<n>`
+     * or `[x_leg_party=agent:<userId>,x_leg_number=<n>,leg_timeout=<s>]<n>`.
+     * inbound_route.lua reads the tags back off whichever leg answered, and
+     * that -- not the plan's first leg -- is who the call is credited to.
+     */
+    dialString?: string;
+    /**
      * Ten-digit keys of the plan's legs that are agents' cells. FreeSWITCH
      * asks the answerer on those legs to confirm (so a voicemail cannot take
      * the call) and skips a cell that is already on a call.
@@ -951,117 +1076,121 @@ export class RoutingService {
         return selectedEndpoint;
       };
 
+      // Every external buyer at a priority, in weighted-random order: each
+      // pick is weighted among the buyers not yet picked.
+      const weightedOrder = (group: EligibleEndpoint[]): EligibleEndpoint[] => {
+        const remaining = [...group];
+        const ordered: EligibleEndpoint[] = [];
+        while (remaining.length > 0) {
+          const picked = pickWeighted(remaining);
+          ordered.push(picked);
+          remaining.splice(remaining.indexOf(picked), 1);
+        }
+        return ordered;
+      };
+
+      // One read of the campaign's routing settings. A failure reads as "no
+      // settings": the weighted pick, no external fallback, default ring times.
+      let meta: Record<string, unknown> = {};
+      try {
+        const campaign = await this.prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+          select: { metadata: true },
+        });
+        if (
+          campaign?.metadata &&
+          typeof campaign.metadata === 'object' &&
+          !Array.isArray(campaign.metadata)
+        ) {
+          meta = campaign.metadata as Record<string, unknown>;
+        }
+      } catch (metaErr) {
+        logger.warn({
+          msg: 'Agent-routing: could not read campaign routing settings (using defaults)',
+          campaignId,
+          error: (metaErr as Error).message,
+        });
+      }
+
       // Ring EVERY external buyer in a step instead of one chosen by weight.
       //
       // Opt-in per campaign (`metadata.ringAllExternalBuyers`), because the
       // weighted pick is what distributes calls across competing buyers
       // everywhere else — switching it on globally would blast every call to
       // every buyer on the campaign. Clearing the flag is the rollback.
-      //
-      // Only read when a step actually holds more than one external, so the
-      // usual routing decision does not gain a query.
-      const hasStepWithMultipleExternals = sortedPriorities.some(
-        priority =>
-          priorityGroups
-            .get(priority)!
-            .filter(endpoint => !isInternalAgentDestination(endpoint.destination)).length > 1
-      );
+      const ringAllExternalBuyers = meta.ringAllExternalBuyers === true;
+      const agentRingSeconds = ringSeconds(meta.agentRingSeconds, DEFAULT_AGENT_RING_SECONDS);
+      const buyerRingSeconds = ringSeconds(meta.buyerRingSeconds, DEFAULT_BUYER_RING_SECONDS);
 
-      let ringAllExternalBuyers = false;
-      if (hasStepWithMultipleExternals) {
-        try {
-          const campaign = await this.prisma.campaign.findFirst({
-            where: { id: campaignId, tenantId },
-            select: { metadata: true },
-          });
-          const meta =
-            campaign?.metadata &&
-            typeof campaign.metadata === 'object' &&
-            !Array.isArray(campaign.metadata)
-              ? (campaign.metadata as Record<string, unknown>)
-              : {};
-          ringAllExternalBuyers = meta.ringAllExternalBuyers === true;
-        } catch (metaErr) {
-          // Fail closed, to the existing behaviour.
-          logger.warn({
-            msg: 'Agent-routing: could not read ringAllExternalBuyers (using weighted pick)',
-            campaignId,
-            error: (metaErr as Error).message,
-          });
-        }
-      }
+      // An agent's cell is still an agent: it rings with the group rather
+      // than being reduced to one weighted pick among external buyers.
+      const isAgentLeg = (endpoint: EligibleEndpoint): boolean =>
+        endpoint.agentCell === true ||
+        !!endpoint.answeringUserId ||
+        isInternalAgentDestination(endpoint.destination);
 
-      const ringSteps: string[] = [];
-      const selectedEndpoints: EligibleEndpoint[] = [];
+      // Steps ring one after another; the legs of a step ring together.
+      const steps: EligibleEndpoint[][] = [];
 
       for (const priority of sortedPriorities) {
         const group = priorityGroups.get(priority)!;
-        // An agent's cell is still an agent: it rings with the group rather
-        // than being reduced to one weighted pick among external buyers.
-        const isAgentLeg = (endpoint: EligibleEndpoint): boolean =>
-          endpoint.agentCell === true || isInternalAgentDestination(endpoint.destination);
         const internalEndpoints = group.filter(isAgentLeg);
         const externalEndpoints = group.filter(endpoint => !isAgentLeg(endpoint));
 
-        const stepEndpoints: EligibleEndpoint[] = [...internalEndpoints];
-        if (externalEndpoints.length > 0) {
-          if (ringAllExternalBuyers) {
-            stepEndpoints.push(...externalEndpoints);
-          } else {
-            stepEndpoints.push(pickWeighted(externalEndpoints));
-          }
+        if (ringAllExternalBuyers) {
+          steps.push([...internalEndpoints, ...externalEndpoints]);
+          continue;
         }
 
+        // The weighted pick rings with this priority's agents. Buyers tied
+        // with it are not dropped: each becomes its own following step, in
+        // weighted-random order, before the next priority is tried.
+        const [first, ...rest] = weightedOrder(externalEndpoints);
+        steps.push(first ? [...internalEndpoints, first] : internalEndpoints);
+        for (const tied of rest) steps.push([tied]);
+      }
+
+      const ringSteps: string[] = [];
+      const dialSteps: string[] = [];
+      const selectedEndpoints: EligibleEndpoint[] = [];
+
+      for (const stepEndpoints of steps) {
         const seen = new Set<string>();
-        const destinations = stepEndpoints
-          .map(endpoint => endpoint.destination.trim())
-          .filter(destination => {
-            if (!destination || seen.has(destination)) return false;
-            seen.add(destination);
-            return true;
-          });
+        const legs = stepEndpoints.filter(endpoint => {
+          const destination = endpoint.destination.trim();
+          if (!destination || seen.has(destination)) return false;
+          seen.add(destination);
+          return true;
+        });
+        if (legs.length === 0) continue;
 
-        if (destinations.length > 0) {
-          ringSteps.push(destinations.join(','));
-          selectedEndpoints.push(...stepEndpoints);
-        }
+        const timeout = legs.some(isAgentLeg) ? agentRingSeconds : buyerRingSeconds;
+        ringSteps.push(legs.map(leg => leg.destination.trim()).join(','));
+        dialSteps.push(legs.map(leg => taggedLeg(leg, timeout)).join(','));
+        selectedEndpoints.push(...legs);
       }
 
       // Agent-assigned external DIDs are translated to their registered
       // Hopwhistle extension. Only append those DIDs as a final PSTN fallback
       // when the campaign explicitly opts in.
-      const externalFallbacks = eligibleEndpoints
-        .map(endpoint => endpoint.externalFallbackDestination?.trim())
-        .filter((destination): destination is string => !!destination);
-
-      if (externalFallbacks.length > 0) {
-        try {
-          const campaign = await this.prisma.campaign.findFirst({
-            where: { id: campaignId, tenantId },
-            select: { metadata: true },
-          });
-          const meta =
-            campaign?.metadata &&
-            typeof campaign.metadata === 'object' &&
-            !Array.isArray(campaign.metadata)
-              ? (campaign.metadata as Record<string, unknown>)
-              : {};
-
-          if (meta.allowAgentDidExternalFallback === true) {
-            ringSteps.push([...new Set(externalFallbacks)].join(','));
-            logger.info({
-              msg: 'Agent-routing: External DID fallback step enabled by campaign metadata',
-              campaignId,
-              fallbackCount: new Set(externalFallbacks).size,
-            });
-          }
-        } catch (metaErr) {
-          logger.warn({
-            msg: 'Agent-routing: Could not evaluate external-fallback setting (skipping fallback)',
-            campaignId,
-            error: (metaErr as Error).message,
-          });
+      const externalFallbacks = new Map<string, EligibleEndpoint>();
+      for (const endpoint of eligibleEndpoints) {
+        const destination = endpoint.externalFallbackDestination?.trim();
+        if (destination && !externalFallbacks.has(destination)) {
+          externalFallbacks.set(destination, { ...endpoint, destination, agentCell: false });
         }
+      }
+
+      if (externalFallbacks.size > 0 && meta.allowAgentDidExternalFallback === true) {
+        ringSteps.push([...externalFallbacks.keys()].join(','));
+        dialSteps.push(
+          [...externalFallbacks.values()].map(leg => taggedLeg(leg, agentRingSeconds)).join(',')
+        );
+        logger.info({
+          msg: 'Agent-routing: External DID fallback step enabled by campaign metadata',
+          campaignId,
+          fallbackCount: externalFallbacks.size,
+        });
       }
 
       if (ringSteps.length === 0) {
@@ -1094,6 +1223,7 @@ export class RoutingService {
       return {
         buyerId: primaryEndpoint.buyerId,
         endpoint: routePlan,
+        dialString: dialSteps.join('|'),
         targetId: primaryEndpoint.endpointId,
         callerState: this.resolveCallerState(callData),
         ...(agentCellKeys.length > 0 ? { agentCellKeys } : {}),

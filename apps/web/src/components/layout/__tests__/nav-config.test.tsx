@@ -341,14 +341,36 @@ describe('navFor: which nav each viewer gets', () => {
   });
 
   it('gives a platform admin previewing as AGENT the agent nav', () => {
-    expect(navFor({ ...NOBODY, isPlatformAdmin: true, previewing: true, isAgentOnly: true })).toBe(
-      AGENT_NAV
-    );
+    expect(
+      navFor({
+        ...NOBODY,
+        isPlatformAdmin: true,
+        previewing: true,
+        isAgentOnly: true,
+        upgrades: ['POWER_DIALER'],
+      })
+    ).toBe(AGENT_NAV);
   });
 
   it('gives an agent the agent nav, and nobody-with-no-role nothing', () => {
-    expect(navFor({ ...NOBODY, isAgentOnly: true })).toBe(AGENT_NAV);
+    expect(navFor({ ...NOBODY, isAgentOnly: true, upgrades: ['POWER_DIALER'] })).toBe(AGENT_NAV);
     expect(navFor(NOBODY)).toEqual([]);
+  });
+
+  it('gives an agent Power Dialer and the CRM only with the POWER_DIALER upgrade', () => {
+    const names = (upgrades: string[]) =>
+      allNavItems(navFor({ ...NOBODY, isAgentOnly: true, upgrades })).map(item => item.name);
+
+    const without = names([]);
+    expect(without).not.toContain('Power Dialer');
+    expect(without).not.toContain('CRM');
+    // The rest of the agent's nav is untouched.
+    expect(without).toContain('My calls');
+    expect(without).toContain('Leaderboard');
+
+    const withUpgrade = names(['POWER_DIALER']);
+    expect(withUpgrade).toContain('Power Dialer');
+    expect(withUpgrade).toContain('CRM');
   });
 });
 
