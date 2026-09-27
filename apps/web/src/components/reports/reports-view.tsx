@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  Download,
-  Loader2,
-  RefreshCw,
-  TrendingUp,
-  DollarSign,
-  Phone,
-  Users,
-} from 'lucide-react';
+import { Download, Loader2, RefreshCw, TrendingUp, DollarSign, Phone, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';

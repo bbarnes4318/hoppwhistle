@@ -444,7 +444,13 @@ export async function buildBuyerCostsReport(
 
   const groups = new Map<
     string,
-    { row: Pick<BuyerCostsRow, 'buyerId' | 'buyerName' | 'campaignId' | 'campaignName' | 'destinationNumber'>; figures: CostFigures }
+    {
+      row: Pick<
+        BuyerCostsRow,
+        'buyerId' | 'buyerName' | 'campaignId' | 'campaignName' | 'destinationNumber'
+      >;
+      figures: CostFigures;
+    }
   >();
   const totals = emptyCostFigures();
 
@@ -611,7 +617,9 @@ function profitabilityFigures(g: MoneyBucket) {
 
 export type CampaignProfitabilityReport = {
   totals: ReturnType<typeof profitabilityFigures>;
-  rows: Array<{ campaignId: string; campaignName: string } & ReturnType<typeof profitabilityFigures>>;
+  rows: Array<
+    { campaignId: string; campaignName: string } & ReturnType<typeof profitabilityFigures>
+  >;
   /** Kept beside the shaped figures so the CSV renders from the same buckets. */
   buckets: { totals: MoneyBucket; groups: Array<[string, MoneyBucket]> };
   names: Map<string, string>;
