@@ -32,6 +32,7 @@ import type { Transporter } from 'nodemailer';
 
 import { logger } from '../lib/logger.js';
 
+import { emailBrandForTenant, netEnrollEmailBrand } from './email-brand.js';
 import { escapeHtml, renderEmail } from './publisher-email.js';
 
 export interface AgentInvitation {
@@ -51,8 +52,18 @@ export interface AgentInvitation {
    * here too -- an agency principal being told to sit and wait for a call that
    * is never routed to them is a worse first impression than no email at all.
    */
-  role?: 'AGENT' | 'OWNER';
+  role?: InvitedRole;
+  /**
+   * The agency the invitation is into. Decides the letterhead: an agency with a
+   * brand sends a branded message (`services/email-brand.ts`), and its links
+   * point at the agency's own domain when it has one. Omitted, or a tenant
+   * with no brand, reads as NetEnroll.
+   */
+  tenantId?: string | null;
 }
+
+/** Every role an activation grant can be issued for. */
+export type InvitedRole = 'AGENT' | 'OWNER' | 'ADMIN' | 'ANALYST' | 'BUYER' | 'PUBLISHER';
 
 export interface InviteEmailResult {
   /** True only when a transport accepted the message. */
@@ -119,9 +130,9 @@ function portalUrl(): string {
  * blank sign-in form -- which still works, but asks the agent to paste a token
  * they were never given.
  */
-export function invitationLink(email: string, activationToken: string): string {
+export function invitationLink(email: string, activationToken: string, base?: string): string {
   const params = new URLSearchParams({ activation: activationToken, email });
-  return `${portalUrl()}/login?${params.toString()}`;
+  return `${(base ?? portalUrl()).replace(/\/+$/, '')}/login?${params.toString()}`;
 }
 
 /** How the expiry reads in the message: a date, in the agency's own terms. */
@@ -146,47 +157,27 @@ export async function sendAgentInvitationEmail(
 ): Promise<InviteEmailResult> {
   const { email, agencyName, activationToken, expiresAt } = invitation;
   const role = invitation.role ?? 'AGENT';
-  const isOwner = role === 'OWNER';
 
   const transport = transporter();
   if (!transport) {
     logger.info({
-      msg: 'Agent invitation not emailed: SMTP is not configured. The token was returned to the caller.',
+      msg: 'Invitation not emailed: SMTP is not configured. The token was returned to the caller.',
       email,
     });
     return { sent: false, reason: 'not_configured' };
   }
 
-  const link = invitationLink(email, activationToken);
-  const joining = agencyName ? `${agencyName} on NetEnroll` : 'NetEnroll';
+  const brand = invitation.tenantId
+    ? await emailBrandForTenant(invitation.tenantId)
+    : { ...netEnrollEmailBrand(), linkBase: portalUrl() };
+  const product = brand.productName;
+
+  const link = invitationLink(email, activationToken, brand.linkBase);
+  const joining = agencyName ? `${agencyName} on ${product}` : product;
   const expires = expiryText(expiresAt);
+  const copy = roleCopy(role, { agencyName, joining, product });
 
-  const subject = agencyName
-    ? isOwner
-      ? `Set up ${agencyName} on NetEnroll`
-      : `You have been added to ${agencyName} on NetEnroll`
-    : isOwner
-      ? 'Set up your agency on NetEnroll'
-      : 'Your NetEnroll agent invitation';
-
-  const opening = isOwner
-    ? `You have been set up as the administrator for ${joining}.`
-    : `You have been added as an agent for ${joining}.`;
-
-  /*
-   * What to do once you are in, and it differs entirely by role. An agent opens
-   * the softphone and waits. An owner has people to add before anyone can.
-   */
-  const nextStep = isOwner
-    ? `Once you are in, add your people under Settings -> Team Members. An agent
-can take calls once they have accepted their invitation, have their licensed
-states recorded and are assigned a campaign -- that screen says which of those
-is missing for each of them.`
-    : `Once you are in, open the phone in the bottom-right corner of the screen. It
-signs itself in; there is nothing to configure. Calls will start arriving once
-an administrator has recorded the states you are licensed in.`;
-
-  const text = `${opening}
+  const text = `${copy.opening}
 
 Set up your account here:
 ${link}
@@ -195,36 +186,30 @@ This link is good until ${expires}. It can be used once, and it is the only
 way to set up this account -- if it expires, ask whoever invited you to send
 another.
 
-${nextStep}
+${copy.nextStepText}
 
 If you were not expecting this, you can ignore this message. Nothing is created
 until the link is used.
 
 Kind regards,
-The NetEnroll team`;
+${brand.signOff}`;
 
   const html = renderEmail({
-    title: agencyName
-      ? isOwner
-        ? `Set up ${agencyName} on NetEnroll`
-        : `You have been added to ${agencyName}`
-      : 'Your NetEnroll invitation',
-    body: `<p>${escapeHtml(opening)}</p>
+    brand,
+    title: copy.title,
+    body: `<p>${escapeHtml(copy.opening)}</p>
 <p style="margin:20px 0;">
   <a href="${escapeHtml(link)}" style="display:inline-block;background:#10b981;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;">Set up your account</a>
 </p>
 <p style="color:#55524b;">This link is good until <strong>${escapeHtml(expires)}</strong>. It can be used once, and it is the only way to set up this account — if it expires, ask whoever invited you to send another.</p>
-<p>${
-      isOwner
-        ? 'Once you are in, add your people under <strong>Settings &rarr; Team Members</strong>. An agent can take calls once they have accepted their invitation, have their licensed states recorded and are assigned a campaign — that screen says which of those is missing for each of them.'
-        : 'Once you are in, open the phone in the bottom-right corner of the screen. It signs itself in; there is nothing to configure. Calls will start arriving once an administrator has recorded the states you are licensed in.'
-    }</p>
+<p>${copy.nextStepHtml}</p>
 <p style="color:#8a867c;font-size:13px;">If you were not expecting this, you can ignore this message. Nothing is created until the link is used.</p>`,
   });
+  const subject = copy.subject;
 
   try {
     await transport.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@netenroll.com',
+      from: brand.from,
       to: email,
       subject,
       text,
@@ -245,5 +230,95 @@ The NetEnroll team`;
       err: error,
     });
     return { sent: false, reason: 'send_failed' };
+  }
+}
+
+interface RoleCopy {
+  subject: string;
+  title: string;
+  opening: string;
+  nextStepText: string;
+  /** Already HTML; every interpolated value is escaped. */
+  nextStepHtml: string;
+}
+
+/**
+ * What the invitation says, by role.
+ *
+ * What to do once you are in differs entirely: an agent opens the softphone and
+ * waits, an owner has people to add, and a buyer or publisher is being given a
+ * window onto its own calls and money rather than a job.
+ */
+function roleCopy(
+  role: InvitedRole,
+  ctx: { agencyName: string | null; joining: string; product: string }
+): RoleCopy {
+  const { agencyName, joining, product } = ctx;
+
+  switch (role) {
+    case 'OWNER': {
+      const next = `Once you are in, add your people under Settings -> Team Members. An agent
+can take calls once they have accepted their invitation, have their licensed
+states recorded and are assigned a campaign -- that screen says which of those
+is missing for each of them.`;
+      return {
+        subject: agencyName
+          ? `Set up ${agencyName} on ${product}`
+          : `Set up your agency on ${product}`,
+        title: agencyName ? `Set up ${agencyName} on ${product}` : `Your ${product} invitation`,
+        opening: `You have been set up as the administrator for ${joining}.`,
+        nextStepText: next,
+        nextStepHtml:
+          'Once you are in, add your people under <strong>Settings &rarr; Team Members</strong>. An agent can take calls once they have accepted their invitation, have their licensed states recorded and are assigned a campaign — that screen says which of those is missing for each of them.',
+      };
+    }
+    case 'BUYER':
+    case 'PUBLISHER': {
+      const access =
+        role === 'BUYER'
+          ? "You've been given access to see the calls you receive, what you're billed, and to request returns."
+          : "You've been given access to see the calls you send, what you've earned, and your payments.";
+      const opening = agencyName ? `${access} (${agencyName} on ${product})` : access;
+      return {
+        subject: agencyName
+          ? `Your ${agencyName} ${role === 'BUYER' ? 'buyer' : 'publisher'} portal`
+          : `Your ${product} ${role === 'BUYER' ? 'buyer' : 'publisher'} portal`,
+        title: role === 'BUYER' ? 'Your buyer portal' : 'Your publisher portal',
+        opening,
+        nextStepText: 'Set a password when you open the link, and you can sign in from then on.',
+        nextStepHtml: 'Set a password when you open the link, and you can sign in from then on.',
+      };
+    }
+    case 'ADMIN':
+    case 'ANALYST': {
+      const opening = agencyName
+        ? `You've been added to the agency portal for ${joining}.`
+        : "You've been added to the agency portal.";
+      return {
+        subject: agencyName
+          ? `You have been added to ${agencyName} on ${product}`
+          : `Your ${product} invitation`,
+        title: agencyName ? `You have been added to ${agencyName}` : `Your ${product} invitation`,
+        opening,
+        nextStepText: 'Set a password when you open the link, and you can sign in from then on.',
+        nextStepHtml: 'Set a password when you open the link, and you can sign in from then on.',
+      };
+    }
+    case 'AGENT':
+    default: {
+      const next = `Once you are in, open the phone in the bottom-right corner of the screen. It
+signs itself in; there is nothing to configure. Calls will start arriving once
+an administrator has recorded the states you are licensed in.`;
+      return {
+        subject: agencyName
+          ? `You have been added to ${agencyName} on ${product}`
+          : `Your ${product} agent invitation`,
+        title: agencyName ? `You have been added to ${agencyName}` : `Your ${product} invitation`,
+        opening: `You have been added as an agent for ${joining}.`,
+        nextStepText: next,
+        nextStepHtml:
+          'Once you are in, open the phone in the bottom-right corner of the screen. It signs itself in; there is nothing to configure. Calls will start arriving once an administrator has recorded the states you are licensed in.',
+      };
+    }
   }
 }

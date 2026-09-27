@@ -9,9 +9,12 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { logger } from '../lib/logger.js';
-import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
+import {
+  NumberPurchaseError,
+  purchaseNumberForTenant,
+} from '../services/numbers/number-purchase.js';
 import { provisioningService } from '../services/provisioning/provisioning-service.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
@@ -37,7 +40,7 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
 
     try {
       const areaCode = request.query.areaCode;
-      
+
       const numbers = await provisioningService.listNumbers('bulkvs', { areaCode });
 
       return {
@@ -67,12 +70,7 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
    * Purchase a number from BulkVS inventory
    */
   fastify.post<{
-    Body: {
-      areaCode: string;
-      number?: string;
-      title?: string;
-      destination?: string;
-    };
+    Body: { areaCode?: string; number?: string; campaignId?: string | null };
   }>('/api/v1/bulkvs/purchase', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const tenantId = getActingTenantId(request);
@@ -81,19 +79,12 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
       return sendTenantRefusal(request, reply);
     }
 
-    const { areaCode, number } = request.body;
+    const { areaCode, number, campaignId } = request.body ?? {};
 
     if (!areaCode && !number) {
       void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'areaCode or number is required',
-        },
-      };
+      return { error: { code: 'VALIDATION_ERROR', message: 'areaCode or number is required' } };
     }
-
-    const prisma = getPrismaClient();
 
     try {
       logger.info({
@@ -104,42 +95,19 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
         number,
       });
 
-      // 1. Purchase the number (ProvisioningService handles calling adapter and creating DB entry)
-      const phoneNumber = await provisioningService.purchaseNumber(
-        'bulkvs',
-        { areaCode, number },
-        {
-          tenantId,
-          userId: user?.userId,
-          ipAddress: request.ip,
-          requestId: request.id,
-        }
-      );
-
-      // The provisioning service creates the PhoneNumber record
-
-      if (request.body.destination) {
-        await prisma.didRoute.create({
-          data: {
-            tenantId,
-            phoneNumberId: phoneNumber.id,
-            did: phoneNumber.number,
-            destination: request.body.destination,
-            label: 'Auto-routed (Purchased)',
-            status: 'ACTIVE',
-            recordingEnabled: true,
-          }
-        });
-      } else {
-        const { didRouteService } = await import('../services/did-route-service.js');
-        await didRouteService.syncDidRouteForNumber(phoneNumber.id, tenantId);
-      }
-
-      logger.info({
-        msg: 'DID provisioned successfully from BulkVS',
-        phoneNumberId: phoneNumber.id,
-        number: phoneNumber.number,
-        routeCreated: !!request.body.destination,
+      /*
+       * Quota under a per-tenant lock, the carrier purchase, the PhoneNumber
+       * row and its charges, in one transaction -- and the number released at
+       * the carrier again if the write fails. The number is the agency's, not
+       * the purchaser's, and is attached to `campaignId` (validated to this
+       * tenant) or left unattached. See `services/numbers/number-purchase.ts`.
+       */
+      const phoneNumber = await purchaseNumberForTenant({
+        provider: 'bulkvs',
+        request: { areaCode, number },
+        tenantId,
+        campaignId: campaignId ?? null,
+        actor: { userId: user?.userId, ipAddress: request.ip, requestId: request.id },
       });
 
       void reply.code(201);
@@ -156,13 +124,16 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
         },
       };
     } catch (error) {
+      if (error instanceof NumberPurchaseError) {
+        void reply.code(error.status);
+        return { error: { code: error.code, message: error.message, ...(error.detail ?? {}) } };
+      }
       logger.error({
         msg: 'Failed to purchase BulkVS DID',
         tenantId,
         areaCode,
         error: error instanceof Error ? error.message : String(error),
       });
-
       void reply.code(400);
       return {
         error: {

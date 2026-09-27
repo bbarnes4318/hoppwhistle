@@ -30,6 +30,7 @@
  */
 
 import { getPrismaClient } from './prisma.js';
+import { tokenVersionOf } from './token-version.js';
 
 /** What a principal is allowed to be, resolved from the database. */
 export interface PrincipalAuthorization {
@@ -38,6 +39,8 @@ export interface PrincipalAuthorization {
   /** `User.publisherId`, falling back to the legacy `metadata.publisherId`. */
   publisherId: string | null;
   buyerId: string | null;
+  /** `User.metadata.tokenVersion`; see `lib/token-version.ts`. */
+  tokenVersion: number;
 }
 
 /** A principal with no grants: what an unknown user resolves to. */
@@ -45,6 +48,7 @@ export const NO_AUTHORIZATION: PrincipalAuthorization = {
   roles: [],
   publisherId: null,
   buyerId: null,
+  tokenVersion: 0,
 };
 
 /**
@@ -68,6 +72,7 @@ export function authorizationFromUser(user: UserAuthorizationRecord): PrincipalA
     roles: user.roles.map(userRole => userRole.role.name),
     publisherId: user.publisherId || legacyPublisherId || null,
     buyerId: user.buyerId || null,
+    tokenVersion: tokenVersionOf(user.metadata),
   };
 }
 
@@ -105,6 +110,8 @@ export interface HydratablePrincipal {
   roles?: string[];
   publisherId?: string | null;
   buyerId?: string | null;
+  /** The row's token version, for the authenticator to compare with `tv`. */
+  currentTokenVersion?: number;
 }
 
 /**
@@ -127,4 +134,5 @@ export async function hydratePrincipal(principal: HydratablePrincipal | undefine
   principal.roles = authorization.roles;
   principal.publisherId = authorization.publisherId;
   principal.buyerId = authorization.buyerId;
+  principal.currentTokenVersion = authorization.tokenVersion;
 }

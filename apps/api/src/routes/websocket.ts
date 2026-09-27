@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { isTokenRevoked } from '../lib/token-version.js';
 import { eventBus } from '../services/event-bus.js';
 import type { EventPayload, EventChannel } from '../services/event-bus.js';
 
@@ -148,10 +149,12 @@ async function authenticateWebSocket(
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.userId },
-    select: { tenantId: true, status: true },
+    select: { tenantId: true, status: true, metadata: true },
   });
 
   if (!user || user.status !== 'ACTIVE') return null;
+  // Signed before a password change or reset: see `lib/token-version.ts`.
+  if (isTokenRevoked(decoded, user.metadata)) return null;
 
   const platform = await loadPlatformContext(decoded.userId);
   const tenantId = platform.isPlatformAdmin ? platform.actingTenantId : user.tenantId;

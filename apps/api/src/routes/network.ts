@@ -36,7 +36,7 @@
  * three.
  */
 
-import { RoleName, TenantActivationSource } from '@prisma/client';
+import { Prisma, RoleName, TenantActivationSource } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import {
@@ -48,9 +48,15 @@ import {
 } from '../lib/agency-details.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { TENANT_UPGRADES, tenantUpgrades } from '../lib/tenant-upgrades.js';
 import { requireWhiteLabelOperator, WHITE_LABEL_ONLY } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
+import {
+  CHILD_DEFAULT_MAX_PHONE_NUMBERS,
+  numberUsage,
+} from '../services/numbers/number-purchase.js';
+import { parseNumberLimit, writeNumberLimit } from '../services/numbers/number-settings.js';
 import { submittedApplicationWhere } from '../services/rating/measurement.js';
 import { issueActivationGrant } from '../services/tenant-activation.js';
 
@@ -290,12 +296,21 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
             slug,
             status: 'ACTIVE',
             parentTenantId: parent.id,
-            // Drawn in the parent's brand: its owner signs in to a portal in
-            // the white-label agency's colours, not NetEnroll's.
-            brandTheme: parent.brandTheme,
-            brandName: parent.brandName,
+            // Drawn in the parent's brand -- but by reference, not by copy.
+            // Left null, `brandForTenant` reads the PARENT's theme and name on
+            // every request, so the child follows when the parent's brand
+            // changes. A copy here froze the child in whatever the parent
+            // looked like on the day it was created.
+            brandTheme: null,
+            brandName: null,
             whiteLabel: false,
           },
+        });
+
+        // A child starts with room for ten numbers. Its parent raises or
+        // lowers that from /network/agencies.
+        await tx.tenantQuota.create({
+          data: { tenantId: created.id, maxPhoneNumbers: CHILD_DEFAULT_MAX_PHONE_NUMBERS },
         });
 
         await tx.agencyProfile.create({
@@ -446,6 +461,7 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
         activationToken: grant.token,
         expiresAt: grant.expiresAt,
         role: 'OWNER',
+        tenantId: child.id,
       });
 
       return reply.code(201).send({
@@ -461,6 +477,152 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
           emailFailureReason: delivery.reason ?? null,
         },
       });
+    }
+  );
+
+  /**
+   * GET /api/v1/network/agencies/:tenantId/settings
+   *
+   * One child's number limit, numbers in use, and upgrades: what the parent
+   * controls from /network/agencies. A separate read from the list above,
+   * which stays aggregates only. Same scoping as the PUT below.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/network/agencies/:tenantId/settings',
+    { preHandler: [authenticate, requireWhiteLabelOperator] },
+    async (request, reply) => {
+      const actingTenantId = resolveTenant(request, reply);
+      if (!actingTenantId) return;
+
+      const child = await prisma.tenant.findFirst({
+        where: { id: request.params.tenantId, parentTenantId: actingTenantId },
+        select: { id: true, metadata: true },
+      });
+      if (!child) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const usage = await numberUsage(child.id);
+      return reply.send({
+        data: {
+          tenantId: child.id,
+          numbersLimit: usage.limit,
+          numbersUsed: usage.used,
+          upgrades: tenantUpgrades(child.metadata),
+        },
+      });
+    }
+  );
+
+  /**
+   * PUT /api/v1/network/agencies/:tenantId/settings
+   *   { maxPhoneNumbers?: number, upgrades?: TenantUpgrade[] }
+   *
+   * A white-label parent sets one of ITS OWN children's number limit and paid
+   * upgrades -- the same controls NetEnroll has on Admin -> Agencies for a
+   * direct agency, because for a child the parent is the one selling them.
+   *
+   * The child is looked up by id AND `parentTenantId` = the acting tenant, so
+   * another agency's child, or an agency that is nobody's child, is 404: the
+   * same answer as one that does not exist. Audited on both tenants.
+   */
+  fastify.put<{
+    Params: { tenantId: string };
+    Body: { maxPhoneNumbers?: unknown; upgrades?: unknown };
+  }>(
+    '/api/v1/network/agencies/:tenantId/settings',
+    { preHandler: [authenticate, requireWhiteLabelOperator] },
+    async (request, reply) => {
+      const actingTenantId = resolveTenant(request, reply);
+      if (!actingTenantId) return;
+
+      const child = await prisma.tenant.findFirst({
+        where: { id: request.params.tenantId, parentTenantId: actingTenantId },
+        select: { id: true, metadata: true },
+      });
+      if (!child) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const body = request.body ?? {};
+
+      let limit: number | undefined;
+      if (body.maxPhoneNumbers !== undefined) {
+        const parsed = parseNumberLimit(body.maxPhoneNumbers);
+        if (!parsed.ok) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'maxPhoneNumbers must be a whole number from 0 to 10000',
+            },
+          });
+        }
+        limit = parsed.value;
+      }
+
+      let upgrades: string[] | undefined;
+      if (body.upgrades !== undefined) {
+        const requested = body.upgrades;
+        if (
+          !Array.isArray(requested) ||
+          requested.some(
+            key => typeof key !== 'string' || !(TENANT_UPGRADES as readonly string[]).includes(key)
+          )
+        ) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `upgrades must be an array of: ${TENANT_UPGRADES.join(', ')}`,
+            },
+          });
+        }
+        upgrades = TENANT_UPGRADES.filter(key => (requested as unknown[]).includes(key));
+      }
+
+      const before = {
+        numbersLimit: (await numberUsage(child.id)).limit,
+        upgrades: tenantUpgrades(child.metadata),
+      };
+
+      await prisma.$transaction(async tx => {
+        if (limit !== undefined) await writeNumberLimit(tx, child.id, limit);
+        if (upgrades !== undefined) {
+          const metadata =
+            child.metadata && typeof child.metadata === 'object' && !Array.isArray(child.metadata)
+              ? (child.metadata as Record<string, unknown>)
+              : {};
+          await tx.tenant.update({
+            where: { id: child.id },
+            data: { metadata: { ...metadata, upgrades } as Prisma.InputJsonValue },
+          });
+        }
+      });
+
+      const after = {
+        numbersLimit: limit !== undefined ? limit : before.numbersLimit,
+        upgrades: upgrades ?? before.upgrades,
+      };
+
+      const userId = getActingUserId(request) ?? undefined;
+      const changes = { parentTenantId: actingTenantId, childTenantId: child.id, before, after };
+      await auditLog({
+        tenantId: actingTenantId,
+        userId,
+        action: 'network.agency.settings_changed',
+        entityType: 'tenant',
+        entityId: child.id,
+        changes,
+      });
+      await auditLog({
+        tenantId: child.id,
+        userId,
+        action: 'network.agency.settings_changed_by_parent',
+        entityType: 'tenant',
+        entityId: child.id,
+        changes,
+      });
+
+      return reply.send({ data: { tenantId: child.id, ...after } });
     }
   );
 }

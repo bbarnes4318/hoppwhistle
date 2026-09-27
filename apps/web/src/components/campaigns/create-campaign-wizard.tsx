@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -70,6 +71,13 @@ const STEPS = [
 ];
 
 export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCampaignWizardProps) {
+  /*
+   * A downline (child) agency has no publishers of its own to choose from: the
+   * API attributes its campaigns to the child's own "(direct)" publisher when
+   * no publisherId is sent. So the Publisher field is not drawn for it, and
+   * not required.
+   */
+  const { isChild } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -111,7 +119,9 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
     setLoading(true);
     try {
       const [pubRes, buyerRes, numbersRes] = await Promise.all([
-        apiClient.get<{ data: Publisher[] }>('/api/v1/publishers?limit=100'),
+        isChild
+          ? Promise.resolve({ data: { data: [] as Publisher[] } })
+          : apiClient.get<{ data: Publisher[] }>('/api/v1/publishers?limit=100'),
         apiClient.get<{ data: Buyer[] }>('/api/v1/buyers?limit=100'),
         apiClient.get<{ data: PhoneNumber[] }>('/api/v1/numbers?limit=100'),
       ]);
@@ -127,7 +137,7 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isChild]);
 
   useEffect(() => {
     if (open) {
@@ -136,7 +146,7 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
     }
   }, [open, resetForm, loadInitialData]);
 
-  const canProceedStep1 = name.trim() && publisherId;
+  const canProceedStep1 = name.trim() && (isChild || publisherId);
   const canProceedStep2 = true; // Buyers are optional
 
   const handleNext = async () => {
@@ -148,7 +158,7 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
       try {
         const response = await apiClient.post<{ id: string }>('/api/v1/campaigns', {
           name: name.trim(),
-          publisherId,
+          ...(isChild ? {} : { publisherId }),
           offerName: offerName.trim() || undefined,
           country,
           recordingEnabled,
@@ -274,21 +284,23 @@ export function CreateCampaignWizard({ open, onOpenChange, onSuccess }: CreateCa
                   />
                 </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="publisher">Publisher *</Label>
-                  <Select value={publisherId} onValueChange={setPublisherId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a publisher" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {publishers.map(pub => (
-                        <SelectItem key={pub.id} value={pub.id}>
-                          {pub.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {isChild ? null : (
+                  <div className="grid gap-2">
+                    <Label htmlFor="publisher">Publisher *</Label>
+                    <Select value={publisherId} onValueChange={setPublisherId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a publisher" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {publishers.map(pub => (
+                          <SelectItem key={pub.id} value={pub.id}>
+                            {pub.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label htmlFor="offerName">Offer Name</Label>

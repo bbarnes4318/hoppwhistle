@@ -140,8 +140,10 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
 
     const { registerUserRoutes } = await import('../routes/index.js');
     const { registerAutomationRoutes } = await import('../routes/automation.js');
+    const { registerAuthRoutes } = await import('../routes/auth.js');
     await app.register(registerUserRoutes);
     await app.register(registerAutomationRoutes);
+    await app.register(registerAuthRoutes);
 
     await app.ready();
     return app;
@@ -351,7 +353,28 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
   // ══════════════════════════════════════════════════════════════════════════
   // 3. Invite granted whatever role was asked for, to whoever asked
   // ══════════════════════════════════════════════════════════════════════════
-  describe('POST /api/v1/users/invite does not mint privilege', () => {
+  /*
+   * The temporary-password invite route is gone (410); every invitation is an
+   * activation grant now. The same properties are asserted against it: nobody
+   * below ADMIN mints anything, nobody mints an OWNER, and an ADMIN can still
+   * invite an ordinary user.
+   */
+  describe('invitations do not mint privilege', () => {
+    it('answers the retired invite route 410 and creates nobody', async () => {
+      const app = await buildApp();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/users/invite',
+        headers: authed(app, 'owner'),
+        payload: { email: 'retired-route@test.local', role: 'ADMIN' },
+      });
+      expect(response.statusCode).toBe(410);
+      expect(
+        await prisma.user.findUnique({ where: { email: 'retired-route@test.local' } })
+      ).toBeNull();
+      await app.close();
+    });
+
     it.each([
       ['readonly', 'a self-serve signup holding the lowest role'],
       ['agent', 'an agent'],
@@ -359,64 +382,54 @@ describe.skipIf(!gate.available)('Security: privilege escalation', () => {
       const app = await buildApp();
       const response = await app.inject({
         method: 'POST',
-        url: '/api/v1/users/invite',
+        url: '/api/v1/auth/activation-grants',
         headers: authed(app, who),
         payload: { email: `escalated-${who}@test.local`, role: 'ADMIN' },
       });
 
       expect(response.statusCode).toBe(403);
-
-      const created = await prisma.user.findUnique({
-        where: { email: `escalated-${who}@test.local` },
-      });
-      expect(created, 'no account should have been created').toBeNull();
+      expect(
+        await prisma.tenantActivationGrant.count({
+          where: { email: `escalated-${who}@test.local` },
+        }),
+        'no invitation should have been issued'
+      ).toBe(0);
       await app.close();
     });
 
-    it('refuses an ADMIN granting OWNER', async () => {
+    it.each(['admin', 'owner'])('refuses %s granting OWNER', async who => {
+      // An additional owner is arranged with NetEnroll, not minted by the agency.
       const app = await buildApp();
       const response = await app.inject({
         method: 'POST',
-        url: '/api/v1/users/invite',
-        headers: authed(app, 'admin'),
-        payload: { email: 'new-owner@test.local', role: 'OWNER' },
+        url: '/api/v1/auth/activation-grants',
+        headers: authed(app, who),
+        payload: { email: `new-owner-${who}@test.local`, role: 'OWNER' },
       });
 
       expect(response.statusCode).toBe(403);
-      expect(await prisma.user.findUnique({ where: { email: 'new-owner@test.local' } })).toBeNull();
-      await app.close();
-    });
-
-    it('lets an OWNER grant OWNER', async () => {
-      const app = await buildApp();
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/users/invite',
-        headers: authed(app, 'owner'),
-        payload: { email: 'second-owner@test.local', role: 'OWNER' },
-      });
-
-      expect(response.statusCode).toBe(201);
+      expect(
+        await prisma.tenantActivationGrant.count({
+          where: { email: `new-owner-${who}@test.local` },
+        })
+      ).toBe(0);
       await app.close();
     });
 
     it('still lets an ADMIN invite an ordinary user', async () => {
-      // The gate has to keep the endpoint usable: with signups held at PENDING,
-      // invitation is how people legitimately get accounts.
       const app = await buildApp();
       const response = await app.inject({
         method: 'POST',
-        url: '/api/v1/users/invite',
+        url: '/api/v1/auth/activation-grants',
         headers: authed(app, 'admin'),
-        payload: { email: 'analyst@test.local', firstName: 'An', role: 'ANALYST' },
+        payload: { email: 'analyst@test.local', role: 'ANALYST' },
       });
 
       expect(response.statusCode).toBe(201);
-      const created = await prisma.user.findUnique({
+      const grant = await prisma.tenantActivationGrant.findFirst({
         where: { email: 'analyst@test.local' },
-        include: { roles: { include: { role: true } } },
       });
-      expect(created?.roles.map(r => r.role.name)).toEqual([RoleName.ANALYST]);
+      expect(grant?.roleName).toBe(RoleName.ANALYST);
       await app.close();
     });
   });

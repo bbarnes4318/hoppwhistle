@@ -10,9 +10,12 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { logger } from '../lib/logger.js';
-import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
+import {
+  NumberPurchaseError,
+  purchaseNumberForTenant,
+} from '../services/numbers/number-purchase.js';
 import { provisioningService } from '../services/provisioning/provisioning-service.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
@@ -71,7 +74,12 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
    * Purchase a number from FracTEL / FoneStorm inventory.
    */
   fastify.post<{
-    Body: { areaCode?: string; number?: string; destination?: string; messagingEnabled?: boolean };
+    Body: {
+      areaCode?: string;
+      number?: string;
+      campaignId?: string | null;
+      messagingEnabled?: boolean;
+    };
   }>('/api/v1/fractel/purchase', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const tenantId = getActingTenantId(request);
@@ -80,14 +88,12 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
       return sendTenantRefusal(request, reply);
     }
 
-    const { areaCode, number, messagingEnabled } = request.body;
+    const { areaCode, number, campaignId } = request.body ?? {};
 
     if (!areaCode && !number) {
       void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'areaCode or number is required' } };
     }
-
-    const prisma = getPrismaClient();
 
     try {
       logger.info({
@@ -98,33 +104,23 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
         number,
       });
 
-      const phoneNumber = await provisioningService.purchaseNumber(
-        'fractel',
-        { areaCode, number, features: { voice: true, sms: messagingEnabled ?? false } },
-        { tenantId, userId: user?.userId, ipAddress: request.ip, requestId: request.id }
-      );
-
-      if (request.body.destination) {
-        await prisma.didRoute.create({
-          data: {
-            tenantId,
-            phoneNumberId: phoneNumber.id,
-            did: phoneNumber.number,
-            destination: request.body.destination,
-            label: 'Auto-routed (Purchased)',
-            status: 'ACTIVE',
-            recordingEnabled: true,
-          },
-        });
-      } else {
-        const { didRouteService } = await import('../services/did-route-service.js');
-        await didRouteService.syncDidRouteForNumber(phoneNumber.id, tenantId);
-      }
-
-      logger.info({
-        msg: 'DID provisioned successfully from FracTEL',
-        phoneNumberId: phoneNumber.id,
-        number: phoneNumber.number,
+      /*
+       * Quota under a per-tenant lock, the carrier purchase, the PhoneNumber
+       * row and its charges, in one transaction -- and the number released at
+       * the carrier again if the write fails. The number is the agency's, not
+       * the purchaser's, and is attached to `campaignId` (validated to this
+       * tenant) or left unattached. See `services/numbers/number-purchase.ts`.
+       */
+      const phoneNumber = await purchaseNumberForTenant({
+        provider: 'fractel',
+        request: {
+          areaCode,
+          number,
+          features: { voice: true, sms: request.body?.messagingEnabled ?? false },
+        },
+        tenantId,
+        campaignId: campaignId ?? null,
+        actor: { userId: user?.userId, ipAddress: request.ip, requestId: request.id },
       });
 
       void reply.code(201);
@@ -141,6 +137,10 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
         },
       };
     } catch (error) {
+      if (error instanceof NumberPurchaseError) {
+        void reply.code(error.status);
+        return { error: { code: error.code, message: error.message, ...(error.detail ?? {}) } };
+      }
       logger.error({
         msg: 'Failed to purchase FracTEL DID',
         tenantId,

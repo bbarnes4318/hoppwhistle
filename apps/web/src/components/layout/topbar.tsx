@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Bell, LogOut, Search, User } from 'lucide-react';
+import { AlertTriangle, Bell, LogOut, Search, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
@@ -41,7 +41,7 @@ import { pageTitleFor } from './page-title';
  */
 export function Topbar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, isBuyerOnly, isPublisherOnly } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
   // A white-label owner's pages are named as their own sidebar names them.
@@ -206,12 +206,23 @@ export function Topbar() {
               <span className="block truncate t-meta font-normal text-ink-3">{user?.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {/* Account (your own login and password) is every role's. Settings
+                is the agency's, and a buyer or publisher portal login has none:
+                linking them there only bounced them back to their portal. */}
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="t-body">
+              <Link href="/account" className="t-body">
                 <User aria-hidden className="mr-2 h-3.5 w-3.5" />
-                Settings
+                Account
               </Link>
             </DropdownMenuItem>
+            {isBuyerOnly || isPublisherOnly ? null : (
+              <DropdownMenuItem asChild>
+                <Link href="/settings" className="t-body">
+                  <Settings aria-hidden className="mr-2 h-3.5 w-3.5" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="t-body">
               <LogOut aria-hidden className="mr-2 h-3.5 w-3.5" />

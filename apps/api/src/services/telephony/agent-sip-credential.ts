@@ -265,6 +265,71 @@ export async function issueCredential(
 }
 
 /**
+ * The extension a DID routed to this agent should ring, reserving one if they
+ * have none yet.
+ *
+ * `syncDidRouteForNumber` used to read `users.metadata.extension` and, for an
+ * agent without one, scan EVERY user on the platform and pick a free number in
+ * 1000..1019 -- the same twenty-identity pool and the same untyped key this
+ * table replaced for the softphone. Now the answer is the agent's
+ * `AgentSipCredential.extension`, which is also what their softphone registers
+ * as, so the DID rings the phone the agent is actually holding.
+ *
+ * An agent with no credential gets a RESERVATION (a row with no secret yet):
+ * the next free extension from 1000 upward, allocated exactly as
+ * `issueCredential` allocates -- the lowest number no credential holds, because
+ * FreeSWITCH's directory is one flat domain and an extension must be unique
+ * across it, not merely within this agency. The secret is generated the first
+ * time the agent fetches their credential.
+ *
+ * Returns null, rather than throwing, for an agent whose credential belongs to
+ * another agency or is not ACTIVE: routing a DID at it would ring somebody
+ * else's phone, or nobody's.
+ */
+export async function reserveExtension(
+  tenantId: string,
+  userId: string,
+  options: { prisma?: PrismaClient } = {}
+): Promise<string | null> {
+  const prisma = options.prisma ?? getPrismaClient();
+
+  for (let attempt = 0; attempt < ALLOCATION_ATTEMPTS; attempt++) {
+    const existing = await prisma.agentSipCredential.findUnique({
+      where: { userId },
+      select: { tenantId: true, extension: true, status: true },
+    });
+    if (existing) {
+      if (existing.status !== 'ACTIVE') return null;
+      if (
+        existing.tenantId !== tenantId &&
+        !(await isHomeAgency(prisma, userId, existing.tenantId))
+      ) {
+        return null;
+      }
+      return existing.extension;
+    }
+
+    const extension = await nextFreeExtension(prisma);
+    if (!extension) throw new ExtensionRangeExhaustedError();
+
+    try {
+      await prisma.agentSipCredential.create({
+        data: { tenantId, userId, extension, passwordEncrypted: null },
+      });
+      return extension;
+    } catch (error) {
+      // Either this agent's row appeared concurrently (the next pass returns
+      // it) or the number was taken (the next pass picks another).
+      if (!isUniqueViolation(error)) throw error;
+    }
+  }
+
+  throw new Error(
+    `Could not reserve a SIP extension for agent ${userId} after ${ALLOCATION_ATTEMPTS} attempts.`
+  );
+}
+
+/**
  * Replace an agent's password, keeping their extension.
  *
  * The agent's softphone is registered with the old secret and will keep working

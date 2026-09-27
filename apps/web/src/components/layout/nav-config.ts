@@ -318,6 +318,14 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
     label: 'Sales',
     items: [
       platformItem('/campaigns'),
+      /*
+       * Numbers is a working screen for every agency now: an OWNER or ADMIN
+       * buys, assigns and releases their own tracking numbers, within the
+       * limit and at the price NetEnroll (or, for a downline, its parent) sets.
+       * It sits here rather than in Call Network so that group stays wholly
+       * locked and the "Unlock more" divider stays above it.
+       */
+      platformItem('/numbers'),
       lockedItem(
         '/call-center',
         'Power Dialer',
@@ -351,11 +359,6 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
         '/buyers',
         'Buyers',
         "Route calls your agents can't take to buyers and get paid for the overflow."
-      ),
-      lockedItem(
-        '/numbers',
-        'Numbers',
-        'Buy and manage your own tracking numbers, with full call history on each.'
       ),
       lockedItem(
         '/settings/carriers',
@@ -410,6 +413,34 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
     ],
   },
 ];
+
+/**
+ * A downline (child) agency principal's navigation: AGENCY_OWNER_NAV without
+ * the two things that belong to the parent.
+ *
+ *   Money           Rate, Delivery, Settlements and Billing are between the
+ *                   child and its parent, and the parent runs them. Team (what
+ *                   each agent delivered over a period) is the one screen in
+ *                   that group about the child's own people, so it moves up to
+ *                   the Floor rather than going with the rest.
+ *   Agency Network  a downline does not onboard downlines of its own, so the
+ *                   locked Agencies and Onboard entries are not offered.
+ *
+ * Built from AGENCY_OWNER_NAV so every other entry stays identical to a
+ * normal agency's.
+ */
+function childAgencyOwnerNav(): NavGroup[] {
+  const team = AGENCY_OWNER_NAV.flatMap(group => group.items).find(
+    item => item.href === '/delivery/team'
+  );
+  return AGENCY_OWNER_NAV.filter(
+    group => group.label !== 'Money' && group.label !== 'Agency Network'
+  ).map(group =>
+    group.label === 'Floor' && team ? { ...group, items: [...group.items, team] } : group
+  );
+}
+
+export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
 
 /**
  * A white-label agency principal's navigation.
@@ -695,6 +726,8 @@ export interface NavViewer {
   canViewRecordings: boolean;
   /** The upgrades turned on for this agency. See `whiteLabelOwnerNav` and `agentNav`. */
   upgrades?: readonly string[];
+  /** The agency is a white-label agency's downline. See `CHILD_AGENCY_OWNER_NAV`. */
+  isChild?: boolean;
 }
 
 /**
@@ -715,7 +748,8 @@ export interface NavViewer {
 export function navFor(viewer: NavViewer): NavGroup[] {
   if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
   if (viewer.hasFullAccess) {
-    return viewer.isWhiteLabel ? whiteLabelOwnerNav(viewer.upgrades) : AGENCY_OWNER_NAV;
+    if (viewer.isWhiteLabel) return whiteLabelOwnerNav(viewer.upgrades);
+    return viewer.isChild ? CHILD_AGENCY_OWNER_NAV : AGENCY_OWNER_NAV;
   }
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);

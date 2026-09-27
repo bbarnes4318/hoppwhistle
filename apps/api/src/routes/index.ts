@@ -787,12 +787,15 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       }
       const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
 
-      const where: Record<string, any> = { tenantId };
+      // A RELEASED number has gone back to the carrier. Its row stays for call
+      // history and billing, but it is not on the agency's account any more.
+      const where: Record<string, any> = { tenantId, status: { not: 'RELEASED' } };
       if (!isAdminOrOwner && user?.userId) {
         where.userId = user.userId;
       }
 
-      const [numbers, total] = await Promise.all([
+      const { numberUsage } = await import('../services/numbers/number-purchase.js');
+      const [numbers, total, usage] = await Promise.all([
         prisma.phoneNumber.findMany({
           where,
           take: limit,
@@ -823,6 +826,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
           },
         }),
         prisma.phoneNumber.count({ where }),
+        numberUsage(tenantId),
       ]);
 
       return {
@@ -857,10 +861,47 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
           limit,
           total,
           totalPages: Math.ceil(total / limit),
+          // "n of m numbers used": what counts against the quota, and the
+          // quota (null for no limit).
+          numbersUsed: usage.used,
+          numbersLimit: usage.limit,
         },
       };
     }
   );
+
+  /**
+   * What buying a number costs this agency, for the purchase screen to show
+   * before anybody confirms, and how much of its quota is left. A child
+   * agency sees its parent's price, because the parent is who is charged.
+   */
+  fastify.get('/api/v1/numbers/pricing', async (request, reply) => {
+    const tenantId = getActingTenantId(request);
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { numberBillingFor, proratedMonthly } = await import(
+      '../services/numbers/number-charges.js'
+    );
+    const { numberUsage } = await import('../services/numbers/number-purchase.js');
+    const [{ pricing }, usage] = await Promise.all([
+      numberBillingFor(prisma, tenantId),
+      numberUsage(tenantId),
+    ]);
+
+    return {
+      data: {
+        setup: pricing.setup,
+        monthly: pricing.monthly,
+        firstMonth: proratedMonthly(pricing.monthly, new Date()),
+        currency: 'USD',
+        numbersUsed: usage.used,
+        numbersLimit: usage.limit,
+      },
+    };
+  });
 
   /**
    * Add a number the platform already owns at a carrier (e.g. an Anveo DID) to
@@ -1019,22 +1060,80 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
 
   fastify.get<{ Params: { numberId: string } }>(
     '/api/v1/numbers/:numberId',
-    async (request, _reply) => {
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      // Scoped to the acting tenant: another agency's number is not found.
+      const n = await prisma.phoneNumber.findFirst({
+        where: { id: request.params.numberId, tenantId },
+        include: { campaign: { select: { id: true, name: true } } },
+      });
+      if (!n) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Phone number not found' } };
+      }
+
       return {
-        id: request.params.numberId,
-        tenantId: '00000000-0000-0000-0000-000000000000',
-        number: '+15551234567',
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: n.id,
+        tenantId: n.tenantId,
+        number: n.number,
+        status: n.status,
+        provider: n.provider,
+        capabilities: n.capabilities,
+        campaign: n.campaign ? { id: n.campaign.id, name: n.campaign.name } : null,
+        purchasedAt: n.purchasedAt?.toISOString(),
+        releasedAt: n.releasedAt?.toISOString() ?? null,
+        createdAt: n.createdAt.toISOString(),
+        updatedAt: n.updatedAt.toISOString(),
       };
+    }
+  );
+
+  /**
+   * Release a number: back to the carrier, its DID routes removed, RELEASED,
+   * its monthly charge ended, audited. It stops working immediately and cannot
+   * be recovered. See `services/numbers/number-purchase.ts`.
+   */
+  fastify.delete<{ Params: { numberId: string } }>(
+    '/api/v1/numbers/:numberId',
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      const { NumberPurchaseError, releaseNumberForTenant } = await import(
+        '../services/numbers/number-purchase.js'
+      );
+      try {
+        const released = await releaseNumberForTenant({
+          tenantId,
+          numberId: request.params.numberId,
+          actor: {
+            userId: (request as AuthRequest).user?.userId,
+            ipAddress: request.ip,
+            requestId: request.id,
+          },
+        });
+        return { data: released };
+      } catch (error) {
+        if (error instanceof NumberPurchaseError) {
+          void reply.code(error.status);
+          return { error: { code: error.code, message: error.message } };
+        }
+        throw error;
+      }
     }
   );
 
   fastify.patch<{
     Params: { numberId: string };
     Body: {
-      status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+      status?: 'ACTIVE' | 'SUSPENDED';
       campaignId?: string | null;
       userId?: string | null;
       capabilities?: {
@@ -1068,9 +1167,25 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         },
       });
 
-      if (!existingNumber) {
+      if (!existingNumber || existingNumber.status === 'RELEASED') {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Phone number not found' } };
+      }
+
+      /*
+       * Switching a number off used to be how it was "released", and the
+       * carrier kept billing for it. Releasing is DELETE now, which gives the
+       * number back; PATCH no longer sets INACTIVE.
+       */
+      if (body.status !== undefined && !['ACTIVE', 'SUSPENDED'].includes(body.status)) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message:
+              'A number cannot be set INACTIVE. To give it up, release it with DELETE /api/v1/numbers/:numberId.',
+          },
+        };
       }
 
       // Verify campaign exists if provided
@@ -1358,6 +1473,18 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (!body.name || !body.name.trim()) {
         void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Campaign name is required' } };
+      }
+
+      /*
+       * A child agency runs no call network -- it cannot create publishers --
+       * but every campaign names one. Its calls arrive through its parent, so
+       * a child's campaign is attributed to the child's own "direct" publisher,
+       * created the first time it is needed and reused after.
+       */
+      if (!body.publisherId) {
+        const { housePublisherForChild } = await import('../services/house-publisher.js');
+        const house = await housePublisherForChild(tenantId);
+        if (house) body.publisherId = house;
       }
 
       if (!body.publisherId) {
@@ -2793,14 +2920,30 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Send welcome email if email provided
+      // Tell the publisher they have been added, if we have an address. Never
+      // fatal: the publisher row is written, and an SMTP outage is not a reason
+      // to answer the agency with a 500 for a party that now exists. A login
+      // is a separate portal-access invitation, not this.
       if (publisher.email) {
-        await sendWelcomeEmail({
-          email: publisher.email,
-          publisherName: publisher.name,
-          publisherId: publisher.code,
-          accessToRecordings: publisher.accessToRecordings,
-        });
+        try {
+          const agency = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+          });
+          await sendWelcomeEmail({
+            email: publisher.email,
+            publisherName: publisher.name,
+            publisherId: publisher.code,
+            accessToRecordings: publisher.accessToRecordings,
+            tenantId,
+            agencyName: agency?.name ?? null,
+          });
+        } catch (error) {
+          request.log.error(
+            { err: error, publisherId: publisher.id },
+            'Publisher welcome email could not be sent; publisher created anyway'
+          );
+        }
       }
 
       // Audit log
@@ -5725,332 +5868,24 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     }
   );
 
-  fastify.post<{
-    Body: {
-      email: string;
-      firstName?: string;
-      lastName?: string;
-      role?: string;
-      buyerId?: string;
-      publisherId?: string;
-      createNewBuyer?: boolean;
-      newBuyerName?: string;
-      roleIds?: string[];
-    };
-  }>('/api/v1/users/invite', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const tenantId = getActingTenantId(request);
-
-    if (!tenantId) {
-      return sendTenantRefusal(request, reply);
-    }
-
-    const prismaForAuthz = (await import('../lib/prisma.js')).getPrismaClient();
-
-    // This endpoint creates a user and grants it whatever role the body names,
-    // ADMIN included. It never checked who was asking: any authenticated
-    // caller -- a self-serve signup with READONLY, a buyer, an agent -- could
-    // mint themselves a second account with full administrative access. The
-    // roles are not in the JWT, so they are read from the database by the same
-    // helper the rest of this file gates on.
-    const inviterProfile = await getUserProfile(request, prismaForAuthz);
-
-    if (!inviterProfile.isAdminOrOwner) {
-      void reply.code(403);
-      return {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Only an administrator or owner can invite users',
-        },
-      };
-    }
-
-    const body = request.body;
-
-    if (!body.email || !body.email.trim()) {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'Email is required' } };
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(body.email)) {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'Invalid email format' } };
-    }
-
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-    // Validate role
-    const requestedRole = body.role?.toUpperCase() || 'ANALYST';
-    const validRoles = ['ADMIN', 'OWNER', 'ANALYST', 'AGENT', 'BUYER', 'PUBLISHER'];
-    if (!validRoles.includes(requestedRole)) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: `Invalid role. Must be one of: ${validRoles.join(', ')}`,
-        },
-      };
-    }
-
-    // BUYER role requires buyerId OR createNewBuyer
-    if (requestedRole === 'BUYER' && !body.buyerId && !body.createNewBuyer) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'buyerId or createNewBuyer is required for BUYER role',
-        },
-      };
-    }
-
-    /*
-     * A portal user is linked to exactly one party, and of their own kind. A
-     * BUYER carrying a publisherId (or a PUBLISHER a buyerId) would be a login
-     * whose portal scopes itself by one id while `getUserProfile` reads the
-     * other -- the publisher portal and the buyer portal both trust that link
-     * to decide whose calls and money the person sees.
-     */
-    if (requestedRole === 'BUYER' && body.publisherId) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'A BUYER invite cannot carry a publisherId',
-        },
-      };
-    }
-    if (requestedRole === 'PUBLISHER' && body.buyerId) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'A PUBLISHER invite cannot carry a buyerId',
-        },
-      };
-    }
-
-    // PUBLISHER role requires a publisherId, and it must be one of THIS
-    // tenant's publishers: the id is client-supplied, and without the tenant
-    // filter a publisher login could be linked to another agency's publisher
-    // and read its calls and payouts. Not found and not ours read the same.
-    if (requestedRole === 'PUBLISHER') {
-      if (!body.publisherId) {
-        void reply.code(400);
-        return {
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'publisherId is required for PUBLISHER role',
-          },
-        };
-      }
-      const publisherRecord = await prisma.publisher.findFirst({
-        where: { id: body.publisherId, tenantId },
-        select: { id: true },
-      });
-      if (!publisherRecord) {
-        void reply.code(400);
-        return {
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Invalid publisherId - publisher not found',
-          },
-        };
-      }
-    }
-
-    // Auto-create buyer if requested
-    let buyerRecord = null;
-    if (requestedRole === 'BUYER' && body.createNewBuyer && body.newBuyerName) {
-      // Generate a unique code for the buyer
-      const generateCode = () => {
-        const chars = '0123456789ABCDEF';
-        let result = '';
-        for (let i = 0; i < 8; i++) {
-          result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return result;
-      };
-
-      buyerRecord = await prisma.buyer.create({
-        data: {
-          tenantId: tenantId,
-          name: body.newBuyerName.trim(),
-          code: generateCode(),
-          status: 'ACTIVE',
-          billingType: 'UPFRONT',
-        },
-      });
-      body.buyerId = buyerRecord.id;
-    } else if (body.buyerId) {
-      // Validate buyerId exists if provided
-      buyerRecord = await prisma.buyer.findUnique({
-        where: { id: body.buyerId },
-      });
-      if (!buyerRecord) {
-        void reply.code(400);
-        return {
-          error: { code: 'VALIDATION_ERROR', message: 'Invalid buyerId - buyer not found' },
-        };
-      }
-      // Ensure the buyer belongs to the same tenant
-      if (buyerRecord.tenantId !== tenantId) {
-        void reply.code(400);
-        return {
-          error: { code: 'VALIDATION_ERROR', message: 'Buyer does not belong to your tenant' },
-        };
-      }
-    }
-
-    // An ADMIN escalating to OWNER by inviting one is the same privilege jump
-    // this endpoint was already handing out, one step further up.
-    if (requestedRole === 'OWNER' && !inviterProfile.userRoles.includes('OWNER')) {
-      void reply.code(403);
-      return {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Only an owner can grant the OWNER role',
-        },
-      };
-    }
-
-    // Constraint: Cannot have ADMIN role with buyerId (internal vs external user)
-    if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.buyerId) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message:
-            'ADMIN and OWNER roles cannot be assigned to external buyer users. Use BUYER role instead.',
-        },
-      };
-    }
-
-    // The same rule for the other portal: an internal user is nobody's publisher.
-    if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.publisherId) {
-      void reply.code(400);
-      return {
-        error: {
-          code: 'VALIDATION_ERROR',
-          message:
-            'ADMIN and OWNER roles cannot be assigned to external publisher users. Use PUBLISHER role instead.',
-        },
-      };
-    }
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        email: body.email.toLowerCase().trim(),
-      },
-    });
-
-    if (existingUser) {
-      void reply.code(409);
-      return { error: { code: 'CONFLICT', message: 'User with this email already exists' } };
-    }
-
-    // Generate temporary password
-    const { randomBytes } = await import('crypto');
-    const tempPassword = randomBytes(16).toString('hex');
-    // bcryptjs is CommonJS: `await import()` yields the module namespace, so
-    // the functions hang off .default. Destructuring `hash` gave undefined and
-    // every call to this endpoint died with "hash is not a function". That bug
-    // is why nobody had exploited the missing check above -- a jammed door, not
-    // a locked one, so it is fixed here rather than left load-bearing.
-    const bcrypt = (await import('bcryptjs')).default;
-    const passwordHash = await bcrypt.hash(tempPassword, 10);
-
-    // Get role ID for the requested role
-    const roleRecord = await prisma.role.findUnique({
-      where: { name: requestedRole as any },
-    });
-
-    if (!roleRecord) {
-      void reply.code(400);
-      return {
-        error: { code: 'ROLE_NOT_FOUND', message: `Role ${requestedRole} not found in system` },
-      };
-    }
-
-    // Create user with role and optional buyerId/publisherId
-    const newUser = await prisma.user.create({
-      data: {
-        tenantId,
-        email: body.email.toLowerCase().trim(),
-        passwordHash,
-        firstName: body.firstName || null,
-        lastName: body.lastName || null,
-        status: 'ACTIVE',
-        buyerId: body.buyerId || null,
-        publisherId: body.publisherId || null,
-        metadata: {
-          tempPassword: true, // Flag that password needs to be changed
-          invitedBy: user?.userId,
-        },
-        roles: {
-          create: [
-            {
-              roleId: roleRecord.id,
-            },
-          ],
-        },
-      },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-        buyer: true,
-        publisher: true,
-      },
-    });
-
-    // Audit log
-    const { auditCreate } = await import('../services/audit.js');
-    await auditCreate(
-      tenantId,
-      'User',
-      newUser.id,
-      {
-        email: newUser.email,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        roles: newUser.roles.map(r => r.role.name),
-        buyerId: newUser.buyerId,
-        buyerName: newUser.buyer?.name || null,
-        publisherId: newUser.publisherId,
-        publisherName: newUser.publisher?.name || null,
-      },
-      {
-        userId: user?.userId,
-        ipAddress: request.ip,
-        requestId: request.id,
-      }
-    );
-
-    // TODO: Send invitation email with temp password
-    // For now, we'll just return success (in production, send email)
-
-    void reply.code(201);
+  /*
+   * Retired. This used to create the user on the spot with a random temporary
+   * password, return that password in the response body, and send nothing --
+   * the inviter was expected to pass a plaintext password on by hand, and the
+   * invitee was never made to change it. Every invitation now goes through
+   * `POST /api/v1/auth/activation-grants`, which emails a single-use,
+   * expiring link and creates the account only when it is used. 410, not 404,
+   * so an old client learns where to go rather than that nothing is here.
+   */
+  fastify.post('/api/v1/users/invite', async (_request, reply) => {
+    void reply.code(410);
     return {
-      id: newUser.id,
-      email: newUser.email,
-      firstName: newUser.firstName,
-      lastName: newUser.lastName,
-      status: newUser.status.toLowerCase(),
-      roles: newUser.roles.map(r => r.role.name.toLowerCase()),
-      buyerId: newUser.buyerId,
-      buyerName: newUser.buyer?.name || null,
-      publisherId: newUser.publisherId,
-      publisherName: newUser.publisher?.name || null,
-      createdAt: newUser.createdAt.toISOString(),
-      // In production, don't return temp password - send via email. Returned
-      // for every role, PUBLISHER included: it is the only way the inviter
-      // can hand a portal user their first sign-in.
-      tempPassword: tempPassword, // Only for development/testing
+      error: {
+        code: 'GONE',
+        message:
+          'POST /api/v1/users/invite has been removed. Invite people with ' +
+          'POST /api/v1/auth/activation-grants, which emails them a link to set up their account.',
+      },
     };
   });
 

@@ -34,8 +34,17 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { isStaffOnlyEndpoint, isWhiteLabelAllowed } from '../lib/staff-only-endpoints.js';
-import { isWhiteLabelOperator, type WhiteLabelPrincipal } from '../lib/white-label.js';
+import {
+  isAgencyOwnerAllowed,
+  isChildAgencyAllowed,
+  isStaffOnlyEndpoint,
+  isWhiteLabelAllowed,
+} from '../lib/staff-only-endpoints.js';
+import {
+  isWhiteLabelOperator,
+  WHITE_LABEL_ROLES,
+  type WhiteLabelPrincipal,
+} from '../lib/white-label.js';
 
 export const STAFF_ONLY = {
   code: 'STAFF_ONLY',
@@ -54,7 +63,11 @@ export function enforceStaffOnly(request: FastifyRequest, reply: FastifyReply): 
 
   // Unauthenticated: leave it to the refusal it already gets. See the header.
   const principal = request.user as
-    | (WhiteLabelPrincipal & { isPlatformAdmin?: boolean })
+    | (WhiteLabelPrincipal & {
+        isPlatformAdmin?: boolean;
+        tenantId?: string | null;
+        tenantIsChild?: boolean;
+      })
     | undefined;
   if (!principal) return false;
 
@@ -70,6 +83,25 @@ export function enforceStaffOnly(request: FastifyRequest, reply: FastifyReply): 
    * key, is refused here like everybody else.
    */
   if (isWhiteLabelOperator(principal) && isWhiteLabelAllowed(request.method, request.url)) {
+    return false;
+  }
+
+  /*
+   * Any agency's OWNER or ADMIN, for their own numbers; and a child agency's
+   * OWNER or ADMIN, for their own campaigns. Both need a user's role inside a
+   * tenant -- an API key holds no role and an AGENT is not an operator -- and
+   * the handlers behind them scope every read and write to that tenant.
+   */
+  const operator =
+    !!principal.tenantId && (principal.roles ?? []).some(role => WHITE_LABEL_ROLES.includes(role));
+  if (operator && isAgencyOwnerAllowed(request.method, request.url)) {
+    return false;
+  }
+  if (
+    operator &&
+    principal.tenantIsChild === true &&
+    isChildAgencyAllowed(request.method, request.url)
+  ) {
     return false;
   }
 

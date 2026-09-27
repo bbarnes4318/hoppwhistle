@@ -511,6 +511,25 @@ describe('white-label screens', () => {
       expect(requested).toContain('/api/v1/network/agencies?period=THIS_MONTH');
     });
 
+    it("sets each child's numbers limit and upgrades from its own settings", async () => {
+      answers['/api/v1/network/agencies'] = NETWORK;
+      answers['/api/v1/network/agencies/child-1/settings'] = {
+        tenantId: 'child-1',
+        numbersLimit: 25,
+        numbersUsed: 7,
+        upgrades: ['POWER_DIALER'],
+      };
+      await mount(() => import('../(dashboard)/network/agencies/page'));
+
+      await waitFor(() => expect(screen.getByText('7 in use')).toBeTruthy());
+      expect(requested).toContain('/api/v1/network/agencies/child-1/settings');
+      expect(screen.getByLabelText('Numbers limit')).toBe(screen.getByDisplayValue('25'));
+      expect(document.querySelectorAll('[data-upgrade-switch]')).toHaveLength(5);
+      expect(
+        document.querySelector('[data-upgrade-switch="POWER_DIALER"]')?.getAttribute('data-state')
+      ).toBe('checked');
+    });
+
     it('offers onboarding when there are none yet', async () => {
       answers['/api/v1/network/agencies'] = { ...NETWORK, agencies: [] };
       await mount(() => import('../(dashboard)/network/agencies/page'));

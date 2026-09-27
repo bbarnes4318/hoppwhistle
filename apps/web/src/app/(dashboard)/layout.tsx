@@ -128,8 +128,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // and is not staff", so a user holding BUYER *and* PUBLISHER satisfied both
     // of the old branches -- /publisher bounced them to /buyer, /buyer bounced
     // them straight back, and the pair looped until the tab was closed.
+    //
+    // `/account` (their own login and password) belongs to every role, so it is
+    // allowed for them as well as their section.
     if (isPublisherOnly || isBuyerOnly) {
       const inAllowedSection =
+        path === '/account' ||
         (isPublisherOnly && path.startsWith('/publisher')) ||
         (isBuyerOnly && path.startsWith('/buyer'));
 

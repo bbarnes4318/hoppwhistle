@@ -24,7 +24,8 @@ import { loadPlatformContext } from '../lib/platform-admin.js';
 import { hydratePrincipal } from '../lib/principal.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { recordingIdFromStreamPath, verifyRecordingToken } from '../lib/recording-token.js';
-import { loadTenantWhiteLabel } from '../lib/white-label.js';
+import { claimedTokenVersion, SESSION_REVOKED } from '../lib/token-version.js';
+import { loadTenantIsChild, loadTenantWhiteLabel } from '../lib/white-label.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
   // Global API key authentication for /api/v1/* routes
@@ -35,7 +36,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
   const DEMO_TENANT_AUTH_ENABLED = isDemoTenantAuthEnabled();
   warnIfDemoTenantAuthEnabled();
 
-  server.addHook('onRequest', async (request, _reply) => {
+  server.addHook('onRequest', async (request, reply) => {
     // With demo auth disabled the demo inputs carry no meaning anywhere, so
     // drop them before anything else looks at them.
     //
@@ -85,6 +86,14 @@ export function registerApiV1Auth(server: FastifyInstance): void {
 
       if (verified) {
         await resolvePrincipal(request);
+        // Signed before the user's sessions were revoked (a password change
+        // or reset). Refused outright rather than falling through to another
+        // credential: the caller presented a session, and it has ended.
+        if (sessionRevoked(request.user)) {
+          request.user = undefined as unknown as FastifyRequest['user'];
+          void reply.code(401).send({ error: SESSION_REVOKED });
+          return;
+        }
         return;
       }
     } else if (queryToken && request.method === 'GET') {
@@ -228,6 +237,9 @@ export async function applyTenantWhiteLabel(request: FastifyRequest): Promise<vo
     | undefined;
   if (!principal) return;
   principal.tenantWhiteLabel = await loadTenantWhiteLabel(principal.tenantId);
+  (principal as { tenantIsChild?: boolean }).tenantIsChild = await loadTenantIsChild(
+    principal.tenantId
+  );
 }
 
 /**
@@ -286,4 +298,14 @@ export async function applyPlatformContext(request: FastifyRequest): Promise<voi
   principal.roles = platform.previewRole
     ? [platform.previewRole]
     : [...existing, ...platform.actingRoles.filter(r => !existing.includes(r))];
+}
+
+/**
+ * Whether a resolved session principal was signed before its user's sessions
+ * were revoked. A principal with no user (an API key) has nothing to revoke.
+ */
+export function sessionRevoked(principal: unknown): boolean {
+  const p = principal as { userId?: string; currentTokenVersion?: number } | undefined;
+  if (!p?.userId || p.currentTokenVersion === undefined) return false;
+  return claimedTokenVersion(p) < p.currentTokenVersion;
 }

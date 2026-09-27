@@ -617,12 +617,20 @@ describe.skipIf(!gate.available)('White-label tier', () => {
     it("creates a child with the parent, the parent's brand and no billing profile", async () => {
       const childId = await createChild();
       const child = await prisma.tenant.findUnique({ where: { id: childId } });
+      // The brand is the parent's by reference, not a copy: the child's own
+      // columns stay null and `brandForTenant` reads the parent's, so a parent
+      // that rebrands takes its children with it.
       expect(child).toMatchObject({
         parentTenantId: wl.id,
-        brandTheme: 'life-leads-plus',
-        brandName: 'Life Leads Plus',
+        brandTheme: null,
+        brandName: null,
         whiteLabel: false,
         status: 'ACTIVE',
+      });
+      const { brandForTenant } = await import('../lib/tenant-brand.js');
+      expect(await brandForTenant(childId)).toEqual({
+        theme: 'life-leads-plus',
+        name: 'Life Leads Plus',
       });
       expect(await prisma.agencyBillingProfile.count({ where: { tenantId: childId } })).toBe(0);
       expect(await prisma.agencyProfile.findUnique({ where: { tenantId: childId } })).toMatchObject(

@@ -157,11 +157,11 @@ export const STAFF_ONLY_ROUTES: readonly StaffOnlyRoute[] = [
  *
  * ── What it deliberately does not open ───────────────────────────────────────
  *
- * Buying or releasing numbers (`POST /numbers`, `/numbers/existing`,
- * `DELETE /numbers/:numberId`, `/anveo`, `/bulkvs`, `/fractel`) spends the
- * platform's carrier accounts and claims shared inventory. Flows, the voice
+ * Numbers are not here: buying, routing and releasing them is every agency
+ * owner's, white-label or not -- see AGENCY_OWNER_ALLOWED below. What stays
+ * staff's for everybody is adding a number from an arbitrary provider
+ * (`POST /numbers`), `/numbers/existing`, and all of `/anveo`. Flows, the voice
  * tooling, carrier routing and the Tools group are platform configuration.
- * All of that stays staff's, for everybody, the white-label tier included.
  *
  * ── It is a pass, not a scope ────────────────────────────────────────────────
  *
@@ -183,6 +183,53 @@ export const WHITE_LABEL_ALLOWED: readonly WhiteLabelAllowance[] = [
   { pattern: '/api/v1/numbers', methods: ['GET'] },
   { pattern: '/api/v1/numbers/:numberId', methods: ['GET', 'PATCH', 'PUT'] },
   { prefix: '/api/v1/did-routes' },
+];
+
+/**
+ * What the OWNER or ADMIN of ANY agency may reach inside the areas above:
+ * their own phone numbers.
+ *
+ * ── Why every agency, not only the white-label tier ──────────────────────────
+ *
+ * An agency cannot take a call without a number, and waiting on NetEnroll to
+ * buy one was the step every new agency got stuck on. So an agency owner buys
+ * local and toll-free numbers from the platform's carriers (FracTEL, and BulkVS
+ * for more local inventory), points them at their own campaigns, and releases
+ * them. The purchase handlers enforce the agency's number quota under a
+ * per-tenant lock and record what each number costs (`number_charges`); the
+ * handlers behind every route here scope to the acting tenant.
+ *
+ * ── What stays staff's ───────────────────────────────────────────────────────
+ *
+ * `POST /numbers` (a purchase from any provider named in the body),
+ * `/numbers/existing` (claiming a DID the platform already holds), and every
+ * Anveo route including its sync. Those are inventory management, not buying a
+ * number for yourself.
+ *
+ * Like the white-label pass, it needs the role: an AGENT and an API key are
+ * refused, whatever tenant they belong to.
+ */
+export const AGENCY_OWNER_ALLOWED: readonly WhiteLabelAllowance[] = [
+  { pattern: '/api/v1/numbers', methods: ['GET'] },
+  { pattern: '/api/v1/numbers/:numberId', methods: ['GET', 'PATCH', 'PUT', 'DELETE'] },
+  { pattern: '/api/v1/bulkvs/available', methods: ['GET'] },
+  { pattern: '/api/v1/bulkvs/purchase', methods: ['POST'] },
+  { pattern: '/api/v1/fractel/available', methods: ['GET'] },
+  { pattern: '/api/v1/fractel/purchase', methods: ['POST'] },
+  { prefix: '/api/v1/did-routes' },
+];
+
+/**
+ * What a CHILD agency's OWNER or ADMIN may reach: its campaigns.
+ *
+ * A downline agency is a normal agency whose calls arrive through its parent's
+ * network. It still has to point its own numbers and agents at something, so it
+ * creates and edits campaigns and assigns its own agents and numbers to them --
+ * the campaign writes from WHITE_LABEL_ALLOWED, and nothing else from it.
+ * Publishers and buyers stay out: a child does not run a call network.
+ */
+export const CHILD_AGENCY_ALLOWED: readonly WhiteLabelAllowance[] = [
+  { prefix: '/api/v1/campaigns', methods: WRITES },
 ];
 
 /**
@@ -245,6 +292,41 @@ export function isStaffOnlyEndpoint(method: string | undefined, url: string | un
   }
 
   return false;
+}
+
+/** Whether a request matches one of an allowance list's rules. */
+function matchesAllowance(
+  rules: readonly WhiteLabelAllowance[],
+  method: string | undefined,
+  url: string | undefined
+): boolean {
+  if (!method || !url) return false;
+
+  const path = normalise(url);
+  if (!path) return false;
+  if (path === '/api/v1/numbers/existing' || path === '/api/v1/numbers/lookup') {
+    // Named segments, not ids: `:numberId` must never match them.
+    return false;
+  }
+
+  const verb = method.toUpperCase();
+
+  return rules.some(rule => {
+    if ('prefix' in rule) {
+      return underPrefix(path, rule.prefix) && (!rule.methods || rule.methods.includes(verb));
+    }
+    return rule.methods.includes(verb) && matchesPattern(path, rule.pattern);
+  });
+}
+
+/** True when this request is one any agency's OWNER or ADMIN may make. */
+export function isAgencyOwnerAllowed(method: string | undefined, url: string | undefined): boolean {
+  return matchesAllowance(AGENCY_OWNER_ALLOWED, method, url);
+}
+
+/** True when this request is one a child agency's OWNER or ADMIN may make. */
+export function isChildAgencyAllowed(method: string | undefined, url: string | undefined): boolean {
+  return matchesAllowance(CHILD_AGENCY_ALLOWED, method, url);
 }
 
 /**
