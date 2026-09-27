@@ -34,6 +34,7 @@ import {
   loadCallMoneyLedger,
   salesCallWhere,
   summariseCallMoney,
+  type CallRange,
   type MoneyBucket,
   type MoneyLedgerEntry,
 } from './call-money.js';
@@ -223,6 +224,67 @@ function groupBy<K>(calls: readonly SalesCall[], keyOf: (call: SalesCall) => K |
   return groups;
 }
 
+/** One publisher's row, from its calls and their money bucket. */
+function publisherRow(
+  publisherId: string,
+  name: string | null,
+  list: readonly SalesCall[],
+  bucket: MoneyBucket
+): CallSalesPublisherRow {
+  const split = billableSplit(list);
+  return {
+    publisherId,
+    publisherName: name ?? list[0]?.publisherName ?? 'Unknown publisher',
+    calls: list.length,
+    answeredByAgents: list.filter(call => call.answeredByUserId !== null).length,
+    sentToBuyers: list.filter(call => call.buyerId !== null).length,
+    billable: split.billable,
+    billableAgentAnswered: split.agentAnswered,
+    billableToBuyers: split.toBuyers,
+    payout: money(bucket.payout),
+    revenue: money(bucket.revenue),
+    profit: money(bucket.profit),
+  };
+}
+
+/**
+ * One publisher's `byPublisher` row for a range, without the rest of the
+ * summary: the same calls (`salesCallWhere` narrowed to the publisher), the
+ * same ledger and the same arithmetic, so the publisher stats drawer and the
+ * Sales screen's publisher row cannot disagree. A publisher with no calls in
+ * the range gets a row of zeros rather than none.
+ */
+export async function getCallSalesPublisherRow(
+  tenantId: string,
+  range: CallRange,
+  publisherId: string,
+  deps: { prisma: CallSalesDeps }
+): Promise<CallSalesPublisherRow> {
+  const { prisma } = deps;
+
+  const calls: SalesCall[] = await prisma.call.findMany({
+    where: { ...salesCallWhere(tenantId, range), publisherId },
+    select: CALL_SELECT,
+    orderBy: { createdAt: 'asc' },
+  });
+  const ledger = await loadCallMoneyLedger(
+    prisma,
+    tenantId,
+    calls.map(call => call.id)
+  );
+  const publisher = await prisma.publisher.findFirst({
+    where: { tenantId, id: publisherId },
+    select: { name: true },
+  });
+
+  return publisherRow(
+    publisherId,
+    publisher?.name ?? null,
+    calls,
+    summariseCallMoney(calls, ledger, () => publisherId).totals
+  );
+}
+
 /**
  * The whole summary for one tenant and one period.
  *
@@ -362,24 +424,14 @@ export async function getCallSalesSummary(
   const publisherName = new Map(publishers.map(publisher => [publisher.id, publisher.name]));
 
   const byPublisher: CallSalesPublisherRow[] = publisherIds
-    .map(publisherId => {
-      const list = publisherCalls.get(publisherId)!;
-      const bucket = byPublisherMoney.groups.get(publisherId)!;
-      return {
+    .map(publisherId =>
+      publisherRow(
         publisherId,
-        publisherName:
-          publisherName.get(publisherId) ?? list[0].publisherName ?? 'Unknown publisher',
-        calls: list.length,
-        answeredByAgents: list.filter(call => call.answeredByUserId !== null).length,
-        sentToBuyers: list.filter(call => call.buyerId !== null).length,
-        billable: billableSplit(list).billable,
-        billableAgentAnswered: billableSplit(list).agentAnswered,
-        billableToBuyers: billableSplit(list).toBuyers,
-        payout: money(bucket.payout),
-        revenue: money(bucket.revenue),
-        profit: money(bucket.profit),
-      };
-    })
+        publisherName.get(publisherId) ?? null,
+        publisherCalls.get(publisherId)!,
+        byPublisherMoney.groups.get(publisherId)!
+      )
+    )
     .sort((a, b) => b.profit - a.profit || a.publisherName.localeCompare(b.publisherName));
 
   /* ── By day ─────────────────────────────────────────────────────────────── */

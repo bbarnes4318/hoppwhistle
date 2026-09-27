@@ -58,6 +58,8 @@ import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+import { PublisherStatsDrawer } from './publisher-stats-drawer';
+
 interface Publisher {
   id: string;
   name: string;
@@ -101,6 +103,8 @@ function PublishersPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // "View stats" opens this publisher's figures in a drawer, in place.
+  const [statsPublisher, setStatsPublisher] = useState<Publisher | null>(null);
   const [selectedPublisher, setSelectedPublisher] = useState<Publisher | null>(null);
 
   // Form states
@@ -441,11 +445,7 @@ function PublishersPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="min-w-[10rem]">
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    (window.location.href = `/dashboard?publisherId=${publisher.id}`)
-                                  }
-                                >
+                                <DropdownMenuItem onSelect={() => setStatsPublisher(publisher)}>
                                   <BarChart3 className="mr-2 h-3.5 w-3.5 text-ink-3" />
                                   View stats
                                 </DropdownMenuItem>
@@ -649,6 +649,13 @@ function PublishersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PublisherStatsDrawer
+        publisher={statsPublisher}
+        onOpenChange={open => {
+          if (!open) setStatsPublisher(null);
+        }}
+      />
     </div>
   );
 }
