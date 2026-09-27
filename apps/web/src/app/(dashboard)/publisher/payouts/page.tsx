@@ -94,8 +94,8 @@ function PublisherPayoutsPage() {
     loading || value === undefined ? '...' : dollars(value);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
+    <div className="page-canvas">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
           <p className="mt-1 text-sm text-ink-2">
             What you are owed for the period, and every payment your agency has recorded.
@@ -179,7 +179,7 @@ function PublisherPayoutsPage() {
             Every payment your agency has recorded to you, with any returned calls deducted from it.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -261,7 +261,7 @@ function PublisherPayoutsPage() {
               Returned calls accepted after you were paid for them. They come off your next payment.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="overflow-x-auto p-0">
             <table className="w-full">
               <tbody className="divide-y divide-rule">
                 {waiting.map(deduction => (

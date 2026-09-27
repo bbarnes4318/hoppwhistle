@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
 import { apiClient, payload, type Envelope } from '@/lib/api';
-import { nyDayBounds } from '@/lib/ny-day';
+import { nyDayBounds } from '@/lib/new-york-day';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 
 /** One row of `GET /api/v1/buyers/balances`. */

@@ -66,7 +66,7 @@ export function StatementsView(): JSX.Element {
       : publishers.find(p => p.id === picked?.partyId)?.name;
 
   return (
-    <div className="grid gap-4">
+    <div className="page-canvas">
       <StatementsPanel
         partyType="AGENCY"
         title="Your agency's statements"

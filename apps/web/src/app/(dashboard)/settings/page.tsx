@@ -41,10 +41,12 @@ export default function SettingsPage(): JSX.Element {
               key: 'statements',
               label: 'Statements',
               render: () => (
-                <StatementsPanel
-                  partyType="CHILD_AGENCY"
-                  description="Your calls, applications, agents and number charges, month by month."
-                />
+                <div className="page-canvas">
+                  <StatementsPanel
+                    partyType="CHILD_AGENCY"
+                    description="Your calls, applications, agents and number charges, month by month."
+                  />
+                </div>
               ),
             },
           ]}
