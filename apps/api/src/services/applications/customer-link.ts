@@ -87,9 +87,7 @@ export async function linkApplicationCustomer(
       where: {
         id: applicationId,
         tenantId,
-        ...(options.onlyCreatedById !== undefined
-          ? { createdById: options.onlyCreatedById }
-          : {}),
+        ...(options.onlyCreatedById !== undefined ? { createdById: options.onlyCreatedById } : {}),
       },
       select: {
         id: true,
@@ -217,7 +215,11 @@ export async function backfillApplicationCustomers(
 ): Promise<BackfillCounts> {
   const counts: BackfillCounts = { existing: 0, linked: 0, created: 0, skippedNoPhone: 0 };
   const batchSize = options.batchSize ?? 200;
-  let cursor: string | undefined;
+  // The last id processed. Paged with `id > after`, NOT Prisma's `cursor` +
+  // `skip: 1`: this loop links every row it reads, so the cursor row has left
+  // the `insuranceLeadId: null` set by the next query, and `skip: 1` then drops
+  // the first row that is still unlinked -- one application per page, silently.
+  let after: string | undefined;
 
   for (;;) {
     const batch = await prisma.insuranceCarrierApplication.findMany({
@@ -225,10 +227,10 @@ export async function backfillApplicationCustomers(
         submittedAt: { not: null },
         insuranceLeadId: null,
         ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+        ...(after ? { id: { gt: after } } : {}),
       },
       orderBy: { id: 'asc' },
       take: batchSize,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: { id: true, tenantId: true },
     });
     if (batch.length === 0) break;
@@ -250,7 +252,7 @@ export async function backfillApplicationCustomers(
         throw error;
       }
     }
-    cursor = batch[batch.length - 1].id;
+    after = batch[batch.length - 1].id;
   }
 
   return counts;
