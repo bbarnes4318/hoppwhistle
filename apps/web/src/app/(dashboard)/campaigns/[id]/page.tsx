@@ -191,8 +191,12 @@ export default function CampaignDetailPage() {
    * Numbers tab, whose DID routes the API opens to them. The flow builder is
    * still staff's alone: flows stay platform configuration for everybody.
    */
-  const { isPlatformAdmin, isWhiteLabel } = useAuth();
+  const { isPlatformAdmin, isWhiteLabel, isChild, hasFullAccess } = useAuth();
   const canManage = isPlatformAdmin || isWhiteLabel;
+  // A downline (child) agency's OWNER and ADMIN may write their own campaigns'
+  // settings. Assignments and DID routes are not opened to them, so only the
+  // settings form is.
+  const canEditSettings = canManage || (isChild && hasFullAccess);
   const canBuildFlows = isPlatformAdmin;
 
   const [loading, setLoading] = useState(true);
@@ -681,7 +685,12 @@ export default function CampaignDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void fetchCampaignData()} disabled={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchCampaignData()}
+            disabled={loading}
+          >
             <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Refresh
           </Button>
@@ -722,7 +731,7 @@ export default function CampaignDetailPage() {
         <TabsContent value="settings">
           <form onSubmit={e => void handleSaveSettings(e)} className="space-y-6">
             {/* A disabled fieldset makes every control inside it read-only. */}
-            <fieldset disabled={!canManage} className="space-y-6">
+            <fieldset disabled={!canEditSettings} className="space-y-6">
               <Card className="border border-border">
                 <CardHeader>
                   <CardTitle>Basic Campaign Configuration</CardTitle>
@@ -881,7 +890,7 @@ export default function CampaignDetailPage() {
                     </p>
                   </div>
                 </CardContent>
-                {canManage ? (
+                {canEditSettings ? (
                   <CardFooter className="flex justify-end border-t px-6 py-4">
                     <Button type="submit" disabled={savingSettings}>
                       {savingSettings ? (

@@ -244,6 +244,7 @@ describe('AGENCY_OWNER_NAV is unchanged', () => {
         'Sales',
         [
           ['Campaigns', '/campaigns', null],
+          ['Numbers', '/numbers', null],
           [
             'Power Dialer',
             '/call-center',
@@ -280,11 +281,6 @@ describe('AGENCY_OWNER_NAV is unchanged', () => {
             'Buyers',
             '/buyers',
             "Route calls your agents can't take to buyers and get paid for the overflow.",
-          ],
-          [
-            'Numbers',
-            '/numbers',
-            'Buy and manage your own tracking numbers, with full call history on each.',
           ],
           [
             'VOIP Carrier Routing',
@@ -408,7 +404,6 @@ describe('isRouteBlockedFor', () => {
   const OPENED = [
     '/publishers',
     '/buyers',
-    '/numbers',
     '/payouts',
     '/reports',
     '/sales',
@@ -444,6 +439,13 @@ describe('isRouteBlockedFor', () => {
   it.each(OPENED)('blocks a normal owner on %s', path => {
     expect(isStaffOnlyRoute(path)).toBe(true);
     expect(isRouteBlockedFor(path, NORMAL)).toBe(true);
+  });
+
+  // Numbers is every agency's now: not staff-only, so nobody is sent home from it.
+  it('lets every agency owner through /numbers', () => {
+    expect(isStaffOnlyRoute('/numbers')).toBe(false);
+    expect(isRouteBlockedFor('/numbers', NORMAL)).toBe(false);
+    expect(isRouteBlockedFor('/numbers', WL)).toBe(false);
   });
 
   it('lets staff through everything', () => {

@@ -2,6 +2,8 @@
 import { RoleName } from '@prisma/client';
 // eslint-disable-next-line import/default
 import bcrypt from 'bcryptjs';
+// eslint-disable-next-line import/no-named-as-default-member
+const { hash: bcryptHash } = bcrypt;
 import Fastify, { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -123,7 +125,7 @@ describe.skipIf(!gate.available)('Password change and reset', () => {
         data: {
           tenantId,
           email: userEmail,
-          passwordHash: await bcrypt.hash(ORIGINAL, 4),
+          passwordHash: await bcryptHash(ORIGINAL, 4),
           status: 'ACTIVE',
           buyerId: buyer.id,
           roles: { create: { roleId: buyerRole.id } },

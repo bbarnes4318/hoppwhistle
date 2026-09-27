@@ -127,6 +127,14 @@ interface UserData {
    * `UPGRADE_KEYS` in `components/layout/nav-config.ts`.
    */
   upgrades?: string[];
+  /**
+   * The acting agency is a downline (child) of a white-label agency, and what
+   * it calls that parent, from `/api/auth/me`. A child's money runs through its
+   * parent, so the child's nav has no Money group and "your account manager"
+   * becomes "Contact <parentBrandName>".
+   */
+  isChild?: boolean;
+  parentBrandName?: string | null;
 }
 
 interface UseAuthReturn {
@@ -172,6 +180,10 @@ interface UseAuthReturn {
   isReadOnlyPreview: boolean;
   /** The upgrades turned on for this agency; empty when none or unknown. */
   upgrades: string[];
+  /** The acting agency is a white-label agency's downline. See `UserData.isChild`. */
+  isChild: boolean;
+  /** What a downline agency calls its parent; null when not a child or unnamed. */
+  parentBrandName: string | null;
   isNewUser: boolean;
   buyerId: string | null;
   publisherId: string | null;
@@ -284,6 +296,11 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         upgrades: Array.isArray(rawUser.upgrades)
           ? rawUser.upgrades.filter((key: unknown): key is string => typeof key === 'string')
           : [],
+        isChild: rawUser.isChild === true,
+        parentBrandName:
+          typeof rawUser.parentBrandName === 'string' && rawUser.parentBrandName.trim()
+            ? rawUser.parentBrandName
+            : null,
       });
       setStatus('authenticated');
       setError(null);
@@ -507,6 +524,8 @@ export function useAuth(): UseAuthReturn {
     isWhiteLabel,
     isReadOnlyPreview,
     upgrades: user?.upgrades ?? NO_UPGRADES,
+    isChild: user?.isChild === true,
+    parentBrandName: user?.parentBrandName ?? null,
     isNewUser,
     buyerId,
     publisherId,

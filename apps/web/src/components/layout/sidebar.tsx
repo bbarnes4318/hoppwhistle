@@ -101,6 +101,7 @@ function isItemActive(pathname: string | null, href: string): boolean {
 function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
   // A white-labelled agency's people do not know NetEnroll by name.
   const { brand } = useBrand();
+  const { isChild, parentBrandName } = useAuth();
   const Icon = item.icon;
   const [open, setOpen] = React.useState(false);
   const hovering = React.useRef(false);
@@ -208,7 +209,9 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
           </div>
         </div>
         <p className="mt-3 border-t border-rule pt-3 t-meta text-ink-3">
-          Ask your {brand ? '' : 'NetEnroll '}account manager to turn this on for your agency.
+          {isChild
+            ? `Contact ${parentBrandName ?? 'your parent agency'} to turn this on for your agency.`
+            : `Ask your ${brand ? '' : 'NetEnroll '}account manager to turn this on for your agency.`}
         </p>
       </PopoverContent>
     </Popover>
@@ -351,6 +354,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     isReadonlyOnly,
     canViewRecordings,
     upgrades,
+    isChild,
     status,
     hasResolvedNoRole,
     user,
@@ -388,6 +392,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         isReadonlyOnly,
         canViewRecordings,
         upgrades,
+        isChild,
       }),
     [
       isPlatformAdmin,
@@ -400,6 +405,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       isReadonlyOnly,
       canViewRecordings,
       upgrades,
+      isChild,
     ]
   );
 

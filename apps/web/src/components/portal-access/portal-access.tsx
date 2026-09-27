@@ -1,12 +1,17 @@
 'use client';
 
-import { Check, Copy, KeyRound, Loader2, UserPlus } from 'lucide-react';
+import { KeyRound, Loader2, UserPlus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Notice, StatusChip } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  ACTIVATION_GRANTS_PATH,
+  InviteResult,
+  type ActivationGrant,
+} from '@/components/users/invite-result';
 import { apiClient } from '@/lib/api';
 import { formatTableDateTime } from '@/lib/format-time';
 
@@ -22,11 +27,13 @@ import { formatTableDateTime } from '@/lib/format-time';
  * agency's own people; they are issued here now, from the buyer or publisher
  * they belong to, so a login cannot be tied to the wrong one.
  *
- * ── The password is shown once ───────────────────────────────────────────────
+ * ── An invitation, not a password ────────────────────────────────────────────
  *
- * `POST /api/v1/users/invite` answers with a one-time temporary password, as
- * the invite dialog always has. It is shown here, with a copy button, until
- * the section is closed or another invite is sent -- and never fetched again.
+ * The invite is an activation grant (`POST /api/v1/auth/activation-grants`,
+ * role BUYER or PUBLISHER with this party's id): the person is emailed a link
+ * and chooses their own password. No password is ever issued from here. When
+ * the email did not go, the link is shown once to hand over instead; see
+ * `components/users/invite-result.tsx`.
  */
 
 export type PortalKind = 'buyer' | 'publisher';
@@ -40,11 +47,6 @@ interface PortalUser {
   lastLoginAt: string | null;
   buyerId?: string | null;
   publisherId?: string | null;
-}
-
-interface InviteAnswer {
-  email: string;
-  tempPassword?: string;
 }
 
 /** Enough for every login one agency's buyers or publishers could have. */
@@ -69,11 +71,10 @@ export function PortalAccess({
   const [users, setUsers] = useState<PortalUser[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
-  const [form, setForm] = useState({ email: '', firstName: '', lastName: '' });
+  const [form, setForm] = useState({ email: '' });
   const [saving, setSaving] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [issued, setIssued] = useState<ActivationGrant | null>(null);
 
   const load = useCallback(async () => {
     const response = await apiClient.get<{ data: PortalUser[] }>(USERS_PATH);
@@ -97,10 +98,8 @@ export function PortalAccess({
     setSaving(true);
     setInviteError(null);
     try {
-      const response = await apiClient.post<InviteAnswer>('/api/v1/users/invite', {
-        email: form.email.trim(),
-        firstName: form.firstName.trim() || undefined,
-        lastName: form.lastName.trim() || undefined,
+      const response = await apiClient.post<ActivationGrant>(ACTIVATION_GRANTS_PATH, {
+        email: form.email.trim().toLowerCase(),
         role: kind === 'buyer' ? 'BUYER' : 'PUBLISHER',
         ...(kind === 'buyer' ? { buyerId: entityId } : { publisherId: entityId }),
       });
@@ -108,27 +107,12 @@ export function PortalAccess({
         setInviteError(response.error?.message ?? 'The invite was not sent.');
         return;
       }
-      setIssued(
-        response.data.tempPassword
-          ? { email: response.data.email, password: response.data.tempPassword }
-          : null
-      );
-      setCopied(false);
+      setIssued(response.data);
       setInviting(false);
-      setForm({ email: '', firstName: '', lastName: '' });
+      setForm({ email: '' });
       void load();
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function copyPassword(): Promise<void> {
-    if (!issued) return;
-    try {
-      await navigator.clipboard.writeText(issued.password);
-      setCopied(true);
-    } catch {
-      setCopied(false);
     }
   }
 
@@ -159,29 +143,7 @@ export function PortalAccess({
         ) : null}
       </div>
 
-      {issued ? (
-        <Notice tone="info" title={`${issued.email} can sign in now`}>
-          <p className="t-body">
-            Temporary password, shown once. Send it to them securely; they change it when they first
-            sign in.
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="t-data rounded bg-sunken px-2 py-1 text-ink" data-temp-password>
-              {issued.password}
-            </code>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => void copyPassword()}
-              aria-label="Copy temporary password"
-            >
-              {copied ? <Check className="mr-1 h-3 w-3" /> : <Copy className="mr-1 h-3 w-3" />}
-              {copied ? 'Copied' : 'Copy'}
-            </Button>
-          </div>
-        </Notice>
-      ) : null}
+      {issued ? <InviteResult grant={issued} /> : null}
 
       {inviting ? (
         <div className="grid gap-3 rounded-control border border-rule bg-surface p-3">
@@ -196,28 +158,9 @@ export function PortalAccess({
               disabled={saving}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor={`portal-first-${entityId}`}>First name</Label>
-              <Input
-                id={`portal-first-${entityId}`}
-                value={form.firstName}
-                onChange={event => setForm(f => ({ ...f, firstName: event.target.value }))}
-                disabled={saving}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor={`portal-last-${entityId}`}>Last name</Label>
-              <Input
-                id={`portal-last-${entityId}`}
-                value={form.lastName}
-                onChange={event => setForm(f => ({ ...f, lastName: event.target.value }))}
-                disabled={saving}
-              />
-            </div>
-          </div>
           <p className="t-meta text-ink-3">
-            They sign in to the {noun} portal and see {entityName}&apos;s calls, and nothing else.
+            They are emailed a link to set their own password, then sign in to the {noun} portal and
+            see {entityName}&apos;s calls, and nothing else.
           </p>
           {inviteError ? <Notice tone="error" title={inviteError} /> : null}
           <div className="flex justify-end gap-2">

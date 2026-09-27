@@ -253,7 +253,7 @@ export function TeamMembersView({
   const [scheduleAgent, setScheduleAgent] = useState<RosterAgent | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const { hasFullAccess } = useAuth();
+  const { hasFullAccess, isChild, parentBrandName } = useAuth();
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
 
@@ -535,7 +535,11 @@ export function TeamMembersView({
       {campaigns.length === 0 && !loading && !withoutAgency && agentTotal > 0 ? (
         <Notice tone="warning">
           This agency has no active campaign, so there is nothing to assign an agent to yet.{' '}
-          {brand ? 'Your account manager sets that up.' : 'NetEnroll sets that up.'}
+          {isChild
+            ? `Contact ${parentBrandName ?? 'your parent agency'} to set that up.`
+            : brand
+              ? 'Your account manager sets that up.'
+              : 'NetEnroll sets that up.'}
         </Notice>
       ) : null}
 

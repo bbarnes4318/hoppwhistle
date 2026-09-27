@@ -321,6 +321,17 @@ export default function AuthPage() {
 
   const passwordStrength = validatePasswordStrength(password);
 
+  /*
+   * "Forgot password?" -- an inline form on the Sign in tab. The server answers
+   * 202 with the same sentence whether or not the address has an account, so
+   * that sentence is shown as-is and nothing here hints at which it was.
+   */
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null);
+  /** Set when /reset-password sent the person back here with a new password. */
+  const [resetDone, setResetDone] = useState(false);
+
   const handleGoogleResponse = useCallback(
     async (response: { credential: string }) => {
       setIsLoading(true);
@@ -377,6 +388,7 @@ export default function AuthPage() {
     // site can point at.
     const wantsCreate = params.get('mode') === 'create' || params.get('signup') !== null;
     if (wantsCreate) setMode('create');
+    if (params.get('reset') === 'done') setResetDone(true);
     if (!token) return;
 
     const invitedEmail = params.get('email') ?? '';
@@ -445,6 +457,35 @@ export default function AuthPage() {
       setError(err instanceof Error ? err.message : 'We could not sign you in.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgot = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setForgotSending(true);
+    setError(null);
+    setForgotMessage(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+
+      if (!res.ok) {
+        throw new Error(await messageFor(res, 'We could not send a reset link.'));
+      }
+
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      setForgotMessage(
+        body?.message ||
+          'If that address has an account, a link to choose a new password is on its way.'
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'We could not send a reset link.');
+    } finally {
+      setForgotSending(false);
     }
   };
 
@@ -595,6 +636,14 @@ export default function AuthPage() {
               </div>
             ) : null}
 
+            {resetDone && !error ? (
+              <div className="mt-5">
+                <Banner tone="info">
+                  Your password has been changed. Sign in with the new one.
+                </Banner>
+              </div>
+            ) : null}
+
             {/*
               Two doors, both always visible. The heading above already says
               which one is open, so the tabs are the switch and not a second
@@ -657,13 +706,69 @@ export default function AuthPage() {
                   </Button>
                 </form>
 
-                {/*
-                  There is no password-reset route to link to. Saying who to
-                  ask is more use than a link that does not exist.
-                */}
-                <p className="t-meta text-center text-ink-2">
-                  Cannot get in? Your agency administrator can reset your access.
-                </p>
+                {forgotOpen ? (
+                  <form
+                    onSubmit={e => void handleForgot(e)}
+                    className="space-y-3 rounded-control border border-rule bg-sunken p-4"
+                    aria-labelledby="forgot-heading"
+                  >
+                    <p id="forgot-heading" className="t-body font-medium text-ink">
+                      Reset your password
+                    </p>
+                    {forgotMessage ? (
+                      <Banner tone="info">{forgotMessage}</Banner>
+                    ) : (
+                      <>
+                        <p className="t-meta text-ink-2">
+                          We will email a link to choose a new one.
+                        </p>
+                        <div className="space-y-1.5">
+                          <FieldLabel htmlFor="forgot-email">Email address</FieldLabel>
+                          <Input
+                            id="forgot-email"
+                            type="email"
+                            placeholder="you@agency.com"
+                            value={email}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                              setEmail(e.target.value)
+                            }
+                            required
+                            autoComplete="email"
+                            className={FIELD}
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          className={cn('h-10 w-full', FOCUS_RING)}
+                          disabled={forgotSending || !email.trim()}
+                        >
+                          {forgotSending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : null}
+                          Send reset link
+                        </Button>
+                      </>
+                    )}
+                  </form>
+                ) : (
+                  <p className="t-meta text-center text-ink-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotOpen(true);
+                        setForgotMessage(null);
+                        setError(null);
+                      }}
+                      className={cn(
+                        'rounded-control text-ink underline underline-offset-2 hover:text-brand-ink',
+                        FOCUS_RING
+                      )}
+                    >
+                      Forgot password?
+                    </button>
+                  </p>
+                )}
               </TabsContent>
 
               <TabsContent value="create" className="mt-6 space-y-6 outline-none">
