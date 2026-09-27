@@ -28,8 +28,8 @@ import { logger } from '../lib/logger.js';
 import { backfillApplicationCustomers } from './applications/customer-link.js';
 import { billMonth } from './numbers/number-charges.js';
 import { currentCalendarDay, PLATFORM_TIME_ZONE } from './rating/calendar-day.js';
-import { closeMonth } from './statements/statements.js';
 import { currentMonth, previousMonth } from './statements/statement-month.js';
+import { closeMonth } from './statements/statements.js';
 
 /** How often the scheduler asks whether it is time. */
 export const MONTHLY_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -139,7 +139,7 @@ export async function runMonthlyCloseTick(deps: MonthlyCloseDeps): Promise<Month
  */
 export function startMonthlyCloseScheduler(deps: MonthlyCloseDeps): () => void {
   const tick = (): void => {
-    runMonthlyCloseTick(deps).catch(error => {
+    runMonthlyCloseTick(deps).catch((error: unknown) => {
       logger.error({ msg: 'Monthly close failed (non-fatal)', err: error });
     });
   };
@@ -155,7 +155,7 @@ export function startApplicationCustomerBackfill(prisma: PrismaClient): void {
     .then(counts => {
       logger.info({ msg: 'Application customer backfill finished', ...counts });
     })
-    .catch(error => {
+    .catch((error: unknown) => {
       logger.error({ msg: 'Application customer backfill failed (non-fatal)', err: error });
     });
 }
