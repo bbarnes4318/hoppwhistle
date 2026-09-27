@@ -183,10 +183,13 @@ function patchRoutingService() {
     source = source.replace(routingBlock, replacement);
   }
 
+  // What the shipped routing must contain: the plan log line, the weighted
+  // pick that orders an external priority group (tied buyers become following
+  // steps), and one ring step per group of legs.
   for (const marker of [
     'Selected campaign mixed destination ring/failover plan',
-    'stepEndpoints.push(pickWeighted(externalEndpoints))',
-    "ringSteps.push(destinations.join(','))",
+    'weightedOrder(externalEndpoints)',
+    "ringSteps.push(legs.map(leg => leg.destination.trim()).join(','))",
   ]) {
     if (!source.includes(marker)) {
       throw new Error(`routing.ts verification failed: ${marker}`);

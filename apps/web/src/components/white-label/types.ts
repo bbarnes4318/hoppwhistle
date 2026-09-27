@@ -58,7 +58,10 @@ export interface CallSalesSummary {
     calls: number;
     answeredByAgents: number;
     sentToBuyers: number;
+    /** Every billable call, agent- or buyer-answered: what the payout pays for. */
     billable: number;
+    billableAgentAnswered: number;
+    billableToBuyers: number;
     payout: number;
     revenue: number;
     profit: number;

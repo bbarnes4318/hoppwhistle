@@ -15,6 +15,7 @@ import {
 import { StatusChip } from '@/components/domain/status-chip';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { usePlatformContext } from '@/hooks/use-platform-context';
+import { AGENT_LIVE_STATUS_TONE, agentLiveStatus } from '@/lib/agent-status';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -142,21 +143,14 @@ export function useAgentSort(agents: AgentRow[]) {
 }
 
 /**
- * Softphone presence, as a chip tone. Available is live; on a call is in
- * progress; away is a deliberate stop, so it takes the blocked violet rather
- * than a failure red; offline, unknown and "n/a" are neutral.
+ * Softphone presence, as a chip tone -- bucketed by the shared rule, so
+ * 'on-call' and 'on_call' both read as on a call. Available is live; on a call
+ * is in progress; away (and do-not-disturb) is a deliberate stop, so it takes
+ * the blocked violet rather than a failure red; offline, unknown and "n/a" are
+ * neutral.
  */
 function agentStatusTone(status: string): 'live' | 'ringing' | 'blocked' | 'neutral' {
-  switch (status) {
-    case 'available':
-      return 'live';
-    case 'on_call':
-      return 'ringing';
-    case 'away':
-      return 'blocked';
-    default:
-      return 'neutral';
-  }
+  return AGENT_LIVE_STATUS_TONE[agentLiveStatus(status)];
 }
 
 /**

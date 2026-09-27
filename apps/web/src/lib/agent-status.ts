@@ -1,28 +1,15 @@
 /**
  * An agent's live status, as the white-label screens say it.
  *
- * The roster reads the softphone's presence from Redis as whatever string the
- * browser last wrote -- 'available', 'READY', 'on_call', 'busy', 'away', or
- * nothing at all. The API's Today summary buckets it with exactly this rule
- * (`routes/white-label-today.ts`), so a count on Today and a chip on a
- * campaign's agents agree.
+ * The bucketing rule lives in `@hopwhistle/shared` (`agentLiveStatus`) so the
+ * API's Today summary (`routes/white-label-today.ts`) and every web chip read
+ * the softphone's presence the same way -- 'on-call' and 'on_call' are both on
+ * a call, 'dnd' is away -- and a count on Today and a chip on a campaign's
+ * agents agree.
  */
-export type AgentLiveStatus = 'READY' | 'ON_CALL' | 'AWAY' | 'OFFLINE';
+import type { AgentLiveStatus } from '@hopwhistle/shared';
 
-export function agentLiveStatus(raw: string | null | undefined): AgentLiveStatus {
-  switch ((raw ?? '').trim().toLowerCase()) {
-    case 'available':
-    case 'ready':
-      return 'READY';
-    case 'busy':
-    case 'on_call':
-      return 'ON_CALL';
-    case 'away':
-      return 'AWAY';
-    default:
-      return 'OFFLINE';
-  }
-}
+export { agentLiveStatus, type AgentLiveStatus } from '@hopwhistle/shared';
 
 export const AGENT_LIVE_STATUS_LABEL: Record<AgentLiveStatus, string> = {
   READY: 'Ready',

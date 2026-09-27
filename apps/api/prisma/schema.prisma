@@ -126,6 +126,7 @@ model Tenant {
   agentSipCredentials      AgentSipCredential[]
   agentSchedules           AgentSchedule[]
   publisherPayments        PublisherPayment[]
+  pendingCallDispositions  PendingCallDisposition[]
 
   @@index([slug])
   @@index([status])
@@ -1192,6 +1193,36 @@ model Edge {
 // ============================================================================
 // Call Tracking
 // ============================================================================
+
+/// A softphone disposition saved before the call's CDR has landed.
+///
+/// The softphone learns the call's `callSid` (`fs-<FreeSWITCH uuid>`, from the
+/// `X-Call-Id` header on the INVITE) when it rings, but the `calls` row is only
+/// written from the CDR after hangup -- and the agent can finish writing the
+/// call up first. Creating a call row there made a second INBOUND row for the
+/// one call. The disposition waits here instead, and the CDR handler merges it
+/// into the call it creates and deletes this row.
+model PendingCallDisposition {
+  id          String    @id @default(uuid())
+  tenantId    String
+  callSid     String
+  /// The agent who saved it; the application, if any, is theirs.
+  userId      String?
+  disposition String
+  notes       String?
+  callSource  String?
+  followUpAt  DateTime?
+  duration    Int?
+  /// The validated application for APPLICATION_SUBMITTED, recorded at merge.
+  application Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, callSid])
+  @@map("pending_call_dispositions")
+}
 
 model Call {
   id           String        @id @default(uuid())

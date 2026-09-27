@@ -37,6 +37,7 @@
  * read or write that fails is logged and the answer comes from the database.
  */
 
+import { agentLiveStatus, type AgentLiveStatus } from '@hopwhistle/shared';
 import type { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
@@ -60,25 +61,15 @@ export function todayCacheKey(tenantId: string): string {
   return `wl:today:${tenantId}`;
 }
 
-export type AgentPresence = 'READY' | 'ON_CALL' | 'AWAY' | 'OFFLINE';
+export type AgentPresence = AgentLiveStatus;
 
 /**
- * The softphone's status string, as the Today screen groups it. Lower-cased
- * first: the softphone has written both cases over its life.
+ * The softphone's status string, as the Today screen groups it -- the shared
+ * rule in `@hopwhistle/shared`, so Today and the web roster chips agree
+ * ('on-call' and 'on_call' are both on a call, 'dnd' is away).
  */
 export function agentPresence(status: string | null | undefined): AgentPresence {
-  switch ((status ?? '').toLowerCase()) {
-    case 'available':
-    case 'ready':
-      return 'READY';
-    case 'busy':
-    case 'on_call':
-      return 'ON_CALL';
-    case 'away':
-      return 'AWAY';
-    default:
-      return 'OFFLINE';
-  }
+  return agentLiveStatus(status);
 }
 
 /** A buyer's daily cap, or null when it has none. */

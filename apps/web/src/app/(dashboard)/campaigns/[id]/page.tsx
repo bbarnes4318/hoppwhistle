@@ -60,6 +60,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { answerOrderOf } from '@/lib/answer-order';
 import { apiClient } from '@/lib/api';
+import {
+  clampRingSeconds,
+  DEFAULT_AGENT_RING_SECONDS,
+  DEFAULT_BUYER_RING_SECONDS,
+  MAX_RING_SECONDS,
+  MIN_RING_SECONDS,
+  ringTimesOf,
+} from '@/lib/ring-times';
 import { cn } from '@/lib/utils';
 
 /** The tabs a campaign has; which of them a viewer sees depends on who they are. */
@@ -223,6 +231,8 @@ export default function CampaignDetailPage() {
     billableDurationSeconds: 60,
     publisherPayoutPerBillableCall: 0,
     buyerPricePerBillableCall: 0,
+    agentRingSeconds: DEFAULT_AGENT_RING_SECONDS,
+    buyerRingSeconds: DEFAULT_BUYER_RING_SECONDS,
   });
 
   // Sub-resource lists
@@ -294,6 +304,7 @@ export default function CampaignDetailPage() {
           billableDurationSeconds: response.data.billableDurationSeconds,
           publisherPayoutPerBillableCall: Number(response.data.publisherPayoutPerBillableCall),
           buyerPricePerBillableCall: Number(response.data.buyerPricePerBillableCall),
+          ...ringTimesOf(response.data.metadata),
         });
       }
 
@@ -405,6 +416,18 @@ export default function CampaignDetailPage() {
         billableDurationSeconds: Number(settingsForm.billableDurationSeconds),
         publisherPayoutPerBillableCall: Number(settingsForm.publisherPayoutPerBillableCall),
         buyerPricePerBillableCall: Number(settingsForm.buyerPricePerBillableCall),
+        // Merged into campaign.metadata by the API; the routing engine reads
+        // both, with the same defaults and 10-120 second bounds.
+        metadata: {
+          agentRingSeconds: clampRingSeconds(
+            settingsForm.agentRingSeconds,
+            DEFAULT_AGENT_RING_SECONDS
+          ),
+          buyerRingSeconds: clampRingSeconds(
+            settingsForm.buyerRingSeconds,
+            DEFAULT_BUYER_RING_SECONDS
+          ),
+        },
       });
 
       if (res.error) {
@@ -806,6 +829,62 @@ export default function CampaignDetailPage() {
                         setSettingsForm({ ...settingsForm, recordingEnabled: checked })
                       }
                     />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-border">
+                <CardHeader>
+                  <CardTitle>Ring Times</CardTitle>
+                  <CardDescription>
+                    How long each call rings before routing moves on to the next answerer.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-agent-ring">Agent ring time (seconds)</Label>
+                    <Input
+                      id="camp-agent-ring"
+                      type="number"
+                      step={1}
+                      min={MIN_RING_SECONDS}
+                      max={MAX_RING_SECONDS}
+                      value={settingsForm.agentRingSeconds}
+                      onChange={e =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          agentRingSeconds: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      How long a call rings your agents before moving on. Between {MIN_RING_SECONDS}{' '}
+                      and {MAX_RING_SECONDS}; defaults to {DEFAULT_AGENT_RING_SECONDS}.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-buyer-ring">Buyer ring time (seconds)</Label>
+                    <Input
+                      id="camp-buyer-ring"
+                      type="number"
+                      step={1}
+                      min={MIN_RING_SECONDS}
+                      max={MAX_RING_SECONDS}
+                      value={settingsForm.buyerRingSeconds}
+                      onChange={e =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          buyerRingSeconds: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      How long a call rings a buyer before moving on. Between {MIN_RING_SECONDS} and{' '}
+                      {MAX_RING_SECONDS}; defaults to {DEFAULT_BUYER_RING_SECONDS}.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

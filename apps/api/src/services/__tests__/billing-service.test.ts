@@ -308,6 +308,43 @@ describe('BillingService Unit Tests', () => {
       expect(res.buyerPriceRate).toBe('22.5000');
     });
 
+    it('pays the publisher for an agent-answered billable call, and charges no buyer', async () => {
+      // An agent took the call: the CDR names no buyer.
+      mockPrisma.call.findUnique.mockResolvedValue({
+        ...defaultCall,
+        buyerId: null,
+        buyer: null,
+        answeredByUserId: 'agent-1',
+      });
+
+      const res = await billingService.calculateCallBilling('call-1');
+
+      expect(res.billable).toBe(true);
+      expect(res.payout).toBe('8.0000');
+      expect(res.revenue).toBe('0.0000');
+      expect(mockPrisma.call.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            billable: true,
+            buyerChargeStatus: 'NOT_BILLABLE',
+            revenue: new Prisma.Decimal(0),
+            buyerBillableAmount: new Prisma.Decimal(0),
+            publisherPayoutStatus: 'PAYABLE',
+          }),
+        })
+      );
+      const updateData = mockPrisma.call.update.mock.calls[0][0].data;
+      expect(updateData.buyerChargedAt).toBeUndefined();
+      expect(mockPrisma.accrualLedger.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'BUYER_REVENUE' }) })
+      );
+      expect(mockPrisma.accrualLedger.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'PUBLISHER_PAYOUT', publisherId: 'pub-1' }),
+        })
+      );
+    });
+
     it('should resolve publisher payout by hierarchy: CampaignPublisher override -> Campaign default -> Publisher rule', async () => {
       // 1. Campaign default
       let res = await billingService.calculateCallBilling('call-1');

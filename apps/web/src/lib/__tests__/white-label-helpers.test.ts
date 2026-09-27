@@ -20,6 +20,16 @@ describe('agentLiveStatus', () => {
   ] as const)('reads %s as %s', (raw, want) => {
     expect(agentLiveStatus(raw)).toBe(want);
   });
+
+  it("an 'on-call' agent counts as on a call", () => {
+    // What the softphone writes today, beside the older spelling.
+    expect(agentLiveStatus('on-call')).toBe('ON_CALL');
+    expect(agentLiveStatus('on_call')).toBe('ON_CALL');
+  });
+
+  it('reads do-not-disturb as away', () => {
+    expect(agentLiveStatus('dnd')).toBe('AWAY');
+  });
 });
 
 describe('answer order', () => {

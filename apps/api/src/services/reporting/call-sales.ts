@@ -87,7 +87,16 @@ export interface CallSalesPublisherRow {
   calls: number;
   answeredByAgents: number;
   sentToBuyers: number;
+  /**
+   * Every billable call from this publisher, whoever answered it -- the same
+   * calls the payout column pays for. A publisher is paid for a billable call
+   * an agent took exactly as for one a buyer took.
+   */
   billable: number;
+  /** Of `billable`, the calls one of the agency's agents answered. */
+  billableAgentAnswered: number;
+  /** Of `billable`, the calls a buyer answered: the only ones that earn revenue. */
+  billableToBuyers: number;
   payout: number;
   revenue: number;
   profit: number;
@@ -324,7 +333,11 @@ export async function getCallSalesSummary(
         calls: list.length,
         answeredByAgents: list.filter(call => call.answeredByUserId !== null).length,
         sentToBuyers: list.filter(call => call.buyerId !== null).length,
-        billable: list.filter(call => call.buyerId !== null && call.billable).length,
+        billable: list.filter(call => call.billable).length,
+        billableAgentAnswered: list.filter(
+          call => call.billable && call.buyerId === null && call.answeredByUserId !== null
+        ).length,
+        billableToBuyers: list.filter(call => call.billable && call.buyerId !== null).length,
         payout: money(bucket.payout),
         revenue: money(billableRevenue(list)),
         profit: money(bucket.profit),

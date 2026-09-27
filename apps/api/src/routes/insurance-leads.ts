@@ -20,6 +20,7 @@ import {
   type StateAuthority,
 } from '../lib/licensed-states.js';
 import { getActingTenantId, getActingUserId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { requireUpgrade } from '../lib/tenant-upgrades.js';
 import { calendarDayBounds } from '../services/rating/calendar-day.js';
 
 
@@ -271,6 +272,17 @@ function runPreClosedPython(leads: any[]): Promise<any[]> {
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
+  // The CRM and its lead lists are the Power Dialer upgrade (they are what the
+  // dialer dials). Every route in this plugin but the inbound webhook, which is
+  // API-key ingestion from a lead vendor: refusing it would drop leads the
+  // vendor has already sent, not hide a screen.
+  fastify.addHook(
+    'preHandler',
+    requireUpgrade('POWER_DIALER', {
+      skip: request => request.url.startsWith('/api/v1/insurance-leads/inbound/'),
+    })
+  );
+
   // -----------------------------------------------------------------------
   // POST /api/v1/insurance-leads/inbound/:vertical — Inbound webhook
   // -----------------------------------------------------------------------

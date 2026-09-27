@@ -6,12 +6,20 @@
   Flow:
     1. Extract caller number (ANI) and dialed number (DNIS/DID)
     2. HTTP GET to API: /api/v1/freeswitch/lookup?did=<DID>
-    3. If route found → start recording → bridge to buyer's phone via BulkVS
-    4. On hangup → POST CDR to API for tracking
+    3. If route found → start recording → bridge to the legs of the dial plan
+    4. On hangup → POST CDR to API for tracking, naming the leg that answered
     5. Kick off recording upload to S3
 
+  Who answered:
+    The API's `dialString` is the routing plan with every leg tagged:
+      [x_leg_party=buyer:<id>,x_leg_target=<endpointId>,x_leg_number=<n>,leg_timeout=<s>]<n>
+      [x_leg_party=agent:<userId>,x_leg_number=<n>,leg_timeout=<s>]<n>
+    Those ride on the B-leg. After the bridge this script reads them back off
+    the leg that answered and reports them as `answeredParty` / `answeredNumber`
+    / `answeredTarget`, which is the only thing the API attributes the call by.
+
   Environment:
-    API_URL     — Base URL of the Hopwhistle API (default: http://127.0.0.1:3001)
+    API_URL     — Base URL of the platform API (default: http://127.0.0.1:3001)
     RECORDING_DIR — Directory for recordings (default: /recordings)
     FREESWITCH_INTERNAL_KEY — REQUIRED. Shared secret proving to the API that
                   this really is FreeSWITCH calling. Without it the API answers
@@ -70,6 +78,81 @@ local function json_value(json_str, key)
   if val == "null" then return nil end
   return val
 end
+
+local function trim(s)
+  return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
+end
+
+-- ── Tagged dial plan ────────────────────────────────────────────────────────
+-- A leg may carry per-leg variables, `[a=b,c=d]<leg>`, whose commas are not
+-- leg separators. Steps (`|`) and legs (`,`) are split outside brackets only.
+-- ##LEG_TAGS_BEGIN##
+local function split_outside_brackets(s, sep)
+    local parts, current, depth = {}, {}, 0
+    for i = 1, string.len(s or "") do
+        local ch = string.sub(s, i, i)
+        if ch == "[" then
+            depth = depth + 1
+        elseif ch == "]" and depth > 0 then
+            depth = depth - 1
+        end
+        if ch == sep and depth == 0 then
+            table.insert(parts, table.concat(current))
+            current = {}
+        else
+            table.insert(current, ch)
+        end
+    end
+    table.insert(parts, table.concat(current))
+    return parts
+end
+
+-- "[a=b,c=d]rest" -> { a = "b", c = "d" }, "rest". No brackets -> {}, token.
+local function parse_leg(token)
+    local tags = {}
+    token = trim(token)
+    local inner = string.match(token, "^%[([^%]]*)%]")
+    if not inner then
+        return tags, token
+    end
+    for pair in string.gmatch(inner, "[^,]+") do
+        local k, v = string.match(pair, "^%s*([^=%s]+)%s*=(.*)$")
+        if k then tags[k] = trim(v) end
+    end
+    return tags, trim(string.sub(token, string.len(inner) + 3))
+end
+
+-- Ordered per-leg variables. A later set of the same name replaces the value.
+local function new_leg_vars()
+    return { order = {}, values = {} }
+end
+
+-- Values go inside `[...]`, where a comma or bracket would end them early.
+local function leg_var_value(v)
+    return (string.gsub(tostring(v or ""), "[%[%],|'\"]", ""))
+end
+
+local function set_leg_var(vars, name, value)
+    if value == nil or value == "" then return end
+    if vars.values[name] == nil then table.insert(vars.order, name) end
+    vars.values[name] = leg_var_value(value)
+end
+
+-- Prefix a leg with its variables, merging into a `[...]` the leg already has
+-- (its own values listed last, so they win).
+local function with_leg_vars(vars, leg)
+    if #vars.order == 0 then return leg end
+    local out = {}
+    for _, name in ipairs(vars.order) do
+        table.insert(out, name .. "=" .. vars.values[name])
+    end
+    local ours = table.concat(out, ",")
+    if string.sub(leg, 1, 1) == "[" then
+        return "[" .. ours .. "," .. string.sub(leg, 2)
+    end
+    return "[" .. ours .. "]" .. leg
+end
+-- ##LEG_TAGS_END##
 
 -- ── Agent busy check ────────────────────────────────────────────────────────
 -- An agent already on a call must never have a second call rung at them.
@@ -278,6 +361,7 @@ end
 local caller_number = session:getVariable("caller_id_number") or "unknown"
 local did_number    = session:getVariable("destination_number") or ""
 local call_uuid     = session:getVariable("uuid") or ""
+local call_start_epoch = os.time()
 
 log("INFO", "Inbound call: " .. caller_number .. " → DID " .. did_number .. " (UUID: " .. call_uuid .. ")")
 
@@ -333,6 +417,58 @@ local function url_encode_component(val)
     return (string.gsub(val or "", "[^%w%-%_%.%~]", function(c)
         return string.format("%%%02X", string.byte(c))
     end))
+end
+
+-- ── CDR ─────────────────────────────────────────────────────────────────────
+-- One place builds and posts the CDR, so a call that never bridges (no
+-- eligible destination) is recorded exactly like one that did.
+local function json_text(v)
+    return (string.gsub(tostring(v or ""), "[\"'\\%c]", ""))
+end
+
+local function json_number(v)
+    local n = tonumber(v)
+    if not n then return "0" end
+    return string.format("%d", math.floor(n))
+end
+
+local CDR_FIELDS = {
+    { "callId" }, { "routeId" }, { "tenantId" }, { "callerNumber" }, { "did" },
+    { "destination" }, { "buyerId" }, { "targetId" }, { "campaignId" },
+    { "duration", "n" }, { "connectedDuration", "n" },
+    { "hangupCause" }, { "sipHangupDisposition" },
+    { "startedAt" }, { "answeredAt" }, { "endedAt" },
+    { "recordingPath" }, { "recordingDuration", "n" },
+    { "bridgeChannelName" },
+    -- Who actually answered: "buyer:<id>", "agent:<userId>", or "" for nobody.
+    { "answeredParty" }, { "answeredNumber" }, { "answeredTarget" },
+}
+
+local function build_cdr_json(cdr)
+    local parts = {}
+    for _, field in ipairs(CDR_FIELDS) do
+        local name, kind = field[1], field[2]
+        if kind == "n" then
+            table.insert(parts, '"' .. name .. '":' .. json_number(cdr[name]))
+        else
+            table.insert(parts, '"' .. name .. '":"' .. json_text(cdr[name]) .. '"')
+        end
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function post_cdr(cdr)
+    local cdr_json = build_cdr_json(cdr)
+    local cdr_url = API_URL .. "/api/v1/freeswitch/cdr?k=" .. url_encode_component(INTERNAL_KEY)
+    local cdr_cmd = string.format(
+      "%s content-type application/json timeout 10 post '%s'",
+      cdr_url,
+      cdr_json
+    )
+    log("INFO", "Posting CDR to: " .. string.gsub(cdr_url, "([?&]k=)[^&]*", "%1REDACTED"))
+    local cdr_response = api:execute("curl", cdr_cmd) or ""
+    log("INFO", "CDR response: " .. cdr_response)
+    return cdr_response
 end
 
 local encoded_did = url_encode_plus(did_normalized)
@@ -397,6 +533,12 @@ local target_id       = json_value(response_body, "targetId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
 local no_eligible     = json_value(response_body, "noEligibleDestination")
+-- The same plan as `destination` with every leg tagged with who it rings.
+-- Preferred; an API that predates it sends only `destination`.
+local dial_plan       = json_value(response_body, "dialString")
+if not dial_plan or dial_plan == "" then
+    dial_plan = destination or ""
+end
 local agent_cell_keys = {}
 for key in string.gmatch(json_value(response_body, "agentCellLegs") or "", "[^,%s]+") do
     agent_cell_keys[key] = true
@@ -457,6 +599,34 @@ if no_eligible == "true" or ((not destination or destination == "") and route_id
   session:sleep(500)
   session:execute("playback", "ivr/ivr-no_user_response.wav")
   session:hangup("NO_USER_RESPONSE")
+  -- Recorded, not dropped: the caller rang and nobody could take the call.
+  -- Answering to play the prompt is not the call being answered, so no
+  -- answeredAt and no answering party.
+  local no_eligible_end = os.time()
+  post_cdr({
+    callId = call_uuid,
+    routeId = route_id,
+    tenantId = tenant_id,
+    callerNumber = caller_number,
+    did = did_normalized,
+    destination = "",
+    buyerId = "",
+    targetId = target_id,
+    campaignId = campaign_id,
+    duration = no_eligible_end - call_start_epoch,
+    connectedDuration = 0,
+    hangupCause = "NO_USER_RESPONSE",
+    sipHangupDisposition = session:getVariable("sip_hangup_disposition") or "",
+    startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ", call_start_epoch),
+    answeredAt = "",
+    endedAt = os.date("!%Y-%m-%dT%H:%M:%SZ", no_eligible_end),
+    recordingPath = "",
+    recordingDuration = 0,
+    bridgeChannelName = "",
+    answeredParty = "",
+    answeredNumber = "",
+    answeredTarget = "",
+  })
   return
 end
 
@@ -539,14 +709,6 @@ end
 local start_epoch = os.time()
 session:setVariable("x_started_at", os.date("!%Y-%m-%dT%H:%M:%SZ", start_epoch))
 
-local function split(s, delimiter)
-    local result = {}
-    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
-        table.insert(result, match)
-    end
-    return result
-end
-
 session:setVariable("continue_on_fail", "true")
 session:setVariable("hangup_after_bridge", hangup_after_bridge_value)
 
@@ -557,19 +719,131 @@ session:execute("unset", "sip_h_Identity-Info")
 session:setVariable("sip_h_Identity", nil)
 session:setVariable("sip_h_Identity-Info", nil)
 
-local failover_steps = split(destination, "|")
+local failover_steps = split_outside_brackets(dial_plan, "|")
 local answered_bridge_channel = ""
+local answered_party = ""
+local answered_number = ""
+local answered_target = ""
+
+-- The overall ring ceiling. A leg's own leg_timeout never exceeds it.
+local CALL_TIMEOUT = tonumber(session:getVariable("call_timeout") or "") or 120
+
+-- External (PSTN/buyer) legs present one of OUR numbers: carriers reject or
+-- silently drop a forwarded caller ID we do not own (campaign_external_cid_fix_v1),
+-- even while local ringback continues. Anonymous/"restricted" A-leg caller IDs
+-- are refused outright (NORMAL_TEMPORARY_FAILURE). So the dialed DID, or the
+-- default FracTEL caller ID when the DID is not a usable number.
+local outbound_cid = string.gsub(tostring(session:getVariable("destination_number") or ""), "%D", "")
+if string.len(outbound_cid) == 10 then
+    outbound_cid = "1" .. outbound_cid
+end
+if string.len(outbound_cid) ~= 11 or string.sub(outbound_cid, 1, 1) ~= "1" then
+    outbound_cid = string.gsub(tostring(os.getenv("FRACTEL_DEFAULT_CALLER_ID") or "12294222208"), "%D", "")
+    if string.len(outbound_cid) == 10 then
+        outbound_cid = "1" .. outbound_cid
+    end
+end
+
+-- The softphone is on OUR side of the call: it shows the customer's number.
+local softphone_cid = string.gsub(caller_number, "[^%w%+]", "")
+if softphone_cid == "" then softphone_cid = "unknown" end
+
+-- Variables every leg carries: who it rings (read back after the bridge) and
+-- how long it rings.
+local function routing_leg_vars(tags, bare)
+    local vars = new_leg_vars()
+    set_leg_var(vars, "x_leg_party", tags["x_leg_party"])
+    set_leg_var(vars, "x_leg_target", tags["x_leg_target"])
+    set_leg_var(vars, "x_leg_number", tags["x_leg_number"] or bare)
+    local leg_timeout = tonumber(tags["leg_timeout"] or "")
+    if leg_timeout and leg_timeout > 0 then
+        set_leg_var(vars, "leg_timeout", tostring(math.min(leg_timeout, CALL_TIMEOUT)))
+    end
+    -- Also stamp the answer onto OUR leg the moment this leg answers, for when
+    -- the B-leg is already gone by the time the bridge returns.
+    if tags["x_leg_party"] and tags["x_leg_party"] ~= "" and call_uuid ~= "" then
+        set_leg_var(vars, "api_on_answer", "uuid_setvar " .. call_uuid .. " x_answered_leg " ..
+            tags["x_leg_party"] .. "/" .. (tags["x_leg_target"] or "") .. "/" .. (tags["x_leg_number"] or bare))
+    end
+    return vars
+end
+
+-- The softphone reads the call's id off the INVITE, so its disposition lands
+-- on the call row the CDR writes (callSid "fs-<uuid>").
+local function agent_leg_vars(vars)
+    set_leg_var(vars, "sip_h_X-Call-Id", "fs-" .. call_uuid)
+end
+
+local function external_leg_vars(vars)
+    set_leg_var(vars, "sip_cid_type", "pid")
+    set_leg_var(vars, "sip_from_user", outbound_cid)
+    set_leg_var(vars, "origination_caller_id_number", outbound_cid)
+    set_leg_var(vars, "origination_caller_id_name", outbound_cid)
+    set_leg_var(vars, "effective_caller_id_number", outbound_cid)
+    set_leg_var(vars, "effective_caller_id_name", outbound_cid)
+end
+
+local function softphone_leg_vars(vars)
+    agent_leg_vars(vars)
+    set_leg_var(vars, "origination_caller_id_number", softphone_cid)
+    set_leg_var(vars, "origination_caller_id_name", softphone_cid)
+end
+
+-- The agent-cell extras (press-1 confirm, optional customer caller ID), as
+-- variables rather than a bracketed string.
+local function add_agent_cell_vars(vars)
+    local cell = agent_cell_leg_vars(caller_number)
+    local inner = string.match(cell, "^%[(.*)%]$")
+    if not inner then return end
+    for pair in string.gmatch(inner, "[^,]+") do
+        local k, v = string.match(pair, "^([^=]+)=(.*)$")
+        if k then set_leg_var(vars, k, v) end
+    end
+end
+
+-- A variable off the leg that answered. The B-leg's own variables first, via
+-- uuid_getvar on whichever of our variables still names it; then the copy the
+-- leg's api_on_answer stamped onto this leg.
+local function answered_leg_var(name)
+    for _, holder in ipairs({ "last_bridge_to", "bridge_uuid", "signal_bond" }) do
+        local b_uuid = trim(session:getVariable(holder) or "")
+        if b_uuid ~= "" then
+            local ok, val = pcall(function() return api:execute("uuid_getvar", b_uuid .. " " .. name) end)
+            if ok and type(val) == "string" then
+                val = trim(val)
+                if val ~= "" and val ~= "_undef_" and not string.match(val, "^%-ERR") then
+                    return val
+                end
+            end
+        end
+    end
+    return ""
+end
+
+local function read_answered_leg()
+    local party = answered_leg_var("x_leg_party")
+    local number = answered_leg_var("x_leg_number")
+    local target = answered_leg_var("x_leg_target")
+    if party == "" then
+        local stamped = trim(session:getVariable("x_answered_leg") or "")
+        local s_party, s_target, s_number = string.match(stamped, "^([^/]*)/([^/]*)/(.*)$")
+        if s_party and s_party ~= "" then
+            party, target, number = s_party, s_target, s_number
+        end
+    end
+    return party, number, target
+end
 
 for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
-        local parallel_destinations = split(step, ",")
+        local parallel_destinations = split_outside_brackets(step, ",")
         local bridge_components = {}
+        -- Each component's per-leg variables, by index into bridge_components.
+        local component_vars = {}
         -- The first carrier leg for each external destination, in that
         -- carrier's own number format. Used when an external shares a step
         -- with other legs, where the full waterfall cannot be expressed.
         local external_first_leg = {}
-        -- Indexes into bridge_components that are an agent's own cell.
-        local agent_cell_components = {}
 
         -- Channel snapshot for this step only. Failover steps run seconds or
         -- minutes apart, so it is refreshed per step, and only fetched at all
@@ -580,10 +854,10 @@ for i, step in ipairs(failover_steps) do
             return channel_rows
         end
 
-        for j, p_dest in ipairs(parallel_destinations) do
-            -- Strip whitespace
-            p_dest = string.gsub(p_dest, "^%s*(.-)%s*$", "%1")
+        for j, raw_dest in ipairs(parallel_destinations) do
+            local tags, p_dest = parse_leg(raw_dest)
             if p_dest ~= "" then
+                local vars = routing_leg_vars(tags, p_dest)
                 -- Check if it's a short extension (e.g. 1000) or a UUID (User ID)
                 local is_internal = false
                 if string.match(p_dest, "^%d%d%d%d$") then
@@ -593,6 +867,7 @@ for i, step in ipairs(failover_steps) do
                 end
 
                 if is_internal then
+                    softphone_leg_vars(vars)
                     -- Pre-resolve the contact to check if registered, searching multiple fallback domains
                     local domain = session:getVariable("domain_name") or "localhost"
                     if domain == "" then domain = "localhost" end
@@ -635,9 +910,11 @@ for i, step in ipairs(failover_steps) do
                     elseif contact ~= "" then
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
+                        component_vars[#bridge_components] = vars
                     else
                         log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
                         table.insert(bridge_components, "user/" .. p_dest)
+                        component_vars[#bridge_components] = vars
                     end
                 else
                     -- External PSTN leg. Validate it actually looks like a phone
@@ -657,12 +934,17 @@ for i, step in ipairs(failover_steps) do
                         log("WARNING", "[AGENT-BUSY] Agent cell " .. dest_digits .. " already on " ..
                             tostring(cell_busy) .. " call(s) — NOT ringing")
                     elseif string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
+                        external_leg_vars(vars)
+                        if is_agent_cell or starts_with(tags["x_leg_party"], "agent:") then
+                            agent_leg_vars(vars)
+                        end
+                        if is_agent_cell then
+                            add_agent_cell_vars(vars)
+                        end
                         table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
+                        component_vars[#bridge_components] = vars
                         local templated = carrier_legs_for(dest_digits)
                         external_first_leg[#bridge_components] = templated and string.match(templated, "^[^|]+") or nil
-                        if is_agent_cell then
-                            agent_cell_components[#bridge_components] = true
-                        end
                     else
                         log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
                     end
@@ -675,29 +957,19 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
-            -- Carriers reject anonymous/"restricted" caller IDs on the outbound buyer
-            -- leg (NORMAL_TEMPORARY_FAILURE). If the A-leg caller ID isn't a real
-            -- number, stamp the dialed DID so the buyer leg is an acceptable call.
-            -- campaign_external_cid_fix_v1: PSTN buyer legs must present a
-            -- Hopwhistle/FracTEL DID as caller ID. Forwarding the original callers ANI
-            -- can be rejected or silently time out even while local ringback continues.
-            local outbound_cid = session:getVariable("destination_number") or ""
-            outbound_cid = string.gsub(tostring(outbound_cid), "%D", "")
-            if string.len(outbound_cid) == 10 then
-                outbound_cid = "1" .. outbound_cid
-            end
-            if string.len(outbound_cid) ~= 11 or string.sub(outbound_cid, 1, 1) ~= "1" then
-                outbound_cid = os.getenv("FRACTEL_DEFAULT_CALLER_ID") or "12294222208"
-                outbound_cid = string.gsub(tostring(outbound_cid), "%D", "")
-                if string.len(outbound_cid) == 10 then
-                    outbound_cid = "1" .. outbound_cid
+            log("INFO", "External legs present caller ID " .. outbound_cid .. "; original caller=" .. tostring(caller_number))
+            -- A registered contact can list several registrations; each is its
+            -- own leg and each carries the variables.
+            local function tagged(idx, leg)
+                local vars = component_vars[idx] or new_leg_vars()
+                local out = {}
+                for _, one in ipairs(split_outside_brackets(leg, ",")) do
+                    if trim(one) ~= "" then
+                        table.insert(out, with_leg_vars(vars, trim(one)))
+                    end
                 end
+                return table.concat(out, ",")
             end
-            log("INFO", "External buyer leg using verified FracTEL caller ID " .. outbound_cid .. "; original caller=" .. tostring(caller_number))
-            local bridge_vars = string.format(
-                "{sip_cid_type=pid,sip_from_user=%s,origination_caller_id_number=%s,origination_caller_id_name=Hopwhistle,effective_caller_id_number=%s,effective_caller_id_name=Hopwhistle}",
-                outbound_cid, outbound_cid, outbound_cid
-            )
             -- Single external destination: retry the same number across the
             -- whole carrier gateway chain (mirrors the outbound dialplan's
             -- fractel1..6 failover) before moving to the next routing step.
@@ -705,27 +977,27 @@ for i, step in ipairs(failover_steps) do
             if #bridge_components == 1 then
                 local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
                 local templated = gw_dest and carrier_legs_for(gw_dest) or nil
+                local alternatives
                 if templated then
                     -- Preferred: the API's rendered waterfall, which carries
                     -- each carrier's own number format.
-                    bridge_body = templated
+                    alternatives = templated
                 elseif gw_dest and #external_gateways > 1 then
                     local alts = {}
                     for _, gw in ipairs(external_gateways) do
                         table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
                     end
-                    bridge_body = table.concat(alts, "|")
+                    alternatives = table.concat(alts, "|")
                 else
-                    bridge_body = bridge_components[1]
+                    alternatives = bridge_components[1]
                 end
-                if agent_cell_components[1] then
-                    local cell_vars = agent_cell_leg_vars(caller_number)
-                    local alts = {}
-                    for alt in string.gmatch(bridge_body, "[^|]+") do
-                        table.insert(alts, cell_vars .. alt)
+                local alts = {}
+                for _, alt in ipairs(split_outside_brackets(alternatives, "|")) do
+                    if trim(alt) ~= "" then
+                        table.insert(alts, tagged(1, trim(alt)))
                     end
-                    bridge_body = table.concat(alts, "|")
                 end
+                bridge_body = table.concat(alts, "|")
             else
                 -- A mixed or ring-all step. Each external leg gets the first
                 -- carrier's rendered format -- the bare `gateway/1XXXXXXXXXX`
@@ -734,15 +1006,11 @@ for i, step in ipairs(failover_steps) do
                 -- failed while the softphones rang.
                 local legs = {}
                 for idx, leg in ipairs(bridge_components) do
-                    local rendered = external_first_leg[idx] or leg
-                    if agent_cell_components[idx] then
-                        rendered = agent_cell_leg_vars(caller_number) .. rendered
-                    end
-                    table.insert(legs, rendered)
+                    table.insert(legs, tagged(idx, external_first_leg[idx] or leg))
                 end
                 bridge_body = table.concat(legs, ",")
             end
-            local bridge_string = bridge_vars .. bridge_body
+            local bridge_string = bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
 
@@ -761,9 +1029,12 @@ for i, step in ipairs(failover_steps) do
             end
 
             if session:answered() then
-                -- The leg that took the call; the CDR credits an agent's cell by it.
+                -- The leg that took the call, and who it was: the CDR credits
+                -- the call to this party and no other.
                 answered_bridge_channel = session:getVariable("bridge_channel") or answered_bridge_channel
-                log("INFO", "Call answered on step " .. tostring(i) .. ", exiting failover loop")
+                answered_party, answered_number, answered_target = read_answered_leg()
+                log("INFO", "Call answered on step " .. tostring(i) .. " by '" .. answered_party ..
+                    "' (" .. answered_number .. "), exiting failover loop")
                 -- hangup_after_bridge is off, so release the caller here.
                 if rescue_enabled and session:ready() then
                     session:hangup("NORMAL_CLEARING")
@@ -821,46 +1092,38 @@ log("INFO", "Call ended: " .. caller_number .. " → " .. destination ..
     " | duration=" .. duration_val .. "s | billsec=" .. billsec .. 
     " | cause=" .. hangup_cause)
 
--- Build CDR payload
+-- Build CDR payload. `answeredAt` only when a leg actually answered: the
+-- no-answer prompt answers this leg too, which sets answered_time, and that
+-- is not the call being answered.
 local answered_at_iso = ""
-if answered_sec > 0 then
+if answered_sec > 0 and answered_bridge_channel ~= "" then
   answered_at_iso = os.date("!%Y-%m-%dT%H:%M:%SZ", answered_sec)
 end
 
-local cdr_json = string.format(
-  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","sipHangupDisposition":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s,"bridgeChannelName":"%s"}',
-  call_uuid,
-  route_id or "",
-  tenant_id or "",
-  caller_number,
-  did_normalized,
-  destination,
-  buyer_id or "",
-  target_id or "",
-  campaign_id or "",
-  duration_val,
-  billsec,
-  hangup_cause,
-  hangup_disposition,
-  os.date("!%Y-%m-%dT%H:%M:%SZ", start_epoch),
-  answered_at_iso,
-  os.date("!%Y-%m-%dT%H:%M:%SZ", end_epoch),
-  recording_path,
-  billsec,
-  (string.gsub(answered_bridge_channel or "", "[\"'\\]", ""))
-)
-
--- POST CDR to API
-local cdr_url = API_URL .. "/api/v1/freeswitch/cdr?k=" .. url_encode_component(INTERNAL_KEY)
-local cdr_cmd = string.format(
-  "%s content-type application/json timeout 10 post '%s'",
-  cdr_url,
-  cdr_json
-)
-
-log("INFO", "Posting CDR to: " .. string.gsub(cdr_url, "([?&]k=)[^&]*", "%1REDACTED"))
-local cdr_response = api:execute("curl", cdr_cmd) or ""
-log("INFO", "CDR response: " .. cdr_response)
+local cdr_response = post_cdr({
+  callId = call_uuid,
+  routeId = route_id,
+  tenantId = tenant_id,
+  callerNumber = caller_number,
+  did = did_normalized,
+  destination = destination,
+  buyerId = buyer_id,
+  targetId = target_id,
+  campaignId = campaign_id,
+  duration = duration_val,
+  connectedDuration = billsec,
+  hangupCause = hangup_cause,
+  sipHangupDisposition = hangup_disposition,
+  startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ", start_epoch),
+  answeredAt = answered_at_iso,
+  endedAt = os.date("!%Y-%m-%dT%H:%M:%SZ", end_epoch),
+  recordingPath = recording_path,
+  recordingDuration = billsec,
+  bridgeChannelName = answered_bridge_channel,
+  answeredParty = answered_bridge_channel ~= "" and answered_party or "",
+  answeredNumber = answered_bridge_channel ~= "" and answered_number or "",
+  answeredTarget = answered_bridge_channel ~= "" and answered_target or "",
+})
 
   -- Parse the call ID from response for recording upload
   local db_call_id = json_value(cdr_response, "callId")

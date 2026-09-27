@@ -72,6 +72,10 @@ const DATABASE_BACKED = [
   // Truncates `insurance_carrier_applications`, `calls`, `tenants`, `roles`
   // and `users` to seed one agency and its agents.
   '**/src/__tests__/application-disposition.test.ts',
+  // Truncates `calls`, `did_routes`, `tenants`, `roles` and `users` to seed one
+  // agency, its agent and a tracking DID, then drives the CDR and the
+  // disposition endpoint against them.
+  '**/src/__tests__/softphone-disposition.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   // Creates two tenants and their webhook keys, so another suite's
   // `TRUNCATE "tenants" CASCADE` would delete them mid-test.

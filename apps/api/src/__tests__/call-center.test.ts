@@ -5,6 +5,11 @@ import { registerCallCenterRoutes } from '../routes/call-center.js';
 
 // Define the mock client
 const mockPrisma = {
+  // The acting tenant has the Power Dialer upgrade these routes sit behind
+  // (`requireUpgrade('POWER_DIALER')`); see power-dialer-upgrade.test.ts.
+  tenant: {
+    findUnique: () => Promise.resolve({ metadata: { upgrades: ['POWER_DIALER'] } }),
+  },
   insuranceLead: {
     findMany: vi.fn(),
   },
