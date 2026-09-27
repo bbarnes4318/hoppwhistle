@@ -685,7 +685,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           destination = '';
           buyerId = null;
           console.log(
-            `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} has no eligible destination`
+            `[FS-LOOKUP] Dynamic route returned no eligible destinations; refusing to bypass routing filters for campaign=${route.campaignId} caller=${caller}`
           );
         }
       } catch (routingErr) {
