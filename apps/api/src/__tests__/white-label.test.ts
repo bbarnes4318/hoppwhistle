@@ -473,7 +473,7 @@ describe.skipIf(!gate.available)('White-label tier', () => {
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/csv');
       expect(response.body).toContain('"Acme Senior",2,1,50,50.00');
-      expect(response.body).toContain('"Beta Leads",2,1,1,1,25.00,40.00,14.30');
+      expect(response.body).toContain('"Beta Leads",2,1,1,2,1,1,25.00,40.00,14.30');
     });
 
     it('guards a name that reads as a formula', async () => {

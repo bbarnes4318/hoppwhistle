@@ -659,9 +659,12 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     if (route.campaignId) {
       try {
         const { routingService } = await import('../services/routing.js');
-        const bestBuyer = await routingService.selectBestBuyer(route.tenantId, route.campaignId, {
-          callerId: caller,
-        });
+        const bestBuyer = await routingService.selectBestBuyer(
+          route.tenantId,
+          route.campaignId,
+          { callerId: caller },
+          { throwOnError: true }
+        );
 
         if (bestBuyer) {
           destination = bestBuyer.endpoint;

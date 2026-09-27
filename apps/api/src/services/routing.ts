@@ -1007,7 +1007,14 @@ export class RoutingService {
   async selectBestBuyer(
     tenantId: string,
     campaignId: string,
-    callData: CallData = {}
+    callData: CallData = {},
+    /**
+     * Rethrow a routing failure instead of answering null. The FreeSWITCH
+     * lookup uses this: "nobody is eligible" records an unanswered call, but
+     * "routing broke" fails open to the route's own destination, and the two
+     * must not look alike.
+     */
+    options: { throwOnError?: boolean } = {}
   ): Promise<{
     buyerId: string;
     endpoint: string;
@@ -1230,6 +1237,7 @@ export class RoutingService {
       };
     } catch (error) {
       logger.error('Error selecting best buyer:', error);
+      if (options.throwOnError) throw error;
       return null;
     }
   }

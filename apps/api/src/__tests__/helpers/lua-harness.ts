@@ -112,7 +112,7 @@ function prelude(scenario: InboundRouteScenario): string {
       caller_id_number: scenario.callerNumber ?? '+14235551212',
       destination_number: scenario.did ?? '18885550123',
       uuid: scenario.uuid ?? '6f1c2d3e-aaaa-4bbb-8ccc-123456789abc',
-      domain_name: 'hopwhistle.com',
+      domain_name: 'switch.test',
     },
   };
 
