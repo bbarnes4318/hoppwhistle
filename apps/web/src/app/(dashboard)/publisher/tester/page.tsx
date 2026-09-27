@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  AlertTriangle,
   Send,
   Terminal,
   Play,
@@ -17,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { Notice } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -263,13 +263,9 @@ function PublisherTesterPage() {
            * and the post leases a real transfer number from the pool, so a call
            * placed to it reaches the winning buyer.
            */}
-          <p
-            role="note"
-            className="flex items-center gap-2 rounded-control border border-ringing/40 bg-ringing-tint px-3 py-2 text-xs font-medium text-ringing-ink"
-          >
-            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <Notice tone="warning" role="note">
             This leases a real number and may route a real call.
-          </p>
+          </Notice>
         </div>
         <Button
           variant="outline"
