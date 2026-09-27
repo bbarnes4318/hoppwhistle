@@ -71,3 +71,24 @@ export function disputedAtOf(call: BuyerCall): string | null {
   const meta = call.metadata as { disputedAt?: unknown } | null;
   return typeof meta?.disputedAt === 'string' ? meta.disputedAt : null;
 }
+
+/**
+ * Whether the buyer has accepted this call.
+ *
+ * `metadata.acceptedByBuyerAt` is what the accept route writes. A VERIFIED
+ * disposition is also read as accepted, for calls accepted before that route
+ * existed, when the button wrote the disposition instead.
+ */
+export function acceptedByBuyer(call: BuyerCall): boolean {
+  const meta = call.metadata as { acceptedByBuyerAt?: unknown } | null;
+  return typeof meta?.acceptedByBuyerAt === 'string' || call.disposition === 'VERIFIED';
+}
+
+const STREAM_PATH = /\/api\/v1\/recordings\/([^/?#]+)\/stream/;
+
+/** The recording id in a call's stream URL, or null for any other URL. */
+export function recordingIdFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  const match = STREAM_PATH.exec(url);
+  return match ? decodeURIComponent(match[1]) : null;
+}

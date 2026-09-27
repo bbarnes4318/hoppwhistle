@@ -15,7 +15,6 @@ import {
   fetchBuyerProfile,
   fetchBuyerTransactions,
   fetchCostReport,
-  fetchInvoices,
   toMajor,
 } from '@/lib/server/buyer';
 import { requireBuyerScope } from '@/lib/server/session';
@@ -81,10 +80,6 @@ export default async function BuyerBillingPage() {
 
       <Suspense fallback={<TableSkeleton title="Transactions" columns={4} rows={8} />}>
         <Ledger token={scope.token} buyerId={scope.buyerId} />
-      </Suspense>
-
-      <Suspense fallback={<PanelSkeleton title="Invoices" lines={4} />}>
-        <Invoices token={scope.token} buyerId={scope.buyerId} />
       </Suspense>
     </>
   );
@@ -297,47 +292,6 @@ async function Ledger({ token, buyerId }: { token: string; buyerId: string }) {
       </PanelHeader>
       <PanelBody flush>
         <LedgerTable rows={rows} />
-      </PanelBody>
-    </Panel>
-  );
-}
-
-async function Invoices({ token, buyerId }: { token: string; buyerId: string }) {
-  const profileResult = await settle(fetchBuyerProfile(token, buyerId));
-  if (profileResult.data?.billingType !== 'TERMS') return null;
-
-  const { data, error } = await settle(fetchInvoices(token, 10));
-  if (error || !data) {
-    return <PanelError title="Invoices" message={error ?? 'No invoices returned.'} />;
-  }
-
-  return (
-    <Panel>
-      <PanelHeader>
-        <PanelTitle>Invoices</PanelTitle>
-      </PanelHeader>
-      <PanelBody>
-        {data.length === 0 ? (
-          <p className="t-body text-ink-3">No invoices have been issued yet.</p>
-        ) : (
-          <ul className="divide-y divide-rule">
-            {data.map(invoice => (
-              <li key={invoice.id} className="flex flex-wrap items-center gap-3 py-2.5">
-                <span className="t-data text-ink">{invoice.invoiceNumber}</span>
-                <StatusChip value={invoice.status} enumName="InvoiceStatus" size="sm" />
-                {invoice.period ? (
-                  <span className="t-meta text-ink-3">
-                    {new Date(invoice.period.start).toLocaleDateString()} –{' '}
-                    {new Date(invoice.period.end).toLocaleDateString()}
-                  </span>
-                ) : null}
-                <span className="ml-auto">
-                  <MoneyCell amount={toMajor(invoice.total)} unit="major" tone="auto" />
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </PanelBody>
     </Panel>
   );

@@ -296,30 +296,8 @@ async function replayPortalQuery(op: Operator): Promise<{
   } else if (op.publisherId) {
     where.publisherId = op.publisherId;
   } else {
-    const owned = await prisma.phoneNumber.findMany({
-      where: { tenantId: op.effectiveTenantId, userId: op.userId },
-      select: { number: true },
-    });
-
-    const variants: string[] = [];
-    for (const { number } of owned) {
-      variants.push(number);
-      if (number.startsWith('+1')) {
-        variants.push(number.slice(2), number.slice(1));
-      } else if (number.startsWith('1') && number.length === 11) {
-        variants.push(`+${number}`, number.slice(1));
-      } else if (number.length === 10) {
-        variants.push(`+1${number}`, `1${number}`);
-      }
-    }
-
-    where.OR = [
-      { createdById: op.userId },
-      { fromNumber: { userId: op.userId } },
-      { callerId: { in: variants } },
-      { toNumber: { in: variants } },
-      { did: { in: variants } },
-    ];
+    // An agent sees the calls they answered -- `buildCallWhere` in routes/index.ts.
+    where.answeredByUserId = op.userId;
   }
 
   const visibleToThisOperator = await prisma.call.count({ where: where as never });
@@ -419,8 +397,8 @@ function verdict(
     out.push('NARROWED BY ROLE — the agency has calls, you are not being shown them.');
     out.push('');
     out.push(`Your roles are [${op.roles.join(', ') || 'none'}]. Neither ADMIN nor OWNER is among them,`);
-    out.push('so buildCallWhere() narrows the list to calls you created or that touched one of your');
-    out.push('own numbers, instead of the whole agency.');
+    out.push('so buildCallWhere() narrows the list to the calls you answered, instead of the whole');
+    out.push('agency.');
     out.push('');
     out.push(`  the agency holds        ${actingCalls.toLocaleString()} calls`);
     out.push(`  you are shown           ${replay?.visibleToThisOperator.toLocaleString() ?? '?'} of them`);

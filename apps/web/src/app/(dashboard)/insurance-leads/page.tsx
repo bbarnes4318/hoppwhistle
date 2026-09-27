@@ -38,6 +38,7 @@ import { LeadsTable } from '@/components/leads/leads-table';
 import { usePhone } from '@/components/phone';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import {
   deleteInsuranceLeads,
@@ -164,6 +165,13 @@ interface LeadList {
 }
 
 export default function CrmPage() {
+  /*
+   * Delete, Import and Export move the agency's whole book, and the API
+   * refuses the delete to anyone but an owner or administrator. An agent works
+   * the leads in front of them; the buttons are not offered.
+   */
+  const { isAdmin, isOwner } = useAuth();
+  const canManageBook = isAdmin || isOwner;
   const { makeCall } = usePhone();
   const router = useRouter();
 
@@ -370,7 +378,7 @@ export default function CrmPage() {
       <PageHeader
         actions={
           <>
-            {view === 'prospects' && selectedLeadIds.length > 0 && (
+            {canManageBook && view === 'prospects' && selectedLeadIds.length > 0 && (
               <Button
                 variant="destructive"
                 onClick={() => void handleDeleteSelected()}
@@ -380,7 +388,7 @@ export default function CrmPage() {
                 Delete ({selectedLeadIds.length})
               </Button>
             )}
-            {view === 'prospects' && (
+            {canManageBook && view === 'prospects' && (
               <Button
                 variant="outline"
                 onClick={() => void handleExport()}
@@ -395,10 +403,12 @@ export default function CrmPage() {
                 {exporting ? 'Exporting…' : 'Export'}
               </Button>
             )}
-            <Button variant="outline" onClick={() => setIsImportOpen(true)} className="gap-1.5">
-              <Upload className="h-4 w-4" />
-              Import
-            </Button>
+            {canManageBook && (
+              <Button variant="outline" onClick={() => setIsImportOpen(true)} className="gap-1.5">
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
+            )}
             <Button asChild className="gap-1.5">
               <Link href="/intake">
                 <Plus className="h-4 w-4" />
@@ -527,7 +537,7 @@ export default function CrmPage() {
                 allLabel="All lists"
               />
             )}
-            {filters.listId !== 'all' && (
+            {canManageBook && filters.listId !== 'all' && (
               <Tooltip content="Delete this list and its prospects" align="end">
                 <button
                   type="button"

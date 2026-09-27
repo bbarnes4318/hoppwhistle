@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { durationScale } from './calls';
+import { acceptedByBuyer, durationScale, recordingIdFromUrl } from './calls';
 import { composeDisputeReason, disputeOutcome } from './dispute';
 import { resolveRange } from './range';
 import { normalizeToken } from './token';
@@ -144,5 +144,37 @@ describe('disputeOutcome', () => {
       tone: 'ringing',
       decided: false,
     });
+  });
+});
+
+describe('acceptedByBuyer', () => {
+  const call = (metadata: Record<string, unknown> | null, disposition: string | null = null) =>
+    ({ metadata, disposition }) as unknown as Parameters<typeof acceptedByBuyer>[0];
+
+  it('reads the time the accept route records', () => {
+    expect(acceptedByBuyer(call({ acceptedByBuyerAt: '2026-09-01T00:00:00.000Z' }))).toBe(true);
+  });
+
+  it('still reads a call accepted the old way, as a VERIFIED disposition', () => {
+    expect(acceptedByBuyer(call(null, 'VERIFIED'))).toBe(true);
+  });
+
+  it('is false for a call nobody accepted', () => {
+    expect(acceptedByBuyer(call(null))).toBe(false);
+    expect(acceptedByBuyer(call({ acceptedByBuyerAt: null }, 'NOT_INTERESTED'))).toBe(false);
+  });
+});
+
+describe('recordingIdFromUrl', () => {
+  it('finds the recording in one of our stream URLs, absolute or relative', () => {
+    expect(recordingIdFromUrl('https://api.example.com/api/v1/recordings/rec-1/stream')).toBe(
+      'rec-1'
+    );
+    expect(recordingIdFromUrl('/api/v1/recordings/rec-2/stream')).toBe('rec-2');
+  });
+
+  it('leaves any other URL alone', () => {
+    expect(recordingIdFromUrl('https://carrier.example.com/audio/123.wav')).toBeNull();
+    expect(recordingIdFromUrl(null)).toBeNull();
   });
 });

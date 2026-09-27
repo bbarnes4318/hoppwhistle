@@ -87,6 +87,70 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     return false;
   }
 
+  /*
+   * A buyer is a counterparty, not an operator of its own routing.
+   *
+   * These target routes are shared with the agency's own principals, and they
+   * did not tell a buyer apart from them: a buyer could raise or lower the
+   * price it pays (`basePrice`, `pricingRules`), point its calls at a new
+   * `destination`, or create and delete targets outright. What a buyer may do
+   * to its own targets is exactly what its account flags say:
+   *
+   *   - `canPauseTargets`: `status` (ACTIVE / INACTIVE).
+   *   - `canSetCaps`:      `maxCap`, `maxConcurrency`, `acceptedStates`.
+   *
+   * Anything else in the body is refused with 403, not silently dropped: a
+   * request that asked to change the price and got a 200 would read as done.
+   */
+  const BUYER_TARGET_REFUSAL = {
+    code: 'FORBIDDEN',
+    message: 'Targets are managed by your account manager',
+  };
+
+  function isBuyerCaller(profile: { isAdminOrOwner: boolean; userRoles: string[] }): boolean {
+    return !profile.isAdminOrOwner && profile.userRoles.includes('BUYER');
+  }
+
+  const CAP_FIELDS = new Set(['maxCap', 'maxConcurrency', 'acceptedStates']);
+
+  function buyerPatchRefusal(
+    body: Record<string, unknown>,
+    buyer: { canPauseTargets: boolean; canSetCaps: boolean }
+  ): { status: number; error: { code: string; message: string } } | null {
+    for (const [field, value] of Object.entries(body)) {
+      if (value === undefined) continue;
+      if (field === 'status') {
+        if (!buyer.canPauseTargets) {
+          return {
+            status: 403,
+            error: { code: 'FORBIDDEN', message: 'Your account cannot pause or resume targets' },
+          };
+        }
+        if (value !== 'ACTIVE' && value !== 'INACTIVE') {
+          return {
+            status: 400,
+            error: { code: 'VALIDATION_ERROR', message: 'Status must be ACTIVE or INACTIVE' },
+          };
+        }
+        continue;
+      }
+      if (CAP_FIELDS.has(field)) {
+        if (!buyer.canSetCaps) {
+          return {
+            status: 403,
+            error: { code: 'FORBIDDEN', message: 'Your account cannot change caps or states' },
+          };
+        }
+        continue;
+      }
+      return {
+        status: 403,
+        error: { code: 'FORBIDDEN', message: `A buyer cannot change a target's ${field}` },
+      };
+    }
+    return null;
+  }
+
   /**
    * GET /api/v1/buyers/upfront-balances
    * Get all Upfront buyers with their balances for dashboard widget
@@ -835,6 +899,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
 
     const { buyerId } = request.params;
     const profile = await getUserProfile(request);
+    if (isBuyerCaller(profile)) {
+      void reply.code(403);
+      return { error: BUYER_TARGET_REFUSAL };
+    }
     const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
 
     if (!isAllowed) {
@@ -912,6 +980,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
 
     const { buyerId } = request.params;
     const profile = await getUserProfile(request);
+    if (isBuyerCaller(profile)) {
+      void reply.code(403);
+      return { error: BUYER_TARGET_REFUSAL };
+    }
     const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
 
     if (!isAllowed) {
@@ -1080,6 +1152,14 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       return { error: { code: 'NOT_FOUND', message: 'Target not found' } };
     }
 
+    if (isBuyerCaller(profile)) {
+      const refusal = buyerPatchRefusal(request.body ?? {}, buyer);
+      if (refusal) {
+        void reply.code(refusal.status);
+        return { error: refusal.error };
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name.trim();
     if (type !== undefined) updateData.type = type;
@@ -1139,6 +1219,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
 
     const { buyerId, targetId } = request.params;
     const profile = await getUserProfile(request);
+    if (isBuyerCaller(profile)) {
+      void reply.code(403);
+      return { error: BUYER_TARGET_REFUSAL };
+    }
     const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
 
     if (!isAllowed) {

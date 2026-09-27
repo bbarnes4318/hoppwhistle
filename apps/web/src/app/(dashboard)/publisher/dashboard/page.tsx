@@ -136,9 +136,12 @@ function PublisherDashboard() {
 
       // Download CSV
       const token = localStorage.getItem('token');
-      const url = `/api/v1/calls/export.csv?startDate=${start}&endDate=${end}&token=${token || ''}`;
+      // In the header, not the query string: `?token=` is no longer a login.
+      const url = `/api/v1/calls/export.csv?startDate=${start}&endDate=${end}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!response.ok) throw new Error('Failed to generate export file.');
 
       const blob = await response.blob();

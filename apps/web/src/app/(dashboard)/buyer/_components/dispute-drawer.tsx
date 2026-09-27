@@ -11,6 +11,7 @@ import { readSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
 
 import { DISPUTE_REASONS, type DisputeEvidence, type DisputeReason } from '../_lib/dispute';
+import { useRecordingPlayback } from '../_lib/use-recording-playback';
 import { disputeCall } from '../actions';
 
 /**
@@ -64,6 +65,7 @@ export function DisputeDrawer({
   const [reason, setReason] = React.useState<DisputeReason | null>(null);
   const [note, setNote] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const recording = useRecordingPlayback(call?.recordingUrl ?? null, open);
 
   // A drawer opened on a different call must not carry the last one's answers.
   React.useEffect(() => {
@@ -210,9 +212,9 @@ export function DisputeDrawer({
 
           <div>
             <p className="t-meta mb-1 text-ink-3">Recording</p>
-            {call.recordingUrl ? (
+            {call.recordingUrl && recording.src ? (
               <a
-                href={call.recordingUrl}
+                href={recording.src}
                 target="_blank"
                 rel="noreferrer"
                 className="t-body inline-flex items-center gap-1.5 text-money underline"
@@ -220,6 +222,10 @@ export function DisputeDrawer({
                 <FileAudio aria-hidden className="h-3.5 w-3.5" />
                 Attached to this dispute
               </a>
+            ) : call.recordingUrl ? (
+              <p className="t-body text-ink-3">
+                {recording.error ?? 'Attached to this dispute. Loading the recording…'}
+              </p>
             ) : (
               <p className="t-body text-ink-3">
                 No recording is available for this call — the dispute says so explicitly.

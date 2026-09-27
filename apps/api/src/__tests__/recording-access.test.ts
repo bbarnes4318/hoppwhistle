@@ -123,7 +123,9 @@ describe.skipIf(!gate.available)('Recording access', () => {
     const agent = await mkUser('agent', roleIds.AGENT);
     const otherAgent = await mkUser('other', roleIds.AGENT);
 
-    const mkCall = async (createdById: string, sid: string) =>
+    // An agent's call is the one they answered: `checkRecordingAccess` reads
+    // `answeredByUserId`, the same rule as the call list.
+    const mkCall = async (agentUserId: string, sid: string) =>
       prisma.call.create({
         data: {
           tenantId: tenant.id,
@@ -131,7 +133,8 @@ describe.skipIf(!gate.available)('Recording access', () => {
           toNumber: '+15550000000',
           status: 'COMPLETED',
           direction: 'INBOUND',
-          createdById,
+          createdById: agentUserId,
+          answeredByUserId: agentUserId,
         },
       });
 

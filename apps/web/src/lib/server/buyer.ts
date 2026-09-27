@@ -144,15 +144,6 @@ export interface BuyerTransaction {
   createdAt: string;
 }
 
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  status: string;
-  period?: { start: string; end: string } | null;
-  total: string;
-  dueDate: string | null;
-}
-
 export interface LiveBuyerMetrics {
   callsInFlight: number | null;
   spendToday: string | null;
@@ -271,11 +262,6 @@ export async function fetchBuyerTransactions(
     `/api/v1/buyers/${buyerId}/transactions?limit=${limit}`,
     token
   );
-  return res.data ?? [];
-}
-
-export async function fetchInvoices(token: string, limit = 10): Promise<Invoice[]> {
-  const res = await apiGet<{ data?: Invoice[] }>(`/api/v1/billing/invoices?limit=${limit}`, token);
   return res.data ?? [];
 }
 

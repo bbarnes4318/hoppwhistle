@@ -88,6 +88,7 @@ interface CallRecord {
   cost?: number | string;
   profit?: number | string;
   recordingUrl?: string;
+  primaryRecordingId?: string | null;
   converted?: boolean;
   missedCall?: boolean;
   isDuplicate?: boolean;
@@ -230,8 +231,8 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
     return `$${num.toFixed(2)}`;
   };
 
-  const handlePlay = (call: CallRecord) => {
-    if (!call.recordingUrl) return;
+  const handlePlay = async (call: CallRecord) => {
+    if (!call.recordingUrl || !call.primaryRecordingId) return;
 
     if (playingId === call.id) {
       audioRef.current?.pause();
@@ -240,7 +241,13 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      audioRef.current = new Audio(call.recordingUrl);
+      // `recordingUrl` carries no credential; the playable URL comes from the
+      // authenticated /url call, with a short-lived pass for this one stream.
+      const response = await apiClient.get<{ url: string }>(
+        `/api/v1/recordings/${call.primaryRecordingId}/url`
+      );
+      if (!response.data?.url) return;
+      audioRef.current = new Audio(response.data.url);
       void audioRef.current.play();
       audioRef.current.onended = () => setPlayingId(null);
       setPlayingId(call.id);
@@ -273,7 +280,7 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => handlePlay(call)}
+            onClick={() => void handlePlay(call)}
             title={playingId === call.id ? 'Pause' : 'Play'}
           >
             {playingId === call.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
