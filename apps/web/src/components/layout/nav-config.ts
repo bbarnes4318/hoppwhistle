@@ -427,18 +427,32 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
  *   Agency Network  a downline does not onboard downlines of its own, so the
  *                   locked Agencies and Onboard entries are not offered.
  *
+ * And one thing added: Upgrades, under Account. A downline asks for an upgrade
+ * there, and the request goes to its parent agency's owners, who turn it on
+ * (`CHILD_AGENCY_ROUTES` in lib/staff-only-routes.ts opens the route to it).
+ *
  * Built from AGENCY_OWNER_NAV so every other entry stays identical to a
  * normal agency's.
  */
+/** The Upgrades page: a white-label owner's, and a downline owner's. */
+const UPGRADES_ITEM: NavItem = {
+  name: 'Upgrades',
+  href: '/upgrades',
+  icon: Sparkles,
+  title: 'Features you can add',
+};
+
 function childAgencyOwnerNav(): NavGroup[] {
   const team = AGENCY_OWNER_NAV.flatMap(group => group.items).find(
     item => item.href === '/delivery/team'
   );
   return AGENCY_OWNER_NAV.filter(
     group => group.label !== 'Money' && group.label !== 'Agency Network'
-  ).map(group =>
-    group.label === 'Floor' && team ? { ...group, items: [...group.items, team] } : group
-  );
+  ).map(group => {
+    if (group.label === 'Floor' && team) return { ...group, items: [...group.items, team] };
+    if (group.label === 'Account') return { ...group, items: [...group.items, UPGRADES_ITEM] };
+    return group;
+  });
 }
 
 export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
@@ -538,10 +552,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
   },
   {
     label: 'Account',
-    items: [
-      platformItem('/settings'),
-      { name: 'Upgrades', href: '/upgrades', icon: Sparkles, title: 'Features you can add' },
-    ],
+    items: [platformItem('/settings'), UPGRADES_ITEM],
   },
 ];
 

@@ -203,10 +203,22 @@ describe.skipIf(!gate.available)('Upgrade catalog', () => {
         key: row.key,
         monthlyCents: null,
         setupCents: null,
+        priceUnit: 'AGENCY',
+        usageNote: null,
         on: false,
         requestOpen: false,
       });
     }
+    // A direct agency's requests go to NetEnroll, so no parent is named.
+    expect(res.json().meta).toEqual({ parentTenantName: null });
+  });
+
+  it("names the parent agency on a downline's catalog", async () => {
+    const res = await send('GET', '/api/v1/upgrades', childOwner());
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().meta.parentTenantName).toBeTruthy();
+    const parentRow = await prisma.tenant.findUnique({ where: { id: parent.id } });
+    expect(res.json().meta.parentTenantName).toBe(parentRow?.name);
   });
 
   it('opens one request, idempotently, and emails the platform admins for a direct agency', async () => {
@@ -240,7 +252,7 @@ describe.skipIf(!gate.available)('Upgrade catalog', () => {
 
   it("emails a child's request to its parent's owners, with the price and the child's page", async () => {
     await prisma.upgradePrice.create({
-      data: { key: 'POWER_DIALER', monthlyCents: 9900, setupCents: 25000 },
+      data: { key: 'POWER_DIALER', monthlyCents: 9900, setupCents: 25000, priceUnit: 'AGENT' },
     });
 
     const res = await send('POST', '/api/v1/upgrades/POWER_DIALER/request', childOwner());
@@ -251,7 +263,7 @@ describe.skipIf(!gate.available)('Upgrade catalog', () => {
     expect(message.to).toBe(parent.ownerEmail);
     expect(message.to).not.toContain(operator.email);
     expect(message.subject).toBe('Upgrade requested: Power Dialer — Downline');
-    expect(message.text).toContain('$99.00/month and $250.00 setup');
+    expect(message.text).toContain('$99.00 per agent/month and $250.00 setup');
     expect(message.text).toContain(`/network/agencies/${child.id}`);
     expect(message.from).toContain('Life Leads Plus');
   });
@@ -301,14 +313,22 @@ describe.skipIf(!gate.available)('Upgrade catalog', () => {
         { key: 'POWER_DIALER', monthlyCents: -1, setupCents: null },
         { key: 'NOPE', monthlyCents: 1, setupCents: 1 },
         { key: 'VOICE_STUDIO', monthlyCents: 1.5, setupCents: null },
+        { key: 'VOICE_AGENTS', monthlyCents: 1, setupCents: 0, priceUnit: 'SEAT' },
+        { key: 'PAYROLL_ADMIN', monthlyCents: 1, setupCents: 0, usageNote: 'x'.repeat(301) },
       ],
     });
     expect(bad.statusCode).toBe(400);
-    expect(bad.json().error.problems).toHaveLength(3);
+    expect(bad.json().error.problems).toHaveLength(5);
 
     const set = await send('PUT', '/api/v1/admin/upgrade-prices', staff(), {
       prices: [
-        { key: 'POWER_DIALER', monthlyCents: 9900, setupCents: 25000 },
+        {
+          key: 'POWER_DIALER',
+          monthlyCents: 9900,
+          setupCents: 25000,
+          priceUnit: 'AGENT',
+          usageNote: '  Includes 5,000 outbound minutes per agent.  ',
+        },
         { key: 'PREDICTIVE_DIALER', monthlyCents: 14900, setupCents: null },
       ],
     });
@@ -320,18 +340,42 @@ describe.skipIf(!gate.available)('Upgrade catalog', () => {
 
     const read = await send('GET', '/api/v1/admin/upgrade-prices', staff());
     expect(read.json().data.slice(0, 3)).toEqual([
-      { key: 'POWER_DIALER', monthlyCents: 9900, setupCents: 25000 },
-      { key: 'PREDICTIVE_DIALER', monthlyCents: 14900, setupCents: null },
-      { key: 'CARRIER_ROUTING', monthlyCents: null, setupCents: null },
+      {
+        key: 'POWER_DIALER',
+        monthlyCents: 9900,
+        setupCents: 25000,
+        priceUnit: 'AGENT',
+        usageNote: 'Includes 5,000 outbound minutes per agent.',
+      },
+      {
+        key: 'PREDICTIVE_DIALER',
+        monthlyCents: 14900,
+        setupCents: null,
+        priceUnit: 'AGENCY',
+        usageNote: null,
+      },
+      {
+        key: 'CARRIER_ROUTING',
+        monthlyCents: null,
+        setupCents: null,
+        priceUnit: 'AGENCY',
+        usageNote: null,
+      },
     ]);
 
-    // Clearing one leaves the other as it was.
+    // Clearing the price leaves the unit and note, sent or not, as they were.
     await send('PUT', '/api/v1/admin/upgrade-prices', staff(), {
       prices: [{ key: 'POWER_DIALER', monthlyCents: null, setupCents: null }],
     });
     const catalog = await send('GET', '/api/v1/upgrades', directOwner());
     expect(catalog.json().data.slice(0, 2)).toMatchObject([
-      { key: 'POWER_DIALER', monthlyCents: null, setupCents: null },
+      {
+        key: 'POWER_DIALER',
+        monthlyCents: null,
+        setupCents: null,
+        priceUnit: 'AGENT',
+        usageNote: 'Includes 5,000 outbound minutes per agent.',
+      },
       { key: 'PREDICTIVE_DIALER', monthlyCents: 14900, setupCents: null },
     ]);
   });

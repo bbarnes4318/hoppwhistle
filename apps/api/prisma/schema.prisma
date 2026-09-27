@@ -5243,6 +5243,10 @@ model UpgradePrice {
   key             String   @id
   monthlyCents    Int?
   setupCents      Int?
+  /// 'AGENCY' (once per agency) or 'AGENT' (per agent). CHECK in the migration.
+  priceUnit       String   @default("AGENCY")
+  /// The line under the price on /upgrades, e.g. the minutes it includes.
+  usageNote       String?
   updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   updatedByUserId String?
 

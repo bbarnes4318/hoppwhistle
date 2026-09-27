@@ -59,6 +59,8 @@ export function StaffOnlyGuard({ children }: { children: React.ReactNode }): JSX
   const {
     isPlatformAdmin,
     isWhiteLabel,
+    isChild,
+    hasFullAccess,
     status,
     loading: authLoading,
     defaultDashboardPath,
@@ -71,7 +73,11 @@ export function StaffOnlyGuard({ children }: { children: React.ReactNode }): JSX
   const settling = authLoading || platform.loading;
   // The same decision the dashboard layout makes, so the two cannot disagree
   // about who may open a staff-only path -- a white-label owner included.
-  const blocked = isRouteBlockedFor(pathname, { isPlatformAdmin, isWhiteLabel });
+  const blocked = isRouteBlockedFor(pathname, {
+    isPlatformAdmin,
+    isWhiteLabel,
+    isChildOwner: isChild && hasFullAccess,
+  });
   const turnAway = guarded && !settling && blocked;
 
   useEffect(() => {

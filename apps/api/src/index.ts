@@ -8,7 +8,7 @@ import Fastify from 'fastify';
 
 import { logger } from './lib/logger.js';
 import { register } from './lib/metrics.js';
-import { closePrismaClient } from './lib/prisma.js';
+import { closePrismaClient, getPrismaClient } from './lib/prisma.js';
 import { initTracing, shutdownTracing } from './lib/tracing.js';
 import { registerApiV1Auth } from './middleware/api-v1-auth.js';
 import { registerAuth } from './middleware/auth.js';
@@ -485,6 +485,25 @@ async function buildServer() {
   ensureCarrierCatalog().catch(err => {
     console.error('[carrier-catalog] bootstrap failed (non-fatal):', err);
   });
+
+  // The 1st of the month (number charges, then last month's statements) and
+  // the one-off application → customer backfill, both in the background. The
+  // runner image carries only dist/, so the CLIs cannot be run there; the API
+  // does it. Neither can block startup or take the API down. Off under test,
+  // where suites build the server and own their fixtures.
+  if (process.env.NODE_ENV !== 'test' && process.env.DISABLE_BACKGROUND_JOBS !== '1') {
+    const { startMonthlyCloseScheduler, startApplicationCustomerBackfill } = await import(
+      './services/monthly-close.js'
+    );
+    const { getRedisClient } = await import('./services/redis.js');
+    const prisma = getPrismaClient();
+    const stopMonthlyClose = startMonthlyCloseScheduler({ prisma, redis: getRedisClient() });
+    server.addHook('onClose', () => {
+      stopMonthlyClose();
+      return Promise.resolve();
+    });
+    startApplicationCustomerBackfill(prisma);
+  }
 
   // Error handler
   server.setErrorHandler((error, request, reply) => {

@@ -432,6 +432,16 @@ describe('a downline (child) agency owner', () => {
     expect(offered).toContain('/campaigns');
     expect(offered).toContain('/numbers');
   });
+
+  it('offers Upgrades under Account, where it asks its parent agency for one', () => {
+    const account = childNav.find(group => group.label === 'Account');
+    const upgrades = account?.items.find(item => item.href === '/upgrades');
+    expect(upgrades?.name).toBe('Upgrades');
+    expect(upgrades?.locked).toBeUndefined();
+    // A normal agency's Account group is unchanged.
+    const normal = AGENCY_OWNER_NAV.find(group => group.label === 'Account');
+    expect(normal?.items.map(item => item.href)).not.toContain('/upgrades');
+  });
 });
 
 describe('isStaffOnlyRoute matches whole segments', () => {

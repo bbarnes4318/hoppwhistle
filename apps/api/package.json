@@ -46,6 +46,9 @@
     "numbers:bill-month": "tsx src/cli/number-charges-monthly.ts",
     "statements:close": "tsx src/cli/statements-close-month.ts",
     "applications:link-customers": "tsx src/cli/link-application-customers.ts",
+    "applications:link-customers:prod": "node dist/cli/link-application-customers.js",
+    "numbers:bill-month:prod": "node dist/cli/number-charges-monthly.js",
+    "statements:close:prod": "node dist/cli/statements-close-month.js",
     "quota:test": "tsx src/cli/test-quota-overage.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "hopper:preflight": "tsx src/cli/hopper-preflight.ts"

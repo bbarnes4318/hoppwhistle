@@ -55,10 +55,19 @@ function dollars(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
-/** "$99.00/month and $250.00 setup", or null when neither price is set. */
-export function priceLine(monthlyCents: number | null, setupCents: number | null): string | null {
+/**
+ * "$99.00/month and $250.00 setup" ("$99.00 per agent/month" for a per-agent
+ * price), or null when neither price is set.
+ */
+export function priceLine(
+  monthlyCents: number | null,
+  setupCents: number | null,
+  priceUnit: 'AGENCY' | 'AGENT' = 'AGENCY'
+): string | null {
   const parts: string[] = [];
-  if (monthlyCents !== null) parts.push(`${dollars(monthlyCents)}/month`);
+  if (monthlyCents !== null) {
+    parts.push(`${dollars(monthlyCents)}${priceUnit === 'AGENT' ? ' per agent' : ''}/month`);
+  }
   if (setupCents !== null) parts.push(`${dollars(setupCents)} setup`);
   return parts.length > 0 ? parts.join(' and ') : null;
 }
@@ -72,6 +81,7 @@ export async function sendUpgradeRequestEmail(params: {
   requestedBy: string | null;
   monthlyCents: number | null;
   setupCents: number | null;
+  priceUnit?: 'AGENCY' | 'AGENT';
 }): Promise<number> {
   try {
     const toParent = params.parentTenantId !== null;
@@ -97,7 +107,7 @@ export async function sendUpgradeRequestEmail(params: {
       : `${appUrl()}/admin/agencies`;
     const where = toParent ? 'their page under Agencies' : 'Admin -> Agencies';
     const who = params.requestedBy ? ` (${params.requestedBy})` : '';
-    const price = priceLine(params.monthlyCents, params.setupCents);
+    const price = priceLine(params.monthlyCents, params.setupCents, params.priceUnit);
 
     const text = `${params.tenantName}${who} has asked for ${params.upgradeName}.
 ${price ? `\nPrice: ${price}.\n` : ''}

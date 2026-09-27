@@ -215,6 +215,15 @@ export const WHITE_LABEL_ROUTES = [
 ] as const;
 
 /**
+ * The staff-only screens a downline (child) agency's OWNER and ADMIN may open.
+ *
+ * Only /upgrades: a downline asks for an upgrade like any agency, and the
+ * request goes to its parent agency's owners, who turn it on. The rest of the
+ * white-label hubs are the parent's.
+ */
+export const CHILD_AGENCY_ROUTES = ['/upgrades'] as const;
+
+/**
  * Where a white-label viewer's old URLs go.
  *
  * The white-label nav gathers these screens into hubs, one tab each (see
@@ -300,6 +309,8 @@ export interface RouteViewer {
   isPlatformAdmin: boolean;
   /** A white-label agency's OWNER or ADMIN. See `useAuth().isWhiteLabel`. */
   isWhiteLabel: boolean;
+  /** A downline agency's OWNER or ADMIN: `isChild && hasFullAccess` from `useAuth()`. */
+  isChildOwner?: boolean;
 }
 
 /**
@@ -307,7 +318,8 @@ export interface RouteViewer {
  *
  * NetEnroll staff are never blocked. A white-label OWNER or ADMIN passes the
  * WHITE_LABEL_ROUTES, matched as whole segments exactly as STAFF_ONLY_ROUTES
- * are. Everybody else gets `isStaffOnlyRoute`'s answer, unchanged -- which is
+ * are, and a downline agency's OWNER or ADMIN passes CHILD_AGENCY_ROUTES.
+ * Everybody else gets `isStaffOnlyRoute`'s answer, unchanged -- which is
  * what keeps a normal agency's redirects exactly as they were.
  */
 export function isRouteBlockedFor(
@@ -319,6 +331,13 @@ export function isRouteBlockedFor(
   if (viewer.isWhiteLabel) {
     const path = normalise(pathname);
     if (WHITE_LABEL_ROUTES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) {
+      return false;
+    }
+  }
+
+  if (viewer.isChildOwner) {
+    const path = normalise(pathname);
+    if (CHILD_AGENCY_ROUTES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) {
       return false;
     }
   }
