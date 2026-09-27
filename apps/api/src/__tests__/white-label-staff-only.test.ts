@@ -57,7 +57,6 @@ const ALLOWED_REQUESTS: Array<[string, string]> = [
 const STILL_STAFF_ONLY: Array<[string, string]> = [
   ['POST', '/api/v1/numbers'],
   ['POST', '/api/v1/numbers/existing'],
-  ['DELETE', '/api/v1/numbers/num-1'],
   ['GET', '/api/v1/flows'],
   ['POST', '/api/v1/flows'],
   ['GET', '/api/v1/carrier-routing/overview'],
@@ -67,12 +66,34 @@ const STILL_STAFF_ONLY: Array<[string, string]> = [
   ['GET', '/api/v1/fish/voices'],
   ['POST', '/api/v1/anveo/purchase'],
   ['POST', '/api/v1/anveo/sync'],
-  ['POST', '/api/v1/bulkvs/purchase'],
-  ['GET', '/api/v1/fractel/available'],
   ['POST', '/api/v1/recording-analysis/upload'],
   ['GET', '/api/v1/industry-research/runs'],
   ['POST', '/api/v1/music-console/voice/launch'],
 ];
+
+/**
+ * Open to the OWNER and ADMIN of EVERY agency since numbers became the
+ * agency's own to buy, route and release (AGENCY_OWNER_ALLOWED). They used to
+ * sit in STILL_STAFF_ONLY above; `/numbers/existing` and all of `/anveo` stay
+ * there.
+ */
+const AGENCY_OWNER_REQUESTS: Array<[string, string]> = [
+  ['GET', '/api/v1/numbers'],
+  ['GET', '/api/v1/numbers/num-1'],
+  ['PATCH', '/api/v1/numbers/num-1'],
+  ['DELETE', '/api/v1/numbers/num-1'],
+  ['GET', '/api/v1/bulkvs/available'],
+  ['POST', '/api/v1/bulkvs/purchase'],
+  ['GET', '/api/v1/fractel/available'],
+  ['POST', '/api/v1/fractel/purchase'],
+  ['GET', '/api/v1/did-routes'],
+  ['POST', '/api/v1/did-routes'],
+];
+
+const isAgencyOwnerRequest = ([method, path]: [string, string]) =>
+  AGENCY_OWNER_REQUESTS.some(([m, p]) => m === method && p === path) ||
+  path.startsWith('/api/v1/did-routes') ||
+  (path === '/api/v1/numbers/num-1' && method === 'PUT');
 
 describe('WHITE_LABEL_ALLOWED: the list, exactly', () => {
   it('is the nine rules asked for, in order', () => {
@@ -134,7 +155,14 @@ describe('the staff-only hook, for the white-label tier', () => {
     registerStaffOnly(app);
 
     const ok = () => Promise.resolve({ ok: true });
-    for (const [method, path] of [...ALLOWED_REQUESTS, ...STILL_STAFF_ONLY]) {
+    const routes = new Set<string>();
+    for (const [method, path] of [
+      ...ALLOWED_REQUESTS,
+      ...STILL_STAFF_ONLY,
+      ...AGENCY_OWNER_REQUESTS,
+    ]) {
+      if (routes.has(`${method} ${path}`)) continue;
+      routes.add(`${method} ${path}`);
       app.route({ method: method as 'GET', url: path, handler: ok });
     }
     await app.ready();
@@ -176,13 +204,56 @@ describe('the staff-only hook, for the white-label tier', () => {
     }
   );
 
-  it.each(ALLOWED_REQUESTS)(
+  it.each(ALLOWED_REQUESTS.filter(request => !isAgencyOwnerRequest(request)))(
     'refuses a normal agency OWNER %s %s, as before',
     async (method, path) => {
       principal = NORMAL_OWNER;
       expect((await send(method, path)).statusCode).toBe(403);
     }
   );
+
+  it.each(AGENCY_OWNER_REQUESTS)(
+    'lets a normal agency OWNER or ADMIN make %s %s: its own numbers',
+    async (method, path) => {
+      principal = NORMAL_OWNER;
+      expect((await send(method, path)).statusCode).toBe(200);
+      principal = { ...NORMAL_OWNER, roles: ['ADMIN'] };
+      expect((await send(method, path)).statusCode).toBe(200);
+    }
+  );
+
+  it.each(AGENCY_OWNER_REQUESTS)(
+    'still refuses an AGENT and an API key %s %s',
+    async (method, path) => {
+      principal = { userId: 'u9', tenantId: 't-normal', roles: ['AGENT'] };
+      expect((await send(method, path)).statusCode).toBe(403);
+      principal = { apiKeyId: 'k9', tenantId: 't-normal' };
+      expect((await send(method, path)).statusCode).toBe(403);
+    }
+  );
+
+  it('keeps /numbers/existing and /anveo staff-only for a normal agency OWNER', async () => {
+    principal = NORMAL_OWNER;
+    for (const [method, path] of [
+      ['POST', '/api/v1/numbers/existing'],
+      ['POST', '/api/v1/numbers'],
+      ['POST', '/api/v1/anveo/purchase'],
+      ['POST', '/api/v1/anveo/sync'],
+    ]) {
+      expect((await send(method, path)).statusCode, `${method} ${path}`).toBe(403);
+    }
+  });
+
+  it("lets a child agency's OWNER write campaigns, and nothing else of the network", async () => {
+    principal = { ...NORMAL_OWNER, tenantIsChild: true };
+    expect((await send('POST', '/api/v1/campaigns')).statusCode).toBe(200);
+    expect((await send('PATCH', '/api/v1/campaigns/camp-1')).statusCode).toBe(200);
+    expect((await send('POST', '/api/v1/publishers')).statusCode).toBe(403);
+    expect((await send('POST', '/api/v1/buyers')).statusCode).toBe(403);
+    // Not a child: campaign writes stay closed.
+    principal = NORMAL_OWNER;
+    expect((await send('POST', '/api/v1/campaigns')).statusCode).toBe(403);
+  });
 
   it('does not take the tier from a role alone, nor the role from the tier alone', async () => {
     principal = { userId: 'u5', tenantId: 't-wl', roles: ['OWNER'] };

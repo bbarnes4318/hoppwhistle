@@ -59,7 +59,7 @@
 
 import { FastifyReply, FastifyRequest } from 'fastify';
 
-import { resolvePrincipal } from './api-v1-auth.js';
+import { resolvePrincipal, sessionRevoked } from './api-v1-auth.js';
 
 /** Must match SESSION_COOKIE in apps/web/src/lib/session-token.ts. */
 export const SESSION_COOKIE = 'hw_session';
@@ -144,5 +144,11 @@ export async function authenticateFromSessionCookie(
       { err },
       'session cookie: could not resolve the principal, refusing rather than serving the token tenant'
     );
+    return;
+  }
+
+  // A cookie minted before a password change authenticates nothing.
+  if (sessionRevoked(request.user)) {
+    (request as { user?: unknown }).user = undefined;
   }
 }

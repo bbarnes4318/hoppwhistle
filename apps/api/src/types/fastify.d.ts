@@ -9,6 +9,8 @@ export interface JwtPayload {
   tenantId: string | null;
   userId?: string;
   email?: string;
+  /** `User.metadata.tokenVersion` at signing; see `lib/token-version.ts`. */
+  tv?: number;
 }
 
 declare module 'fastify' {

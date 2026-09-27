@@ -116,6 +116,10 @@ REQUIRED_MIGRATIONS="
 20260926000000_tenant_white_label
 20260927000000_publisher_payment_clawbacks
 20260928000000_clawback_check_callid
+20260929000000_activation_grant_portal_links
+20260929010000_phone_number_released
+20260929020000_number_charges
+20260929030000_password_reset_tokens
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -464,6 +468,28 @@ migration_applied() {
       echo "SELECT COALESCE((SELECT pg_get_constraintdef(oid) NOT LIKE '%callId%'
               FROM pg_constraint
               WHERE conname = 'publisher_payments_kind_amount_check'), false)" ;;
+    *_activation_grant_portal_links)
+      # One ALTER TABLE adding two nullable columns, so atomic; both are
+      # probed anyway, so a hand-applied half cannot read as done.
+      echo "SELECT (SELECT count(*) FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'tenant_activation_grants'
+                AND column_name IN ('buyerId', 'publisherId')) = 2" ;;
+    *_phone_number_released)
+      # One ALTER TYPE. The enum value is its whole effect.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type t ON t.oid = e.enumtypid
+              WHERE t.typname = 'PhoneNumberStatus'
+                AND e.enumlabel = 'RELEASED'), false)" ;;
+    *_number_charges)
+      # Wrapped BEGIN..COMMIT, so the table, its indexes and foreign keys land
+      # together; the table stands for them, with the unique index the monthly
+      # command relies on probed alongside it.
+      echo "SELECT to_regclass('public.number_charges') IS NOT NULL
+            AND to_regclass('public.\"number_charges_phoneNumberId_kind_periodStart_key\"') IS NOT NULL" ;;
+    *_password_reset_tokens)
+      # Wrapped BEGIN..COMMIT; the table stands for its index and foreign key.
+      echo "SELECT to_regclass('public.password_reset_tokens') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac

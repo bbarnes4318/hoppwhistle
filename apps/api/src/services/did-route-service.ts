@@ -1,5 +1,3 @@
-import type { Prisma } from '@prisma/client';
-
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -17,11 +15,6 @@ function isValidPhoneDestination(value: string | null | undefined): value is str
   // Must contain digits and look like a phone number or extension
   const digits = value.replace(/\D/g, '');
   return digits.length >= 3;
-}
-
-/** The part of a user's JSON `metadata` column this service reads. */
-interface UserExtensionMetadata {
-  extension?: string | null;
 }
 
 export class DidRouteService {
@@ -47,53 +40,24 @@ export class DidRouteService {
         const campaignId = phoneNumber.campaignId || null;
 
         if (phoneNumber.userId) {
-          let extension = (phoneNumber.user?.metadata as UserExtensionMetadata | null | undefined)
-            ?.extension;
-
-          // If user has no extension, dynamically assign a free one from 1000-1019
-          if (!isValidPhoneDestination(extension) && phoneNumber.user) {
-            const allUsers = await prisma.user.findMany({
-              select: { metadata: true },
-            });
-            const usedExtensions = new Set<string>();
-            for (const u of allUsers) {
-              const ext = (u.metadata as Prisma.JsonObject | null)?.extension;
-              if (ext) {
-                usedExtensions.add(String(ext).trim());
-              }
-            }
-
-            let availableExtension: string | null = null;
-            for (let extNum = 1000; extNum <= 1019; extNum++) {
-              const extStr = extNum.toString();
-              if (!usedExtensions.has(extStr)) {
-                availableExtension = extStr;
-                break;
-              }
-            }
-
-            if (availableExtension) {
-              const currentMetadata = (phoneNumber.user.metadata as Prisma.JsonObject | null) || {};
-              const updatedMetadata = {
-                ...currentMetadata,
-                extension: availableExtension,
-              };
-
-              await prisma.user.update({
-                where: { id: phoneNumber.userId },
-                data: { metadata: updatedMetadata },
-              });
-
-              logger.info({
-                msg: 'syncDidRouteForNumber: Automatically assigned free extension to user',
+          /*
+           * The agent's SIP extension, from their `AgentSipCredential` -- the
+           * identity their softphone registers as -- reserving the next free
+           * one from 1000 upward if they have none. It used to be
+           * `users.metadata.extension`, topped up from a scan of every user on
+           * the platform capped at 1019. See `reserveExtension`.
+           */
+          const { reserveExtension } = await import('./telephony/agent-sip-credential.js');
+          const extension = await reserveExtension(tenantId, phoneNumber.userId).catch(
+            (error: unknown) => {
+              logger.error({
+                msg: 'syncDidRouteForNumber: could not reserve an extension for the agent',
                 userId: phoneNumber.userId,
-                extension: availableExtension,
-                phoneNumber: phoneNumber.number,
+                error: error instanceof Error ? error.message : String(error),
               });
-
-              extension = availableExtension;
+              return null;
             }
-          }
+          );
 
           // Only use extension if it's a valid phone destination — never fall back to userId
           destination = isValidPhoneDestination(extension) ? extension : '';

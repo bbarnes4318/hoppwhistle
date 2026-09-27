@@ -786,6 +786,7 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         activationToken: grant.token,
         expiresAt: grant.expiresAt,
         role: 'OWNER',
+        tenantId: tenantId,
       });
 
       return reply.code(201).send({

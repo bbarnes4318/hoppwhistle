@@ -28,6 +28,13 @@ export interface TenantBrand {
  * Null when there is no tenant (a platform admin in the cross-agency view), the
  * tenant has no theme, or the stored key is not one this build knows: a value
  * that fails validation is rendered as the default, never passed through.
+ *
+ * ── A child agency is drawn in its parent's brand ────────────────────────────
+ *
+ * A downline agency is sold under the white-label that onboarded it, so where
+ * the child's own theme or name is null the PARENT's is used -- read on every
+ * call, never copied onto the child, so a parent that changes its brand
+ * changes every child's with it.
  */
 export async function brandForTenant(
   tenantId: string | null | undefined
@@ -36,9 +43,17 @@ export async function brandForTenant(
 
   const tenant = await getPrismaClient().tenant.findUnique({
     where: { id: tenantId },
-    select: { brandTheme: true, brandName: true },
+    select: {
+      brandTheme: true,
+      brandName: true,
+      parent: { select: { brandTheme: true, brandName: true } },
+    },
   });
+  if (!tenant) return null;
 
-  if (!tenant || !isBrandThemeKey(tenant.brandTheme)) return null;
-  return { theme: tenant.brandTheme, name: tenant.brandName ?? null };
+  const theme = tenant.brandTheme ?? tenant.parent?.brandTheme ?? null;
+  const name = tenant.brandName ?? tenant.parent?.brandName ?? null;
+
+  if (!isBrandThemeKey(theme)) return null;
+  return { theme, name };
 }

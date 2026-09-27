@@ -17,7 +17,8 @@
  *
  * A platform admin onboarding an agency, for that agency's OWNER
  * (`routes/onboarding.ts`). An agency OWNER or ADMIN inviting one of their own
- * AGENTS, into their own tenant and no other (`routes/auth.ts`). And the
+ * people -- an AGENT, ADMIN or ANALYST, or the portal login of one of their own
+ * buyers or publishers -- into their own tenant and no other (`routes/auth.ts`). And the
  * provisioning command on the host, for NetEnroll staff, with no tenant at all.
  *
  * ── There is no self-serve purchase ──────────────────────────────────────────
@@ -95,6 +96,10 @@ export interface RedeemedGrant {
   tenantId: string | null;
   roleName: RoleName;
   source: TenantActivationSource;
+  /** The buyer a BUYER login is linked to, re-checked against the tenant. */
+  buyerId: string | null;
+  /** The publisher a PUBLISHER login is linked to, re-checked likewise. */
+  publisherId: string | null;
 }
 
 function hashToken(token: string): string {
@@ -136,6 +141,10 @@ export async function issueActivationGrant(params: {
   roleName?: RoleName;
   source: TenantActivationSource;
   ttlMs?: number;
+  /** A BUYER grant's buyer. The caller has already checked it is this tenant's. */
+  buyerId?: string | null;
+  /** A PUBLISHER grant's publisher. Likewise. */
+  publisherId?: string | null;
 }): Promise<IssuedGrant> {
   const prisma = getPrismaClient();
 
@@ -153,6 +162,8 @@ export async function issueActivationGrant(params: {
       // grant from a payment; the column survives because migrations here never
       // drop one.
       stripeSessionId: null,
+      buyerId: params.buyerId ?? null,
+      publisherId: params.publisherId ?? null,
       expiresAt,
     },
     select: { id: true },
@@ -205,11 +216,37 @@ export async function redeemActivationGrant(
     );
   }
 
+  /*
+   * The buyer or publisher link, re-checked now rather than trusted from issue
+   * time: the party may have been deleted, and a link to a row that is not this
+   * tenant's must never survive into a login. A link that no longer resolves is
+   * dropped, which leaves a BUYER or PUBLISHER login that sees nothing -- the
+   * safe direction.
+   */
+  let buyerId: string | null = null;
+  let publisherId: string | null = null;
+  if (grant.tenantId && grant.buyerId) {
+    const buyer = await prisma.buyer.findFirst({
+      where: { id: grant.buyerId, tenantId: grant.tenantId },
+      select: { id: true },
+    });
+    buyerId = buyer?.id ?? null;
+  }
+  if (grant.tenantId && grant.publisherId) {
+    const publisher = await prisma.publisher.findFirst({
+      where: { id: grant.publisherId, tenantId: grant.tenantId },
+      select: { id: true },
+    });
+    publisherId = publisher?.id ?? null;
+  }
+
   return {
     grantId: grant.id,
     tenantId: grant.tenantId,
     roleName: grant.roleName,
     source: grant.source,
+    buyerId,
+    publisherId,
   };
 }
 

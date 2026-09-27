@@ -126,6 +126,7 @@ model Tenant {
   agentSipCredentials      AgentSipCredential[]
   agentSchedules           AgentSchedule[]
   publisherPayments        PublisherPayment[]
+  numberCharges            NumberCharge[]
 
   @@index([slug])
   @@index([status])
@@ -226,6 +227,12 @@ model TenantActivationGrant {
   /// a grant from a payment, because there is no self-serve purchase. Kept only
   /// because migrations here are additive and never drop a column.
   stripeSessionId String? @unique
+
+  /// The buyer a BUYER grant's user is linked to, or the publisher a PUBLISHER
+  /// grant's user is linked to. Both belong to `tenantId`, checked when the
+  /// grant is issued and again when it is redeemed. Null for every other role.
+  buyerId     String?
+  publisherId String?
 
   expiresAt        DateTime
   redeemedAt       DateTime?
@@ -366,6 +373,7 @@ model User {
   assignedLeads       Lead[]
   buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
   phoneNumbers        PhoneNumber[]
+  passwordResetTokens PasswordResetToken[]
   assignedInsuranceLeads      InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
   createdInsuranceActivities  InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
   assignedInsuranceTasks      InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
@@ -566,6 +574,7 @@ model PhoneNumber {
   pingRequests   PingRequest[] // Numbers assigned via RTB Post
   aiCampaigns    AICampaign[] // AI outbound campaigns using this number
   didRoutes      DidRoute[] // Inbound routing: DID → buyer destination
+  charges        NumberCharge[]
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -629,6 +638,9 @@ enum PhoneNumberStatus {
   INACTIVE
   PORTING
   SUSPENDED
+  /// Given back to the carrier by `DELETE /api/v1/numbers/:numberId`. The row
+  /// stays for call history and billing; the number no longer rings anything.
+  RELEASED
 }
 
 // RTB Number Pool Types
@@ -5122,4 +5134,47 @@ model BillingNotification {
   @@unique([tenantId, kind, subjectKey])
   @@index([tenantId, createdAt])
   @@map("billing_notifications")
+}
+
+/// What a phone number costs the agency that bought it: one SETUP row at
+/// purchase and one MONTHLY row per calendar month it is held.
+///
+/// A child agency's charges are written to its PARENT white-label tenant, with
+/// `metadata.childTenantId` naming the child: NetEnroll bills the white-label,
+/// and the white-label bills its own agencies. Nothing here collects payment;
+/// the rows are read by the agency owner's monthly statement.
+model NumberCharge {
+  id            String   @id @default(uuid())
+  tenantId      String
+  phoneNumberId String
+  /// 'SETUP' | 'MONTHLY'
+  kind          String
+  amount        Decimal  @db.Decimal(10, 2)
+  periodStart   DateTime
+  periodEnd     DateTime
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+
+  @@unique([phoneNumberId, kind, periodStart])
+  @@index([tenantId, periodStart])
+  @@map("number_charges")
+}
+
+/// A single-use password reset link. Only the SHA-256 of the token is stored,
+/// the same treatment `TenantActivationGrant.tokenHash` gets.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

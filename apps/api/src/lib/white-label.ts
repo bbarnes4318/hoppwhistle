@@ -35,6 +35,8 @@ export const WHITE_LABEL_ROLES: readonly string[] = ['OWNER', 'ADMIN'];
 export interface WhiteLabelPrincipal {
   roles?: string[];
   tenantWhiteLabel?: boolean;
+  /** The acting tenant is a downline agency (`parentTenantId` set). */
+  tenantIsChild?: boolean;
   isPlatformAdmin?: boolean;
 }
 
@@ -63,6 +65,31 @@ export async function loadTenantWhiteLabel(tenantId: string | null | undefined):
   } catch (error) {
     logger.warn({
       msg: 'white-label: could not read the tenant flag; treating as off',
+      tenantId,
+      error,
+    });
+    return false;
+  }
+}
+
+/**
+ * Whether ONE tenant is a child agency: onboarded by a white-label parent.
+ *
+ * Fails closed like the flag above. It opens a narrow allowance (campaign
+ * writes) and closes screens in the web app; "could not tell" reads as a normal
+ * agency.
+ */
+export async function loadTenantIsChild(tenantId: string | null | undefined): Promise<boolean> {
+  if (!tenantId) return false;
+  try {
+    const tenant = await getPrismaClient().tenant.findUnique({
+      where: { id: tenantId },
+      select: { parentTenantId: true },
+    });
+    return !!tenant?.parentTenantId;
+  } catch (error) {
+    logger.warn({
+      msg: 'white-label: could not read parentTenantId; treating as not a child',
       tenantId,
       error,
     });

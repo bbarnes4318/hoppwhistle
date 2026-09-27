@@ -1,3 +1,4 @@
+import { BRAND_THEME_NAMES, isBrandThemeKey } from '@hopwhistle/shared';
 import { Prisma, RoleName } from '@prisma/client';
 // eslint-disable-next-line import/default
 import bcrypt from 'bcryptjs';
@@ -9,6 +10,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { loadTenantUpgrades } from '../lib/tenant-upgrades.js';
+import { tokenVersionOf } from '../lib/token-version.js';
 import { loadTenantWhiteLabel } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { effectivePermissionsFor } from '../middleware/rbac.js';
@@ -76,12 +78,18 @@ interface UserRole {
 }
 
 /**
+ * The roles an agency OWNER or ADMIN may invite into their own agency. OWNER is
+ * deliberately absent; see the activation-grants route.
+ */
+const INVITABLE_ROLES = ['AGENT', 'ADMIN', 'ANALYST', 'BUYER', 'PUBLISHER'] as const;
+type InvitableRole = (typeof INVITABLE_ROLES)[number];
+
+/**
  * Auth routes: Login, Register, Google OAuth, CSRF, Logout
  * All routes prefixed with /api for nginx routing
  */
 export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
-  await Promise.resolve(); // satisfy eslint require-await
 
   /**
    * The role a redeemed activation grant carries, attached to the new user.
@@ -131,6 +139,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       'This activation link is not valid for this email address. ' +
       'Ask your agency administrator for a new invitation.',
   } as const;
+
+  // Changing and resetting a password. Registered from here so every instance
+  // that has sign-in has these too. See `routes/password.ts`.
+  const { registerPasswordRoutes } = await import('./password.js');
+  await registerPasswordRoutes(fastify);
 
   // ============================================================================
   // Email/Password Login
@@ -240,6 +253,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         tenantId: user.tenantId,
         userId: user.id,
         email: user.email,
+        tv: tokenVersionOf(user.metadata),
       },
       { expiresIn: SESSION_TOKEN_TTL }
     );
@@ -474,6 +488,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         // PENDING would leave a paying customer with no way in, which is the
         // state this endpoint was previously stuck in.
         status: 'ACTIVE',
+        // A BUYER or PUBLISHER login's party, from the grant and re-checked
+        // against its tenant at redemption. Null for everyone else.
+        buyerId: grant.buyerId,
+        publisherId: grant.publisherId,
         metadata: {
           position: userPosition,
           defaultScript: defaultScript,
@@ -516,6 +534,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         tenantId: user.tenantId,
         userId: user.id,
         email: user.email,
+        tv: tokenVersionOf(user.metadata),
       },
       { expiresIn: SESSION_TOKEN_TTL }
     );
@@ -567,7 +586,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
-      const { email, role } = request.body as { email?: string; role?: string };
+      const { email, role, buyerId, publisherId } = request.body as {
+        email?: string;
+        role?: string;
+        buyerId?: string;
+        publisherId?: string;
+      };
 
       const actingUserId = getActingUserId(request);
       const acting = actingUserId
@@ -597,9 +621,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
 
       /*
-       * An agency invites AGENTS, and only agents.
+       * Who an agency may invite: its own staff (AGENT, ADMIN, ANALYST) and the
+       * portal logins of its own buyers and publishers. This is the ONE way an
+       * agency adds a person; the old temporary-password route
+       * (`POST /api/v1/users/invite`) is gone.
        *
-       * ── Why not OWNER any more ───────────────────────────────────────────
+       * ── Why not OWNER ────────────────────────────────────────────────────
        *
        * An agency's principal is created by NetEnroll during onboarding, from
        * the platform onboarding screen, as the one act that establishes who
@@ -615,17 +642,88 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * an OWNER of one agency cannot mint a working link into another. And a
        * platform admin is not a role at all -- it is a `PlatformAdmin` row
        * granted by a command on the host -- so no grant issued anywhere can
-       * create one. Both properties are asserted rather than argued.
+       * create one. Anything outside the list below is refused with 403.
        */
       const requested = (role ?? 'AGENT').toUpperCase();
-      if (requested !== 'AGENT') {
+      if (!INVITABLE_ROLES.includes(requested as InvitableRole)) {
         return reply.code(403).send({
           error: {
             code: 'FORBIDDEN',
             message:
-              'An agency can invite agents. An additional owner is arranged with NetEnroll, ' +
-              'who issues that invitation.',
+              requested === 'OWNER'
+                ? 'An additional owner is arranged with NetEnroll, who issues that invitation.'
+                : `An agency can invite ${INVITABLE_ROLES.join(', ')}.`,
           },
+        });
+      }
+      const invitedRole = requested as InvitableRole;
+
+      /*
+       * A portal login is linked to exactly one party, of its own kind, and it
+       * must be THIS agency's: the id is client-supplied, and without the
+       * tenant filter a buyer login could be pointed at another agency's buyer
+       * and read its calls and invoices. Not found and not ours read the same.
+       */
+      let grantBuyerId: string | null = null;
+      let grantPublisherId: string | null = null;
+      if (invitedRole === 'BUYER') {
+        if (!buyerId || publisherId) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'A BUYER invitation needs a buyerId, and no publisherId',
+            },
+          });
+        }
+        const buyer = await prisma.buyer.findFirst({
+          where: { id: buyerId, tenantId },
+          select: { id: true },
+        });
+        if (!buyer) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: 'Invalid buyerId - buyer not found' },
+          });
+        }
+        grantBuyerId = buyer.id;
+      } else if (invitedRole === 'PUBLISHER') {
+        if (!publisherId || buyerId) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'A PUBLISHER invitation needs a publisherId, and no buyerId',
+            },
+          });
+        }
+        const publisher = await prisma.publisher.findFirst({
+          where: { id: publisherId, tenantId },
+          select: { id: true },
+        });
+        if (!publisher) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Invalid publisherId - publisher not found',
+            },
+          });
+        }
+        grantPublisherId = publisher.id;
+      } else if (buyerId || publisherId) {
+        // An internal user is nobody's buyer or publisher.
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `A ${invitedRole} invitation cannot carry a buyerId or publisherId`,
+          },
+        });
+      }
+
+      const existing = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+        select: { id: true },
+      });
+      if (existing) {
+        return reply.code(409).send({
+          error: { code: 'EMAIL_EXISTS', message: 'An account with this email already exists' },
         });
       }
 
@@ -633,8 +731,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const grant = await issueActivationGrant({
         tenantId,
         email,
-        roleName: requested as RoleName,
+        roleName: invitedRole as RoleName,
         source: 'ADMIN_INVITE',
+        buyerId: grantBuyerId,
+        publisherId: grantPublisherId,
       });
 
       await auditLog({
@@ -648,45 +748,57 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ipAddress: request.ip,
         userAgent: request.headers['user-agent'],
         requestId: request.id,
+        changes: {
+          email: email.toLowerCase(),
+          roleName: invitedRole,
+          buyerId: grantBuyerId,
+          publisherId: grantPublisherId,
+        },
         success: true,
       });
 
       /*
        * Send it, rather than making the owner deliver it.
        *
-       * This used to end at the response, with the token and a comment telling
-       * the caller to get it to the invitee themselves -- so adding an agent
-       * meant copying a token out of a dialog and into a text message. That is
-       * the first thing every agent on this platform experiences.
-       *
        * Awaited, because the answer goes in the response: an owner has to know
        * whether to follow up by hand. Never throws and never fails the
        * invitation -- the grant is already written and the token is returned
-       * either way. See `services/agent-invite-email.ts`.
+       * either way. See `services/agent-invite-email.ts`, which also brands the
+       * message as the agency when it has a brand.
        */
       const agency = await prisma.tenant.findUnique({
         where: { id: tenantId },
         select: { name: true },
       });
 
-      const { sendAgentInvitationEmail } = await import('../services/agent-invite-email.js');
+      const { sendAgentInvitationEmail, invitationLink } = await import(
+        '../services/agent-invite-email.js'
+      );
+      const { emailBrandForTenant } = await import('../services/email-brand.js');
       const delivery = await sendAgentInvitationEmail({
         email: email.toLowerCase(),
         agencyName: agency?.name ?? null,
         activationToken: grant.token,
         expiresAt: grant.expiresAt,
+        role: invitedRole,
+        tenantId,
       });
+      const brand = await emailBrandForTenant(tenantId);
 
       return reply.code(201).send({
         /*
          * Still returned, and deliberately. When the send failed -- or there is
          * no SMTP configured at all -- the token is the only copy of a grant
          * that cannot be retrieved again, and hand-delivery is the fallback the
-         * owner needs. `emailed` is what tells them which case they are in.
+         * owner needs. `emailed` is what tells them which case they are in, and
+         * `activationLink` is the ready-to-copy link for that case.
          */
         activationToken: grant.token,
+        activationLink: invitationLink(email.toLowerCase(), grant.token, brand.linkBase),
         email: email.toLowerCase(),
-        role: requested,
+        role: invitedRole,
+        buyerId: grantBuyerId,
+        publisherId: grantPublisherId,
         expiresAt: grant.expiresAt.toISOString(),
         emailed: delivery.sent,
         emailFailureReason: delivery.reason ?? null,
@@ -854,6 +966,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             lastName: googleUser.lastName,
             // The grant is the approval; see the email path above.
             status: 'ACTIVE',
+            buyerId: grant.buyerId,
+            publisherId: grant.publisherId,
             lastLoginAt: new Date(),
           },
         });
@@ -930,6 +1044,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         tenantId: user.tenantId,
         userId: user.id,
         email: user.email,
+        tv: tokenVersionOf(user.metadata),
       },
       { expiresIn: SESSION_TOKEN_TTL }
     );
@@ -1042,7 +1157,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
      */
     const user = await prisma.user.findUnique({
       where: { id: principal.userId },
-      select: { id: true, email: true, tenantId: true, status: true },
+      select: { id: true, email: true, tenantId: true, status: true, metadata: true },
     });
 
     if (!user || user.status !== 'ACTIVE') {
@@ -1052,7 +1167,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     const token = await reply.jwtSign(
-      { tenantId: user.tenantId, userId: user.id, email: user.email },
+      {
+        tenantId: user.tenantId,
+        userId: user.id,
+        email: user.email,
+        tv: tokenVersionOf(user.metadata),
+      },
       { expiresIn: SESSION_TOKEN_TTL }
     );
 
@@ -1251,6 +1371,28 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * because there is no agency whose upgrades they are looking at.
        */
       const upgrades = await loadTenantUpgrades(brandTenantId);
+      /*
+       * Whether that tenant is a downline agency, and who its parent is called
+       * -- the name a child's screens say "Contact <parent>" with, since for a
+       * child the account manager is the parent, not NetEnroll. The parent's
+       * brand name when it has one, its theme's name next, its agency name
+       * last.
+       */
+      const tier = brandTenantId
+        ? await prisma.tenant.findUnique({
+            where: { id: brandTenantId },
+            select: {
+              parent: { select: { name: true, brandName: true, brandTheme: true } },
+            },
+          })
+        : null;
+      const parent = tier?.parent ?? null;
+      const isChild = !!parent;
+      const parentBrandName = parent
+        ? parent.brandName?.trim() ||
+          (isBrandThemeKey(parent.brandTheme) ? BRAND_THEME_NAMES[parent.brandTheme] : null) ||
+          parent.name
+        : null;
 
       return reply.send({
         id: user.id,
@@ -1266,6 +1408,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         whiteLabel,
         /** The upgrade keys turned on for that tenant (`lib/tenant-upgrades.ts`). */
         upgrades,
+        /** The tenant above is a downline agency (it has a white-label parent). */
+        isChild,
+        /** What a child calls its parent: "Contact <parentBrandName>". Null otherwise. */
+        parentBrandName,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,

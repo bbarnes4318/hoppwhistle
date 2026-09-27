@@ -154,6 +154,26 @@ export class ProvisioningService {
   }
 
   /**
+   * Buy a number at a carrier and nothing else: no database row, no audit.
+   *
+   * For callers that write the row themselves inside their own transaction --
+   * the agency purchase path (`services/numbers/number-purchase.ts`), which
+   * must hold its quota lock across the purchase and must undo the purchase
+   * with `releaseAtCarrier` if its own write fails.
+   */
+  async purchaseAtCarrier(
+    provider: Provider,
+    request: PurchaseNumberRequest
+  ): Promise<ProvisionedNumber> {
+    return this.getAdapter(provider).purchaseNumber(request);
+  }
+
+  /** Give a number back to its carrier, and nothing else. See `purchaseAtCarrier`. */
+  async releaseAtCarrier(provider: Provider, providerId: string): Promise<void> {
+    await this.getAdapter(provider).releaseNumber(providerId);
+  }
+
+  /**
    * Purchase a number from a provider
    */
   async purchaseNumber(

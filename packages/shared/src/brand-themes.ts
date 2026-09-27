@@ -17,3 +17,11 @@ export type BrandThemeKey = (typeof BRAND_THEME_KEYS)[number];
 export function isBrandThemeKey(value: unknown): value is BrandThemeKey {
   return typeof value === 'string' && (BRAND_THEME_KEYS as readonly string[]).includes(value);
 }
+
+/**
+ * Each theme's own name, used when a tenant has a theme and no `brandName`.
+ * The API needs it for emails; the web registry carries the same value.
+ */
+export const BRAND_THEME_NAMES: Record<BrandThemeKey, string> = {
+  'life-leads-plus': 'Life Leads Plus',
+};
