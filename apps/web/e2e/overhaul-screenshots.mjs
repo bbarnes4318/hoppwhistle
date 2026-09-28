@@ -39,9 +39,51 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const WEB_DIR = resolve(HERE, '..');
-const API_DIR = resolve(HERE, '../../api');
 const REPO = resolve(HERE, '../../..');
+/**
+ * The checkout whose API and web app are shot. This one by default; point it
+ * at a worktree of main (with this checkout's node_modules linked in) for the
+ * "before" set. The seed, the harness and the output always come from here.
+ */
+const APP_ROOT = process.env.SHOTS_APP_ROOT ? resolve(process.env.SHOTS_APP_ROOT) : REPO;
+const WEB_DIR = resolve(APP_ROOT, 'apps/web');
+const API_DIR = resolve(APP_ROOT, 'apps/api');
+
+/**
+ * SHOTS_CLOCK=HH:MM runs everything as of that time in New York today: the
+ * seed (its `llp.now`), the API and `next dev` (shift-clock.cjs) and the
+ * browser. A Today screenshot taken in the middle of the night otherwise
+ * shows a day with nothing in it.
+ */
+function newYorkToday(hours, minutes) {
+  const now = new Date();
+  const part = type =>
+    Number(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+        .formatToParts(now)
+        .find(p => p.type === type).value
+    );
+  const guess = Date.UTC(part('year'), part('month') - 1, part('day'), hours, minutes);
+  const wall = zone => new Date(new Date(guess).toLocaleString('en-US', { timeZone: zone }));
+  return new Date(guess + (wall('UTC') - wall('America/New_York')));
+}
+const CLOCK_OFFSET_MS = process.env.SHOTS_CLOCK
+  ? newYorkToday(...process.env.SHOTS_CLOCK.split(':').map(Number)).getTime() - Date.now()
+  : 0;
+const fakeNow = () => new Date(Date.now() + CLOCK_OFFSET_MS);
+const SHIFT_CLOCK = resolve(HERE, 'shift-clock.cjs');
+const shiftedEnv = () =>
+  CLOCK_OFFSET_MS === 0
+    ? {}
+    : {
+        SHOTS_CLOCK_OFFSET_MS: String(CLOCK_OFFSET_MS),
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${SHIFT_CLOCK}`.trim(),
+      };
 
 const API_PORT = Number(process.env.SHOTS_API_PORT ?? 3411);
 const WEB_PORT = Number(process.env.SHOTS_WEB_PORT ?? 3410);
@@ -135,6 +177,8 @@ function psql(args, input) {
   const result = spawnSync('psql', [DATABASE, '-v', 'ON_ERROR_STOP=1', '-q', ...args], {
     input,
     encoding: 'utf8',
+    // The seed reads `llp.now` as the time to seed as of.
+    env: { ...process.env, PGOPTIONS: `-c llp.now=${fakeNow().toISOString()}` },
   });
   if (result.status !== 0) throw new Error(`psql failed: ${result.stderr}`);
   return result.stdout;
@@ -231,7 +275,8 @@ CREATE TEMP TABLE today_calls ON COMMIT DROP AS
   JOIN tenants t ON t.id = c."tenantId" AND t.name = 'Life Leads Plus'
   WHERE c."callSid" LIKE 'LLPDEMO-%'
     AND (c."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York')::date
-        = (now() AT TIME ZONE 'America/New_York')::date;
+        = (COALESCE(NULLIF(current_setting('llp.now', true), '')::timestamptz, now())
+           AT TIME ZONE 'America/New_York')::date;
 DELETE FROM insurance_carrier_applications WHERE "callId" IN (SELECT id FROM today_calls);
 DELETE FROM calls WHERE id IN (SELECT id FROM today_calls);
 COMMIT;
@@ -325,6 +370,22 @@ async function signIn(email) {
 
 async function contextFor(browser, session, viewport) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  if (CLOCK_OFFSET_MS !== 0) {
+    // The browser's clock, moved the same distance as the servers'.
+    await context.addInitScript(offset => {
+      const RealDate = Date;
+      class ShiftedDate extends RealDate {
+        constructor(...args) {
+          if (args.length === 0) super(RealDate.now() + offset);
+          else super(...args);
+        }
+        static now() {
+          return RealDate.now() + offset;
+        }
+      }
+      globalThis.Date = ShiftedDate;
+    }, CLOCK_OFFSET_MS);
+  }
   await context.addInitScript(
     ([token, user]) => {
       localStorage.setItem('token', token);
@@ -408,6 +469,7 @@ async function boot() {
       SIP_AGENT_PASSWORD: 'overhaul-screens-sip',
       RATE_LIMIT_MAX: '5000',
       FRONTER_SOCKET_PORT: String(API_PORT + 1000),
+      ...shiftedEnv(),
     },
   });
   const web = run(
@@ -416,7 +478,11 @@ async function boot() {
     {
       cwd: WEB_DIR,
       detached: true,
-      env: { ...process.env, NEXT_PUBLIC_API_URL: `http://127.0.0.1:${API_PORT}` },
+      env: {
+        ...process.env,
+        NEXT_PUBLIC_API_URL: `http://127.0.0.1:${API_PORT}`,
+        ...shiftedEnv(),
+      },
     }
   );
   await startFrontDoor();

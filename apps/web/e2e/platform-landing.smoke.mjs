@@ -310,14 +310,14 @@ const SWEEP = [
      * /upgrades offers each upgrade with a request button, and a downline has
      * a detail page of its own.
      *
-     * No strip reading is asserted: the white-label owner's strip is its own
-     * reading, and the strip itself is still required on every load.
+     * And no live strip at all: Today is the white-label owner's live view,
+     * and the strip is asserted ABSENT on every one of these loads.
      */
     who: 'white-label owner (OWNER + ADMIN, no upgrades)',
     roles: ['OWNER', 'ADMIN'],
     platform: false,
     whiteLabel: true,
-    strip: null,
+    strip: false,
     routes: [
       '/dashboard',
       '/applications',
@@ -539,6 +539,21 @@ async function readPageFigures(page) {
  * report a missing strip that is merely late.
  */
 async function checkStrip(page, who, path, expectedScope = null, report = fail) {
+  /*
+   * `false`: this session has no strip at all. A white-label owner's Today is
+   * their live view, and the strip repeated a smaller copy of it above every
+   * page -- one more place for two readings of the same floor to disagree.
+   */
+  if (expectedScope === false) {
+    if (await page.$(STRIP_SELECTOR)) {
+      report(
+        `${who}: the live strip rendered for a white-label owner. Today replaces it; the ` +
+          'dashboard layout leaves it out for white-label and downline owners.'
+      );
+    }
+    return null;
+  }
+
   if (NO_STRIP_ROUTES.includes(path)) {
     if (await page.$(STRIP_SELECTOR)) {
       report(

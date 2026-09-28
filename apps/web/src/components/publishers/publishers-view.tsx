@@ -322,7 +322,7 @@ function PublishersPage() {
                 <TableRow>
                   <TableHead className="pl-5">Name</TableHead>
                   <TableHead>Publisher ID</TableHead>
-                  <TableHead className="text-right">Total Calls</TableHead>
+                  <TableHead className="text-right">Calls</TableHead>
                   <TableHead className="text-right">Billable</TableHead>
                   <TableHead className="text-right">Conversion %</TableHead>
                   <TableHead className="text-right">Missed</TableHead>
@@ -400,7 +400,12 @@ function PublishersPage() {
                         </TableCell>
 
                         {/* Missed Calls */}
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            !pubStats?.missedCalls && 'text-ink-3'
+                          )}
+                        >
                           {pubStats?.missedCalls.toLocaleString() ?? 0}
                         </TableCell>
 

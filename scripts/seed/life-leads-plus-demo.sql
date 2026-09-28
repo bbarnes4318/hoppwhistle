@@ -405,11 +405,18 @@ JOIN llp_buyer b ON b.code = v.buyer_code;
 -- nothing seeded here reads as in progress.
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- "Now" is the server's clock, unless the session names another instant to
+-- rehearse a demo at (or to screenshot one), e.g.
+--
+--   PGOPTIONS="-c llp.now=2026-09-28T14:30:00-04:00" psql ... -f life-leads-plus-demo.sql
 CREATE TEMP TABLE llp_clock ON COMMIT DROP AS
   SELECT
-    (now() AT TIME ZONE 'America/New_York')::date AS today,
-    now() AS run_at,
-    now() - interval '2 minutes' AS last_slot;
+    (c.run_at AT TIME ZONE 'America/New_York')::date AS today,
+    c.run_at,
+    c.run_at - interval '2 minutes' AS last_slot
+  FROM (
+    SELECT COALESCE(NULLIF(current_setting('llp.now', true), '')::timestamptz, now()) AS run_at
+  ) c;
 
 CREATE TEMP TABLE llp_hour_weight ON COMMIT DROP AS
   SELECT h AS hour,
