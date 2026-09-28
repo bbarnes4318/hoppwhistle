@@ -78,7 +78,7 @@ export function TopUpPlanner({
   return (
     <div className="space-y-4">
       <div>
-        <p className="t-label text-ink-3">Amount</p>
+        <p className="t-caption text-ink-2">Amount</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {PRESETS.map(preset => (
             <Button
@@ -109,17 +109,17 @@ export function TopUpPlanner({
 
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <dt className="t-label text-ink-3">Balance after</dt>
+          <dt className="t-caption text-ink-2">Balance after</dt>
           <dd className="t-figure mt-1.5 text-ink">
             <MoneyCell amount={projected} unit="major" size="figure" tone="money" />
           </dd>
         </div>
         <div>
-          <dt className="t-label text-ink-3">Runway now</dt>
+          <dt className="t-caption text-ink-2">Runway now</dt>
           <dd className="t-figure mt-1.5 text-ink">{runwayNow != null ? `${runwayNow}d` : '—'}</dd>
         </div>
         <div>
-          <dt className="t-label text-ink-3">Runway after</dt>
+          <dt className="t-caption text-ink-2">Runway after</dt>
           <dd className="t-figure mt-1.5 text-ink">
             {runwayAfter != null ? `${runwayAfter}d` : '—'}
           </dd>

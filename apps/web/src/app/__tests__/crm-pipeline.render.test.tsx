@@ -161,7 +161,7 @@ describe('the agency CRM', () => {
 
     expect(screen.getAllByText('Prospects').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Submitted Apps').length).toBeGreaterThan(0);
-    expect(screen.getByText('Annual Premium')).toBeTruthy();
+    expect(screen.getByText('Annual premium')).toBeTruthy();
     // Whole dollars in a tile from $1,000.
     expect(screen.getByText('$2,520')).toBeTruthy();
 

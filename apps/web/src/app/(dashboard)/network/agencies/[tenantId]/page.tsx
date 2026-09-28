@@ -483,7 +483,7 @@ function DetailsPanel({
           <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map(([label, value]) => (
               <div key={label} className="min-w-0">
-                <dt className="t-label text-ink-3">{label}</dt>
+                <dt className="t-caption text-ink-2">{label}</dt>
                 <dd className="t-body break-words text-ink">{value || '—'}</dd>
               </div>
             ))}
@@ -503,7 +503,7 @@ function DetailsPanel({
               {field('deliveryTimeZone', 'Time zone')}
             </div>
             <fieldset>
-              <legend className="t-label text-ink-3">Days it takes calls</legend>
+              <legend className="t-caption text-ink-2">Days it takes calls</legend>
               <div className="mt-1 flex flex-wrap gap-2">
                 {DAYS.map(day => {
                   const on = form.deliveryDays.includes(day);

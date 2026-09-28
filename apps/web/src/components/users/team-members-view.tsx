@@ -27,6 +27,7 @@ import {
   ToolbarSearch,
   ToolbarSelect,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import {
   CellForwardField,
   ReadinessCell,
@@ -449,6 +450,8 @@ export function TeamMembersView({
 
   return (
     <div className="page-canvas">
+      <PageHeader description="Everyone on your team, their role, and whether they can take calls." />
+
       {/* ── Search, filters and the page's actions: one row ─────────────── */}
       <Toolbar>
         <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name or email…" />

@@ -22,6 +22,7 @@ export {
   type RechartsTooltipProps,
 } from './chart-kit';
 export { DataTable, type Column, type DataTableProps } from './data-table';
+export { Dollars } from './dollars';
 export {
   DurationBar,
   formatDurationSeconds,

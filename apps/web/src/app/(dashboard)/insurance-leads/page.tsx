@@ -429,6 +429,7 @@ export default function CrmPage() {
   return (
     <div className="page-canvas">
       <PageHeader
+        description="Your prospects, and the ones that became submitted applications."
         actions={
           <>
             {canManageBook && view === 'prospects' && selectedLeadIds.length > 0 && (
@@ -481,6 +482,7 @@ export default function CrmPage() {
           aria-pressed={view === 'prospects'}
         >
           <StatTile
+            size="hero"
             label="Prospects"
             value={summary?.prospects ?? 0}
             sub="not yet submitted"
@@ -498,7 +500,8 @@ export default function CrmPage() {
           className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
-            label="Follow-ups Due"
+            size="hero"
+            label="Follow-ups due"
             value={summary?.followUpsDue ?? 0}
             sub="today or overdue"
             icon={CalendarClock}
@@ -512,7 +515,8 @@ export default function CrmPage() {
           aria-pressed={view === 'submitted'}
         >
           <StatTile
-            label="Submitted Apps"
+            size="hero"
+            label="Submitted apps"
             value={summary?.submittedApps ?? 0}
             sub={periodLabel}
             icon={FileCheck2}
@@ -526,7 +530,8 @@ export default function CrmPage() {
           className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
-            label="Annual Premium"
+            size="hero"
+            label="Annual premium"
             figure={tileDollars(summary?.annualPremium ?? 0)}
             sub={
               summary?.averageAnnualPremium != null ? (
@@ -703,14 +708,14 @@ export default function CrmPage() {
                         'Phone',
                         'State',
                         'Carrier · Product',
-                        'Face Amount',
-                        'Annual Premium',
+                        'Face amount',
+                        'Annual premium',
                         'Agent',
                       ].map(h => (
                         <th
                           key={h}
-                          className={`whitespace-nowrap px-4 py-3 text-xs font-medium uppercase tracking-wider text-ink-3 ${
-                            h === 'Face Amount' || h === 'Annual Premium'
+                          className={`h-10 whitespace-nowrap px-4 t-caption text-ink-2 ${
+                            h === 'Face amount' || h === 'Annual premium'
                               ? 'text-right'
                               : 'text-left'
                           }`}

@@ -113,7 +113,7 @@ function PublisherPayoutsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+            <CardTitle className="t-caption text-ink-2">
               Payable
             </CardTitle>
           </CardHeader>
@@ -128,7 +128,7 @@ function PublisherPayoutsPage() {
 
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+            <CardTitle className="t-caption text-ink-2">
               Paid
             </CardTitle>
           </CardHeader>
@@ -142,8 +142,8 @@ function PublisherPayoutsPage() {
 
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Held / Disputed
+            <CardTitle className="t-caption text-ink-2">
+              Held or disputed
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -156,7 +156,7 @@ function PublisherPayoutsPage() {
 
         <Card className="bg-surface border-rule">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
+            <CardTitle className="t-caption text-ink-2">
               Net payable
             </CardTitle>
           </CardHeader>
@@ -184,16 +184,16 @@ function PublisherPayoutsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-rule bg-sunken">
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                  <th className="p-4 text-left t-caption text-ink-2">
                     Date
                   </th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                  <th className="p-4 text-left t-caption text-ink-2">
                     Method
                   </th>
-                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wider text-ink-2">
+                  <th className="p-4 text-left t-caption text-ink-2">
                     Reference
                   </th>
-                  <th className="p-4 text-right text-xs font-semibold uppercase tracking-wider text-ink-2">
+                  <th className="p-4 text-right t-caption text-ink-2">
                     Amount
                   </th>
                 </tr>

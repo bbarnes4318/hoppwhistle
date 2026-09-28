@@ -237,7 +237,7 @@ async function RightNowPanel({ token }: { token: string }) {
       <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {figures.map(f => (
           <div key={f.label}>
-            <p className="t-label text-ink-3">{f.label}</p>
+            <p className="t-caption text-ink-2">{f.label}</p>
             <p className="t-figure mt-1.5 text-ink">{f.value}</p>
             <p className="t-meta mt-1 text-ink-3">{f.sub}</p>
           </div>
@@ -291,7 +291,7 @@ async function BalancePanel({
       </PanelHeader>
       <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <p className="t-label text-ink-3">{upfront ? 'Balance' : 'Billed this month'}</p>
+          <p className="t-caption text-ink-2">{upfront ? 'Balance' : 'Billed this month'}</p>
           <p className="t-figure mt-1.5 text-ink">
             <MoneyCell
               amount={upfront ? profile.walletBalance : billedThisMonth}
@@ -305,12 +305,12 @@ async function BalancePanel({
           </p>
         </div>
         <div>
-          <p className="t-label text-ink-3">Burn rate</p>
+          <p className="t-caption text-ink-2">Burn rate</p>
           <p className="t-figure mt-1.5 text-ink">${burnPerDay.toFixed(2)}</p>
           <p className="t-meta mt-1 text-ink-3">Average per day over 30 days</p>
         </div>
         <div>
-          <p className="t-label text-ink-3">Runway</p>
+          <p className="t-caption text-ink-2">Runway</p>
           <p className="t-figure mt-1.5 text-ink">
             {upfront ? (runwayDays != null ? `${runwayDays}d` : '—') : 'n/a'}
           </p>

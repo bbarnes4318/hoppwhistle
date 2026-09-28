@@ -19,6 +19,7 @@ import {
   ToolbarDateRange,
   ToolbarSelect,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient, payload } from '@/lib/api';
@@ -401,7 +402,9 @@ export default function ApplicationsPage() {
 
   return (
     <div className="page-canvas">
-      {/* Range, filters and export on one row -- the first thing on the page. */}
+      <PageHeader description="Every application your agents submitted, by carrier and premium." />
+
+      {/* Range, filters and export on one row, under the header. */}
       <Toolbar aria-label="Application filters">
         <ToolbarDateRange
           from={range.from}
@@ -462,6 +465,7 @@ export default function ApplicationsPage() {
       {/* The summary strip. Voided rows are excluded, which is what makes it reconcile. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile
+          size="hero"
           label="Applications"
           figure={count(summary?.count)}
           data-figure-label="Applications"
@@ -470,6 +474,7 @@ export default function ApplicationsPage() {
           sub={formatDayRange(applied.from, applied.to)}
         />
         <StatTile
+          size="hero"
           label="Annualized premium"
           figure={dollars(summary?.totalAnnualizedPremium)}
           data-figure-label="Annualized premium"
@@ -479,6 +484,7 @@ export default function ApplicationsPage() {
           sub="total for the range"
         />
         <StatTile
+          size="hero"
           label="Average premium"
           figure={dollars(summary?.averageAnnualizedPremium)}
           data-figure-label="Average premium"

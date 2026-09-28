@@ -343,7 +343,8 @@ const refusals = [];
 /** Undo the fixed-height shell for a full-page shot. */
 const FULL_PAGE_CSS = `
   div.h-screen { height: auto !important; min-height: 100vh; overflow: visible !important; }
-  main { overflow: visible !important; flex: none !important; }
+  div.h-screen > div { min-width: 0 !important; }
+  main { overflow: visible !important; flex: none !important; min-width: 0 !important; }
   div.h-screen > div.h-full { height: auto !important; }
   div.h-screen > div.h-full > * { height: 100% !important; }
 `;

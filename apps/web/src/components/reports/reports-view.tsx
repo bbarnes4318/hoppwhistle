@@ -423,7 +423,7 @@ function ReportsPage() {
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-shrink-0">
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
+                <div className="t-caption text-ink-2 flex items-center justify-between">
                   <span>Total Revenue</span>
                   <DollarSign className="h-3 w-3 text-live-ink" />
                 </div>
@@ -439,7 +439,7 @@ function ReportsPage() {
               </div>
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
+                <div className="t-caption text-ink-2 flex items-center justify-between">
                   <span>Publisher Payout</span>
                   <Users className="h-3 w-3 text-ringing-ink" />
                 </div>
@@ -455,7 +455,7 @@ function ReportsPage() {
               </div>
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
+                <div className="t-caption text-ink-2 flex items-center justify-between">
                   <span>Routing Cost</span>
                   <Phone className="h-3 w-3 text-dropped-ink" />
                 </div>
@@ -471,7 +471,7 @@ function ReportsPage() {
               </div>
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
+                <div className="t-caption text-ink-2 flex items-center justify-between">
                   <span>Net Profit</span>
                   <TrendingUp className="h-3 w-3 text-live-ink" />
                 </div>
@@ -698,7 +698,7 @@ function ReportsPage() {
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Inbound Calls</div>
+                <div className="t-caption text-ink-2">Total inbound calls</div>
                 <div className="text-base font-bold text-ink mt-1">
                   {pubReport ? pubReport.totals.totalCalls.toLocaleString() : '0'}
                 </div>
@@ -706,7 +706,7 @@ function ReportsPage() {
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
                 <div>
-                  <div className="t-label text-ink-3">Billable Calls</div>
+                  <div className="t-caption text-ink-2">Billable calls</div>
                   <div className="text-base font-bold text-live-ink mt-1">
                     {pubReport ? pubReport.totals.billableCalls.toLocaleString() : '0'}
                   </div>
@@ -726,7 +726,7 @@ function ReportsPage() {
               </div>
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Earnings</div>
+                <div className="t-caption text-ink-2">Total earnings</div>
                 <div className="text-base font-bold text-live-ink mt-1">
                   $
                   {pubReport
@@ -751,7 +751,7 @@ function ReportsPage() {
                       <TableHead>Publisher Name</TableHead>
                       <TableHead>Campaign Name</TableHead>
                       <TableHead className="text-right">Total Calls</TableHead>
-                      <TableHead className="text-right">Billable Calls</TableHead>
+                      <TableHead className="text-right">Billable calls</TableHead>
                       <TableHead className="text-right">Non-Billable</TableHead>
                       <TableHead className="text-right">Payout Rate ($)</TableHead>
                       <TableHead className="text-right">Earnings ($)</TableHead>
@@ -848,7 +848,7 @@ function ReportsPage() {
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Inbound Calls</div>
+                <div className="t-caption text-ink-2">Total inbound calls</div>
                 <div className="text-base font-bold text-ink mt-1">
                   {buyerReport ? buyerReport.totals.totalCalls.toLocaleString() : '0'}
                 </div>
@@ -856,7 +856,7 @@ function ReportsPage() {
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
                 <div>
-                  <div className="t-label text-ink-3">Billable Calls</div>
+                  <div className="t-caption text-ink-2">Billable calls</div>
                   <div className="text-base font-bold text-live-ink mt-1">
                     {buyerReport ? buyerReport.totals.billableCalls.toLocaleString() : '0'}
                   </div>
@@ -876,7 +876,7 @@ function ReportsPage() {
               </div>
 
               <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Buyer Cost</div>
+                <div className="t-caption text-ink-2">Total buyer cost</div>
                 <div className="text-base font-bold text-dropped-ink mt-1">
                   $
                   {buyerReport
@@ -902,7 +902,7 @@ function ReportsPage() {
                       <TableHead>Campaign Name</TableHead>
                       <TableHead>Destination DID</TableHead>
                       <TableHead className="text-right">Total Calls</TableHead>
-                      <TableHead className="text-right">Billable Calls</TableHead>
+                      <TableHead className="text-right">Billable calls</TableHead>
                       <TableHead className="text-right">Billable (%)</TableHead>
                       <TableHead className="text-right">Avg Duration</TableHead>
                       <TableHead className="text-right">Rate ($)</TableHead>

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RoleGuard } from '@/components/auth/role-guard';
 import {
   EmptyState,
+  EntityBadge,
   Panel,
   PanelBody,
   Toolbar,
@@ -674,8 +675,13 @@ function BuyersPage() {
       return <Skeleton className="h-4 w-14" />;
     }
     const value = stats ? stats[field] : 0;
+    const amount = typeof value === 'number' ? value : 0;
+    // Nothing billed reads as nothing: an em dash in ink-3, not a $0 in ink.
+    if (amount === 0) return <span className="t-num text-ink-3">—</span>;
     return (
-      <span className="t-num">${typeof value === 'number' ? value.toLocaleString() : '0'}</span>
+      <span className="t-num">
+        {`$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+      </span>
     );
   };
 
@@ -685,7 +691,7 @@ function BuyersPage() {
   return (
     <div className="page-canvas">
       <PageHeader
-        description="Configure buyer billing, permissions, and targets"
+        description="Your buyers: their caps, returns and portal logins, and what they bought today."
         actions={
           <Button onClick={() => setCreateBuyerOpen(true)} size="sm">
             <Plus className="mr-2 h-4 w-4" />
@@ -736,7 +742,7 @@ function BuyersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8 pl-5"></TableHead>
-                  <TableHead>Company Name</TableHead>
+                  <TableHead>Buyer</TableHead>
                   <TableHead>Sub ID</TableHead>
                   <TableHead className="text-center">Pause</TableHead>
                   <TableHead className="text-center">Caps</TableHead>
@@ -776,8 +782,8 @@ function BuyersPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium">{buyer.name}</div>
-                          <div className="t-data text-ink-3">{buyer.code}</div>
+                          <EntityBadge kind="buyer" name={buyer.name} className="font-medium" />
+                          <div className="t-data pl-[34px] text-ink-3">{buyer.code}</div>
                         </TableCell>
                         <TableCell className="text-ink-3">{buyer.subId || '—'}</TableCell>
                         <TableCell className="text-center" onClick={e => e.stopPropagation()}>

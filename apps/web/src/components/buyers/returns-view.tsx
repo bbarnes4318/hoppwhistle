@@ -5,7 +5,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { dollars, duration } from '@/components/delivery/ledger';
 import {
+  Dollars,
   EmptyState,
+  EntityBadge,
   Notice,
   Pagination,
   Panel,
@@ -219,7 +221,13 @@ export function ReturnsView({
                             {row.campaignName ? ` · ${row.campaignName}` : ''}
                           </div>
                         </TableCell>
-                        <TableCell>{row.buyer?.name ?? '—'}</TableCell>
+                        <TableCell className="max-w-[200px]">
+                          {row.buyer?.name ? (
+                            <EntityBadge kind="buyer" name={row.buyer.name} />
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{row.publisher?.name ?? '—'}</TableCell>
                         <TableCell className="max-w-[18rem]">
                           <div className="line-clamp-2 t-body text-ink-2" title={row.reason ?? ''}>
@@ -234,10 +242,10 @@ export function ReturnsView({
                           {row.connectedDuration === null ? '—' : duration(row.connectedDuration)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {dollars(row.buyerBillableAmount)}
+                          <Dollars value={row.buyerBillableAmount} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {dollars(row.publisherPayoutAmount)}
+                          <Dollars value={row.publisherPayoutAmount} />
                           {row.publisherPayoutStatus ? (
                             <div className="t-meta text-ink-3">
                               {row.publisherPayoutStatus.replace(/_/g, ' ').toLowerCase()}
@@ -323,13 +331,13 @@ export function ReturnsView({
                       <div>
                         <dt className="text-ink-3">Buyer paid</dt>
                         <dd className="tabular-nums text-ink">
-                          {dollars(row.buyerBillableAmount)}
+                          <Dollars value={row.buyerBillableAmount} />
                         </dd>
                       </div>
                       <div>
                         <dt className="text-ink-3">Payout</dt>
                         <dd className="tabular-nums text-ink">
-                          {dollars(row.publisherPayoutAmount)}
+                          <Dollars value={row.publisherPayoutAmount} />
                           {row.publisherPayoutStatus
                             ? ` · ${row.publisherPayoutStatus.replace(/_/g, ' ').toLowerCase()}`
                             : ''}

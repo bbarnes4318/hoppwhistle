@@ -13,6 +13,7 @@ import {
   PanelHeader,
   PanelTitle,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { DncListsView } from '@/components/settings/dnc-lists-view';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -339,9 +340,10 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
 
   return (
     <div className="page-canvas">
+      <PageHeader description="Webhooks, do-not-call lists and the legal pages your agency works under." />
+
       {/*
-       * The tabs are the first thing on the page. The title is already in the
-       * topbar, and the demo-mode switch that used to sit in a full-width
+       * The tabs follow the header. The demo-mode switch that used to sit in a full-width
        * "Workspace" card above them is a tab of its own: it is a setting like
        * the others, not something every visit needs to scroll past. It is a
        * platform admin's tab alone; see the note on SettingsView.

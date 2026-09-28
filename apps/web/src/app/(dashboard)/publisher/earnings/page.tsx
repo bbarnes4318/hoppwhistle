@@ -237,7 +237,7 @@ function PublisherEarningsPage() {
               <card.icon className="w-36 h-36 text-ink" />
             </div>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-bold text-ink-2 uppercase tracking-widest">
+              <span className="t-caption text-ink-2">
                 {card.title} · {label}
               </span>
               <card.icon className={`h-5 w-5 ${card.tone}`} />

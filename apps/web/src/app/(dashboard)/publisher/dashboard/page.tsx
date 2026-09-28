@@ -299,8 +299,8 @@ function PublisherDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Total Calls
+            <CardTitle className="t-caption text-ink-2">
+              Total calls
             </CardTitle>
             <Phone className="h-4 w-4 text-ink-3" />
           </CardHeader>
@@ -318,8 +318,8 @@ function PublisherDashboard() {
 
         <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Billable Calls
+            <CardTitle className="t-caption text-ink-2">
+              Billable calls
             </CardTitle>
             <PhoneIncoming className="h-4 w-4 text-live-ink" />
           </CardHeader>
@@ -335,8 +335,8 @@ function PublisherDashboard() {
 
         <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Payout Earnings
+            <CardTitle className="t-caption text-ink-2">
+              Payout earnings
             </CardTitle>
             <DollarSign className="h-4 w-4 text-money-ink" />
           </CardHeader>
@@ -354,8 +354,8 @@ function PublisherDashboard() {
 
         <Card className="bg-surface border-rule text-ink">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Avg Duration
+            <CardTitle className="t-caption text-ink-2">
+              Avg duration
             </CardTitle>
             <Activity className="h-4 w-4 text-ink-3" />
           </CardHeader>
@@ -501,7 +501,7 @@ function PublisherDashboard() {
           {stats && stats.recentCalls.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-ink-2">
-                <thead className="text-xs uppercase text-ink-2 border-b border-rule bg-sunken">
+                <thead className="t-caption text-ink-2 border-b border-rule bg-sunken">
                   <tr>
                     <th className="px-4 py-3">Time</th>
                     <th className="px-4 py-3">Caller</th>

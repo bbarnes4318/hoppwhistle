@@ -20,6 +20,7 @@ import {
   ToolbarMeta,
   ToolbarSelect,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -216,6 +217,8 @@ function TeamRangeReport(): JSX.Element {
 
   return (
     <div className="page-canvas">
+      <PageHeader description="What each agent delivered over a range: calls, applications and closing." />
+
       {/* ── The range, and what to do with it: one row ──────────────────── */}
       <Toolbar>
         <ToolbarSelect
@@ -310,12 +313,14 @@ function TeamRangeReport(): JSX.Element {
       <section aria-label="The agency" className="flex min-w-0 flex-col gap-3">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
           <StatTile
+            size="hero"
             label="Calls taken"
             figure={count(data?.agencyCallsTaken)}
             data-figure-label="Calls taken"
             data-figure-value={count(data?.agencyCallsTaken)}
           />
           <StatTile
+            size="hero"
             label="Applications"
             figure={count(data?.agencyApplications)}
             data-figure-label="Applications"
@@ -331,6 +336,7 @@ function TeamRangeReport(): JSX.Element {
             data-figure-value={pct(data?.agencyClosingPct ?? null)}
           />
           <StatTile
+            size="hero"
             label="Annualized premium"
             figure={dollars(data?.agencyAnnualizedPremium)}
             data-figure-label="Annualized premium"
