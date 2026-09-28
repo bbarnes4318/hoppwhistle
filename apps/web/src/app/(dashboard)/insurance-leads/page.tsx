@@ -30,8 +30,10 @@ import {
   ToolbarMeta,
   ToolbarSearch,
   ToolbarSelect,
+  tileDollars,
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
+import { defaultCrmView, isCrmView, type CrmView } from '@/components/leads/crm-view';
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { LeadDetailSheet } from '@/components/leads/lead-detail-sheet';
 import { LeadsTable } from '@/components/leads/leads-table';
@@ -71,7 +73,7 @@ import { formatPhoneNumber } from '@/lib/utils';
  * agency sees one book.
  */
 
-type View = 'prospects' | 'submitted';
+type View = CrmView;
 type Period = 'all' | 'today' | 'week' | 'month' | 'last-month' | 'year';
 
 const PAGE_SIZE = 25;
@@ -180,7 +182,26 @@ export default function CrmPage() {
   const { makeCall } = usePhone();
   const router = useRouter();
 
-  const [view, setView] = useState<View>('prospects');
+  /*
+   * The list on screen, in the URL as `?tab=` so a reload or a shared link
+   * opens the same one. Read once at mount; with no tab named, the counts
+   * decide (`defaultCrmView`) as soon as they arrive.
+   */
+  const [requestedTab] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')
+  );
+  const [view, setViewState] = useState<View>(() => defaultCrmView(requestedTab, null));
+  const [viewChosen, setViewChosen] = useState(isCrmView(requestedTab));
+  const setView = useCallback(
+    (next: View) => {
+      setViewChosen(true);
+      setViewState(next);
+      const query = new URLSearchParams(window.location.search);
+      query.set('tab', next);
+      router.replace(`${window.location.pathname}?${query.toString()}`, { scroll: false });
+    },
+    [router]
+  );
   const [period, setPeriod] = useState<Period>('all');
   const range = useMemo(() => periodRange(period), [period]);
 
@@ -233,6 +254,13 @@ export default function CrmPage() {
       setSummaryLoading(false);
     }
   }, [range]);
+
+  // No tab named: the first counts pick the list, once.
+  useEffect(() => {
+    if (viewChosen || !summary) return;
+    setViewChosen(true);
+    setViewState(defaultCrmView(null, summary));
+  }, [summary, viewChosen]);
 
   const loadProspects = useCallback(async () => {
     setProspectsLoading(true);
@@ -449,7 +477,7 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('prospects')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
           aria-pressed={view === 'prospects'}
         >
           <StatTile
@@ -458,7 +486,7 @@ export default function CrmPage() {
             sub="not yet submitted"
             icon={Users}
             loading={summaryLoading}
-            className={view === 'prospects' ? 'ring-2 ring-brand-ink' : undefined}
+            selected={view === 'prospects'}
           />
         </button>
         <button
@@ -467,7 +495,7 @@ export default function CrmPage() {
             setView('prospects');
             setFilter('followUp', 'DUE');
           }}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
             label="Follow-ups Due"
@@ -480,7 +508,7 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('submitted')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
           aria-pressed={view === 'submitted'}
         >
           <StatTile
@@ -489,17 +517,17 @@ export default function CrmPage() {
             sub={periodLabel}
             icon={FileCheck2}
             loading={summaryLoading}
-            className={view === 'submitted' ? 'ring-2 ring-brand-ink' : undefined}
+            selected={view === 'submitted'}
           />
         </button>
         <button
           type="button"
           onClick={() => setView('submitted')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
             label="Annual Premium"
-            figure={<MoneyCell amount={summary?.annualPremium ?? 0} unit="major" size="figure" />}
+            figure={tileDollars(summary?.annualPremium ?? 0)}
             sub={
               summary?.averageAnnualPremium != null ? (
                 <>
@@ -603,8 +631,6 @@ export default function CrmPage() {
               onSelectLeadsChange={setSelectedLeadIds}
               filtered={activeFilterCount > 0}
               onClearFilters={clearFilters}
-              onImport={() => setIsImportOpen(true)}
-              onAddProspect={() => router.push('/intake')}
             />
           </div>
 
@@ -745,7 +771,7 @@ export default function CrmPage() {
                           <MoneyCell amount={app.faceAmount} unit="major" tone="none" />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
-                          <MoneyCell amount={app.annualPremium} unit="major" tone="money" />
+                          <MoneyCell amount={app.annualPremium} unit="major" tone="none" />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-2">
                           {app.agentName || '—'}

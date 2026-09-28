@@ -58,6 +58,11 @@ export interface StatTileProps extends React.HTMLAttributes<HTMLDivElement> {
   emphasis?: boolean;
   /** Colour the figure as money: brand ink when it is not zero. */
   tone?: 'ink' | 'money';
+  /**
+   * The tile stands for the view on screen: a brand-tint ground and a
+   * brand-ink figure. Not a ring -- the ring is keyboard focus, and only that.
+   */
+  selected?: boolean;
   loading?: boolean;
 }
 
@@ -117,6 +122,7 @@ export function StatTile({
   size,
   emphasis = false,
   tone = 'ink',
+  selected = false,
   loading = false,
   className,
   ...props
@@ -148,13 +154,15 @@ export function StatTile({
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col rounded-card border border-rule bg-surface shadow-card',
+        'flex min-w-0 flex-col rounded-card border shadow-card',
+        selected ? 'border-brand-tint bg-brand-tint' : 'border-rule bg-surface',
         hero ? 'p-5' : 'p-4',
         'transition-shadow duration-150 ease-out ne-motion',
         className
       )}
       data-tile-size={hero ? 'hero' : 'secondary'}
       data-zero={zero ? '' : undefined}
+      data-selected={selected ? '' : undefined}
       {...props}
     >
       <div className="flex items-start justify-between gap-3">
@@ -179,7 +187,13 @@ export function StatTile({
             className={cn(
               hero ? 't-kpi-hero' : 't-kpi',
               'min-w-0 tabular-nums',
-              zero ? 'text-ink-3' : tone === 'money' ? 'text-brand-ink' : 'text-ink'
+              selected
+                ? 'text-brand-ink'
+                : zero
+                  ? 'text-ink-3'
+                  : tone === 'money'
+                    ? 'text-brand-ink'
+                    : 'text-ink'
             )}
             data-tile-figure
           >

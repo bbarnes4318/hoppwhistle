@@ -229,8 +229,16 @@ export function LeadsTable({
           <EmptyState
             icon={Users}
             headline="No prospects yet"
-            body="Import a list or add your first prospect."
-            // Add prospect is the page header's primary too; Import is secondary there.
+            /*
+             * The buttons are offered only where the page header does not
+             * already carry them: two Add Prospect/Import pairs on one screen
+             * is one pair too many.
+             */
+            body={
+              onAddProspect || onImport
+                ? 'Import a list or add your first prospect.'
+                : 'Add a prospect or import a list from the top right.'
+            }
             action={onAddProspect ? { label: 'Add prospect', onClick: onAddProspect } : undefined}
             secondaryAction={onImport ? { label: 'Import', onClick: onImport } : undefined}
           />
