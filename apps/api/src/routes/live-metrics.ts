@@ -5,6 +5,7 @@ import { FastifyInstance } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, replyTenantRefusal } from '../lib/tenant-context.js';
 import { computeAbandonRate } from '../services/abandon-rate.js';
+import { IN_FLIGHT_WINDOW_MS, callInProgressWhere } from '../services/live/in-progress.js';
 import { getRedisClient } from '../services/redis.js';
 
 import { getUserProfile } from './index.js';
@@ -72,10 +73,9 @@ interface LiveMetricsResponse {
 
 /**
  * A call with no endedAt but created hours ago is a stuck row, not a live call.
- * Bounding the in-flight window keeps one crashed leg from parking a wrong
- * number on every operator's screen indefinitely.
+ * The window is `callInProgressWhere`'s, the one rule every live screen uses.
  */
-const IN_FLIGHT_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+const IN_FLIGHT_MAX_AGE_MS = IN_FLIGHT_WINDOW_MS;
 
 /**
  * The "hour" metrics use a TRAILING 60 minutes rather than the current clock
@@ -164,9 +164,7 @@ export async function computeLiveMetrics(
     tenantId,
     ...scope,
     // Still up: dialling, ringing or connected, with no end time recorded.
-    status: { in: ['INITIATED', 'RINGING', 'ANSWERED'] },
-    endedAt: null,
-    createdAt: { gte: inFlightSince },
+    ...callInProgressWhere(now),
   };
 
   const windowSince = role === 'admin' ? hourSince : todaySince;

@@ -10,9 +10,9 @@
 --
 -- In the existing tenant named 'Life Leads Plus': the white-label flag and the
 -- 'life-leads-plus' brand, an ADMIN and 12 AGENTs, 3 publishers, 4 buyers, 2
--- campaigns, ~30 days of inbound calls plus today (3 of them in flight),
--- submitted applications on the agent-answered calls, and two weeks of
--- recorded publisher payments. Two child agencies under it, each with an OWNER,
+-- campaigns, the seven days before today and today so far of inbound calls
+-- (every one of them ended), submitted applications on the agent-answered
+-- calls, and a recorded publisher payment for the first three of those days. Two child agencies under it, each with an OWNER,
 -- agents, calls and applications.
 --
 -- It never creates phone_numbers, did_routes, buyer_endpoints,
@@ -39,6 +39,8 @@
 -- One transaction. It deletes every marked row first, then inserts, so a second
 -- run leaves exactly one copy. The draws come from setseed(0.4318), so the same
 -- run on the same day gives the same shape; the window moves with the clock.
+-- Every timestamp is relative to now() in America/New_York, so the demo is
+-- always "today": run it again each morning, or before a demo.
 
 BEGIN;
 
@@ -378,13 +380,29 @@ JOIN llp_buyer b ON b.code = v.buyer_code;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6 & 9c. Call slots
 --
--- The previous 30 calendar days in America/New_York, 09:00-18:00 ET, plus
--- today. Life Leads Plus: 170 a weekday, 60 on Saturday, none on Sunday, and
--- today 22 an hour from 09:00 ET (or now() - 6h if later). Riverbend 45 and
--- Magnolia 25 a weekday, none on weekends, and today pro rata from 09:00 ET.
+-- The seven full calendar days before today in America/New_York, plus today
+-- from 08:00 ET up to now. Every day runs 08:00-20:00 ET, weighted to the
+-- working day: each hour's share of the day is its weight over 50 --
 --
--- Today's slots stop two minutes short of now(), so every completed call has
--- ended before the script ran; the three in-flight calls are added after.
+--   08:00 1   09:00 2   10:00-18:00 5 each   19:00 2
+--
+-- so nine calls in ten land between 10:00 and 19:00.
+--
+-- A day's total is its base volume times a factor between 0.85 and 1.15 drawn
+-- from a hash of the tenant and the date, so re-running on the same day gives
+-- every day the same total, and a day keeps its total as the window moves on.
+--
+--   Life Leads Plus   170 a weekday, 60 on Saturday, 40 on Sunday
+--   Riverbend          45 a weekday, none on weekends
+--   Magnolia           25 a weekday, none on weekends
+--
+-- Today is the same day total, cut off at now(): every hour already over in
+-- full, and the current hour pro rata to the minute. Nothing is seeded before
+-- 08:00 ET, so a run before then leaves today empty.
+--
+-- Today's slots stop two minutes short of now() and every call's length is
+-- clipped to end before the script ran: no seeded call is left open, so
+-- nothing seeded here reads as in progress.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE TEMP TABLE llp_clock ON COMMIT DROP AS
@@ -393,52 +411,54 @@ CREATE TEMP TABLE llp_clock ON COMMIT DROP AS
     now() AS run_at,
     now() - interval '2 minutes' AS last_slot;
 
-CREATE TEMP TABLE llp_window ON COMMIT DROP AS
-  -- The previous 30 days.
+CREATE TEMP TABLE llp_hour_weight ON COMMIT DROP AS
+  SELECT h AS hour,
+         CASE WHEN h = 8 THEN 1 WHEN h IN (9, 19) THEN 2 ELSE 5 END AS weight
+  FROM generate_series(8, 19) AS h;
+
+CREATE TEMP TABLE llp_day ON COMMIT DROP AS
   SELECT
-    r.tenant_key,
-    d::date AS day,
-    ((d::date + time '09:00') AT TIME ZONE 'America/New_York') AS starts,
-    ((d::date + time '18:00') AT TIME ZONE 'America/New_York') AS ends,
-    CASE
-      WHEN extract(isodow FROM d) = 7 THEN 0
-      WHEN extract(isodow FROM d) = 6 THEN r.saturday
-      ELSE r.weekday
-    END AS calls
+    r.tenant_key, r.tenant_order, d::date AS day,
+    round(
+      CASE
+        WHEN extract(isodow FROM d) = 7 THEN r.sunday
+        WHEN extract(isodow FROM d) = 6 THEN r.saturday
+        ELSE r.weekday
+      END
+      * (0.85 + 0.30 * ((abs(hashtext(r.tenant_key || ':' || d::date::text)) % 1000) / 999.0))
+    )::int AS total
   FROM llp_clock k
-  CROSS JOIN generate_series((k.today - 30)::timestamp, (k.today - 1)::timestamp, interval '1 day') AS d
+  CROSS JOIN generate_series((k.today - 7)::timestamp, k.today::timestamp, interval '1 day') AS d
   CROSS JOIN (VALUES
-    ('llp',       1, 170, 60),
-    ('riverbend', 2,  45,  0),
-    ('magnolia',  3,  25,  0)
-  ) AS r(tenant_key, tenant_order, weekday, saturday)
-  UNION ALL
-  -- Today, Life Leads Plus: 22 an hour.
+    ('llp',       1, 170, 60, 40),
+    ('riverbend', 2,  45,  0,  0),
+    ('magnolia',  3,  25,  0,  0)
+  ) AS r(tenant_key, tenant_order, weekday, saturday, sunday);
+
+-- One row per tenant, day and hour: the hour's window and its share of the day.
+CREATE TEMP TABLE llp_window ON COMMIT DROP AS
   SELECT
-    'llp', k.today, w.starts, k.last_slot,
-    greatest(0, floor(22 * extract(epoch FROM (k.last_slot - w.starts)) / 3600))::int
-  FROM llp_clock k
-  CROSS JOIN LATERAL (
-    SELECT greatest(
-      (k.today + time '09:00') AT TIME ZONE 'America/New_York',
-      k.run_at - interval '6 hours'
-    ) AS starts
-  ) w
-  UNION ALL
-  -- Today, the child agencies: their weekday volume, pro rata over 09:00-18:00.
-  SELECT
-    r.tenant_key, k.today, w.starts, w.ends,
+    x.tenant_key, x.tenant_order, x.day, x.starts, x.ends,
     CASE
-      WHEN extract(isodow FROM k.today) >= 6 THEN 0
-      ELSE greatest(0, floor(r.weekday * extract(epoch FROM (w.ends - w.starts)) / (9 * 3600)))::int
-    END
-  FROM llp_clock k
-  CROSS JOIN (VALUES ('riverbend', 45), ('magnolia', 25)) AS r(tenant_key, weekday)
-  CROSS JOIN LATERAL (
+      WHEN x.ends <= x.starts THEN 0
+      ELSE floor(
+        x.total * x.weight / 50.0
+        * extract(epoch FROM (x.ends - x.starts)) / 3600
+        + 0.5
+      )::int
+    END AS calls
+  FROM (
     SELECT
-      (k.today + time '09:00') AT TIME ZONE 'America/New_York' AS starts,
-      least((k.today + time '18:00') AT TIME ZONE 'America/New_York', k.last_slot) AS ends
-  ) w;
+      d.tenant_key, d.tenant_order, d.day, d.total, w.weight,
+      (d.day + make_time(w.hour, 0, 0)) AT TIME ZONE 'America/New_York' AS starts,
+      least(
+        (d.day + make_time(w.hour, 0, 0) + interval '1 hour') AT TIME ZONE 'America/New_York',
+        k.last_slot
+      ) AS ends
+    FROM llp_day d
+    CROSS JOIN llp_hour_weight w
+    CROSS JOIN llp_clock k
+  ) x;
 
 -- One row per call. Past days come first and today last, so a second run a few
 -- minutes later, whose today has a call more or less, draws the same numbers
@@ -446,12 +466,10 @@ CREATE TEMP TABLE llp_window ON COMMIT DROP AS
 CREATE TEMP TABLE llp_slot ON COMMIT DROP AS
   SELECT
     row_number() OVER (
-      ORDER BY w.day = (SELECT today FROM llp_clock), o.tenant_order, w.day, i
+      ORDER BY w.day = (SELECT today FROM llp_clock), w.tenant_order, w.day, w.starts, i
     ) AS seq,
     w.tenant_key, w.day, w.starts, w.ends, w.calls, i AS slot
   FROM llp_window w
-  JOIN (VALUES ('llp', 1), ('riverbend', 2), ('magnolia', 3)) AS o(tenant_key, tenant_order)
-    ON o.tenant_key = w.tenant_key
   CROSS JOIN LATERAL generate_series(0, w.calls - 1) AS i
   WHERE w.calls > 0 AND w.ends > w.starts;
 
@@ -668,41 +686,6 @@ SELECT
 FROM llp_call c
 ORDER BY c.seq;
 
--- In flight: three Final Expense calls on PUB1, still connected.
-INSERT INTO calls (
-  id, "tenantId", "campaignId", "toNumber", "callSid", status, direction,
-  "createdAt", "updatedAt", "startedAt", "answeredAt", "callConnectedTimestamp",
-  "publisherId", "buyerId", "campaignName", "publisherName", "buyerName",
-  "callerId", "callerIdAreaCode", "callerIdState", did, "targetNumber",
-  billable, "billableDurationThreshold", "answeredByUserId", "callSource"
-)
-SELECT
-  gen_random_uuid()::text, (SELECT id FROM llp), c.id, c.did, 'LLPDEMO-' || gen_random_uuid()::text,
-  'ANSWERED'::"CallStatus", 'INBOUND'::"CallDirection",
-  f.started, now(), f.started, f.started + interval '10 seconds', f.started + interval '10 seconds',
-  pub.id, b.id, c.name, pub.name, b.name,
-  '+1' || a.area_code || '555' || lpad((100 + floor(f.r_line * 100))::int::text, 4, '0'),
-  a.area_code, a.state_code, c.did, b.destination,
-  false, CASE WHEN b.id IS NOT NULL THEN 120 END,
-  u.id, CASE WHEN u.id IS NOT NULL THEN 'SOFTPHONE' END
-FROM (
-  SELECT
-    v.ord, now() - v.ago AS started, v.agent_email, v.buyer_code,
-    random() AS r_area, random() AS r_line
-  FROM (VALUES
-    (1, interval '2 minutes', 'marcus.bell@demo.lifeleadsplus.test',  NULL),
-    (2, interval '5 minutes', 'keisha.grant@demo.lifeleadsplus.test', NULL),
-    (3, interval '9 minutes', NULL,                                   'LLPDEMOBUY1')
-  ) AS v(ord, ago, agent_email, buyer_code)
-  ORDER BY v.ord
-) f
-JOIN llp_campaign c ON c.campaign_key = 'FE'
-JOIN llp_pub pub ON pub.code = 'LLPDEMOPUB1'
-JOIN llp_area a ON a.idx = 1 + floor(f.r_area * 20)::int
-LEFT JOIN llp_person u ON u.email = f.agent_email
-LEFT JOIN llp_buyer b ON b.code = f.buyer_code
-ORDER BY f.ord;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7 & 9c. Submitted applications
 --
@@ -749,25 +732,26 @@ WHERE c.has_application
 ORDER BY c.seq;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 8. Publisher payments: the weeks starting 28 and 21 days before this Monday
+-- 8. Publisher payments: the first three days of the window, paid four days ago
+--
+-- One payment per publisher for days today-7 to today-5, recorded at 10:00 ET
+-- four days ago. The four days after that are still owed, so Today and
+-- Payouts always have something to pay.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE TEMP TABLE llp_period ON COMMIT DROP AS
   SELECT
-    w.monday,
-    (w.monday + time '00:00') AT TIME ZONE 'America/New_York' AS period_from,
-    ((w.monday + 6) + time '23:59:59.999') AT TIME ZONE 'America/New_York' AS period_to
-  FROM llp_clock k
-  CROSS JOIN LATERAL (VALUES
-    (date_trunc('week', k.today)::date - 28),
-    (date_trunc('week', k.today)::date - 21)
-  ) AS w(monday);
+    k.today - 7 AS first_day,
+    ((k.today - 7) + time '00:00') AT TIME ZONE 'America/New_York' AS period_from,
+    ((k.today - 5) + time '23:59:59.999') AT TIME ZONE 'America/New_York' AS period_to,
+    ((k.today - 4) + time '10:00') AT TIME ZONE 'America/New_York' AS paid_on
+  FROM llp_clock k;
 
 CREATE TEMP TABLE llp_payment ON COMMIT DROP AS
   SELECT
     gen_random_uuid()::text AS id,
-    p.id AS publisher_id, p.code, w.monday, w.period_from, w.period_to,
-    w.period_to + interval '3 days' AS paid_at,
+    p.id AS publisher_id, p.code, w.first_day, w.period_from, w.period_to,
+    w.paid_on AS paid_at,
     COALESCE((
       SELECT sum(x."publisherPayoutAmount")
       FROM calls x
@@ -791,11 +775,11 @@ INSERT INTO publisher_payments (
 )
 SELECT
   y.id, (SELECT id FROM llp), y.publisher_id, round(y.amount, 2), y.period_from, y.period_to,
-  'ACH', 'LLPDEMO-' || y.code || '-' || to_char(y.monday, 'YYYYMMDD'), y.paid_at,
+  'ACH', 'LLPDEMO-' || y.code || '-' || to_char(y.first_day, 'YYYYMMDD'), y.paid_at,
   (SELECT id FROM llp_person WHERE email = 'renee.castillo@demo.lifeleadsplus.test'),
   y.paid_at
 FROM llp_payment y
-ORDER BY y.code, y.monday;
+ORDER BY y.code, y.first_day;
 
 UPDATE calls x SET
   "publisherPayoutStatus" = 'PAID',

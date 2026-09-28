@@ -55,6 +55,7 @@ import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 import { getAgentBreakdown } from '../services/billing/delivery-view.js';
 import { agentPriorityFor, answerOrderFromMetadata } from '../services/campaigns/answer-order.js';
+import { callInProgressWhere } from '../services/live/in-progress.js';
 import {
   calendarDayBounds,
   currentCalendarDay,
@@ -77,13 +78,6 @@ const CampaignAssignmentSchema = z.object({
    */
   campaignIds: z.array(z.string().uuid()).max(50),
 });
-
-/**
- * How far back an ANSWERED row still counts as the call an agent is on. A call
- * whose hangup was never written stays ANSWERED forever; without a horizon the
- * floor would show an agent on yesterday's call indefinitely.
- */
-const CURRENT_CALL_HORIZON_MS = 4 * 60 * 60 * 1000;
 
 /** The most calls one agent's day drawer lists. */
 const ACTIVITY_CALL_LIMIT = 200;
@@ -534,8 +528,9 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
           where: {
             tenantId,
             answeredByUserId: { in: userIds },
-            status: 'ANSWERED',
-            createdAt: { gte: new Date(now.getTime() - CURRENT_CALL_HORIZON_MS) },
+            // In progress by the rule every live screen shares: a call whose
+            // hangup was never written stops counting after the window.
+            ...callInProgressWhere(now),
           },
           select: {
             ...CALL_LABEL_SELECT,

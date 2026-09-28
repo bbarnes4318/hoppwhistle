@@ -173,6 +173,11 @@ export function calendarDayOf(instant: Date): CalendarDayKey {
   return `${pad(w.year, 4)}-${pad(w.month)}-${pad(w.day)}`;
 }
 
+/** The hour of the day (0-23) an instant falls in, on the platform clock. */
+export function calendarHourOf(instant: Date): number {
+  return wallClockAt(instant).hour;
+}
+
 /** Today's calendar day, as of now. */
 export function currentCalendarDay(now: Date = new Date()): CalendarDayKey {
   return calendarDayOf(now);

@@ -8,6 +8,11 @@ import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
 import { registerStaffOnly } from '../middleware/staff-only.js';
 import { resolvePeriod } from '../services/leaderboard/period.js';
 import { getAgencyLiveBoard } from '../services/live/agency-board.js';
+import {
+  calendarDayBounds,
+  currentCalendarDay,
+  shiftCalendarDay,
+} from '../services/rating/calendar-day.js';
 import { getCallSalesSummary } from '../services/reporting/call-sales.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
@@ -318,7 +323,7 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
     const sales = await getCallSalesSummary(wl.id, resolvePeriod('TODAY'), { prisma });
 
     expect(data.now.callsUp).toBe(board.totals.callsInFlight);
-    expect(data.today).toEqual({
+    expect(data.today).toMatchObject({
       inbound: sales.totals.inboundCalls,
       answeredByAgents: sales.totals.answeredByAgents,
       sentToBuyers: sales.totals.sentToBuyers,
@@ -328,10 +333,16 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
       profit: sales.totals.profit,
       applications: board.totals.applicationsToday,
       closingPct: board.totals.closingPct,
+      billable: sales.totals.billable,
     });
 
     const boardBuyers = board.rows.filter(row => row.kind === 'buyer');
-    expect(data.buyers.map((row: any) => row.id)).toEqual(boardBuyers.map(row => row.id));
+    // Every buyer on the board, busiest first rather than in the board's order.
+    expect(data.buyers.map((row: any) => row.id).sort()).toEqual(
+      boardBuyers.map(row => row.id).sort()
+    );
+    const revenues = data.buyers.map((row: any) => row.revenue);
+    expect(revenues).toEqual([...revenues].sort((a: number, b: number) => b - a));
     for (const row of data.buyers) {
       const source = boardBuyers.find(b => b.id === row.id)!;
       expect(row).toMatchObject(source);
@@ -341,27 +352,29 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
           'atCap',
           'capUsed',
           'capMax',
-          'billableToday',
-          'revenueToday',
+          'calls',
+          'billable',
+          'revenue',
         ].sort()
       );
     }
   });
 
-  it("carries each buyer's billable calls and revenue from the Sales summary's byBuyer", async () => {
+  it("carries each buyer's calls, billable calls and revenue from the Sales summary's byBuyer", async () => {
     const data = (await get(wl.ownerId, wl.id)).json().data;
     const sales = await getCallSalesSummary(wl.id, resolvePeriod('TODAY'), { prisma });
     const byBuyer = new Map(sales.byBuyer.map(row => [row.buyerId, row]));
 
     expect(data.buyers.length).toBeGreaterThan(0);
     for (const row of data.buyers) {
-      expect(row.billableToday).toBe(byBuyer.get(row.id)?.billable ?? 0);
-      expect(row.revenueToday).toBe(byBuyer.get(row.id)?.revenue ?? 0);
+      expect(row.calls).toBe(byBuyer.get(row.id)?.calls ?? 0);
+      expect(row.billable).toBe(byBuyer.get(row.id)?.billable ?? 0);
+      expect(row.revenue).toBe(byBuyer.get(row.id)?.revenue ?? 0);
     }
     // By hand: Acme's one billable $40 call; the monthly buyer's live call is not billable.
     const row = (id: string) => data.buyers.find((r: any) => r.id === id);
-    expect(row(wl.buyers.atCap)).toMatchObject({ billableToday: 1, revenueToday: 40 });
-    expect(row(wl.buyers.monthly)).toMatchObject({ billableToday: 0, revenueToday: 0 });
+    expect(row(wl.buyers.atCap)).toMatchObject({ calls: 1, billable: 1, revenue: 40 });
+    expect(row(wl.buyers.monthly)).toMatchObject({ calls: 1, billable: 0, revenue: 0 });
     // Still there for older clients.
     expect(row(wl.buyers.atCap)).toHaveProperty('applicationsToday');
     expect(row(wl.buyers.atCap)).toHaveProperty('closingPct');
@@ -451,7 +464,7 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
 
   it('caches per tenant for fifteen seconds', async () => {
     const first = (await get(wl.ownerId, wl.id)).json().data;
-    expect(redis.sets).toEqual([{ key: `wl:today:${wl.id}`, args: ['EX', 15] }]);
+    expect(redis.sets).toEqual([{ key: `wl:today:${wl.id}:TODAY`, args: ['EX', 15] }]);
 
     await call(wl.id, { disputeStatus: 'DISPUTED' });
     const second = (await get(wl.ownerId, wl.id)).json().data;
@@ -479,5 +492,161 @@ describe.skipIf(!gate.available)('GET /api/v1/white-label/today', () => {
       'POWER_DIALER',
     ]);
     expect((await get(normal.ownerId, normal.id, '/api/auth/me')).json().upgrades).toEqual([]);
+  });
+  it('names why the agents who cannot take calls cannot, most common first', async () => {
+    const data = (await get(wl.ownerId, wl.id)).json().data;
+    // onCall, away and offline have no licensed states; ready is fully set up.
+    expect(data.agentBlockers).toEqual([
+      { code: 'NO_LICENSED_STATES', reason: 'No licensed states recorded', count: 3 },
+    ]);
+    expect(data.agents.map((a: any) => a.presence)).toEqual([
+      'READY',
+      'ON_CALL',
+      'AWAY',
+      'OFFLINE',
+    ]);
+  });
+
+  it('says how many returns wait, since when, and what is owed to how many publishers', async () => {
+    const data = (await get(wl.ownerId, wl.id)).json().data;
+    expect(data.returnsWaiting.count).toBe(1);
+    expect(typeof data.returnsWaiting.oldestAt).toBe('string');
+    expect(data.owedToPublishers).toEqual({ amount: 20, publishers: 1, calls: 2 });
+  });
+
+  it('refuses a period it does not know, and caches each period on its own', async () => {
+    expect(
+      (await get(wl.ownerId, wl.id, '/api/v1/white-label/today?period=LAST_YEAR')).statusCode
+    ).toBe(400);
+    const response = await get(wl.ownerId, wl.id, '/api/v1/white-label/today?period=YESTERDAY');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().data.period.key).toBe('YESTERDAY');
+    expect(redis.sets.map(set => set.key)).toEqual([`wl:today:${wl.id}:YESTERDAY`]);
+  });
+
+  describe('by hour, against a comparison, over a trend', () => {
+    /*
+     * A clock fixed at 15:00 New York today, and a tenant of its own whose
+     * calls sit at hours chosen to land in known slots.
+     */
+    const today = currentCalendarDay();
+    const yesterday = shiftCalendarDay(today, -1);
+    const at = (day: string, hour: number, minute = 0) =>
+      new Date(calendarDayBounds(day).start.getTime() + (hour * 60 + minute) * 60_000);
+    const now = at(today, 15);
+
+    let tenantId: string;
+
+    beforeEach(async () => {
+      const tenant = await prisma.tenant.create({
+        data: { name: 'Hours', slug: `hours-${Date.now()}`, status: 'ACTIVE', whiteLabel: true },
+      });
+      tenantId = tenant.id;
+      const agent = await prisma.user.create({
+        data: { tenantId, email: `hours-agent-${Date.now()}@agency.local`, status: 'ACTIVE' },
+      });
+      const buyer = await prisma.buyer.create({
+        data: { tenantId, name: 'Hours Buyer', code: `hours-${Date.now()}` },
+      });
+      const agentCall = await call(tenantId, {
+        createdAt: at(today, 9, 10),
+        answeredAt: at(today, 9, 11),
+        answeredByUserId: agent.id,
+      });
+      await call(tenantId, { createdAt: at(today, 10, 20), buyerId: buyer.id });
+      await call(tenantId, { createdAt: at(today, 10, 40) });
+      await call(tenantId, { createdAt: at(today, 11), blocked: true });
+      // Yesterday: one before 15:00, one after. Only the first is "same time yesterday".
+      await call(tenantId, { createdAt: at(yesterday, 9, 30) });
+      await call(tenantId, { createdAt: at(yesterday, 16) });
+      await call(tenantId, { createdAt: at(shiftCalendarDay(today, -3), 12) });
+      await prisma.insuranceCarrierApplication.create({
+        data: {
+          tenantId,
+          firstName: 'Hour',
+          lastName: 'Applicant',
+          callId: agentCall,
+          submittedAt: at(today, 9, 30),
+        },
+      });
+    });
+
+    const read = async (period: 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS') => {
+      const { getWhiteLabelToday } = await import('../routes/white-label-today.js');
+      return getWhiteLabelToday(tenantId, {
+        prisma,
+        now,
+        period,
+        readStatuses: async () => new Map(),
+      });
+    };
+
+    it('puts each call in its New York hour, one outcome each, beside yesterday', async () => {
+      const data = await read('TODAY');
+      expect(data.byHour).toHaveLength(24);
+      expect(data.byHour.map(slot => slot.hour)).toEqual([...Array(24).keys()]);
+      expect(data.byHour[9]).toMatchObject({ agents: 1, buyers: 0, unanswered: 0, comparison: 1 });
+      expect(data.byHour[10]).toMatchObject({ buyers: 1, unanswered: 1, comparison: 0 });
+      expect(data.byHour[11]).toMatchObject({ blocked: 1 });
+      // The dashed line is the whole of yesterday.
+      expect(data.byHour[16]).toMatchObject({ comparison: 1, agents: 0, buyers: 0 });
+      const sum = data.byHour.reduce(
+        (total, slot) => total + slot.agents + slot.buyers + slot.unanswered + slot.blocked,
+        0
+      );
+      expect(sum).toBe(data.today.inbound);
+    });
+
+    it('compares today with yesterday up to the same clock time', async () => {
+      const data = await read('TODAY');
+      expect(data.today).toMatchObject({ inbound: 4, applications: 1, blocked: 1 });
+      expect(data.comparison).toMatchObject({
+        label: 'same time yesterday',
+        from: yesterday,
+        inbound: 1,
+        applications: 0,
+      });
+    });
+
+    it('compares yesterday with the whole day before it', async () => {
+      const data = await read('YESTERDAY');
+      expect(data.period).toMatchObject({ key: 'YESTERDAY', from: yesterday, to: yesterday });
+      expect(data.today.inbound).toBe(2);
+      expect(data.comparison).toMatchObject({ label: 'the day before', inbound: 0 });
+      expect(data.byHour[9].unanswered).toBe(1);
+      expect(data.byHour[16].unanswered).toBe(1);
+    });
+
+    it('gives seven daily rows for the last seven days', async () => {
+      const data = await read('LAST_7_DAYS');
+      expect(data.byHour).toHaveLength(7);
+      expect(data.byHour.map(slot => slot.day)).toEqual(
+        [6, 5, 4, 3, 2, 1, 0].map(n => shiftCalendarDay(today, -n))
+      );
+      expect(data.today.inbound).toBe(7);
+      expect(data.comparison.label).toBe('the previous 7 days');
+    });
+
+    it('trends the last seven days ending today, whatever the period', async () => {
+      for (const period of ['TODAY', 'YESTERDAY', 'LAST_7_DAYS'] as const) {
+        const { trend } = await read(period);
+        expect(trend.map(row => row.day)).toEqual(
+          [6, 5, 4, 3, 2, 1, 0].map(n => shiftCalendarDay(today, -n))
+        );
+        expect(trend[6]).toMatchObject({ inbound: 4, applications: 1 });
+        expect(trend[5]).toMatchObject({ inbound: 2, applications: 0 });
+        expect(trend[3]).toMatchObject({ inbound: 1 });
+        expect(trend[0]).toMatchObject({ inbound: 0, revenue: 0 });
+      }
+    });
+
+    it('keeps its shape when the period has no calls at all', async () => {
+      await prisma.call.deleteMany({ where: { tenantId, createdAt: { gte: at(today, 0) } } });
+      const data = await read('TODAY');
+      expect(data.today.inbound).toBe(0);
+      expect(data.byHour).toHaveLength(24);
+      expect(data.comparison.inbound).toBe(1);
+      expect(data.trend[5].inbound).toBe(2);
+    });
   });
 });

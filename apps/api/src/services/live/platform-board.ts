@@ -8,6 +8,8 @@ import {
 } from '../rating/calendar-day.js';
 import { deliveredCallWhere, submittedApplicationWhere } from '../rating/measurement.js';
 
+import { callInProgressWhere } from './in-progress.js';
+
 /**
  * The Live Board: every agency, right now.
  *
@@ -45,11 +47,7 @@ import { deliveredCallWhere, submittedApplicationWhere } from '../rating/measure
  * polling across two hundred agencies costs what one across two costs.
  */
 
-/** Matches the strip's window. A call with no end time from hours ago is a stuck row. */
-export const IN_FLIGHT_WINDOW_MS = 4 * 60 * 60 * 1000;
-
-/** Still up: dialling, ringing or connected, with no end time recorded. */
-export const IN_FLIGHT_STATUSES = ['INITIATED', 'RINGING', 'ANSWERED'] as const;
+export { IN_FLIGHT_STATUSES, IN_FLIGHT_WINDOW_MS } from './in-progress.js';
 
 export interface LiveBoardAgency {
   tenantId: string;
@@ -115,8 +113,6 @@ export async function getLiveBoard(deps: LiveBoardDeps): Promise<LiveBoard> {
 
   const day = currentCalendarDay(now);
   const bounds = calendarDayBounds(day);
-  const inFlightSince = new Date(now.getTime() - IN_FLIGHT_WINDOW_MS);
-
   /*
    * Non-production tenants are read only when asked for, and are excluded from
    * the totals either way -- hiding the row and excluding the number are two
@@ -154,10 +150,8 @@ export async function getLiveBoard(deps: LiveBoardDeps): Promise<LiveBoard> {
   }
 
   const inFlightWhere: Prisma.CallWhereInput = {
+    ...callInProgressWhere(now),
     tenantId: { in: tenantIds },
-    status: { in: [...IN_FLIGHT_STATUSES] },
-    endedAt: null,
-    createdAt: { gte: inFlightSince },
   };
 
   /*

@@ -8,7 +8,8 @@ import {
 } from '../rating/calendar-day.js';
 import { deliveredCallWhere, submittedApplicationWhere } from '../rating/measurement.js';
 
-import { IN_FLIGHT_STATUSES, IN_FLIGHT_WINDOW_MS, closing } from './platform-board.js';
+import { callInProgressWhere } from './in-progress.js';
+import { closing } from './platform-board.js';
 
 /**
  * The agency's own Live Board: its floor right now, broken out by buyer.
@@ -115,14 +116,7 @@ export async function getAgencyLiveBoard(
 
   const day = currentCalendarDay(now);
   const bounds = calendarDayBounds(day);
-  const inFlightSince = new Date(now.getTime() - IN_FLIGHT_WINDOW_MS);
-
-  const inFlightWhere: Prisma.CallWhereInput = {
-    tenantId,
-    status: { in: [...IN_FLIGHT_STATUSES] },
-    endedAt: null,
-    createdAt: { gte: inFlightSince },
-  };
+  const inFlightWhere: Prisma.CallWhereInput = { tenantId, ...callInProgressWhere(now) };
 
   const [tenant, buyers, inFlightRows, deliveredRows, submitted] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true } }),
@@ -172,8 +166,7 @@ export async function getAgencyLiveBoard(
   const inFlight = tallyByBuyer(inFlightRows);
   const delivered = tallyByBuyer(deliveredRows);
 
-  const sum = (m: Map<string | null, number>): number =>
-    [...m.values()].reduce((a, b) => a + b, 0);
+  const sum = (m: Map<string | null, number>): number => [...m.values()].reduce((a, b) => a + b, 0);
 
   const totals = {
     callsInFlight: sum(inFlight),
