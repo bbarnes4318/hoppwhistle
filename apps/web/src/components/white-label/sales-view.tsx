@@ -8,6 +8,7 @@ import { count, dollars, duration, pct } from '@/components/delivery/ledger';
 import {
   Dollars,
   EmptyState,
+  EntityBadge,
   Notice,
   Panel,
   PanelBody,
@@ -288,9 +289,9 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                     <TableCell className="font-medium">
                       <Link
                         href={`/buyers?id=${encodeURIComponent(row.buyerId)}`}
-                        className="text-brand-ink hover:underline"
+                        className="hover:underline"
                       >
-                        {row.buyerName}
+                        <EntityBadge kind="buyer" name={row.buyerName} />
                       </Link>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{count(row.calls)}</TableCell>

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ledger, count, dollars } from '@/components/delivery/ledger';
 import {
   EmptyState,
+  EntityBadge,
   Notice,
   Panel,
   PanelBody,
@@ -619,8 +620,12 @@ export default function ApplicationsPage() {
                           {dollars(row.modalPremium)}
                         </td>
                         <td className="num">{dollars(row.annualizedPremium)}</td>
-                        <td className="max-w-[12rem] truncate !text-ink-2">
-                          {row.agentName ?? '—'}
+                        <td className="max-w-[12rem] truncate">
+                          {row.agentName ? (
+                            <EntityBadge kind="agent" name={row.agentName} />
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
                         </td>
                         {showEntered && (
                           <td>

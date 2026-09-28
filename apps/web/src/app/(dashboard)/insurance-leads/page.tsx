@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   EmptyState,
+  EntityBadge,
   MoneyCell,
   Pagination,
   Panel,
@@ -778,8 +779,12 @@ export default function CrmPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
                           <MoneyCell amount={app.annualPremium} unit="major" tone="none" />
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-2">
-                          {app.agentName || '—'}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {app.agentName ? (
+                            <EntityBadge kind="agent" name={app.agentName} />
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
