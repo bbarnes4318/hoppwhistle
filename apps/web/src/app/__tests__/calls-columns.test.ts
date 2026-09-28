@@ -25,6 +25,8 @@ import {
   exportFilename,
   localDayKey,
   payoutStatusBadge,
+  returnChip,
+  wentToOf,
   recordingIdOf,
   visibleColumnsFor,
   type CallsViewer,
@@ -125,18 +127,23 @@ describe('the recording buttons', () => {
 });
 
 describe('default columns', () => {
-  it('opens an owner on the money and the returns', () => {
+  it('opens an owner on where each call went, the recording and the money', () => {
     expect(defaultLabels(OWNER)).toEqual([
       'Time',
       'Caller',
       'Campaign',
-      'Answered by',
+      'Went to',
       'Duration',
       'Disposition',
+      'Recording',
       'Revenue',
       'Payout',
-      'Return',
+      'Profit',
     ]);
+  });
+
+  it('has no Return column: a return is a chip in the Disposition cell', () => {
+    expect(CALL_COLUMNS.map(col => col.label)).not.toContain('Return');
   });
 
   it('keeps the rest of an owner`s columns in the picker, off', () => {
@@ -145,8 +152,8 @@ describe('default columns', () => {
       'billable',
       'connectedDuration',
       'cost',
-      'profit',
       'margin',
+      'answeredBy',
       'did',
       'toNumber',
     ] as const) {
@@ -169,9 +176,9 @@ describe('default columns', () => {
     ]);
   });
 
-  it('never offers an agent the Status, Return or money columns', () => {
+  it('never offers an agent the Status, Went to or money columns', () => {
     const ids = visibleColumnsFor(AGENT).map(col => col.id);
-    for (const id of ['status', 'dispute', 'revenue', 'payout', 'cost', 'profit', 'margin']) {
+    for (const id of ['status', 'wentTo', 'revenue', 'payout', 'cost', 'profit', 'margin']) {
       expect(ids, id).not.toContain(id);
     }
   });
@@ -181,6 +188,35 @@ describe('default columns', () => {
     for (const id of [...OWNER_DEFAULT_COLUMNS, ...AGENT_DEFAULT_COLUMNS]) {
       expect(ids.has(id), id).toBe(true);
     }
+  });
+});
+
+describe('went to', () => {
+  it('is blocked, else an agent, else a buyer, else unanswered', () => {
+    expect(wentToOf({ blocked: true, agentName: 'Marisol Vance' })).toEqual({
+      kind: 'blocked',
+      name: null,
+    });
+    expect(
+      wentToOf({ answeredByUserId: 'u-1', agentName: 'Marisol Vance', buyerId: 'b-1' })
+    ).toEqual({ kind: 'agent', name: 'Marisol Vance' });
+    expect(wentToOf({ buyerId: 'b-1', buyerName: 'Acme' })).toEqual({
+      kind: 'buyer',
+      name: 'Acme',
+    });
+    // A masked buyer is still a buyer; its name is withheld, not a name.
+    expect(wentToOf({ buyerId: 'b-1', buyerName: 'Masked' })).toEqual({
+      kind: 'buyer',
+      name: null,
+    });
+    expect(wentToOf({})).toEqual({ kind: 'unanswered', name: null });
+  });
+
+  it('names a return as a small chip: waiting, accepted or denied', () => {
+    expect(returnChip('DISPUTED')?.label).toBe('Return: waiting');
+    expect(returnChip('ACCEPTED')?.label).toBe('Return: accepted');
+    expect(returnChip('DENIED')?.label).toBe('Return: denied');
+    expect(returnChip(null)).toBeNull();
   });
 });
 

@@ -676,7 +676,7 @@ SELECT
   c.agent_id,
   CASE
     WHEN c.outcome = 'NONE' THEN 'NO_ANSWER'
-    WHEN c.has_application THEN 'SALE'
+    WHEN c.has_application THEN 'APPLICATION_SUBMITTED'
     WHEN c.r_disposition < 0.40 THEN 'NOT_INTERESTED'
     WHEN c.r_disposition < 0.65 THEN 'FOLLOW_UP'
     WHEN c.r_disposition < 0.85 THEN 'NOT_QUALIFIED'

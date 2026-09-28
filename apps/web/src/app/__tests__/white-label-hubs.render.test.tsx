@@ -162,6 +162,8 @@ const asked = (prefix: string) => requested.some(line => line.startsWith(prefix)
 /* ── Fixtures ─────────────────────────────────────────────────────────────── */
 
 const TODAY: WhiteLabelToday = {
+  generatedAt: '2026-09-28T03:44:00.000Z',
+  period: { key: 'TODAY', label: 'Today', from: '2026-09-27', to: '2026-09-27' },
   now: {
     callsUp: 4,
     agentsReady: 3,
@@ -178,11 +180,60 @@ const TODAY: WhiteLabelToday = {
     sentToBuyers: 9,
     unanswered: 2,
     blocked: 1,
-    revenue: 450,
+    billable: 7,
+    revenue: 1450,
     profit: 210.5,
     applications: 3,
     closingPct: 37.5,
+    avgCallSeconds: 252,
   },
+  comparison: {
+    label: 'same time yesterday',
+    from: '2026-09-26',
+    to: '2026-09-26',
+    inbound: 16,
+    answeredByAgents: 7,
+    sentToBuyers: 6,
+    unanswered: 2,
+    blocked: 1,
+    billable: 5,
+    revenue: 0,
+    profit: 250,
+    applications: 3,
+    closingPct: 42.86,
+    avgCallSeconds: 240,
+  },
+  byHour: Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    day: null,
+    agents: hour === 10 ? 8 : 0,
+    buyers: hour === 11 ? 9 : 0,
+    unanswered: hour === 12 ? 2 : 0,
+    blocked: hour === 13 ? 1 : 0,
+    comparison: hour === 10 ? 16 : 0,
+  })),
+  trend: [
+    { day: '2026-09-21', inbound: 150, revenue: 2620, profit: 900, applications: 12 },
+    { day: '2026-09-22', inbound: 180, revenue: 3790, profit: 1200, applications: 15 },
+    { day: '2026-09-23', inbound: 159, revenue: 2634, profit: 880, applications: 11 },
+    { day: '2026-09-24', inbound: 170, revenue: 3450, profit: 1100, applications: 14 },
+    { day: '2026-09-25', inbound: 170, revenue: 3065, profit: 1000, applications: 13 },
+    { day: '2026-09-26', inbound: 59, revenue: 1284, profit: 400, applications: 5 },
+    { day: '2026-09-27', inbound: 20, revenue: 1450, profit: 210.5, applications: 3 },
+  ],
+  agents: [
+    { id: 'a1', name: 'Marcus Bell', presence: 'READY' },
+    { id: 'a2', name: 'Tanya Rodriguez', presence: 'READY' },
+    { id: 'a3', name: 'Derek Owens', presence: 'READY' },
+    { id: 'a4', name: 'Keisha Grant', presence: 'ON_CALL' },
+    { id: 'a5', name: 'Brandon Hayes', presence: 'OFFLINE' },
+  ],
+  agentBlockers: [
+    { code: 'NO_CAMPAIGN', reason: 'Not assigned to a campaign', count: 1 },
+    { code: 'NO_SOFTPHONE', reason: 'Has not opened the softphone yet', count: 1 },
+  ],
+  returnsWaiting: { count: 2, oldestAt: '2026-09-25T15:00:00.000Z' },
+  owedToPublishers: { amount: 23404.5, publishers: 3, calls: 5 },
   buyers: [
     {
       id: 'buyer-acme',
@@ -192,11 +243,23 @@ const TODAY: WhiteLabelToday = {
       deliveredToday: 6,
       applicationsToday: 0,
       closingPct: null,
-      billableToday: 5,
-      revenueToday: 212.5,
+      calls: 6,
+      billable: 5,
+      revenue: 212.5,
       atCap: true,
       capUsed: 6,
       capMax: 6,
+    },
+  ],
+  publishers: [
+    {
+      publisherId: 'pub-1',
+      publisherName: 'Senior Direct Mail',
+      calls: 12,
+      billable: 6,
+      billablePct: 50,
+      payout: 120,
+      profit: 90.5,
     },
   ],
   attention: [
@@ -216,11 +279,20 @@ const TODAY: WhiteLabelToday = {
     {
       kind: 'payouts_owed',
       count: 5,
-      amount: 125,
+      amount: 23404.5,
       href: '/publishers?tab=payouts',
       label: 'Owed to publishers',
     },
   ],
+};
+
+/** Today with nothing waiting on anybody. */
+const ALL_CLEAR: WhiteLabelToday = {
+  ...TODAY,
+  attention: [],
+  agentBlockers: [],
+  returnsWaiting: { count: 0, oldestAt: null },
+  owedToPublishers: { amount: 0, publishers: 0, calls: 0 },
 };
 
 function returnRow(overrides: Partial<ReturnRow>): ReturnRow {
@@ -507,65 +579,179 @@ describe('the white-label portal', () => {
   });
 
   describe('Today', () => {
+    const tile = (label: string) =>
+      document.querySelector(`[data-figure-label="${label}"]`) as HTMLElement | null;
+    const deltaOf = (label: string) =>
+      tile(label)?.querySelector('[data-tile-delta]')?.textContent?.replace(/\s+/g, ' ').trim();
+
     it('is the dashboard for a white-label owner, with every figure where it is read', async () => {
       answers['/api/v1/white-label/today'] = { data: TODAY };
       await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
 
-      await waitFor(() => expect(figure('Calls up')).toBe('4'));
-      expect(figure('Agents ready')).toBe('3 of 5');
-      expect(screen.getByText('1 on a call')).toBeTruthy();
-      expect(figure('Buyers taking calls')).toBe('2 of 3');
-      expect(screen.getByText('1 at cap')).toBeTruthy();
-      expect(figure('Returns waiting')).toBe('2');
-      expect(screen.getByRole('link', { name: 'Returns waiting: 2' }).getAttribute('href')).toBe(
-        '/buyers?tab=returns'
-      );
+      await waitFor(() => expect(figure('Inbound calls')).toBe('20'));
+      expect(asked('GET /api/v1/white-label/today?period=TODAY')).toBe(true);
 
-      expect(screen.getByText('Where your calls went')).toBeTruthy();
+      // The four hero figures, whole dollars from $1,000.
+      expect(tile('Inbound calls')?.getAttribute('data-tile-size')).toBe('hero');
+      expect(figure('Revenue')).toBe('$1,450');
+      expect(figure('Profit')).toBe('$210.50');
+      expect(figure('Applications')).toBe('3');
+      // And the secondary row.
+      expect(tile('Closing %')?.getAttribute('data-tile-size')).toBe('secondary');
+      expect(figure('Closing %')).toBe('37.5%');
+      expect(figure('Billable calls')).toBe('7');
+
+      // Live now.
+      expect(figure('Calls up')).toBe('4');
+      expect(figure('Agents ready')).toBe('3 of 5');
+      expect(document.querySelectorAll('[data-presence]')).toHaveLength(5);
+      expect(figure('Buyers taking calls')).toBe('2 of 3');
+      expect(document.querySelector('[data-cap-bar="buyer-acme"]')?.textContent).toContain('6 / 6');
+
+      // The legend is "Where your calls went".
       expect(document.querySelector('[data-part="agents"]')?.textContent).toContain('8');
       expect(document.querySelector('[data-part="buyers"]')?.textContent).toContain('9');
       expect(document.querySelector('[data-part="unanswered"]')?.textContent).toContain('2');
       expect(document.querySelector('[data-part="blocked"]')?.textContent).toContain('1');
 
-      expect(figure('Revenue')).toBe('$450.00');
-      expect(figure('Profit')).toBe('$210.50');
-      expect(figure('Applications')).toBe('3');
-      expect(figure('Closing %')).toBe('37.5%');
-
-      const attention = screen.getByRole('list', { name: 'Needs attention' });
-      const links = within(attention).getAllByRole('link');
-      expect(links.map(link => link.getAttribute('href'))).toEqual([
-        '/buyers?tab=returns',
-        '/buyers',
-        '/agents?tab=roster',
-        '/publishers?tab=payouts',
-      ]);
-      expect(within(attention).getByText('$125.00')).toBeTruthy();
-
       const buyer = document.querySelector('[data-buyer="buyer-acme"]') as HTMLElement;
-      expect(within(buyer).getByText('Acme Senior').closest('a')?.getAttribute('href')).toBe(
-        '/buyers?id=buyer-acme'
-      );
-      expect(buyer.querySelector('[data-cap]')?.textContent).toBe('6 / 6');
+      expect(buyer.querySelector('[data-entity="buyer"]')?.textContent).toContain('Acme Senior');
+      expect(buyer.querySelector('a')?.getAttribute('href')).toBe('/buyers?id=buyer-acme');
       expect(buyer.querySelector('[data-billable]')?.textContent).toBe('5');
       expect(buyer.querySelector('[data-revenue]')?.textContent).toBe('$212.50');
-
-      // Buyers write no applications here: the columns that were always 0 and
-      // blank are gone, and the ones that say something are in their place.
-      const headers = [...(buyer.closest('table') as HTMLElement).querySelectorAll('th')].map(
-        th => th.textContent
+      expect(document.querySelector('[data-publisher="pub-1"]')?.textContent).toContain(
+        'Senior Direct Mail'
       );
-      expect(headers).toEqual(['Buyer', 'Calls up', 'Delivered', 'Billable', 'Revenue', 'Cap']);
 
-      // Not on this page: the chart and the call history the old dashboard had.
-      expect(screen.queryByText(/Sales today/i)).toBeNull();
+      // Not on this page: the call history the old dashboard had.
       expect(asked('GET /api/v1/calls')).toBe(false);
     });
 
-    it('says so when nothing needs attention', async () => {
-      answers['/api/v1/white-label/today'] = { data: { ...TODAY, attention: [] } };
+    it('shows each hero figure against its comparison, and a dash when there is none', async () => {
+      answers['/api/v1/white-label/today'] = { data: TODAY };
       await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
-      await waitFor(() => expect(screen.getByText('Nothing needs you right now.')).toBeTruthy());
+      await waitFor(() => expect(figure('Inbound calls')).toBe('20'));
+
+      // 20 against 16: up a quarter.
+      expect(deltaOf('Inbound calls')).toBe('▲ 25% vs same time yesterday');
+      // 210.50 against 250: down.
+      expect(deltaOf('Profit')).toBe('▼ 16% vs same time yesterday');
+      // Nothing yesterday to compare revenue with: a dash, not "▲ ∞%".
+      expect(deltaOf('Revenue')).toBe('— vs same time yesterday');
+      expect(deltaOf('Applications')).toBe('0% vs same time yesterday');
+    });
+
+    it('lists one card per thing that needs a decision, with the button to it', async () => {
+      answers['/api/v1/white-label/today'] = { data: TODAY };
+      await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
+      await waitFor(() =>
+        expect(screen.getByRole('list', { name: 'Needs attention' })).toBeTruthy()
+      );
+
+      const cards = [...document.querySelectorAll('[data-attention]')] as HTMLElement[];
+      expect(cards.map(card => card.getAttribute('data-attention'))).toEqual([
+        'agents_blocked',
+        'returns',
+        'buyers_at_cap',
+        'payouts_owed',
+      ]);
+      const agents = cards[0];
+      expect(agents.getAttribute('data-severity')).toBe('blocking');
+      expect(agents.textContent).toContain("2 agents can't take calls");
+      expect(agents.textContent).toContain(
+        '1 not assigned to a campaign · 1 has not opened the softphone yet'
+      );
+      expect(
+        within(agents)
+          .getByRole('link', { name: /Fix in Agents/ })
+          .getAttribute('href')
+      ).toBe('/agents?tab=roster');
+      expect(cards[1].textContent).toContain('2 returns waiting');
+      expect(cards[1].textContent).toContain('Oldest from Sep 25');
+      expect(cards[1].getAttribute('data-severity')).toBe('waiting');
+      expect(cards[3].textContent).toContain('$23,405 owed to publishers');
+      expect(cards[3].textContent).toContain('Across 3 publishers');
+      expect(
+        within(cards[3])
+          .getByRole('link', { name: /Pay publishers/ })
+          .getAttribute('href')
+      ).toBe('/publishers?tab=payouts');
+    });
+
+    it('hides a card whose count is zero, and says all clear when every one is', async () => {
+      answers['/api/v1/white-label/today'] = {
+        data: {
+          ...ALL_CLEAR,
+          attention: [TODAY.attention[2]],
+          agentBlockers: TODAY.agentBlockers,
+        },
+      };
+      await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
+      await waitFor(() => expect(document.querySelector('[data-attention]')).toBeTruthy());
+      expect(
+        [...document.querySelectorAll('[data-attention]')].map(card =>
+          card.getAttribute('data-attention')
+        )
+      ).toEqual(['agents_blocked']);
+      cleanup();
+
+      answers['/api/v1/white-label/today'] = { data: ALL_CLEAR };
+      await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
+      await waitFor(() => expect(document.querySelector('[data-all-clear]')).toBeTruthy());
+      expect(document.querySelector('[data-attention]')).toBeNull();
+      expect(screen.queryByRole('list', { name: 'Needs attention' })).toBeNull();
+    });
+
+    it('reads the period from the URL', async () => {
+      answers['/api/v1/white-label/today'] = {
+        data: { ...TODAY, period: { ...TODAY.period, key: 'YESTERDAY', label: 'Yesterday' } },
+      };
+      await mount('/dashboard?period=YESTERDAY', () => import('../(dashboard)/dashboard/page'));
+      await waitFor(() => expect(figure('Inbound calls')).toBe('20'));
+      expect(asked('GET /api/v1/white-label/today?period=YESTERDAY')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Yesterday' }).getAttribute('aria-pressed')).toBe(
+        'true'
+      );
+    });
+
+    it('keeps its layout when the period has no calls', async () => {
+      answers['/api/v1/white-label/today'] = {
+        data: {
+          ...ALL_CLEAR,
+          today: {
+            ...TODAY.today,
+            inbound: 0,
+            answeredByAgents: 0,
+            sentToBuyers: 0,
+            unanswered: 0,
+            blocked: 0,
+            billable: 0,
+            revenue: 0,
+            profit: 0,
+            applications: 0,
+            closingPct: null,
+            avgCallSeconds: null,
+          },
+          byHour: TODAY.byHour.map(row => ({
+            ...row,
+            agents: 0,
+            buyers: 0,
+            unanswered: 0,
+            blocked: 0,
+          })),
+        },
+      };
+      await mount('/dashboard', () => import('../(dashboard)/dashboard/page'));
+      await waitFor(() => expect(figure('Inbound calls')).toBe('0'));
+      expect(tile('Inbound calls')?.hasAttribute('data-zero')).toBe(true);
+      expect(deltaOf('Inbound calls')).toBe('▼ 100% vs same time yesterday');
+      expect(figure('Revenue')).toBe('$0.00');
+      expect(tile('Revenue')?.querySelector('[data-tile-figure]')?.className).toContain(
+        'text-ink-3'
+      );
+      // No 0.0% anywhere: the shares read as dashes.
+      expect(document.querySelector('[data-part="agents"]')?.textContent).toContain('—');
+      expect(document.body.textContent).not.toMatch(/(^|[^0-9])0\.0%/);
     });
 
     it('is not what a normal agency owner gets', async () => {

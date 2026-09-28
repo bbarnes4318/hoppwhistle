@@ -11,6 +11,16 @@ export {
   type ComplianceOverride,
   type ComplianceOverrideBannerProps,
 } from './compliance-override-banner';
+export {
+  AXIS_PROPS,
+  CHART,
+  COMPARISON_LINE,
+  ChartTooltipCard,
+  GRID_PROPS,
+  chartTooltip,
+  type ChartTooltipRow,
+  type RechartsTooltipProps,
+} from './chart-kit';
 export { DataTable, type Column, type DataTableProps } from './data-table';
 export {
   DurationBar,
@@ -20,6 +30,14 @@ export {
   type DurationBarState,
 } from './duration-bar';
 export { EmptyState, type EmptyStateProps } from './empty-state';
+export {
+  EntityBadge,
+  entityDotClass,
+  entityOfCall,
+  type Entity,
+  type EntityBadgeProps,
+} from './entity-badge';
+export { isZeroFigure, percentChange, tileDollars, tileMoneyText } from './figures';
 export {
   FilterBar,
   type DateRangeValue,

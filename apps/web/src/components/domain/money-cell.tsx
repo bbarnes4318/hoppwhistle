@@ -24,8 +24,9 @@ export interface MoneyCellProps extends Omit<React.HTMLAttributes<HTMLSpanElemen
   /** What to render for null/undefined. An em dash, not a zero — they differ. */
   placeholder?: string;
   /**
-   * Colour the figure. `auto` uses money for positive, dropped for negative,
-   * ink-3 for zero. `none` inherits, which is right inside a table row.
+   * Colour the figure. `auto` uses brand ink for positive, dropped for
+   * negative, ink-3 for zero; `money` is brand ink unless it is zero. `none`
+   * inherits, which is right inside a table row.
    */
   tone?: 'auto' | 'money' | 'none';
   /** Always show a leading + on positive values, e.g. in a ledger. */
@@ -82,16 +83,15 @@ export function MoneyCell({
   const formatted = formatMoney(amount, currency, unit);
   const withSign = signed && amount > 0 ? `+${formatted}` : formatted;
 
+  // Money is brand ink only when there is some: a coloured $0.00 reads as good news.
   const toneClass =
     tone === 'none'
       ? ''
-      : tone === 'money'
-        ? 'text-money-ink'
-        : amount > 0
-          ? 'text-money-ink'
-          : amount < 0
-            ? 'text-dropped-ink'
-            : 'text-ink-3';
+      : amount === 0
+        ? 'text-ink-3'
+        : tone === 'money' || amount > 0
+          ? 'text-brand-ink'
+          : 'text-dropped-ink';
 
   return (
     <span

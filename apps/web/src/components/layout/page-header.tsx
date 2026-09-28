@@ -1,33 +1,43 @@
+'use client';
+
 import * as React from 'react';
 
+import { InHubContext } from '@/components/hub/hub-context';
 import { cn } from '@/lib/utils';
 
+import { useClaimPageTitle, useCurrentPageTitle } from './use-page-title';
+
 /**
- * PageHeader — the first row of a page's content, under the LiveStrip.
+ * PageHeader — the first row of a page's content.
  *
- * The page's title is already in the topbar (page-title.ts), so this row does
- * not repeat it. It carries what the page says about itself — the one-line
- * description, at body size in ink-2 and no wider than 72 characters — and
- * the page's own header actions, right-aligned with 8px between them. `meta`
- * sits under the description for a badge or a short status.
+ * Title, a one-line description in ink-2 under it, and the page's own actions
+ * right-aligned with 8px between them. Every page opens the same way, 24px
+ * under the topbar (the canvas gutter), so moving between screens never moves
+ * the eye.
+ *
+ * The title is the page's nav name unless `title` says otherwise, and `false`
+ * leaves it out. Inside a hub the hub names the page above its tabs, so a
+ * view's header there carries its description and actions only. A header that
+ * shows the title claims it, and the topbar drops its own copy.
  *
  * Below 768px the actions wrap underneath the description rather than
  * squeezing it, so a subtitle never runs under a button.
  *
- * `compact` is for a working list that is not a hub: the description stays on
- * one line (truncated, never wrapped) and is centred against the actions, with
- * tighter gaps, so the band above the content is one row tall at md+. Opt-in;
- * every other page keeps the default.
+ * `compact` keeps the description on one line (truncated, never wrapped) with
+ * tighter gaps, for a working list whose header should stay one row tall.
  */
 export interface PageHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  /** Defaults to the page's name in the viewer's nav. `false` for none. */
+  title?: React.ReactNode | false;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   meta?: React.ReactNode;
-  /** One-line description, centred against the actions, tighter gaps. */
+  /** One-line description, tighter gaps. */
   compact?: boolean;
 }
 
 export function PageHeader({
+  title,
   description,
   actions,
   meta,
@@ -35,23 +45,30 @@ export function PageHeader({
   className,
   ...props
 }: PageHeaderProps) {
-  if (!description && !actions && !meta) return null;
+  const inHub = React.useContext(InHubContext);
+  const auto = useCurrentPageTitle();
+  const heading = title === false || inHub ? null : (title ?? auto) || null;
+  useClaimPageTitle(heading !== null);
+
+  if (!heading && !description && !actions && !meta) return null;
 
   return (
     <div
       className={cn(
-        compact
-          ? 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4'
-          : 'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
+        'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
         className
       )}
       data-compact={compact ? '' : undefined}
+      data-page-header=""
       {...props}
     >
-      {description || meta ? (
+      {heading || description || meta ? (
         <div className="min-w-0 max-w-[72ch]">
+          {heading ? <h1 className="t-title text-ink">{heading}</h1> : null}
           {description ? (
-            <div className={cn('t-body text-ink-2', compact && 'md:truncate')}>{description}</div>
+            <div className={cn('t-body text-ink-2', heading && 'mt-1', compact && 'md:truncate')}>
+              {description}
+            </div>
           ) : null}
           {meta ? <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div> : null}
         </div>

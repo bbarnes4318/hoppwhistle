@@ -28,15 +28,15 @@ export function WhereCallsWent({
   agentsHref: string;
 }): JSX.Element {
   const parts = [
-    { key: 'agents', label: 'Your agents', value: disposition.yourAgents, bar: 'bg-live' },
-    { key: 'buyers', label: 'Buyers', value: disposition.buyers, bar: 'bg-money' },
+    { key: 'agents', label: 'Your agents', value: disposition.yourAgents, bar: 'bg-entity-agent' },
+    { key: 'buyers', label: 'Buyers', value: disposition.buyers, bar: 'bg-entity-buyer' },
     {
       key: 'unanswered',
       label: 'Unanswered',
       value: disposition.unanswered,
-      bar: 'bg-ringing',
+      bar: 'bg-entity-unanswered',
     },
-    { key: 'blocked', label: 'Blocked', value: disposition.blocked, bar: 'bg-blocked' },
+    { key: 'blocked', label: 'Blocked', value: disposition.blocked, bar: 'bg-entity-blocked' },
   ];
   const share = (value: number) => (inbound > 0 ? (value / inbound) * 100 : 0);
 
@@ -67,12 +67,14 @@ export function WhereCallsWent({
             const figure = (
               <>
                 {count(part.value)}{' '}
-                <span className="t-meta text-ink-3">{pct(share(part.value), 1)}</span>
+                <span className="t-meta text-ink-3">
+                  {inbound > 0 ? pct(share(part.value), 1) : '—'}
+                </span>
               </>
             );
             return (
               <div key={part.key}>
-                <dt className="flex items-center gap-2 t-label text-ink-3">
+                <dt className="flex items-center gap-2 t-caption text-ink-2">
                   <span className={cn('h-2 w-2 rounded-full', part.bar)} aria-hidden />
                   {part.label}
                 </dt>

@@ -66,7 +66,7 @@ function buildCallWhere(params: {
   agentId?: string | null;
   /** One disposition, or `NONE` for the calls nobody has written up. */
   disposition?: string | null;
-  /** Where the call went: `AGENTS`, `BUYERS` or `UNANSWERED`. Anything else is no filter. */
+  /** Where the call went: `AGENTS`, `BUYERS`, `UNANSWERED` or `BLOCKED`. Anything else is no filter. */
   outcome?: string | null;
   /** `true` narrows to calls with a canonical recording. Anything else is no filter. */
   hasRecording?: string | null;
@@ -241,6 +241,8 @@ function buildCallWhere(params: {
     andClauses.push({ buyerId: { not: null } });
   } else if (outcome === 'UNANSWERED') {
     andClauses.push({ answeredAt: null, blocked: false });
+  } else if (outcome === 'BLOCKED') {
+    andClauses.push({ blocked: true });
   }
 
   /*
@@ -3800,6 +3802,22 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       prisma.call.count({ where }),
     ]);
 
+    /*
+     * The filtered set's totals, for the bar above the table: every call the
+     * filters match, not the page. The same columns the rows show. A principal
+     * only -- the rows are masked for everybody else, so their sums would be
+     * a leak of what the masking hides.
+     */
+    const [moneyTotals, billableTotal] = profile.isAdminOrOwner
+      ? await Promise.all([
+          prisma.call.aggregate({
+            where,
+            _sum: { revenue: true, payout: true, profit: true },
+          }),
+          prisma.call.count({ where: { AND: [where, { billable: true }] } }),
+        ])
+      : [null, null];
+
     await attachAnsweredBy(calls, prisma, tenantId);
 
     const apiBaseUrl = getPublicApiBaseUrl(request);
@@ -3844,6 +3862,17 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        ...(moneyTotals
+          ? {
+              totals: {
+                calls: total,
+                billable: billableTotal ?? 0,
+                revenue: Number(moneyTotals._sum.revenue ?? 0),
+                payout: Number(moneyTotals._sum.payout ?? 0),
+                profit: Number(moneyTotals._sum.profit ?? 0),
+              },
+            }
+          : {}),
       },
     };
   });

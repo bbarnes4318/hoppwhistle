@@ -123,6 +123,22 @@ const config: Config = {
           ink: 'var(--money-ink)',
         },
 
+        /* Where a call went: agents, buyers, unanswered, blocked. */
+        entity: {
+          agent: 'var(--entity-agent)',
+          'agent-ink': 'var(--entity-agent-ink)',
+          'agent-tint': 'var(--entity-agent-tint)',
+          buyer: 'var(--entity-buyer)',
+          'buyer-ink': 'var(--entity-buyer-ink)',
+          'buyer-tint': 'var(--entity-buyer-tint)',
+          unanswered: 'var(--entity-unanswered)',
+          'unanswered-ink': 'var(--entity-unanswered-ink)',
+          'unanswered-tint': 'var(--entity-unanswered-tint)',
+          blocked: 'var(--entity-blocked)',
+          'blocked-ink': 'var(--entity-blocked-ink)',
+          'blocked-tint': 'var(--entity-blocked-tint)',
+        },
+
         /*
          * The NetEnroll accent. `brand` is a bright fill (pair it with `text-ink`);
          * `brand-ink` is the only brand green that may be used for text;

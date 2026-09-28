@@ -463,7 +463,9 @@ export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
  * ── An agency that also sells calls, on twelve entries ──────────────────────
  *
  * On the white-label tier the OWNER and ADMIN run a call network of their own
- * as well as a sales floor. This nav used to list every screen that involved:
+ * as well as a sales floor. Three groups, none of them a single entry: the
+ * Floor (Today, Calls, Applications, CRM, Agents), Call sales (Buyers,
+ * Publishers, Revenue) and Setup (Routing, Agencies, Settings, Upgrades). This nav used to list every screen that involved:
  * twenty-seven entries, five of them locked, with the same person's buyers in
  * one group, what those buyers owed in another and the portal logins in a
  * third. It is now one entry per job, and the screens that used to be separate
@@ -489,16 +491,12 @@ export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
  */
 export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
   {
+    label: 'Floor',
     items: [
       platformItem('/dashboard', {
         name: 'Today',
         title: 'Your calls, agents, buyers and money right now',
       }),
-    ],
-  },
-  {
-    label: 'Floor',
-    items: [
       platformItem('/calls'),
       platformItem('/applications'),
       // Every agency has the CRM; only the Power Dialer is an upgrade.
@@ -512,7 +510,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Call Sales',
+    label: 'Call sales',
     items: [
       platformItem('/buyers', {
         title: 'Your buyers: routing caps, balances, portal logins and returns',
@@ -529,7 +527,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Routing',
+    label: 'Setup',
     items: [
       {
         name: 'Routing',
@@ -537,22 +535,15 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
         icon: Waypoints,
         title: 'Campaigns and phone numbers: where every call goes',
       },
-    ],
-  },
-  {
-    label: 'Network',
-    items: [
       {
         name: 'Agencies',
         href: '/network/agencies',
         icon: Building2,
         title: 'Your agencies: calls, applications and closing percentage',
       },
+      platformItem('/settings'),
+      UPGRADES_ITEM,
     ],
-  },
-  {
-    label: 'Account',
-    items: [platformItem('/settings'), UPGRADES_ITEM],
   },
 ];
 

@@ -68,10 +68,7 @@ export interface ToolbarSearchProps {
 export function ToolbarSearch({ value, onChange, placeholder, className }: ToolbarSearchProps) {
   return (
     <div
-      className={cn(
-        'relative min-w-full flex-[1.6] sm:min-w-[200px] xl:min-w-[140px]',
-        className
-      )}
+      className={cn('relative min-w-full flex-[1.6] sm:min-w-[200px] xl:min-w-[140px]', className)}
     >
       <Search
         aria-hidden

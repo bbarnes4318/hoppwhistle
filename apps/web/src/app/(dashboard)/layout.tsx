@@ -13,6 +13,7 @@ import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { RolePreviewBanner } from '@/components/platform/role-preview-switcher';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
 import { isRouteBlockedFor, whiteLabelRedirectFor } from '@/lib/staff-only-routes';
@@ -44,6 +45,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * prompt to pick an agency instead of on a page that cannot load.
    */
   const platform = usePlatformContext();
+
+  /*
+   * No live strip for a white-label owner or a downline agency's owner: Today
+   * is their live view, and a second, smaller copy of it above every page was
+   * one more place for two numbers to disagree. Agents, buyers, publishers,
+   * normal agencies and NetEnroll staff keep theirs.
+   */
+  const whiteLabelView = useWhiteLabelView();
+  const previewingRole = platform.previewRole != null || user?.previewRole != null;
+  const downlineOwner = isChild && hasFullAccess && (!platform.isPlatformAdmin || previewingRole);
+  const showLiveStrip = !whiteLabelView && !downlineOwner;
 
   /*
    * Who gets a softphone.
@@ -325,8 +337,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-1 flex-col h-screen overflow-hidden">
           <div className="shrink-0">
             <Topbar />
-            {/* Signature 2 — below the topbar, above the page, on every screen. */}
-            <LiveStripMount />
+            {/* Signature 2 — below the topbar, above the page, for everybody but
+                an owner whose Today replaces it. */}
+            {showLiveStrip ? <LiveStripMount /> : null}
           </div>
           <main
             className={cn(

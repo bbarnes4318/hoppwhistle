@@ -21,6 +21,10 @@
  *   5. Deletes today's demo calls, shoots Today with zero calls in the period,
  *      and reseeds.
  *
+ * Iterating: SHOTS_SERVE=1 reseeds, boots the servers and keeps them up;
+ * SHOTS_ATTACH=1 in a second shell shoots against those, without reseeding or
+ * booting anything (SHOTS_ONLY=<regex> narrows it to some screens).
+ *
  * Any 4xx/5xx from the API while a screen loads is printed, and the run exits
  * non-zero if there was one. Like the smoke test it only runs against a
  * loopback database with "test" in its name.
@@ -49,6 +53,8 @@ const OUT = resolve(REPO, 'docs/screenshots/overhaul', LABEL);
 const ONLY = process.env.SHOTS_ONLY ? new RegExp(process.env.SHOTS_ONLY) : null;
 const SETTLE_MS = Number(process.env.SHOTS_SETTLE_MS ?? 3500);
 const PASSWORD = 'screens-Passw0rd!';
+const SERVE = process.env.SHOTS_SERVE === '1';
+const ATTACH = process.env.SHOTS_ATTACH === '1';
 
 const DATABASE = process.env.SHOTS_DATABASE_URL ?? '';
 const REDIS = process.env.SHOTS_REDIS_URL ?? '';
@@ -80,7 +86,11 @@ const SCREENS = [
   { id: 'today-yesterday', who: 'owner', path: '/dashboard?period=YESTERDAY' },
   { id: 'today-last-7-days', who: 'owner', path: '/dashboard?period=LAST_7_DAYS' },
   { id: 'calls', who: 'owner', path: '/calls' },
-  { id: 'calls-filtered', who: 'owner', path: '/calls?wentTo=AGENT&disposition=SALE' },
+  {
+    id: 'calls-filtered',
+    who: 'owner',
+    path: '/calls?outcome=AGENTS&disposition=APPLICATION_SUBMITTED',
+  },
   { id: 'applications', who: 'owner', path: '/applications' },
   { id: 'crm', who: 'owner', path: '/insurance-leads' },
   { id: 'agents-floor', who: 'owner', path: '/agents?tab=floor' },
@@ -330,6 +340,14 @@ async function contextFor(browser, session, viewport) {
 
 const refusals = [];
 
+/** Undo the fixed-height shell for a full-page shot. */
+const FULL_PAGE_CSS = `
+  div.h-screen { height: auto !important; min-height: 100vh; overflow: visible !important; }
+  main { overflow: visible !important; flex: none !important; }
+  div.h-screen > div.h-full { height: auto !important; }
+  div.h-screen > div.h-full > * { height: 100% !important; }
+`;
+
 async function shoot(context, screen, path, sizes) {
   const page = await context.newPage();
   page.on('response', r => {
@@ -344,10 +362,15 @@ async function shoot(context, screen, path, sizes) {
   // The collapsed softphone and the Next dev indicator float over the page.
   await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   for (const size of sizes) {
+    // The shell scrolls inside <main>, so a full-page shot first lets the
+    // document grow to the height of the content.
+    const unroll = size.full ? await page.addStyleTag({ content: FULL_PAGE_CSS }) : null;
+    if (unroll) await page.waitForTimeout(300);
     await page.screenshot({
       path: resolve(OUT, `${screen.id}-${size.name}.png`),
       fullPage: size.full,
     });
+    if (unroll) await unroll.evaluate(el => el.remove());
   }
   await page.close();
 }
@@ -355,9 +378,22 @@ async function shoot(context, screen, path, sizes) {
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
-  reseed();
-  const { child } = seedPeople();
+  let child;
+  if (ATTACH) {
+    child = psql(['-tA', '-c', "SELECT id FROM tenants WHERE slug = 'llp-demo-riverbend'"]).trim();
+  } else {
+    reseed();
+    child = seedPeople().child;
+    await boot();
+  }
+  if (SERVE) {
+    console.log(`serving on ${FRONT}`);
+    await new Promise(() => {});
+  }
+  await shootAll(child);
+}
 
+async function boot() {
   const api = run('node', [resolve(REPO, 'node_modules/tsx/dist/cli.mjs'), 'src/index.ts'], {
     cwd: API_DIR,
     detached: true,
@@ -395,6 +431,9 @@ async function main() {
     240_000,
     () => web.log.slice(-20).join('')
   );
+}
+
+async function shootAll(child) {
   flushTodayCache();
 
   const screens = SCREENS.filter(s => !ONLY || ONLY.test(s.id)).map(s => ({

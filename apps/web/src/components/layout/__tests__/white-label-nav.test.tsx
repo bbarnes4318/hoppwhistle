@@ -50,10 +50,10 @@ function hasPage(href: string): boolean {
 
 /** [label, [name, href, title]] -- exactly the list asked for. */
 const EXPECTED: Array<[string | undefined, Array<[string, string, string | undefined]>]> = [
-  [undefined, [['Today', '/dashboard', 'Your calls, agents, buyers and money right now']]],
   [
     'Floor',
     [
+      ['Today', '/dashboard', 'Your calls, agents, buyers and money right now'],
       ['Calls', '/calls', undefined],
       ['Applications', '/applications', undefined],
       ['CRM', '/insurance-leads', undefined],
@@ -61,27 +61,22 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
     ],
   ],
   [
-    'Call Sales',
+    'Call sales',
     [
       ['Buyers', '/buyers', 'Your buyers: routing caps, balances, portal logins and returns'],
       ['Publishers', '/publishers', 'Your publishers: payouts, portal logins and performance'],
       ['Revenue', '/revenue', 'What your calls sold for, by buyer, publisher, campaign and day'],
     ],
   ],
-  ['Routing', [['Routing', '/routing', 'Campaigns and phone numbers: where every call goes']]],
   [
-    'Network',
+    'Setup',
     [
+      ['Routing', '/routing', 'Campaigns and phone numbers: where every call goes'],
       [
         'Agencies',
         '/network/agencies',
         'Your agencies: calls, applications and closing percentage',
       ],
-    ],
-  ],
-  [
-    'Account',
-    [
       ['Settings', '/settings', undefined],
       ['Upgrades', '/upgrades', 'Features you can add'],
     ],
@@ -91,10 +86,11 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
 const items = WHITE_LABEL_OWNER_NAV.flatMap(group => group.items);
 
 describe('WHITE_LABEL_OWNER_NAV', () => {
-  it('has the five groups in order', () => {
+  it('has the three groups in order, none of them a single entry', () => {
     expect(WHITE_LABEL_OWNER_NAV.map(group => group.label)).toEqual(
       EXPECTED.map(([label]) => label)
     );
+    expect(WHITE_LABEL_OWNER_NAV.filter(group => group.items.length < 2)).toEqual([]);
   });
 
   it('has exactly twelve items, none of them locked or pending', () => {
@@ -219,6 +215,7 @@ describe('the white-label upgrades', () => {
 
     const floor = WHITE_LABEL_OWNER_NAV.find(group => group.label === 'Floor')!;
     expect(floor.items.map(item => item.href)).toEqual([
+      '/dashboard',
       '/calls',
       '/applications',
       '/insurance-leads',
