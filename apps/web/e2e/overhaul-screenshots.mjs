@@ -369,7 +369,12 @@ async function signIn(email) {
 }
 
 async function contextFor(browser, session, viewport) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({
+    viewport,
+    deviceScaleFactor: 1,
+    // The agency's clock: times on screen read as they do in New York.
+    timezoneId: 'America/New_York',
+  });
   if (CLOCK_OFFSET_MS !== 0) {
     // The browser's clock, moved the same distance as the servers'.
     await context.addInitScript(offset => {
@@ -421,13 +426,20 @@ async function shoot(context, screen, path, sizes) {
   await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded', timeout: 180_000 });
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => null);
   await page.waitForTimeout(SETTLE_MS);
+  // A chart mounts after its data and its first measurement; wait for it.
+  if (await page.$('.recharts-responsive-container')) {
+    await page
+      .waitForSelector('.recharts-responsive-container svg', { timeout: 15_000 })
+      .catch(() => null);
+    await page.waitForTimeout(500);
+  }
   // The collapsed softphone and the Next dev indicator float over the page.
   await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   for (const size of sizes) {
     // The shell scrolls inside <main>, so a full-page shot first lets the
     // document grow to the height of the content.
     const unroll = size.full ? await page.addStyleTag({ content: FULL_PAGE_CSS }) : null;
-    if (unroll) await page.waitForTimeout(300);
+    if (unroll) await page.waitForTimeout(1000);
     await page.screenshot({
       path: resolve(OUT, `${screen.id}-${size.name}.png`),
       fullPage: size.full,
