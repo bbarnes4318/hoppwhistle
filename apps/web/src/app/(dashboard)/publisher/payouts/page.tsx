@@ -5,6 +5,8 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { dollars } from '@/components/delivery/ledger';
+import { StatTile } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { StatementsPanel } from '@/components/statements/statements-panel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -95,80 +97,52 @@ function PublisherPayoutsPage() {
 
   return (
     <div className="page-canvas">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
-        <div>
-          <p className="mt-1 text-sm text-ink-2">
-            What you are owed for the period, and every payment your agency has recorded.
-          </p>
-        </div>
-        <Button onClick={() => void loadData()} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        description="What you are owed for the period, and every payment your agency has recorded."
+        actions={
+          <Button onClick={() => void loadData()} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        }
+      />
 
       <PeriodToolbar state={period} resolved={summary?.period ?? null} label="Payouts period" />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="bg-surface border-rule">
-          <CardHeader className="pb-2">
-            <CardTitle className="t-caption text-ink-2">
-              Payable
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-ink">{figure(summary?.payable)}</div>
-            <p className="text-xs text-ink-3 mt-1">
-              {label}
-              {summary ? ` · ${summary.payableCalls.toLocaleString()} calls not yet paid` : ''}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule">
-          <CardHeader className="pb-2">
-            <CardTitle className="t-caption text-ink-2">
-              Paid
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-live-ink">
-              {figure(summary?.paid)}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">{label} · calls already paid for</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule">
-          <CardHeader className="pb-2">
-            <CardTitle className="t-caption text-ink-2">
-              Held or disputed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-dropped-ink">
-              {figure(summary?.held)}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">{label} · on hold or under dispute</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule">
-          <CardHeader className="pb-2">
-            <CardTitle className="t-caption text-ink-2">
-              Net payable
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-ringing-ink">
-              {figure(summary?.netPayable)}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">
-              Payable less {summary ? dollars(summary.returnsPending) : '...'} in returns waiting
-            </p>
-          </CardContent>
-        </Card>
+      {/* The four figures the period is about */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile
+          size="hero"
+          label="Payable"
+          tone="money"
+          loading={loading}
+          figure={figure(summary?.payable)}
+          sub={`${label}${summary ? ` · ${summary.payableCalls.toLocaleString()} calls not yet paid` : ''}`}
+        />
+        <StatTile
+          size="hero"
+          label="Paid"
+          tone="money"
+          loading={loading}
+          figure={figure(summary?.paid)}
+          sub={`${label} · calls already paid for`}
+        />
+        <StatTile
+          size="hero"
+          label="Held or disputed"
+          tone="money"
+          loading={loading}
+          figure={figure(summary?.held)}
+          sub={`${label} · on hold or under dispute`}
+        />
+        <StatTile
+          size="hero"
+          label="Net payable"
+          tone="money"
+          loading={loading}
+          figure={figure(summary?.netPayable)}
+          sub={`Payable less ${summary ? dollars(summary.returnsPending) : '…'} in returns waiting`}
+        />
       </div>
 
       {/* Payment History */}
@@ -184,18 +158,10 @@ function PublisherPayoutsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-rule bg-sunken">
-                  <th className="p-4 text-left t-caption text-ink-2">
-                    Date
-                  </th>
-                  <th className="p-4 text-left t-caption text-ink-2">
-                    Method
-                  </th>
-                  <th className="p-4 text-left t-caption text-ink-2">
-                    Reference
-                  </th>
-                  <th className="p-4 text-right t-caption text-ink-2">
-                    Amount
-                  </th>
+                  <th className="p-4 text-left t-caption text-ink-2">Date</th>
+                  <th className="p-4 text-left t-caption text-ink-2">Method</th>
+                  <th className="p-4 text-left t-caption text-ink-2">Reference</th>
+                  <th className="p-4 text-right t-caption text-ink-2">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">

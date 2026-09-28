@@ -253,7 +253,9 @@ export function LiveStrip({
                 unavailable={m.unavailable}
               />
               {m.sub ? (
-                <span className="t-meta hidden min-w-0 truncate text-ink-3 md:inline">{m.sub}</span>
+                <span className="t-meta hidden min-w-0 truncate text-ink-3 md:inline">
+                  {m.sub}
+                </span>
               ) : null}
             </span>
           </div>

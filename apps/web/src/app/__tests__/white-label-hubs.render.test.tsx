@@ -580,7 +580,7 @@ describe('the white-label portal', () => {
 
   describe('Today', () => {
     const tile = (label: string) =>
-      document.querySelector(`[data-figure-label="${label}"]`) as HTMLElement | null;
+      document.querySelector<HTMLElement>(`[data-figure-label="${label}"]`);
     const deltaOf = (label: string) =>
       tile(label)?.querySelector('[data-tile-delta]')?.textContent?.replace(/\s+/g, ' ').trim();
 

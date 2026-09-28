@@ -11,6 +11,8 @@ import {
   PanelTitle,
   StatTile,
   StatTileRow,
+  isZeroFigure,
+  tileDollars,
 } from '@/components/domain';
 import { settle } from '@/lib/server/api';
 import {
@@ -21,6 +23,7 @@ import {
   toMajor,
 } from '@/lib/server/buyer';
 import { requireBuyerScope } from '@/lib/server/session';
+import { cn } from '@/lib/utils';
 
 import { PageHeader } from '../_components/page-header';
 import { RecentCallsTable, type RecentCallRow } from '../_components/recent-calls-table';
@@ -147,18 +150,21 @@ async function ValueSummary({
   return (
     <StatTileRow>
       <StatTile
+        size="hero"
         label="Spend"
         figure={`$${spend.toFixed(2)}`}
+        tone="money"
         sub="Last 30 days"
-        emphasis
         className="col-span-2 lg:col-span-1"
       />
       <StatTile
+        size="hero"
         label="Billable rate"
         figure={`${(totals.billableRate * 100).toFixed(1)}%`}
         sub={`${totals.billableCalls.toLocaleString()} of ${totals.totalCalls.toLocaleString()} calls`}
       />
       <StatTile
+        size="hero"
         label="Per billable call"
         figure={`$${perBillable.toFixed(2)}`}
         sub={`Average connect ${totals.averageDuration}s`}
@@ -238,7 +244,9 @@ async function RightNowPanel({ token }: { token: string }) {
         {figures.map(f => (
           <div key={f.label}>
             <p className="t-caption text-ink-2">{f.label}</p>
-            <p className="t-figure mt-1.5 text-ink">{f.value}</p>
+            <p className={cn('t-kpi mt-1.5', isZeroFigure(f.value) ? 'text-ink-3' : 'text-ink')}>
+              {f.value}
+            </p>
             <p className="t-meta mt-1 text-ink-3">{f.sub}</p>
           </div>
         ))}
@@ -292,13 +300,15 @@ async function BalancePanel({
       <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <p className="t-caption text-ink-2">{upfront ? 'Balance' : 'Billed this month'}</p>
-          <p className="t-figure mt-1.5 text-ink">
-            <MoneyCell
-              amount={upfront ? profile.walletBalance : billedThisMonth}
-              unit="major"
-              size="figure"
-              tone="auto"
-            />
+          <p
+            className={cn(
+              't-kpi mt-1.5',
+              isZeroFigure(tileDollars(upfront ? profile.walletBalance : billedThisMonth))
+                ? 'text-ink-3'
+                : 'text-brand-ink'
+            )}
+          >
+            {tileDollars(upfront ? profile.walletBalance : billedThisMonth)}
           </p>
           <p className="t-meta mt-1 text-ink-3">
             {upfront ? 'Prepaid funds on hand' : 'Charged since the 1st'}
@@ -306,12 +316,14 @@ async function BalancePanel({
         </div>
         <div>
           <p className="t-caption text-ink-2">Burn rate</p>
-          <p className="t-figure mt-1.5 text-ink">${burnPerDay.toFixed(2)}</p>
+          <p className={cn('t-kpi mt-1.5', burnPerDay === 0 ? 'text-ink-3' : 'text-ink')}>
+            {tileDollars(burnPerDay)}
+          </p>
           <p className="t-meta mt-1 text-ink-3">Average per day over 30 days</p>
         </div>
         <div>
           <p className="t-caption text-ink-2">Runway</p>
-          <p className="t-figure mt-1.5 text-ink">
+          <p className="t-kpi mt-1.5 text-ink">
             {upfront ? (runwayDays != null ? `${runwayDays}d` : '—') : 'n/a'}
           </p>
           <p className="t-meta mt-1 text-ink-3">

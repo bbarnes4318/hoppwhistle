@@ -285,35 +285,35 @@ export async function getDeliveryToday(
     profile,
     openCredits,
   ] = await Promise.all([
-      getRatingSummary(tenantId, { prisma, now }),
-      // `record: false` -- reading a screen is not a delivery decision, and a
-      // page refresh must not be able to raise a delivery hold event or send a
-      // notification.
-      evaluateDeliveryGate(tenantId, { prisma, now, record: false }),
-      creditBalance(prisma, tenantId),
-      ledgerCountsForDay(prisma, tenantId, today),
-      measureCalendarDay(
-        { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+    getRatingSummary(tenantId, { prisma, now }),
+    // `record: false` -- reading a screen is not a delivery decision, and a
+    // page refresh must not be able to raise a delivery hold event or send a
+    // notification.
+    evaluateDeliveryGate(tenantId, { prisma, now, record: false }),
+    creditBalance(prisma, tenantId),
+    ledgerCountsForDay(prisma, tenantId, today),
+    measureCalendarDay(
+      { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+      tenantId,
+      today
+    ),
+    prisma.call.count({
+      where: {
         tenantId,
-        today
-      ),
-      prisma.call.count({
-        where: {
-          tenantId,
-          direction: 'INBOUND',
-          blocked: false,
-          createdAt: { gte: bounds.start, lt: bounds.endExclusive },
-        },
-      }),
-      prisma.call.count({ where: callsInProgressWhere(tenantId, now) }),
-      prisma.deliveryHoldEvent.findFirst({
-        where: { tenantId, deliveryDay: today },
-        orderBy: { occurredAt: 'asc' },
-        select: { occurredAt: true },
-      }),
-      prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
-      openLotCredits(prisma, tenantId),
-    ]);
+        direction: 'INBOUND',
+        blocked: false,
+        createdAt: { gte: bounds.start, lt: bounds.endExclusive },
+      },
+    }),
+    prisma.call.count({ where: callsInProgressWhere(tenantId, now) }),
+    prisma.deliveryHoldEvent.findFirst({
+      where: { tenantId, deliveryDay: today },
+      orderBy: { occurredAt: 'asc' },
+      select: { occurredAt: true },
+    }),
+    prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
+    openLotCredits(prisma, tenantId),
+  ]);
 
   /*
    * Tonight's rate: the one the settlement will derive, which is the same rate

@@ -267,27 +267,13 @@ export function LeadsTable({
                   />
                 </th>
               )}
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Stage
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Follow Up
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Last Contact
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Phone
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                State
-              </th>
-              <th className="px-4 py-3 text-left t-caption text-ink-2">
-                Added
-              </th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Name</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Stage</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Follow Up</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Last Contact</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Phone</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">State</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Added</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-rule">

@@ -241,7 +241,7 @@ describe('the call ledger per role', () => {
       expect(headers()).toContain('Recording');
     });
     expect(screen.getAllByRole('button', { name: 'Play or pause recording' })).toHaveLength(1);
-    const none = screen.getByRole('button', { name: 'No recording' }) as HTMLButtonElement;
-    expect(none.disabled).toBe(true);
+    const none = screen.getByRole('button', { name: 'No recording' });
+    expect(none.hasAttribute('disabled')).toBe(true);
   });
 });

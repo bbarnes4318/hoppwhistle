@@ -18,6 +18,7 @@ import {
   ToolbarMeta,
   ToolbarSelect,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import {
   Board,
   Records,
@@ -32,7 +33,6 @@ import {
   PERIOD_OPTIONS,
   periodQuery,
 } from '@/components/leaderboard/period-picker';
-import { PageHeader } from '@/components/layout/page-header';
 import { Podium } from '@/components/leaderboard/podium';
 import type { Leaderboard, PeriodKey } from '@/components/leaderboard/types';
 import { Button } from '@/components/ui/button';

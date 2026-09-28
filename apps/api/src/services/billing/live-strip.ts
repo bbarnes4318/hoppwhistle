@@ -123,8 +123,7 @@ export interface AgencyStrip {
   unavailable: UnavailableReasons;
 }
 
-const NO_CALLS_TODAY =
-  'No calls have been answered today, so there is nothing to convert yet.';
+const NO_CALLS_TODAY = 'No calls have been answered today, so there is nothing to convert yet.';
 
 const NO_RATE_IN_FORCE =
   'There is no rate in force for this agency today: it is under review, or no ' +

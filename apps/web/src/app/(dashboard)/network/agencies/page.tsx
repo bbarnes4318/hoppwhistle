@@ -152,7 +152,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
                     const owner = OWNER_LABEL[agency.owner.status];
                     return (
                       <TableRow key={agency.tenantId}>
-                        <TableCell className="font-medium">
+                        <TableCell className="whitespace-nowrap font-medium">
                           <Link
                             href={`/network/agencies/${agency.tenantId}`}
                             className="text-brand-ink hover:underline"
@@ -189,7 +189,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
                             <div className="mt-0.5 t-meta text-ink-3">{agency.owner.email}</div>
                           ) : null}
                         </TableCell>
-                        <TableCell className="t-meta text-ink-2">
+                        <TableCell className="whitespace-nowrap t-meta text-ink-2">
                           {formatDisplayDate(agency.createdAt)}
                         </TableCell>
                         <TableCell className="text-right">
