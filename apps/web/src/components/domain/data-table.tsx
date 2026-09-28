@@ -150,7 +150,7 @@ export function DataTable<T>({
       scope="col"
       style={col.width ? { width: col.width } : undefined}
       className={cn(
-        't-label h-10 whitespace-nowrap border-b border-rule bg-sunken px-3 py-0 text-ink-3',
+        't-caption h-10 whitespace-nowrap border-b border-rule-strong bg-surface px-3 py-0 text-ink-2',
         alignClass(col as Column<unknown>),
         col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow],
         col.headClassName

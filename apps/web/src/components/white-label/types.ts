@@ -160,8 +160,30 @@ export interface NetworkAgencies {
   agencies: NetworkAgencyRow[];
 }
 
-/** `GET /api/v1/white-label/today`: the white-label owner's Today screen. */
+/** The periods Today can be read over; New York calendar days. */
+export type TodayPeriodKey = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS';
+
+/** One period's totals on Today, and its comparison's. */
+export interface TodayTotals {
+  inbound: number;
+  answeredByAgents: number;
+  sentToBuyers: number;
+  unanswered: number;
+  blocked: number;
+  /** Every billable call, whoever answered it. */
+  billable: number;
+  revenue: number;
+  profit: number;
+  applications: number;
+  closingPct: number | null;
+  /** Mean connected seconds over answered calls; null with none. */
+  avgCallSeconds: number | null;
+}
+
+/** `GET /api/v1/white-label/today?period=`: the white-label owner's Today screen. */
 export interface WhiteLabelToday {
+  generatedAt: string;
+  period: { key: TodayPeriodKey; label: string; from: string; to: string };
   now: {
     callsUp: number;
     agentsReady: number;
@@ -172,18 +194,38 @@ export interface WhiteLabelToday {
     buyersActive: number;
     returnsOpen: number;
   };
-  today: {
-    inbound: number;
-    answeredByAgents: number;
-    sentToBuyers: number;
+  /** The selected period's totals (named for the default period). */
+  today: TodayTotals;
+  /** What the period is measured against, and its name: "same time yesterday". */
+  comparison: TodayTotals & { label: string; from: string; to: string };
+  /**
+   * Where the period's calls went: 24 hourly rows for a one-day period, 7
+   * daily rows for the last seven days. `comparison` is the comparison
+   * period's calls in the same slot.
+   */
+  byHour: Array<{
+    hour: number | null;
+    day: string | null;
+    agents: number;
+    buyers: number;
     unanswered: number;
     blocked: number;
+    comparison: number;
+  }>;
+  /** The last seven days ending today, whatever the period. */
+  trend: Array<{
+    day: string;
+    inbound: number;
     revenue: number;
     profit: number;
     applications: number;
-    closingPct: number | null;
-  };
-  /** One row per buyer on the agency live board, with today's cap. */
+  }>;
+  /** Every active agent's presence, ready first. */
+  agents: Array<{ id: string; name: string; presence: 'READY' | 'ON_CALL' | 'AWAY' | 'OFFLINE' }>;
+  agentBlockers: Array<{ code: string; reason: string; count: number }>;
+  returnsWaiting: { count: number; oldestAt: string | null };
+  owedToPublishers: { amount: number; publishers: number; calls: number };
+  /** One row per buyer on the agency live board, with today's cap, busiest first. */
   buyers: Array<{
     id: string;
     name: string;
@@ -193,12 +235,23 @@ export interface WhiteLabelToday {
     /** Kept for older screens; buyers write no applications here, so always 0. */
     applicationsToday: number;
     closingPct: number | null;
-    /** Today's billable calls and what they sold for (call sales, by buyer). */
-    billableToday: number;
-    revenueToday: number;
+    /** The period's calls, billable calls and what they sold for. */
+    calls: number;
+    billable: number;
+    revenue: number;
     atCap: boolean;
     capUsed: number;
     capMax: number | null;
+  }>;
+  /** The period's publishers, most profitable first. */
+  publishers: Array<{
+    publisherId: string;
+    publisherName: string;
+    calls: number;
+    billable: number;
+    billablePct: number | null;
+    payout: number;
+    profit: number;
   }>;
   /** What needs a decision, in the order to take it. Only non-zero counts. */
   attention: Array<{

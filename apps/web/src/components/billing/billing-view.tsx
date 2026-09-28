@@ -19,6 +19,7 @@ import {
   ToolbarDateRange,
   toolbarTrigger,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -198,7 +199,8 @@ function BillingPage() {
 
   return (
     <div className="page-canvas">
-      {/* No header row: the page title is already in the topbar. */}
+      <PageHeader description="Every buyer's balance: a prepaid wallet, or what a terms buyer was billed this month." />
+
       {error && <Notice tone="error">Error: {error}</Notice>}
 
       {/*
@@ -342,30 +344,30 @@ function BillingPage() {
           <PanelBody>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-control border border-rule bg-sunken p-3">
               <div>
-                <div className="t-label text-ink-3">Buyer</div>
+                <div className="t-caption text-ink-2">Buyer</div>
                 <div className="t-body font-semibold text-ink">{buyerInfo.name}</div>
               </div>
               <div>
-                <div className="t-label text-ink-3">Publisher</div>
+                <div className="t-caption text-ink-2">Publisher</div>
                 <div className="t-body text-ink">{buyerInfo.publisherName}</div>
               </div>
               {buyerInfo.billingType === 'UPFRONT' ? (
                 <div>
-                  <div className="t-label text-ink-3">Current Balance</div>
+                  <div className="t-caption text-ink-2">Current balance</div>
                   <div className="t-body font-semibold tabular-nums text-ink">
                     {formatCurrency(Number(buyerInfo.walletBalance))}
                   </div>
                 </div>
               ) : (
                 <div>
-                  <div className="t-label text-ink-3">Billed this month</div>
+                  <div className="t-caption text-ink-2">Billed this month</div>
                   <div className="t-body font-semibold tabular-nums text-ink">
                     {formatCurrency(buyers.find(b => b.id === buyerInfo.id)?.billedThisMonth ?? 0)}
                   </div>
                 </div>
               )}
               <div>
-                <div className="t-label text-ink-3">Status</div>
+                <div className="t-caption text-ink-2">Status</div>
                 <Badge variant={buyerInfo.status === 'ACTIVE' ? 'default' : 'secondary'}>
                   {buyerInfo.status}
                 </Badge>

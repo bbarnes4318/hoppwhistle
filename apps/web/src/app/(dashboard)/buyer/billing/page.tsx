@@ -189,7 +189,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
       </PanelHeader>
       <PanelBody className="space-y-4">
         <section>
-          <h3 className="t-label text-ink-3">The threshold</h3>
+          <h3 className="t-caption text-ink-2">The threshold</h3>
           <p className="t-body mt-1 max-w-2xl text-ink">
             A call becomes billable once it has been{' '}
             <strong className="font-medium">
@@ -203,7 +203,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
         </section>
 
         <section>
-          <h3 className="t-label text-ink-3">What triggers a charge</h3>
+          <h3 className="t-caption text-ink-2">What triggers a charge</h3>
           <p className="t-body mt-1 max-w-2xl text-ink">
             Crossing that threshold, and nothing else. When a call passes it you are charged the
             agreed price for that campaign, once.{' '}
@@ -214,7 +214,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
         </section>
 
         <section>
-          <h3 className="t-label text-ink-3">What does not</h3>
+          <h3 className="t-caption text-ink-2">What does not</h3>
           <ul className="t-body mt-1 max-w-2xl list-disc space-y-1 pl-5 text-ink">
             <li>A call that rings and is never answered.</li>
             <li>
@@ -227,7 +227,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
         </section>
 
         <section>
-          <h3 className="t-label text-ink-3">
+          <h3 className="t-caption text-ink-2">
             {upfront ? 'When the balance runs out' : 'When you are invoiced'}
           </h3>
           <p className="t-body mt-1 max-w-2xl text-ink">
@@ -238,7 +238,7 @@ async function BillingRule({ token, buyerId }: { token: string; buyerId: string 
         </section>
 
         <section>
-          <h3 className="t-label text-ink-3">Disputes</h3>
+          <h3 className="t-caption text-ink-2">Disputes</h3>
           <p className="t-body mt-1 max-w-2xl text-ink">
             Filing a dispute does not reverse the charge on its own. It marks the call, holds the
             publisher&apos;s payout while it is reviewed, and the outcome decides whether the charge

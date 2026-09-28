@@ -172,7 +172,7 @@ export function TargetingConsole({
         </PanelHeader>
         <PanelBody className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
-            <p className="t-label text-ink-3">Per-call price</p>
+            <p className="t-caption text-ink-2">Per-call price</p>
             <p className="t-figure mt-1.5 text-ink">
               <MoneyCell amount={weightedPrice} unit="major" size="figure" tone="money" />
             </p>
@@ -184,7 +184,7 @@ export function TargetingConsole({
           </div>
 
           <div>
-            <p className="t-label text-ink-3">Observed volume</p>
+            <p className="t-caption text-ink-2">Observed volume</p>
             <p className="t-figure mt-1.5 text-ink">{totalVolume.toLocaleString()}</p>
             <p className="t-meta mt-1 text-ink-3">
               Billable calls in the last 30 days that these settings would have let through
@@ -202,7 +202,7 @@ export function TargetingConsole({
           </div>
 
           <div>
-            <p className="t-label text-ink-3">At that price</p>
+            <p className="t-caption text-ink-2">At that price</p>
             <p className="t-figure mt-1.5 text-ink">
               <MoneyCell
                 amount={weightedPrice * totalVolume}
@@ -272,7 +272,7 @@ export function TargetingConsole({
 
               <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <p className="t-label text-ink-3">Price per call</p>
+                  <p className="t-caption text-ink-2">Price per call</p>
                   <p className="t-data mt-1.5 text-ink">
                     <MoneyCell amount={target.basePrice} unit="major" />
                   </p>
@@ -322,7 +322,7 @@ export function TargetingConsole({
                 </div>
 
                 <div>
-                  <p className="t-label text-ink-3">Observed, last 30 days</p>
+                  <p className="t-caption text-ink-2">Observed, last 30 days</p>
                   <p className="t-data mt-1.5 text-ink">
                     {volume.toLocaleString()} billable
                     {volume < uncapped ? (

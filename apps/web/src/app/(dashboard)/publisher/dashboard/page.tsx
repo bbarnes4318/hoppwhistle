@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  Activity,
-  DollarSign,
-  Download,
-  Loader2,
-  Phone,
-  PhoneCall,
-  PhoneIncoming,
-  Users,
-} from 'lucide-react';
+import { Download, Loader2, PhoneCall, Users } from 'lucide-react';
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   Area,
@@ -22,6 +13,8 @@ import {
 } from 'recharts';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { AXIS_PROPS, GRID_PROPS, StatTile, chartTooltip, tileDollars } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -217,155 +210,117 @@ function PublisherDashboard() {
 
   return (
     <div className="page-canvas">
-      {/* Header section */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-ink-2 text-sm mt-1">Real-time performance metrics and call details.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-lg bg-sunken border border-rule p-1">
-            <Button
-              variant={datePreset === 'last-7' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setDatePreset('last-7')}
-              className="text-xs rounded-md"
-            >
-              7 Days
-            </Button>
-            <Button
-              variant={datePreset === 'last-30' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setDatePreset('last-30')}
-              className="text-xs rounded-md"
-            >
-              30 Days
-            </Button>
-            <Button
-              variant={datePreset === 'last-90' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setDatePreset('last-90')}
-              className="text-xs rounded-md"
-            >
-              90 Days
-            </Button>
-            <Button
-              variant={datePreset === 'custom' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setDatePreset('custom')}
-              className="text-xs rounded-md"
-            >
-              Custom
-            </Button>
-          </div>
-
-          {datePreset === 'custom' && (
-            <div className="flex items-center gap-2 bg-sunken border border-rule rounded-lg p-1">
-              <Input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              <span className="text-ink-3 text-xs">to</span>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              <Button size="sm" onClick={() => void fetchStats()} className="h-7 px-2 text-xs">
-                Apply
+      <PageHeader
+        description="Your calls, what they earned, and which campaigns sent them."
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center rounded-lg bg-sunken border border-rule p-1">
+              <Button
+                variant={datePreset === 'last-7' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setDatePreset('last-7')}
+                className="text-xs rounded-md"
+              >
+                7 Days
+              </Button>
+              <Button
+                variant={datePreset === 'last-30' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setDatePreset('last-30')}
+                className="text-xs rounded-md"
+              >
+                30 Days
+              </Button>
+              <Button
+                variant={datePreset === 'last-90' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setDatePreset('last-90')}
+                className="text-xs rounded-md"
+              >
+                90 Days
+              </Button>
+              <Button
+                variant={datePreset === 'custom' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setDatePreset('custom')}
+                className="text-xs rounded-md"
+              >
+                Custom
               </Button>
             </div>
-          )}
 
-          <Button
-            onClick={() => void handleExportCSV()}
-            disabled={exporting || !stats?.totalCalls}
-            className="gap-2 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium"
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
+            {datePreset === 'custom' && (
+              <div className="flex items-center gap-2 bg-sunken border border-rule rounded-lg p-1">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+                <span className="text-ink-3 text-xs">to</span>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="h-8 w-32 bg-transparent border-0 text-xs text-ink focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+                <Button size="sm" onClick={() => void fetchStats()} className="h-7 px-2 text-xs">
+                  Apply
+                </Button>
+              </div>
             )}
-            Export CSV
-          </Button>
-        </div>
-      </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-surface border-rule text-ink">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Total Calls
-            </CardTitle>
-            <Phone className="h-4 w-4 text-ink-3" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-ink tabular">
-              {stats?.totalCalls.toLocaleString()}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">
-              {stats?.pingCount
-                ? `${stats.pingCount.toLocaleString()} lead pings received`
-                : 'Calls routed through campaigns'}
-            </p>
-          </CardContent>
-        </Card>
+            <Button
+              onClick={() => void handleExportCSV()}
+              disabled={exporting || !stats?.totalCalls}
+              className="gap-2 bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Export CSV
+            </Button>
+          </div>
+        }
+      />
 
-        <Card className="bg-surface border-rule text-ink">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Billable Calls
-            </CardTitle>
-            <PhoneIncoming className="h-4 w-4 text-live-ink" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-ink tabular">
-              {stats?.billableCalls.toLocaleString()}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">
-              {stats?.billableRate ? `${stats.billableRate.toFixed(1)}% billable rate` : '0%'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule text-ink">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Payout Earnings
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-money-ink" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-ink tabular">
-              $
-              {stats?.payout.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">Total revenue generated</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-surface border-rule text-ink">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-2">
-              Avg Duration
-            </CardTitle>
-            <Activity className="h-4 w-4 text-ink-3" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-ink tabular">
-              {formatDuration(stats?.averageConnectedDuration || 0)}
-            </div>
-            <p className="text-xs text-ink-3 mt-1">Average connected call length</p>
-          </CardContent>
-        </Card>
+      {/* The four numbers the range is about */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile
+          size="hero"
+          label="Total calls"
+          figure={(stats?.totalCalls ?? 0).toLocaleString()}
+          sub={
+            stats?.pingCount
+              ? `${stats.pingCount.toLocaleString()} lead pings received`
+              : 'Calls routed through campaigns'
+          }
+        />
+        <StatTile
+          size="hero"
+          label="Billable calls"
+          figure={(stats?.billableCalls ?? 0).toLocaleString()}
+          sub={
+            stats?.billableRate
+              ? `${stats.billableRate.toFixed(1)}% billable rate`
+              : 'None billable yet'
+          }
+        />
+        <StatTile
+          size="hero"
+          label="Payout earnings"
+          tone="money"
+          figure={tileDollars(stats?.payout ?? 0)}
+          sub="What these calls earned you"
+        />
+        <StatTile
+          size="hero"
+          label="Avg duration"
+          figure={formatDuration(stats?.averageConnectedDuration || 0)}
+          sub="Average connected call length"
+        />
       </div>
 
       {/* Main sections: Chart & Top Campaigns */}
@@ -373,7 +328,7 @@ function PublisherDashboard() {
         {/* Call Volume Chart */}
         <Card className="lg:col-span-2 bg-surface border-rule text-ink">
           <CardHeader>
-            <CardTitle className="text-lg font-bold">Call Performance Trend</CardTitle>
+            <CardTitle className="text-lg font-bold">Call performance</CardTitle>
             <CardDescription className="text-ink-2">
               Daily breakdown of total vs billable calls.
             </CardDescription>
@@ -396,26 +351,10 @@ function PublisherDashboard() {
                     <stop offset="95%" stopColor="var(--brand-ink)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--rule)" />
-                <XAxis
-                  dataKey="name"
-                  stroke="var(--ink-3)"
-                  style={{ fontSize: 10 }}
-                  tickLine={false}
-                />
-                <YAxis
-                  stroke="var(--ink-3)"
-                  style={{ fontSize: 10 }}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--surface)',
-                    borderColor: 'var(--rule)',
-                    color: 'var(--ink)',
-                  }}
-                />
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="name" {...AXIS_PROPS} />
+                <YAxis {...AXIS_PROPS} allowDecimals={false} />
+                <Tooltip cursor={{ stroke: 'var(--rule-strong)' }} content={chartTooltip({})} />
                 <Area
                   type="monotone"
                   dataKey="Total"
@@ -423,7 +362,7 @@ function PublisherDashboard() {
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorTotal)"
-                  name="Total Calls"
+                  name="Total calls"
                 />
                 <Area
                   type="monotone"
@@ -432,7 +371,7 @@ function PublisherDashboard() {
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorBillable)"
-                  name="Billable Calls"
+                  name="Billable calls"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -442,7 +381,7 @@ function PublisherDashboard() {
         {/* Top Campaigns */}
         <Card className="bg-surface border-rule text-ink">
           <CardHeader>
-            <CardTitle className="text-lg font-bold">Top Campaigns</CardTitle>
+            <CardTitle className="text-lg font-bold">Top campaigns</CardTitle>
             <CardDescription className="text-ink-2">
               Top-performing campaign integrations.
             </CardDescription>
@@ -483,7 +422,7 @@ function PublisherDashboard() {
       <Card className="bg-surface border-rule text-ink">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-lg font-bold">Recent Inbound Calls</CardTitle>
+            <CardTitle className="text-lg font-bold">Recent inbound calls</CardTitle>
             <CardDescription className="text-ink-2">
               Latest call traffic generated by your sources.
             </CardDescription>
@@ -501,7 +440,7 @@ function PublisherDashboard() {
           {stats && stats.recentCalls.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-ink-2">
-                <thead className="text-xs uppercase text-ink-2 border-b border-rule bg-sunken">
+                <thead className="t-caption text-ink-2 border-b border-rule bg-sunken">
                   <tr>
                     <th className="px-4 py-3">Time</th>
                     <th className="px-4 py-3">Caller</th>

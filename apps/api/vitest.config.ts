@@ -104,6 +104,9 @@ const DATABASE_BACKED = [
   '**/src/__tests__/user-invite-publisher.test.ts',
   '**/src/__tests__/campaign-answer-order.test.ts',
   '**/src/__tests__/white-label-today.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed one agency with a
+  // stuck call and a live one, and reads every screen that counts calls up.
+  '**/src/__tests__/call-in-progress.test.ts',
   '**/src/__tests__/calls-outcome-filter.test.ts',
   // Truncates `tenants`, `roles` and `audit_logs` to seed two white-label
   // agencies with publishers, payable calls and clawbacks.

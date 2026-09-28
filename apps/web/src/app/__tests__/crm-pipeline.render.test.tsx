@@ -161,8 +161,15 @@ describe('the agency CRM', () => {
 
     expect(screen.getAllByText('Prospects').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Submitted Apps').length).toBeGreaterThan(0);
-    expect(screen.getByText('Annual Premium')).toBeTruthy();
-    expect(screen.getByText('$2,520.00')).toBeTruthy();
+    expect(screen.getByText('Annual premium')).toBeTruthy();
+    // Whole dollars in a tile from $1,000.
+    expect(screen.getByText('$2,520')).toBeTruthy();
+
+    // The tile for the list on screen is tinted, not ringed: the ring is focus.
+    const selected = document.querySelectorAll('[data-selected]');
+    expect(selected).toHaveLength(1);
+    expect(selected[0].className).toContain('bg-brand-tint');
+    expect(selected[0].className).not.toContain('ring-');
 
     const text = document.body.textContent ?? '';
     expect(text).not.toMatch(/FE Customers|\bACA\b|\bB2B\b/);

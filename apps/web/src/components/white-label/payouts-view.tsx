@@ -6,6 +6,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { dollars, count } from '@/components/delivery/ledger';
 import {
+  Dollars,
   EmptyState,
   Notice,
   Panel,
@@ -59,7 +60,7 @@ export function NetToPay({ net }: { net: number }): JSX.Element {
       </span>
     );
   }
-  return <>{dollars(net)}</>;
+  return <Dollars value={net} />;
 }
 
 /** The server's refusal when returns are at least the payable, word for word. */
@@ -226,7 +227,7 @@ export function PayoutsView(): JSX.Element {
                       <TableRow key={row.publisherId} data-publisher={row.publisherId}>
                         <TableCell className="font-medium">{row.publisherName}</TableCell>
                         <TableCell className="text-right tabular-nums" data-figure="payable">
-                          {dollars(row.payable)}
+                          <Dollars value={row.payable} />
                           <span className="ml-1 t-meta text-ink-3">
                             {`${count(row.payableCalls)} call${row.payableCalls === 1 ? '' : 's'}`}
                           </span>
@@ -241,10 +242,10 @@ export function PayoutsView(): JSX.Element {
                           <NetToPay net={row.netPayable} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {dollars(row.held)}
+                          <Dollars value={row.held} />
                         </TableCell>
                         <TableCell className="text-right tabular-nums" data-figure="paid">
-                          {dollars(row.paid)}
+                          <Dollars value={row.paid} />
                         </TableCell>
                         <TableCell className="t-meta text-ink-2">
                           {row.lastPayment
@@ -301,7 +302,7 @@ export function PayoutsView(): JSX.Element {
                             <TableCell>{formatDisplayDate(payment.paidAt)}</TableCell>
                             <TableCell className="font-medium">{payment.publisherName}</TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {dollars(payment.amount)}
+                              <Dollars value={payment.amount} />
                             </TableCell>
                             <TableCell className="t-meta text-ink-2">
                               {`${formatDisplayDate(payment.periodFrom)} – ${formatDisplayDate(
@@ -550,15 +551,15 @@ function RecordPaymentDialog({
           ) : (
             <>
               <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-                <dt className="t-label text-ink-3">{`Payable for ${formatDayRange(from, to)}`}</dt>
+                <dt className="t-caption text-ink-2">{`Payable for ${formatDayRange(from, to)}`}</dt>
                 <dd className="t-data text-right text-ink" data-figure="quote">
-                  {dollars(quote.amount)}
+                  <Dollars value={quote.amount} />
                 </dd>
-                <dt className="t-label text-ink-3">Less returns</dt>
+                <dt className="t-caption text-ink-2">Less returns</dt>
                 <dd className="t-data text-right text-ink" data-figure="less-returns">
                   {quote.returns > 0 ? `−${dollars(quote.returns)}` : dollars(0)}
                 </dd>
-                <dt className="t-label text-ink">Net to pay</dt>
+                <dt className="t-caption font-semibold text-ink">Net to pay</dt>
                 <dd
                   className="t-data text-right text-lg font-semibold text-ink"
                   data-figure="net-to-pay"

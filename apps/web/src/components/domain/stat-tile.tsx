@@ -3,22 +3,33 @@ import * as React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { isZeroFigure, tileMoneyText } from './figures';
+
 /**
  * StatTile — a card holding one figure: label, figure, sub, optional delta,
  * optional icon chip, optional sparkline.
  *
- * The figure is Inter at the figure step with tabular numerals, so a row of
- * tiles reads as one set of numbers. `sub` has a reserved line whether or not
- * it is passed, and the sparkline lane is reserved for every tile that is
- * given a `series` prop, so tiles in a row share their baselines.
+ * ── Two sizes ────────────────────────────────────────────────────────────────
  *
- * `value` is the alternative to `figure` for a raw number or string: a number
- * is shown with `toLocaleString()` and an optional `unit` beside it — the same
- * formatting the dashboard's KPI cards have always applied.
+ * `size="hero"` is for the three or four numbers a page is about: a 30px
+ * figure. Everything else is `secondary`, 20px. A page of twelve tiles at the
+ * same size is twelve numbers the reader has to rank themselves.
+ *
+ * ── What the figure looks like ───────────────────────────────────────────────
+ *
+ * The label is sentence case, 12px, medium, ink-2 -- never an all-caps micro
+ * label. A figure that says nothing (0, $0.00, 0.0%, an em dash) renders in
+ * ink-3 whatever its tone: a blue $0.00 reads as good news. Money
+ * (`tone="money"`) is brand ink only when it is not zero, and a money string
+ * of $1,000 or more drops its cents (`tileMoneyText`).
+ *
+ * `sub` has a reserved line whether or not it is passed, and the sparkline
+ * lane is reserved for every tile that is given a `series` prop, so tiles in a
+ * row share their baselines.
  */
 
 export interface StatTileProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Uppercase label. "Billable rate", not "billable_rate". */
+  /** Sentence case. "Billable rate", not "billable_rate" or "BILLABLE RATE". */
   label: string;
   /** The number. Pass a formatted node (MoneyCell) or a string. */
   figure?: React.ReactNode;
@@ -31,21 +42,31 @@ export interface StatTileProps extends React.HTMLAttributes<HTMLDivElement> {
   /** A lucide icon, shown in a 32px brand-tint chip at the top right. */
   icon?: React.ComponentType<{ className?: string }>;
   /**
-   * Period-over-period change. `direction` says which way is good: `up` for
-   * earnings, `down` for abandon rate. Without it a falling abandon rate would
-   * be painted as bad news.
+   * Change against a comparison. `direction` says which way it moved; `good`
+   * says which way is good (`up` for earnings, `down` for abandon rate), so a
+   * falling abandon rate is not painted as bad news. Null with `deltaLabel`
+   * set renders "—": there was nothing to compare with.
    */
-  delta?: { value: string; direction: 'up' | 'down'; good?: 'up' | 'down' };
+  delta?: { value: string; direction: 'up' | 'down' | 'flat'; good?: 'up' | 'down' } | null;
+  /** What the delta is against: "vs same time yesterday". Puts it on its own line. */
+  deltaLabel?: string;
   /** Values for the sparkline. The lane is reserved when this is passed. */
   series?: number[];
-  /** Emphasise this tile — the one number the page is about. Hero size. */
+  /** `hero` for the numbers a page is about; `secondary` (default) for the rest. */
+  size?: 'hero' | 'secondary';
+  /** Older spelling of `size="hero"`. */
   emphasis?: boolean;
-  /** Colour the figure as money. */
+  /** Colour the figure as money: brand ink when it is not zero. */
   tone?: 'ink' | 'money';
+  /**
+   * The tile stands for the view on screen: a brand-tint ground and a
+   * brand-ink figure. Not a ring -- the ring is keyboard focus, and only that.
+   */
+  selected?: boolean;
   loading?: boolean;
 }
 
-const SPARK_HEIGHT = 20;
+const SPARK_HEIGHT = 24;
 
 /**
  * Deliberately a plain SVG polyline: no axes, no tooltip, no animation. It is
@@ -63,7 +84,7 @@ function Sparkline({ series, tone }: { series: number[]; tone: string }) {
   const points = series
     .map(
       (v, i) =>
-        `${(i * stepX).toFixed(2)},${(SPARK_HEIGHT - ((v - min) / span) * SPARK_HEIGHT).toFixed(2)}`
+        `${(i * stepX).toFixed(2)},${(SPARK_HEIGHT - 2 - ((v - min) / span) * (SPARK_HEIGHT - 4)).toFixed(2)}`
     )
     .join(' ');
 
@@ -96,33 +117,56 @@ export function StatTile({
   sub,
   icon: Icon,
   delta,
+  deltaLabel,
   series,
+  size,
   emphasis = false,
   tone = 'ink',
+  selected = false,
   loading = false,
   className,
   ...props
 }: StatTileProps) {
+  const hero = size === 'hero' || (size === undefined && emphasis);
   // `good` defaults to up. Pass `good: 'down'` for abandon rate, cost per call,
   // time to answer — anything where less is better.
   const good = delta?.good ?? 'up';
   const isGood = delta ? delta.direction === good : false;
 
-  const shown =
+  const raw =
     figure !== undefined ? figure : typeof value === 'number' ? value.toLocaleString() : value;
+  const shown = typeof raw === 'string' ? tileMoneyText(raw) : raw;
+  const zero = isZeroFigure(raw);
+
+  const deltaNode =
+    delta && !loading ? (
+      <span
+        className={cn(
+          't-meta tabular-nums shrink-0 font-medium',
+          delta.direction === 'flat' ? 'text-ink-3' : isGood ? 'text-live-ink' : 'text-dropped-ink'
+        )}
+      >
+        {delta.direction === 'up' ? '▲ ' : delta.direction === 'down' ? '▼ ' : ''}
+        {delta.value}
+      </span>
+    ) : null;
 
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col rounded-card border border-rule bg-surface p-5 shadow-card',
+        'flex min-w-0 flex-col rounded-card border shadow-card',
+        selected ? 'border-brand-tint bg-brand-tint' : 'border-rule bg-surface',
+        hero ? 'p-5' : 'p-4',
         'transition-shadow duration-150 ease-out ne-motion',
-        emphasis && 'border-rule-strong',
         className
       )}
+      data-tile-size={hero ? 'hero' : 'secondary'}
+      data-zero={zero ? '' : undefined}
+      data-selected={selected ? '' : undefined}
       {...props}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="t-label pt-0.5 text-ink-3">{label}</div>
+        <div className="t-caption pt-0.5 text-ink-2">{label}</div>
         {Icon ? (
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-brand-tint text-brand-ink">
             <Icon className="h-4 w-4" />
@@ -130,16 +174,28 @@ export function StatTile({
         ) : null}
       </div>
 
-      <div className={cn('flex flex-wrap items-baseline gap-x-2 gap-y-1', Icon ? 'mt-1' : 'mt-3')}>
+      <div
+        className={cn(
+          'flex flex-wrap items-baseline gap-x-2 gap-y-1',
+          Icon ? 'mt-1' : hero ? 'mt-2' : 'mt-1.5'
+        )}
+      >
         {loading ? (
-          <Skeleton className={cn('w-24', emphasis ? 'h-10' : 'h-[30px]')} />
+          <Skeleton className={cn('w-24', hero ? 'h-[34px]' : 'h-6')} />
         ) : (
           <span
             className={cn(
-              emphasis ? 't-hero' : 't-figure',
+              hero ? 't-kpi-hero' : 't-kpi',
               'min-w-0 tabular-nums',
-              tone === 'money' ? 'text-money-ink' : 'text-ink'
+              selected
+                ? 'text-brand-ink'
+                : zero
+                  ? 'text-ink-3'
+                  : tone === 'money'
+                    ? 'text-brand-ink'
+                    : 'text-ink'
             )}
+            data-tile-figure
           >
             {shown}
             {unit && figure === undefined ? (
@@ -148,17 +204,14 @@ export function StatTile({
           </span>
         )}
 
-        {delta && !loading ? (
-          <span
-            className={cn(
-              't-meta tabular-nums shrink-0 font-medium',
-              isGood ? 'text-live-ink' : 'text-dropped-ink'
-            )}
-          >
-            {delta.direction === 'up' ? '▲' : '▼'} {delta.value}
-          </span>
-        ) : null}
+        {deltaLabel ? null : deltaNode}
       </div>
+
+      {deltaLabel && !loading ? (
+        <div className="t-meta mt-1 flex items-baseline gap-1 text-ink-3" data-tile-delta>
+          {deltaNode ?? <span className="font-medium text-ink-3">—</span>} <span>{deltaLabel}</span>
+        </div>
+      ) : null}
 
       {/* Reserved whether or not `sub` is passed, for the same baseline reason. */}
       <div className="t-meta mt-1 min-h-[17px] text-ink-3">
@@ -174,10 +227,7 @@ export function StatTile({
           {loading ? (
             <Skeleton className="h-full w-full" />
           ) : series.length > 1 ? (
-            <Sparkline
-              series={series}
-              tone={isGood || !delta ? 'var(--brand)' : 'var(--dropped)'}
-            />
+            <Sparkline series={series} tone="var(--brand)" />
           ) : null}
         </div>
       ) : null}

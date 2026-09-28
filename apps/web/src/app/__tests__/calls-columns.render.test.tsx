@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let roles: string[] = ['OWNER', 'ADMIN'];
 let rows: unknown[] = [];
+let meta: Record<string, unknown> = { totalPages: 1 };
 
 function pathOf(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -45,7 +46,7 @@ function installFetch(): void {
         });
       }
       if (path === '/api/v1/calls') {
-        return json({ data: rows, meta: { totalPages: 1 } });
+        return json({ data: rows, meta });
       }
       if (path.startsWith('/api/v1/platform/context')) {
         return json({ isPlatformAdmin: false, actingTenant: null });
@@ -104,6 +105,7 @@ describe('the call ledger per role', () => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     localStorage.setItem('token', 'a-signed-in-user');
     rows = [{ ...baseCall, id: 'call-1' }];
+    meta = { totalPages: 1 };
     installFetch();
   });
 
@@ -113,7 +115,7 @@ describe('the call ledger per role', () => {
     vi.restoreAllMocks();
   });
 
-  it('opens an owner on the money and the returns', async () => {
+  it('opens an owner on where each call went, the recording and the money', async () => {
     roles = ['OWNER', 'ADMIN'];
     await loadCallsPage();
 
@@ -122,14 +124,91 @@ describe('the call ledger per role', () => {
         'Time',
         'Caller',
         'Campaign',
-        'Answered by',
+        'Went to',
         'Duration',
         'Disposition',
+        'Recording',
         'Revenue',
         'Payout',
-        'Return',
+        'Profit',
       ]);
     });
+  });
+
+  it('badges every row by where it went: agent, buyer, unanswered or blocked', async () => {
+    roles = ['OWNER', 'ADMIN'];
+    rows = [
+      {
+        ...baseCall,
+        id: 'to-agent',
+        answeredByUserId: 'u-1',
+        agentName: 'Marcus Bell',
+        buyerId: 'b-1',
+        buyerName: 'Acme',
+      },
+      { ...baseCall, id: 'to-buyer', buyerId: 'b-1', buyerName: 'Heritage Final Expense' },
+      { ...baseCall, id: 'unanswered' },
+      { ...baseCall, id: 'blocked', blocked: true },
+    ];
+    await loadCallsPage();
+
+    const badges = await waitFor(() => {
+      const found = [...document.querySelectorAll('tbody [data-entity]')] as HTMLElement[];
+      expect(found).toHaveLength(4);
+      return found;
+    });
+    expect(badges.map(badge => badge.getAttribute('data-entity'))).toEqual([
+      'agent',
+      'buyer',
+      'unanswered',
+      'blocked',
+    ]);
+    expect(badges[0].textContent).toContain('Marcus Bell');
+    expect(badges[0].textContent).toContain('Agent:');
+    expect(badges[1].textContent).toContain('Heritage Final Expense');
+    expect(badges[1].textContent).toContain('Buyer:');
+    expect(badges[2].textContent).toContain('Unanswered');
+    expect(badges[3].textContent).toContain('Blocked');
+  });
+
+  it('puts a return beside the disposition, and every disposition in a chip', async () => {
+    roles = ['OWNER', 'ADMIN'];
+    rows = [
+      { ...baseCall, id: 'returned', disposition: 'FOLLOW_UP', disputeStatus: 'DISPUTED' },
+      { ...baseCall, id: 'unset', disposition: null },
+    ];
+    await loadCallsPage();
+
+    const cells = await waitFor(() => {
+      const found = [...document.querySelectorAll('[data-disposition]')] as HTMLElement[];
+      expect(found).toHaveLength(2);
+      return found;
+    });
+    expect(cells[0].querySelector('[data-value="FOLLOW_UP"]')?.textContent).toContain('Follow up');
+    expect(cells[0].querySelector('[data-return="DISPUTED"]')?.textContent).toBe('Return: waiting');
+    expect(cells[1].textContent).toBe('Not set');
+  });
+
+  it('totals the filtered set above the table and counts rows below it', async () => {
+    roles = ['OWNER', 'ADMIN'];
+    meta = {
+      page: 1,
+      limit: 50,
+      total: 4112,
+      totalPages: 83,
+      totals: { calls: 4112, billable: 1234, revenue: 200940.5, payout: 80000, profit: 0 },
+    };
+    await loadCallsPage();
+
+    await waitFor(() => expect(document.querySelector('[data-call-totals]')).toBeTruthy());
+    const total = (label: string) => document.querySelector(`[data-total="${label}"]`)?.textContent;
+    expect(total('Calls')).toBe('4,112');
+    expect(total('Billable')).toBe('1,234');
+    expect(total('Revenue')).toBe('$200,941');
+    expect(total('Payout')).toBe('$80,000');
+    expect(total('Profit')).toBe('$0');
+    expect(document.querySelector('[data-total="Profit"]')?.className).toContain('text-ink-3');
+    expect(document.querySelector('[data-page-range]')?.textContent).toBe('1–50 of 4,112');
   });
 
   it('opens an agent on their calls and applications, with no Status column', async () => {
@@ -148,10 +227,8 @@ describe('the call ledger per role', () => {
     });
   });
 
-  it('offers recording controls only on a row with a recording of its own', async () => {
+  it('offers a play button on a row with a recording, and a disabled one without', async () => {
     roles = ['OWNER', 'ADMIN'];
-    // The owner has turned the Recording column on.
-    localStorage.setItem('hopwhistle_calls_columns:v2:owner', JSON.stringify({ recording: true }));
     rows = [
       // A recording URL but no recording id: nothing to play.
       { ...baseCall, id: 'call-no-rec', recordingUrl: '/r.wav', primaryRecordingId: null },
@@ -164,6 +241,7 @@ describe('the call ledger per role', () => {
       expect(headers()).toContain('Recording');
     });
     expect(screen.getAllByRole('button', { name: 'Play or pause recording' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Download recording' })).toHaveLength(1);
+    const none = screen.getByRole('button', { name: 'No recording' });
+    expect(none.hasAttribute('disabled')).toBe(true);
   });
 });

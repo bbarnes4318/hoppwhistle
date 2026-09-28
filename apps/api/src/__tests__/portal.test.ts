@@ -296,7 +296,13 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
         tenantId: params.tenantId,
         callSid: `sid-p4-${callSeq}-${Math.random().toString(36).slice(2, 8)}`,
         toNumber: '+15550000000',
-        status: params.answeredAt ? 'COMPLETED' : 'NO_ANSWER',
+        // A call answered and not ended is still up, which is ANSWERED: a
+        // COMPLETED row with no end time is a stuck row, not a live one.
+        status: !params.answeredAt
+          ? 'NO_ANSWER'
+          : params.endedAt === null
+            ? 'ANSWERED'
+            : 'COMPLETED',
         direction: 'INBOUND',
         answeredAt: params.answeredAt,
         answeredByUserId: params.answeredByUserId ?? null,
@@ -320,11 +326,7 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
 
   let appSeq = 0;
 
-  async function seedApplication(
-    tenantId: string,
-    submittedAt: Date | null,
-    createdById?: string
-  ) {
+  async function seedApplication(tenantId: string, submittedAt: Date | null, createdById?: string) {
     appSeq += 1;
     return prisma.insuranceCarrierApplication.create({
       data: {
@@ -616,7 +618,8 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
 
       // Wren: 20 calls, 6 applications = 30%. Ash: 20 calls, 1 = 5%.
       await seedDeliveredCalls(big.id, TODAY, 20, strong.id);
-      for (let i = 0; i < 6; i++) await seedApplication(big.id, middayOf(TODAY, i * 100), strong.id);
+      for (let i = 0; i < 6; i++)
+        await seedApplication(big.id, middayOf(TODAY, i * 100), strong.id);
 
       await seedDeliveredCalls(big.id, TODAY, 20, weak.id);
       await seedApplication(big.id, middayOf(TODAY, 9000), weak.id);
@@ -818,7 +821,8 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       await seedApplication(big.id, middayOf(TODAY), mine.id);
 
       await seedDeliveredCalls(big.id, TODAY, 30, theirs.id);
-      for (let i = 0; i < 9; i++) await seedApplication(big.id, middayOf(TODAY, 5000 + i * 100), theirs.id);
+      for (let i = 0; i < 9; i++)
+        await seedApplication(big.id, middayOf(TODAY, 5000 + i * 100), theirs.id);
 
       const response = await app.inject({
         method: 'GET',
@@ -967,7 +971,12 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
           label: 'Cheaper curve',
           minimumClosingPct: 5,
           flatFromClosingPct: 15,
-          anchors: { create: [{ closingPct: 5, rate: 10 }, { closingPct: 15, rate: 20 }] },
+          anchors: {
+            create: [
+              { closingPct: 5, rate: 10 },
+              { closingPct: 15, rate: 20 },
+            ],
+          },
         },
       });
       await prisma.ratingSettings.update({

@@ -37,6 +37,7 @@ import { CreditLedgerEntryType, SettlementPaymentStatus } from '@prisma/client';
 
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
+import { callInProgressWhere } from '../live/in-progress.js';
 import { calendarDayBounds, currentCalendarDay } from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 import {
@@ -214,27 +215,12 @@ const NOT_ENROLLED_VIEW: Omit<
 };
 
 /**
- * What "connected to an agent at this instant" means, without the agency.
- *
- * Answered, not ended, and not blocked. Deliberately NOT scoped to today's
- * calendar day: a call that connected at 23:58 and is still up at 00:02 is
- * still in progress, and dropping it because the Delivery Day rolled over would
- * show an empty floor to a principal watching a live one.
- *
- * Exported without the tenant so the cross-agency reading -- "how many agencies
- * are delivering right now" -- can ask it of several tenants in one query
- * rather than restating the predicate. One definition; two scopes.
+ * Calls in progress for one agency: `callInProgressWhere`, the rule every live
+ * screen shares. Deliberately NOT scoped to today's calendar day: a call that
+ * connected at 23:58 and is still up at 00:02 is still in progress.
  */
-export const CALL_IN_PROGRESS: Prisma.CallWhereInput = {
-  direction: 'INBOUND',
-  blocked: false,
-  answeredAt: { not: null },
-  endedAt: null,
-};
-
-/** The same predicate, for one agency. */
-function callsInProgressWhere(tenantId: string): Prisma.CallWhereInput {
-  return { tenantId, ...CALL_IN_PROGRESS };
+function callsInProgressWhere(tenantId: string, now: Date): Prisma.CallWhereInput {
+  return { tenantId, ...callInProgressWhere(now) };
 }
 
 /**
@@ -270,7 +256,7 @@ export async function getDeliveryToday(
           createdAt: { gte: bounds.start, lt: bounds.endExclusive },
         },
       }),
-      prisma.call.count({ where: callsInProgressWhere(tenantId) }),
+      prisma.call.count({ where: callsInProgressWhere(tenantId, now) }),
     ]);
 
     return {
@@ -299,35 +285,35 @@ export async function getDeliveryToday(
     profile,
     openCredits,
   ] = await Promise.all([
-      getRatingSummary(tenantId, { prisma, now }),
-      // `record: false` -- reading a screen is not a delivery decision, and a
-      // page refresh must not be able to raise a delivery hold event or send a
-      // notification.
-      evaluateDeliveryGate(tenantId, { prisma, now, record: false }),
-      creditBalance(prisma, tenantId),
-      ledgerCountsForDay(prisma, tenantId, today),
-      measureCalendarDay(
-        { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+    getRatingSummary(tenantId, { prisma, now }),
+    // `record: false` -- reading a screen is not a delivery decision, and a
+    // page refresh must not be able to raise a delivery hold event or send a
+    // notification.
+    evaluateDeliveryGate(tenantId, { prisma, now, record: false }),
+    creditBalance(prisma, tenantId),
+    ledgerCountsForDay(prisma, tenantId, today),
+    measureCalendarDay(
+      { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+      tenantId,
+      today
+    ),
+    prisma.call.count({
+      where: {
         tenantId,
-        today
-      ),
-      prisma.call.count({
-        where: {
-          tenantId,
-          direction: 'INBOUND',
-          blocked: false,
-          createdAt: { gte: bounds.start, lt: bounds.endExclusive },
-        },
-      }),
-      prisma.call.count({ where: callsInProgressWhere(tenantId) }),
-      prisma.deliveryHoldEvent.findFirst({
-        where: { tenantId, deliveryDay: today },
-        orderBy: { occurredAt: 'asc' },
-        select: { occurredAt: true },
-      }),
-      prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
-      openLotCredits(prisma, tenantId),
-    ]);
+        direction: 'INBOUND',
+        blocked: false,
+        createdAt: { gte: bounds.start, lt: bounds.endExclusive },
+      },
+    }),
+    prisma.call.count({ where: callsInProgressWhere(tenantId, now) }),
+    prisma.deliveryHoldEvent.findFirst({
+      where: { tenantId, deliveryDay: today },
+      orderBy: { occurredAt: 'asc' },
+      select: { occurredAt: true },
+    }),
+    prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
+    openLotCredits(prisma, tenantId),
+  ]);
 
   /*
    * Tonight's rate: the one the settlement will derive, which is the same rate

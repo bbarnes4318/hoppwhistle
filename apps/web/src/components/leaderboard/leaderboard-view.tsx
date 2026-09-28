@@ -18,6 +18,7 @@ import {
   ToolbarMeta,
   ToolbarSelect,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import {
   Board,
   Records,
@@ -227,6 +228,8 @@ export function LeaderboardView(): JSX.Element {
 
   return (
     <div className="page-canvas">
+      <PageHeader description="Your agents ranked by applications, closing and calls over the period." />
+
       {/* Period, the measured range and the page's actions on one row. */}
       <Toolbar aria-label="Leaderboard period">
         <ToolbarSelect
@@ -309,6 +312,7 @@ export function LeaderboardView(): JSX.Element {
             </div>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatTile
+                size="hero"
                 label="Conversion"
                 figure={pct(data.agency.conversionPct, 1)}
                 data-figure-label="Conversion"
@@ -320,6 +324,7 @@ export function LeaderboardView(): JSX.Element {
                 title="Applications as a share of UNIQUE inbound callers. A caller who rings back four times is one opportunity, not four."
               />
               <StatTile
+                size="hero"
                 label="Closing"
                 figure={pct(data.agency.closingPct, 1)}
                 data-figure-label="Closing"
@@ -328,6 +333,7 @@ export function LeaderboardView(): JSX.Element {
                 title="Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
               />
               <StatTile
+                size="hero"
                 label="Inbound calls"
                 figure={count(data.agency.inboundCalls)}
                 data-figure-label="Inbound calls"
@@ -340,6 +346,7 @@ export function LeaderboardView(): JSX.Element {
               />
               {showOutbound ? (
                 <StatTile
+                  size="hero"
                   label="Outbound calls"
                   figure={count(data.agency.outboundCalls)}
                   data-figure-label="Outbound calls"
@@ -348,6 +355,7 @@ export function LeaderboardView(): JSX.Element {
                 />
               ) : (
                 <StatTile
+                  size="hero"
                   label="Unique callers"
                   figure={count(data.agency.uniqueInboundCallers)}
                   data-figure-label="Unique callers"

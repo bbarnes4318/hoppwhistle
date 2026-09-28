@@ -378,22 +378,44 @@ function CampaignsPage() {
                         </TableCell>
 
                         {/* Live */}
-                        <TableCell className="text-right tabular-nums font-medium text-live-ink">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            (campaignStats?.liveCount ?? 0) > 0
+                              ? 'font-medium text-live-ink'
+                              : 'text-ink-3'
+                          )}
+                        >
                           {campaignStats?.liveCount ?? 0}
                         </TableCell>
 
                         {/* Hour */}
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            !campaignStats?.hourCount && 'text-ink-3'
+                          )}
+                        >
                           {campaignStats?.hourCount ?? 0}
                         </TableCell>
 
                         {/* Day */}
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            !campaignStats?.dayCount && 'text-ink-3'
+                          )}
+                        >
                           {campaignStats?.dayCount ?? 0}
                         </TableCell>
 
                         {/* Month */}
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            !campaignStats?.monthCount && 'text-ink-3'
+                          )}
+                        >
                           {campaignStats?.monthCount ?? 0}
                         </TableCell>
 

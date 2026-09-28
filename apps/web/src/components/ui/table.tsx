@@ -3,10 +3,15 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Table — a sticky, sunken header of label-style column heads, 44px rows
- * divided by hairlines, and a row hover. The container rounds to the card
- * radius and scrolls sideways on its own, so a wide ledger never pushes the
- * page body into a horizontal scroll.
+ * Table — a sticky header of 12px sentence-case column heads in ink-2, 14px
+ * body, 44px rows divided by hairlines, no zebra, and a sunken row hover. The
+ * container rounds to the card radius and scrolls sideways on its own, so a
+ * wide ledger never pushes the page body into a horizontal scroll; below
+ * 1024px the first column stays pinned while the rest scroll under it
+ * (`data-pin-first`, styled in globals.css).
+ *
+ * Numbers are right-aligned with tabular figures: give the head and the cell
+ * `text-right` and the cell inherits `tabular-nums` from the table.
  */
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
@@ -15,7 +20,12 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
     // overflow-y to auto as well, and sub-pixel rounding under display scaling
     // then draws a vertical scrollbar inside a one-row table.
     <div className="relative w-full overflow-x-auto overflow-y-hidden rounded-card">
-      <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
+      <table
+        ref={ref}
+        data-pin-first=""
+        className={cn('w-full caption-bottom text-[14px] tabular-nums', className)}
+        {...props}
+      />
     </div>
   )
 );
@@ -28,7 +38,7 @@ const TableHeader = React.forwardRef<
   <thead
     ref={ref}
     className={cn(
-      'sticky top-0 z-10 bg-sunken [&_tr]:border-b [&_tr]:border-rule [&_tr:hover]:bg-transparent',
+      'sticky top-0 z-10 bg-surface [&_tr]:border-b [&_tr]:border-rule-strong [&_tr:hover]:bg-transparent',
       className
     )}
     {...props}
@@ -77,7 +87,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-10 whitespace-nowrap bg-sunken px-3 text-left align-middle t-label text-ink-3 [&:has([role=checkbox])]:pr-0',
+      'h-10 whitespace-nowrap bg-surface px-3 text-left align-middle t-caption text-ink-2 [&:has([role=checkbox])]:pr-0',
       className
     )}
     {...props}

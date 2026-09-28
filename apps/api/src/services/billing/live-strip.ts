@@ -49,14 +49,10 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
+import { callInProgressWhere } from '../live/in-progress.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 
-import {
-  CALL_IN_PROGRESS,
-  getAgentSelfView,
-  getDeliveryToday,
-  getPlatformOverview,
-} from './delivery-view.js';
+import { getAgentSelfView, getDeliveryToday, getPlatformOverview } from './delivery-view.js';
 
 /**
  * Why a figure is absent.
@@ -127,8 +123,7 @@ export interface AgencyStrip {
   unavailable: UnavailableReasons;
 }
 
-const NO_CALLS_TODAY =
-  'No calls have been answered today, so there is nothing to convert yet.';
+const NO_CALLS_TODAY = 'No calls have been answered today, so there is nothing to convert yet.';
 
 const NO_RATE_IN_FORCE =
   'There is no rate in force for this agency today: it is under review, or no ' +
@@ -336,15 +331,18 @@ export async function getPlatformStrip(
 
   const [deliveringNow, projections] = await Promise.all([
     /*
-     * One grouped query rather than one per tenant. `CALL_IN_PROGRESS` is the
-     * agency panel's own predicate with the tenant left off, so "delivering
+     * One grouped query rather than one per tenant. `callInProgressWhere` is
+     * the agency panel's own predicate with the tenant left off, so "delivering
      * right now" means here exactly what "in progress now" means there.
      */
     production.length === 0
       ? Promise.resolve([] as Array<{ tenantId: string }>)
       : prisma.call.groupBy({
           by: ['tenantId'],
-          where: { ...CALL_IN_PROGRESS, tenantId: { in: production.map(row => row.tenantId) } },
+          where: {
+            ...callInProgressWhere(now),
+            tenantId: { in: production.map(row => row.tenantId) },
+          },
         }),
     // The projection an agency's own /delivery shows it, per agency, summed.
     Promise.all(enrolled.map(row => getDeliveryToday(row.tenantId, { prisma, now }))),

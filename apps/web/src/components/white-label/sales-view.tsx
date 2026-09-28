@@ -6,7 +6,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { count, dollars, duration, pct } from '@/components/delivery/ledger';
 import {
+  Dollars,
   EmptyState,
+  EntityBadge,
   Notice,
   Panel,
   PanelBody,
@@ -187,65 +189,70 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
 
   return (
     <>
-      <section
-        className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7"
-        aria-label="Sales KPIs"
-      >
-        <StatTile
-          label="Revenue"
-          figure={dollars(totals.revenue)}
-          data-figure-label="Revenue"
-          data-figure-value={dollars(totals.revenue)}
-          tone="money"
-          sub="billed to buyers"
-        />
-        <StatTile
-          label="Profit"
-          figure={dollars(totals.profit)}
-          data-figure-label="Profit"
-          data-figure-value={dollars(totals.profit)}
-          tone="money"
-          sub={`after ${dollars(totals.publisherPayouts)} in payouts`}
-        />
-        <StatTile
-          label={callCostLabel(totals.callCostEstimated)}
-          figure={dollars(totals.callCost)}
-          data-figure-label={callCostLabel(totals.callCostEstimated)}
-          data-figure-value={dollars(totals.callCost)}
-          tone="money"
-          sub={
-            totals.callCostEstimated
-              ? 'some calls priced at the per-minute estimate'
-              : 'carrier minutes'
-          }
-        />
-        <StatTile
-          label="Margin"
-          figure={pct(totals.marginPct, 1)}
-          data-figure-label="Margin"
-          data-figure-value={pct(totals.marginPct, 1)}
-          sub="profit ÷ revenue"
-        />
-        <StatTile
-          label="Billable to buyers"
-          figure={count(totals.billableToBuyers)}
-          data-figure-label="Billable to buyers"
-          data-figure-value={count(totals.billableToBuyers)}
-          sub={`of ${count(totals.sentToBuyers)} sent`}
-        />
-        <StatTile
-          label="Sell-through"
-          figure={pct(totals.sellThroughPct, 1)}
-          data-figure-label="Sell-through"
-          data-figure-value={pct(totals.sellThroughPct, 1)}
-          sub="billable ÷ sent to buyers"
-        />
-        <StatTile
-          label="Revenue per billable call"
-          figure={dollars(totals.revenuePerBillableCall)}
-          data-figure-label="Revenue per billable call"
-          data-figure-value={dollars(totals.revenuePerBillableCall)}
-        />
+      <section className="flex flex-col gap-4" aria-label="Sales KPIs">
+        {/* The four numbers the period is about, then the ones that explain them. */}
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <StatTile
+            size="hero"
+            label="Revenue"
+            figure={dollars(totals.revenue)}
+            data-figure-label="Revenue"
+            data-figure-value={dollars(totals.revenue)}
+            tone="money"
+            sub="Billed to buyers"
+          />
+          <StatTile
+            size="hero"
+            label="Profit"
+            figure={dollars(totals.profit)}
+            data-figure-label="Profit"
+            data-figure-value={dollars(totals.profit)}
+            tone="money"
+            sub={`After ${dollars(totals.publisherPayouts)} in payouts`}
+          />
+          <StatTile
+            size="hero"
+            label="Margin"
+            figure={pct(totals.marginPct, 1)}
+            data-figure-label="Margin"
+            data-figure-value={pct(totals.marginPct, 1)}
+            sub="Profit ÷ revenue"
+          />
+          <StatTile
+            size="hero"
+            label="Billable to buyers"
+            figure={count(totals.billableToBuyers)}
+            data-figure-label="Billable to buyers"
+            data-figure-value={count(totals.billableToBuyers)}
+            sub={`Of ${count(totals.sentToBuyers)} sent`}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatTile
+            label={callCostLabel(totals.callCostEstimated)}
+            figure={dollars(totals.callCost)}
+            data-figure-label={callCostLabel(totals.callCostEstimated)}
+            data-figure-value={dollars(totals.callCost)}
+            sub={
+              totals.callCostEstimated
+                ? 'Some calls priced at the per-minute estimate'
+                : 'Carrier minutes'
+            }
+          />
+          <StatTile
+            label="Sell-through"
+            figure={pct(totals.sellThroughPct, 1)}
+            data-figure-label="Sell-through"
+            data-figure-value={pct(totals.sellThroughPct, 1)}
+            sub="Billable ÷ sent to buyers"
+          />
+          <StatTile
+            label="Revenue per billable call"
+            figure={dollars(totals.revenuePerBillableCall)}
+            data-figure-label="Revenue per billable call"
+            data-figure-value={dollars(totals.revenuePerBillableCall)}
+          />
+        </div>
       </section>
 
       <WhereCallsWent
@@ -282,9 +289,9 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                     <TableCell className="font-medium">
                       <Link
                         href={`/buyers?id=${encodeURIComponent(row.buyerId)}`}
-                        className="text-brand-ink hover:underline"
+                        className="hover:underline"
                       >
-                        {row.buyerName}
+                        <EntityBadge kind="buyer" name={row.buyerName} />
                       </Link>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{count(row.calls)}</TableCell>
@@ -293,7 +300,7 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                       {pct(row.billablePct, 1)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {dollars(row.revenue)}
+                      <Dollars value={row.revenue} />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.avgConnectedSeconds === null ? '—' : duration(row.avgConnectedSeconds)}
@@ -352,9 +359,11 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                     <TableCell className="text-right tabular-nums">
                       {count(row.billableToBuyers)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{dollars(row.payout)}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {dollars(row.revenue)}
+                      <Dollars value={row.payout} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <Dollars value={row.revenue} />
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -362,7 +371,7 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                         row.profit < 0 ? 'text-dropped-ink' : 'text-money-ink'
                       )}
                     >
-                      {dollars(row.profit)}
+                      <Dollars value={row.profit} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -403,9 +412,15 @@ function SalesBody({ data }: { data: CallSalesSummary }): JSX.Element {
                   >
                     {count(row.billable)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{dollars(row.revenue)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{dollars(row.payout)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{dollars(row.profit)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <Dollars value={row.revenue} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <Dollars value={row.payout} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <Dollars value={row.profit} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

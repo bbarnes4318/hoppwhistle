@@ -19,6 +19,7 @@ import {
   StatTileRow,
   StatusChip,
 } from '@/components/domain';
+import { useClaimPageTitle } from '@/components/layout/use-page-title';
 import { ChildStatementButton } from '@/components/statements/statements-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -101,6 +102,9 @@ function dayLabel(day: string): string {
 export default function NetworkAgencyPage(): JSX.Element {
   const params = useParams<{ tenantId: string }>();
   const tenantId = typeof params?.tenantId === 'string' ? params.tenantId : '';
+
+  // The agency's name is this page's title, so the topbar leaves its own out.
+  useClaimPageTitle(true);
 
   const state = usePeriod('THIS_MONTH');
   const { sendable, query } = state;
@@ -211,25 +215,28 @@ export default function NetworkAgencyPage(): JSX.Element {
       <StatTileRow className="lg:grid-cols-5">
         <StatTile label="Agents" value={count(detail?.stats.agents)} loading={!detail} />
         <StatTile
+          size="hero"
           label="Inbound calls"
           value={count(detail?.stats.inboundCalls)}
           loading={!detail}
         />
         <StatTile
+          size="hero"
           label="Answered by agents"
           value={count(detail?.stats.answeredByAgents)}
           loading={!detail}
         />
         <StatTile
+          size="hero"
           label="Applications"
           value={count(detail?.stats.applications)}
           loading={!detail}
         />
         <StatTile
+          size="hero"
           label="Closing"
           value={pct(detail?.stats.closingPct, 1)}
           sub="Applications per answered call"
-          emphasis
           loading={!detail}
         />
       </StatTileRow>
@@ -483,7 +490,7 @@ function DetailsPanel({
           <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map(([label, value]) => (
               <div key={label} className="min-w-0">
-                <dt className="t-label text-ink-3">{label}</dt>
+                <dt className="t-caption text-ink-2">{label}</dt>
                 <dd className="t-body break-words text-ink">{value || '—'}</dd>
               </div>
             ))}
@@ -503,7 +510,7 @@ function DetailsPanel({
               {field('deliveryTimeZone', 'Time zone')}
             </div>
             <fieldset>
-              <legend className="t-label text-ink-3">Days it takes calls</legend>
+              <legend className="t-caption text-ink-2">Days it takes calls</legend>
               <div className="mt-1 flex flex-wrap gap-2">
                 {DAYS.map(day => {
                   const on = form.deliveryDays.includes(day);

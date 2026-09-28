@@ -74,7 +74,7 @@ export function StatementsView(): JSX.Element {
       />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <span className="t-label text-ink-3">A buyer&rsquo;s or publisher&rsquo;s statement</span>
+        <span className="t-caption text-ink-2">A buyer&rsquo;s or publisher&rsquo;s statement</span>
         <Select value={pick} onValueChange={setPick}>
           <SelectTrigger className="h-8 w-full sm:w-72" aria-label="Buyer or publisher">
             <SelectValue placeholder="Choose a buyer or publisher" />

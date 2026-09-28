@@ -1,10 +1,18 @@
 'use client';
 
-import { Download, Loader2, RefreshCw, TrendingUp, DollarSign, Phone, Users } from 'lucide-react';
+import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
-import { Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import {
+  Dollars,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+  StatTile,
+  tileDollars,
+} from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +37,11 @@ import { PeriodToolbar, usePeriod } from '@/components/white-label/period-toolba
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+/** A report total for a tile: whole dollars from $1,000, zero until the report loads. */
+function reportDollars(value: number | string | null | undefined): string {
+  return tileDollars(value === null || value === undefined ? 0 : Number(value));
+}
 
 /**
  * The period part of an export's file name: the custom range's two days, or
@@ -420,108 +433,59 @@ function ReportsPage() {
         {/* Tab 1: Campaign Profitability */}
         {showProfitability && (
           <TabsContent value="campaign-profitability" className="m-0 w-full flex flex-col gap-2.5">
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-shrink-0">
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
-                  <span>Total Revenue</span>
-                  <DollarSign className="h-3 w-3 text-live-ink" />
-                </div>
-                <div className="text-base font-bold text-ink mt-1">
-                  $
-                  {profitReport
-                    ? Number(profitReport.totals.buyerRevenue).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })
-                    : '0.00'}
-                </div>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
-                  <span>Publisher Payout</span>
-                  <Users className="h-3 w-3 text-ringing-ink" />
-                </div>
-                <div className="text-base font-bold text-ringing-ink mt-1">
-                  $
-                  {profitReport
-                    ? Number(profitReport.totals.publisherPayout).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })
-                    : '0.00'}
-                </div>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
-                  <span>Routing Cost</span>
-                  <Phone className="h-3 w-3 text-dropped-ink" />
-                </div>
-                <div className="text-base font-bold text-dropped-ink mt-1">
-                  $
-                  {profitReport
-                    ? Number(profitReport.totals.callCost).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })
-                    : '0.00'}
-                </div>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3 flex items-center justify-between">
-                  <span>Net Profit</span>
-                  <TrendingUp className="h-3 w-3 text-live-ink" />
-                </div>
-                <div className="text-base font-bold text-live-ink mt-1 flex items-baseline justify-between">
-                  <span>
-                    $
-                    {profitReport
-                      ? Number(profitReport.totals.profit).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      : '0.00'}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      't-meta px-1.5 py-0 border-none',
-                      profitReport && profitReport.totals.margin >= 0
-                        ? 'text-live-ink bg-live-tint'
-                        : 'text-dropped-ink bg-dropped-tint'
-                    )}
-                  >
-                    {profitReport ? (profitReport.totals.margin * 100).toFixed(0) : '0'}% Marg
-                  </Badge>
-                </div>
-              </div>
+            {/* The report's four figures */}
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatTile
+                size="hero"
+                label="Revenue"
+                tone="money"
+                figure={reportDollars(profitReport?.totals.buyerRevenue)}
+              />
+              <StatTile
+                size="hero"
+                label="Publisher payout"
+                figure={reportDollars(profitReport?.totals.publisherPayout)}
+              />
+              <StatTile
+                size="hero"
+                label="Routing cost"
+                figure={reportDollars(profitReport?.totals.callCost)}
+              />
+              <StatTile
+                size="hero"
+                label="Net profit"
+                tone="money"
+                figure={reportDollars(profitReport?.totals.profit)}
+                sub={
+                  profitReport
+                    ? `${(profitReport.totals.margin * 100).toFixed(0)}% margin`
+                    : undefined
+                }
+              />
             </div>
 
             {/* Detailed Table Card */}
             <Panel className="min-w-0 overflow-hidden">
               <PanelHeader>
-                <PanelTitle>Profit & Margin Ledger</PanelTitle>
+                <PanelTitle>Profit and margin by campaign</PanelTitle>
               </PanelHeader>
               <PanelBody flush>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Campaign</TableHead>
-                      <TableHead className="text-right">Total Calls</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
                       <TableHead className="text-right">Connected</TableHead>
                       <TableHead className="text-right">Billable</TableHead>
-                      <TableHead className="text-right">Revenue ($)</TableHead>
-                      <TableHead className="text-right">Payout ($)</TableHead>
-                      <TableHead className="text-right">Call Cost ($)</TableHead>
-                      <TableHead className="text-right">Fees ($)</TableHead>
-                      <TableHead className="text-right">Profit ($)</TableHead>
-                      <TableHead className="text-right">Margin (%)</TableHead>
-                      <TableHead className="text-right">Disputes ($)</TableHead>
-                      <TableHead className="text-right">Adj ($)</TableHead>
-                      <TableHead className="text-right">Net Payable ($)</TableHead>
+                      <TableHead className="text-right">Revenue</TableHead>
+                      <TableHead className="text-right">Payout</TableHead>
+                      <TableHead className="text-right">Call cost</TableHead>
+                      <TableHead className="text-right">Fees</TableHead>
+                      <TableHead className="text-right">Profit</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
+                      <TableHead className="text-right">Disputes</TableHead>
+                      <TableHead className="text-right">Adjustments</TableHead>
+                      <TableHead className="text-right">Net payable</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -550,28 +514,28 @@ function ReportsPage() {
                             <TableCell className="text-right tabular-nums text-ink-3">
                               {row.connectedCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-money-ink font-medium">
+                            <TableCell className="text-right tabular-nums font-medium">
                               {row.billableCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-live-ink">
-                              ${Number(row.buyerRevenue).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.buyerRevenue)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-ringing-ink">
-                              ${Number(row.publisherPayout).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.publisherPayout)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-dropped-ink">
-                              ${Number(row.callCost).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.callCost)} />
                             </TableCell>
                             <TableCell className="text-right tabular-nums text-ink-3">
-                              ${Number(row.otherCosts).toFixed(2)}
+                              <Dollars value={Number(row.otherCosts)} />
                             </TableCell>
                             <TableCell
                               className={cn(
                                 'text-right tabular-nums font-medium',
-                                Number(row.profit) >= 0 ? 'text-live-ink' : 'text-dropped-ink'
+                                Number(row.profit) < 0 && 'text-dropped-ink'
                               )}
                             >
-                              ${Number(row.profit).toFixed(2)}
+                              <Dollars value={Number(row.profit)} />
                             </TableCell>
                             <TableCell className="text-right">
                               <Badge
@@ -587,28 +551,26 @@ function ReportsPage() {
                               </Badge>
                             </TableCell>
                             <TableCell
-                              className="text-right tabular-nums text-ringing-ink"
+                              className="text-right tabular-nums"
                               title={`${row.disputesCount} disputes`}
                             >
-                              ${Number(row.disputes).toFixed(2)}
+                              <Dollars value={Number(row.disputes)} />
                             </TableCell>
                             <TableCell
                               className={cn(
                                 'text-right tabular-nums',
-                                Number(row.adjustments) >= 0 ? 'text-live-ink' : 'text-dropped-ink'
+                                Number(row.adjustments) < 0 && 'text-dropped-ink'
                               )}
                             >
-                              ${Number(row.adjustments).toFixed(2)}
+                              <Dollars value={Number(row.adjustments)} />
                             </TableCell>
                             <TableCell
                               className={cn(
                                 'text-right tabular-nums font-bold',
-                                Number(row.netPayableReceivable) >= 0
-                                  ? 'text-live-ink'
-                                  : 'text-dropped-ink'
+                                Number(row.netPayableReceivable) < 0 && 'text-dropped-ink'
                               )}
                             >
-                              ${Number(row.netPayableReceivable).toFixed(2)}
+                              <Dollars value={Number(row.netPayableReceivable)} />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -621,30 +583,28 @@ function ReportsPage() {
                           <TableCell className="text-right tabular-nums">
                             {profitReport.totals.connectedCalls}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-money-ink">
+                          <TableCell className="text-right tabular-nums">
                             {profitReport.totals.billableCalls}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-live-ink">
-                            ${Number(profitReport.totals.buyerRevenue).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(profitReport.totals.buyerRevenue)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-ringing-ink">
-                            ${Number(profitReport.totals.publisherPayout).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(profitReport.totals.publisherPayout)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-dropped-ink">
-                            ${Number(profitReport.totals.callCost).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(profitReport.totals.callCost)} />
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-ink-3">
-                            ${Number(profitReport.totals.otherCosts).toFixed(2)}
+                            <Dollars value={Number(profitReport.totals.otherCosts)} />
                           </TableCell>
                           <TableCell
                             className={cn(
                               'text-right tabular-nums',
-                              Number(profitReport.totals.profit) >= 0
-                                ? 'text-live-ink'
-                                : 'text-dropped-ink'
+                              Number(profitReport.totals.profit) < 0 && 'text-dropped-ink'
                             )}
                           >
-                            ${Number(profitReport.totals.profit).toFixed(2)}
+                            <Dollars value={Number(profitReport.totals.profit)} />
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge
@@ -659,28 +619,25 @@ function ReportsPage() {
                               {(profitReport.totals.margin * 100).toFixed(0)}%
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-ringing-ink">
-                            ${Number(profitReport.totals.disputes).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(profitReport.totals.disputes)} />
                           </TableCell>
                           <TableCell
                             className={cn(
                               'text-right tabular-nums',
-                              Number(profitReport.totals.adjustments) >= 0
-                                ? 'text-live-ink'
-                                : 'text-dropped-ink'
+                              Number(profitReport.totals.adjustments) < 0 && 'text-dropped-ink'
                             )}
                           >
-                            ${Number(profitReport.totals.adjustments).toFixed(2)}
+                            <Dollars value={Number(profitReport.totals.adjustments)} />
                           </TableCell>
                           <TableCell
                             className={cn(
                               'text-right tabular-nums font-extrabold',
-                              Number(profitReport.totals.netPayableReceivable) >= 0
-                                ? 'text-live-ink'
-                                : 'text-dropped-ink'
+                              Number(profitReport.totals.netPayableReceivable) < 0 &&
+                                'text-dropped-ink'
                             )}
                           >
-                            ${Number(profitReport.totals.netPayableReceivable).toFixed(2)}
+                            <Dollars value={Number(profitReport.totals.netPayableReceivable)} />
                           </TableCell>
                         </TableRow>
                       </>
@@ -695,69 +652,50 @@ function ReportsPage() {
         {/* Tab 2: Publisher Revenue */}
         {showPublisherRevenue && (
           <TabsContent value="publisher-revenue" className="m-0 w-full flex flex-col gap-2.5">
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Inbound Calls</div>
-                <div className="text-base font-bold text-ink mt-1">
-                  {pubReport ? pubReport.totals.totalCalls.toLocaleString() : '0'}
-                </div>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
-                <div>
-                  <div className="t-label text-ink-3">Billable Calls</div>
-                  <div className="text-base font-bold text-live-ink mt-1">
-                    {pubReport ? pubReport.totals.billableCalls.toLocaleString() : '0'}
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="t-meta tabular px-1 py-0 border-none text-live-ink bg-live-tint"
-                >
-                  {pubReport && pubReport.totals.totalCalls > 0
-                    ? (
-                        (pubReport.totals.billableCalls / pubReport.totals.totalCalls) *
-                        100
-                      ).toFixed(0)
-                    : '0'}
-                  % Rate
-                </Badge>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Earnings</div>
-                <div className="text-base font-bold text-live-ink mt-1">
-                  $
-                  {pubReport
-                    ? Number(pubReport.totals.publisherRevenue).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })
-                    : '0.00'}
-                </div>
-              </div>
+            {/* The report's three figures */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatTile
+                size="hero"
+                label="Inbound calls"
+                figure={(pubReport?.totals.totalCalls ?? 0).toLocaleString()}
+              />
+              <StatTile
+                size="hero"
+                label="Billable calls"
+                figure={(pubReport?.totals.billableCalls ?? 0).toLocaleString()}
+                sub={
+                  pubReport && pubReport.totals.totalCalls > 0
+                    ? `${((pubReport.totals.billableCalls / pubReport.totals.totalCalls) * 100).toFixed(0)}% of inbound`
+                    : undefined
+                }
+              />
+              <StatTile
+                size="hero"
+                label="Publisher earnings"
+                tone="money"
+                figure={reportDollars(pubReport?.totals.publisherRevenue)}
+              />
             </div>
 
             {/* Detailed Table Card */}
             <Panel className="min-w-0 overflow-hidden">
               <PanelHeader>
-                <PanelTitle>Publisher Revenue Ledger</PanelTitle>
+                <PanelTitle>Publisher earnings by campaign</PanelTitle>
               </PanelHeader>
               <PanelBody flush>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Publisher Name</TableHead>
-                      <TableHead>Campaign Name</TableHead>
-                      <TableHead className="text-right">Total Calls</TableHead>
-                      <TableHead className="text-right">Billable Calls</TableHead>
-                      <TableHead className="text-right">Non-Billable</TableHead>
-                      <TableHead className="text-right">Payout Rate ($)</TableHead>
-                      <TableHead className="text-right">Earnings ($)</TableHead>
-                      <TableHead className="text-right">Paid ($)</TableHead>
-                      <TableHead className="text-right">Pending ($)</TableHead>
-                      <TableHead className="text-right">Held/Disputed ($)</TableHead>
+                      <TableHead>Publisher</TableHead>
+                      <TableHead>Campaign</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Billable calls</TableHead>
+                      <TableHead className="text-right">Not billable</TableHead>
+                      <TableHead className="text-right">Payout rate</TableHead>
+                      <TableHead className="text-right">Earnings</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Pending</TableHead>
+                      <TableHead className="text-right">Held or disputed</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -784,26 +722,26 @@ function ReportsPage() {
                             <TableCell className="text-right tabular-nums">
                               {row.totalCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-live-ink font-medium">
+                            <TableCell className="text-right tabular-nums font-medium">
                               {row.billableCalls}
                             </TableCell>
                             <TableCell className="text-right tabular-nums text-ink-3">
                               {row.nonBillableCalls}
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-xs text-ink-3">
-                              ${Number(row.payoutRate).toFixed(2)}
+                              <Dollars value={Number(row.payoutRate)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-bold text-live-ink">
-                              ${Number(row.earnings).toFixed(2)}
+                            <TableCell className="text-right tabular-nums font-bold">
+                              <Dollars value={Number(row.earnings)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-live-ink">
-                              ${Number(row.paid).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.paid)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-ringing-ink">
-                              ${Number(row.pending).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.pending)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-dropped-ink">
-                              ${Number(row.held).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.held)} />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -813,24 +751,24 @@ function ReportsPage() {
                           <TableCell className="text-right tabular-nums">
                             {pubReport.totals.totalCalls}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-live-ink">
+                          <TableCell className="text-right tabular-nums">
                             {pubReport.totals.billableCalls}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-ink-3">
                             {pubReport.totals.nonBillableCalls}
                           </TableCell>
                           <TableCell className="text-right">—</TableCell>
-                          <TableCell className="text-right tabular-nums text-lg text-live-ink">
-                            ${Number(pubReport.totals.earnings).toFixed(2)}
+                          <TableCell className="text-right tabular-nums text-lg">
+                            <Dollars value={Number(pubReport.totals.earnings)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-live-ink">
-                            ${Number(pubReport.totals.paid).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(pubReport.totals.paid)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-ringing-ink">
-                            ${Number(pubReport.totals.pending).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(pubReport.totals.pending)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-dropped-ink">
-                            ${Number(pubReport.totals.held).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(pubReport.totals.held)} />
                           </TableCell>
                         </TableRow>
                       </>
@@ -845,72 +783,53 @@ function ReportsPage() {
         {/* Tab 3: Buyer Costs */}
         {showBuyerCosts && (
           <TabsContent value="buyer-costs" className="m-0 w-full flex flex-col gap-2.5">
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Inbound Calls</div>
-                <div className="text-base font-bold text-ink mt-1">
-                  {buyerReport ? buyerReport.totals.totalCalls.toLocaleString() : '0'}
-                </div>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3 flex items-center justify-between">
-                <div>
-                  <div className="t-label text-ink-3">Billable Calls</div>
-                  <div className="text-base font-bold text-live-ink mt-1">
-                    {buyerReport ? buyerReport.totals.billableCalls.toLocaleString() : '0'}
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="t-meta tabular px-1 py-0 border-none text-live-ink bg-live-tint"
-                >
-                  {buyerReport && buyerReport.totals.totalCalls > 0
-                    ? (
-                        (buyerReport.totals.billableCalls / buyerReport.totals.totalCalls) *
-                        100
-                      ).toFixed(0)
-                    : '0'}
-                  % Conv
-                </Badge>
-              </div>
-
-              <div className="rounded-card border border-rule bg-surface shadow-card p-3">
-                <div className="t-label text-ink-3">Total Buyer Cost</div>
-                <div className="text-base font-bold text-dropped-ink mt-1">
-                  $
-                  {buyerReport
-                    ? Number(buyerReport.totals.buyerCost).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })
-                    : '0.00'}
-                </div>
-              </div>
+            {/* The report's three figures */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatTile
+                size="hero"
+                label="Inbound calls"
+                figure={(buyerReport?.totals.totalCalls ?? 0).toLocaleString()}
+              />
+              <StatTile
+                size="hero"
+                label="Billable calls"
+                figure={(buyerReport?.totals.billableCalls ?? 0).toLocaleString()}
+                sub={
+                  buyerReport && buyerReport.totals.totalCalls > 0
+                    ? `${((buyerReport.totals.billableCalls / buyerReport.totals.totalCalls) * 100).toFixed(0)}% of inbound`
+                    : undefined
+                }
+              />
+              <StatTile
+                size="hero"
+                label="Buyer cost"
+                tone="money"
+                figure={reportDollars(buyerReport?.totals.buyerCost)}
+              />
             </div>
 
             {/* Detailed Table Card */}
             <Panel className="min-w-0 overflow-hidden">
               <PanelHeader>
-                <PanelTitle>Buyer Costs Ledger</PanelTitle>
+                <PanelTitle>Buyer costs by campaign</PanelTitle>
               </PanelHeader>
               <PanelBody flush>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Buyer Name</TableHead>
-                      <TableHead>Campaign Name</TableHead>
-                      <TableHead>Destination DID</TableHead>
-                      <TableHead className="text-right">Total Calls</TableHead>
-                      <TableHead className="text-right">Billable Calls</TableHead>
-                      <TableHead className="text-right">Billable (%)</TableHead>
-                      <TableHead className="text-right">Avg Duration</TableHead>
-                      <TableHead className="text-right">Rate ($)</TableHead>
-                      <TableHead className="text-right">Cost ($)</TableHead>
-                      <TableHead className="text-right">Wallet Debits ($)</TableHead>
-                      <TableHead className="text-right">Invoiced ($)</TableHead>
-                      <TableHead className="text-right">Pending Invoice ($)</TableHead>
-                      <TableHead className="text-right">Disputes ($)</TableHead>
+                      <TableHead>Buyer</TableHead>
+                      <TableHead>Campaign</TableHead>
+                      <TableHead>Destination</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Billable calls</TableHead>
+                      <TableHead className="text-right">Billable %</TableHead>
+                      <TableHead className="text-right">Avg duration</TableHead>
+                      <TableHead className="text-right">Rate</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                      <TableHead className="text-right">Wallet debits</TableHead>
+                      <TableHead className="text-right">Invoiced</TableHead>
+                      <TableHead className="text-right">Pending invoice</TableHead>
+                      <TableHead className="text-right">Disputes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -938,7 +857,7 @@ function ReportsPage() {
                             <TableCell className="text-right tabular-nums">
                               {row.totalCalls}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-live-ink font-medium">
+                            <TableCell className="text-right tabular-nums font-medium">
                               {row.billableCalls}
                             </TableCell>
                             <TableCell className="text-right tabular-nums text-xs">
@@ -948,22 +867,22 @@ function ReportsPage() {
                               {Math.round(row.averageDuration)}s
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-xs text-ink-3">
-                              ${Number(row.pricePerBillableCall).toFixed(2)}
+                              <Dollars value={Number(row.pricePerBillableCall)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-bold text-dropped-ink">
-                              ${Number(row.buyerCost).toFixed(2)}
+                            <TableCell className="text-right tabular-nums font-bold">
+                              <Dollars value={Number(row.buyerCost)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-dropped-ink">
-                              ${Number(row.walletDebits).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.walletDebits)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-live-ink">
-                              ${Number(row.invoiced).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.invoiced)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-ringing-ink">
-                              ${Number(row.pendingInvoice).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.pendingInvoice)} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-dropped-ink">
-                              ${Number(row.disputes).toFixed(2)}
+                            <TableCell className="text-right tabular-nums">
+                              <Dollars value={Number(row.disputes)} />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -973,7 +892,7 @@ function ReportsPage() {
                           <TableCell className="text-right tabular-nums">
                             {buyerReport.totals.totalCalls}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-live-ink">
+                          <TableCell className="text-right tabular-nums">
                             {buyerReport.totals.billableCalls}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-xs">
@@ -988,20 +907,20 @@ function ReportsPage() {
                           </TableCell>
                           <TableCell className="text-right">—</TableCell>
                           <TableCell className="text-right">—</TableCell>
-                          <TableCell className="text-right tabular-nums text-lg text-dropped-ink">
-                            ${Number(buyerReport.totals.buyerCost).toFixed(2)}
+                          <TableCell className="text-right tabular-nums text-lg">
+                            <Dollars value={Number(buyerReport.totals.buyerCost)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-dropped-ink">
-                            ${Number(buyerReport.totals.walletDebits).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(buyerReport.totals.walletDebits)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-live-ink">
-                            ${Number(buyerReport.totals.invoiced).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(buyerReport.totals.invoiced)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-ringing-ink">
-                            ${Number(buyerReport.totals.pendingInvoice).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(buyerReport.totals.pendingInvoice)} />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-dropped-ink">
-                            ${Number(buyerReport.totals.disputes).toFixed(2)}
+                          <TableCell className="text-right tabular-nums">
+                            <Dollars value={Number(buyerReport.totals.disputes)} />
                           </TableCell>
                         </TableRow>
                       </>

@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { isZeroFigure, tileMoneyText } from '@/components/domain/figures';
 import { cn } from '@/lib/utils';
 
 /**
@@ -58,7 +59,7 @@ const TONE: Record<NonNullable<FigureProps['tone']>, string> = {
   dropped: 'text-dropped-ink',
   ringing: 'text-ringing-ink',
   live: 'text-live-ink',
-  money: 'text-money-ink',
+  money: 'text-brand-ink',
 };
 
 export function Figure({
@@ -86,17 +87,22 @@ export function Figure({
       data-figure-value={typeof value === 'string' ? value : undefined}
       {...props}
     >
-      <div className="t-label text-ink-3">{label}</div>
+      <div className="t-caption text-ink-2">{label}</div>
       <div
         className={cn(
           'mt-1 min-w-0 truncate',
-          size === 'hero' && 't-hero tabular',
-          size === 'figure' && 't-figure',
-          size === 'quiet' && 't-figure',
-          size === 'quiet' && tone === 'ink' ? 'text-ink-2' : TONE[tone]
+          size === 'hero' && 't-kpi-hero',
+          size === 'figure' && 't-kpi',
+          size === 'quiet' && 't-kpi',
+          // Nothing to show reads as nothing: ink-3, whatever the tone.
+          isZeroFigure(value)
+            ? 'text-ink-3'
+            : size === 'quiet' && tone === 'ink'
+              ? 'text-ink-2'
+              : TONE[tone]
         )}
       >
-        {value}
+        {typeof value === 'string' ? tileMoneyText(value) : value}
       </div>
       {sub ? <div className="t-meta mt-1 text-ink-3">{sub}</div> : null}
     </div>
@@ -177,13 +183,13 @@ export function Ledger({
     <table
       className={cn(
         'w-full border-collapse text-left t-body',
-        '[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-sunken',
-        '[&_thead_th]:h-10 [&_thead_th]:whitespace-nowrap [&_thead_th]:border-b [&_thead_th]:border-rule-strong [&_thead_th]:px-3 [&_thead_th]:align-middle [&_thead_th]:t-label [&_thead_th]:text-ink-3',
+        '[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-surface',
+        '[&_thead_th]:h-10 [&_thead_th]:whitespace-nowrap [&_thead_th]:border-b [&_thead_th]:border-rule-strong [&_thead_th]:px-3 [&_thead_th]:align-middle [&_thead_th]:t-caption [&_thead_th]:text-ink-2',
         '[&_tbody_td]:h-row [&_tbody_td]:border-b [&_tbody_td]:border-rule [&_tbody_td]:px-3 [&_tbody_td]:py-0 [&_tbody_td]:align-middle',
         '[&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-sunken',
         '[&_tbody_tr:last-child_td]:border-b-0',
         '[&_.num]:text-right [&_.num]:t-num [&_.num]:text-ink',
-        '[&_th.num]:t-label [&_th.num]:text-ink-3',
+        '[&_th.num]:t-caption [&_th.num]:text-ink-2',
         className
       )}
       {...props}

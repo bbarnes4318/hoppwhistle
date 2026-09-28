@@ -13,7 +13,9 @@ import {
   StatTile,
   StatusChip,
 } from '@/components/domain';
+import { isZeroFigure } from '@/components/domain/figures';
 import type { StatusTone } from '@/components/domain/status-chip';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLivePoll } from '@/hooks/use-live-poll';
@@ -276,7 +278,9 @@ export function AgentFloor(): JSX.Element {
   }
 
   return (
-    <div className="page-canvas space-y-4" data-testid="agent-floor">
+    <div className="page-canvas" data-testid="agent-floor">
+      <PageHeader description="Who is ready, who is on a call, and how each agent's day is going." />
+
       {error ? <Notice tone="error" title={error} /> : null}
 
       {floor && agents.length === 0 ? (
@@ -294,6 +298,7 @@ export function AgentFloor(): JSX.Element {
             {tiles.map(tile => (
               <StatTile
                 key={tile.label}
+                size={FLOOR_HEROES.has(tile.label) ? 'hero' : 'secondary'}
                 label={tile.label}
                 value={tile.value}
                 sub={tile.sub}
@@ -409,11 +414,21 @@ function AgentCard({
   );
 }
 
+/** The floor's hero figures: who can take a call now, and the day so far. */
+const FLOOR_HEROES = new Set(['Ready', 'On a call', 'Calls today', 'Applications today']);
+
 function CardFigure({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="min-w-0">
-      <dt className="t-label text-ink-3">{label}</dt>
-      <dd className="t-body tabular-nums truncate text-ink">{value}</dd>
+      <dt className="t-caption text-ink-2">{label}</dt>
+      <dd
+        className={cn(
+          't-body tabular-nums truncate',
+          isZeroFigure(value) ? 'text-ink-3' : 'text-ink'
+        )}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
@@ -547,7 +562,7 @@ function StatusLog({
 
   return (
     <section className="border-b border-rule px-4 py-3">
-      <h3 className="t-label mb-2 text-ink-3">Status log</h3>
+      <h3 className="t-caption mb-2 text-ink-2">Status log</h3>
       {events.length === 0 ? (
         <p className="t-meta text-ink-3">No status changes recorded this day.</p>
       ) : (
@@ -598,7 +613,7 @@ function statusEventLabel(status: string): string {
 function CallList({ calls }: { calls: AgentActivityCall[] }): JSX.Element {
   return (
     <section className="px-4 py-3">
-      <h3 className="t-label mb-2 text-ink-3">Calls</h3>
+      <h3 className="t-caption mb-2 text-ink-2">Calls</h3>
       {calls.length === 0 ? (
         <p className="t-meta text-ink-3">No calls answered this day.</p>
       ) : (

@@ -15,6 +15,7 @@ export type CallColumnId =
   | 'time'
   | 'callerId'
   | 'campaignName'
+  | 'wentTo'
   | 'answeredBy'
   | 'publisherName'
   | 'buyerName'
@@ -32,7 +33,6 @@ export type CallColumnId =
   | 'profit'
   | 'margin'
   | 'status'
-  | 'dispute'
   | 'recording';
 
 /** Who is looking, as far as the ledger's columns care. */
@@ -57,27 +57,33 @@ export const CALL_COLUMNS: readonly CallColumn[] = [
   { id: 'time', label: 'Time', canSee: everyone },
   { id: 'callerId', label: 'Caller', canSee: everyone },
   { id: 'campaignName', label: 'Campaign', canSee: everyone },
-  // An agent's list is their own calls, so "who answered" is always them.
+  /*
+   * Where the call went, as an entity badge: one of your agents, a buyer,
+   * nobody, or a gate. Agents and buyers told apart at a glance, which the
+   * old "Answered by" name alone never did. An agent's list is their own
+   * calls, so it is always them.
+   */
+  { id: 'wentTo', label: 'Went to', canSee: v => !v.isAgent },
   { id: 'answeredBy', label: 'Answered by', canSee: v => !v.isAgent },
   { id: 'publisherName', label: 'Publisher', canSee: v => v.isAdminOrOwner },
   { id: 'buyerName', label: 'Buyer', canSee: v => v.isAdminOrOwner },
   { id: 'did', label: 'DID', canSee: v => !v.isBuyer },
   { id: 'toNumber', label: 'Destination', canSee: v => !v.isPublisher },
-  { id: 'duration', label: 'Duration', canSee: everyone },
-  { id: 'connectedDuration', label: 'Connected', canSee: everyone },
+  { id: 'duration', label: 'Duration', align: 'right', canSee: everyone },
+  { id: 'connectedDuration', label: 'Connected', align: 'right', canSee: everyone },
+  // Carries the return's status as a second chip: there is no Return column.
   { id: 'disposition', label: 'Disposition', canSee: everyone },
   // The agency's own business: not the buyer's or the publisher's to read.
   { id: 'application', label: 'Application', canSee: v => !v.isBuyer && !v.isPublisher },
   { id: 'dispositionNotes', label: 'Notes', canSee: everyone },
   { id: 'billable', label: 'Billable', canSee: everyone },
+  { id: 'recording', label: 'Recording', align: 'center', canSee: everyone },
   { id: 'revenue', label: 'Revenue', align: 'right', canSee: v => !v.isPublisher && !v.isAgent },
   { id: 'payout', label: 'Payout', align: 'right', canSee: v => !v.isBuyer && !v.isAgent },
   { id: 'cost', label: 'Cost', align: 'right', canSee: v => v.isAdminOrOwner },
   { id: 'profit', label: 'Profit', align: 'right', canSee: v => v.isAdminOrOwner },
   { id: 'margin', label: 'Margin', align: 'right', canSee: v => v.isAdminOrOwner },
   { id: 'status', label: 'Status', align: 'center', canSee: v => !v.isAgent },
-  { id: 'dispute', label: 'Return', canSee: v => !v.isAgent },
-  { id: 'recording', label: 'Recording', align: 'center', canSee: everyone },
 ];
 
 /**
@@ -99,12 +105,13 @@ export const OWNER_DEFAULT_COLUMNS: readonly CallColumnId[] = [
   'time',
   'callerId',
   'campaignName',
-  'answeredBy',
+  'wentTo',
   'duration',
   'disposition',
+  'recording',
   'revenue',
   'payout',
-  'dispute',
+  'profit',
 ];
 
 /** An agent's: their calls, how each ended, and which became an application. */
@@ -137,7 +144,8 @@ export function visibleColumnsFor(viewer: CallsViewer): CallColumn[] {
  * would otherwise keep a returning owner on the old table indefinitely.
  */
 export function columnStorageKey(role: CallColumnRole): string {
-  return `hopwhistle_calls_columns:v2:${role}`;
+  // v3: "Went to" joined the defaults and the Return column left them.
+  return `hopwhistle_calls_columns:v3:${role}`;
 }
 
 // ── Status badges ────────────────────────────────────────────────────────────
@@ -257,6 +265,66 @@ export function answeredByOf(call: {
   // "Masked" is the API withholding the buyer's name, not a name.
   if (call.buyerName && call.buyerName !== 'Masked') return { name: call.buyerName, kind: 'buyer' };
   return null;
+}
+
+/**
+ * Where the call went, for the "Went to" badge: blocked, one of your agents,
+ * a buyer, or nobody. The order Today's chart counts them in, so the two
+ * never disagree about the same call.
+ */
+export function wentToOf(call: {
+  blocked?: boolean | null;
+  answeredByUserId?: string | null;
+  agentName?: string | null;
+  buyerId?: string | null;
+  buyerName?: string | null;
+}): { kind: 'agent' | 'buyer' | 'unanswered' | 'blocked'; name: string | null } {
+  if (call.blocked) return { kind: 'blocked', name: null };
+  if (call.answeredByUserId || call.agentName)
+    return { kind: 'agent', name: call.agentName ?? null };
+  if (call.buyerId || (call.buyerName && call.buyerName !== 'Masked')) {
+    return {
+      kind: 'buyer',
+      name: call.buyerName && call.buyerName !== 'Masked' ? call.buyerName : null,
+    };
+  }
+  return { kind: 'unanswered', name: null };
+}
+
+/**
+ * A return, as the small second chip in the Disposition cell: waiting on the
+ * agency, accepted (the charge came off) or denied (it stands).
+ */
+const RETURN_CHIPS: Record<string, Omit<StatusBadge, 'value'>> = {
+  DISPUTED: { label: 'Return: waiting', tone: 'ringing' },
+  ACCEPTED: { label: 'Return: accepted', tone: 'dropped' },
+  DENIED: { label: 'Return: denied', tone: 'neutral' },
+};
+
+export function returnChip(status?: string | null): StatusBadge | null {
+  if (!status) return null;
+  const value = status.toUpperCase();
+  const known = RETURN_CHIPS[value];
+  return known
+    ? { value, ...known }
+    : { value, label: `Return: ${formatEnumLabel(value).toLowerCase()}`, tone: resolveTone(value) };
+}
+
+/** A disposition's chip tone: a sale is good news, a callback is pending, a dead line failed. */
+const DISPOSITION_TONES: Record<string, StatusTone> = {
+  APPLICATION_SUBMITTED: 'live',
+  VERIFIED: 'live',
+  LIVE_TRANSFER: 'live',
+  SET_APPOINTMENT: 'ringing',
+  SET_CALLBACK: 'ringing',
+  FOLLOW_UP: 'ringing',
+  NO_ANSWER: 'dropped',
+  DISCONNECTED: 'dropped',
+  WRONG_NUMBER: 'dropped',
+};
+
+export function dispositionTone(value: string): StatusTone {
+  return DISPOSITION_TONES[value.toUpperCase()] ?? 'neutral';
 }
 
 // ── Dates and export ─────────────────────────────────────────────────────────

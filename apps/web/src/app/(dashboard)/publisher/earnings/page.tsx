@@ -13,6 +13,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { dollars } from '@/components/delivery/ledger';
+import { StatTile } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -207,7 +209,7 @@ function PublisherEarningsPage() {
       noteIcon: CheckCircle,
     },
     {
-      title: 'Held / Disputed',
+      title: 'Held or disputed',
       value: summary?.held,
       icon: HelpCircle,
       tone: 'text-dropped-ink',
@@ -217,45 +219,23 @@ function PublisherEarningsPage() {
   ];
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      <div>
-        <p className="text-sm text-ink-2">
-          What your calls earned over the period, and where each payout stands.
-        </p>
-      </div>
+    <div className="page-canvas">
+      <PageHeader description="What your calls earned over the period, and where each payout stands." />
 
       <PeriodToolbar state={period} resolved={summary?.period ?? null} label="Earnings period" />
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* The period's three figures */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {cards.map(card => (
-          <Card
+          <StatTile
             key={card.title}
-            className="bg-surface border-rule backdrop-blur-xl relative overflow-hidden group"
-          >
-            <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-              <card.icon className="w-36 h-36 text-ink" />
-            </div>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-bold text-ink-2 uppercase tracking-widest">
-                {card.title} · {label}
-              </span>
-              <card.icon className={`h-5 w-5 ${card.tone}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-extrabold text-ink tabular">
-                {loading ? (
-                  <Loader2 className="h-7 w-7 animate-spin text-brand-ink" />
-                ) : (
-                  dollars(card.value ?? 0)
-                )}
-              </div>
-              <p className="text-[10px] text-ink-2 mt-2 flex items-center gap-1">
-                <card.noteIcon className={`h-3.5 w-3.5 ${card.tone}`} />
-                {card.note}
-              </p>
-            </CardContent>
-          </Card>
+            size="hero"
+            label={card.title}
+            tone="money"
+            loading={loading}
+            figure={dollars(card.value ?? 0)}
+            sub={`${label} · ${card.note}`}
+          />
         ))}
       </div>
 

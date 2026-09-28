@@ -229,8 +229,16 @@ export function LeadsTable({
           <EmptyState
             icon={Users}
             headline="No prospects yet"
-            body="Import a list or add your first prospect."
-            // Add prospect is the page header's primary too; Import is secondary there.
+            /*
+             * The buttons are offered only where the page header does not
+             * already carry them: two Add Prospect/Import pairs on one screen
+             * is one pair too many.
+             */
+            body={
+              onAddProspect || onImport
+                ? 'Import a list or add your first prospect.'
+                : 'Add a prospect or import a list from the top right.'
+            }
             action={onAddProspect ? { label: 'Add prospect', onClick: onAddProspect } : undefined}
             secondaryAction={onImport ? { label: 'Import', onClick: onImport } : undefined}
           />
@@ -259,27 +267,13 @@ export function LeadsTable({
                   />
                 </th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Stage
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Follow Up
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Last Contact
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Phone
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                State
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-3">
-                Added
-              </th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Name</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Stage</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Follow Up</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Last Contact</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Phone</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">State</th>
+              <th className="px-4 py-3 text-left t-caption text-ink-2">Added</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-rule">

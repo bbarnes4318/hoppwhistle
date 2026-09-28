@@ -3,7 +3,10 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
+import { useClaimPageTitle, useCurrentPageTitle } from '@/components/layout/use-page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+import { InHubContext } from './hub-context';
 
 /**
  * A hub: several screens that used to be sidebar entries, as tabs of one.
@@ -15,6 +18,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
  * `/buyers?tab=wallets`). Changing tab replaces the URL rather than pushing
  * it: the back button leaves the hub instead of stepping through its tabs.
  * An unknown or missing key is the default tab.
+ *
+ * ── The hub names the page ───────────────────────────────────────────────────
+ *
+ * The title sits above the tab list, 24px under the topbar like every page
+ * header, and the views under it leave their own title out (`InHubContext`).
  *
  * ── Each tab is a whole view ─────────────────────────────────────────────────
  *
@@ -64,6 +72,8 @@ function HubTabsInner({ tabs, defaultTab, label }: HubTabsProps): JSX.Element {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active = activeTabOf(searchParams?.get('tab'), tabs, defaultTab);
+  const title = useCurrentPageTitle();
+  useClaimPageTitle(Boolean(title));
 
   function select(key: string): void {
     if (key === active) return;
@@ -75,7 +85,8 @@ function HubTabsInner({ tabs, defaultTab, label }: HubTabsProps): JSX.Element {
 
   return (
     <Tabs value={active} onValueChange={select} className="flex min-w-0 flex-col">
-      <div className="px-4 pt-4 sm:px-6 sm:pt-6 min-[1440px]:px-8 min-[1440px]:pt-8">
+      <div className="px-4 pt-4 sm:px-6 sm:pt-6 min-[1440px]:px-8">
+        {title ? <h1 className="t-title mb-3 text-ink">{title}</h1> : null}
         <TabsList aria-label={label}>
           {tabs.map(tab => (
             <TabsTrigger key={tab.key} value={tab.key} data-hub-tab={tab.key}>
@@ -86,7 +97,9 @@ function HubTabsInner({ tabs, defaultTab, label }: HubTabsProps): JSX.Element {
       </div>
       {tabs.map(tab => (
         <TabsContent key={tab.key} value={tab.key} className="hub-panel mt-0 min-w-0">
-          {tab.key === active ? tab.render() : null}
+          {tab.key === active ? (
+            <InHubContext.Provider value={true}>{tab.render()}</InHubContext.Provider>
+          ) : null}
         </TabsContent>
       ))}
     </Tabs>

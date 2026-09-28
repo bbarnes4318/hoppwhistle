@@ -128,25 +128,25 @@ describe('the pages that were fixed render no title of their own', () => {
   });
 
   /**
-   * The shared header no longer carries a title either, which is what made the
-   * fix one edit rather than twenty-four. A `title` prop reaching it again
+   * One title per page. The page header carries it now -- title, description
+   * and actions in one row at the top of the content -- and the topbar drops
+   * its copy whenever a header has claimed it. A header that rendered the
+   * title without claiming it, or a topbar that rendered its <h1> regardless,
    * would put the second heading back on every page at once.
-   *
-   * This guarded CompactPageHeader until every page moved onto PageHeader and
-   * the compact shell was deleted; it now guards the header they all share.
    */
-  it('PageHeader renders no heading and takes no title', () => {
-    const source = readFileSync(join(__dirname, '..', 'page-header.tsx'), 'utf8');
+  it('PageHeader claims the title it shows, and the topbar drops its own copy', () => {
+    const header = readFileSync(join(__dirname, '..', 'page-header.tsx'), 'utf8');
+    const body = header.slice(header.indexOf('export function PageHeader'));
+    expect(body).toContain('useClaimPageTitle(heading !== null)');
+    expect(body.match(/<h1/g)).toHaveLength(1);
 
-    const start = source.indexOf('export function PageHeader');
-    expect(source.slice(start)).not.toMatch(/<h[1-6]/);
+    const topbar = readFileSync(join(__dirname, '..', 'topbar.tsx'), 'utf8');
+    expect(topbar).toContain('usePageTitleClaimed()');
+    expect(topbar).toMatch(/titleOnPage \? \(\s*<div className="min-w-0 flex-1" \/>/);
 
-    // The props interface alone: `title` is omitted from the HTML attributes
-    // and not declared back.
-    const declStart = source.indexOf('export interface PageHeaderProps');
-    const props = source.slice(declStart, source.indexOf('\n}', declStart));
-    expect(props).toContain("Omit<React.HTMLAttributes<HTMLDivElement>, 'title'>");
-    expect(props).not.toMatch(/^\s*title\??:/m);
+    const hub = readFileSync(join(__dirname, '..', '..', 'hub', 'hub-tabs.tsx'), 'utf8');
+    expect(hub).toContain('useClaimPageTitle(Boolean(title))');
+    expect(hub).toContain('<InHubContext.Provider value={true}>');
   });
 });
 

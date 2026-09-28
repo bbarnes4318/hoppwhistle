@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState, useRef } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -266,13 +267,11 @@ function PublisherCallsPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-ink-2">
-            Monitor incoming calls, track conversion details, and listen to recordings.
-          </p>
-          {hasRecording ? (
+    <div className="page-canvas">
+      <PageHeader
+        description="Monitor incoming calls, track conversion details, and listen to recordings."
+        meta={
+          hasRecording ? (
             <p className="mt-2 flex items-center gap-2 text-xs text-ink-2">
               <Badge variant="outline" className="bg-brand-tint text-brand-ink border-brand/40">
                 With recordings
@@ -285,21 +284,23 @@ function PublisherCallsPage() {
                 Show all calls
               </Link>
             </p>
-          ) : null}
-        </div>
-        <Button
-          onClick={() => void handleExportCSV()}
-          disabled={exporting || calls.length === 0}
-          className="bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium gap-2 self-start md:self-auto"
-        >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Export CSV
-        </Button>
-      </div>
+          ) : null
+        }
+        actions={
+          <Button
+            onClick={() => void handleExportCSV()}
+            disabled={exporting || calls.length === 0}
+            className="bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface font-medium gap-2 self-start md:self-auto"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV
+          </Button>
+        }
+      />
 
       {/* Filter Bar */}
       <Card className="bg-surface border-rule backdrop-blur-xl">

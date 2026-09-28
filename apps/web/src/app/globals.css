@@ -129,6 +129,25 @@
     --radius-control: 8px;
     --row-height: 44px;
 
+    /*
+     * Where a call went, as every table badge, drawer and chart shows it: your
+     * agents, a buyer, nobody (unanswered) or a gate (blocked). One palette so
+     * "Where your calls went", the Calls table and the Today chart agree. The
+     * `-ink` steps carry text on the `-tint` grounds at 4.5:1 or better.
+     */
+    --entity-agent: #12a150;
+    --entity-agent-ink: #0b7a3b;
+    --entity-agent-tint: #e6f5ec;
+    --entity-buyer: #0081f1;
+    --entity-buyer-ink: #0a56c2;
+    --entity-buyer-tint: #e8f2fe;
+    --entity-unanswered: #f59e0b;
+    --entity-unanswered-ink: #92400e;
+    --entity-unanswered-tint: #fef3c7;
+    --entity-blocked: #94a3b8;
+    --entity-blocked-ink: #475569;
+    --entity-blocked-tint: #f1f5f9;
+
     /* --- elevation ------------------------------------------------------ */
     --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
     --shadow-raised: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
@@ -372,6 +391,8 @@
     --brand-strong: #0b5cd6; /* primary button fill, white text */
     --brand-strong-hover: #0a47a8;
 
+    --entity-buyer: var(--brand);
+
     --radius-card: 8px;
     --radius-control: 6px;
 
@@ -482,6 +503,36 @@
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
   }
+  /*
+   * KPI tiles. A hero tile is one of the three or four numbers a page is
+   * about; a secondary tile is everything else. Sentence-case caption labels
+   * above both -- no all-caps micro labels in a tile.
+   */
+  .t-kpi-hero {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums;
+  }
+  .t-kpi {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* A tile label, a table column head: 12px, medium, sentence case. */
+  .t-caption {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
   .t-figure {
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
     font-size: 26px;
@@ -566,7 +617,7 @@
   }
   @media (min-width: 1440px) {
     .page-canvas {
-      padding: 32px;
+      padding: 24px 32px 32px;
     }
   }
 
@@ -577,6 +628,24 @@
    */
   .hub-panel > .page-canvas {
     padding-top: 12px;
+  }
+
+  /*
+   * Tables on a narrow screen: the first column stays put while the rest
+   * scroll sideways under it, so a row never loses its name. Every <Table>
+   * opts in with data-pin-first; below 1024px only.
+   */
+  @media (max-width: 1023px) {
+    [data-pin-first] > :is(thead, tbody, tfoot) > tr > :first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background-color: var(--surface);
+      box-shadow: inset -1px 0 0 var(--rule);
+    }
+    [data-pin-first] > tbody > tr:hover > :first-child {
+      background-color: var(--sunken);
+    }
   }
 
   /*

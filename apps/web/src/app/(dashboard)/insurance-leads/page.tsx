@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   EmptyState,
+  EntityBadge,
   MoneyCell,
   Pagination,
   Panel,
@@ -30,8 +31,10 @@ import {
   ToolbarMeta,
   ToolbarSearch,
   ToolbarSelect,
+  tileDollars,
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
+import { defaultCrmView, isCrmView, type CrmView } from '@/components/leads/crm-view';
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { LeadDetailSheet } from '@/components/leads/lead-detail-sheet';
 import { LeadsTable } from '@/components/leads/leads-table';
@@ -71,7 +74,7 @@ import { formatPhoneNumber } from '@/lib/utils';
  * agency sees one book.
  */
 
-type View = 'prospects' | 'submitted';
+type View = CrmView;
 type Period = 'all' | 'today' | 'week' | 'month' | 'last-month' | 'year';
 
 const PAGE_SIZE = 25;
@@ -180,7 +183,26 @@ export default function CrmPage() {
   const { makeCall } = usePhone();
   const router = useRouter();
 
-  const [view, setView] = useState<View>('prospects');
+  /*
+   * The list on screen, in the URL as `?tab=` so a reload or a shared link
+   * opens the same one. Read once at mount; with no tab named, the counts
+   * decide (`defaultCrmView`) as soon as they arrive.
+   */
+  const [requestedTab] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')
+  );
+  const [view, setViewState] = useState<View>(() => defaultCrmView(requestedTab, null));
+  const [viewChosen, setViewChosen] = useState(isCrmView(requestedTab));
+  const setView = useCallback(
+    (next: View) => {
+      setViewChosen(true);
+      setViewState(next);
+      const query = new URLSearchParams(window.location.search);
+      query.set('tab', next);
+      router.replace(`${window.location.pathname}?${query.toString()}`, { scroll: false });
+    },
+    [router]
+  );
   const [period, setPeriod] = useState<Period>('all');
   const range = useMemo(() => periodRange(period), [period]);
 
@@ -233,6 +255,13 @@ export default function CrmPage() {
       setSummaryLoading(false);
     }
   }, [range]);
+
+  // No tab named: the first counts pick the list, once.
+  useEffect(() => {
+    if (viewChosen || !summary) return;
+    setViewChosen(true);
+    setViewState(defaultCrmView(null, summary));
+  }, [summary, viewChosen]);
 
   const loadProspects = useCallback(async () => {
     setProspectsLoading(true);
@@ -401,6 +430,7 @@ export default function CrmPage() {
   return (
     <div className="page-canvas">
       <PageHeader
+        description="Your prospects, and the ones that became submitted applications."
         actions={
           <>
             {canManageBook && view === 'prospects' && selectedLeadIds.length > 0 && (
@@ -449,16 +479,17 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('prospects')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
           aria-pressed={view === 'prospects'}
         >
           <StatTile
+            size="hero"
             label="Prospects"
             value={summary?.prospects ?? 0}
             sub="not yet submitted"
             icon={Users}
             loading={summaryLoading}
-            className={view === 'prospects' ? 'ring-2 ring-brand-ink' : undefined}
+            selected={view === 'prospects'}
           />
         </button>
         <button
@@ -467,10 +498,11 @@ export default function CrmPage() {
             setView('prospects');
             setFilter('followUp', 'DUE');
           }}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
-            label="Follow-ups Due"
+            size="hero"
+            label="Follow-ups due"
             value={summary?.followUpsDue ?? 0}
             sub="today or overdue"
             icon={CalendarClock}
@@ -480,26 +512,28 @@ export default function CrmPage() {
         <button
           type="button"
           onClick={() => setView('submitted')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
           aria-pressed={view === 'submitted'}
         >
           <StatTile
-            label="Submitted Apps"
+            size="hero"
+            label="Submitted apps"
             value={summary?.submittedApps ?? 0}
             sub={periodLabel}
             icon={FileCheck2}
             loading={summaryLoading}
-            className={view === 'submitted' ? 'ring-2 ring-brand-ink' : undefined}
+            selected={view === 'submitted'}
           />
         </button>
         <button
           type="button"
           onClick={() => setView('submitted')}
-          className="rounded-card text-left transition-shadow hover:shadow-raised"
+          className="rounded-card text-left transition-shadow hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink"
         >
           <StatTile
-            label="Annual Premium"
-            figure={<MoneyCell amount={summary?.annualPremium ?? 0} unit="major" size="figure" />}
+            size="hero"
+            label="Annual premium"
+            figure={tileDollars(summary?.annualPremium ?? 0)}
             sub={
               summary?.averageAnnualPremium != null ? (
                 <>
@@ -603,8 +637,6 @@ export default function CrmPage() {
               onSelectLeadsChange={setSelectedLeadIds}
               filtered={activeFilterCount > 0}
               onClearFilters={clearFilters}
-              onImport={() => setIsImportOpen(true)}
-              onAddProspect={() => router.push('/intake')}
             />
           </div>
 
@@ -677,14 +709,14 @@ export default function CrmPage() {
                         'Phone',
                         'State',
                         'Carrier · Product',
-                        'Face Amount',
-                        'Annual Premium',
+                        'Face amount',
+                        'Annual premium',
                         'Agent',
                       ].map(h => (
                         <th
                           key={h}
-                          className={`whitespace-nowrap px-4 py-3 text-xs font-medium uppercase tracking-wider text-ink-3 ${
-                            h === 'Face Amount' || h === 'Annual Premium'
+                          className={`h-10 whitespace-nowrap px-4 t-caption text-ink-2 ${
+                            h === 'Face amount' || h === 'Annual premium'
                               ? 'text-right'
                               : 'text-left'
                           }`}
@@ -745,10 +777,14 @@ export default function CrmPage() {
                           <MoneyCell amount={app.faceAmount} unit="major" tone="none" />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
-                          <MoneyCell amount={app.annualPremium} unit="major" tone="money" />
+                          <MoneyCell amount={app.annualPremium} unit="major" tone="none" />
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-2">
-                          {app.agentName || '—'}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {app.agentName ? (
+                            <EntityBadge kind="agent" name={app.agentName} />
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

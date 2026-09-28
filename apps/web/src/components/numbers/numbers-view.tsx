@@ -185,20 +185,20 @@ function NumberCard({
         <div className="grid grid-cols-2 gap-2">
           {showCarrier ? (
             <div>
-              <div className="t-label text-ink-3">Carrier</div>
+              <div className="t-caption text-ink-2">Carrier</div>
               <div className="t-body truncate text-ink" title={carrierLabel(number)}>
                 {carrierLabel(number)}
               </div>
             </div>
           ) : null}
           <div>
-            <div className="t-label text-ink-3">Purchased</div>
+            <div className="t-caption text-ink-2">Purchased</div>
             <div className="t-body text-ink">{formatDisplayDate(number.purchasedAt)}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="t-label text-ink-3">Campaign</div>
+            <div className="t-caption text-ink-2">Campaign</div>
             <div
               className={cn('t-body truncate', number.campaign?.name ? 'text-ink' : 'text-ink-3')}
               title={number.campaign?.name || 'Unassigned'}
@@ -207,7 +207,7 @@ function NumberCard({
             </div>
           </div>
           <div>
-            <div className="t-label text-ink-3">Assigned Agent</div>
+            <div className="t-caption text-ink-2">Assigned agent</div>
             <div
               className={cn('t-body truncate', number.user?.name ? 'text-ink' : 'text-ink-3')}
               title={number.user?.name || 'Unassigned'}
@@ -487,7 +487,7 @@ function NumbersPage() {
                           can attest on which trunk, and where a gap is. The flat
                           list made that impossible to see. */}
                       <div className="flex items-center gap-2 mb-2 pb-1 border-b border-rule">
-                        <div className="t-label text-ink-3">{group.carrier}</div>
+                        <div className="t-caption text-ink-2">{group.carrier}</div>
                         <span className="t-meta rounded-full bg-sunken px-2 text-ink-2 tabular-nums">
                           {group.numbers.length}
                         </span>
@@ -577,7 +577,7 @@ function NumbersPage() {
 
                       <div className="space-y-2 border-t border-rule pt-2 mt-2">
                         <div>
-                          <div className="t-label flex items-center gap-1 text-ink-3">
+                          <div className="t-caption flex items-center gap-1 text-ink-2">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
                           </div>
                           <div className="t-data text-ink">
@@ -587,7 +587,7 @@ function NumbersPage() {
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <div className="t-label text-ink-3">Label / Buyer</div>
+                            <div className="t-caption text-ink-2">Label / buyer</div>
                             <div
                               className={cn(
                                 't-body truncate',
@@ -599,7 +599,7 @@ function NumbersPage() {
                             </div>
                           </div>
                           <div>
-                            <div className="t-label text-ink-3">Created</div>
+                            <div className="t-caption text-ink-2">Created</div>
                             <div className="t-body text-ink">
                               {formatDisplayDate(route.createdAt)}
                             </div>

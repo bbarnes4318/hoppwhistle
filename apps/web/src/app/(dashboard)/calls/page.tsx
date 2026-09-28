@@ -20,17 +20,18 @@ import { ReturnRequestedPanel } from '@/components/buyers/return-requested-panel
 import { RedispositionPanel } from '@/components/calls/redisposition-panel';
 import {
   EmptyState,
+  EntityBadge,
   Notice,
   Panel,
   PanelBody,
-  SheetDrawer,
   StatusChip,
   Toolbar,
   ToolbarActions,
-  ToolbarClear,
   ToolbarSearch,
+  formatEnumLabel,
   toolbarTrigger,
 } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -80,11 +82,14 @@ import {
   columnStorageKey,
   defaultVisibleColumns,
   disputeBadge,
+  dispositionTone,
   exportFilename,
   localDayKey,
   payoutStatusBadge,
   recordingIdOf,
+  returnChip,
   visibleColumnsFor,
+  wentToOf,
   type CallColumn,
   type CallColumnId,
   type CallColumnRole,
@@ -117,6 +122,8 @@ interface CallRecord {
   rtbBidAmount?: number | null;
   duration?: number;
   connectedDuration?: number;
+  /** Stopped by a gate (DNC, a cap) before anybody was offered it. */
+  blocked?: boolean;
   billable: boolean;
   billableDurationThreshold?: number | null;
   billableReason?: string | null;
@@ -222,11 +229,29 @@ type OptionListBody =
   | { data?: NamedOption[]; publishers?: NamedOption[]; buyers?: NamedOption[] };
 
 /** The `outcome` filter's values, as `GET /api/v1/calls` reads them. */
+/** "Went to": the same four parts as "Where your calls went" on Today. */
 const CALL_OUTCOMES = [
   { value: 'AGENTS', label: 'Your agents' },
-  { value: 'BUYERS', label: 'Sold to buyers' },
+  { value: 'BUYERS', label: 'Buyers' },
   { value: 'UNANSWERED', label: 'Unanswered' },
+  { value: 'BLOCKED', label: 'Blocked' },
 ] as const;
+
+const PAGE_SIZES = [25, 50, 100] as const;
+
+/** The filtered set's figures, from `meta.totals` (principals only). */
+interface CallTotals {
+  calls: number;
+  billable: number;
+  revenue: number;
+  payout: number;
+  profit: number;
+}
+
+/** Whole dollars, for the totals bar. */
+function wholeDollars(value: number): string {
+  return `${value < 0 ? '−' : ''}$${Math.round(Math.abs(value)).toLocaleString('en-US')}`;
+}
 
 export default function OperationsCallLogsPage() {
   const { user, isAdmin, isOwner, isPlatformAdmin, upgrades } = useAuth();
@@ -272,6 +297,9 @@ export default function OperationsCallLogsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [total, setTotal] = useState(0);
+  const [totals, setTotals] = useState<CallTotals | null>(null);
 
   // Filter parameters
   const [campaigns, setCampaigns] = useState<NamedOption[]>([]);
@@ -339,9 +367,6 @@ export default function OperationsCallLogsPage() {
   const [detailCallId, setDetailCallId] = useState<string | null>(null);
   const [detailCall, setDetailCall] = useState<CallDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-
-  // The Filters sheet, below 640px.
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Audio Playback
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -542,7 +567,7 @@ export default function OperationsCallLogsPage() {
     try {
       const queryParams = new URLSearchParams({
         page: String(page),
-        limit: '20',
+        limit: String(pageSize),
       });
 
       if (search.trim()) {
@@ -590,9 +615,10 @@ export default function OperationsCallLogsPage() {
         queryParams.append('listId', selectedListId);
       }
 
-      const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
-        `/api/v1/calls?${queryParams.toString()}`
-      );
+      const response = await apiClient.get<{
+        data: CallRecord[];
+        meta: { totalPages: number; total?: number; totals?: CallTotals };
+      }>(`/api/v1/calls?${queryParams.toString()}`);
 
       if (response.error) {
         // The request was refused or failed. Say so, and keep whatever rows are
@@ -605,6 +631,8 @@ export default function OperationsCallLogsPage() {
       setLoadError(null);
       setCalls(response.data?.data || []);
       setTotalPages(response.data?.meta?.totalPages || 1);
+      setTotal(response.data?.meta?.total ?? response.data?.data?.length ?? 0);
+      setTotals(response.data?.meta?.totals ?? null);
     } catch (err) {
       console.error('Failed to fetch call logs', err);
       setLoadError({
@@ -616,6 +644,7 @@ export default function OperationsCallLogsPage() {
     }
   }, [
     page,
+    pageSize,
     search,
     datePreset,
     fromDate,
@@ -861,17 +890,6 @@ export default function OperationsCallLogsPage() {
   const filterTrigger = (active: boolean) =>
     cn(toolbarTrigger(active), 'w-auto max-w-full whitespace-nowrap');
   const filterCell = 'shrink-0 max-w-[240px]';
-  const hasActiveFilters =
-    search !== '' ||
-    selectedDisputeStatus !== 'all' ||
-    selectedOutcome !== 'all' ||
-    selectedAgentId !== 'all' ||
-    selectedDisposition !== 'all' ||
-    selectedCampaignId !== 'all' ||
-    selectedListId !== 'all' ||
-    selectedPublisherId !== 'all' ||
-    selectedBuyerId !== 'all' ||
-    datePreset !== 'All Time';
   /** How many of the filters behind the phone's "Filters" button are set. */
   const secondaryFilterCount = [
     selectedAgentId,
@@ -879,7 +897,6 @@ export default function OperationsCallLogsPage() {
     selectedListId,
     selectedPublisherId,
     selectedBuyerId,
-    selectedOutcome,
     selectedDisputeStatus,
   ].filter(value => value !== 'all').length;
   const clearFilters = () => {
@@ -895,38 +912,118 @@ export default function OperationsCallLogsPage() {
     handlePresetChange('All Time');
   };
 
+  /** Each filter that is set, as a chip under the bar that clears it. */
+  const nameOf = (list: { id: string; name: string }[], id: string) =>
+    list.find(option => option.id === id)?.name ?? 'Selected';
+  const activeChips: Array<{ key: string; label: string; value: string; clear: () => void }> = [];
+  const chip = (key: string, label: string, value: string, clear: () => void) =>
+    activeChips.push({
+      key,
+      label,
+      value,
+      clear: () => {
+        clear();
+        setPage(1);
+      },
+    });
+  if (search !== '') chip('search', 'Search', search, () => setSearch(''));
+  if (datePreset !== 'All Time') {
+    chip(
+      'date',
+      'Date',
+      datePreset === 'Custom' ? `${fromDate || 'start'} – ${toDate || 'today'}` : datePreset,
+      () => handlePresetChange('All Time')
+    );
+  }
+  if (selectedOutcome !== 'all') {
+    chip(
+      'wentTo',
+      'Went to',
+      CALL_OUTCOMES.find(o => o.value === selectedOutcome)?.label ?? selectedOutcome,
+      () => setSelectedOutcome('all')
+    );
+  }
+  if (selectedDisposition !== 'all') {
+    chip(
+      'disposition',
+      'Disposition',
+      selectedDisposition === 'NONE'
+        ? 'Not written up'
+        : (DISPOSITION_LABELS[selectedDisposition] ?? selectedDisposition),
+      () => setSelectedDisposition('all')
+    );
+  }
+  if (selectedAgentId !== 'all') {
+    chip('agent', 'Agent', nameOf(agents, selectedAgentId), () => setSelectedAgentId('all'));
+  }
+  if (selectedCampaignId !== 'all') {
+    chip('campaign', 'Campaign', nameOf(campaigns, selectedCampaignId), () =>
+      setSelectedCampaignId('all')
+    );
+  }
+  if (selectedListId !== 'all') {
+    chip('list', 'Lead list', nameOf(leadLists, selectedListId), () => setSelectedListId('all'));
+  }
+  if (selectedPublisherId !== 'all') {
+    chip('publisher', 'Publisher', nameOf(publishers, selectedPublisherId), () =>
+      setSelectedPublisherId('all')
+    );
+  }
+  if (selectedBuyerId !== 'all') {
+    chip('buyer', 'Buyer', nameOf(buyers, selectedBuyerId), () => setSelectedBuyerId('all'));
+  }
+  if (selectedDisputeStatus !== ALL_RETURNS) {
+    chip(
+      'returns',
+      'Returns',
+      DISPUTE_FILTER_OPTIONS.find(o => o.value === selectedDisputeStatus)?.label ??
+        selectedDisputeStatus,
+      () => setSelectedDisputeStatus(ALL_RETURNS)
+    );
+  }
+
   /** The customer's number: who called in, or who was called out to. */
   const callerOf = (call: CallRecord): string | null => {
     const phone = call.direction?.toLowerCase() === 'outbound' ? call.toNumber : call.callerId;
     return phone ? formatPhoneNumber(phone) : null;
   };
 
+  /** Cents in the table; an empty cell is an em dash in ink-3, never blue. */
   const money = (value?: number | null) =>
-    value !== null && value !== undefined ? `$${Number(value).toFixed(2)}` : '—';
+    value !== null && value !== undefined ? (
+      <span className={Number(value) === 0 ? 'text-ink-3' : undefined}>
+        {`${Number(value) < 0 ? '−' : ''}$${Math.abs(Number(value)).toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`}
+      </span>
+    ) : (
+      <span className="text-ink-3">—</span>
+    );
 
   /** Each column's cell classes, beside the one list of columns. */
   const cellClass: Record<CallColumnId, string> = {
     time: 't-data whitespace-nowrap text-ink',
     callerId: 't-data whitespace-nowrap text-ink',
-    campaignName: 'text-ink-2 font-semibold text-xs',
-    answeredBy: 'text-xs',
-    publisherName: 'text-ink-2 font-medium text-xs',
-    buyerName: 'text-ink-2 font-medium text-xs',
+    campaignName: 'max-w-[200px] truncate whitespace-nowrap text-ink-2',
+    wentTo: 'max-w-[220px] whitespace-nowrap',
+    answeredBy: '',
+    publisherName: 'whitespace-nowrap text-ink-2',
+    buyerName: 'whitespace-nowrap text-ink-2',
     did: 't-data whitespace-nowrap text-ink-2',
     toNumber: 't-data whitespace-nowrap text-ink-2',
-    duration: 't-num text-ink-2',
-    connectedDuration: 't-num text-ink-2',
-    disposition: 'text-xs',
+    duration: 'text-right tabular-nums text-ink-2',
+    connectedDuration: 'text-right tabular-nums text-ink-2',
+    disposition: 'whitespace-nowrap',
     application: 'text-xs',
     dispositionNotes: 'text-ink-2 text-xs max-w-xs truncate',
     billable: '',
-    revenue: 't-num text-right font-medium text-ink',
-    payout: 't-num text-right font-medium text-money-ink',
-    cost: 't-num text-right text-ink-2',
-    profit: 't-num text-right font-semibold text-brand-ink',
-    margin: 't-num text-right text-ink-2',
+    revenue: 'text-right tabular-nums text-ink',
+    payout: 'text-right tabular-nums text-ink',
+    cost: 'text-right tabular-nums text-ink-2',
+    profit: 'text-right tabular-nums font-medium text-ink',
+    margin: 'text-right tabular-nums text-ink-2',
     status: 'text-center',
-    dispute: '',
     recording: 'text-center',
   };
 
@@ -937,7 +1034,11 @@ export default function OperationsCallLogsPage() {
       case 'callerId':
         return callerOf(call) ?? '—';
       case 'campaignName':
-        return call.campaignName || '—';
+        return call.campaignName || <span className="text-ink-3">—</span>;
+      case 'wentTo': {
+        const wentTo = wentToOf(call);
+        return <EntityBadge kind={wentTo.kind} name={wentTo.name} />;
+      }
       case 'answeredBy': {
         const answeredBy = answeredByOf(call);
         if (answeredBy) {
@@ -981,17 +1082,39 @@ export default function OperationsCallLogsPage() {
         return call.duration ? formatDuration(call.duration) : '—';
       case 'connectedDuration':
         return call.connectedDuration ? formatDuration(call.connectedDuration) : '—';
-      case 'disposition':
-        // The canonical outcome: the one that is countable, unlike the notes.
-        return call.disposition ? (
-          <span className="rounded-control border border-rule bg-sunken px-1.5 py-0.5 font-medium text-ink-2">
-            {DISPOSITION_LABELS[call.disposition] ?? call.disposition}
-          </span>
-        ) : (
-          <span className="text-ink-3" title="Not written up yet">
-            Not set
-          </span>
+      case 'disposition': {
+        // The canonical outcome, always a chip; a return rides beside it.
+        const returned = !isAgent ? returnChip(call.disputeStatus) : null;
+        return (
+          <div className="flex items-center gap-1" data-disposition={call.disposition ?? 'NONE'}>
+            {call.disposition ? (
+              <StatusChip
+                size="sm"
+                value={call.disposition}
+                tone={dispositionTone(call.disposition)}
+                label={DISPOSITION_LABELS[call.disposition] ?? formatEnumLabel(call.disposition)}
+              />
+            ) : (
+              <span
+                className="inline-flex h-5 items-center rounded-full border border-rule-strong px-2 text-[11px] font-medium text-ink-3"
+                title="Not written up yet"
+              >
+                Not set
+              </span>
+            )}
+            {returned ? (
+              <StatusChip
+                size="sm"
+                dot={false}
+                value={returned.value}
+                tone={returned.tone}
+                label={returned.label}
+                data-return={returned.value}
+              />
+            ) : null}
+          </div>
         );
+      }
       case 'application':
         return call.application ? (
           <span className="font-medium text-ink">{call.application.carrier}</span>
@@ -1030,13 +1153,29 @@ export default function OperationsCallLogsPage() {
             {!isBuyer && statusChip(payoutStatusBadge(call.publisherPayoutStatus))}
           </div>
         );
-      case 'dispute':
-        return statusChip(disputeBadge(call.disputeStatus)) ?? '—';
       case 'recording': {
         const recordingId = recordingIdOf(call);
-        if (!recordingId) return <span className="text-ink-3 text-xs italic">—</span>;
+        if (!recordingId) {
+          return (
+            <div className="flex items-center justify-center">
+              <Tooltip content="No recording for this call">
+                <span tabIndex={0} className="inline-flex rounded-full" data-recording="none">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    aria-label="No recording"
+                    className="h-8 w-8 rounded-full p-0 text-ink-3"
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </span>
+              </Tooltip>
+            </div>
+          );
+        }
         return (
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center" data-recording="ready">
             <Tooltip content="Play or pause recording">
               <Button
                 variant="ghost"
@@ -1053,19 +1192,6 @@ export default function OperationsCallLogsPage() {
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-              </Button>
-            </Tooltip>
-            <Tooltip content="Download recording">
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Download recording"
-                onClick={() =>
-                  void handleDownloadRecording(recordingId, `call-${call.id}-recording.wav`)
-                }
-                className="h-8 w-8 p-0 rounded-full hover:bg-sunken text-ink-3 hover:text-ink"
-              >
-                <Download className="h-4 w-4" />
               </Button>
             </Tooltip>
           </div>
@@ -1216,34 +1342,6 @@ export default function OperationsCallLogsPage() {
         </div>
       )}
 
-      {/* Where it went */}
-      {isAdminOrOwner && (
-        <div className={cell}>
-          <Select
-            value={selectedOutcome}
-            onValueChange={val => {
-              setSelectedOutcome(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger
-              aria-label="Where it went"
-              className={filterTrigger(selectedOutcome !== 'all')}
-            >
-              <SelectValue>{selectedOutcome === 'all' ? 'Where it went' : undefined}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              {CALL_OUTCOMES.map(outcome => (
-                <SelectItem key={outcome.value} value={outcome.value}>
-                  {outcome.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
       {/* Returns: whether a buyer asked for the call back, and how it was decided */}
       <div className={cell}>
         <Select
@@ -1276,6 +1374,8 @@ export default function OperationsCallLogsPage() {
 
   return (
     <div className="page-canvas">
+      <PageHeader description="Every call, where it went, and what it made." />
+
       {/* Filter toolbar */}
       <Toolbar className="flex-wrap gap-2 xl:flex-wrap">
         <ToolbarSearch
@@ -1335,6 +1435,34 @@ export default function OperationsCallLogsPage() {
           </div>
         )}
 
+        {/* Went to: the same four parts as "Where your calls went" */}
+        {isAdminOrOwner && (
+          <div className={filterCell}>
+            <Select
+              value={selectedOutcome}
+              onValueChange={val => {
+                setSelectedOutcome(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger
+                aria-label="Went to"
+                className={filterTrigger(selectedOutcome !== 'all')}
+              >
+                <SelectValue>{selectedOutcome === 'all' ? 'Went to' : undefined}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Went anywhere</SelectItem>
+                {CALL_OUTCOMES.map(outcome => (
+                  <SelectItem key={outcome.value} value={outcome.value}>
+                    {outcome.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Disposition Filter */}
         <div className={filterCell}>
           <Select
@@ -1367,25 +1495,30 @@ export default function OperationsCallLogsPage() {
           </Select>
         </div>
 
-        {/* Every other filter: on the row from 640px, behind "Filters" below it */}
-        <div className="hidden sm:contents">{renderSecondaryFilters(filterCell)}</div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFiltersOpen(true)}
-          className={cn(
-            'h-8 shrink-0 gap-1.5 px-2.5 text-xs sm:hidden',
-            secondaryFilterCount > 0 && 'border-brand-ink bg-brand-tint text-brand-ink'
-          )}
-        >
-          <ListFilter className="h-3.5 w-3.5" />
-          Filters{secondaryFilterCount > 0 ? ` (${secondaryFilterCount})` : ''}
-        </Button>
+        {/* Every other filter, behind one button at every width */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                'h-8 shrink-0 gap-1.5 px-2.5 text-xs',
+                secondaryFilterCount > 0 && 'border-brand-ink bg-brand-tint text-brand-ink'
+              )}
+            >
+              <ListFilter className="h-3.5 w-3.5" />
+              More filters{secondaryFilterCount > 0 ? ` (${secondaryFilterCount})` : ''}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[280px] p-3">
+            <div className="flex flex-col gap-2" data-more-filters>
+              {renderSecondaryFilters('w-full [&_button]:w-full')}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Ledger actions, pinned to the right end of the row */}
         <ToolbarActions>
-          {hasActiveFilters && <ToolbarClear onClick={clearFilters} />}
-
           <DropdownMenu>
             <Tooltip content="Columns" align="end">
               <DropdownMenuTrigger asChild>
@@ -1437,29 +1570,74 @@ export default function OperationsCallLogsPage() {
         </ToolbarActions>
       </Toolbar>
 
-      {/* Below 640px, every filter past search, date and disposition lives here */}
-      <SheetDrawer
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
-        title="Filters"
-        size="md"
-        footer={
-          <div className="flex justify-end gap-2">
-            {secondaryFilterCount > 0 && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear
-              </Button>
-            )}
-            <Button size="sm" onClick={() => setFiltersOpen(false)}>
-              Done
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-3 p-4">
-          {renderSecondaryFilters('w-full [&_button]:w-full')}
+      {/* What the ledger is scoped to, each removable */}
+      {activeChips.length > 0 ? (
+        <div className="-mt-3 flex flex-wrap items-center gap-2" aria-label="Active filters">
+          {activeChips.map(chip => (
+            <span
+              key={chip.key}
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-rule bg-surface pl-2.5 pr-1 t-meta text-ink"
+              data-filter-chip={chip.key}
+            >
+              <span className="text-ink-2">{chip.label}:</span>
+              <span className="max-w-[200px] truncate font-medium">{chip.value}</span>
+              <button
+                type="button"
+                onClick={chip.clear}
+                aria-label={`Remove ${chip.label} filter`}
+                className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-3 hover:bg-sunken hover:text-ink"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="t-meta font-medium text-brand-ink hover:underline"
+          >
+            Clear all
+          </button>
         </div>
-      </SheetDrawer>
+      ) : null}
+
+      {/* The filtered set, before the page of it */}
+      {totals ? (
+        <dl
+          className="flex flex-wrap items-baseline gap-x-6 gap-y-2 rounded-card border border-rule bg-surface px-5 py-3"
+          aria-label="Totals for these filters"
+          data-call-totals
+        >
+          {[
+            {
+              label: 'Calls',
+              value: totals.calls.toLocaleString('en-US'),
+              zero: totals.calls === 0,
+            },
+            {
+              label: 'Billable',
+              value: totals.billable.toLocaleString('en-US'),
+              zero: totals.billable === 0,
+            },
+            { label: 'Revenue', value: wholeDollars(totals.revenue), zero: totals.revenue === 0 },
+            { label: 'Payout', value: wholeDollars(totals.payout), zero: totals.payout === 0 },
+            { label: 'Profit', value: wholeDollars(totals.profit), zero: totals.profit === 0 },
+          ].map(item => (
+            <div key={item.label} className="flex items-baseline gap-2">
+              <dt className="t-caption text-ink-2">{item.label}</dt>
+              <dd
+                className={cn(
+                  't-body font-semibold tabular-nums',
+                  item.zero ? 'text-ink-3' : 'text-ink'
+                )}
+                data-total={item.label}
+              >
+                {item.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
 
       {/* Main Operations Data Table */}
       <Panel className="min-w-0 overflow-hidden">
@@ -1586,12 +1764,38 @@ export default function OperationsCallLogsPage() {
           </Table>
         </PanelBody>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Pagination: rows per page, and where this page sits in the set */}
+        {total > 0 && !loadError ? (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-5 py-3 pr-24">
-            <span className="t-meta tabular-nums text-ink-3">
-              Page {page} of {totalPages}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="t-meta tabular-nums text-ink-2" data-page-range>
+                {`${((page - 1) * pageSize + 1).toLocaleString('en-US')}–${Math.min(
+                  page * pageSize,
+                  total
+                ).toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
+              </span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={value => {
+                  setPageSize(Number(value));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Rows per page"
+                  className="h-8 w-auto gap-1.5 px-2.5 text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZES.map(size => (
+                    <SelectItem key={size} value={String(size)}>
+                      {`${size} rows`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -1607,7 +1811,7 @@ export default function OperationsCallLogsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={page === totalPages}
+                disabled={page >= totalPages}
                 onClick={e => {
                   e.stopPropagation();
                   setPage(p => Math.min(totalPages, p + 1));
@@ -1617,7 +1821,7 @@ export default function OperationsCallLogsPage() {
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
       </Panel>
 
       {/* Slide-out Call Detail Drawer Dialog */}
@@ -1629,7 +1833,8 @@ export default function OperationsCallLogsPage() {
       >
         <DialogContent
           hideClose
-          className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-rule bg-surface p-0 shadow-pop text-ink translate-x-0 translate-y-0 left-auto top-0 bottom-0">
+          className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-rule bg-surface p-0 shadow-pop text-ink translate-x-0 translate-y-0 left-auto top-0 bottom-0"
+        >
           <div className="h-full flex flex-col overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-rule flex items-center justify-between bg-sunken">
@@ -1648,6 +1853,15 @@ export default function OperationsCallLogsPage() {
                       : 'Loading call...'}
                   </h2>
                 </DialogHeader>
+                {detailCall && !isAgent ? (
+                  <div className="mt-2" data-drawer-went-to>
+                    <EntityBadge
+                      variant="chip"
+                      kind={wentToOf(detailCall).kind}
+                      name={wentToOf(detailCall).name}
+                    />
+                  </div>
+                ) : null}
               </div>
               <Tooltip content="Close" align="end">
                 <Button
@@ -1737,6 +1951,22 @@ export default function OperationsCallLogsPage() {
                           ) : (
                             <div className="h-2 bg-sunken rounded-full flex-1" />
                           )}
+                          <Tooltip content="Download recording" align="end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label="Download recording"
+                              onClick={() =>
+                                void handleDownloadRecording(
+                                  recordingIdOf(detailCall) ?? '',
+                                  `call-${detailCall.id}-recording.wav`
+                                )
+                              }
+                              className="h-9 w-9 flex-shrink-0 rounded-full p-0 text-ink-3 hover:bg-sunken hover:text-ink"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
                         </CardContent>
                       </Card>
                     )}

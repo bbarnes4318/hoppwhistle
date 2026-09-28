@@ -2,7 +2,6 @@
 
 import { AlertTriangle, Bell, LogOut, Search, Settings, User } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -22,14 +21,12 @@ import {
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { useBrand } from '@/hooks/use-brand';
-import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 import { CommandPalette, useCommandPalette } from './command-palette';
 import { MobileNav } from './mobile-nav';
-import { AGENT_NAV, WHITE_LABEL_OWNER_NAV } from './nav-config';
-import { pageTitleFor } from './page-title';
+import { usePageTitleClaimed, useCurrentPageTitle } from './use-page-title';
 
 /**
  * Topbar: 64px, the page title at the title step on the left; the command
@@ -40,17 +37,15 @@ import { pageTitleFor } from './page-title';
  * cmd-K would be two search experiences pretending to be one.
  */
 export function Topbar() {
-  const pathname = usePathname();
-  const { user, isBuyerOnly, isPublisherOnly, isAgentOnly } = useAuth();
+  const { user, isBuyerOnly, isPublisherOnly } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
   // A white-label owner's pages, and an agent's, are named as their own
   // sidebar names them: the CRM is "My customers" to an agent.
-  const whiteLabel = useWhiteLabelView();
-  const title = pageTitleFor(
-    pathname,
-    whiteLabel ? WHITE_LABEL_OWNER_NAV : isAgentOnly ? AGENT_NAV : undefined
-  );
+  const title = useCurrentPageTitle();
+  // The page's own header shows the title when it has one; this is the
+  // fallback for a page that does not.
+  const titleOnPage = usePageTitleClaimed();
 
   // The tab is named after the page, then the product, so a floor with six
   // NetEnroll tabs open can tell them apart. Set here because every page under
@@ -99,7 +94,11 @@ export function Topbar() {
     <>
       <header className="flex h-16 shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
         <MobileNav />
-        <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
+        {titleOnPage ? (
+          <div className="min-w-0 flex-1" />
+        ) : (
+          <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
+        )}
 
         {/* NetEnroll staff only, and rendered on every page: an operator must
             never be able to forget which agency's data they are looking at.
