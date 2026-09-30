@@ -139,8 +139,8 @@ describe('the agency brand theme in the authenticated shell', () => {
       await mountShell();
 
       const logo = await screen.findByTestId('brand-logo');
-      // The wordmark reversed out for the navy rail, beside the icon tile.
-      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/wordmark-on-dark.png');
+      // The wordmark full lockup, on a white plate in the navy rail.
+      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/logo.png');
       expect(logo.getAttribute('alt')).toBe('Life Leads Plus');
       expect(
         document.querySelector('img[src="/brands/life-leads-plus/mark-128.png"]')
