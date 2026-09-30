@@ -359,7 +359,12 @@ function StepTwo({
     setBusy(true);
     try {
       const response = await apiClient.post<
-        Envelope<{ activationToken: string; email: string; emailed: boolean }>
+        Envelope<{
+          activationToken: string;
+          activationLink?: string;
+          email: string;
+          emailed: boolean;
+        }>
       >(`/api/v1/network/agencies/${agency.tenantId}/owner`, { email });
       const grant = payload(response);
       if (response.error || !grant) {
@@ -367,10 +372,11 @@ function StepTwo({
         return;
       }
       setProblem(null);
-      // The same two parameters the invitation email's link carries, which the
-      // login page reads to open on its create-account tab.
+      // The server's link, on the agency's portal host. Failing that, the same
+      // two parameters the invitation email's link carries, which the login
+      // page reads to open on its create-account tab.
       const params = new URLSearchParams({ activation: grant.activationToken, email: grant.email });
-      setLink(`${window.location.origin}/login?${params.toString()}`);
+      setLink(grant.activationLink ?? `${window.location.origin}/login?${params.toString()}`);
       if (grant.emailed) toast.success('Invitation sent', `We emailed ${grant.email}.`);
       onInvited();
     } finally {

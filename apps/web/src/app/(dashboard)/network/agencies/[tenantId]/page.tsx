@@ -313,7 +313,12 @@ function ResendInvite({
     setBusy(true);
     try {
       const response = await apiClient.post<
-        Envelope<{ activationToken: string; email: string; emailed: boolean }>
+        Envelope<{
+          activationToken: string;
+          activationLink?: string;
+          email: string;
+          emailed: boolean;
+        }>
       >(`/api/v1/network/agencies/${detail.tenantId}/owner`, { email: email.trim() });
       const grant = payload(response);
       if (response.error || !grant) {
@@ -324,12 +329,14 @@ function ResendInvite({
         toast.success('Invitation sent', `We emailed ${grant.email}.`);
         setOpen(false);
       } else {
-        // SMTP refused or is not configured: hand the link over instead.
+        // SMTP refused or is not configured: hand the link over instead. The
+        // server's link names the agency's portal host; the page's origin is
+        // only a fallback for an API that does not send one.
         const params = new URLSearchParams({
           activation: grant.activationToken,
           email: grant.email,
         });
-        setLink(`${window.location.origin}/login?${params.toString()}`);
+        setLink(grant.activationLink ?? `${window.location.origin}/login?${params.toString()}`);
       }
       onSent();
     } finally {

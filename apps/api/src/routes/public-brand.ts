@@ -1,7 +1,7 @@
 /**
  * The brand a host is drawn in, before anybody has signed in.
  *
- *   GET /api/v1/public/brand?host=portal.lifeleadsplus.com
+ *   GET /api/v1/public/brand?host=agents.lifeleadsplus.com
  *     → { data: { theme, name } }   the tenant whose `Tenant.domain` is that host
  *     → { data: null }              any other host, NetEnroll's own included
  *
@@ -33,7 +33,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { brandForTenant, type TenantBrand } from '../lib/tenant-brand.js';
+import { brandForTenant, normaliseHost, type TenantBrand } from '../lib/tenant-brand.js';
 
 /** Seconds a browser or proxy may reuse the answer. */
 export const PUBLIC_BRAND_MAX_AGE_SECONDS = 300;
@@ -53,17 +53,11 @@ export function clearPublicBrandCache(): void {
 /**
  * The bare host: lower-cased, port and trailing dot stripped. Null for
  * anything that is not a plausible host name, which is answered as "no brand"
- * without a query.
+ * without a query. Shared with the portal-domain resolver, so the host a
+ * login page is looked up by and the host a link is built from are normalised
+ * the same way.
  */
-export function normaliseHost(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  let host = raw.trim().toLowerCase();
-  if (!host || host.length > 253) return null;
-  // `[::1]:3000` -- an IPv6 literal is never a tenant domain.
-  if (host.startsWith('[')) return null;
-  host = host.replace(/:\d*$/, '').replace(/\.$/, '');
-  return /^[a-z0-9.-]+$/.test(host) ? host : null;
-}
+export { normaliseHost };
 
 async function lookup(host: string): Promise<TenantBrand | null> {
   const now = Date.now();

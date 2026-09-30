@@ -149,6 +149,10 @@ const DATABASE_BACKED = [
   // wallets, calls and top-ups, and branded tenants on their own domains.
   '**/src/__tests__/buyer-balances.test.ts',
   '**/src/__tests__/public-brand.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `audit_logs` and the platform admin
+  // tables to seed NetEnroll, the Life Leads Plus white-label on its own
+  // domain, two of its child agencies and an unrelated agency.
+  '**/src/__tests__/white-label-domain.test.ts',
   // Truncates `tenants`, `roles`, `users`, `insurance_leads` and
   // `insurance_carrier_applications`: an application opening its customer.
   '**/src/__tests__/application-customer.test.ts',

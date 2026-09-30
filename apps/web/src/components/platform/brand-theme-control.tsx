@@ -17,6 +17,13 @@ interface Branding {
   brandName: string | null;
   /** The white-label tier. Saved through the same route, audited the same way. */
   whiteLabel?: boolean;
+  /**
+   * The agency's own portal host (e.g. agents.lifeleadsplus.com), or null for
+   * agents.netenroll.com. Its child agencies inherit it. Decides the login
+   * page's brand on that host and the host every emailed link names; never
+   * who is signed in.
+   */
+  domain?: string | null;
 }
 
 /** The select's value for "no theme". A <select> cannot hold null. */
@@ -45,6 +52,8 @@ export function BrandThemeControl({
   const [value, setValue] = useState(DEFAULT_VALUE);
   const [saving, setSaving] = useState(false);
   const [savingTier, setSavingTier] = useState(false);
+  const [domain, setDomain] = useState('');
+  const [savingDomain, setSavingDomain] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,6 +72,7 @@ export function BrandThemeControl({
         }
         setSaved(branding);
         setValue(branding.brandTheme ?? DEFAULT_VALUE);
+        setDomain(branding.domain ?? '');
       });
     return () => {
       cancelled = true;
@@ -72,6 +82,7 @@ export function BrandThemeControl({
   if (!isPlatformAdmin) return null;
 
   const dirty = saved !== null && value !== (saved.brandTheme ?? DEFAULT_VALUE);
+  const domainDirty = saved !== null && domain.trim() !== (saved.domain ?? '');
 
   async function save(): Promise<void> {
     setSaving(true);
@@ -122,6 +133,37 @@ export function BrandThemeControl({
     }
   }
 
+  /*
+   * The portal domain. Only set it once DNS, the certificate and the nginx
+   * server block for the host are live (docs/WHITE_LABEL_DOMAIN.md): from the
+   * moment it is saved, every invitation and reset link for this agency and
+   * its child agencies names it.
+   */
+  async function saveDomain(): Promise<void> {
+    setSavingDomain(true);
+    try {
+      const response = await apiClient.patch<Envelope<Branding>>(
+        `/api/v1/admin/tenants/${tenantId}/branding`,
+        { domain: domain.trim() || null }
+      );
+      const branding = payload(response);
+      if (response.error || !branding) {
+        toast.error('Could not change the portal domain', response.error?.message);
+        return;
+      }
+      setSaved(current => (current ? { ...current, domain: branding.domain } : branding));
+      setDomain(branding.domain ?? '');
+      toast.success(
+        'Portal domain saved',
+        branding.domain
+          ? `${agencyName}'s links now go to ${branding.domain}.`
+          : `${agencyName}'s links now go to the default portal.`
+      );
+    } finally {
+      setSavingDomain(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-3 text-sm">
       <label
@@ -156,6 +198,21 @@ export function BrandThemeControl({
       <Button size="sm" onClick={() => void save()} disabled={!dirty || saving}>
         {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
         Save brand theme
+      </Button>
+      <label className="text-xs text-ink-3">
+        Portal domain
+        <input
+          value={domain}
+          onChange={event => setDomain(event.target.value)}
+          disabled={saved === null || savingDomain}
+          placeholder="agents.netenroll.com (default)"
+          className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm text-ink"
+          data-testid="portal-domain-input"
+        />
+      </label>
+      <Button size="sm" onClick={() => void saveDomain()} disabled={!domainDirty || savingDomain}>
+        {savingDomain ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+        Save domain
       </Button>
       {error ? <p className="text-[13px] text-ink-3">{error}</p> : null}
     </div>

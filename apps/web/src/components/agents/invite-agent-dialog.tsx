@@ -50,6 +50,12 @@ interface InviteAgentDialogProps {
 
 interface GrantResponse {
   activationToken: string;
+  /**
+   * The server's link, on the agency's own portal host (its domain, or its
+   * white-label parent's, or agents.netenroll.com). Preferred over this
+   * page's origin, which is only the host the owner happens to be using.
+   */
+  activationLink?: string;
   email: string;
   expiresAt: string;
   emailed: boolean;
@@ -57,9 +63,10 @@ interface GrantResponse {
 }
 
 /** The link an owner hand-delivers when the email did not go. */
-function invitationLink(email: string, token: string): string {
+function invitationLink(grant: GrantResponse): string {
+  if (grant.activationLink) return grant.activationLink;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const params = new URLSearchParams({ activation: token, email });
+  const params = new URLSearchParams({ activation: grant.activationToken, email: grant.email });
   return `${origin}/login?${params.toString()}`;
 }
 
@@ -112,7 +119,7 @@ export function InviteAgentDialog({
   async function copyLink(): Promise<void> {
     if (!result) return;
     try {
-      await navigator.clipboard.writeText(invitationLink(result.email, result.activationToken));
+      await navigator.clipboard.writeText(invitationLink(result));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -174,7 +181,7 @@ export function InviteAgentDialog({
                 <div className="flex items-center gap-2">
                   <Input
                     readOnly
-                    value={invitationLink(result.email, result.activationToken)}
+                    value={invitationLink(result)}
                     className="font-mono text-xs"
                     onFocus={event => event.currentTarget.select()}
                   />

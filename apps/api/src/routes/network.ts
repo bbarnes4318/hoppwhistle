@@ -537,7 +537,9 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
 
       // Best-effort, exactly as onboarding step (d): the grant stands and the
       // token is returned whether or not SMTP accepted the message.
-      const { sendAgentInvitationEmail } = await import('../services/agent-invite-email.js');
+      const { sendAgentInvitationEmail, invitationLink } = await import(
+        '../services/agent-invite-email.js'
+      );
       const delivery = await sendAgentInvitationEmail({
         email,
         agencyName: child.name,
@@ -546,6 +548,10 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
         role: 'OWNER',
         tenantId: child.id,
       });
+      // The child's portal is its white-label parent's domain: the same host
+      // the email names, for the operator to hand over when it did not send.
+      const { portalUrlForTenant } = await import('../lib/tenant-brand.js');
+      const activationLink = invitationLink(email, grant.token, await portalUrlForTenant(child.id));
 
       return reply.code(201).send({
         data: {
@@ -555,6 +561,8 @@ export async function registerNetworkRoutes(fastify: FastifyInstance): Promise<v
           expiresAt: grant.expiresAt,
           /** Shown once. It is not stored and cannot be read back. */
           activationToken: grant.token,
+          /** The ready-to-copy link, on the child's own portal host. */
+          activationLink,
           /** False when SMTP is unconfigured or refused it. Hand-deliver then. */
           emailed: delivery.sent,
           emailFailureReason: delivery.reason ?? null,
