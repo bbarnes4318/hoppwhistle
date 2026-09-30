@@ -109,6 +109,73 @@ describe('the committed agents.netenroll.com /ws proxy', () => {
   });
 });
 
+/**
+ * The white-label hostname: the same application under a second name.
+ *
+ * agents.lifeleadsplus.com is served by the same web, API and FreeSWITCH as
+ * agents.netenroll.com. Its softphone dials wss://agents.lifeleadsplus.com/ws
+ * (the hostname in its address bar), so its /ws block has exactly the same
+ * failure modes -- and it must not quietly become a redirect to NetEnroll.
+ */
+const WHITE_LABEL_HOST = 'agents.lifeleadsplus.com';
+const WHITE_LABEL_VHOST = join(REPO_ROOT, 'infra', 'nginx', WHITE_LABEL_HOST);
+
+/** Every non-comment directive in the file, in order, whitespace collapsed. */
+function directives(config: string): string[] {
+  return config
+    .split('\n')
+    .map(line => line.replace(/#.*$/, '').trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+}
+
+describe('the committed agents.lifeleadsplus.com server block', () => {
+  const agents = readFileSync(AGENTS_VHOST, 'utf8');
+  const whiteLabel = readFileSync(WHITE_LABEL_VHOST, 'utf8');
+
+  it('proxies /ws directive-for-directive as agents.netenroll.com does', () => {
+    const blocks = wsDirectives(whiteLabel);
+    expect(
+      blocks,
+      'agents.lifeleadsplus.com must proxy /ws or no softphone registers'
+    ).toHaveLength(1);
+    expect(blocks[0]).toEqual(wsDirectives(agents)[0]);
+    expect(blocks[0]).toContain('proxy_pass https://127.0.0.1:7443;');
+    expect(blocks[0]).toContain('proxy_ssl_server_name on;');
+    expect(blocks[0]).toContain('proxy_set_header Sec-WebSocket-Protocol sip;');
+  });
+
+  it('differs from agents.netenroll.com only in its name and its certificate', () => {
+    // Same frontend (:3000), API (:3001), ACME webroot, root redirect and
+    // headers; one application under two names.
+    const rename = (line: string) => line.split(WHITE_LABEL_HOST).join(NEW_HOST);
+    expect(directives(whiteLabel).map(rename)).toEqual(directives(agents));
+  });
+
+  it('serves its own name with its own certificate', () => {
+    const lines = directives(whiteLabel);
+    expect(lines.filter(l => l === `server_name ${WHITE_LABEL_HOST};`)).toHaveLength(2);
+    expect(lines).toContain(
+      `ssl_certificate /etc/letsencrypt/live/${WHITE_LABEL_HOST}/fullchain.pem;`
+    );
+    expect(lines).toContain(
+      `ssl_certificate_key /etc/letsencrypt/live/${WHITE_LABEL_HOST}/privkey.pem;`
+    );
+  });
+
+  it('keeps the ACME challenge above the port-80 redirect', () => {
+    const lines = directives(whiteLabel);
+    const acme = lines.indexOf('location /.well-known/acme-challenge/ {');
+    const redirect = lines.indexOf('return 301 https://$host$request_uri;');
+    expect(acme).toBeGreaterThanOrEqual(0);
+    expect(lines[acme + 1]).toBe('root /var/www/hopwhistle;');
+    expect(redirect).toBeGreaterThan(acme);
+  });
+
+  it('never sends anybody to agents.netenroll.com', () => {
+    expect(directives(whiteLabel).join('\n')).not.toContain('netenroll');
+  });
+});
+
 describe('scripts/check-ws-proxy.mjs fails loudly', () => {
   /**
    * A self-signed cert for `localhost`, generated per-run rather than committed

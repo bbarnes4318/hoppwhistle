@@ -29,6 +29,7 @@ let asked: string[] = [];
 /** The hosts the stubbed API knows. */
 const BRANDS: Record<string, { theme: string; name: string | null }> = {
   'portal.lifeleadsplus.test': { theme: 'life-leads-plus', name: 'Life Leads Plus' },
+  'agents.lifeleadsplus.com': { theme: 'life-leads-plus', name: 'Life Leads Plus' },
 };
 
 vi.mock('next/headers', () => ({ headers: () => requestHeaders }));
@@ -141,6 +142,36 @@ describe('/login on a branded host', () => {
     expect(root.title).toEqual({ default: 'Life Leads Plus', template: '%s · Life Leads Plus' });
     expect(root.applicationName).toBe('Life Leads Plus');
     expect(JSON.stringify(root.icons)).toContain('/brands/life-leads-plus/favicon-32.png');
+  });
+});
+
+/**
+ * The production white-label hostname. nginx passes `Host $host` through
+ * (infra/nginx/agents.lifeleadsplus.com), so the page sees the host the browser
+ * asked for, and the same application renders both portals.
+ */
+describe('/login on agents.lifeleadsplus.com', () => {
+  it('is Life Leads Plus, asked for by that host', async () => {
+    requestHeaders = new Headers({ host: 'agents.lifeleadsplus.com' });
+    await renderLogin();
+    expect(screen.getByTestId('brand-logo').getAttribute('alt')).toBe('Life Leads Plus');
+    expect(screen.queryByTestId('logo')).toBeNull();
+    expect(asked).toContain('/api/v1/public/brand?host=agents.lifeleadsplus.com');
+
+    const { resolveBrand } = await import('@/lib/brand-themes');
+    const root = brandMetadata(resolveBrand(await serverBrandForRequest()));
+    expect(root.title).toEqual({ default: 'Life Leads Plus', template: '%s · Life Leads Plus' });
+    expect(JSON.stringify(root.icons)).toContain('/brands/life-leads-plus/favicon-32.png');
+  });
+
+  it('leaves agents.netenroll.com NetEnroll in the same process', async () => {
+    requestHeaders = new Headers({ host: 'agents.lifeleadsplus.com' });
+    await renderLogin();
+    cleanup();
+    requestHeaders = new Headers({ host: 'agents.netenroll.com' });
+    await renderLogin();
+    expect(screen.getByTestId('logo')).toBeTruthy();
+    expect(screen.queryByTestId('brand-logo')).toBeNull();
   });
 });
 

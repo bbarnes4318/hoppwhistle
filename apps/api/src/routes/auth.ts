@@ -774,7 +774,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const { sendAgentInvitationEmail, invitationLink } = await import(
         '../services/agent-invite-email.js'
       );
-      const { emailBrandForTenant } = await import('../services/email-brand.js');
+      const { portalUrlForTenant } = await import('../lib/tenant-brand.js');
       const delivery = await sendAgentInvitationEmail({
         email: email.toLowerCase(),
         agencyName: agency?.name ?? null,
@@ -783,7 +783,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         role: invitedRole,
         tenantId,
       });
-      const brand = await emailBrandForTenant(tenantId);
+      // The agency's own portal: its domain, its white-label parent's, or
+      // agents.netenroll.com -- the same host the emailed link names.
+      const portalUrl = await portalUrlForTenant(tenantId);
 
       return reply.code(201).send({
         /*
@@ -794,7 +796,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
          * `activationLink` is the ready-to-copy link for that case.
          */
         activationToken: grant.token,
-        activationLink: invitationLink(email.toLowerCase(), grant.token, brand.linkBase),
+        activationLink: invitationLink(email.toLowerCase(), grant.token, portalUrl),
         email: email.toLowerCase(),
         role: invitedRole,
         buyerId: grantBuyerId,

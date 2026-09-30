@@ -779,7 +779,9 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         select: { name: true },
       });
 
-      const { sendAgentInvitationEmail } = await import('../services/agent-invite-email.js');
+      const { sendAgentInvitationEmail, invitationLink } = await import(
+        '../services/agent-invite-email.js'
+      );
       const delivery = await sendAgentInvitationEmail({
         email,
         agencyName: agency?.name ?? null,
@@ -788,6 +790,10 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         role: 'OWNER',
         tenantId: tenantId,
       });
+      // The agency's portal host (its own domain, its white-label parent's, or
+      // agents.netenroll.com), not whichever host the operator is signed in on.
+      const { portalUrlForTenant } = await import('../lib/tenant-brand.js');
+      const activationLink = invitationLink(email, grant.token, await portalUrlForTenant(tenantId));
 
       return reply.code(201).send({
         data: {
@@ -797,6 +803,8 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
           expiresAt: grant.expiresAt,
           /** Shown once. It is not stored and cannot be read back. */
           activationToken: grant.token,
+          /** The ready-to-copy link, on the agency's own portal host. */
+          activationLink,
           /** False when SMTP is unconfigured or refused it. Hand-deliver then. */
           emailed: delivery.sent,
           emailFailureReason: delivery.reason ?? null,

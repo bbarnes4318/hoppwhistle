@@ -310,6 +310,7 @@ describe.skipIf(!gate.available)('Tenant brand theme', () => {
         brandTheme: 'life-leads-plus',
         brandName: 'Ridgeline',
         whiteLabel: false,
+        domain: null,
       });
       expect((await me(agencyB.ownerId, agencyB.id)).json().brand).toEqual({
         theme: 'life-leads-plus',
@@ -334,6 +335,7 @@ describe.skipIf(!gate.available)('Tenant brand theme', () => {
         brandTheme: 'life-leads-plus',
         brandName: 'Life Leads Plus',
         whiteLabel: false,
+        domain: null,
       });
     });
 

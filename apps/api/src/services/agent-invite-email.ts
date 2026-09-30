@@ -31,6 +31,7 @@ import { createTransport } from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
 import { logger } from '../lib/logger.js';
+import { defaultPortalUrl } from '../lib/tenant-brand.js';
 
 import { emailBrandForTenant, netEnrollEmailBrand } from './email-brand.js';
 import { escapeHtml, renderEmail } from './publisher-email.js';
@@ -110,14 +111,16 @@ function transporter(): Transporter | null {
 }
 
 /**
- * Where the portal lives, for the link in the message.
+ * Where the portal lives when the invitation names no agency.
  *
  * `APP_URL` is what `cli/platform-admins.ts` already uses for the same purpose,
  * so the two agree on the address an invitation points at rather than each
- * having their own idea of it.
+ * having their own idea of it. An invitation INTO an agency goes to that
+ * agency's portal instead (`portalUrlForTenant`, via the email brand's
+ * `linkBase`), so a white-label agency's people are sent to its own domain.
  */
 function portalUrl(): string {
-  return (process.env.APP_URL ?? 'https://agents.netenroll.com').replace(/\/+$/, '');
+  return defaultPortalUrl();
 }
 
 /**

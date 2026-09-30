@@ -20,8 +20,7 @@
 
 import { BRAND_THEME_NAMES } from '@hopwhistle/shared';
 
-import { getPrismaClient } from '../lib/prisma.js';
-import { brandForTenant } from '../lib/tenant-brand.js';
+import { brandForTenant, defaultPortalUrl, portalUrlForTenant } from '../lib/tenant-brand.js';
 
 export interface EmailBrand {
   /** True when the tenant has a brand. False means NetEnroll's own look. */
@@ -38,9 +37,13 @@ export interface EmailBrand {
   signOff: string;
 }
 
-/** APP_URL, the portal address every link and asset hangs off by default. */
+/**
+ * APP_URL, the portal address every link and asset hangs off by default. The
+ * default, not the answer for a tenant: a tenant's links come from
+ * `portalUrlForTenant` (lib/tenant-brand.ts), which is `linkBase` below.
+ */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? 'https://agents.netenroll.com').replace(/\/+$/, '');
+  return defaultPortalUrl();
 }
 
 function smtpFrom(): string {
@@ -58,12 +61,6 @@ function fromHeader(displayName: string): string {
   const address = match ? match[1] : configured;
   const safeName = displayName.replace(/["<>\r\n]/g, '').trim();
   return `${safeName} <${address}>`;
-}
-
-/** A host from `Tenant.domain`, as a link base. A value already a URL is kept. */
-function domainBase(domain: string): string {
-  const trimmed = domain.trim().replace(/\/+$/, '');
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 /** NetEnroll's own look, for unbranded agencies and platform mail. */
@@ -90,16 +87,12 @@ export async function emailBrandForTenant(
   if (!tenantId) return netEnrollEmailBrand();
 
   try {
-    const [brand, tenant] = await Promise.all([
+    // The tenant's domain, else its parent's, else the default portal: the
+    // one resolver every tenant-facing link is built from.
+    const [brand, linkBase] = await Promise.all([
       brandForTenant(tenantId),
-      getPrismaClient().tenant.findUnique({
-        where: { id: tenantId },
-        select: { domain: true, parent: { select: { domain: true } } },
-      }),
+      portalUrlForTenant(tenantId),
     ]);
-
-    const domain = tenant?.domain ?? tenant?.parent?.domain ?? null;
-    const linkBase = domain ? domainBase(domain) : appUrl();
 
     if (!brand) {
       return { ...netEnrollEmailBrand(), linkBase };

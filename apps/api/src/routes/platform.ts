@@ -68,6 +68,7 @@ import {
   requirePlatformAdmin,
 } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { defaultPortalHost, NETENROLL_PORTAL_URL, portalHost } from '../lib/tenant-brand.js';
 import { getActingUserId } from '../lib/tenant-context.js';
 import {
   markUpgradeRequestsDone,
@@ -76,6 +77,8 @@ import {
 } from '../lib/tenant-upgrades.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
+
+import { clearPublicBrandCache } from './public-brand.js';
 
 /** Long enough for any agency's trading name; short enough for a sidebar and a tab. */
 const BRAND_NAME_MAX_LENGTH = 100;
@@ -86,6 +89,8 @@ const BRANDING_SELECT = {
   brandTheme: true,
   brandName: true,
   whiteLabel: true,
+  domain: true,
+  parentTenantId: true,
 } as const;
 
 function brandingView(tenant: {
@@ -93,13 +98,41 @@ function brandingView(tenant: {
   brandTheme: string | null;
   brandName: string | null;
   whiteLabel: boolean;
+  domain: string | null;
 }) {
   return {
     tenantId: tenant.id,
     brandTheme: tenant.brandTheme,
     brandName: tenant.brandName,
     whiteLabel: tenant.whiteLabel,
+    domain: tenant.domain,
   };
+}
+
+/**
+ * A white-label portal domain as staff typed it, checked and reduced to a bare
+ * host, or the reason it cannot be one.
+ *
+ * Refused: anything that is not a dotted host name, and the default portal's
+ * own host. A tenant that owned agents.netenroll.com would put its logo on
+ * NetEnroll's own login page for everybody (routes/public-brand.ts) and send
+ * nobody's links anywhere new.
+ */
+function validatePortalDomain(raw: unknown): { domain: string } | { error: string } {
+  if (typeof raw !== 'string') return { error: 'domain must be a host name or null' };
+  const host = portalHost(raw);
+  const labels = host?.split('.') ?? [];
+  if (
+    !host ||
+    labels.length < 2 ||
+    labels.some(label => !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
+  ) {
+    return { error: 'domain must be a host name such as agents.example.com' };
+  }
+  if (host === defaultPortalHost() || host === new URL(NETENROLL_PORTAL_URL).host) {
+    return { error: 'domain cannot be the default portal; leave it empty instead' };
+  }
+  return { domain: host };
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
@@ -407,7 +440,7 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
 
   fastify.patch<{
     Params: { tenantId: string };
-    Body: { brandTheme?: unknown; brandName?: unknown; whiteLabel?: unknown };
+    Body: { brandTheme?: unknown; brandName?: unknown; whiteLabel?: unknown; domain?: unknown };
   }>(
     '/api/v1/admin/tenants/:tenantId/branding',
     { preHandler: [authenticate, requirePlatformAdmin] },
@@ -417,14 +450,35 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       const hasTheme = Object.prototype.hasOwnProperty.call(body, 'brandTheme');
       const hasName = Object.prototype.hasOwnProperty.call(body, 'brandName');
       const hasWhiteLabel = Object.prototype.hasOwnProperty.call(body, 'whiteLabel');
+      const hasDomain = Object.prototype.hasOwnProperty.call(body, 'domain');
 
-      if (!hasTheme && !hasName && !hasWhiteLabel) {
+      if (!hasTheme && !hasName && !hasWhiteLabel && !hasDomain) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Send brandTheme, brandName, whiteLabel, or any of them together',
+            message: 'Send brandTheme, brandName, whiteLabel, domain, or any of them together',
           },
         });
+      }
+
+      // The portal domain: where this agency's people -- and its child
+      // agencies' people, who inherit it -- sign in, and the host every link
+      // they are sent names (lib/tenant-brand.ts `portalUrlForTenant`). null or
+      // "" clears it. It decides presentation and links only; it never
+      // decides who is signed in.
+      let domain: string | null | undefined;
+      if (hasDomain) {
+        if (body.domain === null || (typeof body.domain === 'string' && !body.domain.trim())) {
+          domain = null;
+        } else {
+          const checked = validatePortalDomain(body.domain);
+          if ('error' in checked) {
+            return reply
+              .code(400)
+              .send({ error: { code: 'VALIDATION_ERROR', message: checked.error } });
+          }
+          domain = checked.domain;
+        }
       }
 
       // A boolean and nothing else: a string "false" is truthy, and the tier
@@ -473,15 +527,40 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
       }
 
-      const tenant = await prisma.tenant.update({
-        where: { id: tenantId },
-        data: {
-          ...(hasTheme ? { brandTheme: body.brandTheme as string | null } : {}),
-          ...(hasName ? { brandName } : {}),
-          ...(hasWhiteLabel ? { whiteLabel: body.whiteLabel as boolean } : {}),
-        },
-        select: BRANDING_SELECT,
-      });
+      // A child agency inherits its parent's domain. Giving it one of its own
+      // would split it from the white-label that sells it.
+      if (hasDomain && domain && before.parentTenantId) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'A child agency uses its parent agency’s domain; set it on the parent',
+          },
+        });
+      }
+
+      let tenant: Prisma.TenantGetPayload<{ select: typeof BRANDING_SELECT }>;
+      try {
+        tenant = await prisma.tenant.update({
+          where: { id: tenantId },
+          data: {
+            ...(hasTheme ? { brandTheme: body.brandTheme as string | null } : {}),
+            ...(hasName ? { brandName } : {}),
+            ...(hasWhiteLabel ? { whiteLabel: body.whiteLabel as boolean } : {}),
+            ...(hasDomain ? { domain } : {}),
+          },
+          select: BRANDING_SELECT,
+        });
+      } catch (error) {
+        // `Tenant.domain` is unique: one host, one agency.
+        if ((error as { code?: string }).code === 'P2002') {
+          return reply.code(409).send({
+            error: { code: 'DOMAIN_TAKEN', message: 'Another agency already uses that domain' },
+          });
+        }
+        throw error;
+      }
+      // The login page's brand for the old and new host changes now, not in a minute.
+      if (hasDomain) clearPublicBrandCache();
 
       await auditLog({
         tenantId,
@@ -496,11 +575,13 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
             brandTheme: before.brandTheme,
             brandName: before.brandName,
             ...(hasWhiteLabel ? { whiteLabel: before.whiteLabel } : {}),
+            ...(hasDomain ? { domain: before.domain } : {}),
           },
           after: {
             brandTheme: tenant.brandTheme,
             brandName: tenant.brandName,
             ...(hasWhiteLabel ? { whiteLabel: tenant.whiteLabel } : {}),
+            ...(hasDomain ? { domain: tenant.domain } : {}),
           },
         },
       });

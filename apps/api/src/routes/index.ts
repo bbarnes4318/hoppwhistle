@@ -18,6 +18,7 @@ import {
   resolveTenant,
   sendTenantRefusal,
 } from '../lib/tenant-context.js';
+import { portalUrlForTenant } from '../lib/tenant-brand.js';
 import { authenticate } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/rbac.js';
 import type { Permission } from '../middleware/rbac.js';
@@ -434,15 +435,6 @@ function buildRecordingPlaybackUrls(call: any, apiBaseUrl: string) {
       : primaryUrl;
 
   return { primaryUrl, allUrls };
-}
-
-/**
- * Where the web app lives, for links written into exports.
- *
- * Same variable and default as `services/agent-invite-email.ts`.
- */
-function appUrl(): string {
-  return (process.env.APP_URL ?? 'https://agents.netenroll.com').replace(/\/+$/, '');
 }
 
 function csvEscape(value: any): string {
@@ -3972,6 +3964,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       billable: request.query.billable,
     });
 
+    // The call links go to the acting tenant's own portal: a white-label
+    // agency's (or its child's) export must not point its people at NetEnroll.
+    const portalUrl = await portalUrlForTenant(tenantId);
     const apiBaseUrl = getPublicApiBaseUrl(request);
 
     /*
@@ -4077,7 +4072,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
            * every exported spreadsheet was a working login. The call page
            * plays the recording to whoever signs in and may hear it.
            */
-          mapped.recordingUrl ? `${appUrl()}/calls?call=${encodeURIComponent(mapped.id)}` : '',
+          mapped.recordingUrl ? `${portalUrl}/calls?call=${encodeURIComponent(mapped.id)}` : '',
         ];
 
         if (profile.isAdminOrOwner) {
