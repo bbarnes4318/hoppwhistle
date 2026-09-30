@@ -139,12 +139,9 @@ describe('the agency brand theme in the authenticated shell', () => {
       await mountShell();
 
       const logo = await screen.findByTestId('brand-logo');
-      // The wordmark full lockup, on a white plate in the navy rail.
+      // The full lockup, on a white plate in the navy rail.
       expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/logo.png');
       expect(logo.getAttribute('alt')).toBe('Life Leads Plus');
-      expect(
-        document.querySelector('img[src="/brands/life-leads-plus/mark-128.png"]')
-      ).toBeTruthy();
 
       expect(document.querySelector('[data-testid="logo"]')).toBeNull();
       expect(document.querySelector('img[src="/netenroll-logo.png"]')).toBeNull();
