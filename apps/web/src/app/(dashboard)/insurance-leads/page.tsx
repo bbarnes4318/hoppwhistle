@@ -178,7 +178,7 @@ export default function CrmPage() {
    * refuses the delete to anyone but an owner or administrator. An agent works
    * the leads in front of them; the buttons are not offered.
    */
-  const { isAdmin, isOwner } = useAuth();
+  const { isAdmin, isOwner, isAgentOnly } = useAuth();
   const canManageBook = isAdmin || isOwner;
   const { makeCall } = usePhone();
   const router = useRouter();
@@ -711,7 +711,8 @@ export default function CrmPage() {
                         'Carrier · Product',
                         'Face amount',
                         'Annual premium',
-                        'Agent',
+                        // An agent's list is their own: the column would only repeat their name.
+                        ...(isAgentOnly ? [] : ['Agent']),
                       ].map(h => (
                         <th
                           key={h}
@@ -779,13 +780,15 @@ export default function CrmPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
                           <MoneyCell amount={app.annualPremium} unit="major" tone="none" />
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {app.agentName ? (
-                            <EntityBadge kind="agent" name={app.agentName} />
-                          ) : (
-                            <span className="text-ink-3">—</span>
-                          )}
-                        </td>
+                        {!isAgentOnly && (
+                          <td className="whitespace-nowrap px-4 py-3">
+                            {app.agentName ? (
+                              <EntityBadge kind="agent" name={app.agentName} />
+                            ) : (
+                              <span className="text-ink-3">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

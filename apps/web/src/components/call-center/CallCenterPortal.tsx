@@ -24,6 +24,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
+import { buttonVariants } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
@@ -36,6 +37,7 @@ import {
   deleteInsuranceLeads,
 } from '@/lib/api/leads';
 import { markConsoleExit } from '@/lib/console-exit';
+import { cn } from '@/lib/utils';
 
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
@@ -65,6 +67,7 @@ import type {
 } from './types';
 import { DEFAULT_SCRIPT } from './types';
 import { UnderwritingScriptPanel } from './UnderwritingScriptPanel';
+import { useConsoleFigures } from './use-console-figures';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
@@ -332,34 +335,9 @@ export function CallCenterPortal(): JSX.Element {
 
   // User Settings & Stats
   const [showSettings, setShowSettings] = useState(false);
-  const [appointmentsCount, setAppointmentsCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const v = localStorage.getItem('cc_appointments_count');
-      return v ? parseInt(v, 10) : 0;
-    }
-    return 0;
-  });
-  const [totalCallsCount, setTotalCallsCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const v = localStorage.getItem('cc_total_calls_count');
-      return v ? parseInt(v, 10) : 0;
-    }
-    return 0;
-  });
-  const [followUpCount, setFollowUpCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const v = localStorage.getItem('cc_follow_up_count');
-      return v ? parseInt(v, 10) : 0;
-    }
-    return 0;
-  });
-  const [salesCount, setSalesCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const v = localStorage.getItem('cc_sales_count');
-      return v ? parseInt(v, 10) : 0;
-    }
-    return 0;
-  });
+  // Today's figures for the row above the queue: the server's, not a tally kept
+  // here. See StatsStrip.
+  const { figures: consoleFigures, refresh: refreshFigures } = useConsoleFigures();
 
   const [selectedScript, setSelectedScript] = useState<SelectedScript>(DEFAULT_SCRIPT);
   const [leadLists, setLeadLists] = useState<LeadListSummary[]>([]);
@@ -407,23 +385,6 @@ export function CallCenterPortal(): JSX.Element {
     setEditingScriptType(type);
     setEditingNodeId(EDITABLE_NODES[type][0].id);
   };
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('cc_appointments_count', String(appointmentsCount));
-      localStorage.setItem('cc_total_calls_count', String(totalCallsCount));
-      localStorage.setItem('cc_follow_up_count', String(followUpCount));
-      localStorage.setItem('cc_sales_count', String(salesCount));
-    }
-  }, [appointmentsCount, totalCallsCount, followUpCount, salesCount]);
-
-  // Calculate appointment rate: (Appointments / Total Calls) * 100
-  const appointmentRate =
-    totalCallsCount > 0 ? ((appointmentsCount / totalCallsCount) * 100).toFixed(1) : '0.0';
-
-  // Calculate conversion rate: (Sales / Total Calls) * 100
-  const conversionRate =
-    totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
@@ -515,7 +476,6 @@ export function CallCenterPortal(): JSX.Element {
         dispositionHandledRef.current = false;
         wasAnsweredRef.current = false;
         hasHadActiveSessionRef.current = false; // Reset for new session
-        setTotalCallsCount(prev => prev + 1);
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
       }
 
@@ -798,9 +758,6 @@ export function CallCenterPortal(): JSX.Element {
     setActiveCallView(crmData?.customer ? 'data' : 'script'); // Switch dynamically if CRM record found
     setCallTimer(0);
 
-    // Increment total calls on every answered call
-    setTotalCallsCount(prev => prev + 1);
-
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
     }, 1000);
@@ -942,14 +899,8 @@ export function CallCenterPortal(): JSX.Element {
 
     // Only now is the call worked: the application is on the server.
     setCallRecords(prev => [...prev, callRecord]);
-    if (disp === 'APPLICATION_SUBMITTED') {
-      setSalesCount(prev => prev + 1);
-    } else {
-      setFollowUpCount(prev => prev + 1);
-      if (disp === 'SET_APPOINTMENT') {
-        setAppointmentsCount(prev => prev + 1);
-      }
-    }
+    // The row of figures is the server's; ask for it again now the call is worked.
+    refreshFigures();
 
     // Start/update customer profile in CRM
     if (activeCallData) {
@@ -1234,7 +1185,6 @@ export function CallCenterPortal(): JSX.Element {
     wasAnsweredRef.current = false;
     hasHadActiveSessionRef.current = false;
     callSessionIdRef.current = `call-${Date.now()}`;
-    setTotalCallsCount(prev => prev + 1); // Count outbound application calls
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
     }, 1000);
@@ -1559,7 +1509,7 @@ export function CallCenterPortal(): JSX.Element {
           onClose={() => setShowStandaloneApplication(false)}
           onLogged={() => {
             setShowStandaloneApplication(false);
-            setSalesCount(prev => prev + 1);
+            refreshFigures();
           }}
         />
       )}
@@ -2101,14 +2051,7 @@ export function CallCenterPortal(): JSX.Element {
             </div>
           ) : (
             <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-              <StatsStrip
-                totalCallsCount={totalCallsCount}
-                appointmentsCount={appointmentsCount}
-                appointmentRate={appointmentRate}
-                followUpCount={followUpCount}
-                salesCount={salesCount}
-                conversionRate={conversionRate}
-              />
+              <StatsStrip figures={consoleFigures} />
 
               {/* Auto-Dialer Control Panel */}
               <div className="p-4 bg-surface border border-rule rounded-card flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
@@ -2123,15 +2066,15 @@ export function CallCenterPortal(): JSX.Element {
                     }`}
                   />
                   <div>
-                    <h3 className="text-sm font-bold text-ink flex items-center gap-1.5 font-sans">
-                      Auto-Dialer Queue
+                    <h3 className="flex items-center gap-2 t-section text-ink">
+                      Auto-dialer queue
                       {isAutoDialing && (
-                        <span className="text-[10px] font-mono uppercase bg-brand-tint text-brand-ink px-1.5 py-0.5 rounded font-normal">
+                        <span className="rounded-full bg-brand-tint px-2 py-0.5 t-meta font-medium capitalize text-brand-ink">
                           {autoDialStatus}
                         </span>
                       )}
                     </h3>
-                    <p className="text-xs text-ink-2 mt-0.5 font-sans">
+                    <p className="mt-0.5 t-meta text-ink-2">
                       {applications.length > 0
                         ? `Loaded: ${applications.length} leads. Current index: ${autoDialIndex + 1}.`
                         : 'Queue is empty. Upload leads to start.'}
@@ -2141,7 +2084,7 @@ export function CallCenterPortal(): JSX.Element {
 
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Target List Dropdown */}
-                  <div className="flex items-center gap-2 bg-sunken border border-rule hover:border-rule-strong rounded-lg px-3 py-2 text-ink text-xs font-mono font-medium uppercase tracking-widest transition-all">
+                  <div className="flex h-9 items-center gap-2 rounded-control border border-rule-strong bg-surface px-3 text-ink hover:bg-sunken">
                     <Database className="w-3.5 h-3.5 text-brand-ink" />
                     <select
                       value={selectedListId}
@@ -2153,9 +2096,9 @@ export function CallCenterPortal(): JSX.Element {
                         setAutoDialStatus('idle');
                         dialedLeadIdsRef.current.clear();
                       }}
-                      className="bg-transparent text-ink text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
+                      className="cursor-pointer bg-transparent pr-4 t-body font-medium text-ink focus:outline-none"
                     >
-                      <option value="">All Lists</option>
+                      <option value="">All lists</option>
                       {leadLists.map(list => (
                         <option key={list.id} value={list.id} className="bg-surface text-ink">
                           {list.name} ({list._count?.leads ?? 0})
@@ -2169,20 +2112,23 @@ export function CallCenterPortal(): JSX.Element {
                       onClick={() => {
                         void handleDeleteList();
                       }}
-                      className="px-4 py-2 bg-dropped-tint hover:bg-dropped-tint border border-dropped hover:border-dropped text-dropped-ink text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
-                      title="Delete Selected List"
+                      className={cn(
+                        buttonVariants({ variant: 'outline' }),
+                        'gap-2 border-dropped text-dropped-ink hover:bg-dropped-tint'
+                      )}
+                      title="Delete the selected list"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Delete List
+                      Delete list
                     </button>
                   )}
 
                   <button
                     onClick={() => setShowUploadModal(true)}
-                    className="px-4 py-2 bg-sunken hover:bg-rule border border-rule hover:border-rule-strong text-ink text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    Upload Leads
+                    Upload leads
                   </button>
 
                   {/* Start / Pause Dialer */}
@@ -2192,10 +2138,13 @@ export function CallCenterPortal(): JSX.Element {
                         setIsAutoDialing(false);
                         setAutoDialStatus('paused');
                       }}
-                      className="px-4 py-2 bg-ringing-tint border border-ringing hover:bg-ringing-tint text-ringing-ink text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                      className={cn(
+                        buttonVariants({ variant: 'outline' }),
+                        'gap-2 border-ringing bg-ringing-tint text-ringing-ink hover:bg-ringing-tint'
+                      )}
                     >
                       <Pause className="w-3.5 h-3.5" />
-                      Pause Dialer
+                      Pause dialer
                     </button>
                   ) : (
                     <button
@@ -2220,10 +2169,13 @@ export function CallCenterPortal(): JSX.Element {
                         }
                       }}
                       disabled={applications.length === 0}
-                      className="px-4 py-2 bg-brand hover:bg-brand-ink hover:text-surface disabled:bg-sunken disabled:text-ink-3 disabled:border-rule text-ink text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={cn(
+                        buttonVariants({ variant: 'default' }),
+                        'gap-2 disabled:cursor-not-allowed disabled:text-ink-3 disabled:opacity-60'
+                      )}
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      Start Dialer
+                      Start dialer
                     </button>
                   )}
 
@@ -2236,8 +2188,11 @@ export function CallCenterPortal(): JSX.Element {
                       dialedLeadIdsRef.current.clear();
                     }}
                     disabled={applications.length === 0 || autoDialIndex === 0}
-                    className="p-2 bg-sunken hover:bg-rule disabled:bg-sunken disabled:text-ink-3 disabled:border-rule border border-rule text-ink-2 hover:text-ink rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Reset Dialer Queue"
+                    className={cn(
+                      buttonVariants({ variant: 'outline', size: 'icon' }),
+                      'disabled:cursor-not-allowed disabled:opacity-50'
+                    )}
+                    title="Reset the dialer queue"
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>

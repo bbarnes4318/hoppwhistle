@@ -91,7 +91,8 @@ const FRONT_PORT = Number(process.env.SHOTS_FRONT_PORT ?? 3412);
 const FRONT = `http://127.0.0.1:${FRONT_PORT}`;
 
 const LABEL = process.env.SHOTS_LABEL ?? 'after';
-const OUT = resolve(REPO, 'docs/screenshots/overhaul', LABEL);
+// SHOTS_OUT moves the whole set, e.g. docs/screenshots/agent for the agent portal.
+const OUT = resolve(REPO, process.env.SHOTS_OUT ?? 'docs/screenshots/overhaul', LABEL);
 const ONLY = process.env.SHOTS_ONLY ? new RegExp(process.env.SHOTS_ONLY) : null;
 const SETTLE_MS = Number(process.env.SHOTS_SETTLE_MS ?? 3500);
 const PASSWORD = 'screens-Passw0rd!';
@@ -120,6 +121,10 @@ const PEOPLE = {
   downline: 'owner@riverbend.screens.invalid',
   buyer: 'buyer@llp.screens.invalid',
   publisher: 'publisher@llp.screens.invalid',
+  // A real seeded agent (Marcus Bell, closing tier A), so the agent portal shows
+  // the calls and applications the demo actually gave him. The seed leaves
+  // people without a password; PEOPLE_SEED gives this one the harness's.
+  agent: 'marcus.bell@demo.lifeleadsplus.test',
 };
 
 /** Every screen, as the person it belongs to. `{child}` is Riverbend's tenant id. */
@@ -160,6 +165,14 @@ const SCREENS = [
   { id: 'preview-agents', who: 'preview', path: '/agents?tab=roster' },
   { id: 'downline-dashboard', who: 'downline', path: '/dashboard' },
   { id: 'downline-calls', who: 'downline', path: '/calls' },
+  // The agent portal: what a Life Leads Plus AGENT sees, not the owner.
+  { id: 'agent-calls', who: 'agent', path: '/calls' },
+  { id: 'agent-power-dialer', who: 'agent', path: '/call-center' },
+  { id: 'agent-applications', who: 'agent', path: '/applications' },
+  { id: 'agent-customers', who: 'agent', path: '/insurance-leads' },
+  { id: 'agent-leaderboard', who: 'agent', path: '/leaderboard' },
+  { id: 'agent-my-day', who: 'agent', path: '/delivery/me' },
+  { id: 'agent-settings', who: 'agent', path: '/settings' },
   { id: 'buyer-dashboard', who: 'buyer', path: '/buyer/dashboard' },
   { id: 'buyer-calls', who: 'buyer', path: '/buyer/calls' },
   { id: 'buyer-spend', who: 'buyer', path: '/buyer/spend' },
@@ -246,6 +259,12 @@ await prisma.platformActingTenant.create({
 await person(people.downline, child.id, ['OWNER']);
 await person(people.buyer, llp.id, ['BUYER'], { buyerId: buyer.id });
 await person(people.publisher, llp.id, ['PUBLISHER'], { publisherId: publisher.id });
+// Not a new person: one of the seed's own agents, given a password to sign in with.
+const agentRows = await prisma.user.updateMany({
+  where: { email: people.agent, tenantId: llp.id },
+  data: { passwordHash },
+});
+if (agentRows.count !== 1) throw new Error('the seed has no agent ' + people.agent);
 
 console.log(JSON.stringify({ child: child.id }));
 await prisma.$disconnect();

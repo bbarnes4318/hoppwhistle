@@ -115,7 +115,7 @@ export function LeaderboardView(): JSX.Element {
 
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
-  const { upgrades, isPlatformAdmin, user } = useAuth();
+  const { upgrades, isPlatformAdmin, user, isAgentOnly } = useAuth();
   const previewing = platform.previewRole != null || user?.previewRole != null;
   const sendable = isSendable(period, from, to);
   const query = periodQuery(period, from, to);
@@ -228,7 +228,13 @@ export function LeaderboardView(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Your agents ranked by applications, closing and calls over the period." />
+      <PageHeader
+        description={
+          isAgentOnly
+            ? 'Where you stand on the floor, ranked by applications, closing and calls over the period.'
+            : 'Your agents ranked by applications, closing and calls over the period.'
+        }
+      />
 
       {/* Period, the measured range and the page's actions on one row. */}
       <Toolbar aria-label="Leaderboard period">

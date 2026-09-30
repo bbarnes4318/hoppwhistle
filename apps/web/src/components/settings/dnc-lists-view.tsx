@@ -115,6 +115,8 @@ export function DncListsView({ embedded = false }: { embedded?: boolean } = {}) 
   return (
     <div className={embedded ? 'flex min-w-0 flex-col gap-6' : 'page-canvas'}>
       <PageHeader
+        // Embedded, the page around it already has the title.
+        title={embedded ? false : undefined}
         description="Manage DNC lists and compliance"
         actions={
           <Button onClick={() => setCreating(true)}>

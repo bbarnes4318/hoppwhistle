@@ -289,7 +289,8 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   /**
    * GET /api/v1/delivery/me
    *
-   * An agent's own numbers against the agency average. No pricing, no money.
+   * An agent's own numbers against the agency average, and their last seven
+   * days. No pricing, no money.
    */
   fastify.get<{ Querystring: { day?: string } }>(
     '/api/v1/delivery/me',
@@ -312,7 +313,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           .send({ error: { code: 'VALIDATION_ERROR', message: 'day must be YYYY-MM-DD' } });
       }
 
-      return reply.send({ data: await getAgentSelfView(tenantId, userId, { prisma, day }) });
+      return reply.send({ data: await getAgentSelfView(tenantId, userId, { prisma, day, withTrend: true }) });
     }
   );
 
