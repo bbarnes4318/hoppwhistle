@@ -60,8 +60,12 @@ export type SettingsSection = 'webhooks' | 'dnc' | 'workspace' | 'legal';
  */
 export function SettingsView({ section }: { section?: SettingsSection } = {}) {
   const { productName } = useBrand();
-  const { isPlatformAdmin } = useAuth();
-  const needsWebhooks = section === undefined || section === 'webhooks';
+  const { isPlatformAdmin, isAgentOnly, loading: authLoading } = useAuth();
+  // Webhooks are an owner's or admin's plumbing. An agent is not shown them, and
+  // their page does not so much as ask the server for the list -- which means
+  // not asking before it is known who is looking.
+  const needsWebhooks =
+    !authLoading && !isAgentOnly && (section === undefined || section === 'webhooks');
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [addWebhookOpen, setAddWebhookOpen] = useState(false);
@@ -340,7 +344,13 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Webhooks, do-not-call lists and the legal pages your agency works under." />
+      <PageHeader
+        description={
+          isAgentOnly
+            ? 'The do-not-call lists and the legal pages your agency works under.'
+            : 'Webhooks, do-not-call lists and the legal pages your agency works under.'
+        }
+      />
 
       {/*
        * The tabs follow the header. The demo-mode switch that used to sit in a full-width
@@ -348,24 +358,33 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
        * the others, not something every visit needs to scroll past. It is a
        * platform admin's tab alone; see the note on SettingsView.
        */}
-      <Tabs defaultValue="webhooks" className="w-full">
+      {/*
+        `defaultValue` is read once, on mount. Keyed by the role so that if it
+        resolves after the first render the tabs start over on the right one,
+        rather than keeping Webhooks selected with no Webhooks tab to show it.
+      */}
+      <Tabs
+        key={isAgentOnly ? 'agent' : 'owner'}
+        defaultValue={isAgentOnly ? 'dnc' : 'webhooks'}
+        className="w-full"
+      >
         <TabsList>
-          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-          <TabsTrigger value="dnc">DNC Lists</TabsTrigger>
+          {isAgentOnly ? null : <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
+          <TabsTrigger value="dnc">DNC lists</TabsTrigger>
           {isPlatformAdmin ? <TabsTrigger value="workspace">Workspace</TabsTrigger> : null}
           <TabsTrigger value="legal">Legal</TabsTrigger>
         </TabsList>
 
         {isPlatformAdmin ? <TabsContent value="workspace">{panels.workspace}</TabsContent> : null}
 
-        <TabsContent value="webhooks">{panels.webhooks}</TabsContent>
+        {isAgentOnly ? null : <TabsContent value="webhooks">{panels.webhooks}</TabsContent>}
 
         <TabsContent value="dnc">{panels.dnc}</TabsContent>
 
         <TabsContent value="legal">{panels.legal}</TabsContent>
       </Tabs>
 
-      {webhookDialog}
+      {isAgentOnly ? null : webhookDialog}
     </div>
   );
 }

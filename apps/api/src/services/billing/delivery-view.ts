@@ -38,7 +38,12 @@ import { CreditLedgerEntryType, SettlementPaymentStatus } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { callInProgressWhere } from '../live/in-progress.js';
-import { calendarDayBounds, currentCalendarDay } from '../rating/calendar-day.js';
+import {
+  calendarDayBounds,
+  calendarDayOf,
+  currentCalendarDay,
+  shiftCalendarDay,
+} from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 import {
   deliveredCallWhere,
@@ -753,6 +758,17 @@ async function readAgentStatuses(
   return { statuses, since };
 }
 
+/** One New York day of an agent's own work. No money. */
+export interface AgentDayFigures {
+  day: CalendarDayKey;
+  callsTaken: number;
+  applications: number;
+  talkTimeSeconds: number;
+}
+
+/** How many days an agent's trend covers, ending on the day being viewed. */
+export const AGENT_TREND_DAYS = 7;
+
 export interface AgentSelfView {
   calendarDay: CalendarDayKey;
   callsTaken: number;
@@ -765,6 +781,64 @@ export interface AgentSelfView {
   agencyClosingPct: number | null;
   agencyCallsTaken: number;
   agencyApplications: number;
+  /**
+   * The agent's last `AGENT_TREND_DAYS` New York days, oldest first, the last
+   * being `calendarDay`. Present only when asked for (`withTrend`): the live
+   * strip polls this view all day and has no use for it.
+   */
+  trend?: AgentDayFigures[];
+}
+
+/**
+ * One agent's days, counted the way the headline figures are: a call by when it
+ * was answered, an application by when it was submitted. Two reads of the whole
+ * window, bucketed here, rather than a pair of counts per day.
+ */
+async function agentTrend(
+  prisma: PrismaClient,
+  tenantId: string,
+  userId: string,
+  day: CalendarDayKey
+): Promise<AgentDayFigures[]> {
+  const days = Array.from({ length: AGENT_TREND_DAYS }, (_, i) =>
+    shiftCalendarDay(day, i - (AGENT_TREND_DAYS - 1))
+  );
+  const range = {
+    start: calendarDayBounds(days[0]).start,
+    endExclusive: calendarDayBounds(day).endExclusive,
+  };
+
+  const [calls, applications] = await Promise.all([
+    prisma.call.findMany({
+      where: { ...deliveredCallWhere(tenantId, range), answeredByUserId: userId },
+      select: { answeredAt: true, connectedDuration: true },
+    }),
+    prisma.insuranceCarrierApplication.findMany({
+      where: {
+        tenantId,
+        createdById: userId,
+        submittedAt: { gte: range.start, lt: range.endExclusive },
+      },
+      select: { submittedAt: true },
+    }),
+  ]);
+
+  const byDay = new Map<CalendarDayKey, AgentDayFigures>(
+    days.map(d => [d, { day: d, callsTaken: 0, applications: 0, talkTimeSeconds: 0 }])
+  );
+  for (const call of calls) {
+    if (!call.answeredAt) continue;
+    const figures = byDay.get(calendarDayOf(call.answeredAt));
+    if (!figures) continue;
+    figures.callsTaken += 1;
+    figures.talkTimeSeconds += call.connectedDuration ?? 0;
+  }
+  for (const application of applications) {
+    if (!application.submittedAt) continue;
+    const figures = byDay.get(calendarDayOf(application.submittedAt));
+    if (figures) figures.applications += 1;
+  }
+  return days.map(d => byDay.get(d)!);
 }
 
 /**
@@ -778,14 +852,14 @@ export interface AgentSelfView {
 export async function getAgentSelfView(
   tenantId: string,
   userId: string,
-  options: { prisma?: PrismaClient; now?: Date; day?: CalendarDayKey } = {}
+  options: { prisma?: PrismaClient; now?: Date; day?: CalendarDayKey; withTrend?: boolean } = {}
 ): Promise<AgentSelfView> {
   const prisma = options.prisma ?? getPrismaClient();
   const now = options.now ?? new Date();
   const day = options.day ?? currentCalendarDay(now);
   const bounds = calendarDayBounds(day);
 
-  const [mine, applications, agency, available] = await Promise.all([
+  const [mine, applications, agency, available, trend] = await Promise.all([
     prisma.call.aggregate({
       where: { ...deliveredCallWhere(tenantId, bounds), answeredByUserId: userId },
       _count: { _all: true },
@@ -804,6 +878,7 @@ export async function getAgentSelfView(
       day
     ),
     availableSecondsByUser(prisma, [userId], bounds, now),
+    options.withTrend ? agentTrend(prisma, tenantId, userId, day) : Promise.resolve(undefined),
   ]);
 
   const callsTaken = mine._count._all;
@@ -818,6 +893,7 @@ export async function getAgentSelfView(
     agencyClosingPct: agency.closingPct,
     agencyCallsTaken: agency.deliveredCalls,
     agencyApplications: agency.submittedApplications,
+    ...(trend ? { trend } : {}),
   };
 }
 

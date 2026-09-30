@@ -6,6 +6,8 @@ import * as React from 'react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+import { isZeroFigure } from './figures';
+
 /**
  * LiveStrip — one dense row under the topbar, on every page.
  *
@@ -155,7 +157,15 @@ function LiveValue({
       <span
         className={cn(
           'text-[16px] font-semibold leading-tight tabular-nums transition-colors',
-          unavailable ? 'text-ink-3' : flash ? 'text-live' : TONE_CLASS[tone]
+          unavailable
+            ? 'text-ink-3'
+            : flash
+              ? 'text-live'
+              : // A plain count of nothing is quiet. A toned figure is left alone: a
+                // conversion below the agency's is a warning, not an absence.
+                tone === 'ink' && isZeroFigure(value)
+                ? 'text-ink-3'
+                : TONE_CLASS[tone]
         )}
         style={flash ? { transitionDuration: '600ms' } : undefined}
       >
@@ -253,9 +263,7 @@ export function LiveStrip({
                 unavailable={m.unavailable}
               />
               {m.sub ? (
-                <span className="t-meta hidden min-w-0 truncate text-ink-3 md:inline">
-                  {m.sub}
-                </span>
+                <span className="t-meta hidden min-w-0 truncate text-ink-3 md:inline">{m.sub}</span>
               ) : null}
             </span>
           </div>

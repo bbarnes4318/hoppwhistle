@@ -108,6 +108,9 @@ const DATABASE_BACKED = [
   // stuck call and a live one, and reads every screen that counts calls up.
   '**/src/__tests__/call-in-progress.test.ts',
   '**/src/__tests__/calls-outcome-filter.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs` to seed an owner, an
+  // administrator and an agent, and asks each to manage webhooks.
+  '**/src/__tests__/webhook-access.test.ts',
   // Truncates `tenants`, `roles` and `audit_logs` to seed two white-label
   // agencies with publishers, payable calls and clawbacks.
   '**/src/__tests__/payout-clawbacks.test.ts',

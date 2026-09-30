@@ -23,6 +23,7 @@ import {
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { formatDayRange } from '@/lib/format-time';
@@ -210,6 +211,8 @@ const ALL = 'all';
 
 export default function ApplicationsPage() {
   const router = useRouter();
+  // An agent's list is their own applications, narrowed server-side.
+  const { isAgentOnly } = useAuth();
   // The range being typed, and the filters the page was last loaded with.
   const [range, setRange] = useState(defaultRange);
   const [applied, setApplied] = useState<AppliedFilters>(() => ({
@@ -403,7 +406,13 @@ export default function ApplicationsPage() {
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Every application your agents submitted, by carrier and premium." />
+      <PageHeader
+        description={
+          isAgentOnly
+            ? 'Every application you submitted, by carrier and premium.'
+            : 'Every application your agents submitted, by carrier and premium.'
+        }
+      />
 
       {/* Range, filters and export on one row, under the header. */}
       <Toolbar aria-label="Application filters">
@@ -552,7 +561,8 @@ export default function ApplicationsPage() {
                     <th scope="col" className="num" title="The premium as written, annualized">
                       Annualized
                     </th>
-                    <th scope="col">Agent</th>
+                    {/* An agent's list is their own: the column would only repeat their name. */}
+                    {!isAgentOnly && <th scope="col">Agent</th>}
                     {showEntered && <th scope="col">Entered</th>}
                   </tr>
                 </thead>
@@ -620,13 +630,15 @@ export default function ApplicationsPage() {
                           {dollars(row.modalPremium)}
                         </td>
                         <td className="num">{dollars(row.annualizedPremium)}</td>
-                        <td className="max-w-[12rem] truncate">
-                          {row.agentName ? (
-                            <EntityBadge kind="agent" name={row.agentName} />
-                          ) : (
-                            <span className="text-ink-3">—</span>
-                          )}
-                        </td>
+                        {!isAgentOnly && (
+                          <td className="max-w-[12rem] truncate">
+                            {row.agentName ? (
+                              <EntityBadge kind="agent" name={row.agentName} />
+                            ) : (
+                              <span className="text-ink-3">—</span>
+                            )}
+                          </td>
+                        )}
                         {showEntered && (
                           <td>
                             {/*

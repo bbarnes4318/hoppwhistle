@@ -27,7 +27,11 @@ import {
   overrunCeilingApplications,
 } from '../services/billing/terms.js';
 import { businessDayPeriodEnd } from '../services/rating/business-day.js';
-import { calendarDayBounds, currentCalendarDay } from '../services/rating/calendar-day.js';
+import {
+  calendarDayBounds,
+  currentCalendarDay,
+  shiftCalendarDay,
+} from '../services/rating/calendar-day.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
 
@@ -2921,6 +2925,119 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(body.agencyCallsTaken).toBe(6);
 
       // No pricing, no money. Not "not rendered" -- not present.
+      const serialised = JSON.stringify(body);
+      for (const forbidden of ['rate', 'balance', 'overrun', 'charge', 'amount', 'Rate']) {
+        expect(serialised).not.toContain(forbidden);
+      }
+    });
+
+    it("adds the agent's last seven days, oldest first, counted as the headline is", async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+
+      const agent = await prisma.user.create({
+        data: {
+          tenantId: big.id,
+          email: `agent-${Math.random().toString(36).slice(2, 8)}@test.local`,
+          status: 'ACTIVE',
+        },
+      });
+      const colleague = await prisma.user.create({
+        data: {
+          tenantId: big.id,
+          email: `agent-${Math.random().toString(36).slice(2, 8)}@test.local`,
+          status: 'ACTIVE',
+        },
+      });
+
+      // 2 calls (120s each) and an application two days before; 3 calls and two
+      // applications on the day; one call eight days before, outside the window;
+      // and a colleague's calls, which are not this agent's.
+      const twoBefore = shiftCalendarDay(CLOSED_DAY, -2);
+      const eightBefore = shiftCalendarDay(CLOSED_DAY, -8);
+      for (let i = 0; i < 2; i++) {
+        await seedCall({
+          tenantId: big.id,
+          answeredAt: middayOf(twoBefore, i * 1000),
+          answeredByUserId: agent.id,
+          connectedDuration: 120,
+        });
+      }
+      for (let i = 0; i < 3; i++) {
+        await seedCall({
+          tenantId: big.id,
+          answeredAt: middayOf(CLOSED_DAY, i * 1000),
+          answeredByUserId: agent.id,
+          connectedDuration: 60,
+        });
+      }
+      await seedCall({
+        tenantId: big.id,
+        answeredAt: middayOf(eightBefore),
+        answeredByUserId: agent.id,
+      });
+      await seedCall({
+        tenantId: big.id,
+        answeredAt: middayOf(CLOSED_DAY, 50_000),
+        answeredByUserId: colleague.id,
+      });
+      for (const [day, count] of [
+        [twoBefore, 1],
+        [CLOSED_DAY, 2],
+      ] as const) {
+        for (let i = 0; i < count; i++) {
+          await prisma.insuranceCarrierApplication.create({
+            data: {
+              tenantId: big.id,
+              firstName: 'A',
+              lastName: `App${i}`,
+              status: 'SUBMITTED',
+              submittedAt: middayOf(day, i * 1000),
+              createdById: agent.id,
+            },
+          });
+        }
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/v1/delivery/me?day=${CLOSED_DAY}`,
+        headers: tokenFor(agent.id, big.id),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json().data;
+      const { trend } = body;
+
+      expect(trend).toHaveLength(7);
+      expect(trend.map((d: { day: string }) => d.day)).toEqual(
+        [-6, -5, -4, -3, -2, -1, 0].map(offset => shiftCalendarDay(CLOSED_DAY, offset))
+      );
+      expect(trend[4]).toEqual({
+        day: twoBefore,
+        callsTaken: 2,
+        applications: 1,
+        talkTimeSeconds: 240,
+      });
+      expect(trend[6]).toEqual({
+        day: CLOSED_DAY,
+        callsTaken: 3,
+        applications: 2,
+        talkTimeSeconds: 180,
+      });
+      // The last day is the headline, to the call.
+      expect(trend[6].callsTaken).toBe(body.callsTaken);
+      expect(trend[6].applications).toBe(body.applications);
+      expect(trend[6].talkTimeSeconds).toBe(body.talkTimeSeconds);
+      // Days with nothing are days, at zero, not gaps.
+      expect(trend[0]).toEqual({
+        day: shiftCalendarDay(CLOSED_DAY, -6),
+        callsTaken: 0,
+        applications: 0,
+        talkTimeSeconds: 0,
+      });
+
+      // Still no money.
       const serialised = JSON.stringify(body);
       for (const forbidden of ['rate', 'balance', 'overrun', 'charge', 'amount', 'Rate']) {
         expect(serialised).not.toContain(forbidden);

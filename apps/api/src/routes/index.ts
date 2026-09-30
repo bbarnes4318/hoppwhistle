@@ -19,6 +19,8 @@ import {
   sendTenantRefusal,
 } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/rbac.js';
+import type { Permission } from '../middleware/rbac.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { recordAgentApplication } from '../services/applications/agent-entry.js';
 import { UnknownCallError } from '../services/applications/call-attribution.js';
@@ -5773,11 +5775,34 @@ export async function registerRecordingRoutes(fastify: FastifyInstance) {
   );
 }
 
+/**
+ * Webhooks are an owner's and an administrator's. Where a webhook points is
+ * where the agency's call and application events are sent, so a person who can
+ * write one can send them anywhere.
+ *
+ * The permission has always said so -- `NEVER_FOR_AGENT` in the RBAC table
+ * strips `webhooks:write` and `webhooks:delete` from an agent whatever their
+ * role row says -- but these routes never asked. An agent could create a
+ * webhook (201) and list the agency's.
+ *
+ * This checks the signed-in PERSON. An API key is scoped separately and is left
+ * exactly as it was: changing how keys are authorised here is its own decision,
+ * and an integration may depend on it.
+ */
+function webhookAccess(permission: Permission) {
+  const check = requirePermission(permission);
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (request.user?.apiKeyId) return;
+    await check(request, reply);
+  };
+}
+
 // Public API - Webhooks
 export async function registerWebhookRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
   fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/v1/webhooks',
+    { preHandler: [webhookAccess('webhooks:read')] },
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
 
@@ -5826,7 +5851,10 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       events: string[];
       status?: 'ACTIVE' | 'INACTIVE';
     };
-  }>('/api/v1/webhooks', async (request, reply) => {
+  }>(
+    '/api/v1/webhooks',
+    { preHandler: [webhookAccess('webhooks:write')] },
+    async (request, reply) => {
     const user = (request as AuthRequest).user;
     const tenantId = getActingTenantId(request);
 
@@ -5902,6 +5930,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
 
   fastify.get<{ Params: { webhookId: string } }>(
     '/api/v1/webhooks/:webhookId',
+    { preHandler: [webhookAccess('webhooks:read')] },
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
 
@@ -5944,7 +5973,10 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       events?: string[];
       status?: 'ACTIVE' | 'INACTIVE' | 'FAILED';
     };
-  }>('/api/v1/webhooks/:webhookId', async (request, reply) => {
+  }>(
+    '/api/v1/webhooks/:webhookId',
+    { preHandler: [webhookAccess('webhooks:write')] },
+    async (request, reply) => {
     const user = (request as AuthRequest).user;
     const tenantId = getActingTenantId(request);
 
@@ -6016,6 +6048,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
 
   fastify.delete<{ Params: { webhookId: string } }>(
     '/api/v1/webhooks/:webhookId',
+    { preHandler: [webhookAccess('webhooks:delete')] },
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const tenantId = getActingTenantId(request);

@@ -1,5 +1,16 @@
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import React from 'react';
+
+import { EmptyState, Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 import type { ApplicationData } from './types';
 
@@ -11,6 +22,13 @@ interface ApplicationQueueProps {
   onDeleteLead?: (id: string) => Promise<void>;
 }
 
+/** A queue status as a person reads it: "NEW_LEAD" is "New lead". */
+function statusText(status: string | undefined): string {
+  if (!status) return '—';
+  const text = status.replace(/_/g, ' ').toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function ApplicationQueue({
   applications,
   loadingApplications,
@@ -19,106 +37,93 @@ export function ApplicationQueue({
   onDeleteLead,
 }: ApplicationQueueProps) {
   return (
-    <div className="flex-1 bg-surface border border-rule rounded overflow-hidden flex flex-col mt-4">
-      <div className="p-3 border-b border-rule flex items-center justify-between bg-sunken">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-ink">Application Queue</h2>
-        <button
-          onClick={() => void fetchApplications()}
-          disabled={loadingApplications}
-          className="flex items-center space-x-2 px-2 py-1 hover:bg-sunken text-ink-2 rounded text-[10px] uppercase font-mono tracking-widest transition-colors disabled:opacity-50 border border-transparent hover:border-rule-strong"
-        >
-          <RefreshCw className={'w-3 h-3 ' + (loadingApplications ? 'animate-spin' : '')} />
-          <span>Refresh</span>
-        </button>
-      </div>
+    <Panel className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <PanelHeader
+        action={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void fetchApplications()}
+            disabled={loadingApplications}
+          >
+            <RefreshCw
+              className={'mr-1.5 h-3.5 w-3.5 ' + (loadingApplications ? 'animate-spin' : '')}
+            />
+            Refresh
+          </Button>
+        }
+      >
+        <PanelTitle>Application queue</PanelTitle>
+      </PanelHeader>
 
-      <div className="flex-1 overflow-y-auto">
+      <PanelBody flush className="min-h-0 flex-1 overflow-y-auto">
         {loadingApplications ? (
-          <div className="flex flex-col items-center justify-center h-full space-y-4">
-            <RefreshCw className="w-8 h-8 text-ink-2 animate-spin" />
-            <p className="text-xs font-mono uppercase tracking-widest text-ink-2 border-b border-rule pb-1">
-              Pulling Queue...
-            </p>
+          <div className="flex h-full items-center justify-center gap-2 py-16 t-body text-ink-3">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading the queue
           </div>
         ) : applications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="w-2 h-2 bg-ink-3 mb-4" />
-            <p className="text-xs font-mono uppercase tracking-widest text-ink-2 border-b border-rule pb-1">
-              Queue is Empty
-            </p>
-          </div>
+          <EmptyState headline="The queue is empty." />
         ) : (
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-sunken sticky top-0 border-b border-rule">
-              <tr>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2">
-                  Customer
-                </th>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2">
-                  Phone
-                </th>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2">
-                  Carrier
-                </th>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2 text-right">
-                  Face Amount
-                </th>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2">
-                  Status
-                </th>
-                <th className="text-[10px] font-mono uppercase tracking-widest text-ink-2 px-4 py-2 text-right">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-rule">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Carrier</TableHead>
+                <TableHead className="text-right">Face amount</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Action</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {applications.map(app => (
-                <tr key={app.id} className="hover:bg-sunken transition-colors group">
-                  <td className="px-4 py-2">
-                    <span className="text-sm font-medium text-ink block">
-                      {app.name || (app.firstName || '') + ' ' + (app.lastName || '')}
+                <TableRow key={app.id} className="group">
+                  <TableCell>
+                    <span className="block font-medium text-ink">
+                      {app.name || `${app.firstName || ''} ${app.lastName || ''}`.trim() || '—'}
                     </span>
-                    <span className="text-xs text-ink-2 uppercase tracking-widest">
-                      {app.state || 'N/A'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-xs font-mono text-ink-2">{app.phone || 'N/A'}</td>
-                  <td className="px-4 py-2 text-xs font-mono text-ink-2 uppercase">
-                    {(app.carrier as React.ReactNode) || 'N/A'}
-                  </td>
-                  <td className="px-4 py-2 text-xs font-mono text-ink text-right">
-                    ${(app.faceAmount || 0).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-ink-2">
-                      [{app.status}]
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button
+                    <span className="t-meta text-ink-3">{app.state || '—'}</span>
+                  </TableCell>
+                  <TableCell className="tabular-nums text-ink-2">{app.phone || '—'}</TableCell>
+                  <TableCell className="text-ink-2">
+                    {(app.carrier as React.ReactNode) || '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {app.faceAmount ? `$${Number(app.faceAmount).toLocaleString()}` : '—'}
+                  </TableCell>
+                  <TableCell className="text-ink-2">{statusText(app.status)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => void startCallWithApplication(app)}
-                        className="px-3 py-1 bg-surface border border-rule hover:bg-sunken text-ink text-[10px] font-mono uppercase tracking-widest rounded transition-colors inline-block"
                       >
-                        Call Out
-                      </button>
+                        Call out
+                      </Button>
                       {onDeleteLead && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-dropped-tint hover:text-dropped-ink"
                           onClick={() => void onDeleteLead(app.id)}
-                          className="p-1 hover:bg-dropped-tint text-ink-2 hover:text-dropped-ink rounded transition-colors"
-                          title="Delete Lead"
+                          title="Delete this lead"
+                          aria-label="Delete this lead"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
-    </div>
+      </PanelBody>
+    </Panel>
   );
 }
