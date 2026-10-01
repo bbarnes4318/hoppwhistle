@@ -27,6 +27,7 @@ import {
   assertCarrierEnabled,
   getNumberCarriers,
   NumberCarrierSettingsError,
+  NumberSearchError,
   saveNumberCarriers,
   searchAvailableNumbers,
   type NumberCarrierState,
@@ -96,7 +97,7 @@ export async function registerNumberCarrierRoutes(fastify: FastifyInstance): Pro
               provider: c.provider as string,
               enabled: c.enabled as boolean,
             })),
-            defaultProvider: (body.defaultProvider) ?? null,
+            defaultProvider: body.defaultProvider ?? null,
           },
           {
             userId: getActingUserId(request) as string,
@@ -153,11 +154,28 @@ export async function registerNumberCarrierRoutes(fastify: FastifyInstance): Pro
           },
         };
       } catch (error) {
-        logger.error({ msg: 'Number search failed', tenantId, numberType, areaCode, error });
+        logger.error({
+          msg: 'Number search failed',
+          tenantId,
+          numberType,
+          areaCode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        /*
+         * NetEnroll staff are told which carrier failed and why -- they are the
+         * ones who can fix a rejected credential or an allowlist. An agency
+         * owner never sees a carrier, so they get the plain sentence.
+         */
+        const staff = (request.user as { isPlatformAdmin?: boolean } | undefined)?.isPlatformAdmin;
+        const detail =
+          staff && error instanceof NumberSearchError
+            ? ` ${error.failures.map(f => `${f.label}: ${f.message}`).join(' · ')}`
+            : '';
         return reply.code(502).send({
           error: {
             code: 'SEARCH_FAILED',
-            message: 'Could not reach the number carriers. Try again in a moment.',
+            message: `Could not reach the number carriers. Try again in a moment.${detail}`,
+            ...(staff && error instanceof NumberSearchError ? { carriers: error.failures } : {}),
           },
         });
       }

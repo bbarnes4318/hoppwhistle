@@ -355,6 +355,63 @@ describe.skipIf(!gate.available)('Number carriers', () => {
         headers: as(ownerId, tenantId),
       });
       expect(none.statusCode).toBe(502);
+      // An agency owner is never shown a carrier, nor its error.
+      expect(none.body).not.toMatch(/FracTEL|BulkVS|down/);
+    });
+
+    it('gives up on a carrier that never answers, and shows the others', async () => {
+      const { searchAvailableNumbers, NumberSearchError } = await import(
+        '../services/numbers/number-carriers.js'
+      );
+      searchAvailable.mockImplementation(provider =>
+        provider === 'fractel'
+          ? new Promise<ProvisionedNumber[]>(() => undefined) // never settles
+          : Promise.resolve([found('bulkvs', '+16155550177')])
+      );
+
+      const { numbers } = await searchAvailableNumbers({
+        numberType: 'local',
+        areaCode: '615',
+        timeoutMs: 50,
+      });
+      expect(numbers.map(n => n.number)).toEqual(['+16155550177']);
+
+      // The only carrier on, and it hangs: a named timeout, not a hang.
+      await save({
+        carriers: [{ provider: 'bulkvs', enabled: false }],
+        defaultProvider: 'fractel',
+      });
+      const failed = await searchAvailableNumbers({
+        numberType: 'local',
+        areaCode: '615',
+        timeoutMs: 50,
+      }).catch((error: unknown) => error);
+      expect(failed).toBeInstanceOf(NumberSearchError);
+      expect((failed as InstanceType<typeof NumberSearchError>).failures).toEqual([
+        {
+          provider: 'fractel',
+          label: 'FracTEL',
+          message: 'FracTEL did not answer within 0 seconds',
+        },
+      ]);
+    });
+
+    it('tells a platform admin inside the agency which carrier failed, and why', async () => {
+      await prisma.platformActingTenant.create({ data: { userId: operatorId, tenantId } });
+      inventory = {
+        fractel: new Error('401 Unauthorized: bad API token'),
+        bulkvs: new Error('403 IP not allowlisted'),
+      };
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/numbers/available?areaCode=615',
+        headers: as(operatorId, tenantId),
+      });
+      expect(response.statusCode).toBe(502);
+      const error = response.json().error;
+      expect(error.message).toContain('FracTEL: 401 Unauthorized: bad API token');
+      expect(error.message).toContain('BulkVS: 403 IP not allowlisted');
+      expect(error.carriers.map((c: any) => c.provider)).toEqual(['fractel', 'bulkvs']);
     });
 
     it('buys from the carrier the number came from, if the platform still sells from it', async () => {
