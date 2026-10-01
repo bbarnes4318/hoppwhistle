@@ -291,6 +291,28 @@ export async function saveNumberCarriers(
   return after;
 }
 
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * Every enabled carrier failed to search. Carries each carrier's own reason,
+ * so a platform admin is shown WHY -- a rejected credential, an IP not on the
+ * carrier's allowlist -- rather than a sentence that hides it. The route shows
+ * the reasons to platform admins only; an agency owner is never shown a
+ * carrier.
+ */
+export class NumberSearchError extends Error {
+  constructor(readonly failures: Array<{ provider: string; label: string; message: string }>) {
+    super(
+      `Number search failed at every carrier: ${failures
+        .map(f => `${f.label}: ${f.message}`)
+        .join('; ')}`
+    );
+    this.name = 'NumberSearchError';
+  }
+}
+
 /** One number an agency could buy, and which carrier it is for sale at. */
 export interface AvailableNumber {
   /** Unique across carriers: `<provider>:<carrier id>`. */
@@ -329,15 +351,25 @@ export async function searchAvailableNumbers(params: {
     )
   );
 
-  const failures = results.filter(r => r.status === 'rejected');
+  const failures = results.flatMap((result, i) =>
+    result.status === 'rejected'
+      ? [
+          {
+            provider: carriers[i].provider,
+            label: carriers[i].label,
+            message: errorMessage(result.reason),
+          },
+        ]
+      : []
+  );
   if (failures.length === results.length) {
     logger.error({
       msg: 'Every enabled number carrier failed to search',
       numberType: params.numberType,
       areaCode: params.areaCode,
-      errors: failures.map(f => String((f).reason)),
+      errors: failures.map(f => `${f.label}: ${f.message}`),
     });
-    throw new Error('Number search failed at every carrier');
+    throw new NumberSearchError(failures);
   }
 
   const seen = new Set<string>();

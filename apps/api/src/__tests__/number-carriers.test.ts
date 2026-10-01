@@ -355,6 +355,26 @@ describe.skipIf(!gate.available)('Number carriers', () => {
         headers: as(ownerId, tenantId),
       });
       expect(none.statusCode).toBe(502);
+      // An agency owner is never shown a carrier, nor its error.
+      expect(none.body).not.toMatch(/FracTEL|BulkVS|down/);
+    });
+
+    it('tells a platform admin inside the agency which carrier failed, and why', async () => {
+      await prisma.platformActingTenant.create({ data: { userId: operatorId, tenantId } });
+      inventory = {
+        fractel: new Error('401 Unauthorized: bad API token'),
+        bulkvs: new Error('403 IP not allowlisted'),
+      };
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/numbers/available?areaCode=615',
+        headers: as(operatorId, tenantId),
+      });
+      expect(response.statusCode).toBe(502);
+      const error = response.json().error;
+      expect(error.message).toContain('FracTEL: 401 Unauthorized: bad API token');
+      expect(error.message).toContain('BulkVS: 403 IP not allowlisted');
+      expect(error.carriers.map((c: any) => c.provider)).toEqual(['fractel', 'bulkvs']);
     });
 
     it('buys from the carrier the number came from, if the platform still sells from it', async () => {
