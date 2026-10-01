@@ -178,7 +178,21 @@ describe('default columns', () => {
 
   it('never offers an agent the Status, Went to or money columns', () => {
     const ids = visibleColumnsFor(AGENT).map(col => col.id);
-    for (const id of ['status', 'wentTo', 'revenue', 'payout', 'cost', 'profit', 'margin']) {
+    for (const id of [
+      'status',
+      'wentTo',
+      'answeredBy',
+      'publisherName',
+      'buyerName',
+      // The destination is withheld by the API, and billable is buyer billing.
+      'toNumber',
+      'billable',
+      'revenue',
+      'payout',
+      'cost',
+      'profit',
+      'margin',
+    ]) {
       expect(ids, id).not.toContain(id);
     }
   });

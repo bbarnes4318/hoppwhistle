@@ -215,7 +215,19 @@ export default function CrmPage() {
   const [prospectTotal, setProspectTotal] = useState(0);
   const [prospectPage, setProspectPage] = useState(1);
   const [prospectsLoading, setProspectsLoading] = useState(true);
-  const [filters, setFilters] = useState<ProspectFilters>(EMPTY_PROSPECT_FILTERS);
+  /*
+   * A follow-up filter named in the URL (`?followUp=DUE`), so the agent's
+   * Today -- its Follow-ups due tile and "All follow-ups" -- opens exactly the
+   * list it counted. Read once at mount, like `?tab=`; only the values the
+   * Follow-up control itself offers are accepted.
+   */
+  const [filters, setFilters] = useState<ProspectFilters>(() => {
+    if (typeof window === 'undefined') return EMPTY_PROSPECT_FILTERS;
+    const requested = new URLSearchParams(window.location.search).get('followUp')?.toUpperCase();
+    return requested && FOLLOW_UP_OPTIONS.some(option => option.value === requested)
+      ? { ...EMPTY_PROSPECT_FILTERS, followUp: requested }
+      : EMPTY_PROSPECT_FILTERS;
+  });
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [leadLists, setLeadLists] = useState<LeadList[]>([]);
 
@@ -430,7 +442,11 @@ export default function CrmPage() {
   return (
     <div className="page-canvas">
       <PageHeader
-        description="Your prospects, and the ones that became submitted applications."
+        description={
+          isAgentOnly
+            ? 'Your prospects, follow-ups and submitted business.'
+            : 'Your prospects, and the ones that became submitted applications.'
+        }
         actions={
           <>
             {canManageBook && view === 'prospects' && selectedLeadIds.length > 0 && (
@@ -634,7 +650,9 @@ export default function CrmPage() {
               loading={prospectsLoading}
               onSelectLead={setSelectedLeadId}
               selectedLeadIds={selectedLeadIds}
-              onSelectLeadsChange={setSelectedLeadIds}
+              // Selection only feeds Delete, which is the agency's: an agent
+              // gets no checkbox column for a bulk action they cannot take.
+              onSelectLeadsChange={canManageBook ? setSelectedLeadIds : undefined}
               filtered={activeFilterCount > 0}
               onClearFilters={clearFilters}
             />

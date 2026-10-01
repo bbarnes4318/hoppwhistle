@@ -267,6 +267,8 @@ export default function OperationsCallLogsPage() {
 
   const isAdminOrOwner = isAdmin || isOwner;
   const canSeeFinance = isAdminOrOwner || isFinance;
+  /** An agent's own ledger: no returns, no money, no counterparties. */
+  const agentView = !!isAgent && !isAdminOrOwner;
 
   // State Management
   const [calls, setCalls] = useState<CallRecord[]>([]);
@@ -1342,39 +1344,52 @@ export default function OperationsCallLogsPage() {
         </div>
       )}
 
-      {/* Returns: whether a buyer asked for the call back, and how it was decided */}
-      <div className={cell}>
-        <Select
-          value={selectedDisputeStatus}
-          onValueChange={val => {
-            setSelectedDisputeStatus(val);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger
-            aria-label="Returns"
-            className={filterTrigger(selectedDisputeStatus !== ALL_RETURNS)}
+      {/* Returns: whether a buyer asked for the call back, and how it was
+          decided. A buyer dispute is the agency's business with its buyer;
+          an agent's ledger has no returns to filter by. */}
+      {!agentView && (
+        <div className={cell}>
+          <Select
+            value={selectedDisputeStatus}
+            onValueChange={val => {
+              setSelectedDisputeStatus(val);
+              setPage(1);
+            }}
           >
-            <SelectValue>
-              {selectedDisputeStatus === ALL_RETURNS ? 'Returns' : undefined}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_RETURNS}>All calls</SelectItem>
-            {DISPUTE_FILTER_OPTIONS.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+            <SelectTrigger
+              aria-label="Returns"
+              className={filterTrigger(selectedDisputeStatus !== ALL_RETURNS)}
+            >
+              <SelectValue>
+                {selectedDisputeStatus === ALL_RETURNS ? 'Returns' : undefined}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_RETURNS}>All calls</SelectItem>
+              {DISPUTE_FILTER_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </>
   );
 
   return (
     <div className="page-canvas">
-      <PageHeader description="Every call, where it went, and what it made." />
+      <PageHeader
+        description={
+          // An agent's list is the calls they answered (server-side), and it
+          // carries no money and no "went to": say what it is, not the owner's
+          // line about where calls went and what they made.
+          agentView
+            ? 'Every call you handled, with disposition and recording.'
+            : 'Every call, where it went, and what it made.'
+        }
+      />
 
       {/* Filter toolbar */}
       <Toolbar className="flex-wrap gap-2 xl:flex-wrap">
@@ -1718,7 +1733,11 @@ export default function OperationsCallLogsPage() {
                   <TableCell colSpan={activeColumnsCount} className="p-0">
                     <EmptyState
                       headline="No call events found"
-                      body="Every call your agents take is recorded here with its duration, disposition and recording."
+                      body={
+                        agentView
+                          ? 'Every call you take is recorded here with its duration, disposition and recording.'
+                          : 'Every call your agents take is recorded here with its duration, disposition and recording.'
+                      }
                     />
                   </TableCell>
                 </TableRow>

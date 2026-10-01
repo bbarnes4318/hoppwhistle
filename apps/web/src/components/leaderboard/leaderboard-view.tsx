@@ -231,7 +231,7 @@ export function LeaderboardView(): JSX.Element {
       <PageHeader
         description={
           isAgentOnly
-            ? 'Where you stand on the floor, ranked by applications, closing and calls over the period.'
+            ? 'Where you stand on the floor, ranked by applications, closing and calls.'
             : 'Your agents ranked by applications, closing and calls over the period.'
         }
       />

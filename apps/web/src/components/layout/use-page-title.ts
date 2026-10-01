@@ -10,8 +10,9 @@ import { AGENT_NAV, WHITE_LABEL_OWNER_NAV } from './nav-config';
 import { pageTitleFor } from './page-title';
 
 /**
- * The current page's name, as the viewer's own sidebar names it: the CRM is
- * "My customers" to an agent. The topbar and the page header both read it.
+ * The current page's name, as the viewer's own sidebar names it: /dashboard is
+ * "Today" to an agent and to a white-label owner, "Dashboard" to staff. The
+ * topbar and the page header both read it.
  */
 export function useCurrentPageTitle(): string {
   const pathname = usePathname();

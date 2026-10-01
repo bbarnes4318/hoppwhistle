@@ -68,7 +68,9 @@ export const CALL_COLUMNS: readonly CallColumn[] = [
   { id: 'publisherName', label: 'Publisher', canSee: v => v.isAdminOrOwner },
   { id: 'buyerName', label: 'Buyer', canSee: v => v.isAdminOrOwner },
   { id: 'did', label: 'DID', canSee: v => !v.isBuyer },
-  { id: 'toNumber', label: 'Destination', canSee: v => !v.isPublisher },
+  // Where the call was sent. The API withholds it from an agent, so a column
+  // of it would only ever be empty.
+  { id: 'toNumber', label: 'Destination', canSee: v => !v.isPublisher && !v.isAgent },
   { id: 'duration', label: 'Duration', align: 'right', canSee: everyone },
   { id: 'connectedDuration', label: 'Connected', align: 'right', canSee: everyone },
   // Carries the return's status as a second chip: there is no Return column.
@@ -76,7 +78,8 @@ export const CALL_COLUMNS: readonly CallColumn[] = [
   // The agency's own business: not the buyer's or the publisher's to read.
   { id: 'application', label: 'Application', canSee: v => !v.isBuyer && !v.isPublisher },
   { id: 'dispositionNotes', label: 'Notes', canSee: everyone },
-  { id: 'billable', label: 'Billable', canSee: everyone },
+  // Whether the buyer is charged for it: the agency's billing, not the agent's.
+  { id: 'billable', label: 'Billable', canSee: v => !v.isAgent },
   { id: 'recording', label: 'Recording', align: 'center', canSee: everyone },
   { id: 'revenue', label: 'Revenue', align: 'right', canSee: v => !v.isPublisher && !v.isAgent },
   { id: 'payout', label: 'Payout', align: 'right', canSee: v => !v.isBuyer && !v.isAgent },

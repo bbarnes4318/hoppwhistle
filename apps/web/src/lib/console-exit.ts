@@ -17,6 +17,14 @@
  * person saying where they want to be, and it outranks the default for the rest
  * of that browser tab's life.
  *
+ * ── Today ──────────────────────────────────────────────────────────────────
+ *
+ * /dashboard no longer sends an agent anywhere: it renders AgentToday, their
+ * own Today, and `homePathForRoles` lands an agent there rather than in the
+ * console. Nothing reads this marker at the moment. It stays, written on every
+ * exit and cleared on every sign-in, because the next person to add "agents
+ * start in the console" needs exactly this to not rebuild the trap.
+ *
  * `sessionStorage` rather than a query parameter, because the marker has to
  * survive the next navigation too: leaving the console for /dashboard and then
  * clicking through to /leads must not re-arm the bounce. It is per tab, so

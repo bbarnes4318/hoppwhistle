@@ -22,7 +22,8 @@
  *   2. PUBLISHER     - ahead of BUYER, matching the ladder `useAuth()` and
  *                      `requireBuyerScope()` already used.
  *   3. BUYER
- *   4. AGENT         - their own calls (/calls, narrowed server-side).
+ *   4. AGENT         - /dashboard, which renders AgentToday for them: their own
+ *                      production, narrowed server-side.
  *   5. everyone else (analyst, readonly, no roles yet) - /dashboard.
  */
 
@@ -35,11 +36,16 @@ export function normalizeRoles(roles: string[] | null | undefined): string[] {
 /**
  * The page a user with these roles should land on.
  *
- * AGENT lands on /calls ("My calls") rather than /dashboard because /dashboard is
- * still the tenant-wide view: every call the agency took, every application it
- * wrote. That is the one destination an agent must not be sent to by default,
- * and it stays that way until the dashboard endpoint is narrowed to the
- * caller's own production.
+ * AGENT lands on /dashboard, the same home as everybody in the agency. It used
+ * to be /calls, because /dashboard was the tenant-wide view -- every call the
+ * agency took -- and that was the one destination an agent must not be sent
+ * to. /dashboard now dispatches on the role and gives an agent AgentToday,
+ * built from `GET /api/v1/agent/today`, which is scoped to the caller on the
+ * server and carries no money. The reason for the exception is gone, so the
+ * exception is too.
+ *
+ * Not /call-center: the Power Dialer is a fullscreen work console an agent
+ * opens on purpose, and "Exit console" lands back here.
  */
 export function homePathForRoles(roles: string[] | null | undefined): string {
   const normalized = normalizeRoles(roles);
@@ -47,7 +53,7 @@ export function homePathForRoles(roles: string[] | null | undefined): string {
   if (normalized.includes('OWNER') || normalized.includes('ADMIN')) return '/dashboard';
   if (normalized.includes('PUBLISHER')) return '/publisher/dashboard';
   if (normalized.includes('BUYER')) return '/buyer/dashboard';
-  if (normalized.includes('AGENT')) return '/calls';
+  if (normalized.includes('AGENT')) return '/dashboard';
 
   return '/dashboard';
 }

@@ -62,8 +62,8 @@ describe('the topbar is the only place a page is named', () => {
    * page it named.
    *
    * Not "equals the name of every nav item on that path", because one path can
-   * honestly carry two names: `/calls` is "Calls" to staff and "My calls" to an
-   * agent, and `/delivery/me` likewise. The rule is that the title is one of
+   * honestly carry two names: `/dashboard` is "Dashboard" to staff and "Today"
+   * to an agent. The rule is that the title is one of
    * them and never something only the override remembers.
    */
   it('never lets an override shadow a nav entry', () => {
@@ -166,13 +166,26 @@ describe("the viewer's own nav names its pages first", () => {
   });
 });
 
-describe("an agent's CRM", () => {
-  it('is titled "My customers" by their own nav, detail page included', () => {
-    expect(pageTitleFor('/insurance-leads', AGENT_NAV)).toBe('My customers');
+describe("an agent's pages", () => {
+  it('names them as the owner does: Today, Calls, Applications, CRM, Leaderboard', () => {
+    expect(pageTitleFor('/dashboard', AGENT_NAV)).toBe('Today');
+    expect(pageTitleFor('/calls', AGENT_NAV)).toBe('Calls');
+    expect(pageTitleFor('/applications', AGENT_NAV)).toBe('Applications');
+    expect(pageTitleFor('/insurance-leads', AGENT_NAV)).toBe('CRM');
+    expect(pageTitleFor('/leaderboard', AGENT_NAV)).toBe('Leaderboard');
+    expect(pageTitleFor('/account', AGENT_NAV)).toBe('Account');
+  });
+
+  it('titles a customer record by the CRM entry it is reached from', () => {
     expect(pageTitleFor('/insurance-leads/0f8c1d2e-aaaa-4bbb-8ccc-123456789abc', AGENT_NAV)).toBe(
-      'My customers'
+      'CRM'
     );
-    // An owner's CRM is still the CRM.
+    // The same name an owner's sidebar uses.
     expect(pageTitleFor('/insurance-leads', WHITE_LABEL_OWNER_NAV)).toBe('CRM');
+  });
+
+  it('gives an agent and a white-label owner the same name for /dashboard', () => {
+    expect(pageTitleFor('/dashboard', WHITE_LABEL_OWNER_NAV)).toBe('Today');
+    expect(pageTitleFor('/dashboard', AGENT_NAV)).toBe('Today');
   });
 });

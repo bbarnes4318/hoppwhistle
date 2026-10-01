@@ -264,43 +264,38 @@ const SWEEP = [
     who: 'agent (AGENT, inside one agency)',
     roles: ['AGENT'],
     platform: false,
-    // Their own day. No money, no rate, and no other agent.
-    strip: 'agent',
-    // Exactly AGENT_NAV, and /dashboard is deliberately not on it.
-    //
-    // /dashboard is the TENANT-WIDE admin dashboard: every call the agency took
-    // and every application it wrote. An agent used to land on it because the
-    // page destructured `isAgentOnly`, listed it in the effect's dependency
-    // array, and never branched on it. It now redirects them to /calls ("My calls",
-    // their home), so asking for /dashboard here would fail assertion 2 ("still
-    // on the page asked for") — correctly. /calls below is where they land.
+    /*
+     * No live strip: Today is an agent's live view, as it is a white-label
+     * owner's, and the strip is asserted ABSENT on every one of these loads.
+     */
+    strip: false,
+    // Exactly AGENT_NAV. /dashboard is on it now: for an agent it renders
+    // AgentToday, from `GET /api/v1/agent/today`, which is scoped to them on
+    // the server and carries no money -- it used to be the tenant-wide admin
+    // dashboard, and agents were redirected off it to /calls.
     routes: [
-      '/call-center',
+      '/dashboard',
       '/calls',
       // The same page an administrator opens. An agent sees only their own
       // rows, and that narrowing is server-side.
       '/applications',
       '/insurance-leads',
-      '/delivery/me',
-      // An agent's own standing against the floor. On AGENT_NAV, so it is on
-      // this list: the comment above says "exactly AGENT_NAV" and a route that
-      // drifts out of it is a page nobody loads.
+      // An agent's own standing against the floor.
       '/leaderboard',
-      '/settings',
+      '/call-center',
+      '/account',
     ],
-    // Asked for, and sent somewhere else. Asserted rather than merely omitted:
-    // dropping /dashboard from the list above would leave the redirect itself
-    // untested, and "an agent cannot reach the tenant-wide dashboard" is the
-    // property, not "this file does not ask for it".
+    // Asked for, and sent somewhere else.
     redirects: [
-      { from: '/dashboard', to: '/calls' },
+      // "My day" is Today now.
+      { from: '/delivery/me', to: '/dashboard' },
       /*
        * "My payroll" is switched off (MY_PAYROLL_ENABLED in
        * src/lib/feature-flags.ts) and off AGENT_NAV. Its URL sends them to
-       * /dashboard, which sends an agent on to /calls. Move it back into
-       * the list above when the flag is turned on.
+       * /dashboard, which keeps them. Move it back into the list above when
+       * the flag is turned on.
        */
-      { from: '/payroll', to: '/calls' },
+      { from: '/payroll', to: '/dashboard' },
     ],
   },
   {
@@ -456,8 +451,7 @@ const NO_STRIP_ROUTES = ['/call-center'];
  * agency) and they do not all name a figure the same way.
  *
  * Absent from this map, deliberately: the app credits remaining and the current
- * rate on the agency's /delivery, and the agent's own closing percentage on
- * /delivery/me. Those are the pages' HERO figures and the strip drops them
+ * rate on the agency's /delivery. Those are the pages' HERO figures and the strip drops them
  * there rather than repeating them -- which `MUST_NOT_APPEAR` below asserts.
  */
 const STRIP_MATCHES_PAGE = {
@@ -465,10 +459,6 @@ const STRIP_MATCHES_PAGE = {
     applications: ['Applications', 'Applications today'],
     calls: ['Calls answered', 'Calls today'],
     tracking: ['Tomorrow is tracking toward'],
-  },
-  '/delivery/me': {
-    calls: ['Calls taken'],
-    applications: ['Applications'],
   },
 };
 
@@ -487,7 +477,6 @@ const STRIP_MATCHES_PAGE = {
  */
 const MUST_NOT_APPEAR = {
   'agency:/delivery': ['block', 'rate'],
-  'agent:/delivery/me': ['closing'],
 };
 
 /**

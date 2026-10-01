@@ -1490,9 +1490,11 @@ export function CallCenterPortal(): JSX.Element {
         setShowSettings={setShowSettings}
         onLogApplication={() => setShowStandaloneApplication(true)}
         onExit={() => {
-          // Say so before navigating: /dashboard sends an agent-only account
-          // straight back here unless this has been recorded, which is how the
-          // console became a room with no door.
+          // To the agent's Today. /dashboard used to bounce an agent-only
+          // account straight back here, which is how the console became a room
+          // with no door; it renders AgentToday for them now and redirects
+          // nowhere. The marker still records the request, so any future
+          // "start in the console" default has to respect it.
           markConsoleExit();
           router.push('/dashboard');
         }}
