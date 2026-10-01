@@ -353,6 +353,45 @@ describe.skipIf(!gate.available)('Agency numbers', () => {
     expect(release.statusCode).toBe(404);
   });
 
+  it("shows an agency OWNER their agents' numbers and their own purchases, not platform inventory", async () => {
+    // Platform inventory filed under the agency's tenant: an Anveo sync run while
+    // staff were acting as it. Nobody's agent, nothing the agency paid for.
+    const platform = await prisma.phoneNumber.create({
+      data: { tenantId, number: '+18005550100', provider: 'anveo', importSource: 'anveo-sync' },
+    });
+    const agents = await prisma.phoneNumber.create({
+      data: { tenantId, number: '+18005550101', provider: 'anveo', userId: agentId },
+    });
+    const bought = (await buy({ areaCode: '608' })).json().data.phoneNumber.id;
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/v1/numbers?limit=500',
+      headers: as(ownerId, tenantId),
+    });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(
+      list
+        .json()
+        .data.map((n: any) => n.id)
+        .sort()
+    ).toEqual([agents.id, bought].sort());
+
+    for (const method of ['GET', 'PATCH', 'DELETE'] as const) {
+      const response = await app.inject({
+        method,
+        url: `/api/v1/numbers/${platform.id}`,
+        headers: as(ownerId, tenantId),
+        ...(method === 'PATCH' ? { payload: { campaignId } } : {}),
+      });
+      expect(response.statusCode, `${method} ${response.body}`).toBe(404);
+    }
+    expect(releaseAtCarrier).not.toHaveBeenCalled();
+    expect(
+      await prisma.phoneNumber.findUniqueOrThrow({ where: { id: platform.id } })
+    ).toMatchObject({ status: 'ACTIVE', campaignId: null });
+  });
+
   it('keeps /numbers/existing and /anveo staff-only for an agency OWNER', async () => {
     for (const [method, url] of [
       ['POST', '/api/v1/numbers/existing'],

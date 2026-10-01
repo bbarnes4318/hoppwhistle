@@ -186,7 +186,15 @@ describe.skipIf(!gate.available)('Child agencies', () => {
     );
 
     const number = await prisma.phoneNumber.create({
-      data: { tenantId: child.id, number: '+15125550100', status: 'ACTIVE', provider: 'fractel' },
+      // One of its agents' numbers: an agency manages those and the numbers it
+      // bought, not platform inventory filed under it.
+      data: {
+        tenantId: child.id,
+        userId: child.agentId,
+        number: '+15125550100',
+        status: 'ACTIVE',
+        provider: 'fractel',
+      },
     });
     const attached = await send('PATCH', `/api/v1/numbers/${number.id}`, childOwner(), {
       campaignId,

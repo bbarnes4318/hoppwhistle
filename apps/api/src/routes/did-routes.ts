@@ -53,6 +53,7 @@ import {
   tagDestinationLegs,
 } from '../lib/route-destination.js';
 import {
+  agencyNumberScope,
   didActiveElsewhere,
   extensionsOutsideTenant,
   isPlatformPrincipal,
@@ -144,8 +145,12 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
 
+    // Only routes on numbers the agency may see (see agencyNumberScope).
     const routes = await prisma.didRoute.findMany({
-      where: { tenantId: user.tenantId },
+      where: {
+        tenantId: user.tenantId,
+        phoneNumber: agencyNumberScope(request, user.tenantId),
+      },
       include: {
         phoneNumber: { select: { number: true, provider: true, status: true } },
         buyer: { select: { id: true, name: true, code: true } },
@@ -223,10 +228,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     // Lookup the phone number to get the DID
-    const phoneNumber = await prisma.phoneNumber.findUnique({
-      where: { id: body.phoneNumberId },
+    const phoneNumber = await prisma.phoneNumber.findFirst({
+      where: {
+        id: body.phoneNumberId,
+        tenantId: user.tenantId,
+        ...agencyNumberScope(request, user.tenantId),
+      },
     });
-    if (!phoneNumber || phoneNumber.tenantId !== user.tenantId) {
+    if (!phoneNumber) {
       return reply.code(404).send({ error: 'Phone number not found' });
     }
 
@@ -327,8 +336,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       status?: 'ACTIVE' | 'PAUSED' | 'INACTIVE';
     };
 
-    const existing = await prisma.didRoute.findUnique({ where: { id } });
-    if (!existing || existing.tenantId !== user.tenantId) {
+    const existing = await prisma.didRoute.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        phoneNumber: agencyNumberScope(request, user.tenantId),
+      },
+    });
+    if (!existing) {
       return reply.code(404).send({ error: 'Route not found' });
     }
 
@@ -446,8 +461,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     const { id } = request.params;
-    const existing = await prisma.didRoute.findUnique({ where: { id } });
-    if (!existing || existing.tenantId !== user.tenantId) {
+    const existing = await prisma.didRoute.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        phoneNumber: agencyNumberScope(request, user.tenantId),
+      },
+    });
+    if (!existing) {
       return reply.code(404).send({ error: 'Route not found' });
     }
 

@@ -19,12 +19,35 @@
  * (`isPlatformPrincipal`), and staff behaviour is unchanged.
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 
 /** NetEnroll staff. Not a role; the capability `api-v1-auth` wrote. */
 export function isPlatformPrincipal(request: FastifyRequest): boolean {
   return (request.user as { isPlatformAdmin?: boolean } | undefined)?.isPlatformAdmin === true;
+}
+
+/**
+ * The phone numbers an agency's own people may see and manage.
+ *
+ * `phone_numbers.tenantId` alone is not that set. Platform inventory gets filed
+ * under whichever tenant staff were acting as -- an Anveo sync, a caller-ID
+ * import, a number staff added for the agency -- so an agency owner reading
+ * "every number in my tenant" was reading NetEnroll's whole DID inventory. What
+ * an agency has a claim to is:
+ *
+ *   - a number assigned to one of its own agents, and
+ *   - a number it bought itself, which carries the charges it pays for it
+ *     (`number_charges`; see services/numbers/number-purchase.ts).
+ *
+ * Everything else stays staff's. Staff keep the whole tenant: the empty filter.
+ */
+export function agencyNumberScope(
+  request: FastifyRequest,
+  tenantId: string
+): Prisma.PhoneNumberWhereInput {
+  if (isPlatformPrincipal(request)) return {};
+  return { OR: [{ user: { tenantId } }, { charges: { some: {} } }] };
 }
 
 /**
