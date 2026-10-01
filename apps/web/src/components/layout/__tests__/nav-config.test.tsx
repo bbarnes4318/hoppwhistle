@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { MonitorPlay } from 'lucide-react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   AGENCY_OWNER_NAV,
@@ -19,6 +19,19 @@ import {
   type NavItem,
 } from '@/components/layout/nav-config';
 import { isStaffOnlyRoute } from '@/lib/staff-only-routes';
+
+/** A viewer holding nothing; each test turns on what it is about. */
+const NOBODY = {
+  isPlatformAdmin: false,
+  previewing: false,
+  hasFullAccess: false,
+  isWhiteLabel: false,
+  isPublisherOnly: false,
+  isBuyerOnly: false,
+  isAgentOnly: false,
+  isReadonlyOnly: false,
+  canViewRecordings: false,
+};
 
 const APP_DIR = resolve(__dirname, '../../../app');
 
@@ -310,18 +323,6 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
 });
 
 describe('navFor: which nav each viewer gets', () => {
-  const NOBODY = {
-    isPlatformAdmin: false,
-    previewing: false,
-    hasFullAccess: false,
-    isWhiteLabel: false,
-    isPublisherOnly: false,
-    isBuyerOnly: false,
-    isAgentOnly: false,
-    isReadonlyOnly: false,
-    canViewRecordings: false,
-  };
-
   it('gives staff the platform nav, even inside an agency where they hold OWNER', () => {
     expect(navFor({ ...NOBODY, isPlatformAdmin: true, hasFullAccess: true })).toBe(PLATFORM_NAV);
   });
@@ -364,14 +365,130 @@ describe('navFor: which nav each viewer gets', () => {
 
     const without = names([]);
     expect(without).not.toContain('Power Dialer');
-    expect(without).toContain('My customers');
+    expect(without).toContain('CRM');
     // The rest of the agent's nav is untouched.
-    expect(without).toContain('My calls');
+    expect(without).toContain('Calls');
     expect(without).toContain('Leaderboard');
 
     const withUpgrade = names(['POWER_DIALER']);
     expect(withUpgrade).toContain('Power Dialer');
-    expect(withUpgrade).toContain('My customers');
+    expect(withUpgrade).toContain('CRM');
+  });
+
+  it('gives a real agent and an operator previewing as AGENT the same nav', () => {
+    // The preview is the agent's portal, item for item -- not staff's with a
+    // banner on it.
+    for (const upgrades of [[], ['POWER_DIALER']]) {
+      const real = navFor({ ...NOBODY, isAgentOnly: true, upgrades });
+      const preview = navFor({
+        ...NOBODY,
+        isPlatformAdmin: true,
+        previewing: true,
+        isAgentOnly: true,
+        upgrades,
+      });
+      expect(preview).toEqual(real);
+    }
+  });
+});
+
+describe("the agent's nav: the owner's product, through an agent's lens", () => {
+  const shape = (groups: NavGroup[]) =>
+    groups.map(group => [group.label, group.items.map(item => [item.name, item.href])]);
+
+  it('is Floor, Work and Account, named as the owner names them', () => {
+    // Written out: the requirement, not a copy of the list under test.
+    expect(shape(navFor({ ...NOBODY, isAgentOnly: true, upgrades: ['POWER_DIALER'] }))).toEqual([
+      [
+        'Floor',
+        [
+          ['Today', '/dashboard'],
+          ['Calls', '/calls'],
+          ['Applications', '/applications'],
+          ['CRM', '/insurance-leads'],
+          ['Leaderboard', '/leaderboard'],
+        ],
+      ],
+      ['Work', [['Power Dialer', '/call-center']]],
+      ['Account', [['Account', '/account']]],
+    ]);
+  });
+
+  it('drops the Work group whole without the Power Dialer upgrade', () => {
+    expect(shape(navFor({ ...NOBODY, isAgentOnly: true, upgrades: [] }))).toEqual([
+      [
+        'Floor',
+        [
+          ['Today', '/dashboard'],
+          ['Calls', '/calls'],
+          ['Applications', '/applications'],
+          ['CRM', '/insurance-leads'],
+          ['Leaderboard', '/leaderboard'],
+        ],
+      ],
+      ['Account', [['Account', '/account']]],
+    ]);
+  });
+
+  it('says "My" nowhere: the scoping says whose they are', () => {
+    for (const item of AGENT_NAV.flatMap(group => group.items)) {
+      expect(item.name, item.href).not.toMatch(/^My\b/);
+    }
+  });
+
+  it('has no My day, and no Settings', () => {
+    const hrefs = AGENT_NAV.flatMap(group => group.items).map(item => pathOf(item.href));
+    expect(hrefs).not.toContain('/delivery/me');
+    expect(hrefs).not.toContain('/settings');
+  });
+
+  it.each([
+    'Buyers',
+    'Publishers',
+    'Revenue',
+    'Routing',
+    'Agencies',
+    'Billing',
+    'Rate',
+    'Settlements',
+    'Webhooks',
+    'Team Members',
+    'Upgrades',
+    'Delivery',
+    'Payouts',
+    'Settings',
+  ])('never offers an agent %s', name => {
+    for (const upgrades of [
+      [],
+      ['POWER_DIALER'],
+      ['POWER_DIALER', 'PAYROLL_ADMIN', 'VOICE_STUDIO'],
+    ]) {
+      const names = allNavItems(navFor({ ...NOBODY, isAgentOnly: true, upgrades })).map(
+        item => item.name
+      );
+      expect(names).not.toContain(name);
+    }
+  });
+
+  it('adds Payroll under Account only while MY_PAYROLL_ENABLED is on', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/feature-flags', async importOriginal => ({
+      ...(await importOriginal<object>()),
+      MY_PAYROLL_ENABLED: true,
+    }));
+    const on = await import('@/components/layout/nav-config');
+    const account = on.AGENT_NAV.find(group => group.label === 'Account');
+    expect(account?.items.map(item => [item.name, item.href])).toEqual([
+      ['Account', '/account'],
+      ['Payroll', '/payroll'],
+    ]);
+    vi.doUnmock('@/lib/feature-flags');
+    vi.resetModules();
+
+    const off = await import('@/components/layout/nav-config');
+    const { MY_PAYROLL_ENABLED } = await import('@/lib/feature-flags');
+    const offHrefs = off.AGENT_NAV.flatMap(group => group.items).map(item => item.href);
+    expect(offHrefs.includes('/payroll')).toBe(MY_PAYROLL_ENABLED);
   });
 });
 

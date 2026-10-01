@@ -273,6 +273,9 @@ async function buildServer() {
   await server.register(registerReturnRoutes);
   const { registerWhiteLabelTodayRoutes } = await import('./routes/white-label-today.js');
   await server.register(registerWhiteLabelTodayRoutes);
+  // The agent's own Today: their production, follow-ups and standing, no money.
+  const { registerAgentTodayRoutes } = await import('./routes/agent-today.js');
+  await server.register(registerAgentTodayRoutes);
 
   /*
    * Stripe's dispute webhooks. Registered as its own plugin because it installs

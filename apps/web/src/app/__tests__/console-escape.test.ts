@@ -25,12 +25,9 @@ import { describe, expect, it } from 'vitest';
  *
  * Structural, on the source, because the two ends live in different files and
  * the defect is that they disagree -- rendering either one alone would have
- * passed. Both ends have to keep referring to the same marker:
- *
- *   - the exit button records that the person asked to leave, and
- *   - the dashboard's agent bounce reads that record before firing.
- *
- * Delete either and the loop comes back, so both are asserted here.
+ * passed. The exit button goes to /dashboard, and /dashboard now renders the
+ * agent's own Today instead of bouncing them -- so there is no second redirect
+ * for the first to meet. Both ends are asserted here.
  */
 
 const webSrc = join(__dirname, '../..');
@@ -56,12 +53,25 @@ describe('leaving the call centre', () => {
     expect(header).toMatch(/onClick=\{onExit\}/);
   });
 
-  it('does not bounce an agent back to a console they asked to leave', () => {
-    const dashboard = read('app/(dashboard)/dashboard/page.tsx');
+  it('lands an agent who leaves the console on a dashboard that keeps them', () => {
+    // The exit goes to /dashboard ...
+    const portal = read('components/call-center/CallCenterPortal.tsx');
+    expect(portal).toMatch(/onExit=\{[\s\S]*?router\.push\('\/dashboard'\)[\s\S]*?\}/);
 
-    expect(dashboard).toContain("from '@/lib/console-exit'");
-    // The agent redirect is conditional on the marker, in the same expression.
-    expect(dashboard).toMatch(/isAgentOnly\s*&&\s*!hasLeftConsole\(\)/);
+    // ... and /dashboard gives an agent their own Today rather than sending
+    // them anywhere. The old agent bounce (to /call-center, then /calls) is the
+    // half of the loop that lived here; neither destination may come back.
+    const dashboard = read('app/(dashboard)/dashboard/page.tsx');
+    expect(dashboard).toMatch(/if \(isAgentOnly\) return <AgentToday \/>/);
+    expect(dashboard).not.toMatch(/router\.replace\('\/call-center'\)/);
+    expect(dashboard).not.toMatch(/router\.replace\('\/calls'\)/);
+  });
+
+  it('has nothing else that sends an agent into the console', () => {
+    // The trap needs something pushing people IN. The only way into
+    // /call-center is a link somebody clicks.
+    const layout = read('app/(dashboard)/layout.tsx');
+    expect(layout).not.toMatch(/replace\((['"])\/call-center\1\)/);
   });
 
   it('starts a new session in the console again', () => {
@@ -98,6 +108,7 @@ describe('where each role lands', () => {
 
     expect(homePathForRoles(['OWNER', 'AGENT'])).toBe('/dashboard');
     expect(homePathForRoles(['ADMIN', 'AGENT'])).toBe('/dashboard');
-    expect(homePathForRoles(['AGENT'])).toBe('/calls');
+    // An agent's home is their Today, not the console and not the call list.
+    expect(homePathForRoles(['AGENT'])).toBe('/dashboard');
   });
 });

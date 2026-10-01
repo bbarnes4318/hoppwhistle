@@ -56,7 +56,7 @@ describe('the home path has one definition', () => {
     [['ADMIN'], '/dashboard'],
     [['PUBLISHER'], '/publisher/dashboard'],
     [['BUYER'], '/buyer/dashboard'],
-    [['AGENT'], '/calls'],
+    [['AGENT'], '/dashboard'],
     [['ANALYST'], '/dashboard'],
     [['READONLY'], '/dashboard'],
     [[], '/dashboard'],
@@ -76,7 +76,7 @@ describe('the home path has one definition', () => {
   });
 
   it('is case-insensitive about what the API sent', () => {
-    expect(homePathForRoles(['agent'])).toBe('/calls');
+    expect(homePathForRoles(['agent'])).toBe('/dashboard');
   });
 
   it('agrees with what use-auth exposes as defaultDashboardPath', () => {

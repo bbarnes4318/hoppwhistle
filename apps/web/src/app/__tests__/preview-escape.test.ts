@@ -17,8 +17,9 @@ import { describe, expect, it } from 'vitest';
  *
  * Two consequences met:
  *
- *   1. `homePathForRoles(['AGENT'])` is `/call-center`, and the dashboard page
- *      pushed them back there whenever they reached /dashboard.
+ *   1. `homePathForRoles(['AGENT'])` was `/call-center`, and the dashboard page
+ *      pushed them back there whenever they reached /dashboard. (It is
+ *      /dashboard now, which renders the agent's Today and redirects nowhere.)
  *   2. `/call-center` renders fullscreen, with no topbar -- and the topbar is
  *      what renders `RolePreviewBanner`, which holds the only "Leave preview"
  *      control in the application.
@@ -77,10 +78,23 @@ describe('a platform operator previewing a role', () => {
 });
 
 describe('what a previewed role routes to', () => {
-  it('sends a lone AGENT to My calls', async () => {
-    // A preview is deliberately indistinguishable from a real agent. /calls
-    // renders with the normal shell, so the "Leave preview" banner is there.
+  it('sends a lone AGENT to Today, which renders with the normal shell', async () => {
+    // A preview is deliberately indistinguishable from a real agent. /dashboard
+    // renders with the topbar, so the "Leave preview" banner is there.
     const { homePathForRoles } = await import('@/lib/roles');
-    expect(homePathForRoles(['AGENT'])).toBe('/calls');
+    expect(homePathForRoles(['AGENT'])).toBe('/dashboard');
+  });
+
+  it('chooses the agent Today from the effective role, not from staff status', () => {
+    // Under a preview the roles ARE the previewed one, so `isAgentOnly` is the
+    // whole decision. A test of `isPlatformAdmin` here would hand the operator
+    // a screen no real agent sees.
+    const dashboard = read('app/(dashboard)/dashboard/page.tsx');
+    const dispatch = dashboard.slice(
+      dashboard.indexOf('export default function DashboardPage'),
+      dashboard.indexOf('function AgencyDashboard')
+    );
+    expect(dispatch).toMatch(/if \(isAgentOnly\) return <AgentToday \/>/);
+    expect(dispatch).not.toContain('isPlatformAdmin');
   });
 });

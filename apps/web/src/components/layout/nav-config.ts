@@ -650,60 +650,74 @@ export function firstUpgradeGroupOf(groups: NavGroup[]): string | null {
   return groups.find(group => isLockedGroup(group))?.label ?? null;
 }
 
+/**
+ * An agent's navigation: the same product as the owner's, through an agent's
+ * lens.
+ *
+ * ── Same names as the owner's ────────────────────────────────────────────────
+ *
+ * Today, Calls, Applications, CRM, Leaderboard -- not "My calls", "My
+ * customers". The owner's sidebar says Calls, not "Agency calls"; the role
+ * and the server-side scoping already say whose calls they are, and each
+ * page's description says it again in a sentence. Each entry is the
+ * PLATFORM_NAV item, so the icon cannot drift from the owner's.
+ *
+ *   Floor    Today        /dashboard renders AgentToday for an agent: their
+ *                         own production, follow-ups and standing.
+ *            Calls        narrowed server-side to calls they answered.
+ *            Applications narrowed server-side to applications they wrote.
+ *            CRM          narrowed server-side to customers assigned to them.
+ *            Leaderboard  the floor's production -- shared inside the agency,
+ *                         money is not (see routes/leaderboard.ts).
+ *   Work     Power Dialer the fullscreen console, with the POWER_DIALER
+ *                         upgrade only (`agentNav`).
+ *   Account  Account      their own login and password.
+ *            Payroll      while MY_PAYROLL_ENABLED is on.
+ *
+ * ── What is not here ─────────────────────────────────────────────────────────
+ *
+ * "My day" (/delivery/me) -- its figures are Today now and the path
+ * redirects. Settings -- for an agent it was the agency's DNC lists and legal
+ * links under an innocent name, which is the agency's plumbing rather than
+ * the agent's; their own account is Account. And nothing about buyers,
+ * publishers, revenue, routing, billing, rates or agencies, ever.
+ */
 export const AGENT_NAV: NavGroup[] = [
   {
-    label: 'Live',
+    label: 'Floor',
     items: [
-      {
-        name: 'My calls',
-        href: '/calls',
-        icon: PhoneCall,
-        title: 'Your calls. Narrowed server-side to the ones you took.',
-      },
-      { name: 'Power Dialer', href: '/call-center', icon: Headphones },
-      {
-        name: 'My applications',
-        href: '/applications',
-        icon: FileCheck2,
-        title: 'The applications you wrote',
-      },
-      {
-        /*
-         * An agent's screen as much as a principal's, and the one agency view
-         * an agent sees colleagues' numbers on. It carries no rate, balance or
-         * charge -- see the header of routes/leaderboard.ts -- so the reason
-         * /delivery is kept off this list does not apply to it.
-         */
-        name: 'Leaderboard',
-        href: '/leaderboard',
-        icon: Trophy,
+      platformItem('/dashboard', {
+        name: 'Today',
+        title: 'Your production, follow-ups and pace for the day',
+      }),
+      platformItem('/calls', { title: 'Every call you handled' }),
+      platformItem('/applications', { title: 'Every application you submitted' }),
+      platformItem('/insurance-leads', {
+        title: 'Your prospects, follow-ups and submitted business',
+      }),
+      platformItem('/leaderboard', {
         title: 'Where you stand on the floor, and what it would take to move up',
-      },
-      {
-        // Every agent has the CRM, narrowed server-side to the customers assigned to them.
-        name: 'My customers',
-        href: '/insurance-leads',
-        icon: Contact,
-        title: 'The customers assigned to you',
-      },
+      }),
     ],
   },
   {
-    label: 'Me',
+    label: 'Work',
     items: [
-      {
-        name: 'My day',
-        href: '/delivery/me',
-        icon: Gauge,
-        title: 'Your calls, applications and closing percentage against the agency average',
-      },
+      platformItem('/call-center', {
+        title: 'The dialer console: your queue, script and softphone, fullscreen',
+      }),
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { name: 'Account', href: '/account', icon: UserCog, title: 'Your login and password' },
       // Switched off for now -- see lib/feature-flags.ts.
       ...(MY_PAYROLL_ENABLED
-        ? [{ name: 'My payroll', href: '/payroll', icon: Receipt } satisfies NavItem]
+        ? [{ name: 'Payroll', href: '/payroll', icon: Receipt } satisfies NavItem]
         : []),
     ],
   },
-  { label: 'Build', items: [{ name: 'Settings', href: '/settings', icon: Settings }] },
 ];
 
 /** AGENT_NAV's entries that exist only with the POWER_DIALER upgrade. */
@@ -713,15 +727,16 @@ const AGENT_POWER_DIALER_HREFS: readonly string[] = ['/call-center'];
  * AGENT_NAV, less what this agency's upgrades do not include.
  *
  * The Power Dialer is the POWER_DIALER upgrade: an agent of an agency without
- * it is not shown it (the API answers 403 UPGRADE_REQUIRED). The CRM is every
- * agent's, upgrade or not. With the upgrade this returns AGENT_NAV itself.
+ * it is not shown it (the API answers 403 UPGRADE_REQUIRED), and the Work
+ * group, which holds nothing else, goes with it. The CRM is every agent's,
+ * upgrade or not. With the upgrade this returns AGENT_NAV itself.
  */
 export function agentNav(upgrades: readonly string[] = []): NavGroup[] {
   if (upgrades.includes('POWER_DIALER')) return AGENT_NAV;
   return AGENT_NAV.map(group => ({
     ...group,
     items: group.items.filter(item => !AGENT_POWER_DIALER_HREFS.includes(item.href)),
-  }));
+  })).filter(group => group.items.length > 0);
 }
 
 /** Every item a person can actually open: not pending, not locked. */

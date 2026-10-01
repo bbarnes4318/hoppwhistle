@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { AgentToday } from '@/components/agent/today';
 import {
   EmptyState,
   Panel,
@@ -35,7 +36,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { apiClient } from '@/lib/api';
-import { hasLeftConsole } from '@/lib/console-exit';
 import { formatClock, formatTableDateTime } from '@/lib/format-time';
 import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
 
@@ -210,25 +210,39 @@ function ChartTooltip({
 
 /* ─── Main Dashboard ───────────────────────────────────────────── */
 /**
- * A white-label owner's `/dashboard` is Today: what is happening now, where
- * today's calls went, and what needs a decision. Everybody else gets the
- * dashboard below, unchanged. See `useWhiteLabelView` for who counts --
- * staff inside a white-label agency see it only while previewing its owner.
+ * Which Today this person gets. One page, three readings, chosen by the
+ * EFFECTIVE role -- so a platform operator previewing an agency as AGENT gets
+ * exactly what an agent gets, because under a preview the roles are the
+ * previewed one:
+ *
+ *   an agent                 AgentToday: their own production, follow-ups and
+ *                            standing, from an endpoint that loads no money and
+ *                            takes no agent id. `/dashboard` is an agent's home
+ *                            (`homePathForRoles`).
+ *   a white-label owner      WhiteLabelToday: what is happening now, where
+ *                            today's calls went, and what needs a decision.
+ *                            See `useWhiteLabelView` for who counts.
+ *   everybody else           the agency dashboard below, unchanged.
+ *
+ * Agent first: an agent of a white-label agency is not a white-label operator
+ * (`useAuth().isWhiteLabel` needs OWNER or ADMIN), and the agency dashboard
+ * below is tenant-wide, which is why agents used to be redirected off it.
  */
 export default function DashboardPage() {
   const whiteLabel = useWhiteLabelView();
-  const { loading } = useAuth();
+  const { loading, isAgentOnly } = useAuth();
   const platform = usePlatformContext();
   // Which dashboard is not known until both have answered. The layout already
   // waits for them; this page does too, so neither dashboard mounts, and fires
   // its requests, only to be swapped for the other.
   if (loading || platform.loading) return <div className="flex-1" aria-busy="true" />;
+  if (isAgentOnly) return <AgentToday />;
   return whiteLabel ? <WhiteLabelToday /> : <AgencyDashboard />;
 }
 
 function AgencyDashboard() {
   const router = useRouter();
-  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
+  const { user, isPublisherOnly, isBuyerOnly, loading: authLoading } = useAuth();
 
   /*
    * A platform operator is not one of the roles below, whatever the role list
@@ -258,38 +272,19 @@ function AgencyDashboard() {
       router.replace('/publisher/dashboard');
     } else if (isBuyerOnly) {
       router.replace('/buyer/dashboard');
-    } else if (isAgentOnly && !hasLeftConsole()) {
-      /*
-       * An agent does not belong here by default.
-       *
-       * `isAgentOnly` was destructured and listed in this array and then never
-       * branched on, so publishers and buyers were sent to their own portals and
-       * an agent landed on the tenant-wide admin dashboard: every call the
-       * agency took, every application it wrote, the whole floor's numbers. The
-       * omission read as deliberate because the dependency was there.
-       *
-       * /calls ("My calls") is an agent's home, and it is the same destination
-       * `defaultDashboardPath` already names for them.
-       *
-       * ── Why a default must not be enforced against an explicit request ────
-       *
-       * The console is fullscreen: no sidebar, no topbar, one "Exit console"
-       * button, and that button comes here. So this line and that button were
-       * pointed at each other, and anybody holding AGENT and nothing else was
-       * sealed inside the call centre -- every route they asked for bounced
-       * back to it. The account that found it belonged to the owner, who had
-       * been given an AGENT role and could not reach a single admin page.
-       *
-       * `hasLeftConsole()` is that button having been pressed. Signing in still
-       * puts an agent in the console; asking to leave it now works.
-       */
-      router.replace('/calls');
     }
+    /*
+     * No branch for an agent. One used to send them to /calls, because this
+     * dashboard is tenant-wide and an agent landed on every call the agency
+     * took. An agent never mounts it now: `DashboardPage` gives them
+     * AgentToday, which is theirs. That also removes the half of the old
+     * console loop that lived here -- "Exit console" goes to /dashboard, and
+     * /dashboard no longer sends an agent anywhere.
+     */
   }, [
     user,
     isPublisherOnly,
     isBuyerOnly,
-    isAgentOnly,
     authLoading,
     router,
     platform.loading,

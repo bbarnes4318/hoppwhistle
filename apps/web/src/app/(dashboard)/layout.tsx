@@ -47,15 +47,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const platform = usePlatformContext();
 
   /*
-   * No live strip for a white-label owner or a downline agency's owner: Today
-   * is their live view, and a second, smaller copy of it above every page was
-   * one more place for two numbers to disagree. Agents, buyers, publishers,
-   * normal agencies and NetEnroll staff keep theirs.
+   * No live strip for a white-label owner, a downline agency's owner or an
+   * agent: Today is their live view, and a second, smaller copy of it above
+   * every page was one more place for two numbers to disagree -- and, for an
+   * agent, a KPI header stacked between the topbar and every page's own
+   * header that the owner's portal does not have. Buyers, publishers, normal
+   * agencies and NetEnroll staff keep theirs.
+   *
+   * `isAgentOnly` reads the EFFECTIVE roles, so an operator previewing as
+   * AGENT loses the strip exactly as a real agent does.
    */
   const whiteLabelView = useWhiteLabelView();
   const previewingRole = platform.previewRole != null || user?.previewRole != null;
   const downlineOwner = isChild && hasFullAccess && (!platform.isPlatformAdmin || previewingRole);
-  const showLiveStrip = !whiteLabelView && !downlineOwner;
+  const showLiveStrip = !whiteLabelView && !downlineOwner && !isAgentOnly;
 
   /*
    * Who gets a softphone.
@@ -274,7 +279,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             application, and it is rendered by the topbar. This branch renders
             no topbar. A preview also REPLACES the operator's roles with
             exactly the previewed one (`middleware/auth.ts`), so previewing an
-            agency as AGENT makes `homePathForRoles` route them here -- to the
+            agency as AGENT made `homePathForRoles` route them here (it sends an
+            agent to /dashboard now, but the console is one click away) -- to the
             single page where the control that ends the preview does not exist.
             The preview sent them somewhere the preview could not be left.
 

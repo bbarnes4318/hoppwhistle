@@ -41,7 +41,7 @@ export function Topbar() {
   const { open, setOpen } = useCommandPalette();
 
   // A white-label owner's pages, and an agent's, are named as their own
-  // sidebar names them: the CRM is "My customers" to an agent.
+  // sidebar names them: /dashboard is "Today" to both.
   const title = useCurrentPageTitle();
   // The page's own header shows the title when it has one; this is the
   // fallback for a page that does not.

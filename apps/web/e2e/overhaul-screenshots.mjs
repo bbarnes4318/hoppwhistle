@@ -125,6 +125,9 @@ const PEOPLE = {
   // the calls and applications the demo actually gave him. The seed leaves
   // people without a password; PEOPLE_SEED gives this one the harness's.
   agent: 'marcus.bell@demo.lifeleadsplus.test',
+  // A NetEnroll operator viewing Life Leads Plus "As agent": the shots must
+  // match the real agent's, item for item.
+  previewAgent: 'platform-agent@llp.screens.invalid',
 };
 
 /** Every screen, as the person it belongs to. `{child}` is Riverbend's tenant id. */
@@ -166,13 +169,18 @@ const SCREENS = [
   { id: 'downline-dashboard', who: 'downline', path: '/dashboard' },
   { id: 'downline-calls', who: 'downline', path: '/calls' },
   // The agent portal: what a Life Leads Plus AGENT sees, not the owner.
+  { id: 'agent-today', who: 'agent', path: '/dashboard' },
+  { id: 'agent-today-yesterday', who: 'agent', path: '/dashboard?period=YESTERDAY' },
+  { id: 'agent-today-last-7-days', who: 'agent', path: '/dashboard?period=LAST_7_DAYS' },
   { id: 'agent-calls', who: 'agent', path: '/calls' },
-  { id: 'agent-power-dialer', who: 'agent', path: '/call-center' },
   { id: 'agent-applications', who: 'agent', path: '/applications' },
-  { id: 'agent-customers', who: 'agent', path: '/insurance-leads' },
+  { id: 'agent-crm', who: 'agent', path: '/insurance-leads' },
+  { id: 'agent-crm-follow-ups', who: 'agent', path: '/insurance-leads?tab=prospects&followUp=DUE' },
   { id: 'agent-leaderboard', who: 'agent', path: '/leaderboard' },
-  { id: 'agent-my-day', who: 'agent', path: '/delivery/me' },
-  { id: 'agent-settings', who: 'agent', path: '/settings' },
+  { id: 'agent-account', who: 'agent', path: '/account' },
+  { id: 'agent-power-dialer', who: 'agent', path: '/call-center' },
+  { id: 'preview-agent-today', who: 'previewAgent', path: '/dashboard' },
+  { id: 'preview-agent-calls', who: 'previewAgent', path: '/calls' },
   { id: 'buyer-dashboard', who: 'buyer', path: '/buyer/dashboard' },
   { id: 'buyer-calls', who: 'buyer', path: '/buyer/calls' },
   { id: 'buyer-spend', who: 'buyer', path: '/buyer/spend' },
@@ -266,6 +274,69 @@ const agentRows = await prisma.user.updateMany({
 });
 if (agentRows.count !== 1) throw new Error('the seed has no agent ' + people.agent);
 
+// The operator who views the agency "As agent".
+const staffAgent = await person(people.previewAgent, llp.id, ['ADMIN']);
+await prisma.platformAdmin.create({
+  data: { userId: staffAgent.id, grantedBy: staffAgent.id, note: 'agent preview screenshots' },
+});
+await prisma.platformActingTenant.create({
+  data: { userId: staffAgent.id, tenantId: llp.id, previewRole: 'AGENT' },
+});
+
+/*
+ * The agent's book. The demo seed writes calls and applications but no CRM
+ * leads and no softphone states, so without these the agent's Today would show
+ * an empty follow-up list and no time available -- true, but not the screen a
+ * working agent sees. Marcus is licensed where his leads are (the CRM narrows an
+ * agent to their licensed states), and every lead carries this harness's
+ * marker so a re-run replaces rather than duplicates them.
+ */
+const marcus = await prisma.user.findFirstOrThrow({ where: { email: people.agent } });
+await prisma.user.update({
+  where: { id: marcus.id },
+  data: { metadata: { seed: 'llp-demo', licensedStates: ['TN', 'FL', 'GA', 'AL'] } },
+});
+await prisma.insuranceLead.deleteMany({ where: { tenantId: llp.id, source: 'screens-harness' } });
+const hour = 3_600_000;
+const day = 24 * hour;
+const now = Date.now();
+const book = [
+  ['Carol', 'Simmons', 'TN', 'PROPOSAL', -2 * day],
+  ['Dan', 'Ortiz', 'FL', 'CONTACTED', -1 * day - 3 * hour],
+  ['Evelyn', 'Price', 'GA', 'UNDERWRITING', -3 * hour],
+  ['Frank', 'Hollis', 'AL', null, -1 * hour],
+  ['Gloria', 'Reyes', 'TN', 'PROPOSAL', 2 * hour],
+  ['Harold', 'Banks', 'FL', 'CONTACTED', 4 * hour],
+  ['Irene', 'Webb', 'GA', null, 2 * day],
+  ['James', 'Cole', 'TN', 'NEW', null],
+];
+let n = 0;
+for (const [firstName, lastName, state, leadStage, offset] of book) {
+  await prisma.insuranceLead.create({
+    data: {
+      tenantId: llp.id,
+      vertical: 'FE',
+      firstName,
+      lastName,
+      fullName: firstName + ' ' + lastName,
+      phone: '61555501' + String(++n).padStart(2, '0'),
+      state,
+      source: 'screens-harness',
+      assignedToId: marcus.id,
+      assignedAt: new Date(now - 5 * day),
+      leadStage,
+      nextFollowUpAt: offset === null ? null : new Date(now + offset),
+    },
+  });
+}
+// On the queue since three hours ago, with a break in the middle.
+await prisma.agentStateEvent.deleteMany({ where: { userId: marcus.id } });
+for (const [status, ago] of [['available', 3 * hour], ['away', 2 * hour], ['available', 1.5 * hour]]) {
+  await prisma.agentStateEvent.create({
+    data: { userId: marcus.id, status, occurredAt: new Date(now - ago) },
+  });
+}
+
 console.log(JSON.stringify({ child: child.id }));
 await prisma.$disconnect();
 `;
@@ -279,6 +350,8 @@ function seedPeople() {
       DATABASE_URL: DATABASE,
       SHOTS_PEOPLE: JSON.stringify(PEOPLE),
       SHOTS_PASSWORD: PASSWORD,
+      // Follow-ups and queue time are written relative to the same clock.
+      ...shiftedEnv(),
     },
   });
   if (result.status !== 0) throw new Error(`people seed failed: ${result.stderr}`);
@@ -577,6 +650,14 @@ async function shootAll(child) {
     await shoot(phoneContext, zero, zero.path, [{ name: '390', full: true }]);
     await phoneContext.close();
     console.log('shot today-zero');
+    const agentZero = { id: 'agent-today-zero', who: 'agent', path: '/dashboard' };
+    const agentDesk = await contextFor(browser, sessions.agent, desk);
+    await shoot(agentDesk, agentZero, agentZero.path, [
+      { name: '1366', full: false },
+      { name: '1366-full', full: true },
+    ]);
+    await agentDesk.close();
+    console.log('shot agent-today-zero');
     reseed();
     seedPeople();
   }

@@ -92,7 +92,7 @@ export function pageTitleFor(pathname: string | null, own?: NavGroup[]): string 
   }
 
   // A detail page under one of the viewer's own entries is named as that entry:
-  // an agent's /insurance-leads/<id> reads "My customers", as their sidebar does.
+  // an agent's /insurance-leads/<id> reads "CRM", as their sidebar does.
   const ownPrefix = ownItems
     .filter(item => !item.href.includes('?') && pathname.startsWith(`${item.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];

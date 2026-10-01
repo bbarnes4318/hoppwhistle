@@ -454,7 +454,7 @@ export interface AgentRow {
  * day nobody measured, and reporting it as zero seconds available would put a
  * coaching decision on a number that was never recorded.
  */
-async function availableSecondsByUser(
+export async function availableSecondsByUser(
   prisma: PrismaClient,
   userIds: string[],
   bounds: { start: Date; endExclusive: Date },
@@ -794,7 +794,7 @@ export interface AgentSelfView {
  * was answered, an application by when it was submitted. Two reads of the whole
  * window, bucketed here, rather than a pair of counts per day.
  */
-async function agentTrend(
+export async function agentTrend(
   prisma: PrismaClient,
   tenantId: string,
   userId: string,
@@ -814,11 +814,7 @@ async function agentTrend(
       select: { answeredAt: true, connectedDuration: true },
     }),
     prisma.insuranceCarrierApplication.findMany({
-      where: {
-        tenantId,
-        createdById: userId,
-        submittedAt: { gte: range.start, lt: range.endExclusive },
-      },
+      where: { ...submittedApplicationWhere(tenantId, range), createdById: userId },
       select: { submittedAt: true },
     }),
   ]);
@@ -865,12 +861,14 @@ export async function getAgentSelfView(
       _count: { _all: true },
       _sum: { connectedDuration: true },
     }),
+    /*
+     * Submitted and NOT voided -- the same predicate the agency figure beside
+     * it is counted with. This used to omit `voidedAt`, so an application
+     * NetEnroll had voided still counted toward the agent's own closing
+     * percentage while it had already left the agency's.
+     */
     prisma.insuranceCarrierApplication.count({
-      where: {
-        tenantId,
-        createdById: userId,
-        submittedAt: { gte: bounds.start, lt: bounds.endExclusive },
-      },
+      where: { ...submittedApplicationWhere(tenantId, bounds), createdById: userId },
     }),
     measureCalendarDay(
       { calls: prisma.call, applications: prisma.insuranceCarrierApplication },

@@ -148,6 +148,92 @@ function leadScopeWhere(scope: PipelineScope): Prisma.InsuranceLeadWhereInput {
   };
 }
 
+/**
+ * Prospects whose follow-up is due today or already overdue, not marked lost.
+ *
+ * One definition, read by the CRM's "Follow-ups due" tile, by the agent's
+ * Today (its tile and its "Needs your attention" rows) and -- through the same
+ * two conditions in `insurance-lead-service.ts` -- by the CRM's `followUp=DUE`
+ * filter that both of those link to. A count that disagreed with the list it
+ * opens is the first thing an agent would stop trusting.
+ */
+export function followUpDueWhere(
+  prospectWhere: Prisma.InsuranceLeadWhereInput,
+  now: Date
+): Prisma.InsuranceLeadWhereInput {
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  return {
+    AND: [
+      prospectWhere,
+      { nextFollowUpAt: { lte: endOfToday } },
+      { OR: [{ leadStage: null }, { leadStage: { not: 'CLOSED_LOST' } }] },
+    ],
+  };
+}
+
+/** One follow-up that needs doing: a prospect, and when it was due. */
+export interface FollowUpDueRow {
+  leadId: string;
+  name: string;
+  phone: string;
+  /** The CRM stage, or the lead status when no stage has been set. */
+  stage: string | null;
+  dueAt: string;
+  /** Due before now (overdue), or later today. */
+  overdue: boolean;
+}
+
+/**
+ * The follow-ups due, oldest due first, and how many there are in all.
+ *
+ * Over exactly the rows `getPipelineSummary().followUpsDue` counts, so the
+ * count on a tile and the rows beneath it are the same set.
+ */
+export async function getFollowUpsDue(
+  scope: PipelineScope,
+  options: { now?: Date; take?: number } = {}
+): Promise<{ count: number; rows: FollowUpDueRow[] }> {
+  const prisma = getPrismaClient();
+  const now = options.now ?? new Date();
+  const keys = await getConvertedLeadKeys(scope);
+  const where = followUpDueWhere({ AND: [leadScopeWhere(scope), notConvertedWhere(keys)] }, now);
+
+  const [count, leads] = await Promise.all([
+    prisma.insuranceLead.count({ where }),
+    prisma.insuranceLead.findMany({
+      where,
+      orderBy: [{ nextFollowUpAt: 'asc' }, { id: 'asc' }],
+      take: Math.min(Math.max(options.take ?? 5, 1), 25),
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        fullName: true,
+        phone: true,
+        leadStage: true,
+        status: true,
+        nextFollowUpAt: true,
+      },
+    }),
+  ]);
+
+  return {
+    count,
+    rows: leads.map(lead => ({
+      leadId: lead.id,
+      name:
+        lead.fullName?.trim() ||
+        [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim() ||
+        'Unnamed prospect',
+      phone: lead.phone,
+      stage: lead.leadStage ?? lead.status ?? null,
+      dueAt: (lead.nextFollowUpAt as Date).toISOString(),
+      overdue: (lead.nextFollowUpAt as Date).getTime() < now.getTime(),
+    })),
+  };
+}
+
 export interface PipelineSummary {
   /** Leads with no submitted application. */
   prospects: number;
@@ -174,20 +260,9 @@ export async function getPipelineSummary(
     AND: [leadScopeWhere(scope), notConvertedWhere(keys)],
   };
 
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
-
   const [prospects, followUpsDue, apps] = await Promise.all([
     prisma.insuranceLead.count({ where: prospectWhere }),
-    prisma.insuranceLead.count({
-      where: {
-        AND: [
-          prospectWhere,
-          { nextFollowUpAt: { lte: endOfToday } },
-          { OR: [{ leadStage: null }, { leadStage: { not: 'CLOSED_LOST' } }] },
-        ],
-      },
-    }),
+    prisma.insuranceLead.count({ where: followUpDueWhere(prospectWhere, now) }),
     prisma.insuranceCarrierApplication.aggregate({
       where: submittedApplicationWhere(scope, range),
       _count: { _all: true },
