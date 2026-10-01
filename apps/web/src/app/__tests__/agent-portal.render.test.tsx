@@ -56,6 +56,18 @@ const OWNER = {
   tenantId: 'tenant-a',
   whiteLabel: true,
 };
+/** A NetEnroll operator who holds AGENT on their own account, not previewing. */
+const STAFF_HOLDING_AGENT = {
+  id: 'staff-2',
+  email: 'ops@netenroll.test',
+  roles: ['AGENT'],
+  tenantId: 'tenant-a',
+  whiteLabel: true,
+  upgrades: ['POWER_DIALER'],
+  isPlatformAdmin: true,
+  previewRole: null,
+  isReadOnlyPreview: false,
+};
 /** A NetEnroll operator inside the agency, viewing it as AGENT. */
 const PREVIEW = {
   id: 'staff-1',
@@ -195,7 +207,7 @@ function agentToday(
   };
 }
 
-let user: typeof AGENT | typeof OWNER | typeof PREVIEW = AGENT;
+let user: typeof AGENT | typeof OWNER | typeof PREVIEW | typeof STAFF_HOLDING_AGENT = AGENT;
 let me: unknown = selfView();
 let today: unknown = agentToday();
 
@@ -221,8 +233,8 @@ function installFetch(): void {
                 ? {
                     isPlatformAdmin: true,
                     actingTenant: { id: 'tenant-a', name: 'Life Leads Plus' },
-                    previewRole: 'AGENT',
-                    readOnly: true,
+                    previewRole: 'previewRole' in user ? user.previewRole : null,
+                    readOnly: 'isReadOnlyPreview' in user && user.isReadOnlyPreview,
                   }
                 : { isPlatformAdmin: false, actingTenant: null, previewRole: null },
           });
@@ -530,6 +542,18 @@ describe('/dashboard for each viewer', () => {
     expect(requested).toContain('/api/v1/agent/today?period=TODAY');
     // And nothing moved them off it.
     expect(redirects).toEqual([]);
+  });
+
+  it('keeps the platform dashboard for an operator who holds AGENT but is not previewing', async () => {
+    // The nav gives them PLATFORM_NAV; the page must agree with it.
+    user = STAFF_HOLDING_AGENT;
+    await mountDashboard();
+    await waitFor(() =>
+      expect(requested.some(r => r.startsWith('/api/v1/platform/context'))).toBe(true)
+    );
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('agent-today')).toBeNull();
+    expect(requested.some(r => r.startsWith('/api/v1/agent/today'))).toBe(false);
   });
 
   it('does not redirect a real agent anywhere either', async () => {

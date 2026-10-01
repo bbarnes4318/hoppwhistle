@@ -62,7 +62,7 @@ describe('leaving the call centre', () => {
     // them anywhere. The old agent bounce (to /call-center, then /calls) is the
     // half of the loop that lived here; neither destination may come back.
     const dashboard = read('app/(dashboard)/dashboard/page.tsx');
-    expect(dashboard).toMatch(/if \(isAgentOnly\) return <AgentToday \/>/);
+    expect(dashboard).toMatch(/if \(agentView\) return <AgentToday \/>/);
     expect(dashboard).not.toMatch(/router\.replace\('\/call-center'\)/);
     expect(dashboard).not.toMatch(/router\.replace\('\/calls'\)/);
   });

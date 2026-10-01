@@ -85,16 +85,20 @@ describe('what a previewed role routes to', () => {
     expect(homePathForRoles(['AGENT'])).toBe('/dashboard');
   });
 
-  it('chooses the agent Today from the effective role, not from staff status', () => {
-    // Under a preview the roles ARE the previewed one, so `isAgentOnly` is the
-    // whole decision. A test of `isPlatformAdmin` here would hand the operator
-    // a screen no real agent sees.
+  it('chooses the agent Today from the effective role, as the nav does', () => {
+    // Under a preview the roles ARE the previewed one, so an operator previewing
+    // as AGENT gets exactly the agent's Today. An operator who merely holds AGENT
+    // on their own account, not previewing, keeps the platform dashboard -- the
+    // same staff-first rule `navFor` applies to the sidebar.
     const dashboard = read('app/(dashboard)/dashboard/page.tsx');
     const dispatch = dashboard.slice(
       dashboard.indexOf('export default function DashboardPage'),
       dashboard.indexOf('function AgencyDashboard')
     );
-    expect(dispatch).toMatch(/if \(isAgentOnly\) return <AgentToday \/>/);
-    expect(dispatch).not.toContain('isPlatformAdmin');
+    expect(dispatch).toMatch(/const agentView = useAgentView\(\)/);
+    expect(dispatch).toMatch(/if \(agentView\) return <AgentToday \/>/);
+
+    const hook = read('hooks/use-agent-view.ts');
+    expect(hook).toMatch(/isAgentOnly && \(!isPlatformAdmin \|\| previewing\)/);
   });
 });

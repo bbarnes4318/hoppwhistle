@@ -11,6 +11,7 @@ import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { RolePreviewBanner } from '@/components/platform/role-preview-switcher';
+import { useAgentView } from '@/hooks/use-agent-view';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
@@ -54,13 +55,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * header that the owner's portal does not have. Buyers, publishers, normal
    * agencies and NetEnroll staff keep theirs.
    *
-   * `isAgentOnly` reads the EFFECTIVE roles, so an operator previewing as
-   * AGENT loses the strip exactly as a real agent does.
+   * `useAgentView` reads the EFFECTIVE roles, so an operator previewing as
+   * AGENT loses the strip exactly as a real agent does -- and an operator who
+   * merely holds AGENT on their own account keeps the platform strip.
    */
   const whiteLabelView = useWhiteLabelView();
   const previewingRole = platform.previewRole != null || user?.previewRole != null;
   const downlineOwner = isChild && hasFullAccess && (!platform.isPlatformAdmin || previewingRole);
-  const showLiveStrip = !whiteLabelView && !downlineOwner && !isAgentOnly;
+  const agentView = useAgentView();
+  const showLiveStrip = !whiteLabelView && !downlineOwner && !agentView;
 
   /*
    * Who gets a softphone.

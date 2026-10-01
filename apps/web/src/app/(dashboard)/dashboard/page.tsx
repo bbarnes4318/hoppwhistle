@@ -32,6 +32,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { WhiteLabelToday } from '@/components/white-label/today';
+import { useAgentView } from '@/hooks/use-agent-view';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
@@ -224,19 +225,24 @@ function ChartTooltip({
  *                            See `useWhiteLabelView` for who counts.
  *   everybody else           the agency dashboard below, unchanged.
  *
+ * `useAgentView` is `isAgentOnly` for everybody but NetEnroll staff, who get it
+ * only while previewing -- an operator who happens to hold AGENT on their own
+ * account keeps the platform dashboard, as `navFor` keeps their nav.
+ *
  * Agent first: an agent of a white-label agency is not a white-label operator
  * (`useAuth().isWhiteLabel` needs OWNER or ADMIN), and the agency dashboard
  * below is tenant-wide, which is why agents used to be redirected off it.
  */
 export default function DashboardPage() {
   const whiteLabel = useWhiteLabelView();
-  const { loading, isAgentOnly } = useAuth();
+  const agentView = useAgentView();
+  const { loading } = useAuth();
   const platform = usePlatformContext();
   // Which dashboard is not known until both have answered. The layout already
   // waits for them; this page does too, so neither dashboard mounts, and fires
   // its requests, only to be swapped for the other.
   if (loading || platform.loading) return <div className="flex-1" aria-busy="true" />;
-  if (isAgentOnly) return <AgentToday />;
+  if (agentView) return <AgentToday />;
   return whiteLabel ? <WhiteLabelToday /> : <AgencyDashboard />;
 }
 
