@@ -468,6 +468,111 @@
   }
 }
 
+/* ==========================================================================
+   SIGN-IN PAGE
+   /login is the front door: a brand panel beside (or, on a phone, above) the
+   form. These tokens are that page's only, scoped to [data-auth-page] so
+   nothing else in the product can read them. The panel is the brand's ground;
+   the form side is the light palette every other page uses.
+
+   NetEnroll's panel is light: its lockup is the supplied artwork, with black
+   lettering, and is never set on a dark ground. A white-label agency's panel
+   is its navy, carrying the wordmark reversed out for it.
+
+   Every text colour on a panel is set as the panel's background-color too
+   (the gradient is an image over it), so contrast is measured against a real
+   colour. Decoration (grid, edge light) is aria-hidden and carries no text.
+
+     ne  panel ink     on panel    15.68:1
+     ne  panel ink-2   on panel     6.79:1
+     ne  panel ink-3   on panel     4.78:1
+     llp panel ink     on navy     16.23:1
+     llp panel ink-2   on navy     10.95:1
+     llp panel ink-3   on navy      7.37:1
+   ========================================================================== */
+
+@layer base {
+  [data-auth-page] {
+    /* The ground behind the card, from 640px up. Below that the form side is
+       the white surface itself and the card has no chrome of its own. */
+    --auth-canvas: #f8f9fb;
+    /* The page's controls are a size larger than the product's (48px fields),
+       and take a radius to match. Every brand, so it is set once, here. */
+    --radius-control: 10px;
+
+    --auth-panel: #eff1f4;
+    --auth-panel-image: none;
+    --auth-panel-ink: #101828;
+    --auth-panel-ink-2: #475467;
+    --auth-panel-ink-3: #5f6b7d;
+    --auth-panel-rule: rgba(16, 24, 40, 0.14);
+    --auth-grid: rgba(16, 24, 40, 0.05);
+    --auth-accent: #10b981;
+    --auth-edge: rgba(16, 24, 40, 0.12);
+
+    --auth-card-shadow: 0 20px 50px -12px rgba(16, 24, 40, 0.1), 0 2px 6px rgba(16, 24, 40, 0.04);
+    --auth-field-rule: #c9ced6;
+    --auth-field-hover: #98a2b3;
+    --auth-focus-halo: rgba(4, 120, 87, 0.16);
+    --auth-info-rule: #c4ead8;
+    --auth-error-rule: #e6c3b9;
+  }
+
+  [data-brand='life-leads-plus'] [data-auth-page] {
+    --auth-canvas: #f7f9fc;
+
+    --auth-panel: #0b1f44;
+    --auth-panel-image: linear-gradient(165deg, #0d2550 0%, #0b1f44 52%, #0a1a3a 100%);
+    --auth-panel-ink: #ffffff;
+    --auth-panel-ink-2: #c9d5e8;
+    --auth-panel-ink-3: #9db0ce;
+    --auth-panel-rule: rgba(255, 255, 255, 0.1);
+    --auth-grid: rgba(157, 176, 206, 0.075);
+    --auth-accent: #3d9bff;
+    --auth-edge: rgba(61, 155, 255, 0.4);
+
+    --auth-card-shadow: 0 24px 56px -16px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
+    --auth-field-rule: #c3ccd9;
+    --auth-field-hover: #94a3b8;
+    --auth-focus-halo: rgba(11, 92, 214, 0.16);
+    --auth-info-rule: #cfe0fb;
+  }
+}
+
+@layer components {
+  .auth-panel {
+    background-color: var(--auth-panel);
+    background-image: var(--auth-panel-image);
+    color: var(--auth-panel-ink);
+  }
+
+  /*
+   * A drafting grid, faded in from the panel's lower corner: structure, not
+   * a picture. Masked rather than drawn smaller so the lines stay one device
+   * pixel wherever they show.
+   */
+  .auth-panel-grid {
+    background-image:
+      linear-gradient(to right, var(--auth-grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--auth-grid) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: -1px -1px;
+    -webkit-mask-image: radial-gradient(130% 75% at 0% 100%, #000 25%, transparent 72%);
+    mask-image: radial-gradient(130% 75% at 0% 100%, #000 25%, transparent 72%);
+  }
+
+  /* The panel's inner edge: a hairline that is brightest at the form's height. */
+  .auth-panel-edge {
+    background-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--auth-edge) 35%,
+      var(--auth-edge) 65%,
+      transparent 100%
+    );
+  }
+}
+
 /*
  * Figures, times and phone numbers in Inter with tabular figures rather than
  * the monospace face: aligned in a column, without reading as a developer

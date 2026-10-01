@@ -1,18 +1,19 @@
 'use client';
 
-import { AlertCircle, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Info, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from 'react';
 
-import { LoginBrandLogo } from '@/components/brand/login-brand';
+import { LoginBrandLogo, useLoginBrand, useLoginSurface } from '@/components/brand/login-brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -60,8 +61,53 @@ const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink ' +
   'focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
-/** One field, so the eleven inputs on this page cannot drift apart. */
-const FIELD = cn('h-10 w-full rounded-control border-rule bg-surface text-sm text-ink', FOCUS_RING);
+/**
+ * One field, so the eleven inputs on this page cannot drift apart.
+ *
+ * 48px tall: this is the one screen everyone types into first, often on a
+ * phone. Text is 16px below 640px because iOS zooms into any field set
+ * smaller, and 15px above it. Focus turns the border --brand-ink and lays a
+ * one-pixel --brand-ink line inside a soft halo, so the indicator is a solid
+ * two-pixel edge (the same weight as FOCUS_RING) without a gap around a field.
+ */
+const FIELD = cn(
+  'h-12 w-full rounded-control border-[color:var(--auth-field-rule)] bg-surface px-3.5 text-base text-ink sm:text-[15px]',
+  'placeholder:text-ink-3 hover:border-[color:var(--auth-field-hover)]',
+  'transition-[border-color,box-shadow] duration-150 ease-out ne-motion',
+  'focus-visible:border-brand-ink focus-visible:outline-none focus-visible:ring-0',
+  'focus-visible:shadow-[0_0_0_1px_var(--brand-ink),0_0_0_4px_var(--auth-focus-halo)]'
+);
+
+/**
+ * The primary action: the brand's strong fill, full width, 48px.
+ *
+ * While a request is in flight the button is disabled but keeps its fill --
+ * `data-busy` -- with the spinner beside its label. The primitive's disabled
+ * look (a sunken grey) means "not available", which a button that is working
+ * on your behalf is not.
+ */
+const PRIMARY = cn(
+  'h-12 w-full rounded-control text-[15px] font-semibold',
+  'data-[busy=true]:disabled:cursor-progress data-[busy=true]:disabled:bg-brand-strong data-[busy=true]:disabled:text-white',
+  FOCUS_RING
+);
+
+/** Underlined ink, not brand colour: the primary button is the one coloured thing. */
+const TEXT_LINK = cn(
+  'rounded-control font-medium text-ink underline decoration-rule-strong underline-offset-4',
+  'transition-colors duration-150 ease-out ne-motion hover:decoration-current',
+  FOCUS_RING
+);
+
+/** One half of the Sign in / Create account switch. */
+const SEGMENT = cn(
+  'mb-0 h-10 w-full rounded-[9px] border border-transparent px-3 text-sm font-medium text-ink-2',
+  'transition-[color,background-color,border-color,box-shadow] duration-150 ease-out',
+  'hover:text-ink',
+  'data-[state=active]:border-rule data-[state=active]:bg-surface data-[state=active]:text-ink',
+  'data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.05)]',
+  FOCUS_RING
+);
 
 interface AuthResponse {
   token: string;
@@ -200,27 +246,29 @@ function GoogleButton({
 
 /** The error and the invitation notice are the same shape; only the tone moves. */
 function Banner({ tone, children }: { tone: 'error' | 'info'; children: ReactNode }) {
+  const Icon = tone === 'error' ? AlertCircle : Info;
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
       className={cn(
-        'flex items-start gap-2.5 rounded-control border px-3 py-2.5',
+        'flex items-start gap-2.5 rounded-control border px-3.5 py-3',
         tone === 'error'
-          ? 'border-dropped bg-dropped-tint text-dropped-ink'
-          : 'border-rule bg-sunken text-ink-2'
+          ? 'border-[color:var(--auth-error-rule)] bg-dropped-tint text-dropped-ink'
+          : 'border-[color:var(--auth-info-rule)] bg-brand-tint text-ink'
       )}
     >
-      {tone === 'error' ? (
-        <AlertCircle className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
-      ) : null}
-      <p className="t-body min-w-0">{children}</p>
+      <Icon
+        className={cn('mt-0.5 h-4 w-4 shrink-0', tone === 'info' && 'text-brand-ink')}
+        aria-hidden="true"
+      />
+      <p className="min-w-0 text-[13.5px] leading-5">{children}</p>
     </div>
   );
 }
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="t-meta block font-medium text-ink-2">
+    <label htmlFor={htmlFor} className="block text-sm font-medium leading-5 text-ink">
       {children}
     </label>
   );
@@ -228,6 +276,9 @@ function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNod
 
 export default function AuthPage() {
   const router = useRouter();
+  /** The host's agency, or null for NetEnroll; and the ground its panel is painted. */
+  const brand = useLoginBrand();
+  const surface = useLoginSurface();
 
   /**
    * Tell the session provider about the token before navigating.
@@ -329,6 +380,13 @@ export default function AuthPage() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotSending, setForgotSending] = useState(false);
   const [forgotMessage, setForgotMessage] = useState<string | null>(null);
+  /** The "Forgot password?" control, so closing the form can hand focus back to it. */
+  const forgotToggle = useRef<HTMLButtonElement>(null);
+  const closeForgot = useCallback(() => {
+    setForgotOpen(false);
+    // The control is mounted again by the render this schedules.
+    requestAnimationFrame(() => forgotToggle.current?.focus());
+  }, []);
   /** Set when /reset-password sent the person back here with a new password. */
   const [resetDone, setResetDone] = useState(false);
 
@@ -549,7 +607,7 @@ export default function AuthPage() {
         onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
         required
         autoComplete={autoComplete}
-        className={cn(FIELD, 'pr-11')}
+        className={cn(FIELD, 'pr-12')}
       />
       <button
         type="button"
@@ -557,15 +615,15 @@ export default function AuthPage() {
         aria-label={showPassword ? 'Hide password' : 'Show password'}
         aria-pressed={showPassword}
         className={cn(
-          'absolute right-1 top-1/2 flex h-8 w-9 -translate-y-1/2 items-center justify-center',
-          'rounded-control text-ink-2 hover:text-ink',
+          'absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center',
+          'rounded-lg text-ink-3 transition-colors duration-150 ease-out ne-motion hover:text-ink',
           FOCUS_RING
         )}
       >
         {showPassword ? (
-          <EyeOff className="h-4 w-4" aria-hidden="true" />
+          <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" />
         ) : (
-          <Eye className="h-4 w-4" aria-hidden="true" />
+          <Eye className="h-[18px] w-[18px]" aria-hidden="true" />
         )}
       </button>
     </div>
@@ -579,13 +637,10 @@ export default function AuthPage() {
    * blocks accounts.google.com, which is who this branch is for.
    */
   const divider = (label: string) => (
-    <div className="relative py-1" aria-hidden="true">
-      <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t border-rule" />
-      </div>
-      <div className="relative flex justify-center">
-        <span className="t-meta bg-surface px-3 text-ink-2">{label}</span>
-      </div>
+    <div className="flex items-center gap-3" aria-hidden="true">
+      <span className="h-px flex-1 bg-rule" />
+      <span className="text-xs font-medium text-ink-3">{label}</span>
+      <span className="h-px flex-1 bg-rule" />
     </div>
   );
 
@@ -598,377 +653,511 @@ export default function AuthPage() {
       />
 
       {/*
-        The one screen that runs before there is a session, and — since the
-        root of agents.netenroll.com redirects here — the front door of the
-        domain. One centred card on --paper, the full lockup above it, and
-        the line under the logo that tells someone who arrived by mistake
-        whether this is for them. Nothing decorative: no gradient, no hero, no
-        marketing copy. Brand green appears on the primary action and the focus
-        ring, and nowhere else.
+        The one screen that runs before there is a session, and -- since the
+        root of the domain redirects here -- the front door. Two halves: the
+        host's brand, and the form.
+
+        From 960px they sit side by side, the brand panel pinned to the
+        viewport while the form side scrolls (Create account is long). Below
+        that the panel folds into a compact header and the form rises over its
+        lower edge, so a phone opens on the form, not on a poster.
+
+        The panel is the agency's navy on its own domain, carrying the wordmark
+        reversed out for it, and NetEnroll's light ground everywhere else
+        (useLoginSurface). The form side is the ordinary light palette: the
+        brand's strong fill is on the primary action and the focus ring and
+        nowhere else, and the logo's red stays inside the logo.
       */}
-      <main className="flex min-h-screen flex-col bg-paper px-4 py-10 sm:px-6 sm:py-16">
-        <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center">
-          <header className="text-center">
-            {/* The host's agency lockup on its own domain; NetEnroll's anywhere else. */}
-            <h1>
-              <LoginBrandLogo />
-            </h1>
-            <p className="t-body mt-3 text-ink-2">
+      <div
+        data-auth-page=""
+        className={cn(
+          'flex min-h-screen flex-col bg-surface',
+          // The ground under the pinned panel, for the length of a long form.
+          'min-[960px]:bg-[color:var(--auth-panel)]',
+          'min-[960px]:grid min-[960px]:grid-cols-[minmax(0,40%)_minmax(0,1fr)]',
+          'min-[1200px]:grid-cols-[minmax(0,44%)_minmax(0,1fr)]'
+        )}
+      >
+        <header
+          className={cn(
+            'auth-panel relative isolate overflow-hidden px-5 pb-12 pt-7 sm:px-10 sm:pb-10 sm:pt-9',
+            'min-[960px]:sticky min-[960px]:top-0 min-[960px]:flex min-[960px]:h-screen',
+            'min-[960px]:flex-col min-[960px]:self-start min-[960px]:px-12 min-[960px]:py-12',
+            'min-[1200px]:px-16 min-[1200px]:py-14'
+          )}
+        >
+          <div
+            aria-hidden="true"
+            className="auth-panel-grid pointer-events-none absolute inset-0 -z-10 hidden min-[960px]:block"
+          />
+          <div
+            aria-hidden="true"
+            className="auth-panel-edge pointer-events-none absolute inset-y-0 right-0 hidden w-px min-[960px]:block"
+          />
+
+          {/* The host's agency wordmark on its own domain; NetEnroll's anywhere else. */}
+          <h1>
+            <LoginBrandLogo
+              surface={surface}
+              className={
+                brand
+                  ? 'w-[136px] sm:w-[152px] min-[960px]:w-[220px] min-[1200px]:w-[256px]'
+                  : 'w-[184px] sm:w-[208px] min-[960px]:w-[240px] min-[1200px]:w-[272px]'
+              }
+            />
+          </h1>
+
+          <div className="mt-3 min-[960px]:mt-auto min-[960px]:max-w-[460px]">
+            <span
+              aria-hidden="true"
+              className="mb-7 hidden h-[3px] w-10 rounded-full bg-[color:var(--auth-accent)] min-[960px]:block"
+            />
+            {/*
+              What this is, for someone who arrived by mistake. On a phone it
+              is the one line under the logo; beside the form it is the panel's
+              statement.
+            */}
+            <p
+              className={cn(
+                'text-[15px] leading-6 text-[color:var(--auth-panel-ink-2)] [text-wrap:balance]',
+                'min-[960px]:text-[30px] min-[960px]:font-semibold min-[960px]:leading-[1.2]',
+                'min-[960px]:tracking-[-0.02em] min-[960px]:text-[color:var(--auth-panel-ink)]',
+                'min-[1200px]:text-[34px]'
+              )}
+            >
               The agent portal for licensed insurance agencies.
             </p>
-          </header>
-
-          <section
-            aria-labelledby="auth-heading"
-            className="mt-8 rounded-card border border-rule bg-surface p-6 sm:p-8"
-          >
-            <h2 id="auth-heading" className="t-title text-ink">
-              {mode === 'signin' ? 'Sign in' : 'Create account'}
-            </h2>
-            <p className="t-body mt-1.5 text-ink-2">
-              {mode === 'signin'
-                ? 'Use the account your agency set up for you.'
-                : 'Finish setting up the account your agency invited you to.'}
+            <p className="mt-5 hidden max-w-[400px] text-base leading-7 text-[color:var(--auth-panel-ink-2)] min-[960px]:block">
+              One workspace for your agency and the agents who work with it.
             </p>
+          </div>
 
-            {error ? (
-              <div className="mt-5">
-                <Banner tone="error">{error}</Banner>
-              </div>
-            ) : null}
+          <p className="mt-14 hidden border-t border-[color:var(--auth-panel-rule)] pt-6 text-[13px] text-[color:var(--auth-panel-ink-3)] min-[960px]:block">
+            © {new Date().getFullYear()} {brand?.name ?? 'NetEnroll'}
+          </p>
+        </header>
 
-            {resetDone && !error ? (
-              <div className="mt-5">
-                <Banner tone="info">
-                  Your password has been changed. Sign in with the new one.
-                </Banner>
-              </div>
-            ) : null}
-
-            {/*
-              Two doors, both always visible. The heading above already says
-              which one is open, so the tabs are the switch and not a second
-              title: equal width, so neither reads as the afterthought.
-            */}
-            <Tabs
-              value={mode}
-              onValueChange={value => {
-                setMode(value as 'signin' | 'create');
-                // The previous half's failure is not this half's. Carrying it
-                // across reads as though the tab itself was refused.
-                setError(null);
-              }}
-              className="mt-6"
+        <main
+          className={cn(
+            'relative z-10 -mt-6 flex flex-1 flex-col rounded-t-[20px] bg-surface',
+            'sm:mt-0 sm:rounded-none sm:bg-[color:var(--auth-canvas)]',
+            'min-[960px]:min-h-screen'
+          )}
+        >
+          <div
+            className={cn(
+              'mx-auto flex w-full max-w-[480px] flex-1 flex-col justify-center px-5 pb-10 pt-8',
+              'sm:px-0 sm:py-14 min-[960px]:py-12',
+              // A 768px-tall laptop still shows the whole card, terms included.
+              '[@media(min-width:960px)_and_(max-height:820px)]:py-6'
+            )}
+          >
+            <section
+              aria-labelledby="auth-heading"
+              className={cn(
+                'sm:rounded-2xl sm:border sm:border-rule sm:bg-surface sm:px-10 sm:py-9',
+                'sm:shadow-[var(--auth-card-shadow)]',
+                '[@media(min-width:960px)_and_(max-height:820px)]:py-8'
+              )}
             >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="signin" className={FOCUS_RING}>
-                  Sign in
-                </TabsTrigger>
-                <TabsTrigger value="create" className={FOCUS_RING}>
-                  Create account
-                </TabsTrigger>
-              </TabsList>
+              <h2
+                id="auth-heading"
+                className="text-[26px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink sm:text-[28px]"
+              >
+                {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+              </h2>
+              <p className="mt-1.5 text-[15px] leading-6 text-ink-2 [text-wrap:pretty]">
+                {mode === 'signin'
+                  ? 'Sign in to your agency account.'
+                  : 'Set up the account your agency invited you to.'}
+              </p>
 
-              <TabsContent value="signin" className="mt-6 space-y-6 outline-none">
-                <GoogleButton ready={googleReady} text="continue_with" id="google-signin-button" />
-
-                {googleReady ? divider('or') : null}
-
-                <form onSubmit={e => void handleLogin(e)} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <FieldLabel htmlFor="signin-email">Email address</FieldLabel>
-                    <Input
-                      id="signin-email"
-                      type="email"
-                      placeholder="you@agency.com"
-                      value={email}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                      required
-                      autoComplete="email"
-                      autoFocus
-                      className={FIELD}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <FieldLabel htmlFor="signin-password">Password</FieldLabel>
-                    {passwordField('signin-password', 'current-password')}
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className={cn('h-10 w-full', FOCUS_RING)}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : null}
+              {/*
+                Two doors, both always visible: a contained switch, equal
+                halves, so neither reads as the afterthought. The heading above
+                already says which one is open.
+              */}
+              <Tabs
+                value={mode}
+                onValueChange={value => {
+                  setMode(value as 'signin' | 'create');
+                  // The previous half's failure is not this half's. Carrying it
+                  // across reads as though the tab itself was refused.
+                  setError(null);
+                }}
+                className="mt-6"
+              >
+                <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-1 overflow-visible rounded-xl border border-rule bg-sunken p-1">
+                  <TabsTrigger value="signin" className={SEGMENT}>
                     Sign in
-                  </Button>
-                </form>
+                  </TabsTrigger>
+                  <TabsTrigger value="create" className={SEGMENT}>
+                    Create account
+                  </TabsTrigger>
+                </TabsList>
 
-                {forgotOpen ? (
-                  <form
-                    onSubmit={e => void handleForgot(e)}
-                    className="space-y-3 rounded-control border border-rule bg-sunken p-4"
-                    aria-labelledby="forgot-heading"
-                  >
-                    <p id="forgot-heading" className="t-body font-medium text-ink">
-                      Reset your password
+                {error ? (
+                  <div className="mt-5">
+                    <Banner tone="error">{error}</Banner>
+                  </div>
+                ) : null}
+
+                {resetDone && !error ? (
+                  <div className="mt-5">
+                    <Banner tone="info">
+                      Your password has been changed. Sign in with the new one.
+                    </Banner>
+                  </div>
+                ) : null}
+
+                <TabsContent value="signin" className="mt-6 space-y-5 outline-none">
+                  <GoogleButton
+                    ready={googleReady}
+                    text="continue_with"
+                    id="google-signin-button"
+                  />
+
+                  {googleReady ? divider('or') : null}
+
+                  <form onSubmit={e => void handleLogin(e)} className="space-y-6">
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor="signin-email">Email address</FieldLabel>
+                        <Input
+                          id="signin-email"
+                          type="email"
+                          placeholder="you@agency.com"
+                          value={email}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                          required
+                          autoComplete="email"
+                          autoFocus
+                          className={FIELD}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor="signin-password">Password</FieldLabel>
+                        {passwordField('signin-password', 'current-password')}
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className={PRIMARY}
+                      disabled={isLoading}
+                      data-busy={isLoading}
+                      aria-busy={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      Sign in
+                    </Button>
+                  </form>
+
+                  {forgotOpen ? (
+                    /*
+                      A well inside the card rather than a second card under
+                      it: the same question, asked a different way.
+                    */
+                    <form
+                      onSubmit={e => void handleForgot(e)}
+                      className="space-y-4 rounded-xl border border-rule bg-sunken p-5"
+                      aria-labelledby="forgot-heading"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p
+                            id="forgot-heading"
+                            className="text-[15px] font-semibold leading-6 text-ink"
+                          >
+                            Reset your password
+                          </p>
+                          {forgotMessage ? null : (
+                            <p className="mt-0.5 text-[13.5px] leading-5 text-ink-2 [text-wrap:pretty]">
+                              We will email a link to choose a new one.
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeForgot}
+                          className={cn('-mr-1 shrink-0 px-1 text-[13.5px] leading-6', TEXT_LINK)}
+                        >
+                          {forgotMessage ? 'Done' : 'Cancel'}
+                        </button>
+                      </div>
+                      {forgotMessage ? (
+                        <Banner tone="info">{forgotMessage}</Banner>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            <FieldLabel htmlFor="forgot-email">Email address</FieldLabel>
+                            <Input
+                              id="forgot-email"
+                              type="email"
+                              placeholder="you@agency.com"
+                              value={email}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                setEmail(e.target.value)
+                              }
+                              required
+                              autoComplete="email"
+                              autoFocus
+                              className={FIELD}
+                            />
+                          </div>
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            className={cn(
+                              'h-11 w-full rounded-control border-[color:var(--auth-field-rule)] font-semibold hover:bg-paper',
+                              FOCUS_RING
+                            )}
+                            disabled={forgotSending || !email.trim()}
+                            aria-busy={forgotSending}
+                          >
+                            {forgotSending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                            ) : null}
+                            Send reset link
+                          </Button>
+                        </>
+                      )}
+                    </form>
+                  ) : (
+                    <p className="text-center text-sm">
+                      <button
+                        ref={forgotToggle}
+                        type="button"
+                        onClick={() => {
+                          setForgotOpen(true);
+                          setForgotMessage(null);
+                          setError(null);
+                        }}
+                        className={TEXT_LINK}
+                      >
+                        Forgot password?
+                      </button>
                     </p>
-                    {forgotMessage ? (
-                      <Banner tone="info">{forgotMessage}</Banner>
-                    ) : (
-                      <>
-                        <p className="t-meta text-ink-2">
-                          We will email a link to choose a new one.
-                        </p>
-                        <div className="space-y-1.5">
-                          <FieldLabel htmlFor="forgot-email">Email address</FieldLabel>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="create" className="mt-6 space-y-5 outline-none">
+                  {/*
+                    Which agency this invitation is for, when the link named one.
+                    Worth showing before the password field: an agent following a
+                    link should be able to see they are joining the right agency,
+                    and someone who is not expecting an invitation should be able
+                    to see that they are not.
+                  */}
+                  {tokenFromLink && !invitationRefused ? (
+                    <Banner tone="info">
+                      {agencyName
+                        ? `You have been invited to join ${agencyName}.`
+                        : 'You have been invited to join the agency that sent you this link.'}
+                    </Banner>
+                  ) : null}
+
+                  <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
+
+                  {googleReady ? divider('or') : null}
+
+                  <form onSubmit={e => void handleCreate(e)} className="space-y-6">
+                    <div className="space-y-5">
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                        <div className="min-w-0 space-y-2">
+                          <FieldLabel htmlFor="create-firstname">First name</FieldLabel>
                           <Input
-                            id="forgot-email"
-                            type="email"
-                            placeholder="you@agency.com"
-                            value={email}
+                            id="create-firstname"
+                            type="text"
+                            value={firstName}
                             onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                              setEmail(e.target.value)
+                              setFirstName(e.target.value)
                             }
-                            required
-                            autoComplete="email"
+                            autoComplete="given-name"
                             className={FIELD}
                           />
                         </div>
-                        <Button
-                          type="submit"
-                          variant="outline"
-                          className={cn('h-10 w-full', FOCUS_RING)}
-                          disabled={forgotSending || !email.trim()}
-                        >
-                          {forgotSending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                          ) : null}
-                          Send reset link
-                        </Button>
-                      </>
-                    )}
-                  </form>
-                ) : (
-                  <p className="t-meta text-center text-ink-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForgotOpen(true);
-                        setForgotMessage(null);
-                        setError(null);
-                      }}
-                      className={cn(
-                        'rounded-control text-ink underline underline-offset-2 hover:text-brand-ink',
-                        FOCUS_RING
+                        <div className="min-w-0 space-y-2">
+                          <FieldLabel htmlFor="create-lastname">Last name</FieldLabel>
+                          <Input
+                            id="create-lastname"
+                            type="text"
+                            value={lastName}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                              setLastName(e.target.value)
+                            }
+                            autoComplete="family-name"
+                            className={FIELD}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor="create-email">Email address</FieldLabel>
+                        <Input
+                          id="create-email"
+                          type="email"
+                          placeholder="you@agency.com"
+                          value={email}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                          required
+                          autoComplete="email"
+                          className={FIELD}
+                        />
+                      </div>
+
+                      {/*
+                        The invitation code, for anyone who did not arrive on the
+                        link itself -- it was read out, forwarded as text, or the
+                        link was opened in another browser. Following the link
+                        fills this in and there is nothing left to type, so the
+                        field is not shown then.
+
+                        It is required either way. The API refuses a registration
+                        without one, and it is what tells the server which agency
+                        the new account belongs to; there is no self-serve signup
+                        that skips it.
+                      */}
+                      {tokenFromLink ? null : (
+                        <div className="space-y-2">
+                          <FieldLabel htmlFor="create-invitation">Invitation code</FieldLabel>
+                          <Input
+                            id="create-invitation"
+                            type="text"
+                            value={activationToken}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                              setActivationToken(e.target.value);
+                              // A new code is a new question; the last refusal was
+                              // about the old one.
+                              setInvitationRefused(false);
+                            }}
+                            required
+                            autoComplete="off"
+                            spellCheck={false}
+                            aria-describedby="create-invitation-help"
+                            className={cn(FIELD, 'font-mono sm:text-[14px]')}
+                          />
+                          <p
+                            id="create-invitation-help"
+                            className="text-[13px] leading-5 text-ink-2"
+                          >
+                            From your invitation email. It is the{' '}
+                            <code className="font-mono text-[12.5px]">activation</code> value in the
+                            link your agency administrator sent you.
+                          </p>
+                        </div>
                       )}
+
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor="create-position">Position</FieldLabel>
+                        <div className="relative">
+                          <select
+                            id="create-position"
+                            value={position}
+                            onChange={e => setPosition(e.target.value)}
+                            required
+                            className={cn(
+                              FIELD,
+                              'cursor-pointer appearance-none border pr-10 shadow-card [&>option]:text-ink',
+                              !position && 'text-ink-3'
+                            )}
+                          >
+                            <option value="">Select a position…</option>
+                            <option value="Licensed Agent">Licensed Agent</option>
+                            <option value="Sales Support">Sales Support</option>
+                            <option value="Retention">Retention</option>
+                          </select>
+                          <ChevronDown
+                            className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3"
+                            aria-hidden="true"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor="create-password">Password</FieldLabel>
+                        {passwordField('create-password', 'new-password')}
+
+                        {/*
+                          The three rules the API enforces, listed rather than
+                          scored: "weak" tells someone nothing they can act on.
+                          Announced politely — a person typing does not need each
+                          keystroke read out, so the region is polite, not assertive.
+                        */}
+                        <ul className="grid gap-1.5 pt-1" aria-live="polite">
+                          {[
+                            { met: passwordStrength.hasLength, label: 'At least 8 characters' },
+                            { met: passwordStrength.hasUppercase, label: 'One uppercase letter' },
+                            { met: passwordStrength.hasNumber, label: 'One number' },
+                          ].map(rule => (
+                            <li
+                              key={rule.label}
+                              className={cn(
+                                'flex items-center gap-2 text-[13px] leading-5',
+                                rule.met ? 'text-live-ink' : 'text-ink-2'
+                              )}
+                            >
+                              <span
+                                className="flex h-4 w-4 shrink-0 items-center justify-center"
+                                aria-hidden="true"
+                              >
+                                {rule.met ? (
+                                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                ) : (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
+                                )}
+                              </span>
+                              <span>{rule.label}</span>
+                              <span className="sr-only">
+                                {rule.met ? ' — met' : ' — not yet met'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className={PRIMARY}
+                      disabled={isLoading}
+                      data-busy={isLoading}
+                      aria-busy={isLoading}
                     >
-                      Forgot password?
-                    </button>
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      Create my account
+                    </Button>
+                  </form>
+
+                  <p className="text-center text-[13px] leading-5 text-ink-2 [text-wrap:balance]">
+                    Accounts are created by invitation. If you do not have a code, please ask your
+                    agency administrator.
                   </p>
-                )}
-              </TabsContent>
+                </TabsContent>
+              </Tabs>
 
-              <TabsContent value="create" className="mt-6 space-y-6 outline-none">
-                {/*
-                  Which agency this invitation is for, when the link named one.
-                  Worth showing before the password field: an agent following a
-                  link should be able to see they are joining the right agency,
-                  and someone who is not expecting an invitation should be able
-                  to see that they are not.
-                */}
-                {tokenFromLink && !invitationRefused ? (
-                  <Banner tone="info">
-                    {agencyName
-                      ? `You have been invited to join ${agencyName}.`
-                      : 'You have been invited to join the agency that sent you this link.'}
-                  </Banner>
-                ) : null}
-
-                <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
-
-                {googleReady ? divider('or') : null}
-
-                <form onSubmit={e => void handleCreate(e)} className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <FieldLabel htmlFor="create-firstname">First name</FieldLabel>
-                      <Input
-                        id="create-firstname"
-                        type="text"
-                        value={firstName}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                          setFirstName(e.target.value)
-                        }
-                        autoComplete="given-name"
-                        className={FIELD}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel htmlFor="create-lastname">Last name</FieldLabel>
-                      <Input
-                        id="create-lastname"
-                        type="text"
-                        value={lastName}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
-                        autoComplete="family-name"
-                        className={FIELD}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <FieldLabel htmlFor="create-email">Email address</FieldLabel>
-                    <Input
-                      id="create-email"
-                      type="email"
-                      placeholder="you@agency.com"
-                      value={email}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                      required
-                      autoComplete="email"
-                      className={FIELD}
-                    />
-                  </div>
-
-                  {/*
-                    The invitation code, for anyone who did not arrive on the
-                    link itself -- it was read out, forwarded as text, or the
-                    link was opened in another browser. Following the link
-                    fills this in and there is nothing left to type, so the
-                    field is not shown then.
-
-                    It is required either way. The API refuses a registration
-                    without one, and it is what tells the server which agency
-                    the new account belongs to; there is no self-serve signup
-                    that skips it.
-                  */}
-                  {tokenFromLink ? null : (
-                    <div className="space-y-1.5">
-                      <FieldLabel htmlFor="create-invitation">Invitation code</FieldLabel>
-                      <Input
-                        id="create-invitation"
-                        type="text"
-                        value={activationToken}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          setActivationToken(e.target.value);
-                          // A new code is a new question; the last refusal was
-                          // about the old one.
-                          setInvitationRefused(false);
-                        }}
-                        required
-                        autoComplete="off"
-                        spellCheck={false}
-                        aria-describedby="create-invitation-help"
-                        className={cn(FIELD, 'font-mono')}
-                      />
-                      <p id="create-invitation-help" className="t-meta text-ink-2">
-                        From your invitation email. It is the{' '}
-                        <code className="font-mono">activation</code> value in the link your agency
-                        administrator sent you.
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <FieldLabel htmlFor="create-position">Position</FieldLabel>
-                    <select
-                      id="create-position"
-                      value={position}
-                      onChange={e => setPosition(e.target.value)}
-                      required
-                      className={cn(FIELD, 'border px-3')}
-                    >
-                      <option value="">Select a position…</option>
-                      <option value="Licensed Agent">Licensed Agent</option>
-                      <option value="Sales Support">Sales Support</option>
-                      <option value="Retention">Retention</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <FieldLabel htmlFor="create-password">Password</FieldLabel>
-                    {passwordField('create-password', 'new-password')}
-
-                    {/*
-                      The three rules the API enforces, listed rather than
-                      scored: "weak" tells someone nothing they can act on.
-                      Announced politely — a person typing does not need each
-                      keystroke read out, so the region is polite, not assertive.
-                    */}
-                    <ul className="space-y-1 pt-1.5" aria-live="polite">
-                      {[
-                        { met: passwordStrength.hasLength, label: 'At least 8 characters' },
-                        { met: passwordStrength.hasUppercase, label: 'One uppercase letter' },
-                        { met: passwordStrength.hasNumber, label: 'One number' },
-                      ].map(rule => (
-                        <li
-                          key={rule.label}
-                          className={cn(
-                            't-meta flex items-center gap-1.5',
-                            rule.met ? 'text-live-ink' : 'text-ink-2'
-                          )}
-                        >
-                          {rule.met ? (
-                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          ) : (
-                            <span
-                              className="h-1 w-1 shrink-0 rounded-full bg-ink-3"
-                              aria-hidden="true"
-                            />
-                          )}
-                          <span>{rule.label}</span>
-                          <span className="sr-only">{rule.met ? ' — met' : ' — not yet met'}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className={cn('h-10 w-full', FOCUS_RING)}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    Create my account
-                  </Button>
-                </form>
-
-                <p className="t-meta text-center text-ink-2">
-                  Accounts are created by invitation. If you do not have a code, please ask your
-                  agency administrator.
-                </p>
-              </TabsContent>
-            </Tabs>
-          </section>
-
-          {/*
-            Underlined rather than green. Brand green carries the primary
-            action on this page and, through globals.css, the focus ring; a
-            second green thing at the bottom of the card would make the accent
-            mean less on the one screen where it has to mean "this is the
-            button".
-          */}
-          <p className="t-meta mt-6 text-center text-ink-2">
-            By continuing, you agree to our{' '}
-            <a
-              href="/legal/terms"
-              className={cn(
-                'rounded-control text-ink underline underline-offset-2 hover:text-brand-ink',
-                FOCUS_RING
-              )}
-            >
-              Terms of Service
-            </a>
-            .
-          </p>
-        </div>
-      </main>
+              {/*
+                Part of the card, not a caption floating under it. Underlined
+                ink rather than brand colour: the primary button is the one
+                coloured control here, and a second coloured thing at the foot
+                of the card would make the accent mean less.
+              */}
+              <p className="mt-7 border-t border-rule pt-5 text-center text-[13px] leading-5 text-ink-2">
+                By continuing, you agree to our{' '}
+                <a href="/legal/terms" className={TEXT_LINK}>
+                  Terms of Service
+                </a>
+                .
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
     </>
   );
 }
