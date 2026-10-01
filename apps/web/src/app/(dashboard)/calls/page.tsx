@@ -76,6 +76,7 @@ import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils';
 import {
   ALL_RETURNS,
   DISPUTE_FILTER_OPTIONS,
+  LOCKED_COLUMNS,
   answeredByOf,
   chargeStatusBadge,
   columnRoleOf,
@@ -90,6 +91,7 @@ import {
   returnChip,
   visibleColumnsFor,
   wentToOf,
+  withLockedColumns,
   type CallColumn,
   type CallColumnId,
   type CallColumnRole,
@@ -416,10 +418,14 @@ export default function OperationsCallLogsPage() {
     });
   }, [columnRole]);
 
-  const visibleColumns: Record<string, boolean> =
-    columnState?.role === columnRole ? columnState.visible : defaultVisibleColumns(columnRole);
+  // A role's locked columns win over anything stored -- see LOCKED_COLUMNS.
+  const visibleColumns: Record<string, boolean> = withLockedColumns(
+    columnRole,
+    columnState?.role === columnRole ? columnState.visible : defaultVisibleColumns(columnRole)
+  );
 
   const toggleColumn = (columnId: CallColumnId) => {
+    if (LOCKED_COLUMNS[columnRole].includes(columnId)) return;
     const updated = { ...visibleColumns, [columnId]: !visibleColumns[columnId] };
     setColumnState({ role: columnRole, visible: updated });
     try {
@@ -1557,6 +1563,7 @@ export default function OperationsCallLogsPage() {
                 <DropdownMenuCheckboxItem
                   key={col.id}
                   checked={!!visibleColumns[col.id]}
+                  disabled={LOCKED_COLUMNS[columnRole].includes(col.id)}
                   onCheckedChange={() => toggleColumn(col.id)}
                   className="focus:bg-brand-tint focus:text-brand-ink text-xs"
                 >

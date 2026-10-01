@@ -124,6 +124,7 @@ REQUIRED_MIGRATIONS="
 20261001000000_statements
 20261002000000_upgrade_catalog
 20261003000000_upgrade_price_units
+20261004000000_number_carriers
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -514,6 +515,10 @@ migration_applied() {
       echo "SELECT count(*) = 2 FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = 'upgrade_prices'
               AND column_name IN ('priceUnit', 'usageNote')" ;;
+    *_number_carriers)
+      # Wrapped BEGIN..COMMIT; the table is the whole of it. The seed rows are
+      # ON CONFLICT DO NOTHING and prove nothing about whether this ran.
+      echo "SELECT to_regclass('public.number_carrier_settings') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac

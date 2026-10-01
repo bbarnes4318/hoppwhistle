@@ -117,7 +117,7 @@ function lockKey(tenantId: string): string {
  * specific status; anything else is a carrier or database failure.
  */
 export async function purchaseNumberForTenant(params: {
-  provider: Extract<Provider, 'fractel' | 'bulkvs'>;
+  provider: Extract<Provider, 'fractel' | 'bulkvs' | 'vonage'>;
   request: PurchaseNumberRequest;
   tenantId: string;
   campaignId?: string | null;

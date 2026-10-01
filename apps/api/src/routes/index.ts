@@ -933,9 +933,11 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       '../services/numbers/number-charges.js'
     );
     const { numberUsage } = await import('../services/numbers/number-purchase.js');
-    const [{ pricing }, usage] = await Promise.all([
+    const { enabledCarriers } = await import('../services/numbers/number-carriers.js');
+    const [{ pricing }, usage, tollFree] = await Promise.all([
       numberBillingFor(prisma, tenantId),
       numberUsage(tenantId),
+      enabledCarriers('tollfree'),
     ]);
 
     return {
@@ -946,6 +948,9 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         currency: 'USD',
         numbersUsed: usage.used,
         numbersLimit: usage.limit,
+        // Whether any carrier the platform has enabled sells toll-free numbers;
+        // the Buy numbers dialog offers its Toll-free tab only when one does.
+        tollFreeAvailable: tollFree.length > 0,
       },
     };
   });

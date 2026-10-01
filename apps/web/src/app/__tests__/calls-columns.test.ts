@@ -13,6 +13,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LOCKED_COLUMNS,
+  withLockedColumns,
   AGENT_DEFAULT_COLUMNS,
   CALL_COLUMNS,
   DISPUTE_FILTER_OPTIONS,
@@ -165,7 +167,7 @@ describe('default columns', () => {
     }
   });
 
-  it('opens an agent on their calls and the applications they wrote', () => {
+  it('opens an agent on their calls, each recording, and the applications they wrote', () => {
     expect(defaultLabels(AGENT)).toEqual([
       'Time',
       'Caller',
@@ -173,7 +175,23 @@ describe('default columns', () => {
       'Duration',
       'Disposition',
       'Application',
+      'Recording',
     ]);
+  });
+
+  it("keeps an agent's Recording column on, whatever their browser saved", () => {
+    expect(LOCKED_COLUMNS.agent).toEqual(['recording']);
+    // A layout saved before the column was locked, with it switched off.
+    const stored = { ...defaultVisibleColumns('agent'), recording: false };
+    expect(withLockedColumns('agent', stored).recording).toBe(true);
+    // Every other choice survives.
+    expect(withLockedColumns('agent', { ...stored, campaignName: false }).campaignName).toBe(false);
+  });
+
+  it('locks nothing for an owner', () => {
+    expect(LOCKED_COLUMNS.owner).toEqual([]);
+    const stored = { ...defaultVisibleColumns('owner'), recording: false };
+    expect(withLockedColumns('owner', stored).recording).toBe(false);
   });
 
   it('never offers an agent the Status, Went to or money columns', () => {

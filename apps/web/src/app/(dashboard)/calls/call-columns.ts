@@ -117,15 +117,35 @@ export const OWNER_DEFAULT_COLUMNS: readonly CallColumnId[] = [
   'profit',
 ];
 
-/** An agent's: their calls, how each ended, and which became an application. */
+/**
+ * An agent's: their calls, how each ended, the recording of each, and which
+ * became an application.
+ */
 export const AGENT_DEFAULT_COLUMNS: readonly CallColumnId[] = [
   'time',
   'callerId',
   'campaignName',
   'duration',
   'disposition',
+  'recording',
   'application',
 ];
+
+/**
+ * Columns a role cannot switch off.
+ *
+ * An agent's recordings are how they review a call, and how a floor manager
+ * expects them to. The column used to be off by default for an agent and
+ * toggleable, so most agents never knew their calls were recorded. It is
+ * always on for them now: forced over any layout saved in the browser before
+ * this, and offered in the picker as checked and disabled. The server narrows
+ * which recordings play -- an agent's own answered calls only
+ * (`checkRecordingAccess` in apps/api/src/routes/recordings.ts).
+ */
+export const LOCKED_COLUMNS: Record<CallColumnRole, readonly CallColumnId[]> = {
+  owner: [],
+  agent: ['recording'],
+};
 
 export function defaultVisibleColumns(role: CallColumnRole): Record<CallColumnId, boolean> {
   const on = new Set(role === 'agent' ? AGENT_DEFAULT_COLUMNS : OWNER_DEFAULT_COLUMNS);
@@ -133,6 +153,16 @@ export function defaultVisibleColumns(role: CallColumnRole): Record<CallColumnId
     CallColumnId,
     boolean
   >;
+}
+
+/** A visibility map with the role's locked columns forced on. */
+export function withLockedColumns(
+  role: CallColumnRole,
+  visible: Record<string, boolean>
+): Record<string, boolean> {
+  const locked = LOCKED_COLUMNS[role];
+  if (locked.length === 0) return visible;
+  return { ...visible, ...Object.fromEntries(locked.map(id => [id, true])) };
 }
 
 /** The columns a viewer may choose from, in table order. */

@@ -162,6 +162,25 @@ export class ProvisioningService {
   }
 
   /**
+   * Numbers for sale at a carrier: the adapter's `searchAvailable` where it has
+   * one (its `listNumbers` lists owned numbers), `listNumbers` otherwise.
+   */
+  async searchAvailable(
+    provider: Provider,
+    options?: ListNumbersOptions
+  ): Promise<ProvisionedNumber[]> {
+    const adapter = this.getAdapter(provider);
+    return adapter.searchAvailable
+      ? adapter.searchAvailable(options)
+      : adapter.listNumbers(options);
+  }
+
+  /** Whether a carrier's credentials are present, so it can be searched and bought from. */
+  isConfigured(provider: Provider): boolean {
+    return this.adapters.get(provider)?.isConfigured() === true;
+  }
+
+  /**
    * Buy a number at a carrier and nothing else: no database row, no audit.
    *
    * For callers that write the row themselves inside their own transaction --

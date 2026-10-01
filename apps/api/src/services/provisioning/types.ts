@@ -88,6 +88,16 @@ export interface ProvisioningAdapter {
   listNumbers(options?: ListNumbersOptions): Promise<ProvisionedNumber[]>;
 
   /**
+   * Numbers for SALE at the carrier, by area code.
+   *
+   * Only where `listNumbers` answers with the account's OWN numbers instead
+   * (Vonage): FracTEL's and BulkVS's `listNumbers` already search inventory,
+   * and the agency purchase path (`services/numbers/number-carriers.ts`) uses
+   * this when it is present and `listNumbers` when it is not.
+   */
+  searchAvailable?(options?: ListNumbersOptions): Promise<ProvisionedNumber[]>;
+
+  /**
    * Purchase a number from the provider
    */
   purchaseNumber(request: PurchaseNumberRequest): Promise<ProvisionedNumber>;

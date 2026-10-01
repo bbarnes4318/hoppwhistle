@@ -405,6 +405,10 @@ async function buildServer() {
 
   const { registerFractelProcurementRoutes } = await import('./routes/fractel-procurement.js');
   await server.register(registerFractelProcurementRoutes);
+  // Which carriers agencies buy numbers from (a platform admin's choice), and
+  // the carrier-neutral search and buy the Buy numbers dialog uses.
+  const { registerNumberCarrierRoutes } = await import('./routes/number-carriers.js');
+  await server.register(registerNumberCarrierRoutes);
 
   // Register AI Voice SSO routes (mints the embedded AI Voice session cookie)
   const { registerAiVoiceRoutes } = await import('./routes/aivoice.js');
