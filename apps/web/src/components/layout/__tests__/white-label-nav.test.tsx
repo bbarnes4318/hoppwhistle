@@ -51,7 +51,7 @@ function hasPage(href: string): boolean {
 /** [label, [name, href, title]] -- exactly the list asked for. */
 const EXPECTED: Array<[string | undefined, Array<[string, string, string | undefined]>]> = [
   [
-    'Floor',
+    'Workspace',
     [
       ['Today', '/dashboard', 'Your calls, agents, buyers and money right now'],
       ['Calls', '/calls', undefined],
@@ -61,7 +61,7 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
     ],
   ],
   [
-    'Call sales',
+    'Call Sales',
     [
       ['Buyers', '/buyers', 'Your buyers: routing caps, balances, portal logins and returns'],
       ['Publishers', '/publishers', 'Your publishers: payouts, portal logins and performance'],
@@ -69,7 +69,7 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
     ],
   ],
   [
-    'Setup',
+    'Administration',
     [
       ['Routing', '/routing', 'Campaigns and phone numbers: where every call goes'],
       [
@@ -213,7 +213,7 @@ describe('the white-label upgrades', () => {
     expect(whiteLabelOwnerNav([])).toBe(WHITE_LABEL_OWNER_NAV);
     expect(whiteLabelOwnerNav(['POWER_DIALER'])).toBe(WHITE_LABEL_OWNER_NAV);
 
-    const floor = WHITE_LABEL_OWNER_NAV.find(group => group.label === 'Floor')!;
+    const floor = WHITE_LABEL_OWNER_NAV.find(group => group.label === 'Workspace')!;
     expect(floor.items.map(item => item.href)).toEqual([
       '/dashboard',
       '/calls',
@@ -237,7 +237,7 @@ describe('AGENCY_OWNER_NAV is unchanged', () => {
     expect(fingerprint(AGENCY_OWNER_NAV)).toEqual([
       [null, [['Dashboard', '/dashboard', null]]],
       [
-        'Floor',
+        'Workspace',
         [
           ['Live Board', '/live', null],
           ['Calls', '/calls', null],

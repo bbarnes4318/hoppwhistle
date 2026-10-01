@@ -301,7 +301,7 @@ function lockedItem(href: string, name: string, blurb: string): NavItem {
 export const AGENCY_OWNER_NAV: NavGroup[] = [
   { items: [platformItem('/dashboard')] },
   {
-    label: 'Floor',
+    label: 'Workspace',
     items: [
       {
         name: 'Live Board',
@@ -449,7 +449,7 @@ function childAgencyOwnerNav(): NavGroup[] {
   return AGENCY_OWNER_NAV.filter(
     group => group.label !== 'Money' && group.label !== 'Agency Network'
   ).map(group => {
-    if (group.label === 'Floor' && team) return { ...group, items: [...group.items, team] };
+    if (group.label === 'Workspace' && team) return { ...group, items: [...group.items, team] };
     if (group.label === 'Account') return { ...group, items: [...group.items, UPGRADES_ITEM] };
     return group;
   });
@@ -464,8 +464,8 @@ export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
  *
  * On the white-label tier the OWNER and ADMIN run a call network of their own
  * as well as a sales floor. Three groups, none of them a single entry: the
- * Floor (Today, Calls, Applications, CRM, Agents), Call sales (Buyers,
- * Publishers, Revenue) and Setup (Routing, Agencies, Settings, Upgrades). This nav used to list every screen that involved:
+ * Workspace (Today, Calls, Applications, CRM, Agents), Call Sales (Buyers,
+ * Publishers, Revenue) and Administration (Routing, Agencies, Settings, Upgrades). This nav used to list every screen that involved:
  * twenty-seven entries, five of them locked, with the same person's buyers in
  * one group, what those buyers owed in another and the portal logins in a
  * third. It is now one entry per job, and the screens that used to be separate
@@ -491,7 +491,7 @@ export const CHILD_AGENCY_OWNER_NAV: NavGroup[] = childAgencyOwnerNav();
  */
 export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
   {
-    label: 'Floor',
+    label: 'Workspace',
     items: [
       platformItem('/dashboard', {
         name: 'Today',
@@ -510,7 +510,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Call sales',
+    label: 'Call Sales',
     items: [
       platformItem('/buyers', {
         title: 'Your buyers: routing caps, balances, portal logins and returns',
@@ -527,7 +527,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Setup',
+    label: 'Administration',
     items: [
       {
         name: 'Routing',
@@ -684,7 +684,7 @@ export function firstUpgradeGroupOf(groups: NavGroup[]): string | null {
  */
 export const AGENT_NAV: NavGroup[] = [
   {
-    label: 'Floor',
+    label: 'Workspace',
     items: [
       platformItem('/dashboard', {
         name: 'Today',

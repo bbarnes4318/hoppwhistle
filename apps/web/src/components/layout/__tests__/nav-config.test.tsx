@@ -133,7 +133,7 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
   const EXPECTED: Array<[string | undefined, Array<[string, string, boolean]>]> = [
     [undefined, [['Dashboard', '/dashboard', false]]],
     [
-      'Floor',
+      'Workspace',
       [
         ['Live Board', '/live', false],
         ['Calls', '/calls', false],
@@ -396,11 +396,11 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
   const shape = (groups: NavGroup[]) =>
     groups.map(group => [group.label, group.items.map(item => [item.name, item.href])]);
 
-  it('is Floor, Work and Account, named as the owner names them', () => {
+  it('is Workspace, Work and Account, named as the owner names them', () => {
     // Written out: the requirement, not a copy of the list under test.
     expect(shape(navFor({ ...NOBODY, isAgentOnly: true, upgrades: ['POWER_DIALER'] }))).toEqual([
       [
-        'Floor',
+        'Workspace',
         [
           ['Today', '/dashboard'],
           ['Calls', '/calls'],
@@ -417,7 +417,7 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
   it('drops the Work group whole without the Power Dialer upgrade', () => {
     expect(shape(navFor({ ...NOBODY, isAgentOnly: true, upgrades: [] }))).toEqual([
       [
-        'Floor',
+        'Workspace',
         [
           ['Today', '/dashboard'],
           ['Calls', '/calls'],

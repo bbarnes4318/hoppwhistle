@@ -449,7 +449,7 @@
    *   llp nav text   on navy         11.97:1
    *   llp nav icon   on navy          7.37:1
    *   llp nav label  on navy          5.49:1
-   *   llp nav bar    on navy          5.67:1   (the active item's marker)
+   *   llp nav bar    on navy          6.18:1   (the active item's marker)
    */
   [data-brand='life-leads-plus'] [data-brand-nav] {
     --surface: #0b1f44;
@@ -459,11 +459,13 @@
     --ink-3: #9db0ce;
     --rule: rgba(255, 255, 255, 0.08);
     --rule-strong: rgba(255, 255, 255, 0.16);
-    --sunken: rgba(255, 255, 255, 0.07);
-    --brand: #3d9bff;
+    --sunken: rgba(255, 255, 255, 0.06);
+    --brand: #4da3ff;
     --brand-ink: #ffffff;
-    --brand-tint: rgba(61, 155, 255, 0.2);
+    /* The active item's surface: a lighter navy, not a saturated blue. */
+    --brand-tint: rgba(120, 170, 255, 0.14);
     background-image: linear-gradient(180deg, #0d2550 0%, #0b1f44 55%, #081a38 100%);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
     color-scheme: dark;
   }
 }

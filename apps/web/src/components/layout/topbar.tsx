@@ -92,7 +92,7 @@ export function Topbar() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
+      <header className="flex h-[76px] shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
         <MobileNav />
         {titleOnPage ? (
           <div className="min-w-0 flex-1" />
@@ -149,8 +149,8 @@ export function Topbar() {
           type="button"
           onClick={() => setOpen(true)}
           className={cn(
-            'hidden h-9 items-center gap-2 rounded-control border border-rule bg-paper px-3 sm:flex [&>svg]:h-4 [&>svg]:w-4',
-            'w-[260px] text-left t-body text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
+            'hidden h-9 items-center gap-2 rounded-lg border border-rule bg-paper px-3 shadow-[inset_0_1px_0_rgba(16,24,40,0.02)] sm:flex [&>svg]:h-4 [&>svg]:w-4',
+            'w-[280px] text-left t-body text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
           )}
           aria-label="Open command palette"
