@@ -2,9 +2,10 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
-import { BrandLockup } from '@/components/brand/brand-lockup';
+import { BrandWordmark } from '@/components/brand/brand-lockup';
 import { Logo } from '@/components/brand/logo';
 import { resolveBrand, type ActiveBrand, type ServerBrand } from '@/lib/brand-themes';
+import { cn } from '@/lib/utils';
 
 /**
  * The sign-in page's brand: the agency that owns the host, or none.
@@ -48,9 +49,44 @@ export function useLoginBrand(): ActiveBrand | null {
   return useContext(LoginBrandContext);
 }
 
-/** The logo at the top of the sign-in card: the agency's, or NetEnroll's. */
-export function LoginBrandLogo(): JSX.Element {
+/**
+ * The ground the sign-in page's brand panel is painted in.
+ *
+ * Dark -- the agency's navy -- when the host has a brand: every theme ships a
+ * wordmark reversed out for exactly that (`wordmarkOnDark`). Light for
+ * NetEnroll, whose lockup is the one supplied artwork and has black lettering
+ * that would disappear on anything dark (see components/brand/logo.tsx).
+ */
+export type LoginSurface = 'dark' | 'light';
+
+export function useLoginSurface(): LoginSurface {
+  return useLoginBrand() ? 'dark' : 'light';
+}
+
+/**
+ * The logo on the sign-in page: the agency's wordmark, or NetEnroll's lockup.
+ *
+ * `surface` is the ground it sits on, which picks the artwork. The agency's
+ * full chrome lockup (`brand.logo`, the sidebar's) is never used here: it has
+ * an opaque white canvas. NetEnroll has light artwork only, and the page never
+ * asks for it on a dark ground (`useLoginSurface`).
+ *
+ * `className` sets the width; the height follows the artwork.
+ */
+export function LoginBrandLogo({
+  surface = 'light',
+  className,
+}: {
+  surface?: LoginSurface;
+  className?: string;
+}): JSX.Element {
   const brand = useLoginBrand();
-  if (!brand) return <Logo width={272} />;
-  return <BrandLockup brand={brand} tone="light" />;
+  if (!brand) {
+    return (
+      <span className={cn('block', className)}>
+        <Logo width={272} className="w-full" />
+      </span>
+    );
+  }
+  return <BrandWordmark brand={brand} surface={surface} className={className} />;
 }

@@ -13,6 +13,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LoginBrandLogo, LoginBrandProvider } from '@/components/brand/login-brand';
 import {
   brandMetadata,
   fetchPublicBrand,
@@ -164,6 +165,24 @@ describe('/login on agents.lifeleadsplus.com', () => {
     expect(JSON.stringify(root.icons)).toContain('/brands/life-leads-plus/favicon-32.png');
   });
 
+  /*
+   * The chrome lockup (`logo.png`) has an opaque white canvas. On the navy
+   * panel it was a white sticker with the artwork shrunk inside it; the
+   * panel carries the wordmark reversed out for a dark ground instead.
+   */
+  it('sets the reversed wordmark on its navy panel, never the white-canvas lockup', async () => {
+    requestHeaders = new Headers({ host: 'agents.lifeleadsplus.com' });
+    await renderLogin();
+    expect(screen.getByTestId('brand-logo').getAttribute('src')).toBe(
+      '/brands/life-leads-plus/wordmark-on-dark.png'
+    );
+    expect(document.body.innerHTML).not.toContain('/brands/life-leads-plus/logo.png');
+    // The panel's navy is the brand block's, keyed on the page's own scope.
+    expect(
+      document.querySelector('[data-brand="life-leads-plus"] [data-auth-page]')
+    ).not.toBeNull();
+  });
+
   it('leaves agents.netenroll.com NetEnroll in the same process', async () => {
     requestHeaders = new Headers({ host: 'agents.lifeleadsplus.com' });
     await renderLogin();
@@ -199,5 +218,42 @@ describe('/login anywhere else', () => {
     );
     await renderLogin();
     expect(screen.getByTestId('logo')).toBeTruthy();
+  });
+});
+
+describe('LoginBrandLogo', () => {
+  const llp = { theme: 'life-leads-plus', name: 'Life Leads Plus' };
+
+  it("picks the agency's artwork for the ground it sits on", () => {
+    render(
+      <LoginBrandProvider brand={llp}>
+        <LoginBrandLogo surface="dark" />
+      </LoginBrandProvider>
+    );
+    expect(screen.getByTestId('brand-logo').getAttribute('src')).toBe(
+      '/brands/life-leads-plus/wordmark-on-dark.png'
+    );
+    cleanup();
+
+    render(
+      <LoginBrandProvider brand={llp}>
+        <LoginBrandLogo />
+      </LoginBrandProvider>
+    );
+    expect(screen.getByTestId('brand-logo').getAttribute('src')).toBe(
+      '/brands/life-leads-plus/wordmark.png'
+    );
+  });
+
+  it("is NetEnroll's lockup with no brand", () => {
+    render(
+      <LoginBrandProvider brand={null}>
+        <LoginBrandLogo />
+      </LoginBrandProvider>
+    );
+    expect(screen.getByTestId('logo').querySelector('img')?.getAttribute('src')).toBe(
+      '/netenroll-logo.png'
+    );
+    expect(screen.queryByTestId('brand-logo')).toBeNull();
   });
 });

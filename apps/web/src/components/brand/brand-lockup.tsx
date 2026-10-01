@@ -40,3 +40,40 @@ export function BrandLockup({
     </span>
   );
 }
+
+/**
+ * An agency's wordmark alone, for a page that is mostly brand: the sign-in
+ * page's panel and header. Not the chrome lockup above, whose artwork carries
+ * an opaque white canvas -- set on a coloured ground that reads as a sticker.
+ * Both wordmark files are transparent, so neither ever needs a plate:
+ *
+ *   surface 'dark'   `wordmarkOnDark`, lettering reversed out for navy
+ *   surface 'light'  `wordmark`, the artwork's own colours
+ *
+ * Width is the caller's (`className`), height follows. The width and height
+ * attributes are the files' own canvas, there to reserve the box before the
+ * image arrives; the browser takes the real ratio from the file once it has.
+ */
+export function BrandWordmark({
+  brand,
+  surface,
+  className,
+}: {
+  brand: ActiveBrand;
+  surface: 'dark' | 'light';
+  className?: string;
+}): JSX.Element {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={surface === 'dark' ? brand.wordmarkOnDark : brand.wordmark}
+      alt={brand.name}
+      width={363}
+      height={233}
+      className={cn('block h-auto max-w-full select-none', className)}
+      draggable={false}
+      translate="no"
+      data-testid="brand-logo"
+    />
+  );
+}

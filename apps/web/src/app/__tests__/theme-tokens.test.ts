@@ -359,3 +359,36 @@ describe('the Life Leads Plus brand theme', () => {
     expect(CSS).toMatch(/\[data-brand='life-leads-plus'\] \[data-theme='dark'\]/);
   });
 });
+
+/**
+ * The sign-in page's brand panel. NetEnroll's is light (its lockup has black
+ * lettering); a white-label agency's is its navy. Every text colour the
+ * panel uses clears 4.5:1 on the panel's own ground, and the stylesheet
+ * states each ratio to the value computed here.
+ */
+describe('the sign-in panel', () => {
+  const ne = tokens(/\[data-auth-page\]\s*\{/);
+  const llp = tokens(/\[data-brand='life-leads-plus'\] \[data-auth-page\]\s*\{/);
+  const round = (n: number) => Math.round(n * 100) / 100;
+
+  it('is light for NetEnroll and navy for Life Leads Plus', () => {
+    expect(luminance(ne['auth-panel'])).toBeGreaterThan(0.8);
+    expect(llp['auth-panel']).toBe('#0b1f44');
+  });
+
+  it.each([
+    ['ne', 'ink', 'panel'],
+    ['ne', 'ink-2', 'panel'],
+    ['ne', 'ink-3', 'panel'],
+    ['llp', 'ink', 'navy'],
+    ['llp', 'ink-2', 'navy'],
+    ['llp', 'ink-3', 'navy'],
+  ] as const)('%s panel %s clears 4.5:1 and is stated in the stylesheet', (who, fg, ground) => {
+    const set = who === 'ne' ? ne : llp;
+    const ratio = contrast(set[`auth-panel-${fg}`], set['auth-panel']);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+    const m = new RegExp(`${who}\\s+panel ${fg}\\s+on ${ground}\\s+(\\d+\\.\\d+):1`).exec(CSS);
+    if (!m) throw new Error(`no stated ratio for "${who} panel ${fg}" in globals.css`);
+    expect(Number(m[1])).toBe(round(ratio));
+  });
+});
