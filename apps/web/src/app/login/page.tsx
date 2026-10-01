@@ -1,6 +1,18 @@
 'use client';
 
-import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Info, Loader2 } from 'lucide-react';
+import {
+  AlertCircle,
+  BarChart3,
+  Check,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  FileCheck2,
+  Info,
+  Loader2,
+  PhoneCall,
+  type LucideIcon,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import {
@@ -69,13 +81,20 @@ const FOCUS_RING =
  * smaller, and 15px above it. Focus turns the border --brand-ink and lays a
  * one-pixel --brand-ink line inside a soft halo, so the indicator is a solid
  * two-pixel edge (the same weight as FOCUS_RING) without a gap around a field.
+ *
+ * A field the browser has judged wrong -- an address with no @, once the
+ * person has moved on from it (`:user-invalid`, never on first paint) -- or
+ * one marked `aria-invalid` takes the error colour in the same two weights.
  */
 const FIELD = cn(
-  'h-12 w-full rounded-control border-[color:var(--auth-field-rule)] bg-surface px-3.5 text-base text-ink sm:text-[15px]',
+  'h-12 w-full rounded-control border-[color:var(--auth-field-rule)] bg-surface px-3.5 text-base text-ink shadow-none sm:text-[15px]',
   'placeholder:text-ink-3 hover:border-[color:var(--auth-field-hover)]',
   'transition-[border-color,box-shadow] duration-150 ease-out ne-motion',
   'focus-visible:border-brand-ink focus-visible:outline-none focus-visible:ring-0',
-  'focus-visible:shadow-[0_0_0_1px_var(--brand-ink),0_0_0_4px_var(--auth-focus-halo)]'
+  'focus-visible:shadow-[0_0_0_1px_var(--brand-ink),0_0_0_4px_var(--auth-focus-halo)]',
+  '[&:user-invalid]:border-dropped aria-[invalid=true]:border-dropped',
+  '[&:user-invalid:focus-visible]:shadow-[0_0_0_1px_var(--dropped),0_0_0_4px_var(--auth-error-halo)]',
+  'disabled:cursor-not-allowed disabled:border-rule disabled:bg-sunken disabled:text-ink-3'
 );
 
 /**
@@ -87,27 +106,58 @@ const FIELD = cn(
  * on your behalf is not.
  */
 const PRIMARY = cn(
-  'h-12 w-full rounded-control text-[15px] font-semibold',
+  'h-12 w-full rounded-control text-[15px] font-semibold tracking-[-0.005em]',
+  'shadow-[0_1px_2px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.1)]',
+  'active:translate-y-px',
   'data-[busy=true]:disabled:cursor-progress data-[busy=true]:disabled:bg-brand-strong data-[busy=true]:disabled:text-white',
   FOCUS_RING
 );
 
 /** Underlined ink, not brand colour: the primary button is the one coloured thing. */
 const TEXT_LINK = cn(
-  'rounded-control font-medium text-ink underline decoration-rule-strong underline-offset-4',
+  'rounded-[4px] font-medium text-ink underline decoration-rule-strong underline-offset-4',
   'transition-colors duration-150 ease-out ne-motion hover:decoration-current',
   FOCUS_RING
 );
 
-/** One half of the Sign in / Create account switch. */
+/**
+ * One half of the Sign in / Create account switch.
+ *
+ * Inactive is muted ink on the track's grey. Active is a raised white segment
+ * -- a hairline, a two-step shadow, ink set a weight heavier -- so which door
+ * is open reads at a glance without looking like a third input field.
+ */
 const SEGMENT = cn(
-  'mb-0 h-10 w-full rounded-[9px] border border-transparent px-3 text-sm font-medium text-ink-2',
-  'transition-[color,background-color,border-color,box-shadow] duration-150 ease-out',
-  'hover:text-ink',
-  'data-[state=active]:border-rule data-[state=active]:bg-surface data-[state=active]:text-ink',
-  'data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.05)]',
+  'mb-0 h-10 w-full rounded-[6px] border border-transparent px-3 text-[14px] font-medium text-ink-2',
+  'transition-[color,background-color,border-color,box-shadow] duration-150 ease-out ne-motion',
+  'hover:bg-[color:var(--auth-segment-hover)] hover:text-ink',
+  'data-[state=active]:border-[color:var(--auth-card-rule)] data-[state=active]:bg-surface',
+  'data-[state=active]:font-semibold data-[state=active]:text-ink',
+  'data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_2px_6px_-1px_rgba(15,23,42,0.08)]',
   FOCUS_RING
 );
+
+/**
+ * What the portal does, on the brand panel beside the form. Statements about
+ * the product, not figures about it: there are no numbers here to go stale.
+ */
+const VALUE_ROWS: { icon: LucideIcon; title: string; body: string }[] = [
+  {
+    icon: PhoneCall,
+    title: 'Live Call Management',
+    body: 'Track inbound opportunities and agent activity in real time.',
+  },
+  {
+    icon: FileCheck2,
+    title: 'Applications & Production',
+    body: 'Stay on top of submitted business and policy activity.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Agency & Agent Performance',
+    body: 'Give your team the visibility they need without unnecessary clutter.',
+  },
+];
 
 interface AuthResponse {
   token: string;
@@ -630,16 +680,19 @@ export default function AuthPage() {
   );
 
   /*
-   * Only drawn once Google's script has initialised. The slot above it is
-   * always mounted -- the ref has to be able to attach, and a hidden slot
-   * measures zero and would draw the button at the wrong width -- but an "or"
-   * with nothing above it is a dead end for anyone whose network or extension
-   * blocks accounts.google.com, which is who this branch is for.
+   * The Google button and this divider share one wrapper that carries the
+   * `hidden` attribute until Google's script has initialised. The slot stays
+   * mounted -- the ref has to be able to attach -- and GoogleButton only
+   * draws once `ready` is true, the same commit that unhides it, so it never
+   * measures a hidden slot. Hiding the pair, not just the divider, is what
+   * keeps a blocked accounts.google.com from leaving an "or" with nothing
+   * above it, or an empty gap where the button would be: `space-y-*` skips
+   * `[hidden]` children.
    */
-  const divider = (label: string) => (
-    <div className="flex items-center gap-3" aria-hidden="true">
+  const divider = (
+    <div className="flex items-center gap-4" aria-hidden="true">
       <span className="h-px flex-1 bg-rule" />
-      <span className="text-xs font-medium text-ink-3">{label}</span>
+      <span className="text-[13px] leading-5 text-ink-3">or continue with email</span>
       <span className="h-px flex-1 bg-rule" />
     </div>
   );
@@ -659,8 +712,9 @@ export default function AuthPage() {
 
         From 960px they sit side by side, the brand panel pinned to the
         viewport while the form side scrolls (Create account is long). Below
-        that the panel folds into a compact header and the form rises over its
-        lower edge, so a phone opens on the form, not on a poster.
+        that the panel folds into a compact header -- the logo, and from 640px
+        the headline -- and the form rises over its lower edge, so a phone
+        opens on the form, not on a poster.
 
         The panel is the agency's navy on its own domain, carrying the wordmark
         reversed out for it, and NetEnroll's light ground everywhere else
@@ -674,18 +728,26 @@ export default function AuthPage() {
           'flex min-h-screen flex-col bg-surface',
           // The ground under the pinned panel, for the length of a long form.
           'min-[960px]:bg-[color:var(--auth-panel)]',
-          'min-[960px]:grid min-[960px]:grid-cols-[minmax(0,40%)_minmax(0,1fr)]',
+          'min-[960px]:grid min-[960px]:grid-cols-[minmax(0,42%)_minmax(0,1fr)]',
           'min-[1200px]:grid-cols-[minmax(0,44%)_minmax(0,1fr)]'
         )}
       >
         <header
           className={cn(
-            'auth-panel relative isolate overflow-hidden px-5 pb-12 pt-7 sm:px-10 sm:pb-10 sm:pt-9',
+            'auth-panel relative isolate overflow-hidden px-5 pb-12 pt-7 sm:px-10 sm:pb-11 sm:pt-9',
             'min-[960px]:sticky min-[960px]:top-0 min-[960px]:flex min-[960px]:h-screen',
-            'min-[960px]:flex-col min-[960px]:self-start min-[960px]:px-12 min-[960px]:py-12',
-            'min-[1200px]:px-16 min-[1200px]:py-14'
+            'min-[960px]:flex-col min-[960px]:self-start',
+            // Horizontal room grows with the panel, so on a wide monitor the
+            // copy sits in from the edge instead of hugging it.
+            'min-[960px]:px-[clamp(48px,5.2vw,112px)] min-[960px]:py-12',
+            'min-[1200px]:py-14',
+            '[@media(min-width:960px)_and_(max-height:820px)]:py-9'
           )}
         >
+          <div
+            aria-hidden="true"
+            className="auth-panel-glow pointer-events-none absolute inset-0 -z-10 hidden min-[960px]:block"
+          />
           <div
             aria-hidden="true"
             className="auth-panel-grid pointer-events-none absolute inset-0 -z-10 hidden min-[960px]:block"
@@ -696,43 +758,67 @@ export default function AuthPage() {
           />
 
           {/* The host's agency wordmark on its own domain; NetEnroll's anywhere else. */}
-          <h1>
+          <h1 className="shrink-0">
             <LoginBrandLogo
               surface={surface}
               className={
                 brand
-                  ? 'w-[200px] sm:w-[232px] min-[960px]:w-[300px] min-[1200px]:w-[340px]'
-                  : 'w-[184px] sm:w-[208px] min-[960px]:w-[240px] min-[1200px]:w-[272px]'
+                  ? 'w-[188px] sm:w-[220px] min-[960px]:w-[248px] min-[1200px]:w-[272px]'
+                  : 'w-[176px] sm:w-[200px] min-[960px]:w-[220px] min-[1200px]:w-[240px]'
               }
             />
           </h1>
 
-          <div className="mt-3 min-[960px]:mt-auto min-[960px]:max-w-[460px]">
-            <span
-              aria-hidden="true"
-              className="mb-7 hidden h-[3px] w-10 rounded-full bg-[color:var(--auth-accent)] min-[960px]:block"
-            />
-            {/*
-              What this is, for someone who arrived by mistake. On a phone it
-              is the one line under the logo; beside the form it is the panel's
-              statement.
-            */}
+          {/*
+            The panel's statement, centred in the height between the logo and
+            the footer so the two halves of the page balance. The line length
+            is held at a measure, not the panel's width.
+          */}
+          <div className="hidden sm:mt-6 sm:block min-[960px]:my-auto min-[960px]:max-w-[500px] min-[960px]:py-10 [@media(min-width:960px)_and_(max-height:820px)]:py-6">
             <p
               className={cn(
-                'text-[15px] leading-6 text-[color:var(--auth-panel-ink-2)] [text-wrap:balance]',
-                'min-[960px]:text-[30px] min-[960px]:font-semibold min-[960px]:leading-[1.2]',
-                'min-[960px]:tracking-[-0.02em] min-[960px]:text-[color:var(--auth-panel-ink)]',
-                'min-[1200px]:text-[34px]'
+                'max-w-[480px] text-[17px] font-medium leading-6 tracking-[-0.01em] text-[color:var(--auth-panel-ink)] [text-wrap:balance]',
+                'min-[960px]:text-[36px] min-[960px]:font-semibold min-[960px]:leading-[1.12] min-[960px]:tracking-[-0.025em]',
+                'min-[1200px]:text-[40px] min-[1536px]:text-[46px]'
               )}
             >
-              The agent portal for licensed insurance agencies.
+              Built for agencies that want to sell more.
             </p>
-            <p className="mt-5 hidden max-w-[400px] text-base leading-7 text-[color:var(--auth-panel-ink-2)] min-[960px]:block">
-              One workspace for your agency and the agents who work with it.
+            <p className="mt-5 hidden max-w-[440px] text-[16px] leading-[1.65] text-[color:var(--auth-panel-ink-2)] min-[960px]:block min-[1200px]:text-[17px]">
+              Manage your calls, leads, applications, agents, and production from one streamlined
+              workspace built for insurance sales teams.
             </p>
+
+            <ul
+              className={cn(
+                'mt-10 hidden max-w-[480px] border-t border-[color:var(--auth-panel-rule)] pt-8 min-[960px]:grid min-[960px]:gap-6',
+                '[@media(max-height:820px)]:mt-8 [@media(max-height:820px)]:pt-6 [@media(max-height:820px)]:gap-[18px]',
+                // A short window keeps the statement and drops the detail.
+                '[@media(max-height:700px)]:!hidden'
+              )}
+            >
+              {VALUE_ROWS.map(({ icon: Icon, title, body }) => (
+                <li key={title} className="flex items-start gap-4">
+                  <span
+                    aria-hidden="true"
+                    className="mt-px flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-[color:var(--auth-mark-rule)] bg-[color:var(--auth-mark-ground)] text-[color:var(--auth-mark-ink)]"
+                  >
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold leading-6 text-[color:var(--auth-panel-ink)]">
+                      {title}
+                    </p>
+                    <p className="mt-0.5 text-[14.5px] leading-[1.55] text-[color:var(--auth-panel-ink-2)] [text-wrap:pretty]">
+                      {body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <p className="mt-14 hidden border-t border-[color:var(--auth-panel-rule)] pt-6 text-[13px] text-[color:var(--auth-panel-ink-3)] min-[960px]:block">
+          <p className="hidden shrink-0 text-[13px] text-[color:var(--auth-panel-ink-3)] min-[960px]:block">
             © {new Date().getFullYear()} {brand?.name ?? 'NetEnroll'}
           </p>
         </header>
@@ -747,7 +833,7 @@ export default function AuthPage() {
           <div
             className={cn(
               'mx-auto flex w-full max-w-[480px] flex-1 flex-col justify-center px-5 pb-10 pt-8',
-              'sm:px-0 sm:py-14 min-[960px]:py-12',
+              'sm:max-w-[472px] sm:px-0 sm:py-14 min-[960px]:py-12',
               // A 768px-tall laptop still shows the whole card, terms included.
               '[@media(min-width:960px)_and_(max-height:820px)]:py-6'
             )}
@@ -755,20 +841,22 @@ export default function AuthPage() {
             <section
               aria-labelledby="auth-heading"
               className={cn(
-                'sm:rounded-2xl sm:border sm:border-rule sm:bg-surface sm:px-10 sm:py-9',
-                'sm:shadow-[var(--auth-card-shadow)]',
-                '[@media(min-width:960px)_and_(max-height:820px)]:py-8'
+                'sm:rounded-[var(--auth-radius-card)] sm:border sm:border-[color:var(--auth-card-rule)] sm:bg-surface',
+                'sm:px-10 sm:pb-8 sm:pt-10 sm:shadow-[var(--auth-card-shadow)]',
+                '[@media(min-width:960px)_and_(max-height:820px)]:pt-8'
               )}
             >
               <h2
                 id="auth-heading"
-                className="text-[26px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink sm:text-[28px]"
+                className="text-[26px] font-semibold leading-[1.2] tracking-[-0.022em] text-ink [text-wrap:balance] sm:text-[28px] min-[1200px]:text-[30px]"
               >
-                {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-              </h2>
-              <p className="mt-1.5 text-[15px] leading-6 text-ink-2 [text-wrap:pretty]">
                 {mode === 'signin'
-                  ? 'Sign in to your agency account.'
+                  ? `Sign in to ${brand?.name ?? 'NetEnroll'}`
+                  : 'Create your account'}
+              </h2>
+              <p className="mt-2 text-[15px] leading-6 text-ink-2 [text-wrap:pretty]">
+                {mode === 'signin'
+                  ? 'Access your agency workspace, calls, applications, and client activity.'
                   : 'Set up the account your agency invited you to.'}
               </p>
 
@@ -785,9 +873,9 @@ export default function AuthPage() {
                   // across reads as though the tab itself was refused.
                   setError(null);
                 }}
-                className="mt-6"
+                className="mt-7"
               >
-                <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-1 overflow-visible rounded-xl border border-rule bg-sunken p-1">
+                <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-1 overflow-visible rounded-[10px] border border-rule bg-sunken p-1">
                   <TabsTrigger value="signin" className={SEGMENT}>
                     Sign in
                   </TabsTrigger>
@@ -810,14 +898,15 @@ export default function AuthPage() {
                   </div>
                 ) : null}
 
-                <TabsContent value="signin" className="mt-6 space-y-5 outline-none">
-                  <GoogleButton
-                    ready={googleReady}
-                    text="continue_with"
-                    id="google-signin-button"
-                  />
-
-                  {googleReady ? divider('or') : null}
+                <TabsContent value="signin" className="mt-7 space-y-6 outline-none">
+                  <div hidden={!googleReady} className="space-y-6">
+                    <GoogleButton
+                      ready={googleReady}
+                      text="continue_with"
+                      id="google-signin-button"
+                    />
+                    {divider}
+                  </div>
 
                   <form onSubmit={e => void handleLogin(e)} className="space-y-6">
                     <div className="space-y-5">
@@ -839,6 +928,30 @@ export default function AuthPage() {
                       <div className="space-y-2">
                         <FieldLabel htmlFor="signin-password">Password</FieldLabel>
                         {passwordField('signin-password', 'current-password')}
+                        {/*
+                          Right under the field it is about. While the reset
+                          form is open below the button, this gives way to it;
+                          closing that form hands focus back here.
+                        */}
+                        {forgotOpen ? null : (
+                          <div className="flex justify-end pt-0.5">
+                            <button
+                              ref={forgotToggle}
+                              type="button"
+                              onClick={() => {
+                                setForgotOpen(true);
+                                setForgotMessage(null);
+                                setError(null);
+                              }}
+                              className={cn(
+                                TEXT_LINK,
+                                'text-[13.5px] leading-5 text-ink-2 hover:text-ink'
+                              )}
+                            >
+                              Forgot password?
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -863,7 +976,7 @@ export default function AuthPage() {
                     */
                     <form
                       onSubmit={e => void handleForgot(e)}
-                      className="space-y-4 rounded-xl border border-rule bg-sunken p-5"
+                      className="space-y-4 rounded-[10px] border border-rule bg-paper p-5"
                       aria-labelledby="forgot-heading"
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -912,7 +1025,7 @@ export default function AuthPage() {
                             type="submit"
                             variant="outline"
                             className={cn(
-                              'h-11 w-full rounded-control border-[color:var(--auth-field-rule)] font-semibold hover:bg-paper',
+                              'h-11 w-full rounded-control border-[color:var(--auth-field-rule)] font-semibold hover:bg-sunken',
                               FOCUS_RING
                             )}
                             disabled={forgotSending || !email.trim()}
@@ -926,25 +1039,10 @@ export default function AuthPage() {
                         </>
                       )}
                     </form>
-                  ) : (
-                    <p className="text-center text-sm">
-                      <button
-                        ref={forgotToggle}
-                        type="button"
-                        onClick={() => {
-                          setForgotOpen(true);
-                          setForgotMessage(null);
-                          setError(null);
-                        }}
-                        className={TEXT_LINK}
-                      >
-                        Forgot password?
-                      </button>
-                    </p>
-                  )}
+                  ) : null}
                 </TabsContent>
 
-                <TabsContent value="create" className="mt-6 space-y-5 outline-none">
+                <TabsContent value="create" className="mt-7 space-y-6 outline-none">
                   {/*
                     Which agency this invitation is for, when the link named one.
                     Worth showing before the password field: an agent following a
@@ -960,9 +1058,14 @@ export default function AuthPage() {
                     </Banner>
                   ) : null}
 
-                  <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
-
-                  {googleReady ? divider('or') : null}
+                  <div hidden={!googleReady} className="space-y-6">
+                    <GoogleButton
+                      ready={googleReady}
+                      text="signup_with"
+                      id="google-signup-button"
+                    />
+                    {divider}
+                  </div>
 
                   <form onSubmit={e => void handleCreate(e)} className="space-y-6">
                     <div className="space-y-5">
@@ -1142,12 +1245,13 @@ export default function AuthPage() {
               </Tabs>
 
               {/*
-                Part of the card, not a caption floating under it. Underlined
-                ink rather than brand colour: the primary button is the one
+                Part of the card, not a caption floating under it, and no rule
+                above it: a quiet line at the foot of the form. Underlined ink
+                rather than brand colour: the primary button is the one
                 coloured control here, and a second coloured thing at the foot
                 of the card would make the accent mean less.
               */}
-              <p className="mt-7 border-t border-rule pt-5 text-center text-[13px] leading-5 text-ink-2">
+              <p className="mt-6 text-center text-[13px] leading-5 text-ink-3">
                 By continuing, you agree to our{' '}
                 <a href="/legal/terms" className={TEXT_LINK}>
                   Terms of Service
