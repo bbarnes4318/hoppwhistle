@@ -116,6 +116,38 @@ describe('VonageAdapter', () => {
     });
   });
 
+  describe('searchAvailable', () => {
+    // listNumbers is the account's OWN numbers; a buyer is shown what is for sale.
+    it('searches voice numbers for sale, by area code, as available', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          count: 1,
+          numbers: [
+            { country: 'US', msisdn: '16155550101', type: 'landline', features: ['VOICE'] },
+          ],
+        })
+      );
+
+      const found = await new VonageAdapter().searchAvailable({ areaCode: '615', limit: 10 });
+
+      const [called] = fetchMock.mock.calls[0] as [string];
+      const url = new URL(called);
+      expect(url.pathname).toBe('/number/search');
+      expect(url.searchParams.get('country')).toBe('US');
+      expect(url.searchParams.get('pattern')).toBe('1615');
+      expect(url.searchParams.get('search_pattern')).toBe('0');
+      expect(url.searchParams.get('features')).toBe('VOICE');
+      expect(url.searchParams.get('size')).toBe('10');
+      expect(found).toEqual([
+        expect.objectContaining({
+          number: '+16155550101',
+          provider: 'vonage',
+          status: 'available',
+        }),
+      ]);
+    });
+  });
+
   describe('purchaseNumber', () => {
     it('searches, buys, then links the number to the voice application', async () => {
       fetchMock

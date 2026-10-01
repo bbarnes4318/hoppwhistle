@@ -211,7 +211,7 @@ describe('the call ledger per role', () => {
     expect(document.querySelector('[data-page-range]')?.textContent).toBe('1–50 of 4,112');
   });
 
-  it('opens an agent on their calls and applications, with no Status column', async () => {
+  it('opens an agent on their calls, applications and recordings, with no Status column', async () => {
     roles = ['AGENT'];
     await loadCallsPage();
 
@@ -223,8 +223,24 @@ describe('the call ledger per role', () => {
         'Duration',
         'Disposition',
         'Application',
+        'Recording',
       ]);
     });
+  });
+
+  it('shows an agent the Recording column even if their browser saved it switched off', async () => {
+    roles = ['AGENT'];
+    localStorage.setItem(
+      'hopwhistle_calls_columns:v3:agent',
+      JSON.stringify({ recording: false, campaignName: false })
+    );
+    rows = [{ ...baseCall, id: 'call-rec', primaryRecordingId: 'rec-1' }];
+    await loadCallsPage();
+
+    await waitFor(() => expect(headers()).toContain('Recording'));
+    // Their other choice is kept.
+    expect(headers()).not.toContain('Campaign');
+    await waitFor(() => expect(document.querySelector('[data-recording="ready"]')).toBeTruthy());
   });
 
   it('offers a play button on a row with a recording, and a disabled one without', async () => {

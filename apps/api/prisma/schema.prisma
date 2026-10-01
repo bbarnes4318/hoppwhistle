@@ -5253,6 +5253,22 @@ model UpgradePrice {
   @@map("upgrade_prices")
 }
 
+/// Which carriers agencies may buy phone numbers from, chosen by a NetEnroll
+/// platform admin on Settings -> Number carriers. One row per carrier the
+/// platform knows how to buy from (services/numbers/number-carriers.ts); a
+/// carrier with no row takes its built-in default. At most one row is the
+/// default carrier, searched first. Agency owners never choose: they buy from
+/// whatever this table enables. See migrations/20261004000000_number_carriers.
+model NumberCarrierSetting {
+  provider        String   @id
+  enabled         Boolean  @default(false)
+  isDefault       Boolean  @default(false)
+  updatedAt       DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  updatedByUserId String?
+
+  @@map("number_carrier_settings")
+}
+
 /// An agency asking for a paid upgrade from /upgrades. At most one OPEN
 /// request per (tenantId, upgradeKey) -- a partial unique index Prisma cannot
 /// express, so it lives in the migration and prisma/sql/db-push-constraints.sql.

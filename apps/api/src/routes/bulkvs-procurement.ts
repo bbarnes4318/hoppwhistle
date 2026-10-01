@@ -11,6 +11,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { logger } from '../lib/logger.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
+import { assertCarrierEnabled } from '../services/numbers/number-carriers.js';
 import {
   NumberPurchaseError,
   purchaseNumberForTenant,
@@ -36,6 +37,18 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
 
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
+    }
+
+    // A carrier the platform has switched off is not searched either: its
+    // inventory could not be bought.
+    try {
+      await assertCarrierEnabled('bulkvs');
+    } catch (error) {
+      if (error instanceof NumberPurchaseError) {
+        void reply.code(error.status);
+        return { error: { code: error.code, message: error.message } };
+      }
+      throw error;
     }
 
     try {
@@ -102,6 +115,10 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
        * the purchaser's, and is attached to `campaignId` (validated to this
        * tenant) or left unattached. See `services/numbers/number-purchase.ts`.
        */
+      // Refused when the platform has switched BulkVS off on Settings ->
+      // Number carriers; see services/numbers/number-carriers.ts.
+      await assertCarrierEnabled('bulkvs');
+
       const phoneNumber = await purchaseNumberForTenant({
         provider: 'bulkvs',
         request: { areaCode, number },

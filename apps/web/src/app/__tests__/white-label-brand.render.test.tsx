@@ -417,7 +417,8 @@ describe('a branded agency never reads "NetEnroll"', () => {
     await waitFor(() => expect(screen.getByText('3 of 10 numbers used')).toBeTruthy());
     expect(screen.getByRole('tab', { name: 'Local' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Toll-free' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'More local inventory' })).toBeTruthy();
+    // Which carrier a number comes from is the platform's choice, not a tab.
+    expect(screen.queryByRole('tab', { name: 'More local inventory' })).toBeNull();
     expect(everything()).not.toMatch(/NetEnroll|FracTEL|BulkVS|Anveo/i);
   });
 

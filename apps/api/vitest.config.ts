@@ -109,6 +109,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles` and `audit_logs` to seed two agencies, their
   // agents, calls, applications and CRM leads: the agent's own Today.
   '**/src/__tests__/agent-today.test.ts',
+  // Truncates `tenants`, `roles`, `platform_admins` and
+  // `number_carrier_settings`: which carriers agencies buy numbers from.
+  '**/src/__tests__/number-carriers.test.ts',
   // Truncates `tenants`, `roles` and `audit_logs` to seed one agency with a
   // stuck call and a live one, and reads every screen that counts calls up.
   '**/src/__tests__/call-in-progress.test.ts',

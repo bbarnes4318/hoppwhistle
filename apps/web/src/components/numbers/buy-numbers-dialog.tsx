@@ -23,25 +23,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip } from '@/components/ui/tooltip';
 import { apiClient } from '@/lib/api';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 
 /**
- * Buying phone numbers: one dialog, three kinds of inventory.
+ * Buying phone numbers: one dialog, local or toll-free.
  *
  * ── Who buys, and from whom ──────────────────────────────────────────────────
  *
- * Any agency's OWNER or ADMIN buys its own numbers now, within the limit and
- * at the price its platform (or, for a downline, its parent) has set. Where a
- * number comes from is the platform's business, so the tabs name what a
- * number IS -- local, toll-free, more local inventory -- and never the carrier
- * behind it. NetEnroll staff see the carrier in a tooltip on each tab, because
- * they are the ones who answer when one of them misbehaves.
+ * Any agency's OWNER or ADMIN buys its own numbers, within the limit and at
+ * the price its platform (or, for a downline, its parent) has set. WHICH
+ * carrier a number comes from is the platform's decision, made by a NetEnroll
+ * platform admin on Settings -> Number carriers -- never the agency's. So the
+ * tabs name what a number IS, and the search behind them is carrier-neutral:
  *
- *   Local                  FracTEL local      /api/v1/fractel/available?areaCode=
- *   Toll-free              FracTEL toll-free  /api/v1/fractel/available?type=tollfree
- *   More local inventory   BulkVS             /api/v1/bulkvs/available?areaCode=
+ *   search   GET  /api/v1/numbers/available?type=local|tollfree&areaCode=
+ *                 every carrier the platform has enabled, its default first;
+ *                 each result names the carrier it is for sale at
+ *   buy      POST /api/v1/numbers/buy { provider, number }
+ *                 refused if the platform has since switched that carrier off
+ *
+ * The Toll-free tab is offered only while an enabled carrier sells toll-free
+ * (`tollFreeAvailable` on the pricing answer). NetEnroll staff see the carrier
+ * beside each result, because they are the ones who answer when one of them
+ * misbehaves; an agency owner never does.
  *
  * ── The price is shown before anybody confirms ───────────────────────────────
  *
@@ -51,11 +56,16 @@ import { cn, formatPhoneNumber } from '@/lib/utils';
  * 403 QUOTA_EXCEEDED with a sentence that says so, and that sentence is shown.
  */
 
-export type InventoryKind = 'local' | 'tollfree' | 'more';
+export type InventoryKind = 'local' | 'tollfree';
 
 interface AvailableNumber {
+  /** Unique across carriers. */
   id: string;
+  /** What the carrier calls the number; sent back to it to buy it. */
+  carrierId: string;
   number: string;
+  /** The carrier it is for sale at, as the search answered. */
+  provider: string;
   metadata?: {
     npa?: string;
     rateCenter?: string;
@@ -71,6 +81,8 @@ export interface NumberPricing {
   currency: string;
   numbersUsed: number;
   numbersLimit: number | null;
+  /** An enabled carrier sells toll-free. Absent from an older API: offered. */
+  tollFreeAvailable?: boolean;
 }
 
 interface Campaign {
@@ -83,27 +95,26 @@ interface PurchaseAnswer {
   data?: { phoneNumber: { id: string; number: string; status: string } };
 }
 
-const KINDS: Array<{ key: InventoryKind; label: string; carrier: string }> = [
-  { key: 'local', label: 'Local', carrier: 'FracTEL (local)' },
-  { key: 'tollfree', label: 'Toll-free', carrier: 'FracTEL (toll-free)' },
-  { key: 'more', label: 'More local inventory', carrier: 'BulkVS' },
+const KINDS: Array<{ key: InventoryKind; label: string }> = [
+  { key: 'local', label: 'Local' },
+  { key: 'tollfree', label: 'Toll-free' },
 ];
+
+const CARRIER_NAMES: Record<string, string> = {
+  fractel: 'FracTEL',
+  bulkvs: 'BulkVS',
+  vonage: 'Vonage',
+};
 
 /** Where to search, for this kind of number and this area code or prefix. */
 export function availablePath(kind: InventoryKind, areaCode: string): string {
-  if (kind === 'more') return `/api/v1/bulkvs/available?areaCode=${encodeURIComponent(areaCode)}`;
-  if (kind === 'tollfree') {
-    const params = new URLSearchParams({ type: 'tollfree' });
-    if (areaCode) params.set('areaCode', areaCode);
-    return `/api/v1/fractel/available?${params.toString()}`;
-  }
-  return `/api/v1/fractel/available?areaCode=${encodeURIComponent(areaCode)}`;
+  const params = new URLSearchParams({ type: kind });
+  if (areaCode) params.set('areaCode', areaCode);
+  return `/api/v1/numbers/available?${params.toString()}`;
 }
 
-/** Where to buy it. */
-export function purchasePath(kind: InventoryKind): string {
-  return kind === 'more' ? '/api/v1/bulkvs/purchase' : '/api/v1/fractel/purchase';
-}
+/** Where to buy it: one route, whichever carrier the number came from. */
+export const PURCHASE_PATH = '/api/v1/numbers/buy';
 
 export function formatPrice(amount: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
@@ -133,7 +144,7 @@ export function BuyNumbersDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-  /** NetEnroll staff: the carrier behind each tab is named in its tooltip. */
+  /** NetEnroll staff: each result names the carrier it is for sale at. */
   isStaff: boolean;
 }): JSX.Element {
   const [kind, setKind] = useState<InventoryKind>('local');
@@ -185,6 +196,14 @@ export function BuyNumbersDialog({
     };
   }, [open]);
 
+  // Toll-free only while a carrier the platform enabled sells it.
+  const kinds = KINDS.filter(
+    entry => entry.key !== 'tollfree' || pricing?.tollFreeAvailable !== false
+  );
+  useEffect(() => {
+    if (kind === 'tollfree' && pricing?.tollFreeAvailable === false) setKind('local');
+  }, [kind, pricing?.tollFreeAvailable]);
+
   const needsAreaCode = kind !== 'tollfree';
   const canSearch = needsAreaCode ? areaCode.length === 3 : true;
   const atLimit =
@@ -220,8 +239,9 @@ export function BuyNumbersDialog({
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.post<PurchaseAnswer>(purchasePath(kind), {
-        number: selected.id,
+      const response = await apiClient.post<PurchaseAnswer>(PURCHASE_PATH, {
+        provider: selected.provider,
+        number: selected.carrierId,
         areaCode: selected.metadata?.npa || areaCode || undefined,
         ...(campaignId !== 'none' ? { campaignId } : {}),
       });
@@ -287,20 +307,14 @@ export function BuyNumbersDialog({
                   setError(null);
                 }}
               >
-                <TabsList className="grid w-full grid-cols-3">
-                  {KINDS.map(entry =>
-                    isStaff ? (
-                      <Tooltip key={entry.key} content={entry.carrier} className="flex">
-                        <TabsTrigger value={entry.key} className="w-full">
-                          {entry.label}
-                        </TabsTrigger>
-                      </Tooltip>
-                    ) : (
-                      <TabsTrigger key={entry.key} value={entry.key}>
-                        {entry.label}
-                      </TabsTrigger>
-                    )
-                  )}
+                <TabsList
+                  className={cn('grid w-full', kinds.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}
+                >
+                  {kinds.map(entry => (
+                    <TabsTrigger key={entry.key} value={entry.key}>
+                      {entry.label}
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
               </Tabs>
 
@@ -365,6 +379,14 @@ export function BuyNumbersDialog({
                           {formatPhoneNumber(num.number)}
                         </span>
                         <span className="ml-auto t-meta text-ink-3">{location(num, kind)}</span>
+                        {isStaff ? (
+                          <span
+                            className="shrink-0 rounded-full border border-rule px-2 py-0.5 t-meta text-ink-2"
+                            data-carrier={num.provider}
+                          >
+                            {CARRIER_NAMES[num.provider] ?? num.provider}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   ))}

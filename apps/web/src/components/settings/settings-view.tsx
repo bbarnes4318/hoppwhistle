@@ -15,6 +15,7 @@ import {
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { DncListsView } from '@/components/settings/dnc-lists-view';
+import { NumberCarriersPanel } from '@/components/settings/number-carriers-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,7 +45,7 @@ interface Webhook {
 }
 
 /** One panel of the settings screen, rendered alone. */
-export type SettingsSection = 'webhooks' | 'dnc' | 'workspace' | 'legal';
+export type SettingsSection = 'webhooks' | 'dnc' | 'workspace' | 'carriers' | 'legal';
 
 /**
  * The settings panels: webhooks, DNC lists, workspace and legal.
@@ -60,7 +61,7 @@ export type SettingsSection = 'webhooks' | 'dnc' | 'workspace' | 'legal';
  */
 export function SettingsView({ section }: { section?: SettingsSection } = {}) {
   const { productName } = useBrand();
-  const { isPlatformAdmin, isAgentOnly, loading: authLoading } = useAuth();
+  const { isPlatformAdmin, isAgentOnly, user, loading: authLoading } = useAuth();
   // Webhooks are an owner's or admin's plumbing. An agent is not shown them, and
   // their page does not so much as ask the server for the list -- which means
   // not asking before it is known who is looking.
@@ -83,6 +84,13 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
    */
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
+  /*
+   * Which carriers agencies buy numbers from is NetEnroll's decision, made
+   * here. Not while previewing an agency: a preview is the agency's screen,
+   * and the agency has no say in it.
+   */
+  const previewing = platform.previewRole != null || user?.previewRole != null;
+  const showsCarriers = isPlatformAdmin && !previewing;
 
   useEffect(() => {
     if (platform.loading) return;
@@ -143,6 +151,7 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
         </PanelBody>
       </Panel>
     ) : null,
+    carriers: showsCarriers ? <NumberCarriersPanel /> : null,
     webhooks: (
       <Panel>
         <PanelHeader
@@ -372,10 +381,13 @@ export function SettingsView({ section }: { section?: SettingsSection } = {}) {
           {isAgentOnly ? null : <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
           <TabsTrigger value="dnc">DNC lists</TabsTrigger>
           {isPlatformAdmin ? <TabsTrigger value="workspace">Workspace</TabsTrigger> : null}
+          {showsCarriers ? <TabsTrigger value="carriers">Number carriers</TabsTrigger> : null}
           <TabsTrigger value="legal">Legal</TabsTrigger>
         </TabsList>
 
         {isPlatformAdmin ? <TabsContent value="workspace">{panels.workspace}</TabsContent> : null}
+
+        {showsCarriers ? <TabsContent value="carriers">{panels.carriers}</TabsContent> : null}
 
         {isAgentOnly ? null : <TabsContent value="webhooks">{panels.webhooks}</TabsContent>}
 

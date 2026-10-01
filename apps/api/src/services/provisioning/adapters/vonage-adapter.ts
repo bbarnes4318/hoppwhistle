@@ -50,7 +50,7 @@ export function validateVonageSipUri(raw: string): string | null {
   const at = rest.indexOf('@');
   const host = at >= 0 ? rest.slice(at + 1) : rest;
   if (!host || /^[:;]/.test(host)) {
-    return 'VONAGE_SIP_URI has no host — it must name this platform\'s FreeSWITCH, e.g. sip:sbc.example.com:5080';
+    return "VONAGE_SIP_URI has no host — it must name this platform's FreeSWITCH, e.g. sip:sbc.example.com:5080";
   }
   if (at >= 0 && !SIP_PLACEHOLDER.test(rest.slice(0, at))) {
     return (
@@ -352,7 +352,10 @@ export class VonageAdapter implements ProvisioningAdapter {
     const routing = this.routing();
     if (!routing.ok) throw new Error(routing.reason);
     if (routing.mode === 'application') return { app_id: routing.applicationId };
-    return { voiceCallbackType: 'sip', voiceCallbackValue: renderVonageSipUri(routing.sipUri, msisdn) };
+    return {
+      voiceCallbackType: 'sip',
+      voiceCallbackValue: renderVonageSipUri(routing.sipUri, msisdn),
+    };
   }
 
   private describeRouting(fields: Record<string, string>): string {
@@ -379,6 +382,25 @@ export class VonageAdapter implements ProvisioningAdapter {
     );
 
     return (response.numbers ?? []).map(row => this.toProvisionedNumber(row, true));
+  }
+
+  /**
+   * Voice numbers for sale, by area code: the same `/number/search` that
+   * `purchaseNumber` runs when it is given only an area code. `listNumbers`
+   * lists the account's own numbers, which is not what a buyer is shown.
+   */
+  async searchAvailable(options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
+    const response = await this.request<{ count?: number; numbers?: VonageNumberRow[] }>(
+      'GET',
+      '/number/search',
+      {
+        country: this.defaultCountry,
+        size: String(Math.min(options?.limit || 20, 100)),
+        features: 'VOICE',
+        ...(options?.areaCode ? { pattern: `1${options.areaCode}`, search_pattern: '0' } : {}),
+      }
+    );
+    return (response.numbers ?? []).map(row => this.toProvisionedNumber(row, false));
   }
 
   async purchaseNumber(request: PurchaseNumberRequest): Promise<ProvisionedNumber> {

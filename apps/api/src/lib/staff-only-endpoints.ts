@@ -216,6 +216,10 @@ export const AGENCY_OWNER_ALLOWED: readonly WhiteLabelAllowance[] = [
   { pattern: '/api/v1/bulkvs/purchase', methods: ['POST'] },
   { pattern: '/api/v1/fractel/available', methods: ['GET'] },
   { pattern: '/api/v1/fractel/purchase', methods: ['POST'] },
+  // The carrier-neutral search and buy: every carrier the platform has enabled
+  // on Settings -> Number carriers (services/numbers/number-carriers.ts).
+  { pattern: '/api/v1/numbers/available', methods: ['GET'] },
+  { pattern: '/api/v1/numbers/buy', methods: ['POST'] },
   { prefix: '/api/v1/did-routes' },
 ];
 
