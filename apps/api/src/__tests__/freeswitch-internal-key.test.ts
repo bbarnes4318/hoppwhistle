@@ -245,7 +245,7 @@ describe('the guarded routes are the FreeSWITCH callbacks', () => {
     ).toEqual([]);
   });
 
-  it('finds the five routes it is meant to be checking', async () => {
+  it('finds the six routes it is meant to be checking', async () => {
     // Guards the guard: a regex that matches nothing would pass the test above
     // while checking nothing at all.
     const { readFileSync } = await import('fs');
@@ -261,6 +261,8 @@ describe('the guarded routes are the FreeSWITCH callbacks', () => {
       ].length;
     }
 
-    expect(found).toBe(5);
+    // lookup, cdr, carrier-route, and carrier-result twice: GET is what
+    // mod_curl sends, POST is kept for any caller that posts a body.
+    expect(found).toBe(6);
   });
 });

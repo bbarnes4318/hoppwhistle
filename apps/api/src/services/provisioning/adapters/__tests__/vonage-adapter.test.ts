@@ -8,7 +8,12 @@ vi.mock('../../../../lib/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { VonageAdapter } from '../vonage-adapter.js';
+import {
+  VonageAdapter,
+  renderVonageSipUri,
+  resolveVonageRouting,
+  validateVonageSipUri,
+} from '../vonage-adapter.js';
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -27,6 +32,7 @@ describe('VonageAdapter', () => {
     'VONAGE_APPLICATION_ID',
     'VONAGE_SIP_URI',
     'VONAGE_DEFAULT_COUNTRY',
+    'VONAGE_NUMBER_ROUTING_MODE',
   ];
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -40,6 +46,7 @@ describe('VonageAdapter', () => {
     process.env.VONAGE_API_KEY = 'vk123';
     process.env.VONAGE_API_SECRET = 'vs456';
     process.env.VONAGE_APPLICATION_ID = 'app-789';
+    process.env.VONAGE_NUMBER_ROUTING_MODE = 'application';
   });
 
   afterEach(() => {
@@ -150,29 +157,92 @@ describe('VonageAdapter', () => {
       expect(new URLSearchParams(updateInit.body as string).get('app_id')).toBe('app-789');
     });
 
-    it('routes to a SIP URI when no application is configured', async () => {
+    // SIP mode is how platform numbers reach FreeSWITCH. Each number forwards
+    // to a URI carrying ITS OWN digits as the user part, because that user
+    // part becomes `destination_number` in the public context — the thing
+    // inbound_route.lua looks the DID up by.
+    it('routes into FreeSWITCH by SIP, with the number as the URI user part', async () => {
       delete process.env.VONAGE_APPLICATION_ID;
-      process.env.VONAGE_SIP_URI = 'sip:inbound@sbc.example.com';
+      process.env.VONAGE_NUMBER_ROUTING_MODE = 'sip';
+      process.env.VONAGE_SIP_URI = 'sip:sbc.example.com:5080';
 
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }))
         .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }));
 
-      await new VonageAdapter().purchaseNumber({ number: '+15551112222' });
+      const result = await new VonageAdapter().purchaseNumber({ number: '+15551112222' });
 
       const [, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
       const body = new URLSearchParams(updateInit.body as string);
       expect(body.get('voiceCallbackType')).toBe('sip');
-      expect(body.get('voiceCallbackValue')).toBe('sip:inbound@sbc.example.com');
+      expect(body.get('voiceCallbackValue')).toBe('sip:15551112222@sbc.example.com:5080');
+      expect(body.get('app_id')).toBeNull();
+      expect(result.metadata).toMatchObject({ routingMode: 'sip' });
+    });
+
+    it('treats a SIP URI on its own as SIP mode', async () => {
+      delete process.env.VONAGE_APPLICATION_ID;
+      delete process.env.VONAGE_NUMBER_ROUTING_MODE;
+      process.env.VONAGE_SIP_URI = 'sip:{msisdn}@sbc.example.com:5080;transport=udp';
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }))
+        .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }));
+
+      await new VonageAdapter().purchaseNumber({ number: '15551112222' });
+
+      const [, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(new URLSearchParams(updateInit.body as string).get('voiceCallbackValue')).toBe(
+        'sip:15551112222@sbc.example.com:5080;transport=udp'
+      );
     });
 
     it('refuses to buy a number it cannot route', async () => {
       delete process.env.VONAGE_APPLICATION_ID;
+      delete process.env.VONAGE_NUMBER_ROUTING_MODE;
 
       await expect(new VonageAdapter().purchaseNumber({ areaCode: '555' })).rejects.toThrow(
-        /VONAGE_APPLICATION_ID or VONAGE_SIP_URI/
+        /not configured/
       );
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // The ambiguity this mode exists to remove: with both values present the
+    // old code silently preferred the application, taking numbers away from
+    // FreeSWITCH. Now neither wins until an operator says which.
+    it('refuses to guess when both a SIP URI and an application are configured', async () => {
+      delete process.env.VONAGE_NUMBER_ROUTING_MODE;
+      process.env.VONAGE_SIP_URI = 'sip:sbc.example.com:5080';
+
+      await expect(new VonageAdapter().purchaseNumber({ number: '15551112222' })).rejects.toThrow(
+        /VONAGE_NUMBER_ROUTING_MODE/
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not attach numbers to an application just because its id is present', async () => {
+      delete process.env.VONAGE_NUMBER_ROUTING_MODE;
+
+      await expect(new VonageAdapter().purchaseNumber({ number: '15551112222' })).rejects.toThrow(
+        /not attached to a Voice Application implicitly/
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('uses SIP when told to, even with an application id present', async () => {
+      process.env.VONAGE_NUMBER_ROUTING_MODE = 'sip';
+      process.env.VONAGE_SIP_URI = 'sip:sbc.example.com:5080';
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }))
+        .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }));
+
+      await new VonageAdapter().purchaseNumber({ number: '15551112222' });
+
+      const [, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+      const body = new URLSearchParams(updateInit.body as string);
+      expect(body.get('app_id')).toBeNull();
+      expect(body.get('voiceCallbackType')).toBe('sip');
     });
 
     // Buying and routing are two calls, and the number is already billing by
@@ -195,6 +265,38 @@ describe('VonageAdapter', () => {
       await expect(new VonageAdapter().purchaseNumber({ areaCode: '999' })).rejects.toThrow(
         'No available Vonage numbers found for area code 999'
       );
+    });
+  });
+
+  describe('configureNumber', () => {
+    it('re-points an owned number at the configured SIP destination', async () => {
+      process.env.VONAGE_NUMBER_ROUTING_MODE = 'sip';
+      process.env.VONAGE_SIP_URI = 'sip:sbc.example.com:5080';
+
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({ count: 1, numbers: [{ country: 'CA', msisdn: '15551112222' }] })
+        )
+        .mockResolvedValueOnce(jsonResponse({ 'error-code': '200' }));
+
+      await new VonageAdapter().configureNumber('+15551112222', { voice: true });
+
+      const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(updateUrl).toContain('/number/update');
+      const body = new URLSearchParams(updateInit.body as string);
+      expect(body.get('country')).toBe('CA');
+      expect(body.get('msisdn')).toBe('15551112222');
+      expect(body.get('voiceCallbackValue')).toBe('sip:15551112222@sbc.example.com:5080');
+    });
+
+    it('refuses to re-point a number when routing is ambiguous', async () => {
+      delete process.env.VONAGE_NUMBER_ROUTING_MODE;
+      process.env.VONAGE_SIP_URI = 'sip:sbc.example.com:5080';
+
+      await expect(
+        new VonageAdapter().configureNumber('15551112222', { voice: true })
+      ).rejects.toThrow(/VONAGE_NUMBER_ROUTING_MODE/);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -271,6 +373,18 @@ describe('VonageAdapter', () => {
       );
     });
 
+    it('names a rate limit for what it is', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({}, 429));
+      await expect(new VonageAdapter().listNumbers()).rejects.toThrow(/rate limit/i);
+    });
+
+    it('never puts the API secret in an error message', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ 'error-code-label': 'bad request' }, 400));
+      const error = await new VonageAdapter().listNumbers().catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).not.toContain('vs456');
+    });
+
     it('names authentication failures for what they are', async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse({ 'error-code-label': 'nope' }, 401));
 
@@ -278,5 +392,58 @@ describe('VonageAdapter', () => {
         'Vonage authentication failed. Check credentials.'
       );
     });
+  });
+});
+
+describe('Vonage number routing mode', () => {
+  it('honours an explicit mode', () => {
+    expect(resolveVonageRouting({ mode: 'sip', sipUri: 'sip:h:5080', applicationId: 'a' })).toEqual(
+      { ok: true, mode: 'sip', sipUri: 'sip:h:5080' }
+    );
+    expect(
+      resolveVonageRouting({ mode: 'APPLICATION', sipUri: 'sip:h:5080', applicationId: 'a' })
+    ).toEqual({ ok: true, mode: 'application', applicationId: 'a' });
+  });
+
+  it('requires the value its mode needs', () => {
+    expect(resolveVonageRouting({ mode: 'sip', applicationId: 'a' }).ok).toBe(false);
+    expect(resolveVonageRouting({ mode: 'application', sipUri: 'sip:h' }).ok).toBe(false);
+  });
+
+  it('rejects an unknown mode instead of falling back to a default', () => {
+    const r = resolveVonageRouting({ mode: 'webhook', sipUri: 'sip:h' });
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  it('refuses both values without a mode, and an application id alone', () => {
+    expect(resolveVonageRouting({ sipUri: 'sip:h', applicationId: 'a' }).ok).toBe(false);
+    expect(resolveVonageRouting({ applicationId: 'a' }).ok).toBe(false);
+    expect(resolveVonageRouting({}).ok).toBe(false);
+  });
+
+  it('infers SIP from a SIP URI alone', () => {
+    expect(resolveVonageRouting({ sipUri: 'sip:sbc.example.com:5080' })).toMatchObject({
+      ok: true,
+      mode: 'sip',
+    });
+  });
+});
+
+describe('Vonage SIP URI', () => {
+  it('accepts a bare host or a placeholder, and nothing that hard-codes a user', () => {
+    expect(validateVonageSipUri('sip:sbc.example.com:5080')).toBeNull();
+    expect(validateVonageSipUri('sip:{msisdn}@sbc.example.com:5080')).toBeNull();
+    expect(validateVonageSipUri('sip:inbound@sbc.example.com')).toMatch(/user part/);
+    expect(validateVonageSipUri('sbc.example.com')).toMatch(/sip:/);
+    expect(validateVonageSipUri('sip:')).toMatch(/no host/);
+  });
+
+  it('writes the number in as the user part', () => {
+    expect(renderVonageSipUri('sip:sbc.example.com:5080', '15551112222')).toBe(
+      'sip:15551112222@sbc.example.com:5080'
+    );
+    expect(renderVonageSipUri('sips:{number}@sbc.example.com', '15551112222')).toBe(
+      'sips:15551112222@sbc.example.com'
+    );
   });
 });

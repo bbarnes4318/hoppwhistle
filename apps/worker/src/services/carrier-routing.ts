@@ -232,6 +232,16 @@ export async function getOutboundDialString(
   return { dialString: buildBridgeString(chain, destination, options), chain };
 }
 
+/**
+ * Whether originated legs report their own outcome (see `legOutcomeReporting`
+ * in @hopwhistle/shared). Same switch, same default as the API's, so the two
+ * outbound paths cannot disagree about it.
+ */
+export function legOutcomeReportingEnabled(): boolean {
+  const raw = (process.env.CARRIER_LEG_REPORTING ?? '').trim().toLowerCase();
+  return !['off', '0', 'false', 'no'].includes(raw);
+}
+
 /** Fold an origination outcome into gateway health. Best effort; never throws. */
 export async function recordGatewayOutcome(
   prisma: PrismaClient,

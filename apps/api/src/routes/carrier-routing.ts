@@ -32,9 +32,12 @@ import { requireAnyPermission } from '../middleware/rbac.js';
 import {
   getCarrierChain,
   invalidateCarrierRoutingCache,
+  legOutcomeReportingEnabled,
   listCarrierRoutes,
-  recordGatewayOutcome,
+  recordLegOutcome,
+  resolveTenantForCallId,
   resolveTenantForCallerId,
+  scheduleChainOutcome,
 } from '../services/carrier-routing.js';
 
 interface RouteTypeParams {
@@ -47,6 +50,18 @@ interface UpdateRouteBody {
   /** Full replacement of the waterfall, in order. Index 0 is the primary carrier. */
   carriers?: Array<{ carrierId: string; enabled?: boolean }>;
 }
+
+interface UpdateCarrierBody {
+  status?: 'ACTIVE' | 'INACTIVE';
+  callerIdStrategy?: 'PRESERVE' | 'POOL' | 'FIXED';
+  /** Required when the strategy is FIXED; must be one of this tenant's ACTIVE numbers. */
+  callerIdNumber?: string | null;
+  /** `P-Attestation-Indicator` to claim on this carrier's legs, or null for none. */
+  attestation?: 'A' | 'B' | 'C' | null;
+}
+
+const CALLER_ID_STRATEGIES = new Set(['PRESERVE', 'POOL', 'FIXED']);
+const ATTESTATIONS = new Set(['A', 'B', 'C']);
 
 interface UpdateGatewayBody {
   enabled?: boolean;
@@ -112,18 +127,44 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
       }
 
       const prisma = getPrismaClient();
-      const [routes, carriers] = await Promise.all([
+      const [routes, carriers, numberCounts] = await Promise.all([
         listCarrierRoutes(tenantId),
         prisma.carrier.findMany({
           where: { tenantId },
-          select: { id: true, code: true, name: true, status: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            status: true,
+            callerIdStrategy: true,
+            callerIdNumber: true,
+            numberProvider: true,
+            attestation: true,
+          },
           orderBy: { name: 'asc' },
+        }),
+        prisma.phoneNumber.groupBy({
+          by: ['provider'],
+          where: { tenantId, status: 'ACTIVE', callerIdEligible: true },
+          _count: { _all: true },
         }),
       ]);
 
+      // How many of THIS tenant's numbers each carrier could present. Shown
+      // per carrier, not only per waterfall step, so an operator sees that
+      // Vonage has no caller ID of its own before switching it on anywhere.
+      const eligibleByProvider = new Map(
+        numberCounts.filter(n => n.provider).map(n => [n.provider as string, n._count._all])
+      );
+
       return {
         routes,
-        carriers,
+        carriers: carriers.map(c => ({
+          ...c,
+          eligibleCallerIdCount: c.numberProvider
+            ? (eligibleByProvider.get(c.numberProvider) ?? 0)
+            : 0,
+        })),
         callTypes: CALL_ROUTE_TYPES.map(t => ({ value: t, label: CALL_ROUTE_LABELS[t] })),
       };
     }
@@ -248,6 +289,120 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         carrierOrder: chain.carrierOrder,
         source: chain.source,
       };
+    }
+  );
+
+  /**
+   * Change how one carrier presents caller ID and attestation, or retire it.
+   *
+   * These are properties of the carrier, not of a waterfall, so one change
+   * applies to every call type the carrier is on. They used to be editable
+   * only in the database, which made "Vonage signs its own calls, stop sending
+   * it an attestation header" a support ticket rather than a setting.
+   */
+  server.patch<{ Params: { carrierId: string }; Body: UpdateCarrierBody }>(
+    '/api/v1/carrier-routing/carriers/:carrierId',
+    { preHandler: [canWrite] },
+    async (request, reply) => {
+      const tenantId = tenantOf(request);
+      if (!tenantId) {
+        return replyTenantRefusal(request, reply);
+      }
+
+      const prisma = getPrismaClient();
+      const carrier = await prisma.carrier.findFirst({
+        where: { id: request.params.carrierId, tenantId },
+      });
+      if (!carrier) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Carrier not found' } });
+      }
+
+      const { status, callerIdStrategy, callerIdNumber, attestation } = request.body ?? {};
+
+      if (status !== undefined && status !== 'ACTIVE' && status !== 'INACTIVE') {
+        return reply
+          .code(400)
+          .send({
+            error: { code: 'INVALID_STATUS', message: 'status must be ACTIVE or INACTIVE' },
+          });
+      }
+      if (callerIdStrategy !== undefined && !CALLER_ID_STRATEGIES.has(callerIdStrategy)) {
+        return reply.code(400).send({
+          error: {
+            code: 'INVALID_CALLER_ID_STRATEGY',
+            message: 'callerIdStrategy must be PRESERVE, POOL or FIXED',
+          },
+        });
+      }
+      if (attestation !== undefined && attestation !== null && !ATTESTATIONS.has(attestation)) {
+        return reply.code(400).send({
+          error: { code: 'INVALID_ATTESTATION', message: 'attestation must be A, B, C or null' },
+        });
+      }
+
+      // A FIXED caller ID must be one of THIS tenant's own active numbers. It
+      // is presented on every leg the carrier places, so accepting an arbitrary
+      // string would let one agency present another agency's DID.
+      let fixedNumber: string | null | undefined;
+      if (callerIdNumber !== undefined) {
+        const digits = (callerIdNumber ?? '').replace(/\D/g, '');
+        if (digits === '') {
+          fixedNumber = null;
+        } else {
+          const last10 = digits.slice(-10);
+          const owned =
+            last10.length === 10
+              ? await prisma.phoneNumber.findFirst({
+                  where: { tenantId, status: 'ACTIVE', number: { endsWith: last10 } },
+                  select: { number: true },
+                })
+              : null;
+          if (!owned) {
+            return reply.code(400).send({
+              error: {
+                code: 'UNKNOWN_CALLER_ID',
+                message: "callerIdNumber must be one of this account's active phone numbers",
+              },
+            });
+          }
+          fixedNumber = owned.number;
+        }
+      }
+
+      const nextStrategy = callerIdStrategy ?? carrier.callerIdStrategy;
+      const nextNumber = fixedNumber !== undefined ? fixedNumber : carrier.callerIdNumber;
+      if (nextStrategy === 'FIXED' && !nextNumber) {
+        return reply.code(400).send({
+          error: {
+            code: 'CALLER_ID_REQUIRED',
+            message: 'A FIXED caller ID strategy needs a callerIdNumber',
+          },
+        });
+      }
+
+      const updated = await prisma.carrier.update({
+        where: { id: carrier.id },
+        data: {
+          ...(status !== undefined ? { status } : {}),
+          ...(callerIdStrategy !== undefined ? { callerIdStrategy } : {}),
+          ...(fixedNumber !== undefined ? { callerIdNumber: fixedNumber } : {}),
+          ...(attestation !== undefined ? { attestation } : {}),
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+          callerIdStrategy: true,
+          callerIdNumber: true,
+          numberProvider: true,
+          attestation: true,
+        },
+      });
+
+      invalidateCarrierRoutingCache(tenantId);
+      request.log.warn({ msg: '[carrier-routing] carrier updated', tenantId, carrier: updated });
+      return updated;
     }
   );
 
@@ -416,6 +571,10 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         cid?: string;
         cid_name?: string;
         tenant?: string;
+        /** `hopwhistle_call_id` — the API-created call this INVITE belongs to. */
+        call_id?: string;
+        /** The calling leg's uuid, correlating per-leg reports with the chain's. */
+        corr?: string;
       };
 
       const callType: CallRouteType = isCallRouteType(query.type)
@@ -426,7 +585,13 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
       const legacy = resolveChain(null, callType);
 
       try {
-        const tenantId = query.tenant || (await resolveTenantForCallerId(query.cid));
+        // Strongest evidence first. A call row created by an authenticated
+        // agent session names its tenant outright; the caller-ID DID is only a
+        // guess from a number, used when the call carries no such row (the
+        // Dograh BYOC path) — and the default-tenant heuristic behind it only
+        // when even the number is unknown.
+        const callTenant = await resolveTenantForCallId(query.call_id);
+        const tenantId = callTenant || query.tenant || (await resolveTenantForCallerId(query.cid));
         // The caller ID already on the channel is passed in, not just stamped
         // on: a carrier that issued that number keeps it — which is what makes
         // an agent's manual call still present that agent's own DID — and only
@@ -441,7 +606,13 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
             origination_caller_id_name: query.cid_name,
             hopwhistle_route_type: callType,
             hopwhistle_carrier: chain.gateways[0]?.carrierCode,
+            // Carried onto every leg so each one can report its own outcome
+            // against the right tenant and the right call.
+            hopwhistle_tenant_id: tenantId,
+            hopwhistle_call_id: callTenant ? query.call_id : undefined,
+            hopwhistle_corr: query.corr,
           },
+          legOutcomeReporting: legOutcomeReportingEnabled(),
         });
 
         if (!bridge) {
@@ -473,65 +644,114 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
   );
 
   /**
-   * POST /api/v1/freeswitch/carrier-result
+   * GET|POST /api/v1/freeswitch/carrier-result
    *
-   * Outcome feedback from the dialplan's hangup hook. Fire-and-forget: always
-   * 200, never blocks a call, never explains a failure back to FreeSWITCH
-   * because there is nothing FreeSWITCH could do about it.
+   * Outcome feedback from the dialplan and from each carrier leg. Fire-and-
+   * forget: always 200, never blocks a call, never explains a failure back to
+   * FreeSWITCH because there is nothing FreeSWITCH could do about it.
+   *
+   * GET is the one that matters. Every FreeSWITCH caller reaches this through
+   * mod_curl — `${curl(url)}` in the dialplan, `curl <url>` from Lua — and
+   * both issue a GET. This was registered for POST only, so the dialplan's
+   * whole-waterfall failure report was answered 404 and never reached the
+   * health counters at all.
    */
+  const carrierResult = async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = (request.body ?? {}) as {
+      gateway?: string;
+      chain?: string;
+      cause?: string;
+      answered?: boolean | string;
+      tenantId?: string;
+    };
+    const query = request.query as {
+      mode?: string;
+      gateway?: string;
+      chain?: string;
+      cause?: string;
+      answered?: string;
+      carrier?: string;
+      route_type?: string;
+      tenant?: string;
+      call_id?: string;
+      corr?: string;
+      sip_status?: string;
+    };
+
+    const cause = body.cause || query.cause || '';
+    const answeredRaw = body.answered ?? query.answered;
+    const answered = answeredRaw === true || answeredRaw === 'true';
+    const ok = answered || cause.toUpperCase() === 'NORMAL_CLEARING';
+    const tenantHint = body.tenantId || query.tenant || null;
+
+    // Three shapes.
+    //
+    // `mode=leg` — one leg reporting for itself from carrier_leg_result.lua.
+    // Its answer state is exact: early media is not an answer, so a carrier
+    // is only credited with a call it actually connected.
+    const single = (body.gateway || query.gateway || '').trim();
+    if (query.mode === 'leg' && single) {
+      await recordLegOutcome({
+        gateway: single,
+        answered,
+        cause,
+        carrierCode: query.carrier || null,
+        routeType: query.route_type || null,
+        tenantId: tenantHint,
+        callId: query.call_id || null,
+        corr: query.corr || null,
+        sipStatus: query.sip_status || null,
+      });
+      return reply.type('text/plain').send('ok');
+    }
+
+    // `gateway` — one named gateway, from an older caller.
+    // `chain` — a whole bridge string, sent by the dialplan when every leg of
+    // a waterfall failed. With sequential `|` failover that is a statement
+    // about all of them; legs that already reported their own cause are
+    // skipped so nothing is counted twice.
+    const gateways = new Set<string>();
+    if (single) gateways.add(single);
+
+    const chain = body.chain || query.chain;
+    if (chain) {
+      for (const match of chain.matchAll(/sofia\/gateway\/([^/]+)\//g)) {
+        gateways.add(match[1]);
+      }
+    }
+
+    // Not awaited: the chain report waits for the last leg's own report,
+    // and the dialplan that sent this is holding a call while it waits.
+    void scheduleChainOutcome(
+      [...gateways],
+      { ok, cause },
+      {
+        tenantId: tenantHint,
+        callId: query.call_id || null,
+        corr: query.corr || null,
+      }
+    );
+
+    return reply.type('text/plain').send('ok');
+  };
+
+  server.get(
+    '/api/v1/freeswitch/carrier-result',
+    { preHandler: [requireInternalKey] },
+    carrierResult
+  );
   server.post(
     '/api/v1/freeswitch/carrier-result',
     { preHandler: [requireInternalKey] },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = (request.body ?? {}) as {
-        gateway?: string;
-        chain?: string;
-        cause?: string;
-        answered?: boolean | string;
-        tenantId?: string;
-      };
-      const query = request.query as {
-        gateway?: string;
-        chain?: string;
-        cause?: string;
-        answered?: string;
-      };
-
-      const cause = body.cause || query.cause || '';
-      const answeredRaw = body.answered ?? query.answered;
-      const ok =
-        answeredRaw === true ||
-        answeredRaw === 'true' ||
-        cause.toUpperCase() === 'NORMAL_CLEARING';
-
-      // Two shapes. `gateway` is one named gateway. `chain` is a whole bridge
-      // string, sent by the dialplan when every leg of a waterfall failed —
-      // with sequential `|` failover that is a statement about all of them, so
-      // each one is credited with the failure.
-      const gateways = new Set<string>();
-      const single = body.gateway || query.gateway;
-      if (single) gateways.add(single.trim());
-
-      const chain = body.chain || query.chain;
-      if (chain) {
-        for (const match of chain.matchAll(/sofia\/gateway\/([^/]+)\//g)) {
-          gateways.add(match[1]);
-        }
-      }
-
-      for (const gateway of gateways) {
-        if (gateway) await recordGatewayOutcome(gateway, { ok, cause }, body.tenantId ?? null);
-      }
-
-      return reply.type('text/plain').send('ok');
-    }
+    carrierResult
   );
 
   console.log('  GET             /api/v1/carrier-routing/overview');
   console.log('  PUT             /api/v1/carrier-routing/routes/:callType');
   console.log('  GET             /api/v1/carrier-routing/routes/:callType/preview');
+  console.log('  PATCH           /api/v1/carrier-routing/carriers/:carrierId');
   console.log('  PATCH           /api/v1/carrier-routing/gateways/:gatewayId');
   console.log('  POST            /api/v1/carrier-routing/gateways/:gatewayId/reset-health');
   console.log('  GET             /api/v1/freeswitch/carrier-route');
-  console.log('  POST            /api/v1/freeswitch/carrier-result');
+  console.log('  GET|POST        /api/v1/freeswitch/carrier-result');
 }

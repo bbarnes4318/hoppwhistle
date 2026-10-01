@@ -125,10 +125,12 @@ Vonage (formerly Nexmo) Numbers API.
 ```env
 VONAGE_API_KEY=your-api-key
 VONAGE_API_SECRET=your-api-secret
-# Where purchased numbers are routed — one of these is required to buy.
-VONAGE_APPLICATION_ID=       # Voice application id
-VONAGE_SIP_URI=              # …or a SIP URI (pairs with the `vonage` gateway)
-VONAGE_DEFAULT_COUNTRY=US    # fallback when a number's country can't be read back
+# Where purchased numbers are routed. Explicit, never inferred from which
+# variables happen to be present — see docs/VONAGE.md.
+VONAGE_NUMBER_ROUTING_MODE=sip            # sip (FreeSWITCH, the default) | application
+VONAGE_SIP_URI=sip:sbc.example.com:5080   # sip mode: each number's MSISDN becomes the user part
+VONAGE_APPLICATION_ID=                    # application mode only
+VONAGE_DEFAULT_COUNTRY=US                 # fallback when a number's country can't be read back
 ```
 
 **Endpoints used** (`https://rest.nexmo.com`):

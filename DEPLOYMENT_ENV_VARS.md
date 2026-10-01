@@ -80,17 +80,29 @@
 
 #### Vonage (Optional — number provisioning and the `vonage` carrier):
 
-- `VONAGE_API_KEY` / `VONAGE_API_SECRET` - Numbers API credentials (Vonage Dashboard → API settings).
-- `VONAGE_APPLICATION_ID` - Voice application a purchased number is linked to.
-- `VONAGE_SIP_URI` - SIP URI to route numbers to instead, for trunks terminating to our SBC.
-  As with Twilio, a purchase is refused unless one of these two is set.
+- `VONAGE_API_KEY` / `VONAGE_API_SECRET` - **API.** Numbers API credentials (Vonage Dashboard → API settings).
+- `VONAGE_NUMBER_ROUTING_MODE` - **API.** `sip` or `application`: where purchased and re-configured
+  numbers are pointed. `sip` (the platform default) forwards each number by SIP into FreeSWITCH, where
+  it is routed by `inbound_route.lua` like every other carrier's DID. `application` attaches it to a
+  Vonage Voice Application instead. Unset: `VONAGE_SIP_URI` alone implies `sip`; `VONAGE_APPLICATION_ID`
+  alone, or both values, is refused as ambiguous — a purchase fails before anything is bought, and the
+  API logs the reason at boot.
+- `VONAGE_SIP_URI` - **API.** For `sip` mode: this platform's external SIP profile, e.g.
+  `sip:sbc.example.com:5080`. Each number's own MSISDN is written in as the user part
+  (`sip:14155550100@sbc.example.com:5080`), or use a `{msisdn}` placeholder. A fixed user part is
+  refused: every number would arrive as the same destination.
+- `VONAGE_APPLICATION_ID` - **API.** For `application` mode only. Its presence alone never moves numbers.
 - `VONAGE_DEFAULT_COUNTRY` - Country used when a number's own country cannot be read back
   (releasing a number requires it). Default: `US`.
 - `VONAGE_SIP_PROXY` - **FreeSWITCH.** Termination host. Default: `sip.nexmo.com`; set it for accounts
   on a regional endpoint.
 - `VONAGE_SIP_REALM` - **FreeSWITCH.** Digest realm. Defaults to `VONAGE_SIP_PROXY`.
-- `VONAGE_SIP_USERNAME` / `VONAGE_SIP_PASSWORD` - **FreeSWITCH.** Credential auth. Leave unset when the
-  trunk is IP-whitelisted.
+- `VONAGE_SIP_USERNAME` / `VONAGE_SIP_PASSWORD` - **FreeSWITCH.** Credential auth (Programmable SIP: the
+  API key and secret). Leave BOTH unset when the trunk is IP-whitelisted. Setting only one is refused at
+  start-up: the `vonage` gateway is not loaded, its legs fail over instantly, and nothing else is affected.
+- `CARRIER_LEG_REPORTING` - **API and worker.** Default on. Each carrier leg reports its own outcome
+  (`apps/freeswitch/scripts/carrier_leg_result.lua`), which is what demotes a carrier that fails before
+  a later one answers and what records the connecting gateway on the call. `off` disables it.
 
 Neither carrier carries traffic until it is switched on in **Settings → Carrier Routing**; both are
 seeded onto every waterfall switched off.

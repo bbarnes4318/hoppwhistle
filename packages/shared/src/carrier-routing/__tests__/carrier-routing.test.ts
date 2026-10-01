@@ -641,3 +641,237 @@ describe('tech prefix', () => {
     expect(bridge).toContain('sofia/gateway/anveo/01234518653173943');
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Vonage as a first-class carrier
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('Vonage in a mixed waterfall', () => {
+  // Every carrier the platform runs, each in the spelling its trunk accepts,
+  // inside ONE chain — the property that lets a call fall from one carrier to
+  // the next without the fallback being a dead call in the wrong format.
+  const mixed = resolveChain(
+    route([
+      step('TWILIO', 0, [gw('twilio', { numberFormat: 'E164' })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['+12816991130'],
+      }),
+      step('VONAGE', 1, [gw('vonage', { numberFormat: 'NANP11' })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['+14155550101', '+14155550100'],
+      }),
+      step('FRACTEL', 2, [gw('fractel1'), gw('fractel2', { priority: 1 })]),
+      step('ANVEO', 3, [gw('anveo', { techPrefix: '012345' })]),
+      step('TELNYX', 4, [gw('telnyx', { numberFormat: 'E164' })]),
+      step('BULKVS', 5, [gw('bulkvs')]),
+      step('SIGNALWIRE', 6, [gw('signalwire', { numberFormat: 'E164' })]),
+    ]),
+    'CC_POWER_DIALER',
+    NOW,
+    { callerIdRotation: 0, currentCallerId: '19138999080' }
+  );
+  const legs = buildBridgeString(mixed, '(281) 699-1120', {
+    channelVariables: { origination_caller_id_number: '19138999080' },
+  })!.split('|');
+
+  it('dials every carrier in its own format within one attempt chain', () => {
+    expect(legs[0]).toMatch(/sofia\/gateway\/twilio\/\+12816991120$/);
+    expect(legs[1]).toMatch(/sofia\/gateway\/vonage\/12816991120$/);
+    expect(legs[2]).toMatch(/sofia\/gateway\/fractel1\/12816991120$/);
+    expect(legs[3]).toMatch(/sofia\/gateway\/fractel2\/12816991120$/);
+    expect(legs[4]).toMatch(/sofia\/gateway\/anveo\/01234512816991120$/);
+    expect(legs[5]).toMatch(/sofia\/gateway\/telnyx\/\+12816991120$/);
+    expect(legs[6]).toMatch(/sofia\/gateway\/bulkvs\/12816991120$/);
+    expect(legs[7]).toMatch(/sofia\/gateway\/signalwire\/\+12816991120$/);
+  });
+
+  it('never sends Vonage a plus, in the destination or the caller ID', () => {
+    expect(legs[1]).not.toContain('+');
+    expect(legs[1]).toContain('sip_from_user=14155550100');
+    expect(legs[1]).toContain('origination_caller_id_number=14155550100');
+  });
+
+  it("hands Vonage its own number and the next carrier its own strategy's", () => {
+    expect(mixed.gateways.map(g => [g.carrierCode, g.callerId])).toEqual([
+      ['TWILIO', '12816991130'],
+      ['VONAGE', '14155550100'],
+      ['FRACTEL', null],
+      ['FRACTEL', null],
+      ['ANVEO', null],
+      ['TELNYX', null],
+      ['BULKVS', null],
+      ['SIGNALWIRE', null],
+    ]);
+    // The PRESERVE carriers after Vonage carry no override, so they present
+    // the call's own number again rather than inheriting Vonage's.
+    expect(legs[2]).not.toContain('origination_caller_id_number');
+  });
+
+  it('dials the legs sequentially — never ringing carriers in parallel', () => {
+    const bridge = buildBridgeString(mixed, '2816991120')!;
+    const outsideBlocks = bridge.replace(/\{[^}]*\}|\[[^\]]*\]/g, '');
+    expect(outsideBlocks).not.toContain(',');
+    expect(outsideBlocks.split('|')).toHaveLength(8);
+  });
+});
+
+describe('Vonage caller ID', () => {
+  const vonageStep = (over: Partial<StepRow> = {}) =>
+    step('VONAGE', 0, [gw('vonage')], {
+      callerIdStrategy: 'POOL',
+      callerIdPool: ['+14155550100', '+14155550101', '+14155550102'],
+      ...over,
+    });
+
+  it("keeps an agent's own DID when Vonage issued it", () => {
+    const chain = resolveChain(route([vonageStep()]), 'SOFTPHONE_MANUAL', NOW, {
+      currentCallerId: '(415) 555-0101',
+    });
+    expect(chain.gateways[0].callerId).toBeNull();
+    expect(buildBridgeString(chain, '8005551212')).not.toContain('[origination_caller_id_number');
+  });
+
+  it("replaces another carrier's DID with one of Vonage's, rotating across calls", () => {
+    const seen = [0, 1, 2, 3].map(
+      r =>
+        resolveChain(route([vonageStep()]), 'PREDICTIVE_DIALER', NOW, {
+          callerIdRotation: r,
+          currentCallerId: '12816991120',
+        }).gateways[0].callerId
+    );
+    expect(seen).toEqual(['14155550100', '14155550101', '14155550102', '14155550100']);
+  });
+
+  it('flags a Vonage carrier that has no number of its own instead of handing it a foreign DID', () => {
+    const chain = resolveChain(route([vonageStep({ callerIdPool: [] })]), 'CC_MANUAL', NOW, {
+      currentCallerId: '12816991120',
+    });
+    expect(chain.gateways[0].callerId).toBeNull();
+    expect(chain.gateways[0].callerIdUnavailable).toBe(true);
+  });
+
+  it('sends no attestation header unless one is configured for Vonage', () => {
+    const plain = resolveChain(route([vonageStep()]), 'CC_MANUAL', NOW);
+    expect(buildBridgeString(plain, '8005551212')).not.toContain('P-Attestation-Indicator');
+  });
+});
+
+describe('Vonage failover and circuit breaking', () => {
+  const steps = (vonageOpenUntil: Date | null) =>
+    route([
+      step('VONAGE', 0, [gw('vonage', { circuitOpenUntil: vonageOpenUntil })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['14155550100'],
+      }),
+      step('FRACTEL', 1, [gw('fractel1')]),
+    ]);
+
+  it('tries Vonage first and FracTEL after it when Vonage is primary', () => {
+    expect(resolveChain(steps(null), 'PREDICTIVE_DIALER', NOW).gateways.map(g => g.gateway)).toEqual([
+      'vonage',
+      'fractel1',
+    ]);
+  });
+
+  it('tries Vonage after FracTEL when Vonage is the fallback', () => {
+    const r = steps(null);
+    r.steps[0].position = 5;
+    expect(resolveChain(r, 'PREDICTIVE_DIALER', NOW).gateways.map(g => g.gateway)).toEqual([
+      'fractel1',
+      'vonage',
+    ]);
+  });
+
+  it('demotes Vonage behind FracTEL while its circuit is open, without touching FracTEL', () => {
+    let health = { consecutiveFailures: 0 };
+    let openUntil: Date | null = null;
+    for (let i = 0; i < CIRCUIT_FAILURE_THRESHOLD; i++) {
+      const update = applyOutcome(health, { ok: false, cause: 'NORMAL_TEMPORARY_FAILURE' }, NOW);
+      health = { consecutiveFailures: update.consecutiveFailures };
+      openUntil = update.circuitOpenUntil;
+    }
+    expect(openUntil).not.toBeNull();
+
+    const chain = resolveChain(steps(openUntil), 'PREDICTIVE_DIALER', NOW);
+    expect(chain.gateways.map(g => [g.gateway, g.demoted])).toEqual([
+      ['fractel1', false],
+      ['vonage', true],
+    ]);
+  });
+
+  it('counts carrier-side failures — auth, 5xx, timeouts, network, no route, no progress', () => {
+    for (const cause of [
+      'CALL_REJECTED', // 401/403/407: the trunk refused our credentials or IP
+      'NORMAL_TEMPORARY_FAILURE', // 500/503
+      'NETWORK_OUT_OF_ORDER', // 502
+      'RECOVERY_ON_TIMER_EXPIRE', // 408/504 or no response
+      'DESTINATION_OUT_OF_ORDER',
+      'NO_ROUTE_DESTINATION',
+      'GATEWAY_DOWN',
+      'INVALID_GATEWAY',
+      'PROGRESS_TIMEOUT',
+      'SERVICE_NOT_IMPLEMENTED', // 501
+      'INTERWORKING',
+      'NORMAL_CIRCUIT_CONGESTION',
+    ]) {
+      expect(isCarrierFault(cause), cause).toBe(true);
+    }
+  });
+
+  it('never counts what the callee did as a carrier outage', () => {
+    for (const cause of [
+      'USER_BUSY',
+      'NO_ANSWER',
+      'NO_USER_RESPONSE',
+      'ORIGINATOR_CANCEL',
+      'NORMAL_CLEARING',
+      'UNALLOCATED_NUMBER',
+      'LOSE_RACE',
+    ]) {
+      expect(isCarrierFault(cause), cause).toBe(false);
+      expect(applyOutcome({ consecutiveFailures: 4 }, { ok: false, cause }, NOW)).toMatchObject({
+        consecutiveFailures: 4,
+        circuitOpenUntil: null,
+      });
+    }
+  });
+});
+
+describe('leg outcome reporting', () => {
+  const chain = resolveChain(
+    route([
+      step('VONAGE', 0, [gw('vonage')], { callerIdStrategy: 'POOL', callerIdPool: ['14155550100'] }),
+      step('FRACTEL', 1, [gw('fractel1')]),
+    ]),
+    'SOFTPHONE_MANUAL',
+    NOW
+  );
+
+  it('is off unless asked for, so existing dial strings are unchanged', () => {
+    const s = buildBridgeString(chain, '8005551212')!;
+    expect(s).not.toContain('api_reporting_hook');
+    expect(s).not.toContain('hopwhistle_gateway');
+  });
+
+  it('tags every leg with its own gateway and carrier and reports from the reporting hook', () => {
+    const s = buildBridgeString(chain, '8005551212', {
+      legOutcomeReporting: true,
+      channelVariables: { hopwhistle_tenant_id: 't-1', hopwhistle_corr: 'abc' },
+    })!;
+    expect(s).toMatch(/^\{[^}]*api_reporting_hook=lua carrier_leg_result\.lua[^}]*\}/);
+    // Reported at answer too, before the hangup handler rewrites the call row.
+    expect(s).toMatch(/^\{[^}]*execute_on_answer=lua carrier_leg_result\.lua answer[^}]*\}/);
+    const legs = s.split('|');
+    expect(legs[0]).toContain('hopwhistle_gateway=vonage');
+    expect(legs[0]).toContain('hopwhistle_carrier=VONAGE');
+    expect(legs[1]).toContain('[hopwhistle_carrier=FRACTEL,hopwhistle_gateway=fractel1]');
+  });
+
+  // The recording upload rides on api_hangup_hook and that variable holds one
+  // value; a second writer would silently stop recordings uploading.
+  it('never touches api_hangup_hook, and carries no ${} the calling leg would expand', () => {
+    const s = buildBridgeString(chain, '8005551212', { legOutcomeReporting: true })!;
+    expect(s).not.toContain('api_hangup_hook');
+    expect(s).not.toContain('${');
+  });
+});

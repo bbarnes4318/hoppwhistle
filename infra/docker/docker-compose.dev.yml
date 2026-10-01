@@ -138,6 +138,15 @@ services:
       BULKVS_USERNAME: ${BULKVS_USERNAME:-}
       BULKVS_PASSWORD: ${BULKVS_PASSWORD:-}
       BULKVS_TRUNK_GROUP: ${BULKVS_TRUNK_GROUP:-pvn}
+      # Vonage number provisioning. Server-side only. See DEPLOYMENT_ENV_VARS.md
+      # for VONAGE_NUMBER_ROUTING_MODE — numbers route by SIP into FreeSWITCH
+      # unless it says otherwise.
+      VONAGE_API_KEY: ${VONAGE_API_KEY:-}
+      VONAGE_API_SECRET: ${VONAGE_API_SECRET:-}
+      VONAGE_NUMBER_ROUTING_MODE: ${VONAGE_NUMBER_ROUTING_MODE:-}
+      VONAGE_SIP_URI: ${VONAGE_SIP_URI:-}
+      VONAGE_APPLICATION_ID: ${VONAGE_APPLICATION_ID:-}
+      VONAGE_DEFAULT_COUNTRY: ${VONAGE_DEFAULT_COUNTRY:-US}
       # Industry Research — real four-provider forensic research (Google/Perplexity/xAI/Anthropic; no OpenAI)
       INDUSTRY_RESEARCH_ENABLED: ${INDUSTRY_RESEARCH_ENABLED:-true}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

@@ -111,8 +111,9 @@
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <!-- Outbound carrier: FracTEL (STATIC/IP auth). The bridge below fails
-             over across all 6 FracTEL outbound IPs (fractel1-6 gateways). -->
+        <!-- Outbound carrier: whatever this call type's waterfall resolves to
+             (see "Resolve the carrier waterfall" below). The static fractel1-6
+             chain is only the fallback for an API that did not answer. -->
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
@@ -175,7 +176,12 @@
              variables, which mod_curl does not read — so the call was in fact
              unbounded and this comment was describing a guard that did not
              exist. Every blocking curl in this file now passes them inline. -->
-        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
+        <!-- call_id is the row the API created for this call when the agent
+             clicked dial; it is how the API knows the tenant for certain
+             instead of guessing from the caller-ID number. corr is this leg's
+             uuid, which every carrier leg carries back in its own outcome
+             report so a failed waterfall is never counted twice. -->
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle&amp;call_id=${hopwhistle_call_id}&amp;corr=${uuid}&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
       </condition>
 
       <!-- If the API did not return a usable chain — down, timed out, or
@@ -200,7 +206,7 @@
         <action application="bridge" data="${sofia_contact(internal/${local_ext}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
         
-        <!-- PSTN routing (anti-action) — FracTEL trunk, failover across all 6 outbound IPs -->
+        <!-- PSTN routing (anti-action) — the resolved carrier waterfall, legs tried in order -->
         <anti-action application="log" data="INFO [OUTBOUND-PSTN] route=${hopwhistle_route_type} dest=1${clean_dest} cid=${clean_caller_id} bridge=${carrier_bridge}"/>
         <anti-action application="set" data="continue_on_fail=true"/>
         <anti-action application="set" data="fail_on_single_reject=false"/>
@@ -221,7 +227,7 @@
              carries `{}`, `[]`, `,` and `|`, none of which are legal raw in a
              query string. Interpolated bare, curl rejects the URL outright and
              the outcome that demotes a failing carrier is never reported. -->
-        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
+        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false&amp;call_id=${hopwhistle_call_id}&amp;corr=${uuid}&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

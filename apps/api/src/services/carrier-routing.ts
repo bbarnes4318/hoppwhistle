@@ -87,6 +87,7 @@ export function resetCarrierRoutingCaches(): void {
   chainCache.clear();
   tenantByDidCache.clear();
   callerIdRotation.clear();
+  legReports.clear();
   defaultTenantCache = null;
 }
 
@@ -265,6 +266,43 @@ export async function getCarrierChain(
   }
 
   return chain;
+}
+
+/**
+ * Which tenant owns a call the API itself created.
+ *
+ * Softphone and call-center calls are created by `/api/v1/agent/call/originate`
+ * for an authenticated agent before the browser sends the INVITE, and the
+ * dialplan carries that row's id as `hopwhistle_call_id`. That is the strongest
+ * tenant evidence on the channel — it was established by a logged-in session —
+ * so it outranks the caller-ID DID heuristic below, which only guesses from a
+ * number. Null when the id is absent or names no call.
+ */
+export async function resolveTenantForCallId(callId?: string | null): Promise<string | null> {
+  const id = (callId ?? '').trim();
+  if (!id || id === 'null' || id === 'undefined') return null;
+  try {
+    const row = await getPrismaClient().call.findUnique({
+      where: { id },
+      select: { tenantId: true },
+    });
+    return row?.tenantId ?? null;
+  } catch (error) {
+    console.error('[carrier-routing] tenant lookup by call id failed:', (error as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Leg outcome reporting is on unless an operator switched it off.
+ *
+ * It adds one backgrounded HTTP request per carrier fault and per answered leg.
+ * `CARRIER_LEG_REPORTING=off` is the escape hatch if that ever matters more
+ * than knowing which carrier is failing.
+ */
+export function legOutcomeReportingEnabled(): boolean {
+  const raw = (process.env.CARRIER_LEG_REPORTING ?? '').trim().toLowerCase();
+  return !['off', '0', 'false', 'no'].includes(raw);
 }
 
 /**
@@ -447,6 +485,178 @@ export async function recordGatewayOutcome(
   } catch (error) {
     console.error('[carrier-routing] failed to record gateway outcome:', (error as Error).message);
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Per-leg outcomes and attribution
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Legs that already reported for themselves, keyed `<corr>:<gateway>`.
+ *
+ * A failed waterfall is reported twice: each leg that got as far as a channel
+ * reports its own cause from its reporting hook, and the dialplan reports the
+ * whole chain once the bridge gives up. The chain report is still needed — a
+ * leg to a gateway that is not loaded, or is marked down, never gets a channel
+ * and so never reports — but it must not count a leg a second time. It is
+ * processed after a short delay and skips anything in here.
+ */
+const legReports = new Map<string, number>();
+const LEG_REPORT_TTL_MS = 120_000;
+/** How long a chain report waits for the last leg's own report to land. */
+export const CHAIN_REPORT_DELAY_MS = 3_000;
+
+function legKey(corr: string, gateway: string): string {
+  return `${corr}:${gateway}`;
+}
+
+function noteLegReport(corr: string | null | undefined, gateway: string): void {
+  if (!corr) return;
+  const now = Date.now();
+  legReports.set(legKey(corr, gateway), now + LEG_REPORT_TTL_MS);
+  // Opportunistic sweep; the map is bounded by calls in the last two minutes.
+  if (legReports.size > 5_000) {
+    for (const [key, expires] of legReports) if (expires <= now) legReports.delete(key);
+  }
+}
+
+function legAlreadyReported(corr: string | null | undefined, gateway: string): boolean {
+  if (!corr) return false;
+  const expires = legReports.get(legKey(corr, gateway));
+  return expires !== undefined && expires > Date.now();
+}
+
+export interface LegOutcomeReport {
+  gateway: string;
+  answered: boolean;
+  cause?: string | null;
+  carrierCode?: string | null;
+  routeType?: string | null;
+  /** Tenant named on the leg by the API or worker that built the bridge. */
+  tenantId?: string | null;
+  /** `calls.id` of an API-created call, when there is one. */
+  callId?: string | null;
+  /** Correlates a chain report with the leg reports of the same call. */
+  corr?: string | null;
+  sipStatus?: string | null;
+}
+
+/**
+ * Fold one leg's own outcome into health, and attribute the call to the
+ * carrier that connected it.
+ *
+ * The tenant comes from the call row when there is one: that row was created
+ * by an authenticated session. The `tenant` the leg carries is used only when
+ * there is no call row (the predictive dialer's legs), and it was put there by
+ * the worker from the lead's own tenant — never derived from a phone number.
+ */
+export async function recordLegOutcome(report: LegOutcomeReport): Promise<void> {
+  const gateway = (report.gateway || '').trim();
+  if (!gateway) return;
+
+  const callTenant = await resolveTenantForCallId(report.callId);
+  const tenantId = callTenant ?? report.tenantId ?? null;
+
+  // An answered leg reports twice: once when it answers, and again from its
+  // reporting hook after hangup. The health counters take the first.
+  if (!legAlreadyReported(report.corr, gateway)) {
+    noteLegReport(report.corr, gateway);
+    await recordGatewayOutcome(gateway, { ok: report.answered, cause: report.cause }, tenantId);
+  }
+
+  if (report.answered && callTenant && report.callId) {
+    await attributeCallToCarrier(report.callId, callTenant, {
+      gateway,
+      carrierCode: report.carrierCode ?? null,
+      routeType: report.routeType ?? null,
+    });
+  }
+}
+
+/**
+ * Record on the call which carrier and gateway actually connected it.
+ *
+ * Written into `calls.metadata.carrier` rather than a new column: it is
+ * attribution for reporting and support, it is set once per call, and the
+ * metadata object is where this table already keeps per-call facts like the
+ * caller ID and the answering agent. Tenant-scoped on the write so a forged
+ * call id can never touch another agency's row.
+ */
+export async function attributeCallToCarrier(
+  callId: string,
+  tenantId: string,
+  carrier: { gateway: string; carrierCode: string | null; routeType: string | null }
+): Promise<void> {
+  try {
+    const prisma = getPrismaClient();
+
+    // The gateway name is what was dialed; the carrier code is what the
+    // waterfall called it. Resolve the code from this tenant's own gateway
+    // rows when the leg did not carry one.
+    let carrierCode = carrier.carrierCode;
+    if (!carrierCode) {
+      const gw = await prisma.carrierGateway.findFirst({
+        where: { tenantId, name: carrier.gateway },
+        select: { carrier: { select: { code: true } } },
+      });
+      carrierCode = gw?.carrier.code ?? null;
+    }
+
+    const attribution = JSON.stringify({
+      gateway: carrier.gateway,
+      carrierCode,
+      routeType: carrier.routeType,
+      connectedAt: new Date().toISOString(),
+    });
+
+    // One atomic statement rather than read-modify-write. Other writers merge
+    // into this same column (the hangup handler adds `endReason`, hold adds
+    // `isOnHold`); a read here followed by a write would race them and could
+    // drop their keys or lose this one. First writer wins, so the end-of-call
+    // repeat of the answer-time report changes nothing.
+    await prisma.$executeRaw`
+      UPDATE "calls"
+      SET "metadata" = COALESCE("metadata", '{}'::jsonb) || jsonb_build_object('carrier', ${attribution}::jsonb)
+      WHERE "id" = ${callId}
+        AND "tenantId" = ${tenantId}
+        AND NOT (COALESCE("metadata", '{}'::jsonb) ? 'carrier')
+    `;
+  } catch (error) {
+    console.error('[carrier-routing] failed to attribute call to carrier:', (error as Error).message);
+  }
+}
+
+/**
+ * Credit a whole failed waterfall, minus the legs that already spoke for
+ * themselves.
+ *
+ * With sequential `|` failover, a chain that failed is a statement about every
+ * leg in it. The legs that got a channel report their own, more precise,
+ * cause; this covers the ones that never did. Delayed so the last leg's own
+ * report — which leaves FreeSWITCH at about the same moment as this one — is
+ * in before the comparison is made.
+ */
+export function scheduleChainOutcome(
+  gateways: string[],
+  outcome: { ok: boolean; cause?: string | null },
+  context: { tenantId?: string | null; callId?: string | null; corr?: string | null },
+  delayMs: number = CHAIN_REPORT_DELAY_MS
+): Promise<void> {
+  const run = async () => {
+    const callTenant = await resolveTenantForCallId(context.callId);
+    const tenantId = callTenant ?? context.tenantId ?? null;
+    for (const gateway of gateways) {
+      if (!gateway || legAlreadyReported(context.corr, gateway)) continue;
+      await recordGatewayOutcome(gateway, outcome, tenantId);
+    }
+  };
+
+  if (!context.corr || delayMs <= 0) return run();
+  return new Promise(resolve => {
+    setTimeout(() => {
+      void run().finally(() => resolve());
+    }, delayMs).unref?.();
+  });
 }
 
 /**
