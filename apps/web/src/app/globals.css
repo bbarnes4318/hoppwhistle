@@ -449,7 +449,7 @@
    *   llp nav text   on navy         11.97:1
    *   llp nav icon   on navy          7.37:1
    *   llp nav label  on navy          5.49:1
-   *   llp nav bar    on navy          5.67:1   (the active item's marker)
+   *   llp nav bar    on navy          6.18:1   (the active item's marker)
    */
   [data-brand='life-leads-plus'] [data-brand-nav] {
     --surface: #0b1f44;
