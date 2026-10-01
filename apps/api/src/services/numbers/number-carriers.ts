@@ -291,6 +291,28 @@ export async function saveNumberCarriers(
   return after;
 }
 
+/**
+ * How long one carrier's inventory search may take.
+ *
+ * The adapters' fetches have no timeout of their own, and a carrier that
+ * accepts the connection and never answers -- FoneStorm's inventory search has
+ * done exactly that -- held the whole search open until the browser's request
+ * timed out, with nothing logged and nothing on screen to say which carrier.
+ * A carrier that has not answered by now is treated as failed, like any other
+ * failure: the others' numbers are shown, and if it was the only one the
+ * platform admin is told its name and that it timed out.
+ */
+export const CARRIER_SEARCH_TIMEOUT_MS = 20_000;
+
+/** `promise`, or a rejection with `message` once `ms` have passed. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
@@ -337,17 +359,24 @@ export async function searchAvailableNumbers(params: {
   numberType: NumberType;
   areaCode?: string;
   limit?: number;
+  /** How long one carrier may take; tests shorten it. */
+  timeoutMs?: number;
 }): Promise<{ numbers: AvailableNumber[]; carriersSearched: number }> {
   const carriers = await enabledCarriers(params.numberType);
   if (carriers.length === 0) return { numbers: [], carriersSearched: 0 };
 
+  const timeoutMs = params.timeoutMs ?? CARRIER_SEARCH_TIMEOUT_MS;
   const results = await Promise.allSettled(
     carriers.map(carrier =>
-      provisioningService.searchAvailable(carrier.provider, {
-        areaCode: params.areaCode,
-        numberType: params.numberType,
-        limit: params.limit ?? 50,
-      })
+      withTimeout(
+        provisioningService.searchAvailable(carrier.provider, {
+          areaCode: params.areaCode,
+          numberType: params.numberType,
+          limit: params.limit ?? 50,
+        }),
+        timeoutMs,
+        `${carrier.label} did not answer within ${Math.round(timeoutMs / 1000)} seconds`
+      )
     )
   );
 

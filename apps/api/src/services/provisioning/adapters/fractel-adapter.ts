@@ -233,8 +233,13 @@ export class FractelAdapter implements ProvisioningAdapter {
       if (!areaCode) {
         throw new Error('An area code is required to search local FracTEL numbers');
       }
+      // `include_offnet` is off by default, and without it FoneStorm searches
+      // only FracTEL's own stock -- an empty list for nearly every area code
+      // (303, 615 and 720 all came back `[]`). With it, 615 answered with
+      // numbers in two seconds.
       response = await this.request<unknown>('GET', '/fonenumbers/inventory/local', undefined, {
         area_code: areaCode,
+        include_offnet: 'true',
         max,
       });
     }
