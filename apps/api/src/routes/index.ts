@@ -7,6 +7,7 @@ import { OPEN_DISPUTE } from '../lib/dispute-status.js';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { isPlatformAdminRequest, requirePlatformAdmin } from '../lib/platform-context.js';
 import {
+  agencyNumberScope,
   didActiveElsewhere,
   extensionsOutsideTenant,
   isPlatformPrincipal,
@@ -836,7 +837,13 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
 
       // A RELEASED number has gone back to the carrier. Its row stays for call
       // history and billing, but it is not on the agency's account any more.
-      const where: Record<string, any> = { tenantId, status: { not: 'RELEASED' } };
+      // An agency OWNER or ADMIN sees their agents' numbers and the numbers the
+      // agency bought -- not platform inventory filed under their tenant.
+      const where: Record<string, any> = {
+        tenantId,
+        status: { not: 'RELEASED' },
+        ...agencyNumberScope(request, tenantId),
+      };
       if (!isAdminOrOwner && user?.userId) {
         where.userId = user.userId;
       }
@@ -1121,7 +1128,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
       // Scoped to the acting tenant: another agency's number is not found.
       const n = await prisma.phoneNumber.findFirst({
-        where: { id: request.params.numberId, tenantId },
+        where: { id: request.params.numberId, tenantId, ...agencyNumberScope(request, tenantId) },
         include: { campaign: { select: { id: true, name: true } } },
       });
       if (!n) {
@@ -1156,6 +1163,18 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
       if (!tenantId) {
         return sendTenantRefusal(request, reply);
+      }
+
+      // A number outside the agency's own (see agencyNumberScope) is not
+      // theirs to release.
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const own = await prisma.phoneNumber.findFirst({
+        where: { id: request.params.numberId, tenantId, ...agencyNumberScope(request, tenantId) },
+        select: { id: true },
+      });
+      if (!own) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Phone number not found' } };
       }
 
       const { NumberPurchaseError, releaseNumberForTenant } = await import(
@@ -1216,6 +1235,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         where: {
           id: numberId,
           tenantId: tenantId,
+          ...agencyNumberScope(request, tenantId),
         },
       });
 
