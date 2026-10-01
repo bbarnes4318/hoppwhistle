@@ -108,6 +108,23 @@ describe.skipIf(!gate.available)('GET /api/v1/public/brand', () => {
     expect(response.headers['cache-control']).toMatch(/public, max-age=\d+/);
   });
 
+  it("answers the same brand on the agency site's own domain as on its agents host", async () => {
+    await getPrismaClient().tenant.update({
+      where: { id: tenantId },
+      data: { domain: 'agents.lifeleadsplus.test' },
+    });
+    for (const host of [
+      'agents.lifeleadsplus.test',
+      'lifeleadsplus.test',
+      'www.lifeleadsplus.test',
+    ]) {
+      const response = await brandOf(host);
+      expect(response.json()).toEqual({
+        data: { theme: 'life-leads-plus', name: 'Life Leads Plus' },
+      });
+    }
+  });
+
   it('leaks nothing else about the tenant', async () => {
     const response = await brandOf('portal.lifeleadsplus.test');
     expect(Object.keys(response.json().data).sort()).toEqual(['name', 'theme']);
