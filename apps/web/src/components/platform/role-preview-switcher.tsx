@@ -177,8 +177,8 @@ export function RolePreviewBanner({ state }: { state?: PlatformContextState }) {
     <div
       role="status"
       className={cn(
-        'flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-destructive/40',
-        'bg-destructive/15 px-4 py-1.5 t-meta text-destructive'
+        'flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-destructive/30 border-l-[3px] border-l-destructive',
+        'bg-destructive/10 px-4 py-2 t-meta text-destructive sm:px-6 min-[1440px]:px-8'
       )}
     >
       <span className="flex items-center gap-1.5 font-medium">
@@ -192,7 +192,7 @@ export function RolePreviewBanner({ state }: { state?: PlatformContextState }) {
         type="button"
         onClick={() => void ctx.setPreviewRole(null)}
         className={cn(
-          'ml-auto shrink-0 rounded-control border border-destructive/50 px-2 py-0.5',
+          'ml-auto shrink-0 rounded-lg border border-destructive/40 bg-surface/60 px-2.5 py-1',
           'font-medium text-destructive hover:bg-destructive/10 focus-visible:outline-none'
         )}
       >

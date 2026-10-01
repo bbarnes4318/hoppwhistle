@@ -151,9 +151,9 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
           onPointerEnter={onPointerEnter}
           onPointerLeave={onPointerLeave}
           className={cn(
-            'group flex h-9 w-full items-center gap-3 rounded-control pl-3 pr-1.5 text-left text-sm font-medium text-ink-3',
+            'group flex h-10 w-full items-center gap-3 rounded-lg pl-3 pr-1.5 text-left text-[13px] font-medium text-ink-3',
             // The label-to-pill gap is the flex gap; `ml-auto` only pushes.
-            '[@media(pointer:coarse)]:h-10',
+            '[@media(pointer:coarse)]:h-11',
             'transition-colors duration-150 ease-out ne-motion hover:bg-sunken',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             open && 'bg-sunken'
@@ -234,7 +234,7 @@ function NavLink({
   if (item.pending) {
     return (
       <span
-        className="flex h-9 items-center gap-3 rounded-control px-3 text-sm font-medium text-ink-3"
+        className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-ink-3"
         title={`${item.name} — not built yet`}
         aria-disabled="true"
       >
@@ -251,15 +251,21 @@ function NavLink({
       title={item.title}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'relative flex h-9 items-center gap-3 rounded-control px-3 text-sm font-medium transition-colors duration-150 ease-out ne-motion',
-        '[@media(pointer:coarse)]:h-10',
+        'group relative flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] transition-colors duration-150 ease-out ne-motion',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        '[@media(pointer:coarse)]:h-11',
         active
-          ? 'bg-brand-tint text-brand-ink before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[3px] before:rounded-r-full before:bg-brand'
-          : 'text-ink-2 hover:bg-sunken hover:text-ink'
+          ? // A lifted surface with an inset hairline and a 3px accent bar, not a
+            // saturated block: the item is marked, the rail is not repainted.
+            'bg-brand-tint font-semibold text-ink shadow-[inset_0_0_0_1px_var(--rule-strong)] before:absolute before:-left-3 before:bottom-2 before:top-2 before:w-[3px] before:rounded-r-full before:bg-brand'
+          : 'font-medium text-ink-2 hover:bg-sunken hover:text-ink'
       )}
     >
       <Icon
-        className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-brand-ink' : 'text-ink-3')}
+        className={cn(
+          'h-[18px] w-[18px] shrink-0 transition-colors',
+          active ? 'text-brand' : 'text-ink-3 group-hover:text-ink-2'
+        )}
       />
       <span className="truncate">{item.name}</span>
     </Link>
@@ -330,8 +336,8 @@ function NoRoleNotice() {
  */
 function PortalBadge({ label }: { label: string }) {
   return (
-    <div className="mb-1 flex items-center gap-2 px-3 pb-2 pt-1 text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-brand-ink">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+    <div className="mb-1 flex items-center gap-2 px-3 pb-3 pt-2 text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
       {label}
     </div>
   );
@@ -422,7 +428,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         'flex h-full min-h-0 flex-col bg-surface',
         drawer
           ? 'w-full'
-          : cn('sticky top-0 shrink-0 border-r border-rule', brand ? 'w-[256px]' : 'w-[248px]')
+          : cn('sticky top-0 shrink-0 border-r border-rule', brand ? 'w-[236px]' : 'w-[232px]')
       )}
       /*
        * An agency brand draws the rail in its navy. The attribute re-scopes the
@@ -444,7 +450,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
          * block is taller than the topbar on purpose -- the navy column is its
          * own surface, so its rule does not have to meet the topbar's.
          */
-        <div className="flex h-[92px] shrink-0 items-center border-b border-rule px-6">
+        <div className="flex h-[76px] shrink-0 items-center border-b border-rule px-5">
           <Link
             href="/dashboard"
             className="flex items-center rounded-control"
@@ -454,7 +460,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           </Link>
         </div>
       ) : (
-        <div className="flex h-16 shrink-0 items-center border-b border-rule px-5">
+        <div className="flex h-[76px] shrink-0 items-center border-b border-rule px-5">
           {/* Nothing until the session says whose portal this is: drawing
               NetEnroll's lockup and then swapping it for an agency's is the
               flash a white-labelled user must never see. */}
@@ -471,8 +477,8 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         </div>
       )}
 
-      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
-        <div className="px-1 py-2">
+      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto px-3 pb-4 pt-3">
+        <div>
           {status === 'resolving' ? <ResolvingNotice /> : null}
           {status === 'failed' ? <UnreachableNotice /> : null}
           {hasResolvedNoRole ? <NoRoleNotice /> : null}
@@ -494,8 +500,8 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
                 complete on its own.
               */}
               {upgradeGroup !== null && group.label === upgradeGroup ? (
-                <div className="mt-6 border-t border-rule px-3 pt-4">
-                  <p className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-brand-ink">
+                <div className="mt-7 border-t border-rule px-3 pt-4">
+                  <p className="text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
                     Unlock more
                   </p>
                 </div>
@@ -503,18 +509,18 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
               <div
                 className={cn(
                   gi > 0 &&
-                    (upgradeGroup !== null && group.label === upgradeGroup ? 'mt-3' : 'mt-5')
+                    (upgradeGroup !== null && group.label === upgradeGroup ? 'mt-3' : 'mt-7')
                 )}
               >
                 {group.label ? (
-                  <h2 className="flex items-center gap-1.5 px-3 pb-1.5 t-label text-ink-3">
+                  <h2 className="flex items-center gap-1.5 px-3 pb-2 text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
                     {group.label}
                     {isLockedGroup(group) ? (
                       <Lock className="h-3 w-3 opacity-70" aria-label="Upgrade required" />
                     ) : null}
                   </h2>
                 ) : null}
-                <ul className="space-y-0.5">
+                <ul className="space-y-1">
                   {group.items.map(item => (
                     <li key={`${item.name}-${item.href}`}>
                       <NavLink item={item} active={item.href === activeHref} drawer={drawer} />
