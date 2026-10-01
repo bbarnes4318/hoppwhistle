@@ -477,17 +477,11 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         </div>
       )}
 
-      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto px-3 pb-4 pt-3">
+      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto px-3 pb-4 pt-6">
         <div>
           {status === 'resolving' ? <ResolvingNotice /> : null}
           {status === 'failed' ? <UnreachableNotice /> : null}
           {hasResolvedNoRole ? <NoRoleNotice /> : null}
-          {/* Whose product this is, said at the top of the column. An agency
-            principal gets one for the same reason a publisher does: the screen
-            they are on is an agency's, not NetEnroll's. */}
-          {(!isPlatformAdmin || previewing) && hasFullAccess ? (
-            <PortalBadge label="Agency portal" />
-          ) : null}
           {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
           {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
           {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
