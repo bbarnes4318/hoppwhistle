@@ -64,8 +64,15 @@ async function lookup(host: string): Promise<TenantBrand | null> {
   const hit = cache.get(host);
   if (hit && hit.expiresAt > now) return hit.brand;
 
+  // A tenant's portal lives at `agents.<site>`, but its people also reach the
+  // login page on the site's own domain (`<site>/login`, `www.<site>/login`).
+  // Those hosts name the same brand, so they are looked up as the portal host.
+  const bare = host.replace(/^www\./, '').replace(/^agents\./, '');
+  const candidates = Array.from(new Set([host, bare, `agents.${bare}`]));
   const tenant = await getPrismaClient().tenant.findFirst({
-    where: { domain: { equals: host, mode: 'insensitive' } },
+    where: {
+      OR: candidates.map(domain => ({ domain: { equals: domain, mode: 'insensitive' as const } })),
+    },
     select: { id: true },
   });
   const brand = tenant ? await brandForTenant(tenant.id) : null;
