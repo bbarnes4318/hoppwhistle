@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   /*
-   * The server, and the three CLIs that must be runnable in production. The
+   * The server, and the CLIs that must be runnable in production. The
    * runner image copies only dist/ and has no tsx, so `tsx src/cli/...` cannot
    * run there; these build to dist/cli/*.js and run as `node dist/cli/<name>.js`
    * (the `*:prod` package scripts).
@@ -12,6 +12,7 @@ export default defineConfig({
     'cli/number-charges-monthly': 'src/cli/number-charges-monthly.ts',
     'cli/statements-close-month': 'src/cli/statements-close-month.ts',
     'cli/link-application-customers': 'src/cli/link-application-customers.ts',
+    'cli/vonage-diagnose': 'src/cli/vonage-diagnose.ts',
   },
   format: ['esm'],
   dts: {
