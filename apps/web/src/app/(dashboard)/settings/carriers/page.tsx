@@ -31,6 +31,14 @@ import { PageHeader } from '@/components/layout/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
@@ -80,6 +88,19 @@ interface CarrierView {
   code: string;
   name: string;
   status: string;
+  callerIdStrategy: string;
+  callerIdNumber: string | null;
+  numberProvider: string | null;
+  attestation: string | null;
+  /** This account's ACTIVE, caller-ID-eligible numbers issued by this carrier. */
+  eligibleCallerIdCount: number;
+}
+
+interface CarrierPatch {
+  status?: 'ACTIVE' | 'INACTIVE';
+  callerIdStrategy?: string;
+  callerIdNumber?: string | null;
+  attestation?: string | null;
 }
 
 interface Overview {
@@ -229,6 +250,20 @@ export default function CarrierRoutingPage() {
     await load();
   };
 
+  const updateCarrier = async (carrier: CarrierView, patch: CarrierPatch) => {
+    const res = await apiClient.patch(`/api/v1/carrier-routing/carriers/${carrier.id}`, patch);
+    if (res.error) {
+      toast({
+        variant: 'destructive',
+        title: `${carrier.name} not updated`,
+        description: res.error.message || 'Failed to update carrier',
+      });
+      return;
+    }
+    toast({ title: `${carrier.name} updated`, description: 'Applies to the next call on every waterfall.' });
+    await load();
+  };
+
   if (loading) {
     return (
       <div className="page-canvas">
@@ -286,7 +321,154 @@ export default function CarrierRoutingPage() {
           </div>
         </div>
       ))}
+
+      {overview && overview.carriers.length > 0 && (
+        <div>
+          <h2 className="t-section text-ink">Carriers</h2>
+          <p className="t-meta mb-3 mt-1 text-ink-3">
+            How each carrier presents caller ID and STIR/SHAKEN attestation. These apply wherever
+            the carrier sits in a waterfall.
+          </p>
+          <CarrierSettings carriers={overview.carriers} onUpdate={updateCarrier} />
+        </div>
+      )}
     </div>
+  );
+}
+
+const CALLER_ID_LABELS: Record<string, string> = {
+  PRESERVE: "Keep the call's caller ID",
+  POOL: 'Rotate its own numbers',
+  FIXED: 'One fixed number',
+};
+
+/**
+ * Per-carrier caller-ID and attestation settings.
+ *
+ * The attestation control exists because carriers disagree: some read a
+ * `P-Attestation-Indicator` header to decide how to sign, others — Vonage
+ * among them — sign from their own records, where sending a claim is at best
+ * ignored and at worst one we cannot back. "None" sends no header.
+ */
+function CarrierSettings({
+  carriers,
+  onUpdate,
+}: {
+  carriers: CarrierView[];
+  onUpdate: (carrier: CarrierView, patch: CarrierPatch) => Promise<void>;
+}) {
+  const [fixedDraft, setFixedDraft] = useState<Record<string, string>>({});
+
+  return (
+    <Panel>
+      <PanelBody className="divide-y divide-rule p-0">
+        {carriers.map(carrier => {
+          const ownsNone =
+            carrier.callerIdStrategy === 'POOL' && carrier.eligibleCallerIdCount === 0;
+          return (
+            <div key={carrier.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+              <div className="min-w-[8rem] flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{carrier.name}</span>
+                  {carrier.status === 'INACTIVE' && (
+                    <Badge variant="secondary" className="t-meta">
+                      Inactive
+                    </Badge>
+                  )}
+                </div>
+                <p
+                  className={[
+                    't-meta mt-0.5',
+                    ownsNone ? 'text-ringing-ink' : 'text-ink-3',
+                  ].join(' ')}
+                >
+                  {carrier.numberProvider
+                    ? `${carrier.eligibleCallerIdCount} eligible caller-ID number${
+                        carrier.eligibleCallerIdCount === 1 ? '' : 's'
+                      }${ownsNone ? ' — buy or port numbers here before relying on it' : ''}`
+                    : 'Issues no numbers on this account'}
+                </p>
+              </div>
+
+              <Select
+                value={carrier.callerIdStrategy}
+                onValueChange={value => void onUpdate(carrier, { callerIdStrategy: value })}
+              >
+                <SelectTrigger className="h-7 w-48 text-xs" aria-label={`${carrier.name} caller ID`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CALLER_ID_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value} className="text-xs">
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {carrier.callerIdStrategy === 'FIXED' && (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={e => {
+                    e.preventDefault();
+                    void onUpdate(carrier, {
+                      callerIdNumber: fixedDraft[carrier.id] ?? carrier.callerIdNumber ?? '',
+                    });
+                  }}
+                >
+                  <Input
+                    className="h-7 w-36 text-xs"
+                    placeholder="Caller ID number"
+                    value={fixedDraft[carrier.id] ?? carrier.callerIdNumber ?? ''}
+                    onChange={e => setFixedDraft(d => ({ ...d, [carrier.id]: e.target.value }))}
+                    aria-label={`${carrier.name} fixed caller ID`}
+                  />
+                  <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-xs">
+                    Save
+                  </Button>
+                </form>
+              )}
+
+              <Select
+                value={carrier.attestation ?? 'NONE'}
+                onValueChange={value =>
+                  void onUpdate(carrier, { attestation: value === 'NONE' ? null : value })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 w-44 text-xs"
+                  aria-label={`${carrier.name} attestation`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE" className="text-xs">
+                    Carrier signs (no header)
+                  </SelectItem>
+                  <SelectItem value="A" className="text-xs">
+                    Claim A attestation
+                  </SelectItem>
+                  <SelectItem value="B" className="text-xs">
+                    Claim B attestation
+                  </SelectItem>
+                  <SelectItem value="C" className="text-xs">
+                    Claim C attestation
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Switch
+                checked={carrier.status !== 'INACTIVE'}
+                onCheckedChange={v =>
+                  void onUpdate(carrier, { status: v ? 'ACTIVE' : 'INACTIVE' })
+                }
+                aria-label={`${carrier.name} active`}
+              />
+            </div>
+          );
+        })}
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -455,6 +637,9 @@ function WaterfallCard({
                       ))
                     )}
                   </div>
+                  {step.gateways.map(g => (
+                    <GatewayHealthLine key={g.id} gateway={g} />
+                  ))}
                 </div>
 
                 <Switch
@@ -565,5 +750,41 @@ function GatewayChip({
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * The same health the chip's tooltip carries, written out. A tooltip is
+ * invisible on a phone and to anyone who does not think to hover, and "is
+ * Vonage actually connecting calls" is the question this page is opened to
+ * answer.
+ */
+function GatewayHealthLine({ gateway }: { gateway: GatewayView }) {
+  if (gateway.totalAttempts === 0 && !gateway.lastFailureAt && !gateway.lastSuccessAt) {
+    return null;
+  }
+  const time = (iso: string) => new Date(iso).toLocaleString();
+  const parts = [
+    `${gateway.totalAttempts} attempts`,
+    `${gateway.totalFailures} carrier faults`,
+    gateway.consecutiveFailures > 0 ? `${gateway.consecutiveFailures} in a row` : null,
+    gateway.circuitOpen && gateway.circuitOpenUntil
+      ? `circuit open until ${new Date(gateway.circuitOpenUntil).toLocaleTimeString()}`
+      : null,
+    gateway.lastFailureAt
+      ? `last fault ${gateway.lastFailureCause ?? 'UNKNOWN'} at ${time(gateway.lastFailureAt)}`
+      : null,
+    gateway.lastSuccessAt ? `last connected ${time(gateway.lastSuccessAt)}` : 'never connected',
+  ].filter(Boolean);
+
+  return (
+    <p
+      className={[
+        't-meta mt-0.5 font-mono',
+        gateway.circuitOpen ? 'text-dropped-ink' : 'text-ink-3',
+      ].join(' ')}
+    >
+      {gateway.name}: {parts.join(' · ')}
+    </p>
   );
 }

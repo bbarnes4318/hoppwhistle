@@ -15,7 +15,7 @@ const { Connection: ESLConnection } = modesl;
 import type { HopperScope } from '../config/hopper-gate.js';
 import { logger } from '../lib/logger.js';
 
-import { getOutboundDialString } from './carrier-routing.js';
+import { getOutboundDialString, legOutcomeReportingEnabled } from './carrier-routing.js';
 import { LeadReservationStore } from './lead-reservation-store.js';
 import {
   AttemptOutcome,
@@ -551,6 +551,11 @@ export class DialerWorker {
       // reservation from a live call, and the only safe action would be to leave
       // the lead stuck forever.
       hopwhistle_attempt_id: attemptId,
+      // Read back by each carrier leg's outcome report (carrier_leg_result.lua),
+      // so a carrier that refuses and fails over is still charged with the
+      // failure, and the one that connects is credited with the call.
+      hopwhistle_route_type: 'PREDICTIVE_DIALER',
+      hopwhistle_corr: attemptId,
     };
 
     // The carrier waterfall for this tenant's predictive dialer, resolved per
@@ -565,7 +570,7 @@ export class DialerWorker {
       lead.tenantId,
       'PREDICTIVE_DIALER',
       phoneNumber,
-      { channelVariables: originateVars }
+      { channelVariables: originateVars, legOutcomeReporting: legOutcomeReportingEnabled() }
     );
 
     if (!dialString) {
@@ -592,7 +597,16 @@ export class DialerWorker {
       this.eslConnection!.bgapi(originateCmd, (res: ApiResponse) => {
         const body = res.body ?? '';
         if (body.includes('-ERR')) {
-          logger.error({ msg: 'Originate failed', leadId: lead.id, response: body });
+          // Carrier health is not folded in here. The legs that reached a
+          // carrier have already reported their own causes from their
+          // reporting hooks, which is exact; this line only knows how the LAST
+          // leg ended and would charge every carrier in the chain with it.
+          logger.error({
+            msg: 'Originate failed',
+            leadId: lead.id,
+            response: body,
+            gateways: chain.gateways.map(g => g.gateway),
+          });
           reject(new Error(body));
         } else {
           this.currentActiveCalls++;

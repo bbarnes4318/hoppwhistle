@@ -405,7 +405,31 @@ export interface BridgeOptions {
   legTimeoutSeconds?: number;
   /** How long a leg may be silent before the chain gives up on it. */
   progressTimeoutSeconds?: number;
+  /**
+   * Have every leg report its own outcome when it ends.
+   *
+   * A sequential `|` chain only tells the caller how the LAST leg ended. When
+   * Vonage refuses and FracTEL answers, the bridge succeeds and nothing ever
+   * learns that Vonage failed — so its circuit never opens and every call pays
+   * the progress timeout on it. With this on, each leg is tagged with its own
+   * gateway and carrier and runs `LEG_OUTCOME_SCRIPT` when it answers and from
+   * its reporting hook, which posts that one leg's answer state and hangup
+   * cause back to the API.
+   *
+   * `api_reporting_hook` rather than `api_hangup_hook`: the latter already
+   * carries the recording upload on some channels, holds a single value, and a
+   * second writer would silently stop recordings being uploaded.
+   */
+  legOutcomeReporting?: boolean;
 }
+
+/**
+ * The FreeSWITCH Lua script a leg runs from its reporting hook when
+ * `legOutcomeReporting` is on. Lives in apps/freeswitch/scripts/. It reads
+ * everything it needs from its own channel, so the hook value contains no
+ * `${...}` that the dialplan could expand on the wrong leg.
+ */
+export const LEG_OUTCOME_SCRIPT = 'carrier_leg_result.lua';
 
 /**
  * FreeSWITCH bridge values are `key=value` inside `{}`, comma separated. A
@@ -444,6 +468,15 @@ export function buildBridgeString(
     ...options.channelVariables,
     call_timeout: options.legTimeoutSeconds ?? chain.legTimeoutSeconds,
     progress_timeout: options.progressTimeoutSeconds ?? DEFAULT_PROGRESS_TIMEOUT_SECONDS,
+    ...(options.legOutcomeReporting
+      ? {
+          // At answer: the moment the connecting carrier is known, and long
+          // before anything else rewrites the call row at hangup.
+          execute_on_answer: `lua ${LEG_OUTCOME_SCRIPT} answer`,
+          // After hangup: every leg's own cause, answered or not.
+          api_reporting_hook: `lua ${LEG_OUTCOME_SCRIPT}`,
+        }
+      : {}),
   });
   const prefix = vars ? `{${vars}}` : '';
 
@@ -466,7 +499,14 @@ export function buildBridgeString(
           }
         : {}),
       ...(g.attestation ? { 'sip_h_P-Attestation-Indicator': g.attestation } : {}),
-      ...(g.callerId || g.attestation ? { hopwhistle_carrier: g.carrierCode } : {}),
+      ...(g.callerId || g.attestation || options.legOutcomeReporting
+        ? { hopwhistle_carrier: g.carrierCode }
+        : {}),
+      // Which gateway this leg is, from the leg's own point of view. The
+      // outcome script prefers it to mod_sofia's `sip_gateway_name` so the
+      // attribution is exactly the name the waterfall resolved, the same
+      // string the health counters are keyed on.
+      ...(options.legOutcomeReporting ? { hopwhistle_gateway: g.gateway } : {}),
     });
     const legPrefix = legVars ? `[${legVars}]` : '';
     return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat, g.techPrefix)}`;
@@ -488,19 +528,27 @@ export function buildBridgeString(
  */
 const CARRIER_FAULT_CAUSES = new Set([
   'NO_ROUTE_DESTINATION',
-  'NETWORK_OUT_OF_ORDER',
-  'NORMAL_TEMPORARY_FAILURE',
+  'NETWORK_OUT_OF_ORDER', // SIP 502
+  'NORMAL_TEMPORARY_FAILURE', // SIP 400/481/500/503
   'SERVICE_UNAVAILABLE',
   'GATEWAY_DOWN',
-  'RECOVERY_ON_TIMER_EXPIRE',
+  'RECOVERY_ON_TIMER_EXPIRE', // SIP 408/504, or no answer to the INVITE at all
   'DESTINATION_OUT_OF_ORDER',
   'INCOMPATIBLE_DESTINATION',
   'MANDATORY_IE_MISSING',
-  'CALL_REJECTED',
+  'CALL_REJECTED', // SIP 401/403/407 — includes a trunk refusing our credentials or IP
   'REQUESTED_CHAN_UNAVAIL',
   'CHAN_NOT_IMPLEMENTED',
-  'INVALID_GATEWAY',
+  'INVALID_GATEWAY', // the gateway is not loaded in FreeSWITCH at all
   'PROGRESS_TIMEOUT',
+  // The rest of the 5xx family as mod_sofia maps it. None of these can be
+  // produced by the person being called; all of them mean the trunk or the
+  // carrier's network did not take the call.
+  'NORMAL_CIRCUIT_CONGESTION',
+  'SWITCH_CONGESTION',
+  'INTERWORKING', // SIP 505/513 and other protocol-level refusals
+  'SERVICE_NOT_IMPLEMENTED', // SIP 501
+  'EXCHANGE_ROUTING_ERROR', // SIP 482/483 — a routing loop or hop limit at the carrier
 ]);
 
 export function isCarrierFault(cause: string | null | undefined): boolean {

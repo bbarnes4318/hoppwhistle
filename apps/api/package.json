@@ -29,6 +29,7 @@
     "db:carriers": "prisma db execute --file prisma/sql/carrier-catalog.sql --schema prisma/schema.prisma",
     "audit:accounts": "tsx src/cli/audit-account-provenance.ts",
     "calls:diagnose": "tsx src/cli/diagnose-missing-calls.ts",
+    "vonage:diagnose": "tsx src/cli/vonage-diagnose.ts",
     "calls:inventory": "tsx src/cli/call-history-inventory.ts",
     "calls:restore": "tsx src/cli/restore-call-history.ts",
     "platform:admins": "tsx src/cli/platform-admins.ts",

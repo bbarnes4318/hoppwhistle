@@ -125,6 +125,14 @@ export class ProvisioningService {
       const vonage = new VonageAdapter();
       if (vonage.isConfigured()) {
         this.adapters.set('vonage', vonage);
+        // Said once at boot, not discovered on the first purchase: listing and
+        // searching still work without a routing decision, buying does not.
+        const routing = vonage.routing();
+        if (routing.ok) {
+          logger.info({ msg: 'Vonage number routing', mode: routing.mode });
+        } else {
+          logger.warn({ msg: 'Vonage number purchases are disabled', reason: routing.reason });
+        }
       }
     } catch (error) {
       logger.warn('Vonage adapter not configured, skipping');

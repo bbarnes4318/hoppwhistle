@@ -90,11 +90,12 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${TWILIO_SIP_PASSWORD}|${TWILIO_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
 
     # Vonage. Unlike Twilio the endpoint is shared, so the documented default
-    # is a working value for most accounts.
-    sed -i "s|\${VONAGE_SIP_PROXY}|${VONAGE_SIP_PROXY:-sip.nexmo.com}|g" "$VANILLA_CONF/vars.xml"
-    sed -i "s|\${VONAGE_SIP_REALM}|${VONAGE_SIP_REALM:-${VONAGE_SIP_PROXY:-sip.nexmo.com}}|g" "$VANILLA_CONF/vars.xml"
-    sed -i "s|\${VONAGE_SIP_USERNAME}|${VONAGE_SIP_USERNAME:-}|g" "$VANILLA_CONF/vars.xml"
-    sed -i "s|\${VONAGE_SIP_PASSWORD}|${VONAGE_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
+    # (sip.nexmo.com) is a working value for most accounts. Rendered by a
+    # helper rather than inline because it validates the credential pair,
+    # escapes the values for sed and XML, and never echoes a secret — see
+    # scripts/vonage-gateway.sh.
+    . /usr/share/freeswitch/scripts/vonage-gateway.sh
+    configure_vonage_gateway "$VANILLA_CONF/vars.xml" "$VANILLA_CONF/sip_profiles/external/vonage.xml"
 fi
 
 # Patch switch.conf.xml to restrict RTP ports to Docker-exposed range (16384-16484)

@@ -13,6 +13,8 @@ import { defineConfig } from 'vitest/config';
  */
 const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
+  // Truncates tenants, carriers and calls to seed two agencies' carrier routing.
+  '**/src/__tests__/vonage-carrier.test.ts',
   '**/src/__tests__/tenant-isolation.test.ts',
   '**/src/__tests__/platform-admin.test.ts',
   '**/src/__tests__/rating-engine.test.ts',

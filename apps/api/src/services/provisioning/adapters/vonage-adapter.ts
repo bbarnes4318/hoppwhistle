@@ -21,6 +21,136 @@ interface VonageNumberRow {
   app_id?: string;
 }
 
+export type VonageRoutingMode = 'sip' | 'application';
+
+export type VonageRouting =
+  | { ok: true; mode: 'sip'; sipUri: string }
+  | { ok: true; mode: 'application'; applicationId: string }
+  | { ok: false; reason: string };
+
+const SIP_PLACEHOLDER = /\{(msisdn|number|did)\}/i;
+
+/**
+ * Check a `VONAGE_SIP_URI` and say what is wrong with it, or null.
+ *
+ * Vonage forwards a call to exactly the URI it is given, so the DID has to be
+ * IN that URI: FreeSWITCH routes inbound calls on the Request-URI user part,
+ * and a URI shared by every number would deliver all of them as the same
+ * "number". So the URI is either a bare host — the adapter writes each
+ * number's MSISDN in as the user part — or carries a `{msisdn}` placeholder.
+ * A fixed user part is refused rather than silently routing every DID to one
+ * place.
+ */
+export function validateVonageSipUri(raw: string): string | null {
+  const uri = raw.trim();
+  if (!/^sips?:/i.test(uri)) {
+    return `VONAGE_SIP_URI must start with sip: (got "${uri}")`;
+  }
+  const rest = uri.replace(/^sips?:/i, '');
+  const at = rest.indexOf('@');
+  const host = at >= 0 ? rest.slice(at + 1) : rest;
+  if (!host || /^[:;]/.test(host)) {
+    return 'VONAGE_SIP_URI has no host — it must name this platform\'s FreeSWITCH, e.g. sip:sbc.example.com:5080';
+  }
+  if (at >= 0 && !SIP_PLACEHOLDER.test(rest.slice(0, at))) {
+    return (
+      'VONAGE_SIP_URI must not hard-code a user part: every number would arrive as the same ' +
+      'destination and inbound routing could not tell them apart. Use sip:<host>:<port> or ' +
+      'sip:{msisdn}@<host>:<port>'
+    );
+  }
+  return null;
+}
+
+/** The SIP URI one number forwards to, with its MSISDN as the user part. */
+export function renderVonageSipUri(template: string, msisdn: string): string {
+  const uri = template.trim();
+  if (SIP_PLACEHOLDER.test(uri)) return uri.replace(SIP_PLACEHOLDER, msisdn);
+  const scheme = /^sips:/i.test(uri) ? 'sips:' : 'sip:';
+  return `${scheme}${msisdn}@${uri.replace(/^sips?:/i, '')}`;
+}
+
+/**
+ * Decide, unambiguously, where purchased numbers are routed.
+ *
+ * `VONAGE_NUMBER_ROUTING_MODE` wins when set and must have its value. When it
+ * is unset, only `VONAGE_SIP_URI` is allowed to imply a mode, because SIP into
+ * FreeSWITCH is how this platform carries calls. `VONAGE_APPLICATION_ID` alone
+ * does NOT imply application mode: that variable also exists for unrelated
+ * Vonage products (Dograh's own Vonage provider among them), and attaching
+ * platform DIDs to someone else's Voice Application just because the variable
+ * is present would quietly take them away from FreeSWITCH. Both set with no
+ * mode is refused as ambiguous instead of resolved by a precedence rule nobody
+ * can see.
+ */
+export function resolveVonageRouting(config: {
+  mode?: string;
+  sipUri?: string;
+  applicationId?: string;
+}): VonageRouting {
+  const mode = (config.mode ?? '').trim().toLowerCase();
+  const sipUri = (config.sipUri ?? '').trim();
+  const applicationId = (config.applicationId ?? '').trim();
+
+  if (mode === 'sip') {
+    if (!sipUri) {
+      return { ok: false, reason: 'VONAGE_NUMBER_ROUTING_MODE=sip but VONAGE_SIP_URI is not set' };
+    }
+    const problem = validateVonageSipUri(sipUri);
+    return problem ? { ok: false, reason: problem } : { ok: true, mode: 'sip', sipUri };
+  }
+
+  if (mode === 'application' || mode === 'app') {
+    if (!applicationId) {
+      return {
+        ok: false,
+        reason: 'VONAGE_NUMBER_ROUTING_MODE=application but VONAGE_APPLICATION_ID is not set',
+      };
+    }
+    return { ok: true, mode: 'application', applicationId };
+  }
+
+  if (mode) {
+    return {
+      ok: false,
+      reason: `VONAGE_NUMBER_ROUTING_MODE must be "sip" or "application" (got "${config.mode}")`,
+    };
+  }
+
+  if (sipUri && applicationId) {
+    return {
+      ok: false,
+      reason:
+        'Both VONAGE_SIP_URI and VONAGE_APPLICATION_ID are set and VONAGE_NUMBER_ROUTING_MODE is ' +
+        'not: set it to "sip" (route numbers into FreeSWITCH) or "application" (attach them to ' +
+        'the Voice Application)',
+    };
+  }
+
+  if (sipUri) {
+    const problem = validateVonageSipUri(sipUri);
+    return problem ? { ok: false, reason: problem } : { ok: true, mode: 'sip', sipUri };
+  }
+
+  if (applicationId) {
+    return {
+      ok: false,
+      reason:
+        'VONAGE_APPLICATION_ID is set but VONAGE_NUMBER_ROUTING_MODE is not. Platform numbers are ' +
+        'not attached to a Voice Application implicitly: set VONAGE_SIP_URI to route them into ' +
+        'FreeSWITCH, or VONAGE_NUMBER_ROUTING_MODE=application to confirm the application',
+    };
+  }
+
+  return {
+    ok: false,
+    reason:
+      'Vonage inbound routing is not configured: set VONAGE_SIP_URI (and ' +
+      'VONAGE_NUMBER_ROUTING_MODE=sip), or VONAGE_NUMBER_ROUTING_MODE=application with ' +
+      'VONAGE_APPLICATION_ID',
+  };
+}
+
 /**
  * Vonage Adapter
  *
@@ -45,11 +175,15 @@ interface VonageNumberRow {
  * ── Inbound routing ─────────────────────────────────────────────────────────
  *
  * A freshly bought Vonage number is not attached to anything. Purchases here
- * link it, which is what makes calls to it arrive at this platform:
+ * link it, which is what makes calls to it arrive at this platform. There are
+ * two different destinations and they are different architectures, so the
+ * choice is explicit — see `resolveVonageRouting` below:
  *
- *   VONAGE_APPLICATION_ID  a Voice application (preferred).
- *   VONAGE_SIP_URI         a SIP URI for accounts terminating straight to our
- *                          SBC, paired with the `vonage` FreeSWITCH gateway.
+ *   sip          (the platform default) the number forwards by SIP straight to
+ *                our FreeSWITCH, lands in the `public` context, and is routed
+ *                by inbound_route.lua exactly like every other carrier's DID.
+ *   application  the number is attached to a Vonage Voice Application, whose
+ *                webhooks — not FreeSWITCH — decide what happens to the call.
  *
  * Searching and listing work without either; purchasing does not, because a
  * number that rings nowhere is worse than a failed purchase.
@@ -61,6 +195,7 @@ export class VonageAdapter implements ProvisioningAdapter {
   private apiSecret?: string;
   private applicationId?: string;
   private sipUri?: string;
+  private routingMode?: string;
   private defaultCountry: string;
   private baseUrl = 'https://rest.nexmo.com';
 
@@ -69,6 +204,7 @@ export class VonageAdapter implements ProvisioningAdapter {
     this.apiSecret = process.env.VONAGE_API_SECRET || secrets.get('VONAGE_API_SECRET');
     this.applicationId = process.env.VONAGE_APPLICATION_ID || secrets.get('VONAGE_APPLICATION_ID');
     this.sipUri = process.env.VONAGE_SIP_URI || secrets.get('VONAGE_SIP_URI');
+    this.routingMode = process.env.VONAGE_NUMBER_ROUTING_MODE;
     this.defaultCountry = (process.env.VONAGE_DEFAULT_COUNTRY || 'US').toUpperCase();
   }
 
@@ -196,11 +332,31 @@ export class VonageAdapter implements ProvisioningAdapter {
     };
   }
 
-  /** The fields that point a number at this platform, or {} if unconfigured. */
-  private routingFields(): Record<string, string> {
-    if (this.applicationId) return { app_id: this.applicationId };
-    if (this.sipUri) return { voiceCallbackType: 'sip', voiceCallbackValue: this.sipUri };
-    return {};
+  /** Where purchased and reconfigured numbers will be routed, or why nowhere. */
+  routing(): VonageRouting {
+    return resolveVonageRouting({
+      mode: this.routingMode,
+      sipUri: this.sipUri,
+      applicationId: this.applicationId,
+    });
+  }
+
+  /**
+   * The Numbers API fields that point one number at this platform.
+   *
+   * Throws with the configuration problem rather than returning nothing: the
+   * caller is about to buy or re-point a number, and doing either without a
+   * clear destination is the failure this exists to prevent.
+   */
+  private routingFields(msisdn: string): Record<string, string> {
+    const routing = this.routing();
+    if (!routing.ok) throw new Error(routing.reason);
+    if (routing.mode === 'application') return { app_id: routing.applicationId };
+    return { voiceCallbackType: 'sip', voiceCallbackValue: renderVonageSipUri(routing.sipUri, msisdn) };
+  }
+
+  private describeRouting(fields: Record<string, string>): string {
+    return fields.app_id ? `application:${fields.app_id}` : `sip:${fields.voiceCallbackValue}`;
   }
 
   async listNumbers(options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
@@ -226,11 +382,12 @@ export class VonageAdapter implements ProvisioningAdapter {
   }
 
   async purchaseNumber(request: PurchaseNumberRequest): Promise<ProvisionedNumber> {
-    const routing = this.routingFields();
-    if (Object.keys(routing).length === 0) {
+    // Checked before anything is searched or bought: a misconfiguration must
+    // fail here, not after the number is already on the account and billing.
+    const routingCheck = this.routing();
+    if (!routingCheck.ok) {
       throw new Error(
-        'Vonage inbound routing is not configured: set VONAGE_APPLICATION_ID or VONAGE_SIP_URI ' +
-          'before purchasing, or calls to the number will not reach this platform'
+        `${routingCheck.reason}. Refusing to purchase: calls to the number would not reach this platform`
       );
     }
 
@@ -264,6 +421,8 @@ export class VonageAdapter implements ProvisioningAdapter {
       msisdn = this.toMsisdn(searched.msisdn);
     }
 
+    const routing = this.routingFields(msisdn);
+
     await this.request('POST', '/number/buy', { country, msisdn });
 
     // Buying and routing are two calls. A number that is bought but not linked
@@ -279,8 +438,8 @@ export class VonageAdapter implements ProvisioningAdapter {
       });
       throw new Error(
         `Vonage number ${this.toE164(msisdn)} was purchased but could not be routed: ` +
-          `${(error as Error).message}. Link it to the application or SIP URI in the Vonage ` +
-          'dashboard, or release it.'
+          `${(error as Error).message}. Point it at ${this.describeRouting(routing)} in the ` +
+          'Vonage dashboard, or release it.'
       );
     }
 
@@ -288,7 +447,7 @@ export class VonageAdapter implements ProvisioningAdapter {
       msg: 'Purchased Vonage number',
       number: this.toE164(msisdn),
       country,
-      routedTo: routing.app_id ? `application:${routing.app_id}` : 'sipUri',
+      routedTo: this.describeRouting(routing),
     });
 
     return {
@@ -303,6 +462,7 @@ export class VonageAdapter implements ProvisioningAdapter {
       metadata: {
         country,
         numberType: searched?.type,
+        routingMode: routing.app_id ? 'application' : 'sip',
         ...routing,
       },
     };
@@ -364,23 +524,33 @@ export class VonageAdapter implements ProvisioningAdapter {
    * the Vonage dashboard.
    */
   async configureNumber(providerId: string, features: NumberFeatures): Promise<void> {
-    const routing = this.routingFields();
-    if (Object.keys(routing).length === 0) {
-      throw new Error(
-        'Vonage inbound routing is not configured: set VONAGE_APPLICATION_ID or VONAGE_SIP_URI'
-      );
-    }
-
     const msisdn = this.toMsisdn(providerId);
-    const country = await this.countryFor(msisdn);
+    const routing = this.routingFields(msisdn);
+    const existing = await this.getNumber(msisdn).catch(() => null);
+    const country =
+      ((existing?.metadata as { country?: string } | undefined)?.country ?? '').toUpperCase() ||
+      this.defaultCountry;
 
     await this.request('POST', '/number/update', { country, msisdn, ...routing });
+
+    // A number still linked to a Voice Application can keep being answered by
+    // that application whatever its SIP forwarding says. The Numbers API has no
+    // documented way to unlink one, so say so rather than report success on a
+    // number that may still not ring FreeSWITCH.
+    const linkedApp = (existing?.metadata as { applicationId?: string } | undefined)?.applicationId;
+    if (!routing.app_id && linkedApp) {
+      logger.warn({
+        msg: 'Vonage number is still linked to a Voice Application; unlink it in the Vonage dashboard so SIP forwarding applies',
+        providerId: msisdn,
+        applicationId: linkedApp,
+      });
+    }
 
     logger.info({
       msg: 'Configured Vonage number routing',
       providerId: msisdn,
       country,
-      routedTo: routing.app_id ? `application:${routing.app_id}` : 'sipUri',
+      routedTo: this.describeRouting(routing),
       features,
     });
   }

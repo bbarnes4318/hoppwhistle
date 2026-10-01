@@ -13,7 +13,13 @@
                     Trunking in the Vonage dashboard, and leave
                     VONAGE_SIP_USERNAME / VONAGE_SIP_PASSWORD unset.
       Credentials   set both, and this gateway answers Vonage's 401/407
-                    challenge with them.
+                    challenge with them. For Vonage Programmable SIP these
+                    are the account's API key and API secret.
+
+    Setting only ONE of the two is refused at container start
+    (scripts/vonage-gateway.sh): the gateway is left unloaded, so legs routed
+    here fail instantly with INVALID_GATEWAY and the waterfall moves straight
+    on, instead of every leg being challenged and rejected.
 
     register MUST stay false. Vonage SIP trunks are terminated against, not
     registered to.

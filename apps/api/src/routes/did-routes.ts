@@ -108,6 +108,29 @@ async function tagStaticDestination(
   });
 }
 
+/**
+ * The spellings a dialled DID is stored under, canonical first.
+ *
+ * Carriers deliver the called number differently — Vonage's SIP forwarding
+ * sends international digits (1XXXXXXXXXX), others send +1XXXXXXXXXX or the
+ * bare ten digits — and `did_routes.did` holds whichever form the row was
+ * created with. A bare ten-digit NANP number is given its country code rather
+ * than a bare `+`, which used to turn 8005551212 into "+8005551212", a number
+ * that matches nothing.
+ */
+export function didLookupVariants(raw: string): { normalizedDid: string; variants: string[] } {
+  const digits = (raw || '').replace(/\D/g, '');
+  // Ten digits is a NANP number missing its country code; anything else
+  // already carries one.
+  const normalizedDid = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+  const variants = [
+    normalizedDid,
+    normalizedDid.startsWith('+1') ? normalizedDid.slice(2) : normalizedDid,
+    normalizedDid.slice(1),
+  ];
+  return { normalizedDid, variants: [...new Set(variants)] };
+}
+
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDidRouteRoutes(server: FastifyInstance) {
   const prisma = getPrismaClient();
@@ -510,13 +533,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       }
     }
 
-    // Normalize: ensure +1 prefix
-    const normalizedDid = did.startsWith('+') ? did : `+${did}`;
-    const variants = [
-      normalizedDid,
-      normalizedDid.startsWith('+1') ? normalizedDid.slice(2) : normalizedDid,
-      normalizedDid.startsWith('+') ? normalizedDid.slice(1) : normalizedDid,
-    ];
+    const { normalizedDid, variants } = didLookupVariants(did);
 
     // Try to get Redis RTB leased route first
     let routeInfo = null;
@@ -1087,6 +1104,27 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         }
       }
 
+      // Carrier attribution. Two different carriers can be involved in one
+      // inbound call and both are worth keeping: the one that DELIVERED it
+      // (whoever issued the DID — a Vonage number arrives over Vonage's SIP
+      // forwarding) and the one that carried the forward leg out to the buyer
+      // or agent cell, which is the gateway that actually connected.
+      let inboundCarrier: { provider: string | null; forwardGateway: string | null } | null = null;
+      try {
+        const forwardGateway = body.gateway || gatewayFromChannelName(body.bridgeChannelName) || null;
+        const did = phoneNumberId
+          ? await prisma.phoneNumber.findFirst({
+              where: { id: phoneNumberId, tenantId },
+              select: { provider: true },
+            })
+          : null;
+        if (did?.provider || forwardGateway) {
+          inboundCarrier = { provider: did?.provider ?? null, forwardGateway };
+        }
+      } catch (carrierErr) {
+        console.error('[FS-CDR] Failed to resolve carrier attribution:', carrierErr);
+      }
+
       // Create Call record
       const call = await prisma.call.create({
         data: {
@@ -1121,11 +1159,21 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
               : null,
           answeredByUserId,
           metadata:
-            rtbMetadata || answeredByUserId
+            rtbMetadata || answeredByUserId || inboundCarrier
               ? {
                   ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
                   ...(answeredByUserId
                     ? { answeredByAgentId: answeredByUserId, answeredVia: answeredVia ?? 'agent_cell' }
+                    : {}),
+                  ...(inboundCarrier
+                    ? {
+                        carrier: {
+                          inboundProvider: inboundCarrier.provider,
+                          // Only a leg that answered says which gateway
+                          // connected; an unanswered call's last leg did not.
+                          gateway: body.answeredAt ? inboundCarrier.forwardGateway : null,
+                        },
+                      }
                     : {}),
                 }
               : undefined,
