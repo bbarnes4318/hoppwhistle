@@ -22,15 +22,20 @@ import { BRAND_THEME_KEYS, isBrandThemeKey, type BrandThemeKey } from '@hopwhist
 export interface BrandTheme {
   /** The agency's name, as the product should say it. */
   name: string;
-  /** The full lockup, transparent. The sidebar and the mobile nav. */
-  logo: string;
   /** Icon only, square, no wordmark. Any collapsed or icon-sized slot. */
   mark: string;
   /** The icon, trimmed and small: the app-icon tile beside the wordmark. */
   markSmall: string;
-  /** The wordmark alone, in the artwork's own colours, for a light ground. */
+  /**
+   * The horizontal wordmark, transparent, in the artwork's own colours: for
+   * white and light grounds.
+   */
   wordmark: string;
-  /** The wordmark reversed out for a dark ground: the navy navigation column. */
+  /**
+   * The same wordmark, transparent, lettering reversed out for a dark ground:
+   * the navy rail, the mobile drawer and the sign-in panel. Never set on a
+   * plate.
+   */
   wordmarkOnDark: string;
   favicon: string;
   appleTouchIcon: string;
@@ -39,7 +44,6 @@ export interface BrandTheme {
 export const BRAND_THEMES: Record<BrandThemeKey, BrandTheme> = {
   'life-leads-plus': {
     name: 'Life Leads Plus',
-    logo: '/brands/life-leads-plus/logo.png',
     mark: '/brands/life-leads-plus/mark.png',
     markSmall: '/brands/life-leads-plus/mark-128.png',
     wordmark: '/brands/life-leads-plus/wordmark.png',

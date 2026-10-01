@@ -2,57 +2,59 @@ import type { ActiveBrand } from '@/lib/brand-themes';
 import { cn } from '@/lib/utils';
 
 /**
- * An agency's logo, laid out for the product's chrome: the full lockup
- * (`brand.logo`), on a white plate where the ground is navy.
+ * The surface an agency's wordmark sits on, which picks the artwork. Both files
+ * are transparent, so the image is never given a ground of its own -- no plate,
+ * no tile, no shadow. The surface chooses the image; the image never changes
+ * the surface.
+ *
+ *   'dark'   `wordmarkOnDark`, lettering reversed out for the brand navy
+ *   'light'  `wordmark`, the artwork's own colours, for white and light grounds
+ */
+export type BrandSurface = 'dark' | 'light';
+
+/**
+ * The intrinsic canvas of both wordmark files. Set as width/height attributes
+ * so the box is reserved before the image arrives; the CSS width is the
+ * caller's and the height follows the ratio.
+ */
+const WORDMARK_WIDTH = 900;
+const WORDMARK_HEIGHT = 154;
+
+/** Usable logo width per place in the chrome. */
+const LOCATION_CLASS = {
+  sidebar: 'w-[208px]',
+  drawer: 'w-[188px]',
+} as const;
+
+/**
+ * An agency's wordmark, laid out for the product's chrome: the navy rail and
+ * the navy header of the mobile drawer. Sits directly on whatever surface it is
+ * told it is on.
  */
 export function BrandLockup({
   brand,
-  tone,
-  size = 'md',
+  surface,
+  location = 'sidebar',
   className,
 }: {
   brand: ActiveBrand;
-  tone: 'dark' | 'light';
-  size?: 'md' | 'sm';
+  surface: BrandSurface;
+  location?: keyof typeof LOCATION_CLASS;
   className?: string;
 }): JSX.Element {
-  const md = size === 'md';
   return (
-    <span
-      className={cn(
-        'inline-flex select-none items-center',
-        // The artwork has navy lettering and an opaque white ground, so on the
-        // navy rail it sits on a white plate.
-        tone === 'dark' &&
-          'rounded-[10px] bg-white px-2 py-1 shadow-[0_1px_2px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.12)]',
-        className
-      )}
-      translate="no"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={brand.logo}
-        alt={brand.name}
-        className={cn('w-auto', md ? 'h-[64px]' : 'h-[40px]')}
-        draggable={false}
-        data-testid="brand-logo"
-      />
-    </span>
+    <BrandWordmark
+      brand={brand}
+      surface={surface}
+      className={cn(LOCATION_CLASS[location], className)}
+    />
   );
 }
 
 /**
- * An agency's wordmark alone, for a page that is mostly brand: the sign-in
- * page's panel and header. Not the chrome lockup above, whose artwork carries
- * an opaque white canvas -- set on a coloured ground that reads as a sticker.
- * Both wordmark files are transparent, so neither ever needs a plate:
- *
- *   surface 'dark'   `wordmarkOnDark`, lettering reversed out for navy
- *   surface 'light'  `wordmark`, the artwork's own colours
- *
- * Width is the caller's (`className`), height follows. The width and height
- * attributes are the files' own canvas, there to reserve the box before the
- * image arrives; the browser takes the real ratio from the file once it has.
+ * An agency's wordmark at any width: the sign-in page's panel and header, and
+ * the chrome lockup above. Width is the caller's (`className`), height follows
+ * the artwork's ratio -- never stretched, never cropped.
  */
 export function BrandWordmark({
   brand,
@@ -60,7 +62,7 @@ export function BrandWordmark({
   className,
 }: {
   brand: ActiveBrand;
-  surface: 'dark' | 'light';
+  surface: BrandSurface;
   className?: string;
 }): JSX.Element {
   return (
@@ -68,8 +70,8 @@ export function BrandWordmark({
     <img
       src={surface === 'dark' ? brand.wordmarkOnDark : brand.wordmark}
       alt={brand.name}
-      width={363}
-      height={233}
+      width={WORDMARK_WIDTH}
+      height={WORDMARK_HEIGHT}
       className={cn('block h-auto max-w-full select-none', className)}
       draggable={false}
       translate="no"

@@ -139,8 +139,11 @@ describe('the agency brand theme in the authenticated shell', () => {
       await mountShell();
 
       const logo = await screen.findByTestId('brand-logo');
-      // The full lockup, on a white plate in the navy rail.
-      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/logo.png');
+      // The transparent wordmark reversed out for the navy, straight on the
+      // rail: never the old white-canvas lockup, never on a plate.
+      expect(logo.getAttribute('src')).toBe('/brands/life-leads-plus/wordmark-on-dark.png');
+      expect(document.body.innerHTML).not.toContain('/brands/life-leads-plus/logo.png');
+      expect(logo.closest('.bg-white')).toBeNull();
       expect(logo.getAttribute('alt')).toBe('Life Leads Plus');
 
       expect(document.querySelector('[data-testid="logo"]')).toBeNull();

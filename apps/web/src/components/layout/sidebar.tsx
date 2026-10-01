@@ -420,39 +420,37 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     <div
       className={cn(
         'flex h-full min-h-0 flex-col bg-surface',
-        drawer ? 'w-full' : 'sticky top-0 w-[248px] shrink-0 border-r border-rule'
+        drawer
+          ? 'w-full'
+          : cn('sticky top-0 shrink-0 border-r border-rule', brand ? 'w-[256px]' : 'w-[248px]')
       )}
       /*
        * An agency brand draws the rail in its navy. The attribute re-scopes the
        * design tokens for this subtree (globals.css), so nothing below it needs
-       * to know. The drawer stays light: it opens inside a light panel.
+       * to know. In the drawer the panel itself carries the attribute
+       * (mobile-nav.tsx), so the whole drawer is the same navy.
        */
       data-brand-nav={brand && !drawer ? '' : undefined}
     >
-      {/* In the drawer the panel already has a header, so the NetEnroll brand
-          row would be a second one. An agency's own logo is the exception: it
-          is the only place a white-labelled user sees whose portal this is, so
-          the drawer carries it too, sized down. */}
-      {drawer ? (
-        brand ? (
-          <div className="flex shrink-0 items-center border-b border-rule px-4 py-3">
-            <BrandLockup brand={brand} tone="light" size="sm" />
-          </div>
-        ) : null
-      ) : brand ? (
+      {/* In the drawer the panel already has a header: NetEnroll's says
+          "Navigation", and an agency's carries its wordmark on the same navy
+          (mobile-nav.tsx). So the drawer draws no brand row of its own. */}
+      {drawer ? null : brand ? (
         /*
-         * The agency's lockup, with room: an app-icon tile and the wordmark,
-         * both cut from the supplied artwork (see BrandLockup). The block is
-         * taller than the topbar on purpose -- the navy column is its own
-         * surface, so its rule does not have to meet the topbar's.
+         * The agency's wordmark, straight on the navy: the rail is one
+         * continuous surface, logo and navigation alike. Left-aligned at px-6
+         * so the lettering lines up with the nav labels below it. The rule
+         * under it is the rail's own --rule, there to barely register. The
+         * block is taller than the topbar on purpose -- the navy column is its
+         * own surface, so its rule does not have to meet the topbar's.
          */
-        <div className="flex h-[88px] shrink-0 items-center border-b border-rule px-5">
+        <div className="flex h-[92px] shrink-0 items-center border-b border-rule px-6">
           <Link
             href="/dashboard"
             className="flex items-center rounded-control"
             aria-label={`${brand.name} home`}
           >
-            <BrandLockup brand={brand} tone="dark" />
+            <BrandLockup brand={brand} surface="dark" location="sidebar" />
           </Link>
         </div>
       ) : (

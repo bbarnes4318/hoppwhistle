@@ -4,8 +4,10 @@ import { Menu } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
+import { BrandLockup } from '@/components/brand/brand-lockup';
 import { SheetDrawer } from '@/components/domain';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useBrand } from '@/hooks/use-brand';
 
 import { Sidebar } from './sidebar';
 
@@ -22,6 +24,7 @@ import { Sidebar } from './sidebar';
 export function MobileNav() {
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
+  const { brand } = useBrand();
 
   // Following a link must close the panel it was followed from.
   React.useEffect(() => {
@@ -48,6 +51,13 @@ export function MobileNav() {
         size="md"
         title="Navigation"
         className="sm:max-w-[16rem]"
+        /*
+         * An agency's drawer is the rail again: the same navy from the
+         * wordmark down, never a white masthead over a navy menu.
+         */
+        brandHeader={
+          brand ? <BrandLockup brand={brand} surface="dark" location="drawer" /> : undefined
+        }
       >
         <Sidebar variant="drawer" />
       </SheetDrawer>
