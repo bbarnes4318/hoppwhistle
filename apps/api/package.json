@@ -50,6 +50,7 @@
     "applications:link-customers:prod": "node dist/cli/link-application-customers.js",
     "numbers:bill-month:prod": "node dist/cli/number-charges-monthly.js",
     "statements:close:prod": "node dist/cli/statements-close-month.js",
+    "vonage:diagnose:prod": "node dist/cli/vonage-diagnose.js",
     "quota:test": "tsx src/cli/test-quota-overage.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "hopper:preflight": "tsx src/cli/hopper-preflight.ts"
