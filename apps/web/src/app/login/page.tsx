@@ -701,7 +701,7 @@ export default function AuthPage() {
               surface={surface}
               className={
                 brand
-                  ? 'w-[136px] sm:w-[152px] min-[960px]:w-[220px] min-[1200px]:w-[256px]'
+                  ? 'w-[200px] sm:w-[232px] min-[960px]:w-[300px] min-[1200px]:w-[340px]'
                   : 'w-[184px] sm:w-[208px] min-[960px]:w-[240px] min-[1200px]:w-[272px]'
               }
             />

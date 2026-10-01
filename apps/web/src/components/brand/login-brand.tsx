@@ -66,10 +66,10 @@ export function useLoginSurface(): LoginSurface {
 /**
  * The logo on the sign-in page: the agency's wordmark, or NetEnroll's lockup.
  *
- * `surface` is the ground it sits on, which picks the artwork. The agency's
- * full chrome lockup (`brand.logo`, the sidebar's) is never used here: it has
- * an opaque white canvas. NetEnroll has light artwork only, and the page never
- * asks for it on a dark ground (`useLoginSurface`).
+ * `surface` is the ground it sits on, which picks the artwork: the agency's
+ * wordmark ships reversed out for navy and in its own colours for light, both
+ * transparent. NetEnroll has light artwork only, and the page never asks for
+ * it on a dark ground (`useLoginSurface`).
  *
  * `className` sets the width; the height follows the artwork.
  */

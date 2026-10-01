@@ -43,6 +43,12 @@ export interface SheetDrawerProps {
   side?: 'right' | 'left';
   size?: 'md' | 'lg' | 'xl';
   className?: string;
+  /**
+   * An agency's branded header: shown in place of the title, which stays the
+   * drawer's accessible name. The whole panel is then drawn in the brand navy
+   * (`data-brand-nav`, globals.css), header and body as one surface.
+   */
+  brandHeader?: React.ReactNode;
 }
 
 const SIZE_CLASS = {
@@ -61,6 +67,7 @@ export function SheetDrawer({
   side = 'right',
   size = 'lg',
   className,
+  brandHeader,
 }: SheetDrawerProps) {
   // The drawer is portalled to document.body, outside any data-theme subtree,
   // so it has to carry the scope itself. See theme-scope.tsx.
@@ -79,6 +86,7 @@ export function SheetDrawer({
         />
         <DialogPrimitive.Content
           data-theme={theme}
+          data-brand-nav={brandHeader ? '' : undefined}
           className={cn(
             'fixed inset-y-0 z-50 flex w-full flex-col border-rule bg-surface',
             // Full width on a phone, a panel from the edge above that.
@@ -91,9 +99,19 @@ export function SheetDrawer({
             className
           )}
         >
-          <header className="flex items-start justify-between gap-3 border-b border-rule px-4 py-3">
+          <header
+            className={cn(
+              'flex justify-between gap-3 border-b border-rule',
+              brandHeader ? 'h-[84px] shrink-0 items-center pl-6 pr-4' : 'items-start px-4 py-3'
+            )}
+          >
             <div className="min-w-0">
-              <DialogTitle className="t-section truncate text-ink">{title}</DialogTitle>
+              <DialogTitle
+                className={cn('t-section truncate text-ink', brandHeader && 'sr-only')}
+              >
+                {title}
+              </DialogTitle>
+              {brandHeader}
               {description ? (
                 <DialogDescription className="t-meta mt-0.5 truncate text-ink-3">
                   {description}
