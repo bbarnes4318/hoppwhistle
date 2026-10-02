@@ -39,6 +39,10 @@ export interface BridgeOutcome {
   bVars?: Record<string, string>;
   /** What the leg's api_on_answer stamped on our leg (`x_answered_leg`). */
   stampedLeg?: string;
+  /** `originate_disposition` when nobody answered. Default NO_ANSWER. */
+  disposition?: string;
+  /** `originate_causes` when nobody answered: `uuid;CAUSE` per leg, `|`-joined. */
+  causes?: string;
 }
 
 export interface InboundRouteScenario {
@@ -102,6 +106,8 @@ function prelude(scenario: InboundRouteScenario): string {
       channel: b.channel ?? '',
       bUuid: b.bUuid ?? '',
       stampedLeg: b.stampedLeg ?? '',
+      disposition: b.disposition ?? 'NO_ANSWER',
+      causes: b.causes ?? '',
     })),
     bVars: Object.fromEntries(
       (scenario.bridges ?? [])
@@ -153,7 +159,8 @@ function session:execute(app, arg)
       vars.last_bridge_to = outcome.bUuid
       if outcome.stampedLeg ~= "" then vars.x_answered_leg = outcome.stampedLeg end
     else
-      vars.originate_disposition = "NO_ANSWER"
+      vars.originate_disposition = outcome and outcome.disposition or "NO_ANSWER"
+      vars.originate_causes = outcome and outcome.causes or ""
     end
   end
 end
@@ -167,6 +174,9 @@ function api_handle:execute(cmd, arg)
     local b_uuid, name = string.match(arg or "", "^(%S+)%s+(%S+)$")
     local b = cfg.bVars[b_uuid or ""]
     return (b and b[name]) or "_undef_"
+  elseif cmd == "create_uuid" then
+    uuid_seq = (uuid_seq or 0) + 1
+    return string.format("00000000-0000-4000-8000-%012d", uuid_seq)
   elseif cmd == "curl" then
     table.insert(events.curls, arg)
     return '{"callId":"db-call-1"}'

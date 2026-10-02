@@ -3,6 +3,7 @@ export { AgentPhonePanel } from './agent-phone-panel';
 export { GlobalDispositionModal } from './global-disposition-modal';
 export { AgentStatusSelector } from './agent-status-selector';
 export { AvailabilitySwitch } from './availability-switch';
+export { RingOnControl } from './ring-on-control';
 export { CallControls } from './call-controls';
 export { CallTransferDialog } from './call-transfer-dialog';
 export { DialPad } from './dial-pad';

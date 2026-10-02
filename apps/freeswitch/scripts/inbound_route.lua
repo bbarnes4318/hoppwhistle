@@ -298,16 +298,40 @@ if AGENT_CELL_CONFIRM_FILE == "" then
     AGENT_CELL_CONFIRM_FILE = os.getenv("AGENT_CELL_CONFIRM_FILE") or "ivr/ivr-accept_reject_voicemail.wav"
 end
 
--- Optionally the agent's cell shows the CUSTOMER's number instead of our DID.
--- OFF by default: carriers refuse a caller ID we do not own (Anveo answered
--- NORMAL_TEMPORARY_FAILURE), so agent cells present our DID like buyer legs
--- (campaign_external_cid_fix_v1). Turn it on, next call, no restart:
---     fs_cli -x "global_setvar agent_cell_show_caller=true"   (or env AGENT_CELL_SHOW_CALLER=true)
+-- The agent's cell shows the CUSTOMER's number, so they know who is calling.
+-- ON by default. The leg also carries a Diversion header naming the DID the
+-- customer dialed -- the standard signal for a forwarded call -- since carriers
+-- may refuse a caller ID we do not own (Anveo answered NORMAL_TEMPORARY_FAILURE).
+-- When a carrier still refuses it, that step is rung once more with our DID
+-- (see CELL_CID_REFUSED below), so the agent is never lost over caller ID.
+-- Turn it off, next call, no restart:
+--     fs_cli -x "global_setvar agent_cell_show_caller=false"   (or env AGENT_CELL_SHOW_CALLER=false)
 local cell_caller_setting = fs_global("agent_cell_show_caller")
 if cell_caller_setting == "" then
-    cell_caller_setting = os.getenv("AGENT_CELL_SHOW_CALLER") or "false"
+    cell_caller_setting = os.getenv("AGENT_CELL_SHOW_CALLER") or "true"
 end
-local AGENT_CELL_SHOW_CALLER = cell_caller_setting == "true"
+local AGENT_CELL_SHOW_CALLER = cell_caller_setting ~= "false"
+
+-- Host part of that Diversion header. Carriers read the number, not the host.
+local DIVERSION_HOST = fs_global("agent_cell_diversion_host")
+if DIVERSION_HOST == "" then DIVERSION_HOST = fs_global("local_ip_v4") end
+if DIVERSION_HOST == "" then DIVERSION_HOST = "localhost" end
+
+-- Causes with which a carrier refuses a leg outright, before any phone rang --
+-- what a refused caller ID looks like. Not NO_ANSWER, USER_BUSY or a cancel:
+-- those mean the agent's phone was reached.
+local CELL_CID_REFUSED = {
+    NORMAL_TEMPORARY_FAILURE = true,
+    CALL_REJECTED = true,
+    FACILITY_REJECTED = true,
+    NETWORK_OUT_OF_ORDER = true,
+    DESTINATION_OUT_OF_ORDER = true,
+    SERVICE_UNAVAILABLE = true,
+    BEARERCAPABILITY_NOTAUTH = true,
+    INCOMPATIBLE_DESTINATION = true,
+    EXCHANGE_ROUTING_ERROR = true,
+    NORMAL_UNSPECIFIED = true,
+}
 
 -- 1XXXXXXXXXX for a real NANP caller, or nil (withheld, anonymous, garbage).
 local function presentable_caller(caller)
@@ -321,18 +345,24 @@ local function presentable_caller(caller)
     return nil
 end
 
-local function agent_cell_leg_vars(caller)
+local function agent_cell_leg_vars(caller, show_caller, our_cid)
     local vars = {}
     if AGENT_CELL_CONFIRM then
         table.insert(vars, "group_confirm_key=1")
         table.insert(vars, "group_confirm_file=" .. AGENT_CELL_CONFIRM_FILE)
         table.insert(vars, "group_confirm_read_timeout=10000")
     end
-    local cid = AGENT_CELL_SHOW_CALLER and presentable_caller(caller) or nil
+    local cid = show_caller and presentable_caller(caller) or nil
     if cid then
         table.insert(vars, "sip_from_user=" .. cid)
         table.insert(vars, "origination_caller_id_number=" .. cid)
+        table.insert(vars, "origination_caller_id_name=" .. cid)
         table.insert(vars, "effective_caller_id_number=" .. cid)
+        table.insert(vars, "effective_caller_id_name=" .. cid)
+        if our_cid and our_cid ~= "" then
+            -- Angle brackets and semicolons survive leg_var_value; commas would not.
+            table.insert(vars, "sip_h_Diversion=<sip:" .. our_cid .. "@" .. DIVERSION_HOST .. ">;reason=unconditional")
+        end
     end
     if #vars == 0 then
         return ""
@@ -789,16 +819,43 @@ local function softphone_leg_vars(vars)
     set_leg_var(vars, "origination_caller_id_name", softphone_cid)
 end
 
--- The agent-cell extras (press-1 confirm, optional customer caller ID), as
--- variables rather than a bracketed string.
-local function add_agent_cell_vars(vars)
-    local cell = agent_cell_leg_vars(caller_number)
+-- The agent-cell extras (press-1 confirm, the customer's caller ID), as
+-- variables rather than a bracketed string. True when the leg presents the
+-- customer's number rather than ours.
+local function add_agent_cell_vars(vars, show_caller)
+    local cell = agent_cell_leg_vars(caller_number, show_caller, outbound_cid)
     local inner = string.match(cell, "^%[(.*)%]$")
-    if not inner then return end
+    if not inner then return false end
+    local forwarded = false
     for pair in string.gmatch(inner, "[^,]+") do
         local k, v = string.match(pair, "^([^=]+)=(.*)$")
-        if k then set_leg_var(vars, k, v) end
+        if k then
+            set_leg_var(vars, k, v)
+            if k == "sip_from_user" then forwarded = true end
+        end
     end
+    return forwarded
+end
+
+-- Whether a carrier refused the customer's caller ID on this step's agent
+-- cells: the step's own cause when it was the cell alone, or the cell legs'
+-- causes in originate_causes when it shared the step with softphones.
+local function cell_cid_refused(forwarded_uuids)
+    local cause = session:getVariable("originate_disposition") or ""
+    if CELL_CID_REFUSED[cause] then
+        return true, cause
+    end
+    local causes = session:getVariable("originate_causes") or ""
+    for _, leg_uuid in ipairs(forwarded_uuids) do
+        local start = string.find(causes, leg_uuid .. ";", 1, true)
+        if start then
+            local leg_cause = string.match(causes, "^([A-Z_]+)", start + string.len(leg_uuid) + 1)
+            if leg_cause and CELL_CID_REFUSED[leg_cause] then
+                return true, leg_cause
+            end
+        end
+    end
+    return false, cause
 end
 
 -- A variable off the leg that answered. The B-leg's own variables first, via
@@ -834,185 +891,225 @@ local function read_answered_leg()
     return party, number, target
 end
 
-for i, step in ipairs(failover_steps) do
-    if step and step ~= "" then
-        local parallel_destinations = split_outside_brackets(step, ",")
-        local bridge_components = {}
-        -- Each component's per-leg variables, by index into bridge_components.
-        local component_vars = {}
-        -- The first carrier leg for each external destination, in that
-        -- carrier's own number format. Used when an external shares a step
-        -- with other legs, where the full waterfall cannot be expressed.
-        local external_first_leg = {}
+-- One failover step's bridge string. `show_caller` decides whether agent
+-- cells present the customer's number. Returns the bridge string (nil when
+-- nothing in the step is reachable), whether any agent cell in it presented
+-- the customer's number, and the uuids of those cell legs.
+local function build_step(step, show_caller)
+    local forwarded = false
+    local forwarded_uuids = {}
+    local parallel_destinations = split_outside_brackets(step, ",")
+    local bridge_components = {}
+    -- Each component's per-leg variables, by index into bridge_components.
+    local component_vars = {}
+    -- The first carrier leg for each external destination, in that
+    -- carrier's own number format. Used when an external shares a step
+    -- with other legs, where the full waterfall cannot be expressed.
+    local external_first_leg = {}
 
-        -- Channel snapshot for this step only. Failover steps run seconds or
-        -- minutes apart, so it is refreshed per step, and only fetched at all
-        -- when the step actually contains an internal extension.
-        local channel_rows = nil
-        local function step_channel_rows()
-            if channel_rows == nil then channel_rows = live_channel_rows() end
-            return channel_rows
-        end
+    -- Channel snapshot for this step only. Failover steps run seconds or
+    -- minutes apart, so it is refreshed per step, and only fetched at all
+    -- when the step actually contains an internal extension.
+    local channel_rows = nil
+    local function step_channel_rows()
+        if channel_rows == nil then channel_rows = live_channel_rows() end
+        return channel_rows
+    end
 
-        for j, raw_dest in ipairs(parallel_destinations) do
-            local tags, p_dest = parse_leg(raw_dest)
-            if p_dest ~= "" then
-                local vars = routing_leg_vars(tags, p_dest)
-                -- Check if it's a short extension (e.g. 1000) or a UUID (User ID)
-                local is_internal = false
-                if string.match(p_dest, "^%d%d%d%d$") then
-                    is_internal = true
-                elseif string.match(p_dest, "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
-                    is_internal = true
+    for j, raw_dest in ipairs(parallel_destinations) do
+        local tags, p_dest = parse_leg(raw_dest)
+        if p_dest ~= "" then
+            local vars = routing_leg_vars(tags, p_dest)
+            -- Check if it's a short extension (e.g. 1000) or a UUID (User ID)
+            local is_internal = false
+            if string.match(p_dest, "^%d%d%d%d$") then
+                is_internal = true
+            elseif string.match(p_dest, "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+                is_internal = true
+            end
+
+            if is_internal then
+                softphone_leg_vars(vars)
+                -- Pre-resolve the contact to check if registered, searching multiple fallback domains
+                local domain = session:getVariable("domain_name") or "localhost"
+                if domain == "" then domain = "localhost" end
+
+                local domains_to_try = {
+                    "hopwhistle.com",
+                    "aivoice.hopwhistle.com",
+                    domain,
+                    "178.156.223.97",
+                    "freeswitch",
+                    "localhost"
+                }
+                local contact = ""
+                for _, dom in ipairs(domains_to_try) do
+                    if dom and dom ~= "" then
+                        local res = api:execute("sofia_contact", "internal/" .. p_dest .. "@" .. dom) or ""
+                        if res ~= "" and not string.match(res, "^error") then
+                            contact = res
+                            log("INFO", "Internal extension " .. p_dest .. " found registered on domain " .. dom .. ": " .. contact)
+                            break
+                        end
+                    end
                 end
 
-                if is_internal then
-                    softphone_leg_vars(vars)
-                    -- Pre-resolve the contact to check if registered, searching multiple fallback domains
-                    local domain = session:getVariable("domain_name") or "localhost"
-                    if domain == "" then domain = "localhost" end
-                    
-                    local domains_to_try = {
-                        "hopwhistle.com",
-                        "aivoice.hopwhistle.com",
-                        domain,
-                        "178.156.223.97",
-                        "freeswitch",
-                        "localhost"
-                    }
-                    local contact = ""
-                    for _, dom in ipairs(domains_to_try) do
-                        if dom and dom ~= "" then
-                            local res = api:execute("sofia_contact", "internal/" .. p_dest .. "@" .. dom) or ""
-                            if res ~= "" and not string.match(res, "^error") then
-                                contact = res
-                                log("INFO", "Internal extension " .. p_dest .. " found registered on domain " .. dom .. ": " .. contact)
-                                break
+                -- Never ring an agent who is already on a call.
+                local busy_calls = 0
+                if AGENT_BUSY_CHECK then
+                    busy_calls = agent_channel_count(
+                        p_dest,
+                        (contact ~= "" and contact or nil),
+                        step_channel_rows(),
+                        call_uuid
+                    )
+                end
+
+                if busy_calls >= AGENT_MAX_CONCURRENT then
+                    log("WARNING", "[AGENT-BUSY] Extension " .. p_dest .. " already on " ..
+                        tostring(busy_calls) .. " call(s) (limit " .. tostring(AGENT_MAX_CONCURRENT) ..
+                        ") — NOT ringing; leaving their call undisturbed")
+                elseif contact ~= "" then
+                    log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
+                    table.insert(bridge_components, contact)
+                    component_vars[#bridge_components] = vars
+                else
+                    log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
+                    table.insert(bridge_components, "user/" .. p_dest)
+                    component_vars[#bridge_components] = vars
+                end
+            else
+                -- External PSTN leg. Validate it actually looks like a phone
+                -- number — stale routes can carry sentinels like "Campaign"
+                -- which previously produced sofia/gateway/<gw>/Campaign and a
+                -- guaranteed dead bridge.
+                local dest_digits = string.gsub(p_dest, "%D", "")
+                if string.len(dest_digits) == 10 then
+                    dest_digits = "1" .. dest_digits
+                end
+                local is_agent_cell = agent_cell_keys[ten_digit_key(dest_digits)] == true
+                local cell_busy = 0
+                if is_agent_cell and AGENT_BUSY_CHECK then
+                    cell_busy = cell_channel_count(ten_digit_key(dest_digits), step_channel_rows(), call_uuid)
+                end
+                if cell_busy >= AGENT_MAX_CONCURRENT then
+                    log("WARNING", "[AGENT-BUSY] Agent cell " .. dest_digits .. " already on " ..
+                        tostring(cell_busy) .. " call(s) — NOT ringing")
+                elseif string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
+                    external_leg_vars(vars)
+                    if is_agent_cell or starts_with(tags["x_leg_party"], "agent:") then
+                        agent_leg_vars(vars)
+                    end
+                    if is_agent_cell and add_agent_cell_vars(vars, show_caller) then
+                        forwarded = true
+                        -- In a shared step the bridge's own cause is the
+                        -- softphones' NO_ANSWER; this leg's cause is read back
+                        -- by uuid from originate_causes.
+                        if #parallel_destinations > 1 then
+                            local ok, leg_uuid = pcall(function() return api:execute("create_uuid") end)
+                            leg_uuid = ok and trim(tostring(leg_uuid or "")) or ""
+                            if string.match(leg_uuid, "^%x+%-[%x%-]+$") then
+                                set_leg_var(vars, "origination_uuid", leg_uuid)
+                                table.insert(forwarded_uuids, leg_uuid)
                             end
                         end
                     end
-
-                    -- Never ring an agent who is already on a call.
-                    local busy_calls = 0
-                    if AGENT_BUSY_CHECK then
-                        busy_calls = agent_channel_count(
-                            p_dest,
-                            (contact ~= "" and contact or nil),
-                            step_channel_rows(),
-                            call_uuid
-                        )
-                    end
-
-                    if busy_calls >= AGENT_MAX_CONCURRENT then
-                        log("WARNING", "[AGENT-BUSY] Extension " .. p_dest .. " already on " ..
-                            tostring(busy_calls) .. " call(s) (limit " .. tostring(AGENT_MAX_CONCURRENT) ..
-                            ") — NOT ringing; leaving their call undisturbed")
-                    elseif contact ~= "" then
-                        log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
-                        table.insert(bridge_components, contact)
-                        component_vars[#bridge_components] = vars
-                    else
-                        log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
-                        table.insert(bridge_components, "user/" .. p_dest)
-                        component_vars[#bridge_components] = vars
-                    end
+                    table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
+                    component_vars[#bridge_components] = vars
+                    local templated = carrier_legs_for(dest_digits)
+                    external_first_leg[#bridge_components] = templated and string.match(templated, "^[^|]+") or nil
                 else
-                    -- External PSTN leg. Validate it actually looks like a phone
-                    -- number — stale routes can carry sentinels like "Campaign"
-                    -- which previously produced sofia/gateway/<gw>/Campaign and a
-                    -- guaranteed dead bridge.
-                    local dest_digits = string.gsub(p_dest, "%D", "")
-                    if string.len(dest_digits) == 10 then
-                        dest_digits = "1" .. dest_digits
-                    end
-                    local is_agent_cell = agent_cell_keys[ten_digit_key(dest_digits)] == true
-                    local cell_busy = 0
-                    if is_agent_cell and AGENT_BUSY_CHECK then
-                        cell_busy = cell_channel_count(ten_digit_key(dest_digits), step_channel_rows(), call_uuid)
-                    end
-                    if cell_busy >= AGENT_MAX_CONCURRENT then
-                        log("WARNING", "[AGENT-BUSY] Agent cell " .. dest_digits .. " already on " ..
-                            tostring(cell_busy) .. " call(s) — NOT ringing")
-                    elseif string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
-                        external_leg_vars(vars)
-                        if is_agent_cell or starts_with(tags["x_leg_party"], "agent:") then
-                            agent_leg_vars(vars)
-                        end
-                        if is_agent_cell then
-                            add_agent_cell_vars(vars)
-                        end
-                        table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
-                        component_vars[#bridge_components] = vars
-                        local templated = carrier_legs_for(dest_digits)
-                        external_first_leg[#bridge_components] = templated and string.match(templated, "^[^|]+") or nil
-                    else
-                        log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
-                    end
+                    log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
                 end
             end
         end
-        
-        if #bridge_components > 0 then
+    end
+
+
+    if #bridge_components == 0 then
+        return nil, false, forwarded_uuids
+    end
+    -- A registered contact can list several registrations; each is its
+    -- own leg and each carries the variables.
+    local function tagged(idx, leg)
+        local vars = component_vars[idx] or new_leg_vars()
+        local out = {}
+        for _, one in ipairs(split_outside_brackets(leg, ",")) do
+            if trim(one) ~= "" then
+                table.insert(out, with_leg_vars(vars, trim(one)))
+            end
+        end
+        return table.concat(out, ",")
+    end
+    -- Single external destination: retry the same number across the
+    -- whole carrier gateway chain (mirrors the outbound dialplan's
+    -- fractel1..6 failover) before moving to the next routing step.
+    local bridge_body
+    if #bridge_components == 1 then
+        local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
+        local templated = gw_dest and carrier_legs_for(gw_dest) or nil
+        local alternatives
+        if templated then
+            -- Preferred: the API's rendered waterfall, which carries
+            -- each carrier's own number format.
+            alternatives = templated
+        elseif gw_dest and #external_gateways > 1 then
+            local alts = {}
+            for _, gw in ipairs(external_gateways) do
+                table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
+            end
+            alternatives = table.concat(alts, "|")
+        else
+            alternatives = bridge_components[1]
+        end
+        local alts = {}
+        for _, alt in ipairs(split_outside_brackets(alternatives, "|")) do
+            if trim(alt) ~= "" then
+                table.insert(alts, tagged(1, trim(alt)))
+            end
+        end
+        bridge_body = table.concat(alts, "|")
+    else
+        -- A mixed or ring-all step. Each external leg gets the first
+        -- carrier's rendered format -- the bare `gateway/1XXXXXXXXXX`
+        -- above drops a carrier's tech prefix, and Anveo refuses a
+        -- number without it, so every cell in a softphone+cell step
+        -- failed while the softphones rang.
+        local legs = {}
+        for idx, leg in ipairs(bridge_components) do
+            table.insert(legs, tagged(idx, external_first_leg[idx] or leg))
+        end
+        bridge_body = table.concat(legs, ",")
+    end
+    return bridge_body, forwarded, forwarded_uuids
+end
+
+for i, step in ipairs(failover_steps) do
+    if step and step ~= "" then
+        local bridge_string, forwarded, forwarded_uuids = build_step(step, AGENT_CELL_SHOW_CALLER)
+        if bridge_string then
             if not session:ready() then
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
             log("INFO", "External legs present caller ID " .. outbound_cid .. "; original caller=" .. tostring(caller_number))
-            -- A registered contact can list several registrations; each is its
-            -- own leg and each carries the variables.
-            local function tagged(idx, leg)
-                local vars = component_vars[idx] or new_leg_vars()
-                local out = {}
-                for _, one in ipairs(split_outside_brackets(leg, ",")) do
-                    if trim(one) ~= "" then
-                        table.insert(out, with_leg_vars(vars, trim(one)))
-                    end
-                end
-                return table.concat(out, ",")
-            end
-            -- Single external destination: retry the same number across the
-            -- whole carrier gateway chain (mirrors the outbound dialplan's
-            -- fractel1..6 failover) before moving to the next routing step.
-            local bridge_body
-            if #bridge_components == 1 then
-                local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
-                local templated = gw_dest and carrier_legs_for(gw_dest) or nil
-                local alternatives
-                if templated then
-                    -- Preferred: the API's rendered waterfall, which carries
-                    -- each carrier's own number format.
-                    alternatives = templated
-                elseif gw_dest and #external_gateways > 1 then
-                    local alts = {}
-                    for _, gw in ipairs(external_gateways) do
-                        table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
-                    end
-                    alternatives = table.concat(alts, "|")
-                else
-                    alternatives = bridge_components[1]
-                end
-                local alts = {}
-                for _, alt in ipairs(split_outside_brackets(alternatives, "|")) do
-                    if trim(alt) ~= "" then
-                        table.insert(alts, tagged(1, trim(alt)))
-                    end
-                end
-                bridge_body = table.concat(alts, "|")
-            else
-                -- A mixed or ring-all step. Each external leg gets the first
-                -- carrier's rendered format -- the bare `gateway/1XXXXXXXXXX`
-                -- above drops a carrier's tech prefix, and Anveo refuses a
-                -- number without it, so every cell in a softphone+cell step
-                -- failed while the softphones rang.
-                local legs = {}
-                for idx, leg in ipairs(bridge_components) do
-                    table.insert(legs, tagged(idx, external_first_leg[idx] or leg))
-                end
-                bridge_body = table.concat(legs, ",")
-            end
-            local bridge_string = bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
+
+            -- A carrier refused the customer's caller ID on an agent cell: ring
+            -- the same step once more, the cells presenting our DID instead.
+            if forwarded and not session:answered() and session:ready() then
+                local refused, refusal = cell_cid_refused(forwarded_uuids)
+                if refused then
+                    local plain = build_step(step, false)
+                    if plain then
+                        log("WARNING", "[AGENT-CELL-CID] carrier refused the customer's caller ID (" ..
+                            refusal .. ") — re-ringing step " .. tostring(i) .. " with our DID")
+                        bridge_string = plain
+                        session:execute("bridge", bridge_string)
+                    end
+                end
+            end
 
             -- The customer outlives a dead agent leg: re-ring this same group
             -- once rather than hanging up on a live conversation. Bounded to a
