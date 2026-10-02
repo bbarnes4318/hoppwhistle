@@ -104,7 +104,10 @@ export function InviteAgentDialog({
       });
       const data = response.data;
       if (!data) {
-        setError('The invitation could not be created.');
+        // The client reports a refusal as `{ error }` rather than throwing, so
+        // the server's own reason (e.g. the email already has an account) has
+        // to be read here or the owner only sees the generic line.
+        setError(response.error?.message || 'The invitation could not be created.');
         return;
       }
       setResult(data);
