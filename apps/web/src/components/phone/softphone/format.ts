@@ -411,3 +411,14 @@ export function normalizeThirdPartyNumber(input: string): string | null {
   if (/^1[2-9]\d{9}$/.test(digits)) return digits;
   return null;
 }
+
+/**
+ * Whether the agent's microphone reaches the far end. Mute and hold both cut
+ * it, independently: unholding a call the agent muted must not unmute them,
+ * and unmuting a held call must not let the customer hear the agent.
+ */
+export function sendsAgentAudio(
+  call: Pick<CallInfo, 'isMuted' | 'isOnHold'> | null | undefined
+): boolean {
+  return !!call && !call.isMuted && !call.isOnHold;
+}

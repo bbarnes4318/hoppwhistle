@@ -24,7 +24,7 @@ import {
 
 import { inboundCallSid } from '@/lib/softphone-call-id';
 
-import { normalizeThirdPartyNumber } from './softphone/format';
+import { normalizeThirdPartyNumber, sendsAgentAudio } from './softphone/format';
 
 /**
  * REGISTER, and resolve only when the registrar ACCEPTS it.
@@ -101,8 +101,10 @@ function getSipCallId(session: SipSessionLike | null | undefined): string {
 }
 
 /**
- * Silence (or restore) what the agent sends on a session. This is what the
- * softphone's "hold" is: the far end hears nothing, the call stays up.
+ * Silence (or restore) what the agent sends on a session. Both "mute" and the
+ * softphone's "hold" work this way: the far end hears nothing, the call stays
+ * up. Callers that know the call's mute and hold state go through
+ * `syncAgentAudio` so one never undoes the other.
  */
 function setSessionAudioMuted(session: Session | null, muted: boolean): void {
   const pc = (
@@ -112,6 +114,14 @@ function setSessionAudioMuted(session: Session | null, muted: boolean): void {
   for (const sender of pc.getSenders()) {
     if (sender.track && sender.track.kind === 'audio') sender.track.enabled = !muted;
   }
+}
+
+/** Make what the agent sends on `session` match the call's mute and hold state. */
+function syncAgentAudio(
+  session: Session | null,
+  call: Pick<CallInfo, 'isMuted' | 'isOnHold'> | null | undefined
+): void {
+  setSessionAudioMuted(session, !sendsAgentAudio(call));
 }
 
 // ============================================================================
@@ -388,6 +398,13 @@ export function PhoneProvider({
   // State
   const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
   const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
+  /**
+   * The latest call, for the mute and hold toggles: two presses inside one
+   * render must each see what the one before did, which a closure over
+   * `currentCall` does not.
+   */
+  const currentCallRef = useRef<CallInfo | null>(null);
+  currentCallRef.current = currentCall;
   const [callHistory, setCallHistory] = useState<CallInfo[]>([]);
   const [isPhonePanelOpen, setIsPhonePanelOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -963,7 +980,9 @@ export function PhoneProvider({
       heldCallInfoRef.current = null;
 
       // Take the customer off hold and put their audio back on the speaker.
-      setSessionAudioMuted(sessionRef.current, false);
+      // Off hold, not unmuted: an agent who muted before adding someone is
+      // still muted when the customer comes back.
+      syncAgentAudio(sessionRef.current, heldCall ? { ...heldCall, isOnHold: false } : null);
       const pc = (
         sessionRef.current.sessionDescriptionHandler as
           | { peerConnection?: RTCPeerConnection }
@@ -1327,57 +1346,31 @@ export function PhoneProvider({
   }, []);
 
   const toggleMute = useCallback(() => {
-    // TODO: Implement SIP mute
-    // sessionRef.current?.mute() / unmute()
-    setCurrentCall(prev => {
-      if (!prev) return prev;
-      return { ...prev, isMuted: !prev.isMuted };
-    });
+    const call = currentCallRef.current;
+    if (!call) return;
+    const next = { ...call, isMuted: !call.isMuted };
+    currentCallRef.current = next;
+    // The microphone itself, not just the icon. Held calls stay silent
+    // whatever mute says (see `sendsAgentAudio`).
+    syncAgentAudio(sessionRef.current, next);
+    setCurrentCall(prev => (prev ? { ...prev, isMuted: next.isMuted } : prev));
   }, []);
 
   const toggleHold = useCallback(() => {
-    if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+    const session = sessionRef.current;
+    const call = currentCallRef.current;
+    if (!session || session.state !== SessionState.Established || !call) {
       return;
     }
 
-    const session = sessionRef.current;
-    const currentlyOnHold = currentCall?.isOnHold ?? false;
-
-    try {
-      // Send re-INVITE with hold/unhold SDP modifiers
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sdh = session.sessionDescriptionHandler as any;
-      if (sdh && sdh.peerConnection) {
-        const pc = sdh.peerConnection as RTCPeerConnection;
-        const senders = pc.getSenders();
-        for (const sender of senders) {
-          if (sender.track && sender.track.kind === 'audio') {
-            sender.track.enabled = currentlyOnHold; // unmute for resume, mute for hold
-          }
-        }
-      }
-
-      setCurrentCall(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          isOnHold: !currentlyOnHold,
-          state: !currentlyOnHold ? 'hold' : 'active',
-        };
-      });
-    } catch (err) {
-      console.error('[Phone] Hold toggle failed:', err);
-      // Fallback: still update UI state so user isn't stuck
-      setCurrentCall(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          isOnHold: !currentlyOnHold,
-          state: !currentlyOnHold ? 'hold' : 'active',
-        };
-      });
-    }
-  }, [currentCall?.isOnHold]);
+    const isOnHold = !call.isOnHold;
+    const state: CallState = isOnHold ? 'hold' : 'active';
+    const next = { ...call, isOnHold, state };
+    currentCallRef.current = next;
+    // Taking a call off hold does not unmute an agent who muted it.
+    syncAgentAudio(session, next);
+    setCurrentCall(prev => (prev ? { ...prev, isOnHold, state } : prev));
+  }, []);
 
   const playDTMFTone = useCallback((digit: string) => {
     try {
@@ -1535,7 +1528,7 @@ export function PhoneProvider({
           heldSessionRef.current = null;
           heldCallInfoRef.current = null;
           setHasHeldCalls(false);
-          setSessionAudioMuted(session, false);
+          syncAgentAudio(session, heldCall ? { ...heldCall, isOnHold: false } : null);
           if (heldCall) setCurrentCall({ ...heldCall, isOnHold: false, state: 'active' });
         }
         // makeCall has already set the error the agent should see.
@@ -1597,6 +1590,8 @@ export function PhoneProvider({
       // The call the agent placed lives on inside the three-way call and is
       // closed out when it ends; the screen goes back to the customer.
       mergedCallsRef.current.push(addedCall);
+      // Nobody is on hold in a three-way call; the agent's mute carries over.
+      syncAgentAudio(active, { isMuted: addedCall.isMuted, isOnHold: false });
       setCurrentCall(prev => {
         const base = heldCall ?? prev;
         if (!base) return prev;
@@ -1604,7 +1599,7 @@ export function PhoneProvider({
           ...base,
           state: 'active',
           isOnHold: false,
-          isMuted: prev?.isMuted ?? false,
+          isMuted: addedCall.isMuted,
           conferenceWith: [...(base.conferenceWith ?? []), addedCall.phoneNumber],
         };
       });
