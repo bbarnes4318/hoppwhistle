@@ -1,11 +1,20 @@
 'use client';
 
-import { Building2, Handshake, Loader2, RefreshCw } from 'lucide-react';
+import { Building2, Handshake, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
+import { InviteOwnerDialog } from '@/components/agencies/invite-owner-dialog';
 import { count, pct } from '@/components/delivery/ledger';
-import { EmptyState, Notice, Panel, PanelBody, StatusChip } from '@/components/domain';
+import {
+  EmptyState,
+  Notice,
+  Panel,
+  PanelBody,
+  StatTile,
+  StatTileRow,
+  StatusChip,
+} from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { ChildStatementButton } from '@/components/statements/statements-view';
 import { Button } from '@/components/ui/button';
@@ -54,6 +63,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
   const [data, setData] = useState<NetworkAgencies | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inviting, setInviting] = useState<NetworkAgencyRow | null>(null);
 
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
@@ -89,6 +99,9 @@ export default function NetworkAgenciesPage(): JSX.Element {
     );
   }
 
+  const waiting = (data?.agencies ?? []).filter(agency => agency.owner.status !== 'ACCEPTED');
+  const active = (data?.agencies ?? []).length - waiting.length;
+
   return (
     <div className="page-canvas">
       <PageHeader
@@ -114,6 +127,43 @@ export default function NetworkAgenciesPage(): JSX.Element {
 
       {error ? <Notice tone="error" title={error} /> : null}
 
+      {data && data.agencies.length > 0 ? (
+        <>
+          <StatTileRow className="lg:grid-cols-4">
+            <StatTile label="Agencies" value={count(data.agencies.length)} />
+            <StatTile label="Owners active" value={count(active)} />
+            <StatTile
+              label="Waiting on an owner"
+              value={count(waiting.length)}
+              sub={
+                waiting.length > 0 ? 'Invite them from the table below' : 'Everyone is signed in'
+              }
+            />
+            <StatTile
+              label="Applications"
+              value={count(data.agencies.reduce((sum, agency) => sum + agency.applications, 0))}
+            />
+          </StatTileRow>
+
+          {waiting.length > 0 ? (
+            <Notice
+              tone="warning"
+              title={`${waiting.length} ${waiting.length === 1 ? 'agency has' : 'agencies have'} no owner signed in yet`}
+              action={
+                waiting.length === 1 ? (
+                  <Button size="sm" onClick={() => setInviting(waiting[0] ?? null)}>
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                    {waiting[0]?.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Resend invite'}
+                  </Button>
+                ) : undefined
+              }
+            >
+              An agency cannot take calls until its owner has accepted the invitation and signed in.
+            </Notice>
+          ) : null}
+        </>
+      ) : null}
+
       {loading && !data ? (
         <div className="flex items-center justify-center py-16 t-body text-ink-3">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -134,14 +184,12 @@ export default function NetworkAgenciesPage(): JSX.Element {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Agency</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Owner</TableHead>
                     <TableHead className="text-right">Agents</TableHead>
                     <TableHead className="text-right">Inbound calls</TableHead>
-                    <TableHead className="text-right">Answered by agents</TableHead>
+                    <TableHead className="text-right">Answered</TableHead>
                     <TableHead className="text-right">Applications</TableHead>
                     <TableHead className="text-right">Closing</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Onboarded</TableHead>
                     <TableHead>
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -150,18 +198,36 @@ export default function NetworkAgenciesPage(): JSX.Element {
                 <TableBody>
                   {data.agencies.map(agency => {
                     const owner = OWNER_LABEL[agency.owner.status];
+                    const accepted = agency.owner.status === 'ACCEPTED';
+                    const neverInvited = agency.owner.status === 'NOT_INVITED';
                     return (
                       <TableRow key={agency.tenantId}>
-                        <TableCell className="whitespace-nowrap font-medium">
-                          <Link
-                            href={`/network/agencies/${agency.tenantId}`}
-                            className="text-brand-ink hover:underline"
-                          >
-                            {agency.name}
-                          </Link>
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/network/agencies/${agency.tenantId}`}
+                              className="font-medium text-brand-ink hover:underline"
+                            >
+                              {agency.name}
+                            </Link>
+                            <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
+                          </div>
+                          <div className="mt-0.5 t-meta text-ink-3">
+                            {`Onboarded ${formatDisplayDate(agency.createdAt)}`}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
+                          <div className="flex flex-col items-start gap-1">
+                            <StatusChip
+                              value={agency.owner.status}
+                              label={owner.label}
+                              tone={owner.tone}
+                              size="sm"
+                            />
+                            {agency.owner.email ? (
+                              <span className="t-meta text-ink-3">{agency.owner.email}</span>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {count(agency.agents)}
@@ -178,22 +244,20 @@ export default function NetworkAgenciesPage(): JSX.Element {
                         <TableCell className="text-right tabular-nums">
                           {pct(agency.closingPct, 1)}
                         </TableCell>
-                        <TableCell>
-                          <StatusChip
-                            value={agency.owner.status}
-                            label={owner.label}
-                            tone={owner.tone}
-                            size="sm"
-                          />
-                          {agency.owner.email ? (
-                            <div className="mt-0.5 t-meta text-ink-3">{agency.owner.email}</div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap t-meta text-ink-2">
-                          {formatDisplayDate(agency.createdAt)}
-                        </TableCell>
                         <TableCell className="text-right">
-                          <ChildStatementButton tenantId={agency.tenantId} name={agency.name} />
+                          <div className="flex items-center justify-end gap-2">
+                            {accepted ? null : (
+                              <Button
+                                size="sm"
+                                variant={neverInvited ? 'default' : 'outline'}
+                                onClick={() => setInviting(agency)}
+                              >
+                                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                                {neverInvited ? 'Invite owner' : 'Resend invite'}
+                              </Button>
+                            )}
+                            <ChildStatementButton tenantId={agency.tenantId} name={agency.name} />
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -204,6 +268,25 @@ export default function NetworkAgenciesPage(): JSX.Element {
           </PanelBody>
         </Panel>
       )}
+
+      <InviteOwnerDialog
+        open={inviting !== null}
+        onOpenChange={open => {
+          if (!open) setInviting(null);
+        }}
+        scope="network"
+        agency={
+          inviting
+            ? {
+                tenantId: inviting.tenantId,
+                name: inviting.name,
+                email: inviting.owner.email,
+                alreadyInvited: inviting.owner.status !== 'NOT_INVITED',
+              }
+            : null
+        }
+        onInvited={() => void load()}
+      />
     </div>
   );
 }
