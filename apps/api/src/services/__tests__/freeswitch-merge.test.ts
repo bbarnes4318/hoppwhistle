@@ -45,6 +45,16 @@ const B2: FakeChannel = {
   sipCallId: 'carrier-b2',
 };
 
+/**
+ * `executeApi` is async; the fakes are written synchronously. Wrapping them in
+ * a promise executor turns a thrown error into a rejection, as the real one
+ * reports an `-ERR` reply.
+ */
+const asEsl =
+  (fn: (command: string, args: string) => string) =>
+  (command: string, args: string): Promise<string> =>
+    new Promise(resolve => resolve(fn(command, args)));
+
 function fakeSwitch(
   channels: FakeChannel[],
   opts: { customerJoins?: boolean; failActiveTransfer?: boolean } = {}
@@ -54,32 +64,34 @@ function fakeSwitch(
   let customerInRoom = false;
 
   const svc = new FreeSwitchService();
-  vi.spyOn(svc, 'executeApi').mockImplementation(async (command: string, args: string) => {
-    commands.push(`${command} ${args}`);
-    if (command === 'show') {
-      return JSON.stringify({ rows: channels.map(({ sipCallId: _s, ...row }) => row) });
-    }
-    if (command === 'uuid_getvar') {
-      const [uuid, name] = args.split(' ');
-      const chan = channels.find(c => c.uuid === uuid);
-      if (!chan) throw new Error('FreeSWITCH command failed: -ERR No such channel!');
-      return name === 'sip_call_id' ? chan.sipCallId : '_undef_';
-    }
-    if (command === 'uuid_transfer') {
-      if (args.startsWith('b1 ') && customerJoins) customerInRoom = true;
-      if (args.startsWith('a2 ') && failActiveTransfer) {
-        throw new Error('FreeSWITCH command failed: -ERR No such channel!');
+  vi.spyOn(svc, 'executeApi').mockImplementation(
+    asEsl((command: string, args: string) => {
+      commands.push(`${command} ${args}`);
+      if (command === 'show') {
+        return JSON.stringify({ rows: channels.map(({ sipCallId: _s, ...row }) => row) });
       }
-      return '+OK';
-    }
-    if (command === 'conference') {
-      const [name] = args.split(' ');
-      if (!customerInRoom) return `Conference ${name} not found`;
-      return `1;sofia/external/customer@carrier;b1;customer;customer;hear|speak;0;0;100`;
-    }
-    if (command === 'uuid_kill') return '+OK';
-    throw new Error(`unexpected ESL command: ${command} ${args}`);
-  });
+      if (command === 'uuid_getvar') {
+        const [uuid, name] = args.split(' ');
+        const chan = channels.find(c => c.uuid === uuid);
+        if (!chan) throw new Error('FreeSWITCH command failed: -ERR No such channel!');
+        return name === 'sip_call_id' ? chan.sipCallId : '_undef_';
+      }
+      if (command === 'uuid_transfer') {
+        if (args.startsWith('b1 ') && customerJoins) customerInRoom = true;
+        if (args.startsWith('a2 ') && failActiveTransfer) {
+          throw new Error('FreeSWITCH command failed: -ERR No such channel!');
+        }
+        return '+OK';
+      }
+      if (command === 'conference') {
+        const [name] = args.split(' ');
+        if (!customerInRoom) return `Conference ${name} not found`;
+        return `1;sofia/external/customer@carrier;b1;customer;customer;hear|speak;0;0;100`;
+      }
+      if (command === 'uuid_kill') return '+OK';
+      throw new Error(`unexpected ESL command: ${command} ${args}`);
+    })
+  );
 
   return { svc, commands };
 }
@@ -119,18 +131,20 @@ describe('FreeSwitchService.mergeCalls', () => {
     const A1in: FakeChannel = { ...A1, call_uuid: 'c' };
     const { svc, commands } = fakeSwitch([C, A1in, A2, B2]);
     // The fake moves "b1" into the room; this switch's customer is "c".
-    vi.spyOn(svc, 'executeApi').mockImplementation(async (command: string, args: string) => {
-      commands.push(`${command} ${args}`);
-      if (command === 'show') {
-        return JSON.stringify({ rows: [C, A1in, A2, B2] });
-      }
-      if (command === 'uuid_getvar') {
-        const chan = [C, A1in, A2, B2].find(x => x.uuid === args.split(' ')[0]);
-        return chan?.sipCallId ?? '';
-      }
-      if (command === 'conference') return '1;sofia/external/c;c;c;c;hear|speak;0;0;100';
-      return '+OK';
-    });
+    vi.spyOn(svc, 'executeApi').mockImplementation(
+      asEsl((command: string, args: string) => {
+        commands.push(`${command} ${args}`);
+        if (command === 'show') {
+          return JSON.stringify({ rows: [C, A1in, A2, B2] });
+        }
+        if (command === 'uuid_getvar') {
+          const chan = [C, A1in, A2, B2].find(x => x.uuid === args.split(' ')[0]);
+          return chan?.sipCallId ?? '';
+        }
+        if (command === 'conference') return '1;sofia/external/c;c;c;c;hear|speak;0;0;100';
+        return '+OK';
+      })
+    );
 
     await svc.mergeCalls(A2.sipCallId, A1in.sipCallId);
 
