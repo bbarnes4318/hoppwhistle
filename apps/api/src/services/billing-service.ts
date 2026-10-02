@@ -210,6 +210,32 @@ export class BillingService {
           billable = true;
         }
 
+        // 3b. A PER_APPLICATION campaign bills on applications, not on duration.
+        //
+        // The call is billable when at least one submitted, unvoided application
+        // is attributed to it, and is charged and paid once per such
+        // application (a couple insuring together is two). Duration plays no
+        // part. It is exclusive: nothing below prices such a call per call, so
+        // a buyer is never charged both ways for one caller.
+        const perApplication = campaign?.billingModel === 'PER_APPLICATION';
+        let applicationCount = 0;
+        if (perApplication) {
+          applicationCount = await tx.insuranceCarrierApplication.count({
+            where: { tenantId, callId: call.id, submittedAt: { not: null }, voidedAt: null },
+          });
+          if (call.blocked) {
+            billable = false;
+            noPayoutReason = 'BLOCKED';
+            noConversionReason = 'BLOCKED';
+          } else if (applicationCount === 0) {
+            billable = false;
+            noPayoutReason = 'NO_APPLICATION_SUBMITTED';
+            noConversionReason = 'NO_APPLICATION_SUBMITTED';
+          } else {
+            billable = true;
+          }
+        }
+
         // 4. Resolve Buyer Endpoint ID
         let buyerEndpointId: string | null = null;
         if (call.buyerId && call.targetNumber) {
@@ -409,6 +435,50 @@ export class BillingService {
           }
         }
 
+        // 6b. PER_APPLICATION rates replace the per-call ones resolved above:
+        // the assignment's override, else the campaign's default. RTB bids,
+        // endpoint base prices and publisher metadata are per-call prices and
+        // do not apply.
+        if (perApplication && campaign) {
+          buyerPriceRate = campaign.buyerPricePerApplication ?? new Prisma.Decimal(0);
+          pricingSource = 'campaign_application_default';
+          if (call.buyerId) {
+            const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
+            const assignments = await tx.campaignBuyer.findMany({
+              where: { tenantId, campaignId: campaign.id, buyerId: call.buyerId, status: 'ACTIVE' },
+            });
+            const match =
+              assignments.find(
+                a => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
+              ) ?? (assignments.length === 1 ? assignments[0] : undefined);
+            if (match?.pricePerApplication !== null && match?.pricePerApplication !== undefined) {
+              buyerPriceRate = match.pricePerApplication;
+              pricingSource = 'campaign_buyer_application_override';
+            }
+          }
+
+          publisherPayoutRate = campaign.publisherPayoutPerApplication ?? new Prisma.Decimal(0);
+          payoutSource = 'campaign_application_default';
+          if (call.publisherId) {
+            const assignment = await tx.campaignPublisher.findUnique({
+              where: {
+                tenantId_campaignId_publisherId: {
+                  tenantId,
+                  campaignId: campaign.id,
+                  publisherId: call.publisherId,
+                },
+              },
+            });
+            if (
+              assignment?.payoutPerApplication !== null &&
+              assignment?.payoutPerApplication !== undefined
+            ) {
+              publisherPayoutRate = assignment.payoutPerApplication;
+              payoutSource = 'campaign_publisher_application_override';
+            }
+          }
+        }
+
         // 7. Resolve Carrier / Live-Transfer Cost
         let cost = new Prisma.Decimal(0);
         let costSource = 'estimated_rate_card';
@@ -456,15 +526,20 @@ export class BillingService {
         // took it, or nobody did -- earns none, whatever the campaign's buyer
         // price says. The publisher is still paid below: a publisher is paid for
         // every billable inbound call from their campaign, whoever answered it.
+        //
+        // A PER_APPLICATION call is charged and paid once per application.
         const hasBuyer = !!call.buyerId;
-        const revenue = billable && hasBuyer ? buyerPriceRate : new Prisma.Decimal(0);
-        const payout = billable ? publisherPayoutRate : new Prisma.Decimal(0);
+        const units = perApplication ? applicationCount : 1;
+        const revenue = billable && hasBuyer ? buyerPriceRate.mul(units) : new Prisma.Decimal(0);
+        const payout = billable ? publisherPayoutRate.mul(units) : new Prisma.Decimal(0);
         const profit = revenue.minus(payout).minus(cost);
 
         // 9. Build billing rule snapshot
         const billingRuleSnapshot = {
           campaignId: campaign?.id || null,
           campaignName: campaign?.name || null,
+          billingModel: campaign?.billingModel ?? 'PER_CALL',
+          applicationCount: perApplication ? applicationCount : null,
           publisherId: call.publisherId || null,
           publisherName: call.publisherName || null,
           buyerId: call.buyerId || null,
@@ -608,7 +683,9 @@ export class BillingService {
               revenue,
               call.buyerId,
               null,
-              `Lead Charge - Campaign: ${campaign?.name || 'Unknown'}`
+              perApplication
+                ? `Application Charge x${applicationCount} - Campaign: ${campaign?.name || 'Unknown'}`
+                : `Lead Charge - Campaign: ${campaign?.name || 'Unknown'}`
             );
           }
 
@@ -619,7 +696,9 @@ export class BillingService {
               payout.negated(),
               null,
               call.publisherId,
-              `Lead Payout - Campaign: ${campaign?.name || 'Unknown'}`
+              perApplication
+                ? `Application Payout x${applicationCount} - Campaign: ${campaign?.name || 'Unknown'}`
+                : `Lead Payout - Campaign: ${campaign?.name || 'Unknown'}`
             );
           }
         } else {

@@ -62,6 +62,17 @@ percentage on a settlement total, nothing itemised separately from the price.
 See §13.
 
 
+**This is the platform billing the agency.** A campaign's own billing model
+(`Campaign.billingModel`, set on the campaign's Settings tab) is a different
+thing: what the agency charges its *buyers* and pays its *publishers*, per
+billable call (`PER_CALL`) or per submitted application (`PER_APPLICATION`).
+The two are exclusive on a campaign — a `PER_APPLICATION` call is never also
+priced per call — and are computed in `services/billing-service.ts`, not in
+this ledger. Every application carries the `campaignId`, `buyerId` and
+`publisherId` of its call. Writing or voiding one re-prices that call
+(`services/applications/application-billing.ts`). Nothing in this document
+reads any of that.
+
 ---
 
 ## 0. Enrolment — the opt-in

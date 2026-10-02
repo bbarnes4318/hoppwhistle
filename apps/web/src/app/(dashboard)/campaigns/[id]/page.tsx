@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AnswerOrderControl } from '@/components/campaigns/answer-order-control';
 import { CampaignAgentsTab } from '@/components/campaigns/campaign-agents-tab';
+import { CampaignBillingNotice } from '@/components/campaigns/campaign-billing-notice';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -115,6 +116,7 @@ interface CampaignPublisher {
   publisherId: string;
   publisher: Publisher;
   payoutPerBillableCall: string | null;
+  payoutPerApplication: string | null;
   status: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
 }
@@ -127,6 +129,7 @@ interface CampaignBuyer {
   buyerEndpoint: BuyerEndpoint | null;
   destinationNumber: string;
   pricePerBillableCall: string | null;
+  pricePerApplication: string | null;
   priority: number;
   weight: number;
   status: 'ACTIVE' | 'INACTIVE';
@@ -146,6 +149,9 @@ interface DidRoute {
   };
 }
 
+/** How a campaign charges its buyers and pays its publishers. Exclusive. */
+type BillingModel = 'PER_CALL' | 'PER_APPLICATION';
+
 interface CampaignDetails {
   id: string;
   name: string;
@@ -160,6 +166,9 @@ interface CampaignDetails {
   billableDurationSeconds: number;
   publisherPayoutPerBillableCall: string;
   buyerPricePerBillableCall: string;
+  billingModel: BillingModel;
+  buyerPricePerApplication: string;
+  publisherPayoutPerApplication: string;
   calls: number;
   phoneNumbers: number;
   /** Free-form settings. `answerOrder` is "who answers first"; see lib/answer-order. */
@@ -235,6 +244,9 @@ export default function CampaignDetailPage() {
     billableDurationSeconds: 60,
     publisherPayoutPerBillableCall: 0,
     buyerPricePerBillableCall: 0,
+    billingModel: 'PER_CALL' as BillingModel,
+    buyerPricePerApplication: 0,
+    publisherPayoutPerApplication: 0,
     agentRingSeconds: DEFAULT_AGENT_RING_SECONDS,
     buyerRingSeconds: DEFAULT_BUYER_RING_SECONDS,
   });
@@ -259,6 +271,7 @@ export default function CampaignDetailPage() {
   const [pubForm, setPubForm] = useState({
     publisherId: '',
     payoutPerBillableCall: '',
+    payoutPerApplication: '',
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
   });
 
@@ -267,6 +280,7 @@ export default function CampaignDetailPage() {
     buyerEndpointId: '',
     destinationNumber: '',
     pricePerBillableCall: '',
+    pricePerApplication: '',
     priority: 0,
     weight: 100,
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
@@ -285,6 +299,7 @@ export default function CampaignDetailPage() {
         buyerEndpointId: '',
         destinationNumber: '',
         pricePerBillableCall: '',
+        pricePerApplication: '',
         priority: 0,
         weight: 100,
         status: 'ACTIVE',
@@ -308,6 +323,9 @@ export default function CampaignDetailPage() {
           billableDurationSeconds: response.data.billableDurationSeconds,
           publisherPayoutPerBillableCall: Number(response.data.publisherPayoutPerBillableCall),
           buyerPricePerBillableCall: Number(response.data.buyerPricePerBillableCall),
+          billingModel: response.data.billingModel ?? 'PER_CALL',
+          buyerPricePerApplication: Number(response.data.buyerPricePerApplication ?? 0),
+          publisherPayoutPerApplication: Number(response.data.publisherPayoutPerApplication ?? 0),
           ...ringTimesOf(response.data.metadata),
         });
       }
@@ -420,6 +438,9 @@ export default function CampaignDetailPage() {
         billableDurationSeconds: Number(settingsForm.billableDurationSeconds),
         publisherPayoutPerBillableCall: Number(settingsForm.publisherPayoutPerBillableCall),
         buyerPricePerBillableCall: Number(settingsForm.buyerPricePerBillableCall),
+        billingModel: settingsForm.billingModel,
+        buyerPricePerApplication: Number(settingsForm.buyerPricePerApplication),
+        publisherPayoutPerApplication: Number(settingsForm.publisherPayoutPerApplication),
         // Merged into campaign.metadata by the API; the routing engine reads
         // both, with the same defaults and 10-120 second bounds.
         metadata: {
@@ -472,6 +493,9 @@ export default function CampaignDetailPage() {
         payoutPerBillableCall: pubForm.payoutPerBillableCall
           ? Number(pubForm.payoutPerBillableCall)
           : null,
+        payoutPerApplication: pubForm.payoutPerApplication
+          ? Number(pubForm.payoutPerApplication)
+          : null,
         status: pubForm.status,
       });
 
@@ -488,7 +512,12 @@ export default function CampaignDetailPage() {
           variant: 'success',
         });
         setPubDialogOpen(false);
-        setPubForm({ publisherId: '', payoutPerBillableCall: '', status: 'ACTIVE' });
+        setPubForm({
+          publisherId: '',
+          payoutPerBillableCall: '',
+          payoutPerApplication: '',
+          status: 'ACTIVE',
+        });
         void fetchCampaignData();
       }
     } catch (err) {
@@ -567,6 +596,9 @@ export default function CampaignDetailPage() {
           pricePerBillableCall: buyerForm.pricePerBillableCall
             ? Number(buyerForm.pricePerBillableCall)
             : null,
+          pricePerApplication: buyerForm.pricePerApplication
+            ? Number(buyerForm.pricePerApplication)
+            : null,
           priority: Number(buyerForm.priority) || 0,
           weight: Number(buyerForm.weight) || 100,
           status: buyerForm.status,
@@ -578,6 +610,9 @@ export default function CampaignDetailPage() {
           destinationNumber: dest,
           pricePerBillableCall: buyerForm.pricePerBillableCall
             ? Number(buyerForm.pricePerBillableCall)
+            : null,
+          pricePerApplication: buyerForm.pricePerApplication
+            ? Number(buyerForm.pricePerApplication)
             : null,
           priority: Number(buyerForm.priority) || 0,
           weight: Number(buyerForm.weight) || 100,
@@ -616,6 +651,7 @@ export default function CampaignDetailPage() {
       buyerEndpointId: cb.buyerEndpointId || '',
       destinationNumber: cb.destinationNumber,
       pricePerBillableCall: cb.pricePerBillableCall ? String(cb.pricePerBillableCall) : '',
+      pricePerApplication: cb.pricePerApplication ? String(cb.pricePerApplication) : '',
       priority: cb.priority,
       weight: cb.weight || 100,
       status: cb.status,
@@ -900,74 +936,151 @@ export default function CampaignDetailPage() {
 
               <Card className="border border-border">
                 <CardHeader>
-                  <CardTitle>Billable Call & Payout Configuration</CardTitle>
+                  <CardTitle>Billing &amp; Payout Configuration</CardTitle>
                   <CardDescription>
-                    Define the duration rules and default pricing rates for routing and financial
-                    reporting.
+                    Choose whether this campaign charges its buyers and pays its publishers per
+                    billable call or per submitted application, and set the default rates.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-6 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="camp-threshold">Billable Threshold (Seconds)</Label>
-                    <Input
-                      id="camp-threshold"
-                      type="number"
-                      min={0}
-                      value={settingsForm.billableDurationSeconds}
-                      onChange={e =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          billableDurationSeconds: parseInt(e.target.value) || 0,
-                        })
+                <CardContent className="space-y-6">
+                  <CampaignBillingNotice billingModel={settingsForm.billingModel} />
+
+                  <div className="max-w-sm space-y-2">
+                    <Label htmlFor="camp-billing-model">Billing Model</Label>
+                    <Select
+                      value={settingsForm.billingModel}
+                      onValueChange={val =>
+                        setSettingsForm({ ...settingsForm, billingModel: val as BillingModel })
                       }
-                      required
-                    />
+                    >
+                      <SelectTrigger id="camp-billing-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PER_CALL">Per billable call</SelectItem>
+                        <SelectItem value="PER_APPLICATION">Per submitted application</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <p className="text-[11px] text-muted-foreground">
-                      Call must exceed this duration to be billable.
+                      {settingsForm.billingModel === 'PER_APPLICATION'
+                        ? 'A call is charged and paid only when an agent submits an application on it, once per application. Call duration does not matter.'
+                        : 'A call is charged and paid when it runs past the billable threshold.'}
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="camp-payout">Default Publisher Payout ($)</Label>
-                    <Input
-                      id="camp-payout"
-                      type="number"
-                      step="0.0001"
-                      min={0}
-                      value={settingsForm.publisherPayoutPerBillableCall}
-                      onChange={e =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      required
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Amount paid to publisher per billable call.
-                    </p>
-                  </div>
+                  {settingsForm.billingModel === 'PER_APPLICATION' ? (
+                    <div className="grid gap-6 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="camp-app-payout">
+                          Default Publisher Payout per Application ($)
+                        </Label>
+                        <Input
+                          id="camp-app-payout"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          value={settingsForm.publisherPayoutPerApplication}
+                          onChange={e =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              publisherPayoutPerApplication: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Amount paid to the publisher per submitted application.
+                        </p>
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="camp-price">Default Buyer Price ($)</Label>
-                    <Input
-                      id="camp-price"
-                      type="number"
-                      step="0.0001"
-                      min={0}
-                      value={settingsForm.buyerPricePerBillableCall}
-                      onChange={e =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          buyerPricePerBillableCall: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      required
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Amount billed to buyer per billable call.
-                    </p>
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="camp-app-price">
+                          Default Buyer Price per Application ($)
+                        </Label>
+                        <Input
+                          id="camp-app-price"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          value={settingsForm.buyerPricePerApplication}
+                          onChange={e =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              buyerPricePerApplication: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Amount billed to the buyer per submitted application.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-6 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="camp-threshold">Billable Threshold (Seconds)</Label>
+                        <Input
+                          id="camp-threshold"
+                          type="number"
+                          min={0}
+                          value={settingsForm.billableDurationSeconds}
+                          onChange={e =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              billableDurationSeconds: parseInt(e.target.value) || 0,
+                            })
+                          }
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Call must exceed this duration to be billable.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="camp-payout">Default Publisher Payout ($)</Label>
+                        <Input
+                          id="camp-payout"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          value={settingsForm.publisherPayoutPerBillableCall}
+                          onChange={e =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              publisherPayoutPerBillableCall: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Amount paid to publisher per billable call.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="camp-price">Default Buyer Price ($)</Label>
+                        <Input
+                          id="camp-price"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          value={settingsForm.buyerPricePerBillableCall}
+                          onChange={e =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              buyerPricePerBillableCall: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Amount billed to buyer per billable call.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
                 {canEditSettings ? (
                   <CardFooter className="flex justify-end border-t px-6 py-4">
@@ -1053,7 +1166,18 @@ export default function CampaignDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono">
-                          {cp.payoutPerBillableCall ? (
+                          {campaign.billingModel === 'PER_APPLICATION' ? (
+                            cp.payoutPerApplication ? (
+                              <span className="text-ringing-ink font-medium">
+                                ${Number(cp.payoutPerApplication).toFixed(2)} / app (Override)
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                ${Number(campaign.publisherPayoutPerApplication).toFixed(2)} / app
+                                (Campaign Default)
+                              </span>
+                            )
+                          ) : cp.payoutPerBillableCall ? (
                             <span className="text-ringing-ink font-medium">
                               ${Number(cp.payoutPerBillableCall).toFixed(2)} (Override)
                             </span>
@@ -1180,7 +1304,18 @@ export default function CampaignDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono">
-                          {cb.pricePerBillableCall ? (
+                          {campaign.billingModel === 'PER_APPLICATION' ? (
+                            cb.pricePerApplication ? (
+                              <span className="text-ringing-ink font-medium">
+                                ${Number(cb.pricePerApplication).toFixed(2)} / app (Override)
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                ${Number(campaign.buyerPricePerApplication).toFixed(2)} / app
+                                (Campaign Default)
+                              </span>
+                            )
+                          ) : cb.pricePerBillableCall ? (
                             <span className="text-ringing-ink font-medium">
                               ${Number(cb.pricePerBillableCall).toFixed(2)} (Override)
                             </span>
@@ -1359,23 +1494,45 @@ export default function CampaignDetailPage() {
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="pub-override">Payout Override ($ per Billable Call)</Label>
-                    <Input
-                      id="pub-override"
-                      type="number"
-                      step="0.0001"
-                      min={0}
-                      placeholder={`Default: $${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}`}
-                      value={pubForm.payoutPerBillableCall}
-                      onChange={e =>
-                        setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })
-                      }
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      Leave blank to use the campaign default publisher payout rate.
-                    </p>
-                  </div>
+                  {campaign.billingModel === 'PER_APPLICATION' ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="pub-app-override">
+                        Payout Override ($ per Submitted Application)
+                      </Label>
+                      <Input
+                        id="pub-app-override"
+                        type="number"
+                        step="0.0001"
+                        min={0}
+                        placeholder={`Default: $${Number(campaign.publisherPayoutPerApplication).toFixed(2)}`}
+                        value={pubForm.payoutPerApplication}
+                        onChange={e =>
+                          setPubForm({ ...pubForm, payoutPerApplication: e.target.value })
+                        }
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Leave blank to use the campaign default payout per application.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="pub-override">Payout Override ($ per Billable Call)</Label>
+                      <Input
+                        id="pub-override"
+                        type="number"
+                        step="0.0001"
+                        min={0}
+                        placeholder={`Default: $${Number(campaign.publisherPayoutPerBillableCall).toFixed(2)}`}
+                        value={pubForm.payoutPerBillableCall}
+                        onChange={e =>
+                          setPubForm({ ...pubForm, payoutPerBillableCall: e.target.value })
+                        }
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Leave blank to use the campaign default publisher payout rate.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="pub-status">Assignment Status</Label>
@@ -1505,20 +1662,39 @@ export default function CampaignDetailPage() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="buyer-override">Price Override ($ per Billable Call)</Label>
-                      <Input
-                        id="buyer-override"
-                        type="number"
-                        step="0.0001"
-                        min={0}
-                        placeholder="Campaign Default"
-                        value={buyerForm.pricePerBillableCall}
-                        onChange={e =>
-                          setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })
-                        }
-                      />
-                    </div>
+                    {campaign.billingModel === 'PER_APPLICATION' ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="buyer-app-override">
+                          Price Override ($ per Submitted Application)
+                        </Label>
+                        <Input
+                          id="buyer-app-override"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          placeholder="Campaign Default"
+                          value={buyerForm.pricePerApplication}
+                          onChange={e =>
+                            setBuyerForm({ ...buyerForm, pricePerApplication: e.target.value })
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label htmlFor="buyer-override">Price Override ($ per Billable Call)</Label>
+                        <Input
+                          id="buyer-override"
+                          type="number"
+                          step="0.0001"
+                          min={0}
+                          placeholder="Campaign Default"
+                          value={buyerForm.pricePerBillableCall}
+                          onChange={e =>
+                            setBuyerForm({ ...buyerForm, pricePerBillableCall: e.target.value })
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

@@ -532,7 +532,14 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
 
       const application = await prisma.insuranceCarrierApplication.findUnique({
         where: { id: request.params.id },
-        select: { id: true, tenantId: true, voidedAt: true, submittedAt: true, carrier: true },
+        select: {
+          id: true,
+          tenantId: true,
+          voidedAt: true,
+          submittedAt: true,
+          carrier: true,
+          callId: true,
+        },
       });
 
       if (!application) {
@@ -561,6 +568,13 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
         },
         select: { id: true, voidedAt: true, voidedById: true, voidReason: true },
       });
+
+      // A voided application no longer charges the buyer or pays the publisher
+      // on a campaign billed per application.
+      const { rebillCallForApplications } = await import(
+        '../services/applications/application-billing.js'
+      );
+      await rebillCallForApplications(prisma, application.callId);
 
       await auditLog({
         tenantId: application.tenantId,

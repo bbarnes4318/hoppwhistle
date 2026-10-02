@@ -9,6 +9,7 @@
 
 import { encryptField, last4 } from '../../lib/field-encryption.js';
 import { getPrismaClient } from '../../lib/prisma.js';
+import { callTags, rebillCallForApplications } from '../applications/application-billing.js';
 
 import type { NormalizedCarrierPayload } from './normalization.js';
 import { sanitizeErrorMessage } from './redaction.js';
@@ -29,6 +30,7 @@ export const createCarrierApplication = async (params: {
 }): Promise<CarrierApplicationRecord> => {
   const { tenantId, jobId, normalized: n, createdById } = params;
   const prisma = getPrismaClient();
+  const tags = await callTags(prisma, tenantId, n.callId);
 
   const application = await prisma.insuranceCarrierApplication.create({
     data: {
@@ -36,6 +38,9 @@ export const createCarrierApplication = async (params: {
       insuranceLeadId: n.insuranceLeadId,
       prospectIntakeId: n.prospectIntakeId,
       callId: n.callId,
+      campaignId: tags.campaignId,
+      buyerId: tags.buyerId,
+      publisherId: tags.publisherId,
       carrier: 'American Amicable',
       product: 'Senior Choice',
       planType: n.selectedPlanType,
@@ -189,8 +194,12 @@ export const markAutomationCompleted = async (
       // submission timestamp is not.
       submittedAt: existing?.submittedAt ?? now,
     },
-    select: { id: true, tenantId: true, submittedAt: true },
+    select: { id: true, tenantId: true, submittedAt: true, callId: true },
   });
+
+  // On a campaign that bills its buyers per application, this submission is
+  // what makes its call chargeable. Swallows its own failures.
+  await rebillCallForApplications(prisma, application.callId);
 
   /*
    * The application has reached submitted state, so it costs one credit.
