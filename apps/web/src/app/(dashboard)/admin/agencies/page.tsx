@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
+import { InviteOwnerDialog } from '@/components/agencies/invite-owner-dialog';
 import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { BrandThemeControl } from '@/components/platform/brand-theme-control';
@@ -184,6 +185,8 @@ export default function PlatformAgenciesPage(): JSX.Element {
    */
   const [showTestAgencies, setShowTestAgencies] = useState(false);
 
+  /** The agency whose owner is being invited. */
+  const [invitingOwner, setInvitingOwner] = useState<AgencyRow | null>(null);
   /** The agency whose test/production marking is being confirmed. */
   const [marking, setMarking] = useState<AgencyRow | null>(null);
   const [markingNote, setMarkingNote] = useState('');
@@ -725,6 +728,9 @@ export default function PlatformAgenciesPage(): JSX.Element {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setInvitingOwner(row)}>
+                            Invite owner
+                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => openMarking(row)}>
                             {row.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
                           </DropdownMenuItem>
@@ -770,6 +776,17 @@ export default function PlatformAgenciesPage(): JSX.Element {
         <UpgradePricesPanel />
         <UpgradeRequestsPanel />
       </div>
+
+      <InviteOwnerDialog
+        open={invitingOwner !== null}
+        onOpenChange={open => {
+          if (!open) setInvitingOwner(null);
+        }}
+        scope="platform"
+        agency={
+          invitingOwner ? { tenantId: invitingOwner.tenantId, name: invitingOwner.name } : null
+        }
+      />
 
       <Dialog
         open={marking !== null}

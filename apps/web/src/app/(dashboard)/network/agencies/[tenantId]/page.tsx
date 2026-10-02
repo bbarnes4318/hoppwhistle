@@ -1,11 +1,12 @@
 'use client';
 
-import { ArrowLeft, Loader2, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, RefreshCw, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { InviteOwnerDialog } from '@/components/agencies/invite-owner-dialog';
 import { count, pct } from '@/components/delivery/ledger';
 import {
   EmptyState,
@@ -113,6 +114,7 @@ export default function NetworkAgencyPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const platform = usePlatformContext();
   const withoutAgency = platform.needsAgency;
@@ -203,12 +205,36 @@ export default function NetworkAgencyPage(): JSX.Element {
           </Button>
           {detail ? <ChildStatementButton tenantId={detail.tenantId} name={detail.name} /> : null}
           {detail && detail.owner.status !== 'ACCEPTED' ? (
-            <ResendInvite detail={detail} onSent={() => void load()} />
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+              {detail.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Resend invite'}
+            </Button>
           ) : null}
         </div>
       </div>
 
       {error && !notFound ? <Notice tone="error" title={error} /> : null}
+
+      {detail && detail.owner.status !== 'ACCEPTED' ? (
+        <Notice
+          tone="warning"
+          title={
+            detail.owner.status === 'NOT_INVITED'
+              ? `${detail.name} has no owner yet`
+              : detail.owner.status === 'EXPIRED'
+                ? `The invitation to ${detail.owner.email ?? 'the owner'} has expired`
+                : `Waiting for ${detail.owner.email ?? 'the owner'} to accept`
+          }
+          action={
+            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+              {detail.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Send a new link'}
+            </Button>
+          }
+        >
+          The owner signs in first, and then adds the agency&rsquo;s agents. Nobody at the agency
+          can sign in until they have.
+        </Notice>
+      ) : null}
 
       <PeriodToolbar state={state} resolved={detail?.period ?? null} label="Agency period" />
 
@@ -291,88 +317,20 @@ export default function NetworkAgencyPage(): JSX.Element {
           Loading the agency
         </div>
       ) : null}
-    </div>
-  );
-}
 
-/** "Resend owner invite": the existing POST .../owner, to the owner's address. */
-function ResendInvite({
-  detail,
-  onSent,
-}: {
-  detail: NetworkAgencyDetail;
-  onSent: () => void;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState(detail.owner.email ?? detail.profile?.contactEmail ?? '');
-  const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState<string | null>(null);
-  const invited = detail.owner.status !== 'NOT_INVITED';
-
-  async function send(): Promise<void> {
-    setBusy(true);
-    try {
-      const response = await apiClient.post<
-        Envelope<{
-          activationToken: string;
-          activationLink?: string;
-          email: string;
-          emailed: boolean;
-        }>
-      >(`/api/v1/network/agencies/${detail.tenantId}/owner`, { email: email.trim() });
-      const grant = payload(response);
-      if (response.error || !grant) {
-        toast.error('The invitation was not sent', response.error?.message);
-        return;
-      }
-      if (grant.emailed) {
-        toast.success('Invitation sent', `We emailed ${grant.email}.`);
-        setOpen(false);
-      } else {
-        // SMTP refused or is not configured: hand the link over instead. The
-        // server's link names the agency's portal host; the page's origin is
-        // only a fallback for an API that does not send one.
-        const params = new URLSearchParams({
-          activation: grant.activationToken,
-          email: grant.email,
-        });
-        setLink(grant.activationLink ?? `${window.location.origin}/login?${params.toString()}`);
-      }
-      onSent();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <Button size="sm" onClick={() => setOpen(true)}>
-        {invited ? 'Resend owner invite' : 'Invite the owner'}
-      </Button>
-    );
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input
-        type="email"
-        aria-label="Owner email"
-        value={email}
-        onChange={event => setEmail(event.target.value)}
-        className="h-8 w-56"
-        placeholder="owner@agency.example"
-      />
-      <Button size="sm" onClick={() => void send()} disabled={busy || !email.trim()}>
-        {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-        Send
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-        Cancel
-      </Button>
-      {link ? (
-        <p className="basis-full break-all t-meta text-ink-2">
-          {`We could not email it. Send them this link: ${link}`}
-        </p>
+      {detail ? (
+        <InviteOwnerDialog
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          scope="network"
+          agency={{
+            tenantId: detail.tenantId,
+            name: detail.name,
+            email: detail.owner.email ?? detail.profile?.contactEmail ?? '',
+            alreadyInvited: detail.owner.status !== 'NOT_INVITED',
+          }}
+          onInvited={() => void load()}
+        />
       ) : null}
     </div>
   );

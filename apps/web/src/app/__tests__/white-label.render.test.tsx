@@ -575,6 +575,73 @@ describe('white-label screens', () => {
       expect(requested).not.toContain('/api/v1/network/agencies/child-1/settings');
     });
 
+    it('invites an owner from the row: asks for the email and posts it to the agency', async () => {
+      sent.length = 0;
+      answers['/api/v1/network/agencies'] = {
+        ...NETWORK,
+        agencies: [
+          {
+            ...NETWORK.agencies[0],
+            owner: { status: 'NOT_INVITED', email: null, invitedAt: null },
+          },
+        ],
+      };
+      answers['/api/v1/network/agencies/child-1/owner'] = {
+        tenantId: 'child-1',
+        email: 'new.owner@downline.test',
+        activationToken: 'tok',
+        activationLink: 'https://agents.lifeleadsplus.com/login?activation=tok',
+        emailed: true,
+      };
+      await mount(() => import('../(dashboard)/network/agencies/page'));
+      await waitFor(() => expect(screen.getByText('Downline One')).toBeTruthy());
+      expect(screen.getByText('Not invited')).toBeTruthy();
+
+      // The row's own button, not only the banner above the table.
+      const row = screen.getByText('Downline One').closest('tr') as HTMLElement;
+      fireEvent.click(within(row).getByRole('button', { name: 'Invite owner' }));
+
+      fireEvent.change(await screen.findByLabelText(/Owner.s email address/), {
+        target: { value: 'New.Owner@Downline.test' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Send invitation' }));
+
+      await waitFor(() => expect(sent).toHaveLength(1));
+      expect(sent[0]).toEqual({
+        method: 'POST',
+        path: '/api/v1/network/agencies/child-1/owner',
+        body: { email: 'new.owner@downline.test' },
+      });
+      await waitFor(() =>
+        expect(screen.getByText('Invitation sent to new.owner@downline.test')).toBeTruthy()
+      );
+    });
+
+    it('shows the link to hand over when the invitation could not be emailed', async () => {
+      answers['/api/v1/network/agencies'] = NETWORK;
+      answers['/api/v1/network/agencies/child-1/owner'] = {
+        tenantId: 'child-1',
+        email: 'owner@downline.test',
+        activationToken: 'tok',
+        activationLink: 'https://agents.lifeleadsplus.com/login?activation=tok',
+        emailed: false,
+        emailFailureReason: 'not_configured',
+      };
+      await mount(() => import('../(dashboard)/network/agencies/page'));
+      await waitFor(() => expect(screen.getByText('Downline One')).toBeTruthy());
+
+      const row = screen.getByText('Downline One').closest('tr') as HTMLElement;
+      fireEvent.click(within(row).getByRole('button', { name: 'Resend invite' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Resend invitation' }));
+
+      await waitFor(() =>
+        expect(screen.getByText(/owner@downline.test has NOT been emailed/)).toBeTruthy()
+      );
+      expect(screen.getByLabelText('Activation link').value).toBe(
+        'https://agents.lifeleadsplus.com/login?activation=tok'
+      );
+    });
+
     it('offers onboarding when there are none yet', async () => {
       answers['/api/v1/network/agencies'] = { ...NETWORK, agencies: [] };
       await mount(() => import('../(dashboard)/network/agencies/page'));
@@ -645,7 +712,7 @@ describe('white-label screens', () => {
       expect(requested).toContain('/api/v1/network/agencies/child-1?period=THIS_MONTH');
       expect(screen.getByRole('heading', { name: 'Downline One' })).toBeTruthy();
       expect(screen.getByText('Invite pending')).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Resend owner invite' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Resend invite' })).toBeTruthy();
       expect(screen.getByText('120')).toBeTruthy();
       expect(screen.getByText('9.0%')).toBeTruthy();
       expect(screen.getByText('Mon, Tue · 09:00–17:00')).toBeTruthy();
