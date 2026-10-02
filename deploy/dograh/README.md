@@ -76,6 +76,14 @@ one.
 It only reads the database and downloads what it points at — it writes nothing
 back to Dograh.
 
+## Related: inbound DID → workflow mapping
+
+`inbound-dids/` is a separate kit that maps our FracTEL DIDs to an **inbound**
+Dograh workflow. It writes the same `telephony_phone_numbers` table, so the two
+interact: every active row for an (org, telephony config) is also an outbound
+caller ID here. See `inbound-dids/README.md` → "Caller-ID pool collision" before
+loading numbers with either importer.
+
 ## Policy model (kill-switchable, off by default)
 
 Per campaign: `campaigns.orchestrator_metadata.state_cid_policy` = `off` | `prefer` | `strict`.
