@@ -81,6 +81,7 @@ export class BuyerBillingService {
           where: { id: callId },
           include: {
             buyer: true,
+            campaign: { select: { billingModel: true } },
           },
         });
 
@@ -102,6 +103,13 @@ export class BuyerBillingService {
             reason: 'Buyer is TERMS billing (post-pay)',
             buyerId: buyer.id,
           };
+        }
+
+        // A PER_APPLICATION call's charge moves after the call ends: a second
+        // application on it adds one, a void takes one away. Its single DEBIT
+        // is kept equal to the call's charge rather than written once.
+        if (call.campaign?.billingModel === 'PER_APPLICATION') {
+          return syncApplicationDebit(tx, call, buyer);
         }
 
         // Check 1.2: Check if a DEBIT transaction already exists for this call and buyer to ensure database-level idempotency
@@ -647,3 +655,127 @@ export class BuyerBillingService {
 }
 
 export const buyerBillingService = new BuyerBillingService();
+
+/**
+ * Bring an UPFRONT buyer's DEBIT for a PER_APPLICATION call to the call's
+ * current charge (`buyerBillableAmount`, or nothing once it is not billable).
+ *
+ * One DEBIT row per call (unique on buyer, call, type), so the row's amount is
+ * moved and the wallet by the difference: up when an application is added,
+ * back when one is voided. A raise the wallet cannot cover is refused and the
+ * buyer paused, exactly as a first charge is.
+ */
+async function syncApplicationDebit(
+  tx: Prisma.TransactionClient,
+  call: {
+    id: string;
+    tenantId: string;
+    billable: boolean;
+    buyerBillableAmount: Prisma.Decimal | null;
+  },
+  buyer: {
+    id: string;
+    status: string;
+    walletBalance: Prisma.Decimal;
+    metadata: Prisma.JsonValue;
+  }
+): Promise<BillingResult> {
+  const zero = new Prisma.Decimal(0);
+  const target = call.billable ? (call.buyerBillableAmount ?? zero) : zero;
+  const existing = await tx.buyerTransaction.findFirst({
+    where: { buyerId: buyer.id, callId: call.id, type: 'DEBIT' },
+  });
+  const debited = existing ? existing.amount.negated() : zero;
+  const delta = target.minus(debited); // > 0 charges more, < 0 gives back
+  const unchanged = {
+    success: true,
+    deducted: false,
+    buyerId: buyer.id,
+    walletBalance: Number(buyer.walletBalance),
+  };
+
+  if (delta.isZero()) {
+    if (target.gt(0)) {
+      await tx.call.update({
+        where: { id: call.id },
+        data: { buyerChargeStatus: 'CHARGED' },
+      });
+    }
+    return { ...unchanged, reason: 'Application charge already in step' };
+  }
+
+  if (delta.gt(0) && buyer.walletBalance.lessThan(delta)) {
+    if (buyer.status !== 'PAUSED') {
+      await tx.buyer.update({
+        where: { id: buyer.id },
+        data: { status: 'PAUSED', metadata: withPauseReason(buyer.metadata, 'WALLET_EMPTY') },
+      });
+    }
+    return { ...unchanged, reason: 'Insufficient wallet balance' };
+  }
+
+  const newBalance = buyer.walletBalance.minus(delta);
+  const shouldPause = newBalance.lessThanOrEqualTo(0) && buyer.status !== 'PAUSED';
+  await tx.buyer.update({
+    where: { id: buyer.id },
+    data: {
+      walletBalance: newBalance,
+      leadsRemaining: Math.floor(Number(newBalance)),
+      ...(shouldPause
+        ? { status: 'PAUSED', metadata: withPauseReason(buyer.metadata, 'WALLET_EMPTY') }
+        : {}),
+    },
+  });
+
+  if (target.isZero()) {
+    if (existing) await tx.buyerTransaction.delete({ where: { id: existing.id } });
+  } else if (existing) {
+    await tx.buyerTransaction.update({
+      where: { id: existing.id },
+      data: { amount: target.negated() },
+    });
+  } else {
+    await tx.buyerTransaction.create({
+      data: {
+        buyerId: buyer.id,
+        amount: target.negated(),
+        type: 'DEBIT',
+        description: `Applications on call ID #${call.id.substring(0, 8)}`,
+        callId: call.id,
+      },
+    });
+  }
+
+  await tx.call.update({
+    where: { id: call.id },
+    data: target.gt(0)
+      ? { buyerChargeStatus: 'CHARGED', buyerChargedAt: new Date() }
+      : { buyerChargeStatus: 'NOT_BILLABLE' },
+  });
+
+  await auditLog({
+    tenantId: call.tenantId,
+    action: 'buyer.billing.application_debit',
+    entityType: 'Buyer',
+    entityId: buyer.id,
+    resource: 'walletBalance',
+    changes: {
+      previous: buyer.walletBalance.toString(),
+      new: newBalance.toString(),
+      callId: call.id,
+      debitedBefore: debited.toString(),
+      debitedAfter: target.toString(),
+      autoPaused: shouldPause,
+    },
+    ipAddress: 'system',
+    success: true,
+  });
+
+  return {
+    success: true,
+    deducted: delta.gt(0),
+    buyerId: buyer.id,
+    walletBalance: Number(newBalance),
+    autoPaused: shouldPause,
+  };
+}

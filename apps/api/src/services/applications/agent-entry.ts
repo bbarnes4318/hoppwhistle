@@ -43,6 +43,7 @@ import { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 
+import { callTags, rebillCallForApplications } from './application-billing.js';
 import { attributeCall } from './call-attribution.js';
 
 /** The premium modes an agent can write business in. */
@@ -141,6 +142,7 @@ export async function recordAgentApplication(
     input.callId,
     submittedAt
   );
+  const tags = await callTags(prisma, input.tenantId, callId);
 
   let application: { id: string; tenantId: string; submittedAt: Date | null } & Record<
     string,
@@ -169,6 +171,9 @@ export async function recordAgentApplication(
 
         callId,
         callAttribution: attribution,
+        campaignId: tags.campaignId,
+        buyerId: tags.buyerId,
+        publisherId: tags.publisherId,
         insuranceLeadId: input.insuranceLeadId ?? null,
 
         carrier: input.carrier,
@@ -235,6 +240,10 @@ export async function recordAgentApplication(
     }
     throw error;
   }
+
+  // On a campaign that bills its buyers per application, this application is
+  // what makes its call chargeable. Swallows its own failures.
+  await rebillCallForApplications(prisma, callId);
 
   /*
    * The application has reached submitted state, so it costs one credit.

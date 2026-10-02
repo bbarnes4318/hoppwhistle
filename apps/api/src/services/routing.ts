@@ -192,7 +192,11 @@ export class RoutingService {
           },
         },
         campaign: {
-          select: { buyerPricePerBillableCall: true },
+          select: {
+            buyerPricePerBillableCall: true,
+            billingModel: true,
+            buyerPricePerApplication: true,
+          },
         },
       },
     });
@@ -247,11 +251,19 @@ export class RoutingService {
       }
 
       if (assignment.buyer.billingType === 'UPFRONT') {
-        const price = expectedBuyerPrice({
-          campaignBuyerPrice: assignment.pricePerBillableCall,
-          campaignDefaultPrice: assignment.campaign?.buyerPricePerBillableCall,
-          endpointBasePrice: ep?.basePrice,
-        });
+        // A PER_APPLICATION campaign charges per application, so the wallet
+        // must hold the price of one.
+        const price =
+          assignment.campaign?.billingModel === 'PER_APPLICATION'
+            ? expectedBuyerPrice({
+                campaignBuyerPrice: assignment.pricePerApplication,
+                campaignDefaultPrice: assignment.campaign.buyerPricePerApplication,
+              })
+            : expectedBuyerPrice({
+                campaignBuyerPrice: assignment.pricePerBillableCall,
+                campaignDefaultPrice: assignment.campaign?.buyerPricePerBillableCall,
+                endpointBasePrice: ep?.basePrice,
+              });
         if (!hasFundsFor(assignment.buyer.billingType, assignment.buyer.walletBalance, price)) {
           logger.info({
             msg: 'Buyer-routing: Endpoint EXCLUDED (UPFRONT wallet below call price)',

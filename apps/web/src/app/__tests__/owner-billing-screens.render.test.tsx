@@ -217,3 +217,31 @@ describe('Plan & Billing', () => {
     expect(screen.queryByTestId('plan-not-enrolled')).toBeNull();
   });
 });
+
+describe('Campaign billing notice', () => {
+  it('says the campaign bills per application and that the agency is enrolled', async () => {
+    answers['/api/v1/delivery/mandate'] = { data: { enrolled: true, status: 'VALID' } };
+    const { CampaignBillingNotice } = await import(
+      '@/components/campaigns/campaign-billing-notice'
+    );
+    await mount(<CampaignBillingNotice billingModel="PER_APPLICATION" />);
+
+    const notice = await screen.findByTestId('campaign-billing-notice');
+    expect(notice.textContent).toContain('only for submitted applications');
+    await waitFor(() => expect(notice.textContent).toContain('is enrolled'));
+    const link = within(notice).getByRole('link', { name: /Plan & Billing/ });
+    expect(link.getAttribute('href')).toBe('/settings?tab=plan');
+  });
+
+  it('says a per-call campaign bills per call and the agency is not enrolled', async () => {
+    answers['/api/v1/delivery/mandate'] = { data: { enrolled: false, status: 'NONE' } };
+    const { CampaignBillingNotice } = await import(
+      '@/components/campaigns/campaign-billing-notice'
+    );
+    await mount(<CampaignBillingNotice billingModel="PER_CALL" />);
+
+    const notice = await screen.findByTestId('campaign-billing-notice');
+    expect(notice.textContent).toContain('per billable call');
+    await waitFor(() => expect(notice.textContent).toContain('is not enrolled'));
+  });
+});

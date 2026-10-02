@@ -1501,6 +1501,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           billableDurationSeconds: c.billableDurationSeconds,
           publisherPayoutPerBillableCall: c.publisherPayoutPerBillableCall,
           buyerPricePerBillableCall: c.buyerPricePerBillableCall,
+          billingModel: c.billingModel,
+          buyerPricePerApplication: c.buyerPricePerApplication,
+          publisherPayoutPerApplication: c.publisherPayoutPerApplication,
           calls: c._count.calls,
           phoneNumbers: c._count.phoneNumbers,
           createdAt: c.createdAt.toISOString(),
@@ -1704,6 +1707,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         billableDurationSeconds: campaign.billableDurationSeconds,
         publisherPayoutPerBillableCall: campaign.publisherPayoutPerBillableCall,
         buyerPricePerBillableCall: campaign.buyerPricePerBillableCall,
+        billingModel: campaign.billingModel,
+        buyerPricePerApplication: campaign.buyerPricePerApplication,
+        publisherPayoutPerApplication: campaign.publisherPayoutPerApplication,
         metadata: campaign.metadata,
         createdAt: campaign.createdAt.toISOString(),
         updatedAt: campaign.updatedAt.toISOString(),
@@ -1859,6 +1865,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         billableDurationSeconds: campaign.billableDurationSeconds,
         publisherPayoutPerBillableCall: campaign.publisherPayoutPerBillableCall,
         buyerPricePerBillableCall: campaign.buyerPricePerBillableCall,
+        billingModel: campaign.billingModel,
+        buyerPricePerApplication: campaign.buyerPricePerApplication,
+        publisherPayoutPerApplication: campaign.publisherPayoutPerApplication,
         calls: campaign._count.calls,
         phoneNumbers: campaign._count.phoneNumbers,
         createdAt: campaign.createdAt.toISOString(),
@@ -1880,6 +1889,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       billableDurationSeconds?: number;
       publisherPayoutPerBillableCall?: number;
       buyerPricePerBillableCall?: number;
+      billingModel?: 'PER_CALL' | 'PER_APPLICATION';
+      buyerPricePerApplication?: number;
+      publisherPayoutPerApplication?: number;
       /**
        * Only the ring-time settings are accepted here, and they are MERGED
        * into the campaign's metadata: replacing the object would drop the
@@ -1975,6 +1987,27 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         }
         updateData.buyerPricePerBillableCall = new Prisma.Decimal(body.buyerPricePerBillableCall);
       }
+      if (body.billingModel !== undefined) {
+        if (body.billingModel !== 'PER_CALL' && body.billingModel !== 'PER_APPLICATION') {
+          void reply.code(400);
+          return {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Billing model must be PER_CALL or PER_APPLICATION',
+            },
+          };
+        }
+        updateData.billingModel = body.billingModel;
+      }
+      for (const key of ['buyerPricePerApplication', 'publisherPayoutPerApplication'] as const) {
+        const value = body[key];
+        if (value === undefined) continue;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: `${key} must be >= 0` } };
+        }
+        updateData[key] = new Prisma.Decimal(value);
+      }
 
       // Ring time per routing step: agents' steps and buyer-only steps.
       if (body.metadata !== undefined && body.metadata !== null) {
@@ -2038,6 +2071,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         billableDurationSeconds: updatedCampaign.billableDurationSeconds,
         publisherPayoutPerBillableCall: updatedCampaign.publisherPayoutPerBillableCall,
         buyerPricePerBillableCall: updatedCampaign.buyerPricePerBillableCall,
+        billingModel: updatedCampaign.billingModel,
+        buyerPricePerApplication: updatedCampaign.buyerPricePerApplication,
+        publisherPayoutPerApplication: updatedCampaign.publisherPayoutPerApplication,
         createdAt: updatedCampaign.createdAt.toISOString(),
         updatedAt: updatedCampaign.updatedAt.toISOString(),
       };
@@ -2217,12 +2253,17 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     }
   );
 
+  /** An optional per-assignment override: a number, null to clear it, absent to leave it. */
+  const optionalRate = (value: number | null | undefined) =>
+    value === undefined ? undefined : value === null ? null : new Prisma.Decimal(value);
+
   // POST campaign publisher assignment
   fastify.post<{
     Params: { campaignId: string };
     Body: {
       publisherId: string;
       payoutPerBillableCall?: number;
+      payoutPerApplication?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
   }>('/api/v1/campaigns/:campaignId/publishers', async (request, reply) => {
@@ -2230,7 +2271,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId } = request.params;
-    const { publisherId, payoutPerBillableCall, status } = request.body;
+    const { publisherId, payoutPerBillableCall, payoutPerApplication, status } = request.body;
 
     if (!publisherId) {
       return reply.code(400).send({ error: 'publisherId is required' });
@@ -2267,6 +2308,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           payoutPerBillableCall !== undefined && payoutPerBillableCall !== null
             ? new Prisma.Decimal(payoutPerBillableCall)
             : null,
+        payoutPerApplication: optionalRate(payoutPerApplication) ?? null,
         status: status || 'ACTIVE',
       },
       include: {
@@ -2282,6 +2324,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     Params: { campaignId: string; assignmentId: string };
     Body: {
       payoutPerBillableCall?: number | null;
+      payoutPerApplication?: number | null;
       status?: 'ACTIVE' | 'INACTIVE';
     };
   }>('/api/v1/campaigns/:campaignId/publishers/:assignmentId', async (request, reply) => {
@@ -2289,7 +2332,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId, assignmentId } = request.params;
-    const { payoutPerBillableCall, status } = request.body;
+    const { payoutPerBillableCall, payoutPerApplication, status } = request.body;
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
     const existing = await prisma.campaignPublisher.findFirst({
@@ -2306,6 +2349,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
               ? null
               : new Prisma.Decimal(payoutPerBillableCall)
             : undefined,
+        payoutPerApplication: optionalRate(payoutPerApplication),
         status: status || undefined,
       },
       include: {
@@ -2372,6 +2416,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       buyerEndpointId?: string;
       destinationNumber: string;
       pricePerBillableCall?: number;
+      pricePerApplication?: number;
       priority?: number;
       weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
@@ -2386,6 +2431,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       buyerEndpointId,
       destinationNumber,
       pricePerBillableCall,
+      pricePerApplication,
       priority,
       weight,
       status,
@@ -2483,6 +2529,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
             pricePerBillableCall !== undefined && pricePerBillableCall !== null
               ? new Prisma.Decimal(pricePerBillableCall)
               : null,
+          pricePerApplication: optionalRate(pricePerApplication) ?? null,
           priority: priority || 0,
           weight: weight !== undefined ? weight : 100,
           status: status || 'ACTIVE',
@@ -2513,6 +2560,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       buyerEndpointId?: string | null;
       destinationNumber?: string;
       pricePerBillableCall?: number | null;
+      pricePerApplication?: number | null;
       priority?: number;
       weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
@@ -2522,8 +2570,15 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId, assignmentId } = request.params;
-    const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } =
-      request.body;
+    const {
+      buyerEndpointId,
+      destinationNumber,
+      pricePerBillableCall,
+      pricePerApplication,
+      priority,
+      weight,
+      status,
+    } = request.body;
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
     const existing = await prisma.campaignBuyer.findFirst({
@@ -2599,6 +2654,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
               ? null
               : new Prisma.Decimal(pricePerBillableCall)
             : undefined,
+        pricePerApplication: optionalRate(pricePerApplication),
         priority: priority !== undefined ? priority : undefined,
         weight: weight !== undefined ? weight : undefined,
         status: status || undefined,

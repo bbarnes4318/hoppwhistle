@@ -830,6 +830,11 @@ model Campaign {
   billableDurationSeconds        Int            @default(60)
   publisherPayoutPerBillableCall Decimal        @default(0) @db.Decimal(10, 4)
   buyerPricePerBillableCall      Decimal        @default(0) @db.Decimal(10, 4)
+  /// How this campaign charges its buyers and pays its publishers. Exclusive:
+  /// a PER_APPLICATION campaign's calls are never also priced per call.
+  billingModel                   CampaignBillingModel @default(PER_CALL)
+  buyerPricePerApplication       Decimal        @default(0) @db.Decimal(10, 4)
+  publisherPayoutPerApplication  Decimal        @default(0) @db.Decimal(10, 4)
   createdAt                      DateTime       @default(now())
   updatedAt                      DateTime       @updatedAt
 
@@ -851,6 +856,14 @@ model Campaign {
   @@index([publisherId])
   @@index([status])
   @@map("campaigns")
+}
+
+/// See services/billing-service.ts. PER_CALL: a call past the billable
+/// threshold is charged and paid. PER_APPLICATION: a call is charged and paid
+/// once per submitted, unvoided application attributed to it, and only then.
+enum CampaignBillingModel {
+  PER_CALL
+  PER_APPLICATION
 }
 
 enum CampaignStatus {
@@ -3249,6 +3262,7 @@ model CampaignPublisher {
   campaignId            String
   publisherId           String
   payoutPerBillableCall Decimal?                @db.Decimal(10, 4) // Override default publisher payout
+  payoutPerApplication  Decimal?                @db.Decimal(10, 4) // Override for PER_APPLICATION campaigns
   status                CampaignPublisherStatus @default(ACTIVE)
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
@@ -3278,6 +3292,7 @@ model CampaignBuyer {
   buyerEndpointId      String?
   destinationNumber    String
   pricePerBillableCall Decimal?            @db.Decimal(10, 4) // Override default buyer price
+  pricePerApplication  Decimal?            @db.Decimal(10, 4) // Override for PER_APPLICATION campaigns
   priority             Int                 @default(0)
   weight               Int                 @default(100)
   status               CampaignBuyerStatus @default(ACTIVE)
@@ -3437,6 +3452,13 @@ model InsuranceCarrierApplication {
   insuranceLeadId  String?
   prospectIntakeId String?
   callId           String?
+
+  /// Copied off the attributed call when the application is written, so an
+  /// application can be priced and reported per campaign, buyer and publisher.
+  /// Null when no call is attributed (`callAttribution` NONE).
+  campaignId  String?
+  buyerId     String?
+  publisherId String?
 
   /// HOW `callId` came to be set, or why it is not.
   ///
@@ -3604,6 +3626,9 @@ model InsuranceCarrierApplication {
   @@index([tenantId, createdById, submittedAt])
   /// The drill-down this column exists for: which applications came off a call.
   @@index([tenantId, callId])
+  @@index([tenantId, campaignId, submittedAt])
+  @@index([buyerId])
+  @@index([publisherId])
   @@index([prospectIntakeId])
   @@index([insuranceLeadId])
   @@index([callId])

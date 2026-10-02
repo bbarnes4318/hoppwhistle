@@ -45,6 +45,11 @@ const mockPrisma = {
   buyerTransaction: {
     findFirst: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  insuranceCarrierApplication: {
+    count: vi.fn(),
   },
   // A paused buyer with no recorded pause reason is resolved from its audit
   // trail (services/buyer-pause.ts).
@@ -710,6 +715,198 @@ describe('BuyerBillingService Unit Tests', () => {
       mockPrisma.auditLog.findFirst.mockResolvedValueOnce({ action: 'buyer.status.autopaused' });
       await buyerBillingService.addCredits('buyer-1', 50, 'admin-1');
       expect(mockPrisma.buyer.update.mock.calls[1][0].data.status).toBe('ACTIVE');
+    });
+  });
+});
+
+describe('PER_APPLICATION campaigns', () => {
+  const service = new BillingService();
+  const buyerBilling = new BuyerBillingService();
+
+  const call = {
+    id: 'call-1',
+    tenantId: 'tenant-1',
+    callSid: 'sid-1',
+    callerId: '+18005550199',
+    did: '+18005550100',
+    status: 'COMPLETED',
+    // Well under any threshold: duration plays no part per application.
+    connectedDuration: 5,
+    duration: 5,
+    targetNumber: '+18005550150',
+    buyerId: 'buyer-1',
+    publisherId: 'pub-1',
+    campaignId: 'camp-1',
+    cost: null,
+    metadata: { rtb: { bidAmount: 99 } },
+    campaign: {
+      id: 'camp-1',
+      name: 'Final Expense',
+      billingModel: 'PER_APPLICATION',
+      billableDurationSeconds: 60,
+      buyerPricePerBillableCall: new Prisma.Decimal('15.00'),
+      publisherPayoutPerBillableCall: new Prisma.Decimal('8.00'),
+      buyerPricePerApplication: new Prisma.Decimal('120.00'),
+      publisherPayoutPerApplication: new Prisma.Decimal('50.00'),
+    },
+    buyer: { id: 'buyer-1', billableDuration: 45, billingType: 'TERMS' },
+    publisher: { id: 'pub-1' },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.call.findUnique.mockResolvedValue(call);
+    mockPrisma.buyerEndpoint.findMany.mockResolvedValue([]);
+    mockPrisma.buyerEndpoint.findUnique.mockResolvedValue(null);
+    mockPrisma.pingRequest.findMany.mockResolvedValue([]);
+    mockPrisma.campaignPublisher.findUnique.mockResolvedValue(null);
+    mockPrisma.campaignBuyer.findMany.mockResolvedValue([]);
+    mockPrisma.didRoute.findFirst.mockResolvedValue(null);
+    mockPrisma.accrualLedger.findUnique.mockResolvedValue(null);
+    mockPrisma.accrualLedger.create.mockImplementation(args => Promise.resolve(args.data));
+    mockPrisma.accrualLedger.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.call.update.mockResolvedValue({});
+    mockPrisma.publisher.findUnique.mockResolvedValue(null);
+    mockPrisma.billingAccount.findFirst.mockResolvedValue({ id: 'acc-1' });
+  });
+
+  it('is not billable without a submitted application, however long the call', async () => {
+    mockPrisma.call.findUnique.mockResolvedValue({ ...call, connectedDuration: 900 });
+    mockPrisma.insuranceCarrierApplication.count.mockResolvedValue(0);
+
+    const res = await service.calculateCallBilling('call-1');
+
+    expect(res.billable).toBe(false);
+    expect(res.revenue).toBe('0.0000');
+    expect(res.payout).toBe('0.0000');
+    const data = mockPrisma.call.update.mock.calls[0][0].data;
+    expect(data.noPayoutReason).toBe('NO_APPLICATION_SUBMITTED');
+  });
+
+  it('charges and pays once per application, never the per-call or RTB price', async () => {
+    mockPrisma.insuranceCarrierApplication.count.mockResolvedValue(2);
+
+    const res = await service.calculateCallBilling('call-1');
+
+    expect(res.billable).toBe(true);
+    expect(res.revenue).toBe('240.0000');
+    expect(res.payout).toBe('100.0000');
+    expect(mockPrisma.insuranceCarrierApplication.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        callId: 'call-1',
+        submittedAt: { not: null },
+        voidedAt: null,
+      },
+    });
+    const snapshot = mockPrisma.call.update.mock.calls[0][0].data.billingRuleSnapshot;
+    expect(snapshot.billingModel).toBe('PER_APPLICATION');
+    expect(snapshot.applicationCount).toBe(2);
+  });
+
+  it('uses the assignment overrides when set', async () => {
+    mockPrisma.insuranceCarrierApplication.count.mockResolvedValue(1);
+    mockPrisma.campaignBuyer.findMany.mockResolvedValue([
+      {
+        destinationNumber: '+18005550150',
+        pricePerBillableCall: new Prisma.Decimal('20.00'),
+        pricePerApplication: new Prisma.Decimal('150.00'),
+      },
+    ]);
+    mockPrisma.campaignPublisher.findUnique.mockResolvedValue({
+      payoutPerBillableCall: null,
+      payoutPerApplication: new Prisma.Decimal('60.00'),
+    });
+
+    const res = await service.calculateCallBilling('call-1');
+
+    expect(res.revenue).toBe('150.0000');
+    expect(res.payout).toBe('60.0000');
+  });
+
+  it('leaves a PER_CALL campaign priced per call', async () => {
+    mockPrisma.call.findUnique.mockResolvedValue({
+      ...call,
+      metadata: null,
+      connectedDuration: 90,
+      campaign: { ...call.campaign, billingModel: 'PER_CALL' },
+    });
+
+    const res = await service.calculateCallBilling('call-1');
+
+    expect(res.revenue).toBe('15.0000');
+    expect(res.payout).toBe('8.0000');
+    expect(mockPrisma.insuranceCarrierApplication.count).not.toHaveBeenCalled();
+  });
+
+  describe("an UPFRONT buyer's debit follows the applications", () => {
+    const upfrontCall = {
+      id: 'call-1',
+      tenantId: 'tenant-1',
+      billable: true,
+      buyerChargeStatus: 'CHARGED',
+      campaign: { billingModel: 'PER_APPLICATION' },
+      buyer: {
+        id: 'buyer-1',
+        billingType: 'UPFRONT',
+        status: 'ACTIVE',
+        walletBalance: new Prisma.Decimal('500.00'),
+        metadata: null,
+      },
+    };
+
+    it('charges the difference when a second application lands', async () => {
+      mockPrisma.call.findUnique.mockResolvedValue({
+        ...upfrontCall,
+        buyerBillableAmount: new Prisma.Decimal('240.00'),
+      });
+      mockPrisma.buyerTransaction.findFirst.mockResolvedValue({
+        id: 'tx-1',
+        amount: new Prisma.Decimal('-120.00'),
+      });
+
+      const res = await buyerBilling.processCallBilling('call-1');
+
+      expect(res.deducted).toBe(true);
+      expect(mockPrisma.buyer.update.mock.calls[0][0].data.walletBalance.toString()).toBe('380');
+      expect(mockPrisma.buyerTransaction.update).toHaveBeenCalledWith({
+        where: { id: 'tx-1' },
+        data: { amount: new Prisma.Decimal('-240.00') },
+      });
+    });
+
+    it('gives the charge back when the only application is voided', async () => {
+      mockPrisma.call.findUnique.mockResolvedValue({
+        ...upfrontCall,
+        billable: false,
+        buyerBillableAmount: new Prisma.Decimal('0'),
+      });
+      mockPrisma.buyerTransaction.findFirst.mockResolvedValue({
+        id: 'tx-1',
+        amount: new Prisma.Decimal('-120.00'),
+      });
+
+      await buyerBilling.processCallBilling('call-1');
+
+      expect(mockPrisma.buyer.update.mock.calls[0][0].data.walletBalance.toString()).toBe('620');
+      expect(mockPrisma.buyerTransaction.delete).toHaveBeenCalledWith({ where: { id: 'tx-1' } });
+      expect(mockPrisma.call.update.mock.calls[0][0].data.buyerChargeStatus).toBe('NOT_BILLABLE');
+    });
+
+    it('does nothing when the debit already matches', async () => {
+      mockPrisma.call.findUnique.mockResolvedValue({
+        ...upfrontCall,
+        buyerBillableAmount: new Prisma.Decimal('120.00'),
+      });
+      mockPrisma.buyerTransaction.findFirst.mockResolvedValue({
+        id: 'tx-1',
+        amount: new Prisma.Decimal('-120.00'),
+      });
+
+      const res = await buyerBilling.processCallBilling('call-1');
+
+      expect(res.deducted).toBe(false);
+      expect(mockPrisma.buyer.update).not.toHaveBeenCalled();
     });
   });
 });
