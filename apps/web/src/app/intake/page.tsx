@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 
 import { CustomerIntakeForm } from '@/components/call-center/CustomerIntakeForm';
 import { ManualLeadEntryFormV2 } from '@/components/leads/manual-lead-entry-form-v2';
+import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 
 declare global {
   interface Window {
@@ -20,7 +21,11 @@ declare global {
 type IntakeMode = 'lead' | 'application';
 
 export default function IntakePage(): JSX.Element {
-  const [mode, setMode] = useState<IntakeMode>('lead');
+  // Manual CRM Lead Entry (buyer submission + compliance data) is not part of
+  // the white-label platform; those viewers get the intake form only.
+  const whiteLabelView = useWhiteLabelView();
+  const [selectedMode, setMode] = useState<IntakeMode>('lead');
+  const mode: IntakeMode = whiteLabelView ? 'application' : selectedMode;
   const [certUrl, setCertUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,7 +93,9 @@ export default function IntakePage(): JSX.Element {
               </div>
             </div>
 
-            <div className="flex rounded-lg border border-rule bg-sunken p-1">
+            <div
+              className={`flex rounded-lg border border-rule bg-sunken p-1 ${whiteLabelView ? 'hidden' : ''}`}
+            >
               <button
                 type="button"
                 onClick={() => setMode('lead')}

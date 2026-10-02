@@ -16,7 +16,7 @@ import {
   FileText,
   ExternalLink,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Button } from '@/components/ui/button';
@@ -74,6 +74,25 @@ export function CustomerIntakeForm(): JSX.Element {
   const handlePhoneChange = useCallback(
     (value: string) => {
       updateField('phone', formatPhoneNumber(value));
+    },
+    [updateField]
+  );
+
+  // The CRM stores a monthly premium; agents quote and report it annually.
+  const [annualPremium, setAnnualPremium] = useState(() =>
+    formData.monthlyPremium ? (Math.round(formData.monthlyPremium * 12 * 100) / 100).toString() : ''
+  );
+
+  // Keep the box in step when the form is cleared or prefilled elsewhere.
+  useEffect(() => {
+    if (!formData.monthlyPremium) setAnnualPremium('');
+  }, [formData.monthlyPremium]);
+
+  const handleAnnualPremiumChange = useCallback(
+    (value: string) => {
+      setAnnualPremium(value);
+      const annual = parseFloat(value);
+      updateField('monthlyPremium', Number.isFinite(annual) && annual > 0 ? annual / 12 : 0);
     },
     [updateField]
   );
@@ -202,6 +221,8 @@ export function CustomerIntakeForm(): JSX.Element {
         state: formData.state,
         age: formData.age || undefined,
         trustedFormCertUrl,
+        carrier: formData.carrier || undefined,
+        monthlyPremium: formData.monthlyPremium || undefined,
         source: showFullApplication ? 'intake_form_full' : 'intake_form_basic',
       };
 
@@ -213,10 +234,8 @@ export function CustomerIntakeForm(): JSX.Element {
           street: formData.address || undefined,
           city: formData.city || undefined,
           zip: formData.zip || undefined,
-          carrier: formData.carrier || undefined,
           policyType: formData.policyType || undefined,
           coverageAmount: formData.coverage || undefined,
-          monthlyPremium: formData.monthlyPremium || undefined,
           beneficiaries: beneficiaries && beneficiaries.length > 0 ? beneficiaries : undefined,
           ssPaidOnDate: formData.ssPayDay || undefined,
           payDay: formData.firstPayDay?.toString() || undefined,
@@ -364,6 +383,46 @@ export function CustomerIntakeForm(): JSX.Element {
               className="bg-sunken border-rule-strong text-ink"
               placeholder="65"
             />
+          </div>
+        </div>
+
+        {/* Carrier and Annual Premium (agent-fillable) */}
+        <div className="mt-4 grid grid-cols-5 gap-4">
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-ink-2">Carrier</Label>
+            <Select
+              value={formData.carrier}
+              onValueChange={value => updateField('carrier', value as CustomerIntakeData['carrier'])}
+            >
+              <SelectTrigger className="bg-sunken border-rule-strong text-ink">
+                <SelectValue placeholder="Select carrier" />
+              </SelectTrigger>
+              <SelectContent>
+                {CARRIERS.map(carrier => (
+                  <SelectItem key={carrier.value} value={carrier.value}>
+                    {carrier.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2 space-y-1.5">
+            <Label htmlFor="annualPremium" className="text-ink-2">
+              Annual Premium
+            </Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-3" />
+              <Input
+                id="annualPremium"
+                type="number"
+                min="0"
+                step="0.01"
+                value={annualPremium}
+                onChange={e => handleAnnualPremiumChange(e.target.value)}
+                className="bg-sunken border-rule-strong text-ink pl-9"
+                placeholder="0.00"
+              />
+            </div>
           </div>
         </div>
 
@@ -582,28 +641,8 @@ export function CustomerIntakeForm(): JSX.Element {
                 </div>
               </div>
 
-              {/* Policy Row */}
+              {/* Policy Row (carrier and annual premium live in Lead Information) */}
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-ink-2">Carrier</Label>
-                  <Select
-                    value={formData.carrier}
-                    onValueChange={value =>
-                      updateField('carrier', value as CustomerIntakeData['carrier'])
-                    }
-                  >
-                    <SelectTrigger className="bg-sunken border-rule-strong text-ink">
-                      <SelectValue placeholder="Select carrier" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CARRIERS.map(carrier => (
-                        <SelectItem key={carrier.value} value={carrier.value}>
-                          {carrier.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-1.5">
                   <Label className="text-ink-2">Policy Type</Label>
                   <Select
@@ -623,22 +662,6 @@ export function CustomerIntakeForm(): JSX.Element {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="monthlyPremium" className="text-ink-2">
-                    Monthly Premium
-                  </Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-3" />
-                    <Input
-                      id="monthlyPremium"
-                      type="number"
-                      value={formData.monthlyPremium || ''}
-                      onChange={e => updateField('monthlyPremium', parseFloat(e.target.value) || 0)}
-                      className="bg-sunken border-rule-strong text-ink pl-9"
-                      placeholder="0.00"
-                    />
-                  </div>
                 </div>
               </div>
 
