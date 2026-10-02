@@ -60,4 +60,7 @@ if [ "$VOL" != "docker_postgres_data" ]; then
   RED "DATABASE DRIFT: postgres is on volume \"$VOL\", expected docker_postgres_data"; exit 3
 fi
 GRN "postflight ok: database on docker_postgres_data"
+
+# --- Housekeeping: old rollback/candidate images piled up and filled the disk. Non-fatal.
+"$ROOT/scripts/prune-docker-images.sh" --apply || RED "image prune failed (non-fatal)"
 GRN "deploy complete"
