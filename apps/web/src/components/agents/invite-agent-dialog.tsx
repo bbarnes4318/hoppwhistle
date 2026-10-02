@@ -1,8 +1,9 @@
 'use client';
 
 import { Check, Copy, Loader2, Mail, UserPlus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
+import { StatePicker } from '@/components/agents/state-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,13 +16,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api';
-import {
-  JURISDICTIONS,
-  REGIONS,
-  jurisdictionsInRegion,
-  searchJurisdictions,
-} from '@/lib/licensable-jurisdictions';
-import { cn } from '@/lib/utils';
 
 /**
  * Adding an agent to the agency.
@@ -88,35 +82,9 @@ export function InviteAgentDialog({
   const [result, setResult] = useState<GrantResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState('');
-
-  const visible = useMemo(() => searchJurisdictions(query), [query]);
-
-  function toggle(code: string): void {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  }
-
-  function toggleRegion(region: (typeof REGIONS)[number]): void {
-    setSelected(prev => {
-      const codes = jurisdictionsInRegion(region).map(j => j.code);
-      const next = new Set(prev);
-      const allOn = codes.every(code => next.has(code));
-      for (const code of codes) {
-        if (allOn) next.delete(code);
-        else next.add(code);
-      }
-      return next;
-    });
-  }
 
   function reset(): void {
     setSelected(new Set());
-    setQuery('');
     setEmail('');
     setError(null);
     setResult(null);
@@ -129,10 +97,6 @@ export function InviteAgentDialog({
       setError('An email address is required.');
       return;
     }
-    if (selected.size === 0) {
-      setError('Select at least one state the agent is licensed in.');
-      return;
-    }
 
     setSaving(true);
     setError(null);
@@ -140,7 +104,9 @@ export function InviteAgentDialog({
       const response = await apiClient.post<GrantResponse>('/api/v1/auth/activation-grants', {
         email: trimmed,
         role: 'AGENT',
-        licensedStates: [...selected].sort(),
+        // Optional: an agent whose states are not recorded here is made to
+        // choose them on their first sign-in.
+        ...(selected.size > 0 ? { licensedStates: [...selected].sort() } : {}),
       });
       const data = response.data;
       if (!data) {
@@ -187,8 +153,9 @@ export function InviteAgentDialog({
             Add an agent
           </DialogTitle>
           <DialogDescription>
-            They will be emailed a link to set up their account. Choose the states they are licensed
-            in — they are only sent calls from those states — then assign them a campaign.
+            They will be emailed a link to set up their account. They are only sent calls from the
+            states they are licensed in: choose them here, or the agent will be asked on first
+            sign-in. Then assign them a campaign.
           </DialogDescription>
         </DialogHeader>
 
@@ -250,66 +217,12 @@ export function InviteAgentDialog({
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Licensed states</Label>
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  <span className="font-semibold text-foreground">{selected.size}</span> of{' '}
-                  {JURISDICTIONS.length}
-                </span>
-              </div>
-              <Input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Search by name or code…"
-                aria-label="Search states"
-              />
-              <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
-                {REGIONS.map(region => {
-                  const items = visible.filter(j => j.region === region);
-                  if (items.length === 0) return null;
-                  const allOn = jurisdictionsInRegion(region).every(j => selected.has(j.code));
-                  return (
-                    <div key={region}>
-                      <div className="mb-1 flex items-center justify-between">
-                        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                          {region}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => toggleRegion(region)}
-                          className="rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          {allOn ? 'Clear region' : 'Select region'}
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                        {items.map(j => {
-                          const on = selected.has(j.code);
-                          return (
-                            <button
-                              key={j.code}
-                              type="button"
-                              role="checkbox"
-                              aria-checked={on}
-                              aria-label={`${j.name} (${j.code})`}
-                              onClick={() => toggle(j.code)}
-                              className={cn(
-                                'flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
-                                on
-                                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                                  : 'border-transparent bg-muted/40 text-muted-foreground hover:bg-muted'
-                              )}
-                            >
-                              <span className="min-w-0 flex-1 truncate">{j.name}</span>
-                              <span className="shrink-0 font-mono text-[10px]">{j.code}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <Label>Licensed states (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                If you leave this empty, the agent is asked to choose their states the first time
+                they sign in, and cannot use the portal until they do.
+              </p>
+              <StatePicker selected={selected} onChange={setSelected} />
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
@@ -333,7 +246,7 @@ export function InviteAgentDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={() => void submit()} disabled={saving || !email.trim() || selected.size === 0}>
+              <Button onClick={() => void submit()} disabled={saving || !email.trim()}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Send invitation
               </Button>

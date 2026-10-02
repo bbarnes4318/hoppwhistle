@@ -6,7 +6,11 @@ import bcrypt from 'bcryptjs';
 const { compare, hash } = bcrypt;
 import { FastifyInstance } from 'fastify';
 
-import { normalizeLicensedStates, partitionLicensedStates } from '../lib/licensed-states.js';
+import {
+  isStateRestrictedAgent,
+  normalizeLicensedStates,
+  partitionLicensedStates,
+} from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
@@ -725,27 +729,20 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
 
       /*
-       * An agent is rung only for the states they are licensed in, so an AGENT
-       * invitation must say which. Validated through the same normaliser the
-       * routing and CRM gates read, and refused whole on a typo rather than
-       * silently granting less than the administrator believed they granted.
+       * An agent is rung only for the states they are licensed in. The
+       * administrator may record them here; if they do not, the agent is made
+       * to choose on their first sign-in before they can use anything. Either
+       * way the list is validated through the same normaliser the routing and
+       * CRM gates read, and refused whole on a typo.
        */
       let grantLicensedStates: string[] = [];
-      if (invitedRole === 'AGENT') {
+      if (invitedRole === 'AGENT' && licensedStates !== undefined && licensedStates !== null) {
         const parts = partitionLicensedStates(licensedStates);
         if (parts.rejected.length > 0) {
           return reply.code(400).send({
             error: {
               code: 'VALIDATION_ERROR',
               message: 'licensedStates must be an array of US state codes',
-            },
-          });
-        }
-        if (parts.licensed.length === 0) {
-          return reply.code(400).send({
-            error: {
-              code: 'LICENSED_STATES_REQUIRED',
-              message: 'Select at least one state the agent is licensed in',
             },
           });
         }
@@ -808,9 +805,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         select: { name: true },
       });
 
-      const { sendAgentInvitationEmail, invitationLink } = await import(
-        '../services/agent-invite-email.js'
-      );
+      const { sendAgentInvitationEmail, invitationLink } =
+        await import('../services/agent-invite-email.js');
       const { portalUrlForTenant } = await import('../lib/tenant-brand.js');
       const delivery = await sendAgentInvitationEmail({
         email: email.toLowerCase(),
@@ -1380,6 +1376,22 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * previewing a role gets exactly that role's -- the same list the
        * requests they are about to make will be judged against.
        */
+      /*
+       * Whether this agent still has to say which states they are licensed in.
+       * Calls and leads are only routed to an agent inside those states, so an
+       * agent with none is shown a mandatory screen before anything else. The
+       * same test the enforcement uses decides who counts as an agent.
+       */
+      const licensedStates = normalizeLicensedStates(userMetadata?.licensedStates);
+      const needsLicensedStates =
+        licensedStates.length === 0 &&
+        isStateRestrictedAgent({
+          userId: user.id,
+          roles: effectiveRoles,
+          isPlatformAdmin: isPlatformPrincipal,
+          previewRole: principal?.previewRole ?? null,
+        });
+
       const permissions = Array.from(
         new Set(
           effectiveRoles.flatMap(role =>
@@ -1459,6 +1471,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,
         buyerAccessToRecordings,
+        licensedStates,
+        needsLicensedStates,
         position: userMetadata?.position || null,
         defaultScript: userMetadata?.defaultScript || null,
         customScripts: userMetadata?.customScripts || null,
@@ -1479,6 +1493,110 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         sessionExpiresAt:
           typeof principal?.exp === 'number' ? new Date(principal.exp * 1000).toISOString() : null,
       });
+    }
+  );
+
+  // ============================================================================
+  // An agent records the states they are licensed in (me)
+  // ============================================================================
+  /**
+   * The mandatory first-login step. An agent with no licensed states is routed
+   * no calls and shown no leads, so the app will not let them past this screen.
+   *
+   * It only ever FILLS an empty list. Once states are on file -- chosen here or
+   * by the agency -- changing them is the administrator's job, so an agent can
+   * not quietly widen a licence an administrator has set. The caller is read
+   * from the verified session and the target is always that same user: there is
+   * no user id in the body.
+   */
+  fastify.put(
+    '/api/auth/me/licensed-states',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const principal = request.user as {
+        userId?: string;
+        tenantId?: string;
+        roles?: string[];
+        isPlatformAdmin?: boolean;
+        previewRole?: string | null;
+      };
+      const userId = principal?.userId;
+      if (!userId) {
+        return reply.code(401).send({
+          error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+        });
+      }
+      if (principal.previewRole) {
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'A role preview cannot record a licence' },
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { roles: { include: { role: true } } },
+      });
+      const roleNames = user?.roles.map((ur: UserRole) => ur.role.name) ?? [];
+      if (!user || !isStateRestrictedAgent({ userId, roles: roleNames })) {
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Only an agent records licensed states here' },
+        });
+      }
+
+      const parts = partitionLicensedStates(
+        (request.body as { licensedStates?: unknown })?.licensedStates
+      );
+      if (parts.rejected.length > 0 || parts.licensed.length === 0) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Select at least one state you are licensed in',
+          },
+        });
+      }
+
+      const metadata =
+        user.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)
+          ? (user.metadata as Record<string, unknown>)
+          : {};
+      if (normalizeLicensedStates(metadata.licensedStates).length > 0) {
+        return reply.code(409).send({
+          error: {
+            code: 'LICENSE_ALREADY_RECORDED',
+            message:
+              'Your licensed states are already on file. Ask your administrator to change them.',
+          },
+        });
+      }
+
+      // Conditional on the list still being empty, so two racing requests (or
+      // an administrator saving at the same moment) cannot overwrite each other.
+      const updated = await prisma.user.updateMany({
+        where: { id: userId, updatedAt: user.updatedAt },
+        data: { metadata: { ...metadata, licensedStates: parts.licensed } },
+      });
+      if (updated.count === 0) {
+        return reply.code(409).send({
+          error: { code: 'CONFLICT', message: 'Your account changed. Please try again.' },
+        });
+      }
+
+      await auditLog({
+        tenantId: user.tenantId ?? undefined,
+        userId,
+        action: 'auth.licensed_states.recorded',
+        entityType: 'User',
+        entityId: userId,
+        resource: '/api/auth/me/licensed-states',
+        method: 'PUT',
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        changes: { licensedStates: parts.licensed },
+        success: true,
+      });
+
+      return reply.send({ licensedStates: parts.licensed });
     }
   );
 
