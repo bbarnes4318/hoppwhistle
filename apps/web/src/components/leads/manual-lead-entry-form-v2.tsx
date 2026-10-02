@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
-import { US_STATES } from '@/lib/us-states';
+import { CARRIERS, US_STATES } from '@/lib/us-states';
 
 type Vertical = 'FE' | 'ACA';
 type DeliveryChoice = 'CRM_ONLY' | 'SEND_NOW';
@@ -37,6 +37,8 @@ interface ManualLeadFormState {
   birthDate: string;
   gender: string;
   smoker: string;
+  carrier: string;
+  annualPremium: string;
   heightFeet: string;
   heightInches: string;
   weight: string;
@@ -101,6 +103,8 @@ const INITIAL_STATE: ManualLeadFormState = {
   birthDate: '',
   gender: '',
   smoker: '',
+  carrier: '',
+  annualPremium: '',
   heightFeet: '',
   heightInches: '',
   weight: '',
@@ -269,6 +273,12 @@ export function ManualLeadEntryFormV2(): JSX.Element {
       age: calculatedAge ?? undefined,
       gender: form.gender || undefined,
       smoker: form.smoker || undefined,
+      carrier: form.carrier || undefined,
+      // The CRM stores a monthly premium; agents enter it annually.
+      monthlyPremium:
+        Number(form.annualPremium) > 0
+          ? (Math.round((Number(form.annualPremium) / 12) * 100) / 100).toFixed(2)
+          : undefined,
       heightFeet: form.heightFeet ? Number(form.heightFeet) : undefined,
       heightInches: form.heightInches === '' ? undefined : Number(form.heightInches),
       weight: form.weight ? Number(form.weight) : undefined,
@@ -624,7 +634,7 @@ export function ManualLeadEntryFormV2(): JSX.Element {
           )}
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label htmlFor="smoker" className="text-ink-2">
               Tobacco Use
@@ -639,6 +649,41 @@ export function ManualLeadEntryFormV2(): JSX.Element {
               <option value="No">No</option>
               <option value="Yes">Yes</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="carrier" className="text-ink-2">
+              Carrier
+            </Label>
+            <select
+              id="carrier"
+              value={form.carrier}
+              onChange={event => update('carrier', event.target.value)}
+              className="h-10 w-full rounded-md border border-rule bg-surface px-3 text-sm text-ink"
+            >
+              <option value="">Select carrier</option>
+              {CARRIERS.map(carrier => (
+                <option key={carrier.value} value={carrier.value}>
+                  {carrier.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="annualPremium" className="text-ink-2">
+              Annual Premium
+            </Label>
+            <Input
+              id="annualPremium"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.annualPremium}
+              onChange={event => update('annualPremium', event.target.value)}
+              className="border-rule bg-surface text-ink"
+              placeholder="0.00"
+            />
           </div>
 
           {form.vertical === 'ACA' && (
