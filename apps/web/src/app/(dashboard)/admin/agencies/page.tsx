@@ -1,21 +1,26 @@
 'use client';
 
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
-  Download,
-  Loader2,
-  MoreHorizontal,
-  RefreshCw,
-} from 'lucide-react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Download, Loader2, MoreHorizontal, RefreshCw, UserPlus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { InviteOwnerDialog } from '@/components/agencies/invite-owner-dialog';
-import { Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
+import {
+  Notice,
+  Panel,
+  PanelBody,
+  SheetDrawer,
+  StatTile,
+  StatTileRow,
+  StatusChip,
+} from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { BrandThemeControl } from '@/components/platform/brand-theme-control';
 import { NumbersAllowanceControl } from '@/components/platform/numbers-allowance-control';
+import {
+  SettingsSection,
+  SettingsToggleRow,
+  selectClass,
+} from '@/components/platform/settings-section';
 import {
   UpgradePricesPanel,
   UpgradeRequestsPanel,
@@ -38,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -46,6 +52,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient, payload } from '@/lib/api';
@@ -132,9 +139,12 @@ function pct(value: number | null): string {
 }
 
 function money(value: number | null, digits = 2): string {
-  return value === null
-    ? '—'
-    : `$${value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+  if (value === null) return '—';
+  const formatted = Math.abs(value).toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return value < 0 ? `-$${formatted}` : `$${formatted}`;
 }
 
 /** What is standing between an agency and being enrolled. */
@@ -185,6 +195,8 @@ export default function PlatformAgenciesPage(): JSX.Element {
    */
   const [showTestAgencies, setShowTestAgencies] = useState(false);
 
+  const [exportOpen, setExportOpen] = useState(false);
+
   /** The agency whose owner is being invited. */
   const [invitingOwner, setInvitingOwner] = useState<AgencyRow | null>(null);
   /** The agency whose test/production marking is being confirmed. */
@@ -218,17 +230,13 @@ export default function PlatformAgenciesPage(): JSX.Element {
   }, [load]);
 
   /**
-   * Open one agency's enrolment panel.
+   * Open one agency's management panel and read its enrolment state.
    *
    * The readiness check is a server read, always re-fetched: the blockers are
    * the same ones `POST .../enrol` will apply, and showing a cached "ready"
    * next to a button that then refuses is worse than a moment's wait.
    */
   async function openEnrolment(tenantId: string): Promise<void> {
-    if (openAgency === tenantId) {
-      setOpenAgency(null);
-      return;
-    }
     setOpenAgency(tenantId);
     setEnrolment(null);
     setEnrolmentNote(null);
@@ -421,6 +429,13 @@ export default function PlatformAgenciesPage(): JSX.Element {
     );
   }
 
+  const production = sorted.filter(row => !row.isNonProduction);
+  const sum = (pick: (row: AgencyRow) => number | null): number | null => {
+    const values = production.map(pick).filter((value): value is number => value !== null);
+    return values.length === 0 ? null : values.reduce((total, value) => total + value, 0);
+  };
+  const openRow = openAgency ? (rows.find(row => row.tenantId === openAgency) ?? null) : null;
+
   return (
     <div className="page-canvas">
       <PageHeader
@@ -432,6 +447,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
               value={day}
               onChange={event => setDay(event.target.value)}
               className="h-8 w-40"
+              aria-label="Delivery day"
             />
             <Button
               variant="outline"
@@ -445,6 +461,10 @@ export default function PlatformAgenciesPage(): JSX.Element {
               <RefreshCw className="mr-2 h-3 w-3" />
               Refresh
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+              <Download className="mr-2 h-3 w-3" />
+              Export
+            </Button>
             <Button size="sm" onClick={() => void runSettlement()} disabled={running}>
               {running && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
               Run settlement
@@ -453,329 +473,244 @@ export default function PlatformAgenciesPage(): JSX.Element {
         }
       />
 
-      {error && <p className="text-sm text-dropped-ink">{error}</p>}
+      {error ? <Notice tone="error" title={error} /> : null}
 
-      <Panel>
-        <PanelHeader>
-          <PanelTitle>Export settlement records</PanelTitle>
-        </PanelHeader>
-        <PanelBody>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-ink-3">
-              From
-              <Input
-                type="date"
-                value={exportFrom}
-                onChange={event => setExportFrom(event.target.value)}
-                className="mt-1 h-8 w-40"
-              />
-            </label>
-            <label className="text-xs text-ink-3">
-              To
-              <Input
-                type="date"
-                value={exportTo}
-                onChange={event => setExportTo(event.target.value)}
-                className="mt-1 h-8 w-40"
-              />
-            </label>
-            <label className="text-xs text-ink-3">
-              Mode
-              <select
-                value={exportMode}
-                onChange={event =>
-                  setExportMode(event.target.value as 'ALL' | 'DRY_RUN' | 'CHARGED')
-                }
-                className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm"
-              >
-                <option value="ALL">All settlements</option>
-                <option value="DRY_RUN">Dry run — nothing was charged</option>
-                <option value="CHARGED">Charged</option>
-              </select>
-            </label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void exportSettlements()}
-              disabled={exporting}
-            >
-              {exporting ? (
-                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-3 w-3" />
-              )}
-              Download CSV
-            </Button>
-            <p className="text-xs text-ink-3">
-              Every figure from the settlement record — counts, closing percentage, rate, curve
-              version, overrun, block and total. Defaults to the day shown above.
-            </p>
-          </div>
-        </PanelBody>
-      </Panel>
+      <StatTileRow className="lg:grid-cols-4">
+        <StatTile label="Agencies" value={String(production.length)} sub={`On ${day}`} />
+        <StatTile
+          label="Needing action"
+          value={String(needingAction.length)}
+          sub={needingAction.length === 0 ? 'Nothing is flagged' : 'Flagged agencies sort first'}
+        />
+        <StatTile label="Revenue" value={money(sum(row => row.revenue))} sub="All agencies" />
+        <StatTile
+          label="Margin"
+          value={money(sum(row => row.margin))}
+          sub="Revenue less call cost"
+        />
+      </StatTileRow>
 
-      {needingAction.length > 0 && (
-        <div className="flex items-start gap-2 rounded-card border border-ringing bg-ringing-tint p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
-          <div>
-            <p className="font-medium">
-              {needingAction.length} agenc{needingAction.length === 1 ? 'y needs' : 'ies need'}{' '}
-              action
-            </p>
-            <p className="text-ink-3">{needingAction.map(row => row.name).join(', ')}</p>
-          </div>
-        </div>
-      )}
+      {needingAction.length > 0 ? (
+        <Notice
+          tone="warning"
+          title={`${needingAction.length} ${needingAction.length === 1 ? 'agency needs' : 'agencies need'} action`}
+        >
+          {needingAction.map(row => row.name).join(', ')}
+        </Notice>
+      ) : null}
 
-      <Panel className="min-w-0 overflow-hidden">
-        <PanelHeader>
-          <PanelTitle>Per agency — {day}</PanelTitle>
-        </PanelHeader>
-        <PanelBody flush>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8" />
-                <TableHead>Agency</TableHead>
-                <TableHead>Parent</TableHead>
-                <TableHead>Billing</TableHead>
-                <TableHead className="text-right">Calls</TableHead>
-                <TableHead className="text-right">Applications</TableHead>
-                <TableHead className="text-right">Closing</TableHead>
-                <TableHead className="text-right">Rate</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
-                <TableHead className="text-right">Call cost</TableHead>
-                <TableHead className="text-right">Margin</TableHead>
-                <TableHead className="text-right">Rev / call</TableHead>
-                <TableHead className="text-right">Cost / call</TableHead>
-                <TableHead>Settlement</TableHead>
-                <TableHead>Flags</TableHead>
-                <TableHead className="w-10">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map(row => (
-                <Fragment key={row.tenantId}>
+      <Tabs defaultValue="agencies" className="flex flex-col gap-4">
+        <TabsList>
+          <TabsTrigger value="agencies">Agencies</TabsTrigger>
+          <TabsTrigger value="upgrades">Upgrade pricing and requests</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="agencies" className="mt-0">
+          <Panel className="min-w-0 overflow-hidden">
+            <PanelBody flush className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell className="align-middle">
-                      <button
-                        type="button"
-                        aria-expanded={openAgency === row.tenantId}
-                        aria-label={`Enrolment controls for ${row.name}`}
-                        className="text-ink-3"
-                        onClick={() => void openEnrolment(row.tenantId)}
-                      >
-                        {openAgency === row.tenantId ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </button>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <span>{row.name}</span>
-                        {row.isNonProduction && (
-                          <StatusChip value="TEST" label="Test" tone="neutral" size="sm" />
-                        )}
-                        {row.whiteLabel && (
-                          <StatusChip
-                            value="WHITE_LABEL"
-                            label="White-label"
-                            tone="money"
-                            size="sm"
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-ink-2">{row.parentName ?? '—'}</TableCell>
-                    <TableCell>
-                      {!row.enrolled ? (
-                        <Badge
-                          variant="outline"
-                          title="Not enrolled: not gated, not metered, not settled. Calls deliver as they always have."
-                        >
-                          not enrolled
-                        </Badge>
-                      ) : row.chargesEnabled ? (
-                        <Badge variant="secondary" title="Enrolled, and settlements charge">
-                          charging
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          title="Enrolled. Settlements compute and are recorded in full; no payment is taken."
-                        >
-                          dry run
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
-                    <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(row.rate)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(row.revenue)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(row.callCost)}</TableCell>
-                    <TableCell
-                      className={cn(
-                        'text-right font-medium tabular-nums',
-                        row.margin !== null && row.margin < 0 && 'text-dropped-ink'
-                      )}
-                    >
-                      {money(row.margin)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-ink-3">
-                      {money(row.revenuePerCall, 4)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-ink-3">
-                      {money(row.costPerCall, 4)}
-                    </TableCell>
-                    <TableCell>
-                      {/*
-                        A halt is not a decline: the run worked and withheld the
-                        debit on purpose. It still needs somebody, so it is not
-                        quiet -- but calling it "failed" sends an operator to
-                        retry a card instead of to explain the day.
-                      */}
-                      <Badge
-                        variant={
-                          row.settlement.status === 'SETTLED'
-                            ? 'secondary'
-                            : row.settlement.status === 'FAILED' ||
-                                row.settlement.status === 'HALTED'
-                              ? 'destructive'
-                              : 'outline'
-                        }
-                        title={
-                          row.settlement.status === 'HALTED'
-                            ? 'The run completed and deliberately placed no debit. Explain the day rather than retrying the payment.'
-                            : undefined
-                        }
-                      >
-                        {row.settlement.status === 'NOT_ENROLLED'
-                          ? '—'
-                          : row.settlement.status === 'NOT_YET_RUN'
-                            ? 'not yet run'
-                            : (row.settlement.paymentStatus ?? row.settlement.status)
-                                .replace(/_/g, ' ')
-                                .toLowerCase()}
-                      </Badge>
-                    </TableCell>
-                    {/*
-                      Each flag opens that agency's own controls, so a badge is
-                      a place to act rather than only a place to look. Without
-                      it an operator reads "no mandate" and then has to find the
-                      row again in a table sorted by flag count.
-                    */}
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {row.flags.belowMinimumAndPaused && (
-                          <FlagBadge
-                            label="below 5%"
-                            title="Below the curve minimum. Only a platform admin can clear the review."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                        {row.flags.atCeiling && (
-                          <FlagBadge
-                            label="at ceiling"
-                            title="The Overrun ceiling has been reached for this Delivery Day, so delivery has stopped until tomorrow."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                        {row.flags.settlementFailedOrUnpaid && (
-                          <FlagBadge
-                            label="unpaid"
-                            title="A settlement is failed, halted or unpaid."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                        {row.flags.noValidMandate && (
-                          <FlagBadge
-                            label="no mandate"
-                            title="No usable payment method, so nothing will deliver."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                        {row.flags.suspended && (
-                          <FlagBadge
-                            label="suspended"
-                            title="Suspended by a platform admin. Paid applications survive a suspension."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                        {row.flags.enrolledNeverSettled && (
-                          <FlagBadge
-                            label="never settled"
-                            title="Enrolled, and no settlement has ever been written for this agency. The nightly run is not reaching it — every other column here reads a settlement that does not exist and shows an em dash that looks like a quiet day."
-                            onClick={() => void openEnrolment(row.tenantId)}
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right align-middle">
-                      <DropdownMenu modal={false}>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            aria-label={`More actions for ${row.name}`}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => setInvitingOwner(row)}>
-                            Invite owner
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => openMarking(row)}>
-                            {row.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                    <TableHead>Agency</TableHead>
+                    <TableHead>Billing</TableHead>
+                    <TableHead className="text-right">Calls</TableHead>
+                    <TableHead className="text-right">Applications</TableHead>
+                    <TableHead className="text-right">Closing</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">Margin</TableHead>
+                    <TableHead>Settlement</TableHead>
+                    <TableHead>Flags</TableHead>
+                    <TableHead className="w-[1%]">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
-
-                  {openAgency === row.tenantId && (
-                    <TableRow className="bg-sunken">
-                      <TableCell colSpan={16} className="p-4">
-                        <EnrolmentPanel
-                          row={row}
-                          status={enrolment}
-                          busy={enrolmentBusy}
-                          note={enrolmentNote}
-                          onAct={act}
-                          onCeiling={setCeiling}
-                        />
-                        <div className="mt-3">
-                          <BrandThemeControl tenantId={row.tenantId} agencyName={row.name} />
-                          <div className="mt-3">
-                            <UpgradesControl tenantId={row.tenantId} agencyName={row.name} />
-                          </div>
-                          <div className="mt-3">
-                            <NumbersAllowanceControl
-                              tenantId={row.tenantId}
-                              agencyName={row.name}
+                </TableHeader>
+                <TableBody>
+                  {sorted.map(row => (
+                    <TableRow key={row.tenantId}>
+                      <TableCell>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => void openEnrolment(row.tenantId)}
+                            className="font-medium text-brand-ink hover:underline"
+                          >
+                            {row.name}
+                          </button>
+                          {row.isNonProduction && (
+                            <StatusChip value="TEST" label="Test" tone="neutral" size="sm" />
+                          )}
+                          {row.whiteLabel && (
+                            <StatusChip
+                              value="WHITE_LABEL"
+                              label="White-label"
+                              tone="money"
+                              size="sm"
                             />
-                          </div>
+                          )}
+                        </div>
+                        {row.parentName ? (
+                          <div className="mt-0.5 t-meta text-ink-3">{`Under ${row.parentName}`}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <BillingBadge row={row} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.deliveredCalls}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {pct(row.closingPct)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {money(row.revenue)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'text-right font-medium tabular-nums',
+                          row.margin !== null && row.margin < 0 && 'text-dropped-ink'
+                        )}
+                      >
+                        {money(row.margin)}
+                      </TableCell>
+                      <TableCell>
+                        <SettlementBadge row={row} />
+                      </TableCell>
+                      {/*
+                        Each flag opens that agency's own controls, so a badge is
+                        a place to act rather than only a place to look. Without
+                        it an operator reads "no mandate" and then has to find the
+                        row again in a table sorted by flag count.
+                      */}
+                      <TableCell>
+                        <FlagBadges row={row} onOpen={() => void openEnrolment(row.tenantId)} />
+                      </TableCell>
+                      <TableCell className="text-right align-middle">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          >
+                            Manage
+                          </Button>
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                aria-label={`More actions for ${row.name}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => setInvitingOwner(row)}>
+                                Invite owner
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => openMarking(row)}>
+                                {row.isNonProduction ? 'Mark as production' : 'Mark as test agency'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )}
-                </Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </PanelBody>
-      </Panel>
+                  ))}
+                </TableBody>
+              </Table>
+            </PanelBody>
+          </Panel>
+        </TabsContent>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <UpgradePricesPanel />
-        <UpgradeRequestsPanel />
-      </div>
+        <TabsContent value="upgrades" className="mt-0">
+          <div className="grid grid-cols-1 gap-4">
+            <UpgradePricesPanel />
+            <UpgradeRequestsPanel />
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <SheetDrawer
+        open={openRow !== null}
+        onOpenChange={open => {
+          if (!open) setOpenAgency(null);
+        }}
+        title={openRow?.name ?? 'Agency'}
+        description={
+          openRow
+            ? [
+                openRow.whiteLabel ? 'White-label' : null,
+                openRow.parentName ? `Under ${openRow.parentName}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'Billing, branding, upgrades and numbers'
+            : undefined
+        }
+        size="xl"
+      >
+        {openRow ? (
+          <>
+            <SettingsSection title={`Figures for ${day}`}>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+                {(
+                  [
+                    ['Delivered calls', String(openRow.deliveredCalls)],
+                    ['Applications', String(openRow.applications)],
+                    ['Closing', pct(openRow.closingPct)],
+                    ['Rate', money(openRow.rate)],
+                    ['Revenue', money(openRow.revenue)],
+                    ['Call cost', money(openRow.callCost)],
+                    ['Margin', money(openRow.margin)],
+                    ['Revenue per call', money(openRow.revenuePerCall, 4)],
+                    ['Cost per call', money(openRow.costPerCall, 4)],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="t-meta text-ink-3">{label}</dt>
+                    <dd className="t-body font-medium tabular-nums text-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Billing and delivery"
+              description="Whether this agency is metered and settled, and whether its calls are delivering."
+            >
+              <EnrolmentPanel
+                row={openRow}
+                status={enrolment}
+                busy={enrolmentBusy}
+                note={enrolmentNote}
+                onAct={act}
+                onCeiling={setCeiling}
+              />
+            </SettingsSection>
+
+            <SettingsSection
+              title="Owner"
+              description="The first person inside an agency can only be invited from here: nobody there can do it yet."
+            >
+              <SettingsToggleRow
+                title="Owner invitation"
+                description="Emails the owner a single-use link to create their sign-in."
+              >
+                <Button size="sm" onClick={() => setInvitingOwner(openRow)}>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                  Invite owner
+                </Button>
+              </SettingsToggleRow>
+            </SettingsSection>
+
+            <BrandThemeControl tenantId={openRow.tenantId} agencyName={openRow.name} />
+            <UpgradesControl tenantId={openRow.tenantId} agencyName={openRow.name} />
+            <NumbersAllowanceControl tenantId={openRow.tenantId} agencyName={openRow.name} />
+          </>
+        ) : null}
+      </SheetDrawer>
 
       <InviteOwnerDialog
         open={invitingOwner !== null}
@@ -787,6 +722,66 @@ export default function PlatformAgenciesPage(): JSX.Element {
           invitingOwner ? { tenantId: invitingOwner.tenantId, name: invitingOwner.name } : null
         }
       />
+
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export settlement records</DialogTitle>
+            <DialogDescription>
+              Every figure from the settlement record: counts, closing percentage, rate, curve
+              version, overrun, block and total. With no dates it exports the day shown on the page.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="export-from">From</Label>
+              <Input
+                id="export-from"
+                type="date"
+                value={exportFrom}
+                onChange={event => setExportFrom(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="export-to">To</Label>
+              <Input
+                id="export-to"
+                type="date"
+                value={exportTo}
+                onChange={event => setExportTo(event.target.value)}
+              />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <Label htmlFor="export-mode">Mode</Label>
+              <select
+                id="export-mode"
+                value={exportMode}
+                onChange={event =>
+                  setExportMode(event.target.value as 'ALL' | 'DRY_RUN' | 'CHARGED')
+                }
+                className={selectClass}
+              >
+                <option value="ALL">All settlements</option>
+                <option value="DRY_RUN">Dry run — nothing was charged</option>
+                <option value="CHARGED">Charged</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
+              Close
+            </Button>
+            <Button onClick={() => void exportSettlements()} disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-3 w-3" />
+              )}
+              Download CSV
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={marking !== null}
@@ -828,6 +823,102 @@ export default function PlatformAgenciesPage(): JSX.Element {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** The billing state, as a badge: not enrolled, charging, or a dry run. */
+function BillingBadge({ row }: { row: AgencyRow }): JSX.Element {
+  if (!row.enrolled) {
+    return (
+      <Badge
+        variant="outline"
+        title="Not enrolled: not gated, not metered, not settled. Calls deliver as they always have."
+      >
+        not enrolled
+      </Badge>
+    );
+  }
+  return row.chargesEnabled ? (
+    <Badge variant="secondary" title="Enrolled, and settlements charge">
+      charging
+    </Badge>
+  ) : (
+    <Badge
+      variant="outline"
+      title="Enrolled. Settlements compute and are recorded in full; no payment is taken."
+    >
+      dry run
+    </Badge>
+  );
+}
+
+/**
+ * Where the day's settlement run got to.
+ *
+ * A halt is not a decline: the run worked and withheld the debit on purpose. It
+ * still needs somebody, so it is not quiet -- but calling it "failed" sends an
+ * operator to retry a card instead of to explain the day.
+ */
+function SettlementBadge({ row }: { row: AgencyRow }): JSX.Element {
+  const { status, paymentStatus } = row.settlement;
+  return (
+    <Badge
+      variant={
+        status === 'SETTLED'
+          ? 'secondary'
+          : status === 'FAILED' || status === 'HALTED'
+            ? 'destructive'
+            : 'outline'
+      }
+      title={
+        status === 'HALTED'
+          ? 'The run completed and deliberately placed no debit. Explain the day rather than retrying the payment.'
+          : undefined
+      }
+    >
+      {status === 'NOT_ENROLLED'
+        ? '—'
+        : status === 'NOT_YET_RUN'
+          ? 'not yet run'
+          : (paymentStatus ?? status).replace(/_/g, ' ').toLowerCase()}
+    </Badge>
+  );
+}
+
+/** Every flag raised on an agency; each opens that agency's controls. */
+function FlagBadges({ row, onOpen }: { row: AgencyRow; onOpen: () => void }): JSX.Element {
+  const flags: Array<[boolean, string, string]> = [
+    [
+      row.flags.belowMinimumAndPaused,
+      'below 5%',
+      'Below the curve minimum. Only a platform admin can clear the review.',
+    ],
+    [
+      row.flags.atCeiling,
+      'at ceiling',
+      'The Overrun ceiling has been reached for this Delivery Day, so delivery has stopped until tomorrow.',
+    ],
+    [row.flags.settlementFailedOrUnpaid, 'unpaid', 'A settlement is failed, halted or unpaid.'],
+    [row.flags.noValidMandate, 'no mandate', 'No usable payment method, so nothing will deliver.'],
+    [
+      row.flags.suspended,
+      'suspended',
+      'Suspended by a platform admin. Paid applications survive a suspension.',
+    ],
+    [
+      row.flags.enrolledNeverSettled,
+      'never settled',
+      'Enrolled, and no settlement has ever been written for this agency. The nightly run is not reaching it — every other column here reads a settlement that does not exist and shows an em dash that looks like a quiet day.',
+    ],
+  ];
+  const raised = flags.filter(([on]) => on);
+  if (raised.length === 0) return <span className="text-ink-3">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {raised.map(([, label, title]) => (
+        <FlagBadge key={label} label={label} title={title} onClick={onOpen} />
+      ))}
     </div>
   );
 }
@@ -906,130 +997,154 @@ function EnrolmentPanel({
 }): JSX.Element {
   if (!status) {
     return (
-      <p className="flex items-center text-sm text-ink-3">
+      <p className="flex items-center t-meta text-ink-3">
         <Loader2 className="mr-2 h-3 w-3 animate-spin" />
         Reading this agency&rsquo;s enrolment
       </p>
     );
   }
 
+  const facts: Array<[string, string]> = [
+    ['Balance', `${status.balance} paid applications`],
+    [
+      'Payment method',
+      status.mandate.valid
+        ? status.mandate.last4
+          ? `${status.mandate.bankName ?? 'Bank'} ····${status.mandate.last4}`
+          : 'Valid'
+        : status.mandate.status.toLowerCase(),
+    ],
+  ];
+
   return (
-    <div className="space-y-3 text-sm">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-        <span className="font-medium">{row.name}</span>
-        <span className="text-ink-3">
-          {status.enrolled ? 'Enrolled in billing' : 'Not enrolled in billing'}
-          {status.enrolled && (status.chargesEnabled ? ' · charging' : ' · not charging')}
-        </span>
-        <span className="text-ink-3">
-          Balance <span className="tabular-nums">{status.balance}</span> paid applications
-        </span>
-        <span className="text-ink-3">
-          Mandate {status.mandate.valid ? 'valid' : status.mandate.status.toLowerCase()}
-          {status.mandate.last4
-            ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}`
-            : ''}
-        </span>
-      </div>
+    <div className="space-y-4">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {facts.map(([label, value]) => (
+          <div key={label}>
+            <dt className="t-meta text-ink-3">{label}</dt>
+            <dd className="t-body font-medium text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
 
-      {note && (
-        <p className="rounded-control border border-ringing bg-ringing-tint p-2 text-[13px]">
-          {note}
-        </p>
-      )}
+      {note ? <Notice tone="warning" title={note} /> : null}
 
-      {!status.enrolled && status.blockers.length > 0 && (
-        <p className="text-ink-3">
-          Not ready to enrol. Still needed:{' '}
-          <span className="font-medium">
-            {status.blockers.map(code => BLOCKER_TEXT[code] ?? code).join(', ')}
-          </span>
-          .
-        </p>
-      )}
+      {!status.enrolled && status.blockers.length > 0 ? (
+        <Notice tone="info" title="Not ready to enrol">
+          Still needed: {status.blockers.map(code => BLOCKER_TEXT[code] ?? code).join(', ')}.
+        </Notice>
+      ) : null}
 
-      {status.enrolled && status.pendingDryRunCloseout.credits > 0 && (
-        <p className="text-ink-3">
+      {status.enrolled && status.pendingDryRunCloseout.credits > 0 ? (
+        <p className="t-meta text-ink-3">
           Turning charging on will retire {status.pendingDryRunCloseout.credits} credits from{' '}
           {status.pendingDryRunCloseout.lots}{' '}
           {status.pendingDryRunCloseout.lots === 1 ? 'dry-run block' : 'dry-run blocks'}, so the
           first charged settlement sells a full block. Charging is switched on from the go-live
           runbook, not from here.
         </p>
-      )}
+      ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {status.enrolled ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => void onAct(row.tenantId, 'unenrol', { reason: 'From the agency view' })}
-          >
-            Un-enrol
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={busy || !status.readyToEnrol}
-            title={
-              status.readyToEnrol
-                ? 'Enrolment takes effect on the next call offered.'
-                : 'Every precondition has to be in place first.'
-            }
-            onClick={() => void onAct(row.tenantId, 'enrol', { note: 'From the agency view' })}
-          >
-            Enrol
-          </Button>
-        )}
-
-        {row.flags.suspended ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => void onAct(row.tenantId, 'resume')}
-          >
-            Resume delivery
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            title="Stops delivery immediately. Paid applications are untouched and are there when you resume."
-            onClick={() =>
-              void onAct(row.tenantId, 'suspend', { reason: 'Suspended from the agency view' })
-            }
-          >
-            Suspend delivery
-          </Button>
-        )}
-
-        <span className="ml-2 text-xs text-ink-3">Overrun ceiling:</span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          title="Withdraw overrun entirely. The agency then delivers only what it has paid for."
-          onClick={() => void onCeiling(row.tenantId, 0)}
+      <div className="space-y-2">
+        <SettingsToggleRow
+          title="Billing"
+          description={
+            status.enrolled
+              ? 'Enrolled: calls are gated, metered and settled.'
+              : 'Not enrolled: calls deliver as they always have.'
+          }
         >
-          Withdraw
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          title="Put the ceiling back on the standard schedule."
-          onClick={() => void onCeiling(row.tenantId, null)}
-        >
-          Back to schedule
-        </Button>
+          {status.enrolled ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void onAct(row.tenantId, 'unenrol', { reason: 'From the agency view' })
+              }
+            >
+              Un-enrol
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={busy || !status.readyToEnrol}
+              title={
+                status.readyToEnrol
+                  ? 'Enrolment takes effect on the next call offered.'
+                  : 'Every precondition has to be in place first.'
+              }
+              onClick={() => void onAct(row.tenantId, 'enrol', { note: 'From the agency view' })}
+            >
+              Enrol
+            </Button>
+          )}
+        </SettingsToggleRow>
 
-        {busy && <Loader2 className="h-3 w-3 animate-spin text-ink-3" />}
+        <SettingsToggleRow
+          title="Delivery"
+          description={
+            row.flags.suspended
+              ? 'Suspended: no calls are being sent to this agency.'
+              : 'Active. Suspending stops delivery immediately; paid applications are untouched.'
+          }
+        >
+          {row.flags.suspended ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void onAct(row.tenantId, 'resume')}
+            >
+              Resume delivery
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void onAct(row.tenantId, 'suspend', { reason: 'Suspended from the agency view' })
+              }
+            >
+              Suspend delivery
+            </Button>
+          )}
+        </SettingsToggleRow>
+
+        <SettingsToggleRow
+          title="Overrun ceiling"
+          description="Withdraw it and the agency delivers only what it has paid for."
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            title="Withdraw overrun entirely. The agency then delivers only what it has paid for."
+            onClick={() => void onCeiling(row.tenantId, 0)}
+          >
+            Withdraw
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            title="Put the ceiling back on the standard schedule."
+            onClick={() => void onCeiling(row.tenantId, null)}
+          >
+            Back to schedule
+          </Button>
+        </SettingsToggleRow>
       </div>
 
-      <p className="text-[11px] text-ink-3">
+      {busy ? (
+        <p className="flex items-center t-meta text-ink-3">
+          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+          Saving
+        </p>
+      ) : null}
+
+      <p className="t-meta text-ink-3">
         Each of these is recorded in the audit log against your account. Un-enrolling stops gating,
         metering and settling immediately, and leaves the ledger and every settlement already
         written exactly as they are.

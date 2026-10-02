@@ -10,6 +10,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 
+import { SettingsSection } from './settings-section';
+
 interface TenantUpgrades {
   tenantId: string;
   upgrades: string[];
@@ -88,15 +90,18 @@ export function UpgradesControl({
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-rule pt-3" data-testid="upgrades-control">
-      <span className="text-xs font-medium text-ink-2">Upgrades</span>
+    <SettingsSection
+      title="Upgrades"
+      description="Paid features this agency has turned on. Each switch saves as you flip it."
+      data-testid="upgrades-control"
+    >
       <UpgradeSwitches
         value={saved}
         saving={saving}
         onToggle={(key, name, on) => void toggle(key, name, on)}
       />
-      {error ? <p className="text-[13px] text-ink-3">{error}</p> : null}
-    </div>
+      {error ? <p className="t-meta text-dropped-ink">{error}</p> : null}
+    </SettingsSection>
   );
 }
 
@@ -121,24 +126,27 @@ export function UpgradeSwitches({
   disabled?: boolean;
 }): JSX.Element {
   return (
-    <div className="flex flex-wrap gap-x-5 gap-y-2">
+    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {WHITE_LABEL_UPGRADES.map(({ key, item }) => (
-        <label
-          key={key}
-          className="flex items-center gap-2 text-xs text-ink-3"
-          title={item.locked?.blurb}
-        >
-          <Switch
-            checked={value?.includes(key) === true}
-            onCheckedChange={checked => onToggle(key, item.name, checked)}
-            disabled={disabled || value === null || saving !== null}
-            aria-label={item.name}
-            data-upgrade-switch={key}
-          />
-          {item.name}
-          {saving === key ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-        </label>
+        <li key={key}>
+          <label
+            className="flex items-center justify-between gap-3 rounded-control border border-rule bg-surface px-3 py-2.5"
+            title={item.locked?.blurb}
+          >
+            <span className="flex min-w-0 items-center gap-2 t-body text-ink">
+              <span className="truncate">{item.name}</span>
+              {saving === key ? <Loader2 className="h-3 w-3 animate-spin text-ink-3" /> : null}
+            </span>
+            <Switch
+              checked={value?.includes(key) === true}
+              onCheckedChange={checked => onToggle(key, item.name, checked)}
+              disabled={disabled || value === null || saving !== null}
+              aria-label={item.name}
+              data-upgrade-switch={key}
+            />
+          </label>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

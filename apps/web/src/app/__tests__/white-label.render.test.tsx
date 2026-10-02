@@ -537,7 +537,7 @@ describe('white-label screens', () => {
 
       await waitFor(() => expect(screen.getByText('Downline One')).toBeTruthy());
       expect(screen.getByText('120')).toBeTruthy();
-      expect(screen.getByText('100')).toBeTruthy();
+      expect(screen.getByText('100 answered')).toBeTruthy();
       expect(screen.getByText('9.0%')).toBeTruthy();
       expect(screen.getByText('Invite pending')).toBeTruthy();
       expect(screen.getByText('owner@downline.test')).toBeTruthy();
@@ -637,7 +637,7 @@ describe('white-label screens', () => {
       await waitFor(() =>
         expect(screen.getByText(/owner@downline.test has NOT been emailed/)).toBeTruthy()
       );
-      expect(screen.getByLabelText('Activation link').value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>('Activation link').value).toBe(
         'https://agents.lifeleadsplus.com/login?activation=tok'
       );
     });
@@ -712,7 +712,7 @@ describe('white-label screens', () => {
       expect(requested).toContain('/api/v1/network/agencies/child-1?period=THIS_MONTH');
       expect(screen.getByRole('heading', { name: 'Downline One' })).toBeTruthy();
       expect(screen.getByText('Invite pending')).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Resend invite' })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: 'Resend invite' })).toHaveLength(2);
       expect(screen.getByText('120')).toBeTruthy();
       expect(screen.getByText('9.0%')).toBeTruthy();
       expect(screen.getByText('Mon, Tue · 09:00–17:00')).toBeTruthy();

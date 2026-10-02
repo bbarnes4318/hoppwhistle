@@ -141,50 +141,66 @@ export function UpgradePricesPanel(): JSX.Element {
       </PanelHeader>
       <PanelBody>
         {error ? <p className="t-meta text-dropped-ink">{error}</p> : null}
-        <div className="flex flex-col divide-y divide-rule">
+        <div
+          className="hidden gap-3 pb-2 t-label text-ink-3 sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_7rem_8.5rem]"
+          aria-hidden
+        >
+          <span>Upgrade</span>
+          <span>Monthly</span>
+          <span>Setup</span>
+          <span>Billed</span>
+        </div>
+        <div className="flex flex-col divide-y divide-rule border-t border-rule">
           {WHITE_LABEL_UPGRADES.map(({ key, item }) => {
             const row = draft[key] ?? EMPTY_ROW;
             const disabled = saved === null || busy;
             return (
               <div
                 key={key}
-                className="grid grid-cols-2 gap-x-3 gap-y-2 py-3 first:pt-0 sm:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_8rem]"
+                className="grid grid-cols-2 items-center gap-x-3 gap-y-2 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_8.5rem]"
                 data-upgrade-price-row={key}
               >
-                <span className="col-span-2 self-center truncate t-body text-ink sm:col-span-1">
+                <span className="col-span-2 t-body font-medium text-ink sm:col-span-1">
                   {item.name}
                 </span>
                 {(['monthly', 'setup'] as const).map(field => (
-                  <Input
-                    key={field}
-                    aria-label={`${item.name} ${field === 'monthly' ? 'monthly' : 'setup'} price`}
-                    inputMode="decimal"
-                    placeholder={field === 'monthly' ? 'Monthly' : 'Setup'}
-                    value={row[field]}
-                    disabled={disabled}
-                    aria-invalid={centsFromDollars(row[field]) === undefined}
-                    onChange={event => set(key, field, event.target.value)}
-                    className="h-8"
-                  />
+                  <div key={field} className="relative">
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
+                    >
+                      $
+                    </span>
+                    <Input
+                      aria-label={`${item.name} ${field === 'monthly' ? 'monthly' : 'setup'} price`}
+                      inputMode="decimal"
+                      placeholder={field === 'monthly' ? 'Monthly' : 'Setup'}
+                      value={row[field]}
+                      disabled={disabled}
+                      aria-invalid={centsFromDollars(row[field]) === undefined}
+                      onChange={event => set(key, field, event.target.value)}
+                      className="h-9 pl-6 tabular-nums"
+                    />
+                  </div>
                 ))}
                 <select
                   aria-label={`${item.name} price is per`}
                   value={row.unit}
                   disabled={disabled}
                   onChange={event => set(key, 'unit', event.target.value as PriceUnit)}
-                  className="col-span-2 h-8 rounded-control border border-rule bg-surface px-2 t-body text-ink sm:col-span-1"
+                  className="col-span-2 h-9 rounded-control border border-rule bg-surface px-2.5 t-body text-ink sm:col-span-1"
                 >
                   <option value="AGENCY">per agency</option>
                   <option value="AGENT">per agent</option>
                 </select>
                 <Input
                   aria-label={`${item.name} note`}
-                  placeholder="Note under the price (optional)"
+                  placeholder="Note shown under the price, for example the minutes it includes (optional)"
                   value={row.note}
                   maxLength={300}
                   disabled={disabled}
                   onChange={event => set(key, 'note', event.target.value)}
-                  className="col-span-2 h-8 sm:col-span-4"
+                  className="col-span-2 h-9 text-ink-2 sm:col-span-4"
                 />
               </div>
             );

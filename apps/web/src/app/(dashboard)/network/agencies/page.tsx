@@ -186,8 +186,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
                     <TableHead>Agency</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead className="text-right">Agents</TableHead>
-                    <TableHead className="text-right">Inbound calls</TableHead>
-                    <TableHead className="text-right">Answered</TableHead>
+                    <TableHead className="text-right">Calls</TableHead>
                     <TableHead className="text-right">Applications</TableHead>
                     <TableHead className="text-right">Closing</TableHead>
                     <TableHead>
@@ -210,7 +209,9 @@ export default function NetworkAgenciesPage(): JSX.Element {
                             >
                               {agency.name}
                             </Link>
-                            <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
+                            {agency.status !== 'ACTIVE' ? (
+                              <StatusChip value={agency.status} enumName="TenantStatus" size="sm" />
+                            ) : null}
                           </div>
                           <div className="mt-0.5 t-meta text-ink-3">
                             {`Onboarded ${formatDisplayDate(agency.createdAt)}`}
@@ -234,9 +235,9 @@ export default function NetworkAgenciesPage(): JSX.Element {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {count(agency.inboundCalls)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {count(agency.answeredByAgents)}
+                          <div className="t-meta text-ink-3">
+                            {`${count(agency.answeredByAgents)} answered`}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {count(agency.applications)}
@@ -245,7 +246,7 @@ export default function NetworkAgenciesPage(): JSX.Element {
                           {pct(agency.closingPct, 1)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             {accepted ? null : (
                               <Button
                                 size="sm"

@@ -4,12 +4,15 @@ import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { BRAND_THEME_OPTIONS } from '@/lib/brand-themes';
+
+import { SettingsField, SettingsSection, SettingsToggleRow, selectClass } from './settings-section';
 
 interface Branding {
   tenantId: string;
@@ -165,11 +168,16 @@ export function BrandThemeControl({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-3 text-sm">
-      <label
-        className="flex items-center gap-2 text-xs text-ink-3"
-        title="Sales, the call network, Payouts and their own agencies, for this agency's OWNER and ADMIN"
+    <SettingsSection
+      title="Brand and portal"
+      description="How this agency's portal looks, and the address its people sign in on."
+      data-testid="brand-control"
+    >
+      <SettingsToggleRow
+        title="White-label tier"
+        description="Opens Sales, the call network, Payouts and their own agencies for this agency's owner and admin."
       >
+        {savingTier ? <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-3" /> : null}
         <Switch
           checked={saved?.whiteLabel === true}
           onCheckedChange={checked => void saveTier(checked)}
@@ -177,44 +185,66 @@ export function BrandThemeControl({
           aria-label="White-label tier"
           data-testid="white-label-switch"
         />
-        White-label tier
-      </label>
-      <label className="text-xs text-ink-3">
-        Brand theme
-        <select
-          value={value}
-          onChange={event => setValue(event.target.value)}
-          disabled={saved === null || saving}
-          className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm text-ink"
-          data-testid="brand-theme-select"
-        >
-          {BRAND_THEME_OPTIONS.map(option => (
-            <option key={option.value ?? 'default'} value={option.value ?? DEFAULT_VALUE}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Button size="sm" onClick={() => void save()} disabled={!dirty || saving}>
-        {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-        Save brand theme
-      </Button>
-      <label className="text-xs text-ink-3">
-        Portal domain
-        <input
-          value={domain}
-          onChange={event => setDomain(event.target.value)}
-          disabled={saved === null || savingDomain}
-          placeholder="agents.netenroll.com (default)"
-          className="mt-1 block h-8 rounded-control border border-rule bg-surface px-2 text-sm text-ink"
-          data-testid="portal-domain-input"
-        />
-      </label>
-      <Button size="sm" onClick={() => void saveDomain()} disabled={!domainDirty || savingDomain}>
-        {savingDomain ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-        Save domain
-      </Button>
-      {error ? <p className="text-[13px] text-ink-3">{error}</p> : null}
-    </div>
+      </SettingsToggleRow>
+
+      <SettingsField label="Brand theme" htmlFor="brand-theme">
+        <div className="flex items-center gap-2">
+          <select
+            id="brand-theme"
+            value={value}
+            onChange={event => setValue(event.target.value)}
+            disabled={saved === null || saving}
+            className={selectClass}
+            data-testid="brand-theme-select"
+          >
+            {BRAND_THEME_OPTIONS.map(option => (
+              <option key={option.value ?? 'default'} value={option.value ?? DEFAULT_VALUE}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 shrink-0"
+            onClick={() => void save()}
+            disabled={!dirty || saving}
+          >
+            {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+            Save theme
+          </Button>
+        </div>
+      </SettingsField>
+
+      <SettingsField
+        label="Portal domain"
+        htmlFor="portal-domain"
+        hint="Set this only once DNS, the certificate and the nginx server block are live. From the moment it is saved, every invitation and reset link for this agency and its downline names it."
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            id="portal-domain"
+            value={domain}
+            onChange={event => setDomain(event.target.value)}
+            disabled={saved === null || savingDomain}
+            placeholder="agents.netenroll.com (default)"
+            className="h-9"
+            data-testid="portal-domain-input"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 shrink-0"
+            onClick={() => void saveDomain()}
+            disabled={!domainDirty || savingDomain}
+          >
+            {savingDomain ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+            Save domain
+          </Button>
+        </div>
+      </SettingsField>
+
+      {error ? <p className="t-meta text-dropped-ink">{error}</p> : null}
+    </SettingsSection>
   );
 }
