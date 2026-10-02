@@ -10,6 +10,7 @@ import { usePhone, type CallInfo } from '@/components/phone';
 import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
 import { AvailabilitySwitch } from '@/components/phone/availability-switch';
 import { DialPad } from '@/components/phone/dial-pad';
+import { RingOnControl } from '@/components/phone/ring-on-control';
 import { ScreenPopSettings } from '@/components/phone/screen-pop-settings';
 import {
   deriveSoftphoneState,
@@ -87,6 +88,7 @@ export default function PhonePage(): JSX.Element {
              * routing obeys.
              */}
             <AvailabilitySwitch className="rounded-control border border-rule bg-surface px-2.5 py-1" />
+            <RingOnControl className="rounded-control border border-rule bg-surface px-2.5 py-1" />
             <Button
               variant="outline"
               size="sm"

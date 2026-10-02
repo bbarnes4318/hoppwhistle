@@ -249,3 +249,100 @@ describe('inbound_route.lua source', () => {
     expect(inboundRouteSource()).not.toContain('Hopwhistle');
   });
 });
+
+describe("inbound_route.lua agent cells show the customer's number", () => {
+  const CELL = '+18655551234';
+  const CELL_LEG = `[x_leg_party=agent:agent-2,x_leg_number=${CELL},leg_timeout=20]${CELL}`;
+  const CUSTOMER_CID = '14235551212';
+
+  function cellLookup(dialString: string) {
+    return lookup({
+      destination: dialString,
+      dialString,
+      agentCellLegs: '8655551234',
+    });
+  }
+
+  it("presents the customer's number, with a Diversion header naming our DID", () => {
+    const run = runInboundRoute({
+      lookup: cellLookup(CELL_LEG),
+      bridges: [{ answer: true, channel: 'sofia/gateway/fractel1/18655551234' }],
+    });
+
+    expect(run.error).toBeNull();
+    expect(run.bridges).toHaveLength(1);
+    const [cell] = legsOf(run.bridges[0]);
+    expect(cell.vars).toMatchObject({
+      sip_from_user: CUSTOMER_CID,
+      origination_caller_id_number: CUSTOMER_CID,
+      effective_caller_id_number: CUSTOMER_CID,
+      sip_h_Diversion: `<sip:${DID_CID}@localhost>;reason=unconditional`,
+    });
+  });
+
+  it("re-rings the cell with our DID when the carrier refuses the customer's number", () => {
+    const run = runInboundRoute({
+      lookup: cellLookup(CELL_LEG),
+      bridges: [
+        { answer: false, disposition: 'NORMAL_TEMPORARY_FAILURE' },
+        { answer: true, channel: 'sofia/gateway/fractel1/18655551234' },
+      ],
+    });
+
+    expect(run.bridges).toHaveLength(2);
+    for (const leg of legsOf(run.bridges[1])) {
+      expect(leg.vars.sip_from_user).toBe(DID_CID);
+      expect(leg.vars.origination_caller_id_number).toBe(DID_CID);
+      expect(leg.vars.sip_h_Diversion).toBeUndefined();
+    }
+  });
+
+  it('does not re-ring a cell that rang and was not answered', () => {
+    const run = runInboundRoute({
+      lookup: cellLookup(CELL_LEG),
+      bridges: [{ answer: false, disposition: 'NO_ANSWER' }],
+    });
+
+    expect(run.bridges).toHaveLength(1);
+  });
+
+  it('finds a refusal on a cell that shared its step with a softphone', () => {
+    const run = runInboundRoute({
+      lookup: cellLookup(`${AGENT_LEG},${CELL_LEG}`),
+      contacts: { '1000': CONTACT },
+      bridges: [
+        {
+          answer: false,
+          disposition: 'NO_ANSWER',
+          causes:
+            'ARRAY::aaaaaaaa-0000-4000-8000-000000000000;NO_ANSWER|:00000000-0000-4000-8000-000000000001;CALL_REJECTED',
+        },
+        { answer: false },
+      ],
+    });
+
+    expect(run.bridges).toHaveLength(2);
+    const [, firstCell] = legsOf(run.bridges[0]);
+    expect(firstCell.vars.origination_uuid).toBe('00000000-0000-4000-8000-000000000001');
+    expect(firstCell.vars.sip_from_user).toBe(CUSTOMER_CID);
+    const [softphone, retryCell] = legsOf(run.bridges[1]);
+    expect(softphone.target).toBe(CONTACT);
+    expect(retryCell.vars.sip_from_user).toBe(DID_CID);
+  });
+
+  it('leaves a shared step alone when the cell itself was not refused', () => {
+    const run = runInboundRoute({
+      lookup: cellLookup(`${AGENT_LEG},${CELL_LEG}`),
+      contacts: { '1000': CONTACT },
+      bridges: [
+        {
+          answer: false,
+          disposition: 'NO_ANSWER',
+          causes: 'ARRAY::00000000-0000-4000-8000-000000000001;NO_ANSWER',
+        },
+      ],
+    });
+
+    expect(run.bridges).toHaveLength(1);
+  });
+});

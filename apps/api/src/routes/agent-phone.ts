@@ -2,6 +2,11 @@ import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
+  CELL_FORWARD_METADATA_KEY,
+  normalizeCellForwardNumber,
+  readCellForwardNumber,
+} from '../lib/agent-cell-forward.js';
+import {
   permits,
   resolveStateAuthority,
   resolveStateForPhone,
@@ -9,6 +14,7 @@ import {
 } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.js';
+import { auditLog } from '../services/audit.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
@@ -353,6 +359,119 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       });
 
       return { availableForCalls, changedAt: new Date().toISOString() };
+    }
+  );
+
+  /**
+   * GET /api/v1/agent/call-destination
+   *
+   * Where this agent's calls ring: the softphone, or their own cell.
+   */
+  fastify.get(
+    '/api/v1/agent/call-destination',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+
+      const row = await getPrismaClient().user.findFirst({
+        where: { id: agent.userId, tenantId: agent.tenantId },
+        select: { metadata: true },
+      });
+
+      const cellForwardNumber = readCellForwardNumber(row?.metadata);
+      return { ringOn: cellForwardNumber ? 'cell' : 'softphone', cellForwardNumber };
+    }
+  );
+
+  /**
+   * PUT /api/v1/agent/call-destination
+   *
+   * The agent chooses where their own calls ring. A US cell number sends them
+   * to the cell instead of the softphone; null or an empty string puts them
+   * back on the softphone. The same `users.metadata.cellForwardNumber` the
+   * agency sets from the Agents page, so either side sees the other's choice.
+   */
+  fastify.put<{ Body: { cellForwardNumber?: unknown } }>(
+    '/api/v1/agent/call-destination',
+    async (request, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
+
+      const raw = (request.body ?? {}).cellForwardNumber;
+      if (raw !== null && typeof raw !== 'string') {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'cellForwardNumber must be a phone number, or null for the softphone',
+          },
+        };
+      }
+      const clearing = raw === null || raw.trim() === '';
+      const cellForwardNumber = clearing ? null : normalizeCellForwardNumber(raw);
+      if (!clearing && cellForwardNumber === null) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'cellForwardNumber must be a 10-digit US phone number',
+          },
+        };
+      }
+
+      const prisma = getPrismaClient();
+      const row = await prisma.user.findFirst({
+        where: { id: userId, tenantId },
+        select: { metadata: true },
+      });
+      if (!row) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'No such agent in this agency' } };
+      }
+
+      /*
+       * Merged, never replaced: `metadata` also carries the agent's licensed
+       * states and call limit, which this must not touch. Off is absence, as
+       * the Agents page writes it.
+       */
+      const existing =
+        row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+          ? (row.metadata as Record<string, unknown>)
+          : {};
+      const nextMetadata: Record<string, unknown> = { ...existing };
+      if (cellForwardNumber) {
+        nextMetadata[CELL_FORWARD_METADATA_KEY] = cellForwardNumber;
+      } else {
+        delete nextMetadata[CELL_FORWARD_METADATA_KEY];
+      }
+
+      await prisma.user.updateMany({
+        where: { id: userId, tenantId },
+        data: { metadata: nextMetadata as Prisma.InputJsonObject },
+      });
+
+      // Best-effort: a gap in the audit trail must never fail the change.
+      try {
+        await auditLog({
+          tenantId,
+          userId,
+          action: 'agent.call_destination.updated',
+          entityType: 'User',
+          entityId: userId,
+          resource: '/api/v1/agent/call-destination',
+          method: 'PUT',
+          changes: { [CELL_FORWARD_METADATA_KEY]: cellForwardNumber },
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'],
+          requestId: request.id,
+          success: true,
+        });
+      } catch {
+        // ignored
+      }
+
+      return { ringOn: cellForwardNumber ? 'cell' : 'softphone', cellForwardNumber };
     }
   );
 

@@ -1,7 +1,7 @@
 import { FilePlus2, Headphones, LogOut, Settings } from 'lucide-react';
 import React, { useState } from 'react';
 
-import { AvailabilitySwitch } from '@/components/phone';
+import { AvailabilitySwitch, RingOnControl } from '@/components/phone';
 import { cn } from '@/lib/utils';
 
 import type { SelectedScript } from './types';
@@ -158,6 +158,7 @@ export function CallCenterHeader({
           onChange={setAvailableForCalls}
           className="rounded-control border border-rule bg-surface px-2.5 py-1.5"
         />
+        <RingOnControl className="rounded-control border border-rule bg-surface px-2.5 py-1.5" />
 
         <label className="sr-only" htmlFor="call-script">
           Call script

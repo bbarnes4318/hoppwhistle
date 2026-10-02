@@ -19,6 +19,7 @@ import { CustomerDetailsPanel } from './CustomerDetailsPanel';
 import { DialPad } from './dial-pad';
 import { IncomingCallModal } from './incoming-call-modal';
 import { usePhone } from './phone-provider';
+import { RingOnControl } from './ring-on-control';
 import { ScreenPop } from './screen-pop';
 import { ScreenPopSettings } from './screen-pop-settings';
 import { ConnectionNotice } from './softphone/connection-notice';
@@ -471,6 +472,7 @@ export function AgentPhonePanel(): JSX.Element | null {
             */}
             <AgentStatusSelector />
             <AvailabilitySwitch />
+            <RingOnControl />
           </>
         }
         callSeconds={currentCall?.duration}
