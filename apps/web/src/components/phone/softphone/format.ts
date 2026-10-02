@@ -398,3 +398,27 @@ export function mergeRecentCalls(
     .sort((a, b) => time(b.startedAt) - time(a.startedAt))
     .slice(0, limit);
 }
+
+/**
+ * The number "Add call" dials, as the digits FreeSWITCH routes: a US number,
+ * ten digits or eleven with the leading 1. Agents type it however they like --
+ * "(555) 123-4567", "+1 555.123.4567" -- and the punctuation used to go
+ * straight into the SIP URI, which SIP.js rejects as invalid.
+ */
+export function normalizeThirdPartyNumber(input: string): string | null {
+  const digits = input.replace(/\D/g, '');
+  if (/^[2-9]\d{9}$/.test(digits)) return digits;
+  if (/^1[2-9]\d{9}$/.test(digits)) return digits;
+  return null;
+}
+
+/**
+ * Whether the agent's microphone reaches the far end. Mute and hold both cut
+ * it, independently: unholding a call the agent muted must not unmute them,
+ * and unmuting a held call must not let the customer hear the agent.
+ */
+export function sendsAgentAudio(
+  call: Pick<CallInfo, 'isMuted' | 'isOnHold'> | null | undefined
+): boolean {
+  return !!call && !call.isMuted && !call.isOnHold;
+}

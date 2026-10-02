@@ -21,6 +21,8 @@ import {
   isDialing,
   knownCallerName,
   mergeRecentCalls,
+  normalizeThirdPartyNumber,
+  sendsAgentAudio,
   type SoftphoneStateInput,
 } from '../phone/softphone/format';
 import { isTypingTarget, keypadKeyFor, resolveShortcut } from '../phone/softphone/shortcuts';
@@ -327,5 +329,40 @@ describe('mergeRecentCalls', () => {
       number: '+14075550198',
       missed: false,
     });
+  });
+});
+
+describe('normalizeThirdPartyNumber', () => {
+  it('accepts a US number however the agent typed it, as bare digits', () => {
+    expect(normalizeThirdPartyNumber('(813) 555-0142')).toBe('8135550142');
+    expect(normalizeThirdPartyNumber('+1 813.555.0142')).toBe('18135550142');
+    expect(normalizeThirdPartyNumber('813-555-0142')).toBe('8135550142');
+    expect(normalizeThirdPartyNumber(' 18135550142 ')).toBe('18135550142');
+  });
+
+  it('refuses what the dialplan would not route', () => {
+    expect(normalizeThirdPartyNumber('')).toBeNull();
+    expect(normalizeThirdPartyNumber('1001')).toBeNull(); // an extension, platform-wide
+    expect(normalizeThirdPartyNumber('queue:q1')).toBeNull();
+    expect(normalizeThirdPartyNumber('555-0142')).toBeNull();
+    expect(normalizeThirdPartyNumber('0135550142')).toBeNull(); // area codes start 2-9
+    expect(normalizeThirdPartyNumber('+442071234567')).toBeNull();
+  });
+});
+
+describe('sendsAgentAudio', () => {
+  it('sends the microphone only when the call is neither muted nor held', () => {
+    expect(sendsAgentAudio({ isMuted: false, isOnHold: false })).toBe(true);
+    expect(sendsAgentAudio({ isMuted: true, isOnHold: false })).toBe(false);
+    expect(sendsAgentAudio({ isMuted: false, isOnHold: true })).toBe(false);
+    expect(sendsAgentAudio({ isMuted: true, isOnHold: true })).toBe(false);
+    expect(sendsAgentAudio(null)).toBe(false);
+  });
+
+  it('keeps mute and hold independent: undoing one never undoes the other', () => {
+    // Muted, then held, then taken off hold: still muted, still silent.
+    expect(sendsAgentAudio({ isMuted: true, isOnHold: false })).toBe(false);
+    // Held, then unmuted while held: the customer still must not hear the agent.
+    expect(sendsAgentAudio({ isMuted: false, isOnHold: true })).toBe(false);
   });
 });

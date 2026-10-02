@@ -1,0 +1,18 @@
+<include>
+  <context name="public">
+    <extension name="rig-phone">
+      <condition field="destination_number" expression="^(customer|thirdparty|agentin)$">
+        <action application="answer"/>
+        <action application="park"/>
+      </condition>
+    </extension>
+    <extension name="rig-slow">
+      <condition field="destination_number" expression="^slowparty$">
+        <action application="ring_ready"/>
+        <action application="sleep" data="8000"/>
+        <action application="answer"/>
+        <action application="park"/>
+      </condition>
+    </extension>
+  </context>
+</include>

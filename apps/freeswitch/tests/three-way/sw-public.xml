@@ -1,0 +1,22 @@
+<include>
+  <context name="public">
+    <!-- Mirrors outbound-to-bulkvs: the agent leg runs the dialplan and bridges out. -->
+    <extension name="rig-outbound">
+      <condition field="destination_number" expression="^out-(.+)$">
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="RECORD_STEREO=true"/>
+        <action application="record_session" data="/tmp/rec_${uuid}.wav"/>
+        <action application="set" data="continue_on_fail=true"/>
+        <action application="bridge" data="sofia/external/$1@ph:5080"/>
+        <action application="log" data="ERR RIG waterfall failed"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+    <!-- Mirrors inbound-dynamic-route: lua owns the customer leg. -->
+    <extension name="rig-inbound">
+      <condition field="destination_number" expression="^in-lua$">
+        <action application="lua" data="rig_inbound.lua"/>
+      </condition>
+    </extension>
+  </context>
+</include>

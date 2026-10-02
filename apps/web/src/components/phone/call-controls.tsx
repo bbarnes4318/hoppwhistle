@@ -75,6 +75,7 @@ export function CallControls({
       holdSeconds={holdSeconds}
       keypadOpen={keypadOpen}
       hasHeldCalls={hasHeldCalls}
+      conferenceWith={currentCall.conferenceWith}
       onMute={toggleMute}
       onHold={() => void toggleHold()}
       onKeypad={onKeypadToggle}

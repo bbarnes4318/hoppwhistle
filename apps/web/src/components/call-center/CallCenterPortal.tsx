@@ -1762,7 +1762,9 @@ export function CallCenterPortal(): JSX.Element {
               toggleHold={toggleHold}
               isAddingThirdParty={isAddingThirdParty}
               setIsAddingThirdParty={setIsAddingThirdParty}
-              thirdPartyConnected={thirdPartyConnected}
+              thirdPartyConnected={
+                thirdPartyConnected || Boolean(currentCall?.conferenceWith?.length)
+              }
               handleHangup={() => {
                 handleHangup();
               }}
@@ -1771,6 +1773,7 @@ export function CallCenterPortal(): JSX.Element {
               setCallNotes={setCallNotes}
               hasHeldCalls={hasHeldCalls}
               mergeCalls={mergeCalls}
+              mergeReady={currentCall?.state === 'active'}
             />
           )}
 

@@ -28,6 +28,8 @@ interface ActiveCallControlsProps {
   setCallNotes: (notes: string) => void;
   hasHeldCalls: boolean;
   mergeCalls: () => Promise<void>;
+  /** The person being added has answered, so there is something to merge. */
+  mergeReady?: boolean;
 }
 
 export function ActiveCallControls({
@@ -45,6 +47,7 @@ export function ActiveCallControls({
   setCallNotes,
   hasHeldCalls,
   mergeCalls,
+  mergeReady = true,
 }: ActiveCallControlsProps) {
   const [showTransferPanel, setShowTransferPanel] = useState(false);
   const [transferNumber, setTransferNumber] = useState('');
@@ -123,10 +126,11 @@ export function ActiveCallControls({
           <div className="mb-4">
             <button
               onClick={() => void mergeCalls()}
-              className="w-full py-3 bg-brand hover:bg-brand-ink hover:text-surface text-ink font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors"
+              disabled={!mergeReady}
+              className="disabled:opacity-50 disabled:cursor-not-allowed w-full py-3 bg-brand hover:bg-brand-ink hover:text-surface text-ink font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors"
             >
               <Merge className="w-4.5 h-4.5" />
-              <span>Merge Calls</span>
+              <span>{mergeReady ? 'Merge Calls' : 'Merge when they answer'}</span>
             </button>
           </div>
         )}
