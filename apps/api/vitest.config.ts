@@ -13,6 +13,11 @@ import { defineConfig } from 'vitest/config';
  */
 const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
+  // Truncates tenants, campaigns, calls and applications to seed a campaign
+  // billed per application. Left off this list it ran beside settlement.test.ts
+  // and the two deleted each other's fixtures: P2025 on a call it had just
+  // created, and `users_tenantId_fkey` / `calls_tenantId_fkey` in settlement.
+  '**/src/__tests__/campaign-application-billing.test.ts',
   // Truncates tenants, carriers and calls to seed two agencies' carrier routing.
   '**/src/__tests__/vonage-carrier.test.ts',
   '**/src/__tests__/tenant-isolation.test.ts',
