@@ -484,7 +484,6 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           {hasResolvedNoRole ? <NoRoleNotice /> : null}
           {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
           {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
-          {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
 
           {groups.map((group, gi) => (
             <React.Fragment key={group.label ?? `group-${gi}`}>
