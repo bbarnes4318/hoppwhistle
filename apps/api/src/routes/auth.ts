@@ -1385,8 +1385,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        * same test the enforcement uses decides who counts as an agent.
        */
       const licensedStates = normalizeLicensedStates(userMetadata?.licensedStates);
+      // Never for NetEnroll staff or a role preview: an operator previewing an
+      // agency as an AGENT is looking at the screens, not working a licence, and
+      // a preview is read-only so the screen could not be completed anyway.
       const needsLicensedStates =
         licensedStates.length === 0 &&
+        !isPlatformPrincipal &&
+        !principal?.previewRole &&
         isStateRestrictedAgent({
           userId: user.id,
           roles: effectiveRoles,
