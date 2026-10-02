@@ -1582,7 +1582,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
 
       await auditLog({
-        tenantId: user.tenantId ?? undefined,
+        tenantId: user.tenantId ?? null,
         userId,
         action: 'auth.licensed_states.recorded',
         entityType: 'User',
