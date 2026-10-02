@@ -6,5 +6,9 @@
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/migrations/20261005000000_activation_grant_licensed_states/migration.sql
 --
 -- Idempotent.
+BEGIN;
+
 ALTER TABLE "tenant_activation_grants"
   ADD COLUMN IF NOT EXISTS "licensedStates" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+
+COMMIT;
