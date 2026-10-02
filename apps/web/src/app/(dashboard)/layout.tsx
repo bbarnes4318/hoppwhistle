@@ -287,7 +287,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * there is nothing for the app to send them. The server decides who this is
    * (`needsLicensedStates` on /api/auth/me); no phone starts and no page mounts.
    */
-  if (!authLoading && user?.needsLicensedStates) {
+  if (
+    !authLoading &&
+    user?.needsLicensedStates &&
+    !user.isPlatformAdmin &&
+    !user.previewRole &&
+    !user.isReadOnlyPreview
+  ) {
     return (
       <>
         <BrandThemeSync />
