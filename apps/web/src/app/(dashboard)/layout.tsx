@@ -32,6 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isBuyerOnly,
     isAgentOnly,
     isWhiteLabel,
+    isWhiteLabelAgent,
     isChild,
     hasFullAccess,
     status: authStatus,
@@ -190,7 +191,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         path.startsWith('/voice-agents') ||
         path.startsWith('/flows') ||
         path.startsWith('/buyer') ||
-        path.startsWith('/publisher'))
+        path.startsWith('/publisher') ||
+        // A white-label agency keeps its Leaderboard to the owner.
+        (isWhiteLabelAgent && path.startsWith('/leaderboard')))
     ) {
       router.replace('/dashboard');
     } else if (
@@ -231,6 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isBuyerOnly,
     isAgentOnly,
     isWhiteLabel,
+    isWhiteLabelAgent,
     isChild,
     hasFullAccess,
     authStatus,

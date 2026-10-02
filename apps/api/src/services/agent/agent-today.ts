@@ -152,6 +152,12 @@ export interface AgentTodayDeps {
   period?: TodayPeriod;
   /** States a state-restricted agent may work; undefined when unrestricted. */
   licensedStates?: string[];
+  /**
+   * Whether to rank the agent on the floor at all. False for an agent of a
+   * white-label agency, who has no Leaderboard: `standing` answers null and
+   * the board is never read. See `isWhiteLabelAgent` in lib/white-label.ts.
+   */
+  withStanding?: boolean;
 }
 
 type Range = { start: Date; endExclusive: Date };
@@ -305,7 +311,9 @@ export async function getAgentToday(
         disposition: true,
       },
     }),
-    standingOf(prisma, tenantId, userId, period, now),
+    deps.withStanding === false
+      ? Promise.resolve(null)
+      : standingOf(prisma, tenantId, userId, period, now),
   ]);
 
   /* ── Your production, by hour or by day ─────────────────────────────────── */

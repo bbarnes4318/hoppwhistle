@@ -595,8 +595,9 @@ export default function ApplicationsPage() {
                         title={
                           voided
                             ? `Voided${row.voidReason ? `: ${row.voidReason}` : ''}. Excluded from the ` +
-                              'totals above and from the closing percentage. The credit it consumed ' +
-                              'was not reversed.'
+                              'totals above and from the closing percentage.' +
+                              // What it cost the agency is the owner's business, not the agent's.
+                              (isAgentOnly ? '' : ' The credit it consumed was not reversed.')
                             : undefined
                         }
                       >

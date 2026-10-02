@@ -723,19 +723,34 @@ export const AGENT_NAV: NavGroup[] = [
 /** AGENT_NAV's entries that exist only with the POWER_DIALER upgrade. */
 const AGENT_POWER_DIALER_HREFS: readonly string[] = ['/call-center'];
 
+/** AGENT_NAV's entries a white-label agency's agents are not shown. */
+const WHITE_LABEL_AGENT_HIDDEN_HREFS: readonly string[] = ['/leaderboard'];
+
 /**
  * AGENT_NAV, less what this agency's upgrades do not include.
  *
  * The Power Dialer is the POWER_DIALER upgrade: an agent of an agency without
  * it is not shown it (the API answers 403 UPGRADE_REQUIRED), and the Work
  * group, which holds nothing else, goes with it. The CRM is every agent's,
- * upgrade or not. With the upgrade this returns AGENT_NAV itself.
+ * upgrade or not.
+ *
+ * An agent of a white-label agency is not shown the Leaderboard: the agency
+ * keeps the board to its owner (the API answers 403 to its agents).
+ *
+ * With the upgrade, and not white-label, this returns AGENT_NAV itself.
  */
-export function agentNav(upgrades: readonly string[] = []): NavGroup[] {
-  if (upgrades.includes('POWER_DIALER')) return AGENT_NAV;
+export function agentNav(
+  upgrades: readonly string[] = [],
+  options: { whiteLabel?: boolean } = {}
+): NavGroup[] {
+  const hidden = [
+    ...(upgrades.includes('POWER_DIALER') ? [] : AGENT_POWER_DIALER_HREFS),
+    ...(options.whiteLabel ? WHITE_LABEL_AGENT_HIDDEN_HREFS : []),
+  ];
+  if (hidden.length === 0) return AGENT_NAV;
   return AGENT_NAV.map(group => ({
     ...group,
-    items: group.items.filter(item => !AGENT_POWER_DIALER_HREFS.includes(item.href)),
+    items: group.items.filter(item => !hidden.includes(item.href)),
   })).filter(group => group.items.length > 0);
 }
 
@@ -768,6 +783,8 @@ export interface NavViewer {
   upgrades?: readonly string[];
   /** The agency is a white-label agency's downline. See `CHILD_AGENCY_OWNER_NAV`. */
   isChild?: boolean;
+  /** An agent of a white-label agency (`useAuth().isWhiteLabelAgent`). See `agentNav`. */
+  isWhiteLabelAgent?: boolean;
 }
 
 /**
@@ -793,7 +810,9 @@ export function navFor(viewer: NavViewer): NavGroup[] {
   }
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
-  if (viewer.isAgentOnly) return agentNav(viewer.upgrades);
+  if (viewer.isAgentOnly) {
+    return agentNav(viewer.upgrades, { whiteLabel: viewer.isWhiteLabelAgent });
+  }
   if (viewer.isReadonlyOnly) {
     /*
      * Dashboard alone.

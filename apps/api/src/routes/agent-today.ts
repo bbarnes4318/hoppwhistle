@@ -22,6 +22,7 @@ import type { FastifyInstance } from 'fastify';
 import { resolveStateAuthority } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { isWhiteLabelAgent, type WhiteLabelPrincipal } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { getAgentToday } from '../services/agent/agent-today.js';
 
@@ -60,6 +61,8 @@ export async function registerAgentTodayRoutes(fastify: FastifyInstance): Promis
       prisma,
       period: requested,
       licensedStates: stateAuthority.restricted ? [...stateAuthority.licensed] : undefined,
+      // A white-label agency's agents have no Leaderboard, so no rank on it either.
+      withStanding: !isWhiteLabelAgent(request.user as WhiteLabelPrincipal | undefined),
     });
     return reply.send({ data });
   });

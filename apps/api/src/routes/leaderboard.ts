@@ -34,6 +34,11 @@
  * which clock you ask and the browser's is the wrong one. See the header of
  * `services/leaderboard/period.ts`. `period=CUSTOM&from=&to=` is the calendar
  * picker, and those are day labels, which no timezone can shift.
+ *
+ * ── Not for a white-label agency's agents ────────────────────────────────────
+ *
+ * A white-label agency keeps its board to its OWNER and ADMIN: its agents are
+ * answered 403 here, and their nav and Today carry no link to it.
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -41,6 +46,7 @@ import type { FastifyInstance } from 'fastify';
 import { csvCell } from '../lib/csv.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { isWhiteLabelAgent, type WhiteLabelPrincipal } from '../lib/white-label.js';
 import { authenticate } from '../middleware/auth.js';
 import { getLeaderboard } from '../services/leaderboard/leaderboard.js';
 import {
@@ -67,6 +73,15 @@ export async function registerLeaderboardRoutes(fastify: FastifyInstance): Promi
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
+
+      if (isWhiteLabelAgent(request.user as WhiteLabelPrincipal | undefined)) {
+        return reply.code(403).send({
+          error: {
+            code: 'LEADERBOARD_UNAVAILABLE',
+            message: 'The leaderboard is not available to agents in this agency.',
+          },
+        });
+      }
 
       const requested = request.query.period ?? 'TODAY';
       if (!isPeriodKey(requested)) {

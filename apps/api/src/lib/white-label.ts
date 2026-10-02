@@ -104,6 +104,20 @@ export function isWhiteLabelOperator(principal: WhiteLabelPrincipal | undefined 
 }
 
 /**
+ * An AGENT of a white-label agency: anybody in the tenant who is not its
+ * OWNER or ADMIN.
+ *
+ * A white-label agency's agents see no Leaderboard -- not the page, not the
+ * route behind it, not their rank on Today. Platform staff inside an agency
+ * carry OWNER and ADMIN, so they are not caught; an operator PREVIEWING as
+ * AGENT carries exactly ['AGENT'] and is, which is what a preview is for.
+ */
+export function isWhiteLabelAgent(principal: WhiteLabelPrincipal | undefined | null): boolean {
+  if (!principal || principal.tenantWhiteLabel !== true) return false;
+  return !(principal.roles ?? []).some(role => WHITE_LABEL_ROLES.includes(role));
+}
+
+/**
  * preHandler for the white-label screens' own routes: Sales, Payouts and the
  * Agency Network.
  *

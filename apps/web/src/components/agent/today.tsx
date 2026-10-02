@@ -124,6 +124,8 @@ function TodayScreen(): JSX.Element {
   const [data, setData] = useState<TodayData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const platform = usePlatformContext();
+  // A white-label agency's agents have no Leaderboard, so no standing on it.
+  const { isWhiteLabelAgent } = useAuth();
 
   // The period the screen is showing now; an answer for another one is dropped.
   const periodRef = useRef(period);
@@ -216,8 +218,14 @@ function TodayScreen(): JSX.Element {
       <HeroFigures data={shown} busy={busy} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <Production data={shown} period={period} className="lg:col-span-8" />
-        <Standing data={shown} period={period} className="lg:col-span-4" />
+        <Production
+          data={shown}
+          period={period}
+          className={isWhiteLabelAgent ? 'lg:col-span-12' : 'lg:col-span-8'}
+        />
+        {isWhiteLabelAgent ? null : (
+          <Standing data={shown} period={period} className="lg:col-span-4" />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">

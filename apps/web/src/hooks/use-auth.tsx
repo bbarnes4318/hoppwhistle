@@ -175,6 +175,11 @@ interface UseAuthReturn {
    */
   isWhiteLabel: boolean;
   /**
+   * An agent of a white-label agency (`isAgentOnly` on the white-label tier).
+   * They get no Leaderboard and no rank on Today; the API refuses both.
+   */
+  isWhiteLabelAgent: boolean;
+  /**
    * This session is a platform operator previewing an agency as one of its own
    * roles, and the server refuses every write. Save, submit and delete controls
    * render disabled and say so, which is how the operator learns it from the UI
@@ -440,6 +445,7 @@ export function useAuth(): UseAuthReturn {
   const isPublisherOnly = isPublisher && !hasFullAccess;
   const isAgentOnly = isAgent && !hasFullAccess;
   const isReadonlyOnly = isReadonly && !hasFullAccess;
+  const isWhiteLabelAgent = user?.whiteLabel === true && isAgentOnly;
 
   const isNewUser = !!user && userRoles.length === 0;
   const hasResolvedNoRole = status === 'authenticated' && userRoles.length === 0;
@@ -531,6 +537,7 @@ export function useAuth(): UseAuthReturn {
     hasFullAccess,
     isPlatformAdmin,
     isWhiteLabel,
+    isWhiteLabelAgent,
     isReadOnlyPreview,
     upgrades: user?.upgrades ?? NO_UPGRADES,
     isChild: user?.isChild === true,

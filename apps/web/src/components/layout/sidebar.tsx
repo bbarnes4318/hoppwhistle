@@ -361,6 +361,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     canViewRecordings,
     upgrades,
     isChild,
+    isWhiteLabelAgent,
     status,
     hasResolvedNoRole,
     user,
@@ -399,6 +400,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         canViewRecordings,
         upgrades,
         isChild,
+        isWhiteLabelAgent,
       }),
     [
       isPlatformAdmin,
@@ -412,6 +414,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       canViewRecordings,
       upgrades,
       isChild,
+      isWhiteLabelAgent,
     ]
   );
 
