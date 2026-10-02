@@ -1022,10 +1022,16 @@ await prisma.tenant.upsert({
 await prisma.upgradeRequest.deleteMany({ where: { tenantId: tenant.id } });
 
 const passwordHash = await bcrypt.hash(process.env.SMOKE_PASSWORD, 10);
+// An agent with no licensed states is held at a mandatory "which states are
+// you licensed in?" screen before any page loads, so the sweep's agent has
+// states on file: the pages are what is under test here, not that gate.
+const smokeMetadata = { licensedStates: ['TN'] };
+
 const user = await prisma.user.upsert({
   where: { email: process.env.SMOKE_EMAIL },
-  update: { passwordHash, status: 'ACTIVE' },
+  update: { passwordHash, status: 'ACTIVE', metadata: smokeMetadata },
   create: {
+    metadata: smokeMetadata,
     email: process.env.SMOKE_EMAIL,
     passwordHash,
     firstName: 'Platform',
@@ -1261,10 +1267,16 @@ const role = await prisma.role.upsert({
 
 const passwordHash = await bcrypt.hash(process.env.LOGIN_PASSWORD, 10);
 
+// An agent with no licensed states is stopped at a mandatory "which states are
+// you licensed in?" screen before any page loads, so this one has states on
+// file: the pages below are what is under test, not that gate.
+const agentMetadata = { licensedStates: ['TN'] };
+
 const agent = await prisma.user.upsert({
   where: { email: process.env.LOGIN_ACTIVE_EMAIL },
-  update: { passwordHash, status: 'ACTIVE', tenantId: tenant.id },
+  update: { passwordHash, status: 'ACTIVE', tenantId: tenant.id, metadata: agentMetadata },
   create: {
+    metadata: agentMetadata,
     email: process.env.LOGIN_ACTIVE_EMAIL,
     passwordHash,
     firstName: 'Ada',

@@ -359,7 +359,7 @@ describe.skipIf(!gate.available)('White-label portal domain', () => {
           referer: `https://${wrongHost}/settings/team`,
           'x-forwarded-host': wrongHost,
         },
-        payload: { email: invitee, role: 'AGENT' },
+        payload: { email: invitee, role: 'AGENT', licensedStates: ['TN'] },
       });
       expect(response.statusCode, `${label}: ${response.body}`).toBe(201);
 

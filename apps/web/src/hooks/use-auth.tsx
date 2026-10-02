@@ -92,6 +92,10 @@ interface UserData {
   tenantId: string;
   publisherAccessToRecordings?: boolean;
   buyerAccessToRecordings?: boolean;
+  /** The states this agent is licensed in; calls and leads route only inside them. */
+  licensedStates?: string[];
+  /** An agent who has not yet said which states they are licensed in. */
+  needsLicensedStates?: boolean;
   position?: string | null;
   defaultScript?: string | null;
   customScripts?: Record<string, string> | null;
@@ -279,6 +283,8 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         tenantId: rawUser.tenantId,
         publisherAccessToRecordings: rawUser.publisherAccessToRecordings,
         buyerAccessToRecordings: rawUser.buyerAccessToRecordings,
+        licensedStates: Array.isArray(rawUser.licensedStates) ? rawUser.licensedStates : [],
+        needsLicensedStates: rawUser.needsLicensedStates === true,
         position: rawUser.position,
         defaultScript: rawUser.defaultScript,
         customScripts: rawUser.customScripts,

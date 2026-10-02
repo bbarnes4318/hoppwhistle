@@ -1569,7 +1569,12 @@ describe.skipIf(!gate.available)(
           method: 'POST',
           url: '/api/v1/auth/activation-grants',
           headers: owner,
-          payload: { email: 'agent@ridgeline.example', role: 'AGENT', tenantId: fairhaven.id },
+          payload: {
+            email: 'agent@ridgeline.example',
+            role: 'AGENT',
+            licensedStates: ['TN'],
+            tenantId: fairhaven.id,
+          },
         });
         expect(issued.statusCode).toBe(201);
 

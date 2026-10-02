@@ -206,7 +206,14 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
     });
 
     const phoneNumber = await prisma.phoneNumber.create({
-      data: { tenantId: tenant.id, number: `+1555${label.length}${Date.now() % 1000000}` },
+      // Assigned to one of the agency's own users: an owner's number list is
+      // limited to numbers assigned to their people or bought by the agency
+      // (`agencyNumberScope`), so an unassigned fixture is correctly invisible.
+      data: {
+        tenantId: tenant.id,
+        number: `+1555${label.length}${Date.now() % 1000000}`,
+        userId: owner.id,
+      },
     });
 
     const call = await prisma.call.create({
@@ -761,7 +768,7 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
         // A tenantId in the body is not part of the contract. Sending one must
         // change nothing -- this is the assertion that there is no field to
         // find.
-        payload: { email: 'newagent@example.invalid', role: 'AGENT', tenantId: b.tenantId },
+        payload: { email: 'newagent@example.invalid', role: 'AGENT', licensedStates: ['TN'], tenantId: b.tenantId },
       });
 
       expect(response.statusCode).toBe(201);

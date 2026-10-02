@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { LicensedStatesGate } from '@/components/agents/licensed-states-gate';
 import { BrandThemeSync } from '@/components/brand/brand-theme-sync';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { LiveStripMount } from '@/components/layout/live-strip-mount';
@@ -258,6 +259,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * request every page here already waits on.
    */
   const settling = authLoading || platform.loading;
+
+  /*
+   * An agent who has not said which states they are licensed in sees nothing
+   * else. Calls and leads route only inside those states, so until they choose
+   * there is nothing for the app to send them. The server decides who this is
+   * (`needsLicensedStates` on /api/auth/me); no phone starts and no page mounts.
+   */
+  if (!authLoading && user?.needsLicensedStates) {
+    return (
+      <>
+        <BrandThemeSync />
+        <LicensedStatesGate />
+      </>
+    );
+  }
 
   // Check if we're on the call center page (fullscreen mode)
   const isCallCenterPage = pathname?.startsWith('/call-center');

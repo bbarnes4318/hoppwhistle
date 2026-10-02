@@ -237,6 +237,11 @@ model TenantActivationGrant {
   buyerId     String?
   publisherId String?
 
+  /// The states an AGENT grant's user is licensed in, recorded by the
+  /// administrator who issued it and copied to `User.metadata.licensedStates`
+  /// when the grant is redeemed. Empty for every other role.
+  licensedStates String[] @default([])
+
   expiresAt        DateTime
   redeemedAt       DateTime?
   redeemedByUserId String?

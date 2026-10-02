@@ -3,6 +3,7 @@
 import { Check, Copy, Loader2, Mail, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 
+import { StatePicker } from '@/components/agents/state-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -80,8 +81,10 @@ export function InviteAgentDialog({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GrantResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function reset(): void {
+    setSelected(new Set());
     setEmail('');
     setError(null);
     setResult(null);
@@ -101,10 +104,16 @@ export function InviteAgentDialog({
       const response = await apiClient.post<GrantResponse>('/api/v1/auth/activation-grants', {
         email: trimmed,
         role: 'AGENT',
+        // Optional: an agent whose states are not recorded here is made to
+        // choose them on their first sign-in.
+        ...(selected.size > 0 ? { licensedStates: [...selected].sort() } : {}),
       });
       const data = response.data;
       if (!data) {
-        setError('The invitation could not be created.');
+        // The client reports a refusal as `{ error }` rather than throwing, so
+        // the server's own reason (e.g. the email already has an account) has
+        // to be read here or the owner only sees the generic line.
+        setError(response.error?.message || 'The invitation could not be created.');
         return;
       }
       setResult(data);
@@ -144,8 +153,9 @@ export function InviteAgentDialog({
             Add an agent
           </DialogTitle>
           <DialogDescription>
-            They will be emailed a link to set up their account. Record the states they are licensed
-            in and assign them a campaign, and calls will start arriving.
+            They will be emailed a link to set up their account. They are only sent calls from the
+            states they are licensed in: choose them here, or the agent will be asked on first
+            sign-in. Then assign them a campaign.
           </DialogDescription>
         </DialogHeader>
 
@@ -193,19 +203,27 @@ export function InviteAgentDialog({
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            <Label htmlFor="agent-email">Email address</Label>
-            <Input
-              id="agent-email"
-              type="email"
-              autoComplete="off"
-              placeholder="agent@example.com"
-              value={email}
-              onChange={event => setEmail(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' && !saving) void submit();
-              }}
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="agent-email">Email address</Label>
+              <Input
+                id="agent-email"
+                type="email"
+                autoComplete="off"
+                placeholder="agent@example.com"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Licensed states (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                If you leave this empty, the agent is asked to choose their states the first time
+                they sign in, and cannot use the portal until they do.
+              </p>
+              <StatePicker selected={selected} onChange={setSelected} />
+            </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
         )}
