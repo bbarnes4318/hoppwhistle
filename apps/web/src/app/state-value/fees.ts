@@ -1,245 +1,161 @@
 /**
- * Fee resolution for the State Value Evaluator.
+ * Licensing fees for the State Value Evaluator, read from the v3 data drop.
  *
  * The cost of a non-resident licence is not a property of the target state
- * alone: a dozen jurisdictions charge a non-resident whatever that applicant's
- * *home* state charges one of theirs. So every amount here is a function of
- * (target state, resident state), never a fixed column.
- */
-
-/**
- * NIPR's transaction fee, charged once per application.
+ * alone: five jurisdictions charge a non-resident whatever that applicant's
+ * home state charges one of theirs. Every amount is therefore a function of
+ * (target state, resident state).
  *
- * Never multiplied by lines of authority — only the state portion scales.
- * NIPR raises this periodically, which is exactly why it is one named constant
- * rather than a literal repeated across the fee table.
+ * `licensing-fees.json` is the published drop, kept verbatim so the next one
+ * is a file swap. Nothing here fills gaps or guesses: a retaliatory state with
+ * no schedule row for the applicant's home state THROWS rather than falling
+ * back to a base rate, because a plausible wrong number in a tool agents spend
+ * their own money against is worse than a loud failure.
  */
-export const NIPR_TRANSACTION_FEE = 5.6;
+import raw from './licensing-fees.json';
 
-/** A fee whose last verification is older than this is surfaced as stale. */
-export const STALE_AFTER_DAYS = 180;
-
-/** The authoritative source for every figure below, and for refreshing them. */
-export const NIPR_STATE_REQUIREMENTS_URL = 'https://nipr.com/licensing-center/state-requirements';
-
-/**
- * How a figure got here.
- *
- * `owner-supplied` means it came from the product owner's fee table and has NOT
- * been read back from the source URL. Nothing in this file is `source-verified`
- * yet: the session that entered these figures had no network route to nipr.com,
- * so no amount could be confirmed against its published page. Verifying them is
- * a prerequisite to launch, not a nicety — see docs in the admin view.
- */
-export type Provenance = 'owner-supplied' | 'source-verified';
-
-export interface FeeRecord {
+export interface Jurisdiction {
+  code: string;
+  name: string;
+  totalPopulation: number;
+  /** Residents aged 55-80 — the final expense target market. */
+  seniorPopulation55to80: number;
+  /** Charges a non-resident whatever their home state charges. */
+  isRetaliatory: boolean;
   /**
-   * Posted non-resident fee for the Life line of authority, excluding the NIPR
-   * transaction fee. For a retaliatory state this is only the default, used
-   * when that state's schedule has no row for the applicant's resident state.
+   * The posted fee, excluding the NIPR transaction fee.
+   *
+   * Null for all five retaliatory jurisdictions, by design rather than as a
+   * gap: four of them publish no usable base rate, and Indiana's schedule
+   * already folds its $90 base in wherever no higher retaliatory amount
+   * applies. A null here is only ever read through a schedule.
    */
-  postedFee: number;
-  /** Charged per line of authority rather than per licence. */
-  perLoa?: true;
-  /** The amount is not fixed (Illinois prorates to the expiration date). */
-  variable?: true;
-  variableNote?: string;
-  /** Fee depends on the applicant's resident state. */
-  retaliatory?: true;
-  /** ISO date the retaliatory regime takes effect, when it is not already in force. */
-  retaliatoryFrom?: string;
+  flatFee: number | null;
+  feeIsFallback: boolean;
+  /** The state portion scales with lines of authority; the NIPR fee never does. */
+  perLineOfAuthority: boolean;
+  /** The amount is not fixed — Illinois prorates, New York halves and varies. */
+  prorated: boolean;
   sourceUrl: string;
   /** ISO date this figure was last checked against sourceUrl. */
-  verifiedOn: string;
-  provenance: Provenance;
+  lastVerified: string;
 }
 
-/** One retaliatory state's published schedule, keyed by resident state code. */
-export interface RetaliatorySchedule {
-  sourceUrl: string;
-  verifiedOn: string;
-  provenance: Provenance;
-  /** Resident state code -> fee that state's residents are charged. */
-  fees: Record<string, number>;
+export interface LicensingFeeData {
+  schemaVersion: number;
+  lastVerified: string;
+  niprTransactionFee: number;
+  licenseClass: string;
+  lineOfAuthority: string;
+  transactionType: string;
+  notes: Record<string, string>;
+  jurisdictions: Jurisdiction[];
+  /** Target state code -> resident state code -> that applicant's fee. */
+  retaliatorySchedules: Record<string, Record<string, number>>;
 }
 
-const OWNER_SUPPLIED = {
-  sourceUrl: NIPR_STATE_REQUIREMENTS_URL,
-  verifiedOn: '2026-09-08',
-  provenance: 'owner-supplied' as const,
+export const DATA = raw as unknown as LicensingFeeData;
+
+/**
+ * NIPR's transaction fee, charged once per application and never multiplied by
+ * lines of authority. Read from the drop so a rate change is a data edit.
+ */
+export const NIPR_TRANSACTION_FEE = DATA.niprTransactionFee;
+
+/** A figure whose last verification is older than this is surfaced as stale. */
+export const STALE_AFTER_DAYS = 180;
+
+export const JURISDICTIONS: Jurisdiction[] = DATA.jurisdictions;
+
+const BY_CODE = new Map(JURISDICTIONS.map(j => [j.code, j]));
+
+export function jurisdiction(code: string): Jurisdiction | undefined {
+  return BY_CODE.get(code);
+}
+
+/** Notes keyed loosely by state, for the prorated jurisdictions that need one. */
+export const PRORATION_NOTES: Record<string, string> = {
+  IL: DATA.notes.illinois,
+  NY: DATA.notes.newYork,
 };
 
-/**
- * Posted non-resident fees, individual producer, Life line of authority,
- * excluding the NIPR transaction fee.
- *
- * Five jurisdictions are deliberately absent — Alaska, Hawaii, Missouri, Nevada
- * and New York. They have no sourced figure, and a guess in a tool agents spend
- * their own money against is worse than a visible gap, so they resolve to
- * `unsourced` and are excluded from ranking rather than given a placeholder.
- */
-// prettier-ignore
-export const FEES: Record<string, FeeRecord> = {
-  AL: { postedFee: 80, ...OWNER_SUPPLIED },
-  AZ: { postedFee: 120, ...OWNER_SUPPLIED },
-  AR: { postedFee: 70, ...OWNER_SUPPLIED },
-  CA: { postedFee: 188, ...OWNER_SUPPLIED },
-  CO: { postedFee: 71, ...OWNER_SUPPLIED },
-  CT: { postedFee: 140, ...OWNER_SUPPLIED },
-  DE: { postedFee: 125, ...OWNER_SUPPLIED },
-  DC: { postedFee: 100, ...OWNER_SUPPLIED },
-  FL: { postedFee: 55, ...OWNER_SUPPLIED },
-  GA: { postedFee: 120, ...OWNER_SUPPLIED },
-  ID: { postedFee: 80, ...OWNER_SUPPLIED },
-  IL: { postedFee: 331.07, variable: true, variableNote: 'Prorated by days remaining to the assigned expiration date; 331.07 is a point-in-time amount, not a rate.', ...OWNER_SUPPLIED },
-  IN: { postedFee: 185, retaliatory: true, ...OWNER_SUPPLIED },
-  IA: { postedFee: 50, retaliatory: true, ...OWNER_SUPPLIED },
-  KS: { postedFee: 50, ...OWNER_SUPPLIED },
-  KY: { postedFee: 100, ...OWNER_SUPPLIED },
-  LA: { postedFee: 75, ...OWNER_SUPPLIED },
-  ME: { postedFee: 55, ...OWNER_SUPPLIED },
-  MD: { postedFee: 54, ...OWNER_SUPPLIED },
-  MA: { postedFee: 225, ...OWNER_SUPPLIED },
-  MI: { postedFee: 10, ...OWNER_SUPPLIED },
-  MN: { postedFee: 60, ...OWNER_SUPPLIED },
-  MS: { postedFee: 100, ...OWNER_SUPPLIED },
-  MT: { postedFee: 100, ...OWNER_SUPPLIED },
-  NE: { postedFee: 50, retaliatory: true, retaliatoryFrom: '2026-07-17', ...OWNER_SUPPLIED },
-  NH: { postedFee: 210, ...OWNER_SUPPLIED },
-  NJ: { postedFee: 170, ...OWNER_SUPPLIED },
-  NM: { postedFee: 30, ...OWNER_SUPPLIED },
-  NC: { postedFee: 94, ...OWNER_SUPPLIED },
-  ND: { postedFee: 100, ...OWNER_SUPPLIED },
-  OH: { postedFee: 10, ...OWNER_SUPPLIED },
-  OK: { postedFee: 120, ...OWNER_SUPPLIED },
-  OR: { postedFee: 75, ...OWNER_SUPPLIED },
-  PA: { postedFee: 110, ...OWNER_SUPPLIED },
-  RI: { postedFee: 130, ...OWNER_SUPPLIED },
-  SC: { postedFee: 25, ...OWNER_SUPPLIED },
-  SD: { postedFee: 30, retaliatory: true, ...OWNER_SUPPLIED },
-  TN: { postedFee: 50, retaliatory: true, ...OWNER_SUPPLIED },
-  TX: { postedFee: 50, ...OWNER_SUPPLIED },
-  UT: { postedFee: 75, ...OWNER_SUPPLIED },
-  VT: { postedFee: 215, retaliatory: true, ...OWNER_SUPPLIED },
-  VA: { postedFee: 15, ...OWNER_SUPPLIED },
-  WA: { postedFee: 55, ...OWNER_SUPPLIED },
-  WI: { postedFee: 75, ...OWNER_SUPPLIED },
-  WV: { postedFee: 50, ...OWNER_SUPPLIED },
-  WY: { postedFee: 150, ...OWNER_SUPPLIED },
-};
-
-/**
- * Jurisdictions that charge a non-resident their home state's rate.
- *
- * New York is on this list but has no posted fee either, so it resolves as
- * `unsourced` until both its fee and its schedule are obtained.
- */
-export const RETALIATORY_CODES = ['IN', 'IA', 'NE', 'NY', 'SD', 'TN', 'VT'] as const;
-
-/**
- * Published retaliatory schedules, keyed by target state then resident state.
- *
- * EMPTY BY DESIGN, NOT BY OVERSIGHT. Each schedule is a published table of
- * per-resident-state amounts; none could be retrieved here, because the network
- * egress policy in the session that built this blocked in.gov, secure.in.gov and
- * nipr.com outright. Retaliation is deliberately NOT approximated with a formula
- * such as max(homeFee, targetFee): that is wrong for a meaningful share of state
- * pairs, and wrong in a direction that costs agents money.
- *
- * Until a schedule is loaded here, every retaliatory state resolves through
- * `retaliatory-fallback` — posted fee, flagged unverified in the UI.
- *
- * To load one, add an entry; no other code changes:
- *   IN: { sourceUrl: '…/non-resident-retaliatory-fees/', verifiedOn: '2026-…',
- *         provenance: 'source-verified', fees: { AL: 90, AK: 120, … } }
- */
-export const RETALIATORY_SCHEDULES: Record<string, RetaliatorySchedule> = {};
-
-export type FeeBasis = 'posted' | 'retaliatory-schedule' | 'retaliatory-fallback' | 'unsourced';
+export type FeeBasis = 'flat' | 'retaliatory';
 
 export interface ResolvedFee {
   basis: FeeBasis;
-  /** State portion after any per-LOA multiplication. Null when unsourced. */
-  stateFee: number | null;
+  /** State portion after any per-line-of-authority multiplication. */
+  stateFee: number;
   niprFee: number;
-  /** stateFee + NIPR fee. Null when unsourced. */
-  total: number | null;
-  /** False when the figure is a fallback or a guess the UI must flag. */
-  verified: boolean;
-  /** True when the amount is not fixed (Illinois). */
-  variable: boolean;
-  note: string | null;
+  total: number;
+  /** True when the stored amount is an upper bound or varies per applicant. */
+  prorated: boolean;
+  perLineOfAuthority: boolean;
+  sourceUrl: string;
+  lastVerified: string;
 }
 
 export interface ResolveOptions {
   /** Lines of authority on the application. Only per-LOA states multiply. */
   loaCount?: number;
-  /** Evaluation date, for regimes with a future effective date. */
-  asOf?: Date;
-}
-
-function isRetaliatoryOn(record: FeeRecord, asOf: Date): boolean {
-  if (!record.retaliatory) return false;
-  if (!record.retaliatoryFrom) return true;
-  return asOf >= new Date(`${record.retaliatoryFrom}T00:00:00Z`);
 }
 
 /**
  * The cost for an agent resident in `residentCode` to licence in `targetCode`.
  *
- * Resolution order: unsourced -> retaliatory schedule -> retaliatory fallback
- * (unverified) -> posted fee.
+ * Throws rather than guessing when the data cannot answer: an unknown state, a
+ * retaliatory state with no row for this home state, or a non-retaliatory
+ * state with no posted fee. Each is a data defect, and a thrown error is how
+ * it gets noticed instead of quietly becoming a wrong dollar amount.
  */
 export function resolveFee(
   targetCode: string,
   residentCode: string,
-  { loaCount = 1, asOf = new Date() }: ResolveOptions = {}
+  { loaCount = 1 }: ResolveOptions = {}
 ): ResolvedFee {
-  const record = FEES[targetCode];
-
-  if (!record) {
-    return {
-      basis: 'unsourced',
-      stateFee: null,
-      niprFee: NIPR_TRANSACTION_FEE,
-      total: null,
-      verified: false,
-      variable: false,
-      note: 'No sourced fee. Take it from this state’s NIPR non-resident individual page.',
-    };
+  const target = BY_CODE.get(targetCode);
+  if (!target) {
+    throw new Error(`No licensing record for ${targetCode}.`);
+  }
+  if (targetCode === residentCode) {
+    // An agent needs no non-resident licence at home, and no retaliatory
+    // schedule carries a row for its own state. Callers exclude the resident
+    // state; reaching here is a bug, so it says so.
+    throw new Error(`${targetCode} is the resident state — it has no non-resident fee.`);
   }
 
-  let basis: FeeBasis = 'posted';
-  let baseFee = record.postedFee;
-  let verified = true;
-  let note: string | null = record.variableNote ?? null;
+  let basis: FeeBasis;
+  let baseFee: number;
 
-  if (isRetaliatoryOn(record, asOf)) {
-    const scheduled = RETALIATORY_SCHEDULES[targetCode]?.fees[residentCode];
-    if (scheduled != null) {
-      basis = 'retaliatory-schedule';
-      baseFee = scheduled;
-    } else {
-      basis = 'retaliatory-fallback';
-      verified = false;
-      note =
-        'Retaliatory state: charges what your home state charges its non-residents. No schedule row loaded for this resident state, so the posted fee is shown as a placeholder.';
+  if (target.isRetaliatory) {
+    const scheduled = DATA.retaliatorySchedules[targetCode]?.[residentCode];
+    if (scheduled == null) {
+      throw new Error(
+        `${targetCode} is retaliatory but its schedule has no row for resident state ${residentCode}.`
+      );
     }
+    basis = 'retaliatory';
+    baseFee = scheduled;
+  } else {
+    if (target.flatFee == null) {
+      throw new Error(`${targetCode} is not retaliatory but carries no posted fee.`);
+    }
+    basis = 'flat';
+    baseFee = target.flatFee;
   }
 
   // Only the state portion scales with lines of authority; the NIPR
   // transaction fee is charged once per application.
-  const stateFee = record.perLoa ? baseFee * Math.max(1, loaCount) : baseFee;
+  const stateFee = target.perLineOfAuthority ? baseFee * Math.max(1, loaCount) : baseFee;
 
   return {
     basis,
     stateFee,
     niprFee: NIPR_TRANSACTION_FEE,
     total: stateFee + NIPR_TRANSACTION_FEE,
-    verified,
-    variable: record.variable === true,
-    note,
+    prorated: target.prorated,
+    perLineOfAuthority: target.perLineOfAuthority,
+    sourceUrl: target.sourceUrl,
+    lastVerified: target.lastVerified,
   };
 }
 
