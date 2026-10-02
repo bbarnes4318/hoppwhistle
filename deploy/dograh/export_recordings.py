@@ -69,6 +69,14 @@ MANIFEST_SKIP_RE = re.compile(r"transcript|prompt|messages|history|context_dump"
 
 S3_BUCKET_ENV = ("S3_BUCKET_NAME", "AWS_S3_BUCKET", "S3_BUCKET", "AWS_BUCKET_NAME", "MINIO_BUCKET")
 S3_ENDPOINT_ENV = ("AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3", "S3_ENDPOINT_URL", "S3_ENDPOINT", "MINIO_ENDPOINT")
+# Dograh's MinIO credentials do not always land in the AWS_* names boto3 reads
+# on its own, so the export looks under the MinIO names too.
+S3_KEY_ENV = ("AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY", "S3_ACCESS_KEY_ID", "MINIO_ACCESS_KEY", "MINIO_ROOT_USER")
+S3_SECRET_ENV = (
+    "AWS_SECRET_ACCESS_KEY", "S3_SECRET_KEY", "S3_SECRET_ACCESS_KEY",
+    "MINIO_SECRET_KEY", "MINIO_ROOT_PASSWORD",
+)
+S3_REGION_ENV = ("AWS_DEFAULT_REGION", "AWS_REGION", "S3_REGION")
 
 
 # --------------------------------------------------------------------------
@@ -153,6 +161,18 @@ def key_from_url(url: str, bucket: str) -> str:
     if bucket and (path == bucket or path.startswith(bucket + "/")):
         path = path[len(bucket):].lstrip("/")
     return path
+
+
+def normalize_endpoint(endpoint: str) -> str:
+    """Give a bare host:port a scheme.
+
+    Dograh configures its object store as ``minio:9000``; boto3 refuses that
+    with "Invalid endpoint" and every recording fails on it.
+    """
+    text = (endpoint or "").strip().rstrip("/")
+    if not text or "://" in text:
+        return text
+    return "https://" + text if text.endswith(":443") else "http://" + text
 
 
 def audio_extension(location: str) -> str:
@@ -415,7 +435,23 @@ class Fetcher:
             try:
                 import boto3  # available in the dograh api image when S3 is configured
 
-                self._s3 = boto3.client("s3", endpoint_url=self.endpoint or None)
+                options = {"region_name": first_env(S3_REGION_ENV) or "us-east-1"}
+                endpoint = normalize_endpoint(self.endpoint)
+                if endpoint:
+                    options["endpoint_url"] = endpoint
+                    try:
+                        from botocore.config import Config
+
+                        # MinIO serves buckets under the path, not as a
+                        # subdomain, which is what boto3 would otherwise assume.
+                        options["config"] = Config(s3={"addressing_style": "path"})
+                    except Exception:
+                        pass
+                key, secret = first_env(S3_KEY_ENV), first_env(S3_SECRET_ENV)
+                if key and secret:
+                    options["aws_access_key_id"] = key
+                    options["aws_secret_access_key"] = secret
+                self._s3 = boto3.client("s3", **options)
             except Exception as exc:
                 self.s3_error = f"no usable S3 client ({exc})"
         return self._s3
@@ -624,7 +660,8 @@ async def run(args) -> int:
         ]
         extra = [c for c in columns if not MANIFEST_SKIP_RE.search(c)]
 
-        downloaded = failed = missing = 0
+        downloaded = failed = missing = processed = 0
+        failure_notes: dict = {}
         print(f"\n{len(rows)} runs in the window. Writing to {out_dir}\n")
 
         with open(manifest_path, "w", newline="", encoding="utf-8") as handle:
@@ -656,6 +693,9 @@ async def run(args) -> int:
                         status = "failed"
                         audio_name = ""
 
+                if status == "failed":
+                    failure_notes[note] = failure_notes.get(note, 0) + 1
+
                 writer.writerow(
                     [
                         run_id,
@@ -675,6 +715,15 @@ async def run(args) -> int:
                     + [jsonable(data.get(c)) for c in extra]
                 )
 
+                # A week of dialing is thousands of rows and the audio comes
+                # down one file at a time; without this the run looks hung.
+                processed += 1
+                if not args.manifest_only and processed % 500 == 0:
+                    print(
+                        f"  ... {processed}/{len(rows)} calls, {downloaded} downloaded",
+                        flush=True,
+                    )
+
         print(f"manifest      {manifest_path}  ({len(rows)} runs)")
         if args.manifest_only:
             print("audio         skipped (--manifest-only)")
@@ -685,6 +734,8 @@ async def run(args) -> int:
                   "recording off, or the call never connected)")
         if failed:
             print(f"failed        {failed}  (see the note column in the manifest)")
+            for note, count in sorted(failure_notes.items(), key=lambda item: -item[1])[:2]:
+                print(f"              {count}x {note}")
         print(f"audio         {audio_dir}")
         if downloaded == 0 and rows:
             print("\nNothing downloaded. Every row's note column says why; the usual "

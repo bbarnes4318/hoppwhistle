@@ -69,16 +69,30 @@ if [ "$status" -eq 2 ]; then
   exit 2
 fi
 
-rm -rf "$OUT_DIR"
+rm -rf "$OUT_DIR" "$TARBALL"
 mkdir -p "$OUT_DIR"
 docker cp "$CONTAINER:$IN_CONTAINER/out/." "$OUT_DIR/" >/dev/null
-tar -czf "$TARBALL" -C "$(dirname "$OUT_DIR")" "$(basename "$OUT_DIR")"
 
 echo
-echo "files:      $OUT_DIR"
+echo "files:      $OUT_DIR  ($(du -sh "$OUT_DIR" | cut -f1))"
 echo "  manifest.csv   every call in the window, one row each"
 echo "  audio/         the recordings themselves"
-echo "one archive: $TARBALL  ($(du -h "$TARBALL" | cut -f1))"
+
+# A week of dialing can be gigabytes of wav, and the archive is a second copy
+# of all of it. Past a few GB that is a good way to fill /root, so the archive
+# is skipped and the directory gets copied down directly instead.
+SIZE_MB="$(du -sm "$OUT_DIR" | cut -f1)"
+ARCHIVE_LIMIT_MB="${DOGRAH_ARCHIVE_LIMIT_MB:-4096}"
+if [ "$SIZE_MB" -gt "$ARCHIVE_LIMIT_MB" ]; then
+  COPY_HINT="scp -r -i \$env:USERPROFILE\\.ssh\\hetzner_pvn root@178.156.223.97:$OUT_DIR \$env:USERPROFILE\\Downloads\\"
+  echo
+  echo "No archive: ${SIZE_MB}MB is over the ${ARCHIVE_LIMIT_MB}MB limit, and taring it"
+  echo "would put a second copy of it on this disk. Copy the directory instead."
+else
+  tar -czf "$TARBALL" -C "$(dirname "$OUT_DIR")" "$(basename "$OUT_DIR")"
+  COPY_HINT="scp -i \$env:USERPROFILE\\.ssh\\hetzner_pvn root@178.156.223.97:$TARBALL \$env:USERPROFILE\\Downloads\\"
+  echo "one archive: $TARBALL  ($(du -h "$TARBALL" | cut -f1))"
+fi
 
 if [ "$status" -ne 0 ]; then
   echo
@@ -91,7 +105,7 @@ cat <<EOF
 To get them onto your PC, run this FROM A WINDOWS POWERSHELL WINDOW
 (not here — this is the server):
 
-  scp -i \$env:USERPROFILE\\.ssh\\hetzner_pvn root@178.156.223.97:$TARBALL \$env:USERPROFILE\\Downloads\\
+  $COPY_HINT
 
 Or let get-dograh-recordings.ps1 do the whole thing from the PC.
 EOF
