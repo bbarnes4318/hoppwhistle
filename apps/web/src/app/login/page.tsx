@@ -856,7 +856,7 @@ export default function AuthPage() {
               </h2>
               <p className="mt-2 text-[15px] leading-6 text-ink-2 [text-wrap:pretty]">
                 {mode === 'signin'
-                  ? 'Access your agency workspace, calls, applications, and client activity.'
+                  ? 'The agent portal for licensed insurance agencies: your calls, applications, and client activity in one workspace.'
                   : 'Set up the account your agency invited you to.'}
               </p>
 
