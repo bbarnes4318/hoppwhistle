@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 
 import { ApplicationLogForm } from '@/components/call-center/ApplicationLogForm';
 import type { ApplicationLogPayload } from '@/components/call-center/ApplicationLogForm';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { DISPOSITION_LABELS } from '@/lib/call-dispositions';
 
@@ -49,6 +50,8 @@ export function RedispositionPanel({
   hasSubmittedApplication: boolean;
   onSaved: () => void;
 }): JSX.Element {
+  // What an application costs the agency is the owner's business, not the agent's.
+  const { isAgentOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [disposition, setDisposition] = useState(currentDisposition ?? '');
   const [notes, setNotes] = useState(currentNotes ?? '');
@@ -129,8 +132,9 @@ export function RedispositionPanel({
 
       {disposition === 'APPLICATION_SUBMITTED' && hasSubmittedApplication ? (
         <p className="text-[10px] text-ink-3">
-          This call already has a submitted application on it. It is not asked for again, and no
-          second credit is spent.
+          {isAgentOnly
+            ? 'This call already has a submitted application on it. It is not asked for again.'
+            : 'This call already has a submitted application on it. It is not asked for again, and no second credit is spent.'}
         </p>
       ) : null}
 

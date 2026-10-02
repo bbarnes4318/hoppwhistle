@@ -453,7 +453,16 @@ describe("an agent's Today", () => {
     expect(panel.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
+  it('gives no standing and no Leaderboard link on a white-label agency', async () => {
+    await loadToday();
+    expect(document.querySelector('[data-standing]')).toBeNull();
+    expect(figure('Rank')).toBeUndefined();
+    expect(document.querySelector('a[href^="/leaderboard"]')).toBeNull();
+  });
+
   it('gives their standing in a small panel, not a second leaderboard', async () => {
+    // A normal agency's agent: the white-label tier keeps the board to its owner.
+    user = { ...AGENT, whiteLabel: false };
     await loadToday();
     const panel = document.querySelector('[data-standing]') as HTMLElement;
     expect(figure('Rank')).toBe('#3');

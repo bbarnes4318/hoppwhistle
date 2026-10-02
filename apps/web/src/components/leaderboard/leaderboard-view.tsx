@@ -336,7 +336,11 @@ export function LeaderboardView(): JSX.Element {
                 data-figure-label="Closing"
                 data-figure-value={pct(data.agency.closingPct, 1)}
                 sub="applications ÷ delivered calls"
-                title="Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
+                title={
+                  isAgentOnly
+                    ? 'Applications as a share of every answered inbound call.'
+                    : "Applications as a share of every answered inbound call. This is the definition the agency's rate is set from."
+                }
               />
               <StatTile
                 size="hero"

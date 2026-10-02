@@ -430,6 +430,16 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
     ]);
   });
 
+  it('has no Leaderboard for an agent of a white-label agency', () => {
+    for (const upgrades of [[], ['POWER_DIALER']]) {
+      const hrefs = allNavItems(
+        navFor({ ...NOBODY, isAgentOnly: true, isWhiteLabelAgent: true, upgrades })
+      ).map(item => item.href);
+      expect(hrefs).not.toContain('/leaderboard');
+      expect(hrefs).toContain('/dashboard');
+    }
+  });
+
   it('says "My" nowhere: the scoping says whose they are', () => {
     for (const item of AGENT_NAV.flatMap(group => group.items)) {
       expect(item.name, item.href).not.toMatch(/^My\b/);
