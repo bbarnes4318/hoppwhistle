@@ -217,7 +217,8 @@ export class FreeSwitchService {
         const call = await prisma.call.findUnique({ where: { id: callId } });
         if (call) {
           const callMetadata = (call.metadata as Prisma.JsonObject | null) || {};
-          const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | null | undefined) || {};
+          const existingRecordingDebug =
+            (callMetadata.recordingDebug as Prisma.JsonObject | null | undefined) || {};
           await prisma.call.update({
             where: { id: callId },
             data: {
@@ -297,214 +298,218 @@ export class FreeSwitchService {
   // ============================================================================
 
   /**
-   * Merge two calls into a conference
-   * Supports the 3-Way Calling flow by bridging two agent sessions
+   * Merge the agent's two softphone calls into one three-way conference.
+   *
+   * Before the merge the agent holds two WebRTC calls on FreeSWITCH, each a
+   * bridge of two channels:
+   *
+   *   held   = agent leg A1 <-> customer   B1   (the original call, on hold)
+   *   active = agent leg A2 <-> third party B2  (the call the agent just placed)
+   *
+   * After it, B1, B2 and A2 sit in one conference and A1 is gone. The order is
+   * what keeps the customer on the line:
+   *
+   *   1. B1 is transferred into the conference on its own, and we wait until it
+   *      is actually a member before touching A1. uuid_transfer returns once
+   *      the transfer is queued, not done; waiting makes "the customer has left
+   *      the bridge before their agent leg is hung up" a guarantee rather than
+   *      a matter of timing.
+   *   2. A1 is then hung up. The browser receives a BYE for the held session.
+   *   3. A2 and B2 are moved together with `-both`, so neither leg of that
+   *      bridge sees its partner vanish and hangs up.
+   *
+   * The active pair joins with the `mintwo` flag: once the room has had two
+   * people in it, it ends when it drops below two. So the agent can drop out
+   * and leave the customer talking to the third party, but nobody is ever left
+   * alone in a conference after everyone else has gone.
+   *
+   * Channels are found ONLY by the exact SIP Call-ID of the agent's own
+   * softphone legs. The previous version also matched a raw channel UUID, a
+   * bridge partner's UUID, or any channel whose name *contained* the string it
+   * was given -- which let a request name anyone's channel on the switch, from
+   * any tenant, and pull it into a conference. A SIP Call-ID is only known to
+   * the browser that owns the dialog.
    */
-  async mergeCalls(activeSipCallId: string, heldSipCallId: string): Promise<void> {
+  async mergeCalls(
+    activeSipCallId: string,
+    heldSipCallId: string
+  ): Promise<{ conferenceName: string }> {
     logger.info({ msg: 'Merging calls via FreeSWITCH', activeSipCallId, heldSipCallId });
 
-    // Get all active channels for multi-strategy matching
-    let channels: Array<Record<string, string>> = [];
-    try {
-      const jsonOutput = await this.executeApi('show', 'channels as json');
-      const parsed = JSON.parse(jsonOutput) as { rows?: Array<Record<string, string>> };
-      channels = parsed.rows || [];
-      logger.info({
-        msg: 'Active FreeSWITCH channels for merge',
-        count: channels.length,
-        channels: channels.map(c => ({
-          uuid: c.uuid,
-          name: c.name,
-          cid_num: c.cid_num,
-          dest: c.dest,
-          call_uuid: c.call_uuid,
-          callstate: c.callstate,
-        })),
-      });
-    } catch (err) {
-      logger.error({ msg: 'Failed to list channels for merge', error: (err as Error).message });
+    if (!activeSipCallId || !heldSipCallId || activeSipCallId === heldSipCallId) {
+      throw new MergeCallsError('BAD_REQUEST', 'Two different calls are needed to merge');
     }
 
-    // Multi-strategy UUID resolution
-    const resolveMulti = async (id: string, label: string): Promise<string | null> => {
-      // Strategy 1: sip_call_id match
-      let uuid = await this.resolveUuid(id);
-      if (uuid) {
-        logger.info({ msg: `${label}: resolved via sip_call_id`, id, uuid });
-        return uuid;
-      }
+    const channels = await this.listChannels();
 
-      // Strategy 2: hopwhistle_call_id match
-      uuid = await this.resolveUuidByCallId(id);
-      if (uuid) {
-        logger.info({ msg: `${label}: resolved via hopwhistle_call_id`, id, uuid });
-        return uuid;
-      }
+    const activeAgentLeg = await this.resolveUuid(activeSipCallId);
+    const heldAgentLeg = await this.resolveUuid(heldSipCallId);
 
-      // Strategy 3: direct UUID — id itself is a FS UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (uuidRegex.test(id)) {
-        const match = channels.find(c => c.uuid === id);
-        if (match) {
-          logger.info({ msg: `${label}: id is a direct FS UUID`, id });
-          return id;
-        }
-      }
-
-      // Strategy 4: match by call_uuid field (bridged partner UUID)
-      const byCallUuid = channels.find(c => c.call_uuid === id);
-      if (byCallUuid?.uuid) {
-        logger.info({
-          msg: `${label}: resolved via call_uuid bridge partner`,
-          id,
-          uuid: byCallUuid.uuid,
-        });
-        return byCallUuid.uuid;
-      }
-
-      // Strategy 5: match by name field (e.g. "sofia/internal/...")
-      const byName = channels.find(c => c.name?.includes(id));
-      if (byName?.uuid) {
-        logger.info({ msg: `${label}: resolved via channel name`, id, uuid: byName.uuid });
-        return byName.uuid;
-      }
-
+    if (!activeAgentLeg || !heldAgentLeg) {
       logger.error({
-        msg: `${label}: could not resolve UUID`,
-        id,
-        availableUuids: channels.map(c => c.uuid),
-      });
-      return null;
-    };
-
-    const activeUuid = await resolveMulti(activeSipCallId, 'ACTIVE');
-    const heldUuid = await resolveMulti(heldSipCallId, 'HELD');
-
-    if (!activeUuid || !heldUuid) {
-      logger.error({
-        msg: 'Could not resolve UUIDs for merge',
-        activeUuid,
-        heldUuid,
+        msg: 'Merge: could not find the agent legs on FreeSWITCH',
         activeSipCallId,
         heldSipCallId,
+        activeAgentLeg,
+        heldAgentLeg,
       });
-      throw new Error('Could not find active calls in FreeSWITCH');
+      throw new MergeCallsError(
+        'CALL_NOT_FOUND',
+        !heldAgentLeg
+          ? 'The call on hold is no longer connected'
+          : 'The new call is no longer connected'
+      );
     }
 
-    // Use the held UUID as the base for the conference name (held call is guaranteed ACTIVE)
-    const conferenceName = `conf_${heldUuid}`;
-
-    // Find B-leg (peer) UUIDs from the channel list.
-    // Handles both inbound (agent is child leg) and outbound (agent is parent leg) calls,
-    // as well as conference-bridged legs.
-    const findPeerLeg = (uuid: string): string | null => {
-      const chan = channels.find(c => c.uuid === uuid);
-      if (chan) {
-        // Strategy 1: If in a conference, find the other member of the conference
-        if (chan.dest && chan.dest.startsWith('conference:')) {
-          const confPeer = channels.find(c => c.dest === chan.dest && c.uuid !== uuid);
-          if (confPeer) {
-            logger.info({
-              msg: 'findPeerLeg: resolved via shared conference destination',
-              uuid,
-              peer: confPeer.uuid,
-              conference: chan.dest,
-            });
-            return confPeer.uuid;
-          }
-        }
-
-        // Strategy 2: If this channel is the child leg, its peer is the parent leg (whose uuid matches call_uuid)
-        if (chan.call_uuid && chan.uuid !== chan.call_uuid) {
-          const parentExists = channels.some(c => c.uuid === chan.call_uuid);
-          if (parentExists) return chan.call_uuid;
-        }
-
-        // Strategy 3: If this channel is the parent leg, its peer is the child leg
-        const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
-        if (child) return child.uuid;
-      }
-
-      // Fallback: search for child leg by call_uuid
-      const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
-      return child?.uuid || null;
-    };
-
-    const heldBleg = findPeerLeg(heldUuid);
-    const activeBleg = findPeerLeg(activeUuid);
+    const customerLeg = findBridgePartner(channels, heldAgentLeg);
+    const thirdPartyLeg = findBridgePartner(channels, activeAgentLeg);
 
     logger.info({
-      msg: 'Merge: resolved all legs',
-      activeAleg: activeUuid,
-      activeBleg,
-      heldAleg: heldUuid,
-      heldBleg,
-      conferenceName,
+      msg: 'Merge: resolved legs',
+      heldAgentLeg,
+      customerLeg,
+      activeAgentLeg,
+      thirdPartyLeg,
     });
 
-    if (!heldBleg) {
-      logger.error({ msg: 'Could not find B-leg for held call', heldUuid });
-      throw new Error('Could not find remote party for held call');
+    if (!customerLeg) {
+      throw new MergeCallsError('CALL_NOT_FOUND', 'The customer on hold has hung up');
+    }
+    if (!thirdPartyLeg || !isAnswered(channels, thirdPartyLeg)) {
+      throw new MergeCallsError('NOT_ANSWERED', 'The person you are adding has not answered yet');
     }
 
-    // Prevent A-legs from hanging up when their bridges break
-    for (const uuid of [activeUuid, heldUuid]) {
-      try {
-        await this.executeApi('uuid_setvar', `${uuid} hangup_after_bridge false`);
-        await this.executeApi('uuid_setvar', `${uuid} park_after_bridge true`);
-      } catch (err) {
-        logger.warn({ msg: 'Failed to set bridge variables', uuid, error: err });
-      }
+    const conferenceName = `hw3way-${customerLeg}`;
+    const destination = (flags?: string) =>
+      `conference:${conferenceName}@${CONFERENCE_PROFILE}${flags ? `+flags{${flags}}` : ''}`;
+
+    // 1. The customer goes first, alone, and must have arrived before we touch
+    //    the agent leg it is bridged to.
+    await this.executeApi('uuid_transfer', `${customerLeg} ${destination()} inline`);
+    const joined = await this.waitForConferenceMember(conferenceName, customerLeg);
+    if (!joined) {
+      logger.error({
+        msg: 'Merge: customer never joined the conference',
+        customerLeg,
+        conferenceName,
+      });
+      throw new MergeCallsError('MERGE_FAILED', 'The customer could not be moved into the call');
     }
 
-    // Ensure all channels are answered before transferring to conference
-    for (const uuid of [heldBleg, activeBleg, activeUuid].filter(Boolean) as string[]) {
-      try {
-        await this.executeApi('uuid_answer', uuid);
-      } catch (err) {
-        logger.warn({ msg: 'Failed to answer channel before merge', uuid, error: err });
-      }
-    }
-
-    // 1. Transfer the HELD B-leg (remote party) directly into the conference
+    // 2. The held agent leg is now bridged to nothing. If FreeSWITCH has not
+    //    already hung it up, do so; an error here means it already went.
     try {
-      await this.executeApi('uuid_transfer', `${heldBleg} conference:${conferenceName} inline`);
-      logger.info({ msg: 'Transferred held B-leg to conference', heldBleg });
+      await this.executeApi('uuid_kill', heldAgentLeg);
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer held B-leg to conference', error: err });
-      throw new Error('Failed to merge held call');
+      logger.info({
+        msg: 'Merge: held agent leg already gone',
+        heldAgentLeg,
+        error: (err as Error).message,
+      });
     }
 
-    // 2. Kill the HELD A-leg (agent's first WebRTC session)
-    //    We don't need it because the agent will communicate via the active A-leg.
+    // 3. Agent and third party, together.
     try {
-      await this.executeApi('uuid_kill', heldUuid);
-      logger.info({ msg: 'Killed held A-leg to prevent duplicate agent audio', heldUuid });
+      await this.executeApi(
+        'uuid_transfer',
+        `${activeAgentLeg} -both ${destination('mintwo|dist-dtmf')} inline`
+      );
     } catch (err) {
-      logger.warn({ msg: 'Failed to kill held A-leg', error: err });
-    }
-
-    // 3. If the active call has a B-leg (it's answered), transfer it into the conference too
-    if (activeBleg) {
-      try {
-        await this.executeApi('uuid_transfer', `${activeBleg} conference:${conferenceName} inline`);
-        logger.info({ msg: 'Transferred active B-leg to conference', activeBleg });
-      } catch (err) {
-        logger.warn({ msg: 'Failed to transfer active B-leg to conference', error: err });
-      }
-    }
-
-    // 4. Transfer the ACTIVE A-leg (agent's second WebRTC session) into the conference
-    try {
-      await this.executeApi('uuid_transfer', `${activeUuid} conference:${conferenceName} inline`);
-      logger.info({ msg: 'Transferred active A-leg to conference', activeUuid });
-    } catch (err) {
-      logger.error({ msg: 'Failed to transfer active A-leg to conference', error: err });
-      throw new Error('Failed to join conference');
+      // Only reachable if the agent's new call vanished in the moment since we
+      // looked it up. The customer is already in the room and their old agent
+      // leg is gone, so there is nothing to put back: log it loudly.
+      logger.error({
+        msg: 'Merge: customer is in the conference but the agent and third party could not join',
+        conferenceName,
+        activeAgentLeg,
+        thirdPartyLeg,
+        error: (err as Error).message,
+      });
+      throw new MergeCallsError('MERGE_FAILED', 'Could not join the three-way call');
     }
 
     logger.info({ msg: 'Merge command sequence completed', conferenceName });
+    return { conferenceName };
   }
+
+  private async listChannels(): Promise<FsChannel[]> {
+    const jsonOutput = await this.executeApi('show', 'channels as json');
+    try {
+      const parsed = JSON.parse(jsonOutput) as { rows?: FsChannel[] };
+      return parsed.rows || [];
+    } catch {
+      logger.error({ msg: 'Failed to parse channels JSON', jsonOutput });
+      return [];
+    }
+  }
+
+  /**
+   * Poll until `uuid` is listed as a member of `conferenceName`.
+   * `conference <name> list` prints one `;`-separated row per member, whose
+   * third field is the member's channel UUID.
+   */
+  private async waitForConferenceMember(
+    conferenceName: string,
+    uuid: string,
+    timeoutMs = MERGE_JOIN_TIMEOUT_MS
+  ): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        const list = await this.executeApi('conference', `${conferenceName} list`);
+        if (list.split('\n').some(row => row.split(';')[2] === uuid)) return true;
+      } catch {
+        // Not created yet -- the transfer is still in flight.
+      }
+      if (Date.now() >= deadline) return false;
+      await new Promise(resolve => setTimeout(resolve, MERGE_POLL_INTERVAL_MS));
+    }
+  }
+}
+
+/** The conference profile in apps/freeswitch/conf/autoload_configs/conference.conf.xml. */
+const CONFERENCE_PROFILE = 'hopwhistle-3way';
+const MERGE_JOIN_TIMEOUT_MS = 5000;
+const MERGE_POLL_INTERVAL_MS = 150;
+
+type FsChannel = Record<string, string | undefined>;
+
+export type MergeCallsErrorCode =
+  | 'BAD_REQUEST'
+  | 'CALL_NOT_FOUND'
+  | 'NOT_ANSWERED'
+  | 'MERGE_FAILED';
+
+export class MergeCallsError extends Error {
+  constructor(
+    readonly code: MergeCallsErrorCode,
+    message: string
+  ) {
+    super(message);
+    this.name = 'MergeCallsError';
+  }
+}
+
+/**
+ * The channel bridged to `uuid`. `show channels` reports a bridge on both legs:
+ * the originating leg's `uuid` is the shared `call_uuid`, and the other leg
+ * carries that same `call_uuid`. Covers both an outbound call (agent leg
+ * originated it) and an inbound one (agent leg is the originated child).
+ */
+function findBridgePartner(channels: FsChannel[], uuid: string): string | null {
+  const self = channels.find(c => c.uuid === uuid);
+  if (!self) return null;
+  const callUuid = self.call_uuid;
+  if (!callUuid) return null;
+  const partner = channels.find(
+    c => c.uuid !== uuid && (c.uuid === callUuid || c.call_uuid === callUuid)
+  );
+  return partner?.uuid ?? null;
+}
+
+function isAnswered(channels: FsChannel[], uuid: string): boolean {
+  const chan = channels.find(c => c.uuid === uuid);
+  return chan?.callstate === 'ACTIVE' || chan?.callstate === 'HELD';
 }
 
 export const freeswitchService = new FreeSwitchService();

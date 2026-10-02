@@ -12,7 +12,7 @@ import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
-import { freeswitchService } from '../services/freeswitch-service.js';
+import { freeswitchService, MergeCallsError } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -734,7 +734,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const recordingEnabled = callMetadata.recordingEnabled !== false;
       const answeredAt = call.answeredAt || new Date();
 
-      const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
+      const existingRecordingDebug =
+        (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
       const recordingDebug = {
         ...existingRecordingDebug,
         answerNotifiedAt: answeredAt.toISOString(),
@@ -920,7 +921,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
     // Add metadata.endReason
     const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
-    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
+    const existingRecordingDebug =
+      (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       hangupNotifiedAt: endedAt.toISOString(),
@@ -1093,7 +1095,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       try {
         request.log.info({ msg: 'MERGE REQUEST', activeCallId, heldCallId, userId });
-        await freeswitchService.mergeCalls(activeCallId, heldCallId);
+        const { conferenceName } = await freeswitchService.mergeCalls(activeCallId, heldCallId);
 
         // Publish merge event
         void eventBus.publish('call.*', {
@@ -1102,6 +1104,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           data: {
             activeSipCallId: activeCallId,
             heldSipCallId: heldCallId,
+            conferenceName,
             agentId: userId,
             timestamp: new Date().toISOString(),
           },
@@ -1113,6 +1116,18 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         };
       } catch (err) {
         request.log.error({ msg: 'Merge failed', err });
+        // A refusal the agent can act on ("they have not answered yet") is
+        // passed through as-is; anything else is a generic failure.
+        if (err instanceof MergeCallsError) {
+          const status = {
+            BAD_REQUEST: 400,
+            CALL_NOT_FOUND: 404,
+            NOT_ANSWERED: 409,
+            MERGE_FAILED: 502,
+          }[err.code];
+          void reply.code(status);
+          return { error: { code: err.code, message: err.message } };
+        }
         void reply.code(500);
         return { error: { code: 'MERGE_FAILED', message: 'Failed to merge calls' } };
       }

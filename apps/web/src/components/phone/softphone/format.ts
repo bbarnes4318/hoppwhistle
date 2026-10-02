@@ -398,3 +398,16 @@ export function mergeRecentCalls(
     .sort((a, b) => time(b.startedAt) - time(a.startedAt))
     .slice(0, limit);
 }
+
+/**
+ * The number "Add call" dials, as the digits FreeSWITCH routes: a US number,
+ * ten digits or eleven with the leading 1. Agents type it however they like --
+ * "(555) 123-4567", "+1 555.123.4567" -- and the punctuation used to go
+ * straight into the SIP URI, which SIP.js rejects as invalid.
+ */
+export function normalizeThirdPartyNumber(input: string): string | null {
+  const digits = input.replace(/\D/g, '');
+  if (/^[2-9]\d{9}$/.test(digits)) return digits;
+  if (/^1[2-9]\d{9}$/.test(digits)) return digits;
+  return null;
+}

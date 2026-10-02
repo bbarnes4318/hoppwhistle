@@ -44,6 +44,8 @@ export interface ActiveCallViewProps {
   holdSeconds?: number;
   keypadOpen: boolean;
   hasHeldCalls?: boolean;
+  /** Others on this call after a three-way merge. */
+  conferenceWith?: string[];
   onMute: () => void;
   onHold: () => void;
   onKeypad: () => void;
@@ -69,6 +71,7 @@ export function ActiveCallView({
   holdSeconds = 0,
   keypadOpen,
   hasHeldCalls = false,
+  conferenceWith = [],
   onMute,
   onHold,
   onKeypad,
@@ -94,6 +97,14 @@ export function ActiveCallView({
         <div className="min-w-0 flex-1">
           <p className="t-section truncate text-ink">{callerName ?? number}</p>
           {callerName ? <p className="t-data truncate text-ink-2">{number}</p> : null}
+          {conferenceWith.length > 0 ? (
+            <p className="t-meta mt-0.5 flex min-w-0 items-center gap-1 text-ink-2">
+              <Merge className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="truncate">
+                3-way with {conferenceWith.map(n => formatPhoneNumber(n) || n).join(', ')}
+              </span>
+            </p>
+          ) : null}
           {source || location ? (
             <p className="t-meta mt-0.5 flex min-w-0 items-center gap-2 text-ink-3">
               {source ? (
@@ -195,7 +206,12 @@ export function ActiveCallView({
         <ControlButton label="Transfer" onClick={onTransfer} disabled={dialing}>
           <PhoneForwarded className="h-5 w-5" />
         </ControlButton>
-        <ControlButton label="Add call" onClick={onAddCall} disabled={dialing}>
+        <ControlButton
+          label="Add call"
+          onClick={onAddCall}
+          // One added party at a time: merge or hang up the first.
+          disabled={dialing || hasHeldCalls || conferenceWith.length > 0}
+        >
           <UserPlus className="h-5 w-5" />
         </ControlButton>
       </div>
@@ -211,7 +227,10 @@ export function ActiveCallView({
           <button
             type="button"
             onClick={onMerge}
+            // Nothing to merge until the person being added picks up.
+            disabled={dialing}
             className={cn(
+              'disabled:cursor-not-allowed disabled:opacity-50',
               'inline-flex h-11 w-full items-center justify-center gap-2 rounded-card border border-rule-strong bg-surface text-sm font-semibold text-ink hover:bg-sunken',
               PRESS,
               FOCUS_RING,
@@ -219,7 +238,7 @@ export function ActiveCallView({
             )}
           >
             <Merge className="h-4 w-4" aria-hidden />
-            Merge calls
+            {dialing ? 'Merge when they answer' : 'Merge calls'}
           </button>
         ) : null}
         <button

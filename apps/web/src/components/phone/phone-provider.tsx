@@ -24,6 +24,8 @@ import {
 
 import { inboundCallSid } from '@/lib/softphone-call-id';
 
+import { normalizeThirdPartyNumber } from './softphone/format';
+
 /**
  * REGISTER, and resolve only when the registrar ACCEPTS it.
  *
@@ -98,6 +100,20 @@ function getSipCallId(session: SipSessionLike | null | undefined): string {
   return (session.id || '').trim();
 }
 
+/**
+ * Silence (or restore) what the agent sends on a session. This is what the
+ * softphone's "hold" is: the far end hears nothing, the call stays up.
+ */
+function setSessionAudioMuted(session: Session | null, muted: boolean): void {
+  const pc = (
+    session?.sessionDescriptionHandler as { peerConnection?: RTCPeerConnection } | undefined
+  )?.peerConnection;
+  if (!pc) return;
+  for (const sender of pc.getSenders()) {
+    if (sender.track && sender.track.kind === 'audio') sender.track.enabled = !muted;
+  }
+}
+
 // ============================================================================
 // Types & Interfaces
 // ============================================================================
@@ -163,6 +179,8 @@ export interface CallInfo {
   prospectData?: ProspectData;
   queueName?: string;
   campaignId?: string;
+  /** Numbers merged into this call by "Add call" + "Merge" (three-way calling). */
+  conferenceWith?: string[];
 }
 
 export interface PhoneContextType {
@@ -322,7 +340,11 @@ interface PhoneProviderProps {
   enabled?: boolean;
 }
 
-export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProviderProps): JSX.Element {
+export function PhoneProvider({
+  children,
+  apiUrl,
+  enabled = true,
+}: PhoneProviderProps): JSX.Element {
   // In the browser, always derive the API base from the current origin so
   // requests use the same protocol/domain (avoids Mixed Content when the
   // build-time NEXT_PUBLIC_API_URL was baked with an http:// address).
@@ -433,6 +455,14 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   const sessionRef = useRef<Session | null>(null);
   const heldSessionRef = useRef<Session | null>(null);
   const heldCallInfoRef = useRef<CallInfo | null>(null);
+  /** Consult calls merged into the current call; their hangups are reported when it ends. */
+  const mergedCallsRef = useRef<CallInfo[]>([]);
+  /**
+   * True while a merge request is out. The server hangs up the held leg as part
+   * of the merge, and that BYE can arrive before the HTTP response does: it is
+   * the merge working, not the customer hanging up.
+   */
+  const mergeInFlightRef = useRef(false);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [hasHeldCalls, setHasHeldCalls] = useState(false);
   const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
@@ -730,6 +760,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   // always call the latest versions (avoids stale closures).
   const handleCallAnsweredRef = useRef<() => void>(() => {});
   const handleCallEndedRef = useRef<() => void>(() => {});
+  const handleHeldSessionEndedRef = useRef<(session: Session) => void>(() => {});
 
   const handleIncomingSipCall = useCallback(
     (invitation: Invitation) => {
@@ -804,11 +835,8 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
         if (newState === SessionState.Terminated) {
           if (sessionRef.current === invitation) {
             handleCallEndedRef.current();
-          } else if (heldSessionRef.current === invitation) {
-            console.log('[Phone] Held inbound session terminated in background');
-            heldSessionRef.current = null;
-            heldCallInfoRef.current = null;
-            setHasHeldCalls(false);
+          } else {
+            handleHeldSessionEndedRef.current(invitation);
           }
         } else if (newState === SessionState.Established) {
           handleCallAnsweredRef.current();
@@ -829,17 +857,20 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
    * Legacy compat wrapper — called from outbound (Inviter) flows.
    * Delegates to the new wireRemoteAudio.
    */
-  const setupRemoteAudio = useCallback((session: Session) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pc = (session.sessionDescriptionHandler as any)?.peerConnection as
-      | RTCPeerConnection
-      | undefined;
-    if (!pc) {
-      console.warn('[Phone] setupRemoteAudio: no peerConnection on session');
-      return;
-    }
-    wireRemoteAudio(pc);
-  }, [wireRemoteAudio]);
+  const setupRemoteAudio = useCallback(
+    (session: Session) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pc = (session.sessionDescriptionHandler as any)?.peerConnection as
+        | RTCPeerConnection
+        | undefined;
+      if (!pc) {
+        console.warn('[Phone] setupRemoteAudio: no peerConnection on session');
+        return;
+      }
+      wireRemoteAudio(pc);
+    },
+    [wireRemoteAudio]
+  );
 
   const handleCallAnswered = useCallback(() => {
     setCurrentCall(prev => {
@@ -883,6 +914,43 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
     startCallDurationTimer();
   }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
+  /**
+   * Tell the API an outbound call this browser placed has ended. Inbound calls
+   * are closed by FreeSWITCH's own CDR. Once per call id, however many paths
+   * notice the end.
+   */
+  const reportCallEnded = useCallback(
+    (call: CallInfo, endReason: string) => {
+      if (call.direction !== 'outbound') return;
+      const callId = call.callId;
+      if (reportedEndedCallsRef.current.has(callId)) return;
+      reportedEndedCallsRef.current.add(callId);
+      const duration = call.answerTime
+        ? Math.floor((Date.now() - call.answerTime.getTime()) / 1000)
+        : 0;
+      fetch(`${normalizedApiUrl}/api/v1/agent/call/${callId}/hangup`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({
+          duration,
+          startedAt: call.startTime?.toISOString(),
+          answeredAt: call.answerTime?.toISOString(),
+          endedAt: new Date().toISOString(),
+          endReason,
+        }),
+      })
+        .then(res => {
+          if (!res.ok) {
+            console.error('[Phone] Failed to report hangup to backend');
+          } else {
+            console.log('[Phone] Hangup successfully reported to backend');
+          }
+        })
+        .catch(err => console.error('[Phone] Failed to report hangup:', err));
+    },
+    [normalizedApiUrl, getApiHeaders]
+  );
+
   const handleCallEnded = useCallback(() => {
     // If there is a held call stashed, restore it instead of ending the session entirely
     if (heldSessionRef.current) {
@@ -891,36 +959,23 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       heldSessionRef.current = null;
       setHasHeldCalls(false);
 
-      const restoredCall = heldCallInfoRef.current;
+      const heldCall = heldCallInfoRef.current;
       heldCallInfoRef.current = null;
 
-      if (restoredCall) {
-        restoredCall.isOnHold = false;
-        restoredCall.state = 'active';
+      // Take the customer off hold and put their audio back on the speaker.
+      setSessionAudioMuted(sessionRef.current, false);
+      const pc = (
+        sessionRef.current.sessionDescriptionHandler as
+          | { peerConnection?: RTCPeerConnection }
+          | undefined
+      )?.peerConnection;
+      if (pc) wireRemoteAudio(pc);
 
-        // Unhold/unmute audio tracks in the browser RTCPeerConnection
-        try {
-          const sdh = sessionRef.current.sessionDescriptionHandler as
-            | { peerConnection?: RTCPeerConnection }
-            | undefined;
-          if (sdh && sdh.peerConnection) {
-            const pc = sdh.peerConnection;
-            const senders = pc.getSenders();
-            for (const sender of senders) {
-              if (sender.track && sender.track.kind === 'audio') {
-                sender.track.enabled = true; // unmute
-              }
-            }
-
-            // Re-bind the restored call's stream to the browser HTML audio element
-            wireRemoteAudio(pc);
-          }
-        } catch (e) {
-          console.warn('[Phone] Failed to unmute track on restore:', e);
-        }
-
-        setCurrentCall(restoredCall);
-      }
+      setCurrentCall(prev => {
+        // The call that just ended is the one the agent placed to add someone.
+        if (prev) reportCallEnded(prev, 'sip_terminated');
+        return heldCall ? { ...heldCall, isOnHold: false, state: 'active' } : prev;
+      });
       return;
     }
 
@@ -937,32 +992,7 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
           ? Math.floor((Date.now() - prev.answerTime.getTime()) / 1000)
           : 0;
 
-        if (prev.direction === 'outbound') {
-          const callId = prev.callId;
-          if (!reportedEndedCallsRef.current.has(callId)) {
-            reportedEndedCallsRef.current.add(callId);
-            const url = `${normalizedApiUrl}/api/v1/agent/call/${callId}/hangup`;
-            fetch(url, {
-              method: 'POST',
-              headers: getApiHeaders(),
-              body: JSON.stringify({
-                duration,
-                startedAt: prev.startTime?.toISOString(),
-                answeredAt: prev.answerTime?.toISOString(),
-                endedAt: new Date().toISOString(),
-                endReason: 'sip_terminated',
-              }),
-            })
-              .then(res => {
-                if (!res.ok) {
-                  console.error('[Phone] Failed to report hangup to backend');
-                } else {
-                  console.log('[Phone] Hangup successfully reported to backend');
-                }
-              })
-              .catch(err => console.error('[Phone] Failed to report hangup:', err));
-          }
-        }
+        reportCallEnded(prev, 'sip_terminated');
 
         setCallHistory(history => [completedCall, ...history].slice(0, 50));
         // Preserve call data for disposition modal
@@ -979,6 +1009,10 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
       }
       return null;
     });
+    // A three-way call carries the call the agent placed to add the third
+    // party; this session was that call's, so it ends here too.
+    for (const merged of mergedCallsRef.current) reportCallEnded(merged, 'sip_terminated');
+    mergedCallsRef.current = [];
     setAgentStatusState('available');
     // Sync available status to Redis so routing service knows agent is free
     void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
@@ -990,7 +1024,37 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
-  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders, wireRemoteAudio]);
+  }, [
+    stopRingtone,
+    stopCallDurationTimer,
+    normalizedApiUrl,
+    getApiHeaders,
+    wireRemoteAudio,
+    reportCallEnded,
+  ]);
+
+  /**
+   * The call on hold ended while the agent was on the call they placed to add
+   * someone -- the customer hung up while waiting. The agent stays on the new
+   * call; the held one is closed out.
+   */
+  const handleHeldSessionEnded = useCallback(
+    (session: Session) => {
+      if (heldSessionRef.current !== session || mergeInFlightRef.current) return;
+      console.log('[Phone] Held call ended in the background');
+      const heldCall = heldCallInfoRef.current;
+      heldSessionRef.current = null;
+      heldCallInfoRef.current = null;
+      setHasHeldCalls(false);
+      if (heldCall) {
+        reportCallEnded(heldCall, 'held_party_hangup');
+        setCallHistory(history =>
+          [{ ...heldCall, state: 'ended' as const, endTime: new Date() }, ...history].slice(0, 50)
+        );
+      }
+    },
+    [reportCallEnded]
+  );
 
   // Keep refs in sync so stateChange listeners always call latest versions
   useEffect(() => {
@@ -999,6 +1063,9 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
   useEffect(() => {
     handleCallEndedRef.current = handleCallEnded;
   }, [handleCallEnded]);
+  useEffect(() => {
+    handleHeldSessionEndedRef.current = handleHeldSessionEnded;
+  }, [handleHeldSessionEnded]);
 
   // ============================================================================
   // Phone Actions
@@ -1143,11 +1210,8 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
           } else if (newState === SessionState.Terminated) {
             if (sessionRef.current === inviter) {
               handleCallEndedRef.current();
-            } else if (heldSessionRef.current === inviter) {
-              console.log('[Phone] Held outbound session terminated in background');
-              heldSessionRef.current = null;
-              heldCallInfoRef.current = null;
-              setHasHeldCalls(false);
+            } else {
+              handleHeldSessionEndedRef.current(inviter);
             }
           }
         });
@@ -1416,112 +1480,147 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
     console.log('Transfer not fully implemented in SIP yet');
   }, []);
 
-  // Add third party to call (for 3-way calling)
-  // This puts the current call on hold and dials the new number
+  /**
+   * Three-way calling, step 1: put the customer on hold and dial the person to
+   * add. The customer's session is stashed as the held call; the new call
+   * becomes the current one. `mergeCalls` joins them; hanging up the new call
+   * instead brings the customer back (see `handleCallEnded`).
+   */
   const addThirdParty = useCallback(
     async (phoneNumber: string) => {
-      if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+      const session = sessionRef.current;
+      if (!session || session.state !== SessionState.Established) {
         setError('No active call to add party to');
         return;
       }
-
       if (!userAgentRef.current) {
         setError('Phone not connected');
         return;
       }
+      if (heldSessionRef.current) {
+        setError('Merge or hang up the call you already added first');
+        return;
+      }
+      if (currentCall?.conferenceWith?.length) {
+        setError('This call already has three people on it');
+        return;
+      }
+      const number = normalizeThirdPartyNumber(phoneNumber);
+      if (!number) {
+        setError('Enter a 10-digit US phone number');
+        return;
+      }
+
+      console.log('[Phone] Adding third party:', number);
+
+      // Hold the customer. Explicitly, not a toggle: a customer the agent had
+      // already put on hold would otherwise have been taken OFF hold here.
+      const heldCall = currentCall
+        ? { ...currentCall, isOnHold: true, state: 'hold' as const }
+        : null;
+      setSessionAudioMuted(session, true);
+      heldCallInfoRef.current = heldCall;
+      heldSessionRef.current = session;
+      setHasHeldCalls(true);
+      sessionRef.current = null; // makeCall starts a fresh session
 
       try {
-        console.log('[Phone] Adding third party:', phoneNumber);
-
-        // 1. Put the current call on hold (await so SIP processes)
-        toggleHold();
-
-        // 2. Stash the current session and call info
-        heldCallInfoRef.current = currentCall
-          ? { ...currentCall, isOnHold: true, state: 'hold' }
-          : null;
-        heldSessionRef.current = sessionRef.current;
-        setHasHeldCalls(true);
-        sessionRef.current = null; // Clear so makeCall starts fresh
-
-        // 3. Small delay to let FreeSWITCH process the hold
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // 4. Dial the new number
-        await makeCall(phoneNumber);
+        await makeCall(number);
       } catch (err) {
+        // The call never left (refused by the API, phone not ready). Put the
+        // customer back exactly as they were.
         console.error('[Phone] Add third party failed:', err);
-        const message = err instanceof Error ? err.message : 'Failed to add party';
-        setError(message);
-
-        // Restore if failed
-        if (heldSessionRef.current) {
-          sessionRef.current = heldSessionRef.current;
+        if (heldSessionRef.current === session) {
+          sessionRef.current = session;
           heldSessionRef.current = null;
           heldCallInfoRef.current = null;
           setHasHeldCalls(false);
-          // Try to unhold the original call
-          try {
-            toggleHold();
-          } catch {
-            /* best effort */
-          }
+          setSessionAudioMuted(session, false);
+          if (heldCall) setCurrentCall({ ...heldCall, isOnHold: false, state: 'active' });
         }
+        // makeCall has already set the error the agent should see.
       }
     },
-    [toggleHold, makeCall, currentCall]
+    [makeCall, currentCall]
   );
 
+  /**
+   * Three-way calling, step 2: join the customer on hold and the person just
+   * dialled into one call. FreeSWITCH does the joining (POST
+   * /agent/call/merge); this browser keeps the session it is on, and the held
+   * one is hung up by the server.
+   */
   const mergeCalls = useCallback(async () => {
-    if (!sessionRef.current || !heldSessionRef.current) {
+    const active = sessionRef.current;
+    const held = heldSessionRef.current;
+    if (!active || !held) {
       setError('Need two calls to merge');
       return;
     }
+    if (active.state !== SessionState.Established || currentCall?.state !== 'active') {
+      setError('Wait for them to answer before merging');
+      return;
+    }
 
-    // Get call IDs using the exact SIP Call-ID header to match FreeSWITCH's sip_call_id
-    const activeCallId = getSipCallId(sessionRef.current);
-    const heldCallId = getSipCallId(heldSessionRef.current);
+    const heldCall = heldCallInfoRef.current;
+    const addedCall = currentCall;
 
-    console.log('[Phone] Merging calls...', {
-      active: activeCallId,
-      held: heldCallId,
-    });
+    // The exact SIP Call-IDs: the only thing the server will match a leg by.
+    const activeCallId = getSipCallId(active);
+    const heldCallId = getSipCallId(held);
+    console.log('[Phone] Merging calls...', { active: activeCallId, held: heldCallId });
 
+    mergeInFlightRef.current = true;
     try {
-      // Call backend API to merge
       const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/merge`, {
         method: 'POST',
         headers: getApiHeaders(),
-        body: JSON.stringify({
-          activeCallId,
-          heldCallId,
-        }),
+        body: JSON.stringify({ activeCallId, heldCallId }),
       });
 
       if (!response.ok) {
-        throw new Error('Merge failed');
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(body.error?.message || 'Failed to merge calls');
       }
 
-      // On success, the held session is effectively consumed/merged.
-      // Hang up the held session locally to clean up WebRTC state in the browser
-      if (heldSessionRef.current) {
-        try {
-          void heldSessionRef.current.bye();
-        } catch (e) {
-          console.warn('[Phone] Failed to send BYE for held session:', e);
-        }
-        heldSessionRef.current = null;
-        heldCallInfoRef.current = null;
-      }
+      // Merged. The server has hung up the held leg; let go of it without
+      // treating that as the customer leaving.
+      heldSessionRef.current = null;
+      heldCallInfoRef.current = null;
       setHasHeldCalls(false);
+      if (held.state === SessionState.Established) {
+        void held.bye().catch(() => {});
+      }
 
-      // The active session remains as the "Conference" session
-      console.log('[Phone] Merge command sent successfully');
+      // The call the agent placed lives on inside the three-way call and is
+      // closed out when it ends; the screen goes back to the customer.
+      mergedCallsRef.current.push(addedCall);
+      setCurrentCall(prev => {
+        const base = heldCall ?? prev;
+        if (!base) return prev;
+        return {
+          ...base,
+          state: 'active',
+          isOnHold: false,
+          isMuted: prev?.isMuted ?? false,
+          conferenceWith: [...(base.conferenceWith ?? []), addedCall.phoneNumber],
+        };
+      });
+      console.log('[Phone] Calls merged');
     } catch (err) {
       console.error('[Phone] Merge failed:', err);
-      setError('Failed to merge calls');
+      setError(err instanceof Error ? err.message : 'Failed to merge calls');
+    } finally {
+      mergeInFlightRef.current = false;
+      // If the held call ended while the request was out and the merge did not
+      // take it, that was the customer leaving: close it out now.
+      if (heldSessionRef.current === held && held.state === SessionState.Terminated) {
+        handleHeldSessionEndedRef.current(held);
+      }
     }
-  }, [normalizedApiUrl, getApiHeaders]);
+  }, [normalizedApiUrl, getApiHeaders, currentCall]);
 
   const setAudioInput = useCallback((deviceId: string) => {
     setSelectedAudioInput(deviceId);

@@ -21,6 +21,7 @@ import {
   isDialing,
   knownCallerName,
   mergeRecentCalls,
+  normalizeThirdPartyNumber,
   type SoftphoneStateInput,
 } from '../phone/softphone/format';
 import { isTypingTarget, keypadKeyFor, resolveShortcut } from '../phone/softphone/shortcuts';
@@ -327,5 +328,23 @@ describe('mergeRecentCalls', () => {
       number: '+14075550198',
       missed: false,
     });
+  });
+});
+
+describe('normalizeThirdPartyNumber', () => {
+  it('accepts a US number however the agent typed it, as bare digits', () => {
+    expect(normalizeThirdPartyNumber('(813) 555-0142')).toBe('8135550142');
+    expect(normalizeThirdPartyNumber('+1 813.555.0142')).toBe('18135550142');
+    expect(normalizeThirdPartyNumber('813-555-0142')).toBe('8135550142');
+    expect(normalizeThirdPartyNumber(' 18135550142 ')).toBe('18135550142');
+  });
+
+  it('refuses what the dialplan would not route', () => {
+    expect(normalizeThirdPartyNumber('')).toBeNull();
+    expect(normalizeThirdPartyNumber('1001')).toBeNull(); // an extension, platform-wide
+    expect(normalizeThirdPartyNumber('queue:q1')).toBeNull();
+    expect(normalizeThirdPartyNumber('555-0142')).toBeNull();
+    expect(normalizeThirdPartyNumber('0135550142')).toBeNull(); // area codes start 2-9
+    expect(normalizeThirdPartyNumber('+442071234567')).toBeNull();
   });
 });
