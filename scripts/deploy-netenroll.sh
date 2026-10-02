@@ -126,6 +126,7 @@ REQUIRED_MIGRATIONS="
 20261003000000_upgrade_price_units
 20261004000000_number_carriers
 20261005000000_activation_grant_licensed_states
+20261006000000_campaign_billing_model
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -525,6 +526,10 @@ migration_applied() {
       echo "SELECT count(*) = 1 FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = 'tenant_activation_grants'
               AND column_name = 'licensedStates'" ;;
+    *_campaign_billing_model)
+      # Wrapped BEGIN..COMMIT, so its last index stands for the columns before
+      # it and the backfill (an UPDATE, which leaves nothing to probe).
+      echo "SELECT to_regclass('public.\"insurance_carrier_applications_publisherId_idx\"') IS NOT NULL" ;;
     *)
       echo "" ;;
   esac
