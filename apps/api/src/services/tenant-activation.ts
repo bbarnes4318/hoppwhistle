@@ -49,6 +49,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { RoleName, TenantActivationSource } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { configuredPortalDomain } from '../lib/tenant-brand.js';
 
 /** How long an activation link stays usable. Long enough to survive a weekend. */
 export const ACTIVATION_GRANT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -187,11 +188,14 @@ export async function issueActivationGrant(params: {
 export async function peekActivationGrant(
   token: string,
   email: string
-): Promise<{ tenantName: string | null; roleName: RoleName }> {
+): Promise<{ tenantName: string | null; roleName: RoleName; portalDomain: string | null }> {
   const grant = await loadRedeemableGrant(token, email);
   // Null for a platform invite. The signup page shows "NetEnroll" rather than
   // an agency name; it does not get to invent one.
-  return { tenantName: grant.tenant?.name ?? null, roleName: grant.roleName };
+  // The host this agency's people belong on, when it has one of its own: lets the
+  // signup page move an invitation opened on the wrong host to the right one.
+  const portalDomain = await configuredPortalDomain(grant.tenantId);
+  return { tenantName: grant.tenant?.name ?? null, roleName: grant.roleName, portalDomain };
 }
 
 /**
@@ -202,10 +206,7 @@ export async function peekActivationGrant(
  * accounts. `redeemedByUserId` is filled in by the caller once the user row
  * exists — see `completeActivationGrant`.
  */
-export async function redeemActivationGrant(
-  token: string,
-  email: string
-): Promise<RedeemedGrant> {
+export async function redeemActivationGrant(token: string, email: string): Promise<RedeemedGrant> {
   const prisma = getPrismaClient();
   const grant = await loadRedeemableGrant(token, email);
 
@@ -264,10 +265,7 @@ export async function redeemActivationGrant(
  * above safe. A failure here loses the back-reference, not the isolation, so it
  * is not worth failing the registration over.
  */
-export async function completeActivationGrant(
-  grantId: string,
-  userId: string
-): Promise<void> {
+export async function completeActivationGrant(grantId: string, userId: string): Promise<void> {
   const prisma = getPrismaClient();
   await prisma.tenantActivationGrant
     .update({ where: { id: grantId }, data: { redeemedByUserId: userId } })

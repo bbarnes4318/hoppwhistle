@@ -142,7 +142,9 @@ export function defaultPortalHost(): string {
  * Never throws. A read that fails is logged and answers null (the default
  * portal): a link must not be lost over which host it names.
  */
-async function configuredPortalDomain(tenantId: string | null | undefined): Promise<string | null> {
+export async function configuredPortalDomain(
+  tenantId: string | null | undefined
+): Promise<string | null> {
   if (!tenantId) return null;
   try {
     const tenant = await getPrismaClient().tenant.findUnique({
