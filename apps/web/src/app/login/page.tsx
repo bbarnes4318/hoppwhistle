@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { clearConsoleExit } from '@/lib/console-exit';
+import { portalRedirectTarget } from '@/lib/portal-host';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
@@ -519,7 +520,16 @@ export default function AuthPage() {
           setInvitationRefused(true);
           return;
         }
-        const data = (await res.json()) as { agencyName?: string };
+        const data = (await res.json()) as { agencyName?: string; portalDomain?: string | null };
+        // An invitation opened on the wrong host (a white-label agency's link
+        // that names agents.netenroll.com) is moved to the agency's own host,
+        // token and all, before anyone sets a password here. Nothing has been
+        // consumed by the preview, so the link works the same on the right host.
+        const target = portalRedirectTarget(data.portalDomain, window.location);
+        if (target) {
+          window.location.replace(target);
+          return;
+        }
         if (data.agencyName) setAgencyName(data.agencyName);
       } catch {
         // Unreachable, not rejected. Registration still validates the token.

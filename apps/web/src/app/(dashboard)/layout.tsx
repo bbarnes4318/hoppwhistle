@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
+import { portalRedirectTarget } from '@/lib/portal-host';
 import { getRedirectPath } from '@/lib/roles';
 import { isRouteBlockedFor, whiteLabelRedirectFor } from '@/lib/staff-only-routes';
 import { cn } from '@/lib/utils';
@@ -83,6 +84,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    */
   const canTakeCalls =
     !authLoading && !platform.loading && userRoles.includes('AGENT') && !platform.needsAgency;
+
+  /*
+   * A white-label agency's people belong on the agency's own host. Sessions are
+   * host-only, so somebody signed in on agents.netenroll.com who belongs to an
+   * agency with its own domain is sent to that domain's sign-in rather than
+   * left on the wrong brand. Never for NetEnroll staff (they work across
+   * agencies) and never in local development.
+   */
+  const portalDomain = user?.portalDomain ?? null;
+  const onWrongHost = !!user && !user.isPlatformAdmin && !!portalDomain;
+  useEffect(() => {
+    if (!onWrongHost) return;
+    const target = portalRedirectTarget(portalDomain, {
+      hostname: window.location.hostname,
+      pathname: '/login',
+      search: '',
+      protocol: window.location.protocol,
+    });
+    if (target) window.location.replace(target);
+  }, [onWrongHost, portalDomain]);
 
   useEffect(() => {
     if (authLoading) return;

@@ -92,6 +92,8 @@ interface UserData {
   tenantId: string;
   publisherAccessToRecordings?: boolean;
   buyerAccessToRecordings?: boolean;
+  /** This agency's own portal host, or null on the default portal. */
+  portalDomain?: string | null;
   /** The states this agent is licensed in; calls and leads route only inside them. */
   licensedStates?: string[];
   /** An agent who has not yet said which states they are licensed in. */
@@ -283,6 +285,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         tenantId: rawUser.tenantId,
         publisherAccessToRecordings: rawUser.publisherAccessToRecordings,
         buyerAccessToRecordings: rawUser.buyerAccessToRecordings,
+        portalDomain: typeof rawUser.portalDomain === 'string' ? rawUser.portalDomain : null,
         licensedStates: Array.isArray(rawUser.licensedStates) ? rawUser.licensedStates : [],
         needsLicensedStates: rawUser.needsLicensedStates === true,
         position: rawUser.position,

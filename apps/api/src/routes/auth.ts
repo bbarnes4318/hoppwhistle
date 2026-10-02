@@ -12,7 +12,7 @@ import {
   partitionLicensedStates,
 } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { brandForTenant } from '../lib/tenant-brand.js';
+import { brandForTenant, configuredPortalDomain } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { loadTenantUpgrades } from '../lib/tenant-upgrades.js';
 import { tokenVersionOf } from '../lib/token-version.js';
@@ -331,6 +331,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const preview = await peekActivationGrant(activationToken, email);
       return reply.send({
         agencyName: preview.tenantName,
+        // The agency's own portal host, or null for the default portal.
+        portalDomain: preview.portalDomain,
         role: preview.roleName,
         email: email.toLowerCase(),
       });
@@ -1421,6 +1423,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        */
       const whiteLabel = await loadTenantWhiteLabel(brandTenantId);
       /*
+       * The agency's own portal host (its domain, else its white-label
+       * parent's), or null when it uses the default portal. The client moves a
+       * session that is on any other host to this one, so a white-label agency's
+       * people are never left on agents.netenroll.com.
+       */
+      const portalDomain = await configuredPortalDomain(brandTenantId);
+      /*
        * The upgrades that same tenant has turned on, from its metadata. Same
        * tenant, same reason: an operator in the cross-agency view has none,
        * because there is no agency whose upgrades they are looking at.
@@ -1461,6 +1470,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         brand,
         /** The tenant above is on the white-label tier. */
         whiteLabel,
+        /** That tenant's own portal host, or null for the default portal. */
+        portalDomain,
         /** The upgrade keys turned on for that tenant (`lib/tenant-upgrades.ts`). */
         upgrades,
         /** The tenant above is a downline agency (it has a white-label parent). */
