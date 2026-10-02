@@ -637,7 +637,7 @@ describe('white-label screens', () => {
       await waitFor(() =>
         expect(screen.getByText(/owner@downline.test has NOT been emailed/)).toBeTruthy()
       );
-      expect(screen.getByLabelText('Activation link').value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>('Activation link').value).toBe(
         'https://agents.lifeleadsplus.com/login?activation=tok'
       );
     });

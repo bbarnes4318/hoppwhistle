@@ -10,6 +10,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 
+import { SettingsField, SettingsSection } from './settings-section';
+
 interface TenantNumbers {
   tenantId: string;
   numbersLimit: number | null;
@@ -110,48 +112,51 @@ export function NumbersAllowanceControl({
     }
   }
 
-  const field = (key: 'limit' | 'setup' | 'monthly', label: string, step: string) => (
-    <label className="flex flex-col gap-1 text-xs text-ink-3">
-      {label}
+  const field = (
+    key: 'limit' | 'setup' | 'monthly',
+    label: string,
+    step: string,
+    hint?: string
+  ) => (
+    <SettingsField label={label} htmlFor={`numbers-${key}`} hint={hint}>
       <Input
+        id={`numbers-${key}`}
         type="number"
         min={0}
         step={step}
         value={form[key]}
         onChange={event => setForm(f => ({ ...f, [key]: event.target.value }))}
-        className="h-8 w-28"
+        className="h-9"
         disabled={saved === null || saving}
         data-numbers-field={key}
       />
-    </label>
+    </SettingsField>
   );
 
   return (
-    <div className="flex flex-col gap-2 border-t border-rule pt-3" data-testid="numbers-control">
-      <span className="text-xs font-medium text-ink-2">
-        Numbers
-        {saved ? (
-          <span className="ml-2 font-normal tabular-nums text-ink-3">
-            {saved.numbersUsed} in use
-          </span>
-        ) : null}
-      </span>
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-        {field('limit', 'Numbers limit', '1')}
+    <SettingsSection
+      title="Phone numbers"
+      description="How many numbers this agency may hold, and what it pays for each."
+      meta={saved ? `${saved.numbersUsed} in use` : undefined}
+      data-testid="numbers-control"
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {field('limit', 'Numbers limit', '1', 'Blank for no limit')}
         {field('setup', 'Setup price (USD)', '0.01')}
         {field('monthly', 'Monthly price (USD)', '0.01')}
+      </div>
+      <div className="flex items-center gap-3">
         <Button
           size="sm"
           variant="outline"
-          className="h-8"
           onClick={() => void submit()}
           disabled={saved === null || saving || !valid}
         >
           {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-          Save
+          Save numbers settings
         </Button>
+        {error ? <p className="t-meta text-dropped-ink">{error}</p> : null}
       </div>
-      {error ? <p className="text-[13px] text-ink-3">{error}</p> : null}
-    </div>
+    </SettingsSection>
   );
 }
