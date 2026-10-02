@@ -312,7 +312,7 @@ describe.skipIf(!gate.available)('Inviting into an agency with activation grants
 
   it('reports a failed send and still returns the link to copy', async () => {
     sendMail.mockRejectedValueOnce(new Error('SMTP down'));
-    const issued = await invite({ email: email(), role: 'AGENT' });
+    const issued = await invite({ email: email(), role: 'AGENT', licensedStates: ['TN'] });
     expect(issued.statusCode).toBe(201);
     expect(issued.json()).toMatchObject({ emailed: false, emailFailureReason: 'send_failed' });
     expect(issued.json().activationLink).toContain('/login?activation=');

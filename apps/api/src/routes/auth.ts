@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 const { compare, hash } = bcrypt;
 import { FastifyInstance } from 'fastify';
 
+import { normalizeLicensedStates, partitionLicensedStates } from '../lib/licensed-states.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
@@ -495,6 +496,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         metadata: {
           position: userPosition,
           defaultScript: defaultScript,
+          // The licence the inviting administrator recorded. Without it a new
+          // agent starts with no licensed states at all.
+          ...(grant.licensedStates.length > 0
+            ? { licensedStates: normalizeLicensedStates(grant.licensedStates) }
+            : {}),
         },
       },
     });
@@ -586,11 +592,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
-      const { email, role, buyerId, publisherId } = request.body as {
+      const { email, role, buyerId, publisherId, licensedStates } = request.body as {
         email?: string;
         role?: string;
         buyerId?: string;
         publisherId?: string;
+        licensedStates?: unknown;
       };
 
       const actingUserId = getActingUserId(request);
@@ -717,6 +724,34 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
+      /*
+       * An agent is rung only for the states they are licensed in, so an AGENT
+       * invitation must say which. Validated through the same normaliser the
+       * routing and CRM gates read, and refused whole on a typo rather than
+       * silently granting less than the administrator believed they granted.
+       */
+      let grantLicensedStates: string[] = [];
+      if (invitedRole === 'AGENT') {
+        const parts = partitionLicensedStates(licensedStates);
+        if (parts.rejected.length > 0) {
+          return reply.code(400).send({
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'licensedStates must be an array of US state codes',
+            },
+          });
+        }
+        if (parts.licensed.length === 0) {
+          return reply.code(400).send({
+            error: {
+              code: 'LICENSED_STATES_REQUIRED',
+              message: 'Select at least one state the agent is licensed in',
+            },
+          });
+        }
+        grantLicensedStates = parts.licensed;
+      }
+
       const existing = await prisma.user.findUnique({
         where: { email: email.toLowerCase() },
         select: { id: true },
@@ -735,6 +770,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         source: 'ADMIN_INVITE',
         buyerId: grantBuyerId,
         publisherId: grantPublisherId,
+        licensedStates: grantLicensedStates,
       });
 
       await auditLog({
@@ -753,6 +789,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           roleName: invitedRole,
           buyerId: grantBuyerId,
           publisherId: grantPublisherId,
+          licensedStates: grantLicensedStates,
         },
         success: true,
       });
@@ -801,6 +838,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         role: invitedRole,
         buyerId: grantBuyerId,
         publisherId: grantPublisherId,
+        licensedStates: grantLicensedStates,
         expiresAt: grant.expiresAt.toISOString(),
         emailed: delivery.sent,
         emailFailureReason: delivery.reason ?? null,
@@ -970,6 +1008,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             status: 'ACTIVE',
             buyerId: grant.buyerId,
             publisherId: grant.publisherId,
+            ...(grant.licensedStates.length > 0
+              ? { metadata: { licensedStates: normalizeLicensedStates(grant.licensedStates) } }
+              : {}),
             lastLoginAt: new Date(),
           },
         });

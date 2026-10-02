@@ -100,6 +100,8 @@ export interface RedeemedGrant {
   buyerId: string | null;
   /** The publisher a PUBLISHER login is linked to, re-checked likewise. */
   publisherId: string | null;
+  /** An AGENT's licensed states, as recorded by whoever invited them. */
+  licensedStates: string[];
 }
 
 function hashToken(token: string): string {
@@ -145,6 +147,8 @@ export async function issueActivationGrant(params: {
   buyerId?: string | null;
   /** A PUBLISHER grant's publisher. Likewise. */
   publisherId?: string | null;
+  /** An AGENT grant's licensed states. The caller has already normalised them. */
+  licensedStates?: string[];
 }): Promise<IssuedGrant> {
   const prisma = getPrismaClient();
 
@@ -164,6 +168,7 @@ export async function issueActivationGrant(params: {
       stripeSessionId: null,
       buyerId: params.buyerId ?? null,
       publisherId: params.publisherId ?? null,
+      licensedStates: params.licensedStates ?? [],
       expiresAt,
     },
     select: { id: true },
@@ -247,6 +252,7 @@ export async function redeemActivationGrant(
     source: grant.source,
     buyerId,
     publisherId,
+    licensedStates: grant.licensedStates,
   };
 }
 

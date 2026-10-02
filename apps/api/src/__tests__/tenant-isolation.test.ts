@@ -761,7 +761,7 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
         // A tenantId in the body is not part of the contract. Sending one must
         // change nothing -- this is the assertion that there is no field to
         // find.
-        payload: { email: 'newagent@example.invalid', role: 'AGENT', tenantId: b.tenantId },
+        payload: { email: 'newagent@example.invalid', role: 'AGENT', licensedStates: ['TN'], tenantId: b.tenantId },
       });
 
       expect(response.statusCode).toBe(201);
