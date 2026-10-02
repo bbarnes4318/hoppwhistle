@@ -1,0 +1,53 @@
+name: Dograh transfer lifetime guard
+
+on:
+  pull_request:
+    paths:
+      - "deploy/dograh/transfer-lifetime/**"
+      - ".github/workflows/dograh-transfer-lifetime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-source-patch:
+    name: Dograh ${{ matrix.dograh_ref }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dograh_ref:
+          - ef9c276e44ed22c28a3a61dd5486b611be6baf06 # Dograh 1.42.0
+          - d682789c7c57c4d700d9bb6f134f389355472223 # upstream main reviewed 2026-08-03
+
+    steps:
+      - name: Check out Hopwhistle
+        uses: actions/checkout@v4
+
+      - name: Check out reviewed Dograh source
+        uses: actions/checkout@v4
+        with:
+          repository: dograh-hq/dograh
+          ref: ${{ matrix.dograh_ref }}
+          path: .dograh-upstream
+
+      - name: Run patcher unit tests
+        run: python -m unittest deploy/dograh/transfer-lifetime/test_patch_transfer_lifetime.py
+
+      - name: Apply and verify source patch
+        run: |
+          python deploy/dograh/transfer-lifetime/patch_transfer_lifetime.py \
+            --root .dograh-upstream --apply
+          python deploy/dograh/transfer-lifetime/patch_transfer_lifetime.py \
+            --root .dograh-upstream --check
+          python -m py_compile \
+            .dograh-upstream/api/services/telephony/providers/ari/strategies.py
+
+      - name: Prove the patch is idempotent
+        run: |
+          before=$(sha256sum .dograh-upstream/api/services/telephony/providers/ari/strategies.py)
+          python deploy/dograh/transfer-lifetime/patch_transfer_lifetime.py \
+            --root .dograh-upstream --apply
+          after=$(sha256sum .dograh-upstream/api/services/telephony/providers/ari/strategies.py)
+          test "$before" = "$after"
