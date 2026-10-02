@@ -93,52 +93,56 @@ export function DownlineSettings({
   const changed = draftValid && parsed !== limit;
 
   return (
-    <div
-      className="flex flex-wrap items-end gap-x-8 gap-y-3"
-      data-downline-settings={agency.tenantId}
-    >
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor={`numbers-limit-${agency.tenantId}`}
-          className="text-xs font-medium text-ink-2"
-        >
-          Numbers limit
-        </label>
-        <div className="flex items-center gap-2">
-          <Input
-            id={`numbers-limit-${agency.tenantId}`}
-            type="number"
-            min={0}
-            step={1}
-            inputMode="numeric"
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            className="h-8 w-24"
-            disabled={upgrades === null || saving !== null}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            disabled={upgrades === null || !changed || saving !== null}
-            onClick={() => {
-              if (parsed === null) return;
-              void save({ maxPhoneNumbers: parsed }, 'numbers').then(data => {
-                if (data) toast.success('Numbers limit saved', `${agency.name}: ${parsed}`);
-              });
-            }}
-          >
-            {saving === 'numbers' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-            Save
-          </Button>
-          <span className="t-meta tabular-nums text-ink-3">
-            {used !== null ? `${used} in use` : null}
-          </span>
+    <div className="flex flex-col gap-6" data-downline-settings={agency.tenantId}>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="t-label text-ink-2">Phone numbers</h3>
+          {used !== null ? (
+            <span className="t-meta tabular-nums text-ink-3">{`${used} in use`}</span>
+          ) : null}
         </div>
-      </div>
+        <div className="flex max-w-sm flex-col gap-1.5">
+          <label htmlFor={`numbers-limit-${agency.tenantId}`} className="t-meta text-ink-3">
+            Numbers limit
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              id={`numbers-limit-${agency.tenantId}`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={draft}
+              onChange={event => setDraft(event.target.value)}
+              className="h-9 w-28"
+              disabled={upgrades === null || saving !== null}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              disabled={upgrades === null || !changed || saving !== null}
+              onClick={() => {
+                if (parsed === null) return;
+                void save({ maxPhoneNumbers: parsed }, 'numbers').then(data => {
+                  if (data) toast.success('Numbers limit saved', `${agency.name}: ${parsed}`);
+                });
+              }}
+            >
+              {saving === 'numbers' ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Save limit
+            </Button>
+          </div>
+        </div>
+      </section>
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-ink-2">Upgrades</span>
+      <section className="flex flex-col gap-3 border-t border-rule pt-5">
+        <div>
+          <h3 className="t-label text-ink-2">Upgrades</h3>
+          <p className="t-meta mt-1 text-ink-3">
+            Each switch saves as you flip it. The agency sees the change on its next page load.
+          </p>
+        </div>
         <UpgradeSwitches
           value={upgrades}
           saving={saving}
@@ -155,8 +159,8 @@ export function DownlineSettings({
             });
           }}
         />
-      </div>
-      {loadError ? <p className="basis-full t-meta text-ink-3">{loadError}</p> : null}
+      </section>
+      {loadError ? <p className="t-meta text-dropped-ink">{loadError}</p> : null}
     </div>
   );
 }

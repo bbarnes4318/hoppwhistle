@@ -164,8 +164,6 @@ export default function NetworkAgencyPage(): JSX.Element {
     );
   }
 
-  const owner = detail ? OWNER_LABEL[detail.owner.status] : null;
-
   return (
     <div className="page-canvas">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
@@ -180,23 +178,7 @@ export default function NetworkAgencyPage(): JSX.Element {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h2 className="t-title truncate text-ink">{detail?.name ?? 'Agency'}</h2>
             {detail ? <StatusChip value={detail.status} enumName="TenantStatus" size="sm" /> : null}
-            {detail && owner ? (
-              <StatusChip
-                value={detail.owner.status}
-                label={owner.label}
-                tone={owner.tone}
-                size="sm"
-              />
-            ) : null}
           </div>
-          {detail?.owner.email ? (
-            <p className="t-meta text-ink-3">
-              {`Owner ${detail.owner.email}`}
-              {detail.owner.invitedAt
-                ? ` · invited ${formatDisplayDate(detail.owner.invitedAt)}`
-                : ''}
-            </p>
-          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -215,31 +197,15 @@ export default function NetworkAgencyPage(): JSX.Element {
 
       {error && !notFound ? <Notice tone="error" title={error} /> : null}
 
-      {detail && detail.owner.status !== 'ACCEPTED' ? (
-        <Notice
-          tone="warning"
-          title={
-            detail.owner.status === 'NOT_INVITED'
-              ? `${detail.name} has no owner yet`
-              : detail.owner.status === 'EXPIRED'
-                ? `The invitation to ${detail.owner.email ?? 'the owner'} has expired`
-                : `Waiting for ${detail.owner.email ?? 'the owner'} to accept`
-          }
-          action={
-            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
-              {detail.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Send a new link'}
-            </Button>
-          }
-        >
-          The owner signs in first, and then adds the agency&rsquo;s agents. Nobody at the agency
-          can sign in until they have.
-        </Notice>
-      ) : null}
-
       <PeriodToolbar state={state} resolved={detail?.period ?? null} label="Agency period" />
 
       <StatTileRow className="lg:grid-cols-5">
-        <StatTile label="Agents" value={count(detail?.stats.agents)} loading={!detail} />
+        <StatTile
+          size="hero"
+          label="Agents"
+          value={count(detail?.stats.agents)}
+          loading={!detail}
+        />
         <StatTile
           size="hero"
           label="Inbound calls"
@@ -267,47 +233,52 @@ export default function NetworkAgencyPage(): JSX.Element {
         />
       </StatTileRow>
 
-      {detail ? <DetailsPanel detail={detail} onSaved={() => void load()} /> : null}
-
       {detail ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Panel className="min-w-0 lg:col-span-2">
-            <PanelHeader>
-              <PanelTitle>Numbers and upgrades</PanelTitle>
-              <PanelDescription>
-                What you let this agency hold, and the upgrades you sell it.
-              </PanelDescription>
-            </PanelHeader>
-            <PanelBody>
-              <DownlineSettings agency={detail} onSaved={() => void load()} />
-            </PanelBody>
-          </Panel>
-          <Panel className="min-w-0" data-open-upgrade-requests="">
-            <PanelHeader>
-              <PanelTitle>Upgrade requests</PanelTitle>
-              <PanelDescription>Turning an upgrade on closes its request.</PanelDescription>
-            </PanelHeader>
-            <PanelBody>
-              {detail.openUpgradeRequests.length === 0 ? (
-                <p className="t-meta text-ink-3">No open requests.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {detail.openUpgradeRequests.map(request => (
-                    <li
-                      key={request.id}
-                      className="flex items-center justify-between gap-3"
-                      data-upgrade-request={request.upgradeKey}
-                    >
-                      <span className="t-body text-ink">{request.upgradeName}</span>
-                      <span className="t-meta text-ink-3">
-                        {`Asked ${formatDisplayDate(request.createdAt)}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </PanelBody>
-          </Panel>
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+            <DetailsPanel detail={detail} onSaved={() => void load()} />
+            <Panel className="min-w-0">
+              <PanelHeader>
+                <PanelTitle>Numbers and upgrades</PanelTitle>
+                <PanelDescription>
+                  What you let this agency hold, and the upgrades you sell it.
+                </PanelDescription>
+              </PanelHeader>
+              <PanelBody>
+                <DownlineSettings agency={detail} onSaved={() => void load()} />
+              </PanelBody>
+            </Panel>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4">
+            <OwnerPanel detail={detail} onInvite={() => setInviteOpen(true)} />
+            <Panel className="min-w-0" data-open-upgrade-requests="">
+              <PanelHeader>
+                <PanelTitle>Upgrade requests</PanelTitle>
+                <PanelDescription>Turning an upgrade on closes its request.</PanelDescription>
+              </PanelHeader>
+              <PanelBody>
+                {detail.openUpgradeRequests.length === 0 ? (
+                  <p className="t-meta text-ink-3">No open requests.</p>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-rule">
+                    {detail.openUpgradeRequests.map(request => (
+                      <li
+                        key={request.id}
+                        className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                        data-upgrade-request={request.upgradeKey}
+                      >
+                        <span className="t-body text-ink">{request.upgradeName}</span>
+                        <span className="t-meta text-ink-3">
+                          {`Asked ${formatDisplayDate(request.createdAt)}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </PanelBody>
+            </Panel>
+          </div>
         </div>
       ) : null}
 
@@ -333,6 +304,60 @@ export default function NetworkAgencyPage(): JSX.Element {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The agency's owner: who they are, where their invitation stands, and the one
+ * button that sends it. Always on the page, so the way to invite an owner never
+ * depends on noticing a banner.
+ */
+function OwnerPanel({
+  detail,
+  onInvite,
+}: {
+  detail: NetworkAgencyDetail;
+  onInvite: () => void;
+}): JSX.Element {
+  const owner = OWNER_LABEL[detail.owner.status];
+  const accepted = detail.owner.status === 'ACCEPTED';
+  const neverInvited = detail.owner.status === 'NOT_INVITED';
+
+  return (
+    <Panel className="min-w-0" data-agency-owner="">
+      <PanelHeader>
+        <PanelTitle>Owner</PanelTitle>
+        <PanelDescription>
+          {accepted
+            ? 'Signed in, and in charge of the agency’s agents.'
+            : 'The owner signs in first, then adds the agency’s agents.'}
+        </PanelDescription>
+      </PanelHeader>
+      <PanelBody className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip value={detail.owner.status} label={owner.label} tone={owner.tone} size="sm" />
+          {detail.owner.email ? (
+            <span className="t-body break-all text-ink">{detail.owner.email}</span>
+          ) : null}
+        </div>
+        {detail.owner.invitedAt ? (
+          <p className="t-meta text-ink-3">
+            {`Invited ${formatDisplayDate(detail.owner.invitedAt)}. The link works once and expires in seven days.`}
+          </p>
+        ) : null}
+        {accepted ? null : (
+          <Button
+            size="sm"
+            variant={neverInvited ? 'default' : 'outline'}
+            className="self-start"
+            onClick={onInvite}
+          >
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+            {neverInvited ? 'Invite owner' : 'Resend invite'}
+          </Button>
+        )}
+      </PanelBody>
+    </Panel>
   );
 }
 

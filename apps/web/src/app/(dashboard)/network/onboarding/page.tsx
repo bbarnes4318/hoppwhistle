@@ -201,7 +201,18 @@ function StepShell({
           ) : null
         }
       >
-        <PanelTitle>{`${index}. ${title}`}</PanelTitle>
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+              done ? 'bg-live text-white' : 'bg-brand-tint text-brand-ink'
+            )}
+          >
+            {index}
+          </span>
+          <PanelTitle>{title}</PanelTitle>
+        </div>
       </PanelHeader>
       <PanelBody className="flex flex-col gap-3">{children}</PanelBody>
     </Panel>
@@ -254,7 +265,7 @@ function StepOne({
 
   if (done && selected) {
     return (
-      <StepShell index={1} title="The agency" done>
+      <StepShell index={1} title="Create the agency" done>
         <p className="t-body text-ink">{selected.name}</p>
         <Button variant="outline" size="sm" className="self-start" onClick={onStartOver}>
           Onboard another agency
@@ -275,22 +286,32 @@ function StepOne({
   );
 
   return (
-    <StepShell index={1} title="The agency" done={false}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {field('name', 'Agency name')}
-        {field('legalName', 'Legal name')}
-        {field('state', 'State', { maxLength: 2, placeholder: 'TX' })}
-        {field('licensedAgents', 'Licensed agents', { type: 'number', min: 1 })}
-        {field('contactName', 'Contact name')}
-        {field('contactEmail', 'Contact email', { type: 'email' })}
-        {field('contactPhone', 'Contact phone', { type: 'tel' })}
-        {field('timezone', 'Time zone')}
-        {field('deliveryStart', 'Takes calls from', { type: 'time' })}
-        {field('deliveryEnd', 'Until', { type: 'time' })}
-      </div>
-      <fieldset>
-        <legend className="t-label text-ink-3">Days it takes calls</legend>
-        <div className="mt-1 flex flex-wrap gap-2">
+    <StepShell index={1} title="Create the agency" done={false}>
+      <section className="flex flex-col gap-3">
+        <h3 className="t-label text-ink-2">The agency</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {field('name', 'Agency name')}
+          {field('legalName', 'Legal name')}
+          {field('state', 'State', { maxLength: 2, placeholder: 'TX' })}
+          {field('licensedAgents', 'Licensed agents', { type: 'number', min: 1 })}
+        </div>
+      </section>
+      <section className="flex flex-col gap-3 border-t border-rule pt-4">
+        <h3 className="t-label text-ink-2">Primary contact</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {field('contactName', 'Contact name')}
+          {field('contactEmail', 'Contact email', { type: 'email' })}
+          {field('contactPhone', 'Contact phone', { type: 'tel' })}
+        </div>
+      </section>
+      <section className="flex flex-col gap-3 border-t border-rule pt-4">
+        <h3 className="t-label text-ink-2">When it takes calls</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {field('timezone', 'Time zone')}
+          {field('deliveryStart', 'From', { type: 'time' })}
+          {field('deliveryEnd', 'Until', { type: 'time' })}
+        </div>
+        <div className="flex flex-wrap gap-2">
           {DAYS.map(day => {
             const on = form.deliveryDays.includes(day);
             return (
@@ -316,7 +337,7 @@ function StepOne({
             );
           })}
         </div>
-      </fieldset>
+      </section>
       {problems.length > 0 ? (
         <ul className="list-disc pl-5 t-meta text-dropped-ink">
           {problems.map(problem => (
@@ -385,11 +406,19 @@ function StepTwo({
   }
 
   return (
-    <StepShell index={2} title="Its owner" done={done}>
+    <StepShell index={2} title="Invite its owner" done={done}>
       {!agency ? (
-        <p className="t-meta text-ink-3">
-          Create the agency first, or pick one waiting on its owner.
-        </p>
+        <div className="flex flex-col gap-3">
+          <p className="t-body text-ink">Once the agency exists, you invite its owner here.</p>
+          <ul className="flex list-disc flex-col gap-1 pl-5 t-meta text-ink-3">
+            <li>They get an email with a single-use link to create their sign-in.</li>
+            <li>The link expires in seven days. You can issue a new one at any time.</li>
+            <li>The owner then adds the agency&rsquo;s agents themselves.</li>
+          </ul>
+          <p className="t-meta text-ink-3">
+            Onboarded an agency already? Pick it from the list below.
+          </p>
+        </div>
       ) : done ? (
         <p className="t-body text-ink">{`${agency.owner.email ?? 'The owner'} has signed in.`}</p>
       ) : (
