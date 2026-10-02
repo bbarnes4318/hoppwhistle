@@ -51,13 +51,14 @@ export function CampaignAgentsTab({
   const [adding, setAdding] = useState('');
 
   const load = useCallback(async () => {
-    const response = await apiClient.get<Roster>('/api/v1/agent-roster');
-    if (response.error || !response.data) {
+    // The roster comes wrapped in `{ data }`, as Team Members reads it.
+    const response = await apiClient.get<{ data: Roster }>('/api/v1/agent-roster');
+    if (response.error || !response.data?.data) {
       setError(response.error?.message ?? 'The agents could not be loaded.');
       return;
     }
     setError(null);
-    setRoster(response.data);
+    setRoster(response.data.data);
   }, []);
 
   useEffect(() => {
@@ -110,7 +111,13 @@ export function CampaignAgentsTab({
             <Select value={adding} onValueChange={setAdding} disabled={available.length === 0}>
               <SelectTrigger className="h-8 w-56" aria-label="Agent to add">
                 <SelectValue
-                  placeholder={available.length === 0 ? 'Every agent is on it' : 'Choose an agent'}
+                  placeholder={
+                    available.length > 0
+                      ? 'Choose an agent'
+                      : roster?.agents.length
+                        ? 'Every agent is on it'
+                        : 'No agents yet'
+                  }
                 />
               </SelectTrigger>
               <SelectContent>
