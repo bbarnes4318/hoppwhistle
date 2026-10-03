@@ -652,7 +652,8 @@ describe('one list, read by everyone who takes a screen away', () => {
 });
 
 describe('Agreements: platform admins only', () => {
-  const hrefsOf = (groups: NavGroup[]) => groups.flatMap(group => group.items).map(item => item.href);
+  const hrefsOf = (groups: NavGroup[]) =>
+    groups.flatMap(group => group.items).map(item => item.href);
 
   it('sits in PLATFORM_NAV Admin, directly after Onboard an agency', () => {
     const admin = PLATFORM_NAV.find(group => group.label === 'Admin')!;

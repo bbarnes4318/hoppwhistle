@@ -24,12 +24,7 @@ export function isTrustedProxyAddress(raw: string | undefined | null): boolean {
   if (address === '::1') return true;
   if (isIP(address) === 4) {
     const [a, b] = address.split('.').map(Number);
-    return (
-      a === 127 ||
-      a === 10 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
-    );
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
   }
   if (isIP(address) === 6) {
     const lower = address.toLowerCase();

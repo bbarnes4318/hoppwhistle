@@ -139,9 +139,16 @@ function EmailChips({
       {values.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {values.map(email => (
-            <span key={email} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-xs">
+            <span
+              key={email}
+              className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-xs"
+            >
               {email}
-              <button type="button" aria-label={`Remove ${email}`} onClick={() => onChange(values.filter(v => v !== email))}>
+              <button
+                type="button"
+                aria-label={`Remove ${email}`}
+                onClick={() => onChange(values.filter(v => v !== email))}
+              >
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -195,12 +202,16 @@ function ScheduleFields({
                 onClick={() =>
                   onChange({
                     ...value,
-                    deliveryDays: on ? value.deliveryDays.filter(d => d !== day) : [...value.deliveryDays, day],
+                    deliveryDays: on
+                      ? value.deliveryDays.filter(d => d !== day)
+                      : [...value.deliveryDays, day],
                   })
                 }
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs',
-                  on ? 'border-brand-strong bg-brand-tint text-brand-ink' : 'border-rule-strong bg-surface text-ink-2'
+                  on
+                    ? 'border-brand-strong bg-brand-tint text-brand-ink'
+                    : 'border-rule-strong bg-surface text-ink-2'
                 )}
               >
                 {DAY_SHORT[day]}
@@ -286,7 +297,11 @@ export default function NewAgreementPage(): JSX.Element {
   const [signatory, setSignatory] = useState({ name: '', title: '' });
   const [authority, setAuthority] = useState(false);
 
-  const [previewDocs, setPreviewDocs] = useState<Array<{ kind: string; title: string; html: string }> | null>(null);
+  const [previewDocs, setPreviewDocs] = useState<Array<{
+    kind: string;
+    title: string;
+    html: string;
+  }> | null>(null);
   const [previewTab, setPreviewTab] = useState(0);
   const [previewedFor, setPreviewedFor] = useState<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'send' | null>(null);
@@ -296,9 +311,9 @@ export default function NewAgreementPage(): JSX.Element {
 
   useEffect(() => {
     void apiClient
-      .get<Envelope<{ defaultSignatoryName: string; defaultSignatoryTitle: string }>>(
-        '/api/v1/platform/agreements/settings'
-      )
+      .get<
+        Envelope<{ defaultSignatoryName: string; defaultSignatoryTitle: string }>
+      >('/api/v1/platform/agreements/settings')
       .then(response => {
         const s = payload(response);
         if (s) setSignatory({ name: s.defaultSignatoryName, title: s.defaultSignatoryTitle });
@@ -308,9 +323,9 @@ export default function NewAgreementPage(): JSX.Element {
   useEffect(() => {
     const handle = setTimeout(() => {
       void apiClient
-        .get<Envelope<AgencyOption[]>>(
-          `/api/v1/platform/agreements/agencies?q=${encodeURIComponent(agencyQuery.trim())}`
-        )
+        .get<
+          Envelope<AgencyOption[]>
+        >(`/api/v1/platform/agreements/agencies?q=${encodeURIComponent(agencyQuery.trim())}`)
         .then(response => setAgencyOptions(payload(response) ?? []));
     }, 250);
     return () => clearTimeout(handle);
@@ -319,7 +334,11 @@ export default function NewAgreementPage(): JSX.Element {
   // The signer defaults to the principal at the notice email, until edited.
   useEffect(() => {
     if (signerTouched) return;
-    setSigner({ name: agency.principalName, title: agency.principalTitle, email: agency.noticeEmail });
+    setSigner({
+      name: agency.principalName,
+      title: agency.principalTitle,
+      email: agency.noticeEmail,
+    });
   }, [agency.principalName, agency.principalTitle, agency.noticeEmail, signerTouched]);
 
   function chooseAgency(option: AgencyOption | null): void {
@@ -337,7 +356,8 @@ export default function NewAgreementPage(): JSX.Element {
       noticePhone: option.contactPhone,
     }));
     const schedule: Schedule = {
-      deliveryDays: option.deliveryDays.length > 0 ? option.deliveryDays : DEFAULT_SCHEDULE.deliveryDays,
+      deliveryDays:
+        option.deliveryDays.length > 0 ? option.deliveryDays : DEFAULT_SCHEDULE.deliveryDays,
       deliveryStart: option.deliveryStartTime || DEFAULT_SCHEDULE.deliveryStart,
       deliveryEnd: option.deliveryEndTime || DEFAULT_SCHEDULE.deliveryEnd,
       firstDeliveryDay: '',
@@ -359,7 +379,8 @@ export default function NewAgreementPage(): JSX.Element {
       billingEmail: billingSame ? agency.noticeEmail : agency.billingEmail,
       billingPhone: billingSame ? agency.noticePhone : agency.billingPhone,
     };
-    const existing = msaMode === 'existing' && selectedAgency?.executedMsa ? selectedAgency.executedMsa : null;
+    const existing =
+      msaMode === 'existing' && selectedAgency?.executedMsa ? selectedAgency.executedMsa : null;
     return {
       tenantId: selectedAgency?.id ?? null,
       includesCpa,
@@ -374,7 +395,11 @@ export default function NewAgreementPage(): JSX.Element {
               verticals: Object.fromEntries(
                 VERTICALS.map(v => [
                   v,
-                  { selected: cpaRows[v].selected, rate: num(cpaRows[v].rate) ?? 0, dailyBlock: num(cpaRows[v].dailyBlock) },
+                  {
+                    selected: cpaRows[v].selected,
+                    rate: num(cpaRows[v].rate) ?? 0,
+                    dailyBlock: num(cpaRows[v].dailyBlock),
+                  },
                 ])
               ),
               ...scheduleOut(cpaSchedule),
@@ -423,10 +448,9 @@ export default function NewAgreementPage(): JSX.Element {
   async function preview(): Promise<void> {
     setBusy('preview');
     setError(null);
-    const response = await apiClient.post<Envelope<{ documents: Array<{ kind: string; title: string; html: string }> }>>(
-      '/api/v1/platform/agreements/preview',
-      requestBody
-    );
+    const response = await apiClient.post<
+      Envelope<{ documents: Array<{ kind: string; title: string; html: string }> }>
+    >('/api/v1/platform/agreements/preview', requestBody);
     setBusy(null);
     if (response.error) {
       setError(response.error.message);
@@ -458,7 +482,11 @@ export default function NewAgreementPage(): JSX.Element {
     }
   }
 
-  const agencyField = (key: keyof typeof agency, label: string, props: Record<string, unknown> = {}) => (
+  const agencyField = (
+    key: keyof typeof agency,
+    label: string,
+    props: Record<string, unknown> = {}
+  ) => (
     <Field id={`agency-${key}`} label={label}>
       <Input
         id={`agency-${key}`}
@@ -492,24 +520,42 @@ export default function NewAgreementPage(): JSX.Element {
           <PanelBody className="space-y-4">
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={includesCpa} onChange={e => setIncludesCpa(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={includesCpa}
+                  onChange={e => setIncludesCpa(e.target.checked)}
+                />
                 CPA Agreement (pay per submitted application)
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={includesCpl} onChange={e => setIncludesCpl(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={includesCpl}
+                  onChange={e => setIncludesCpl(e.target.checked)}
+                />
                 CPL Agreement (pay per billable call)
               </label>
               {!includesCpa && !includesCpl && (
-                <p className="text-[11px] text-dropped-ink">Choose at least one campaign agreement.</p>
+                <p className="text-[11px] text-dropped-ink">
+                  Choose at least one campaign agreement.
+                </p>
               )}
             </div>
             <div className="space-y-2 border-t border-rule pt-3">
               <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="msa" checked={msaMode === 'new'} onChange={() => setMsaMode('new')} />
+                <input
+                  type="radio"
+                  name="msa"
+                  checked={msaMode === 'new'}
+                  onChange={() => setMsaMode('new')}
+                />
                 Include a new Master Services Agreement
               </label>
               <label
-                className={cn('flex items-center gap-2 text-sm', !selectedAgency?.executedMsa && 'text-ink-3')}
+                className={cn(
+                  'flex items-center gap-2 text-sm',
+                  !selectedAgency?.executedMsa && 'text-ink-3'
+                )}
               >
                 <input
                   type="radio"
@@ -521,7 +567,8 @@ export default function NewAgreementPage(): JSX.Element {
                 This agency already has an executed MSA
                 {selectedAgency?.executedMsa && (
                   <span className="text-xs text-ink-3">
-                    ({selectedAgency.executedMsa.reference}, effective {selectedAgency.executedMsa.effectiveDate})
+                    ({selectedAgency.executedMsa.reference}, effective{' '}
+                    {selectedAgency.executedMsa.effectiveDate})
                   </span>
                 )}
               </label>
@@ -590,7 +637,11 @@ export default function NewAgreementPage(): JSX.Element {
               {agencyField('noticePhone', 'Notice phone')}
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={billingSame} onChange={e => setBillingSame(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={billingSame}
+                onChange={e => setBillingSame(e.target.checked)}
+              />
               Billing email and phone same as notice
             </label>
             {!billingSame && (
@@ -637,7 +688,12 @@ export default function NewAgreementPage(): JSX.Element {
                             type="checkbox"
                             aria-label={`Select ${VERTICAL_NAMES[v]}`}
                             checked={cpaRows[v].selected}
-                            onChange={e => setCpaRows({ ...cpaRows, [v]: { ...cpaRows[v], selected: e.target.checked } })}
+                            onChange={e =>
+                              setCpaRows({
+                                ...cpaRows,
+                                [v]: { ...cpaRows[v], selected: e.target.checked },
+                              })
+                            }
                           />
                         </td>
                         <td className="py-1 pr-3">
@@ -647,7 +703,12 @@ export default function NewAgreementPage(): JSX.Element {
                             min={0}
                             step="0.01"
                             value={cpaRows[v].rate}
-                            onChange={e => setCpaRows({ ...cpaRows, [v]: { ...cpaRows[v], rate: e.target.value } })}
+                            onChange={e =>
+                              setCpaRows({
+                                ...cpaRows,
+                                [v]: { ...cpaRows[v], rate: e.target.value },
+                              })
+                            }
                           />
                         </td>
                         <td className="py-1">
@@ -658,7 +719,12 @@ export default function NewAgreementPage(): JSX.Element {
                             step="1"
                             disabled={!cpaRows[v].selected}
                             value={cpaRows[v].dailyBlock}
-                            onChange={e => setCpaRows({ ...cpaRows, [v]: { ...cpaRows[v], dailyBlock: e.target.value } })}
+                            onChange={e =>
+                              setCpaRows({
+                                ...cpaRows,
+                                [v]: { ...cpaRows[v], dailyBlock: e.target.value },
+                              })
+                            }
                           />
                         </td>
                       </tr>
@@ -697,7 +763,12 @@ export default function NewAgreementPage(): JSX.Element {
                             type="checkbox"
                             aria-label={`Select ${VERTICAL_NAMES[v]} CPL`}
                             checked={cplRows[v].selected}
-                            onChange={e => setCplRows({ ...cplRows, [v]: { ...cplRows[v], selected: e.target.checked } })}
+                            onChange={e =>
+                              setCplRows({
+                                ...cplRows,
+                                [v]: { ...cplRows[v], selected: e.target.checked },
+                              })
+                            }
                           />
                         </td>
                         {(['rate', 'bufferSeconds', 'dailyBlock'] as const).map(key => (
@@ -709,7 +780,12 @@ export default function NewAgreementPage(): JSX.Element {
                               step={key === 'rate' ? '0.01' : '1'}
                               disabled={!cplRows[v].selected}
                               value={cplRows[v][key]}
-                              onChange={e => setCplRows({ ...cplRows, [v]: { ...cplRows[v], [key]: e.target.value } })}
+                              onChange={e =>
+                                setCplRows({
+                                  ...cplRows,
+                                  [v]: { ...cplRows[v], [key]: e.target.value },
+                                })
+                              }
                             />
                           </td>
                         ))}
@@ -744,7 +820,8 @@ export default function NewAgreementPage(): JSX.Element {
               ))}
             </div>
             <p className="text-[11px] text-ink-3">
-              The agreements are issued to this named person: they must type this exact name to sign.
+              The agreements are issued to this named person: they must type this exact name to
+              sign.
             </p>
             <Field id="cc" label="Copy recipients (receive the executed copies; up to 10)">
               <EmailChips id="cc" values={ccEmails} onChange={setCcEmails} max={10} />
@@ -795,11 +872,22 @@ export default function NewAgreementPage(): JSX.Element {
 
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" disabled={busy !== null} onClick={() => void preview()}>
-            {busy === 'preview' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Eye className="mr-1.5 h-4 w-4" />}
+            {busy === 'preview' ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Eye className="mr-1.5 h-4 w-4" />
+            )}
             Preview
           </Button>
-          <Button disabled={busy !== null || !previewCurrent || !authority} onClick={() => void send()}>
-            {busy === 'send' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+          <Button
+            disabled={busy !== null || !previewCurrent || !authority}
+            onClick={() => void send()}
+          >
+            {busy === 'send' ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-1.5 h-4 w-4" />
+            )}
             Sign and send
           </Button>
           <span className="text-xs text-ink-3">
@@ -817,7 +905,8 @@ export default function NewAgreementPage(): JSX.Element {
           <DialogHeader>
             <DialogTitle>Preview</DialogTitle>
             <DialogDescription>
-              Exactly as the signer will receive them. NetEnroll&rsquo;s signature is applied at send.
+              Exactly as the signer will receive them. NetEnroll&rsquo;s signature is applied at
+              send.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-1" role="tablist">
@@ -859,11 +948,13 @@ export default function NewAgreementPage(): JSX.Element {
           <DialogHeader>
             <DialogTitle>The email was not sent</DialogTitle>
             <DialogDescription>
-              The agreements are signed for NetEnroll and recorded, but the invitation email could not be
-              sent. Send the signer this link yourself. It works only for {signer.email}.
+              The agreements are signed for NetEnroll and recorded, but the invitation email could
+              not be sent. Send the signer this link yourself. It works only for {signer.email}.
             </DialogDescription>
           </DialogHeader>
-          <code className="block break-all rounded-control bg-sunken p-2 text-xs">{notSent?.signUrl}</code>
+          <code className="block break-all rounded-control bg-sunken p-2 text-xs">
+            {notSent?.signUrl}
+          </code>
           <DialogFooter>
             <Button
               variant="outline"

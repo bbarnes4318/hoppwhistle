@@ -64,7 +64,9 @@ export default function AgreementSettingsPage(): JSX.Element {
       return;
     }
     setError(null);
-    setSettings(s => (s ? { ...s, internalCopyEmails: Array.from(new Set([...s.internalCopyEmails, value])) } : s));
+    setSettings(s =>
+      s ? { ...s, internalCopyEmails: Array.from(new Set([...s.internalCopyEmails, value])) } : s
+    );
     setChip('');
   }
 
@@ -72,13 +74,16 @@ export default function AgreementSettingsPage(): JSX.Element {
     if (!settings) return;
     setBusy(true);
     setNotice(null);
-    const response = await apiClient.put<Envelope<Settings>>('/api/v1/platform/agreements/settings', {
-      netenrollNoticeAddress: settings.netenrollNoticeAddress ?? '',
-      netenrollNoticeEmail: settings.netenrollNoticeEmail ?? '',
-      defaultSignatoryName: settings.defaultSignatoryName,
-      defaultSignatoryTitle: settings.defaultSignatoryTitle,
-      internalCopyEmails: settings.internalCopyEmails,
-    });
+    const response = await apiClient.put<Envelope<Settings>>(
+      '/api/v1/platform/agreements/settings',
+      {
+        netenrollNoticeAddress: settings.netenrollNoticeAddress ?? '',
+        netenrollNoticeEmail: settings.netenrollNoticeEmail ?? '',
+        defaultSignatoryName: settings.defaultSignatoryName,
+        defaultSignatoryTitle: settings.defaultSignatoryTitle,
+        internalCopyEmails: settings.internalCopyEmails,
+      }
+    );
     setBusy(false);
     if (response.error) {
       setError(response.error.message);
@@ -87,7 +92,9 @@ export default function AgreementSettingsPage(): JSX.Element {
     const saved = payload(response);
     if (saved) setSettings(saved);
     setError(null);
-    setNotice(saved?.missing ? `Saved. Sending stays blocked: ${saved.missing} is empty.` : 'Saved.');
+    setNotice(
+      saved?.missing ? `Saved. Sending stays blocked: ${saved.missing} is empty.` : 'Saved.'
+    );
   }
 
   return (
@@ -163,7 +170,10 @@ export default function AgreementSettingsPage(): JSX.Element {
             </label>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {settings.internalCopyEmails.map(email => (
-                <span key={email} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-xs">
+                <span
+                  key={email}
+                  className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-xs"
+                >
                   {email}
                   <button
                     type="button"
@@ -198,7 +208,9 @@ export default function AgreementSettingsPage(): JSX.Element {
                 Add
               </Button>
             </div>
-            <p className="mt-1 text-[11px] text-ink-3">These addresses receive every executed copy.</p>
+            <p className="mt-1 text-[11px] text-ink-3">
+              These addresses receive every executed copy.
+            </p>
           </div>
 
           {error && <p className="text-sm text-dropped-ink">{error}</p>}

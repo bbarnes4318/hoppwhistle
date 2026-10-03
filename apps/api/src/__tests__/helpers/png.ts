@@ -33,4 +33,3 @@ export function testPng(width: number, height: number): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-

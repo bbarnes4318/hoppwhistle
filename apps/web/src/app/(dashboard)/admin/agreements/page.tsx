@@ -228,11 +228,15 @@ export default function AgreementsPage(): JSX.Element {
                     <td className="px-3 py-2">
                       <Badge variant={STATUS_TONES[row.status]}>{STATUS_LABELS[row.status]}</Badge>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">{etDateTime(row.sentAt)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">
+                      {etDateTime(row.sentAt)}
+                    </td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">
                       {etDateTime(row.lastActivityAt ?? row.sentAt)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">{etDateTime(row.completedAt)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-2">
+                      {etDateTime(row.completedAt)}
+                    </td>
                   </tr>
                 ))}
             </tbody>
@@ -242,13 +246,23 @@ export default function AgreementsPage(): JSX.Element {
 
       {pages > 1 && (
         <div className="flex items-center justify-end gap-2 text-sm text-ink-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage(p => p - 1)}
+          >
             Previous
           </Button>
           <span>
             Page {page} of {pages}
           </span>
-          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(p => p + 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= pages}
+            onClick={() => setPage(p => p + 1)}
+          >
             Next
           </Button>
         </div>

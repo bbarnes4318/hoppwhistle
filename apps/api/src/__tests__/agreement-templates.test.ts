@@ -370,9 +370,15 @@ describe('agreement templates: the legal text is verbatim', () => {
   });
 
   it('starts the MSA signatures, and each campaign section 2, on a new page', () => {
-    expect(msa.html).toMatch(/<section class="section new-page">\s*<h2 class="section-title">SIGNATURES/);
-    expect(cpa.html).toMatch(/<section class="section new-page">\s*<h2 class="section-title">2\. CAMPAIGN/);
-    expect(cpl.html).toMatch(/<section class="section new-page">\s*<h2 class="section-title">2\. CAMPAIGN/);
+    expect(msa.html).toMatch(
+      /<section class="section new-page">\s*<h2 class="section-title">SIGNATURES/
+    );
+    expect(cpa.html).toMatch(
+      /<section class="section new-page">\s*<h2 class="section-title">2\. CAMPAIGN/
+    );
+    expect(cpl.html).toMatch(
+      /<section class="section new-page">\s*<h2 class="section-title">2\. CAMPAIGN/
+    );
   });
 
   it('is fully self-contained: no external URL anywhere', () => {
@@ -393,7 +399,9 @@ describe('agreement templates: agency-supplied values are escaped', () => {
     const { msa, cpa, cpl } = render(hostile);
     for (const doc of [msa, cpa, cpl]) {
       expect(doc.html).not.toContain('<script>');
-      expect(doc.html).toContain('Acme &lt;script&gt;alert(1)&lt;/script&gt; &quot;Quoted&quot; LLC');
+      expect(doc.html).toContain(
+        'Acme &lt;script&gt;alert(1)&lt;/script&gt; &quot;Quoted&quot; LLC'
+      );
     }
     expect(plainText(msa.html)).toContain('Acme <script>alert(1)</script> "Quoted" LLC');
   });

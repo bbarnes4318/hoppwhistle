@@ -295,7 +295,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
               select: { id: true, reference: true, tenantId: true, terms: true, completedAt: true },
             });
       const latest = new Map<string, (typeof msas)[number]>();
-      for (const row of msas) if (row.tenantId && !latest.has(row.tenantId)) latest.set(row.tenantId, row);
+      for (const row of msas)
+        if (row.tenantId && !latest.has(row.tenantId)) latest.set(row.tenantId, row);
       return reply.send({
         data: profiles.map(p => {
           const msa = latest.get(p.tenantId);
@@ -550,7 +551,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       });
       return reply
         .header('Content-Type', 'text/html; charset=utf-8')
-        .header('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'")
+        .header(
+          'Content-Security-Policy',
+          "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"
+        )
         .header('X-Content-Type-Options', 'nosniff')
         .send(doc.sentHtml);
     }
@@ -620,7 +624,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       return reply.code(500).send({
         error: {
           code: 'INTEGRITY_CHECK_FAILED',
-          message: 'This file failed its integrity check and was not served. NetEnroll has been notified.',
+          message:
+            'This file failed its integrity check and was not served. NetEnroll has been notified.',
         },
       });
     }
@@ -644,7 +649,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const envelope = await loadEnvelope(request.params.id);
       if (!envelope) return notFound(reply);
       await expireStaleEnvelopes(prisma, envelope.id);
-      const current = await prisma.agreementEnvelope.findUniqueOrThrow({ where: { id: envelope.id } });
+      const current = await prisma.agreementEnvelope.findUniqueOrThrow({
+        where: { id: envelope.id },
+      });
       if (!OPEN.includes(current.status)) {
         return reply.code(409).send({
           error: {
@@ -656,7 +663,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const token = decryptField(current.signTokenEnc);
       if (!token) {
         return reply.code(409).send({
-          error: { code: 'NO_LINK', message: 'The signing link for this agreement cannot be rebuilt.' },
+          error: {
+            code: 'NO_LINK',
+            message: 'The signing link for this agreement cannot be rebuilt.',
+          },
         });
       }
       const signUrl = signUrlFor(token);
@@ -699,7 +709,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const parsed = z
         .object({ reason: z.string().trim().min(1).max(500) })
         .safeParse(request.body);
-      if (!parsed.success) return validation(reply, 'Give a reason for voiding (1–500 characters).');
+      if (!parsed.success)
+        return validation(reply, 'Give a reason for voiding (1–500 characters).');
       const envelope = await loadEnvelope(request.params.id);
       if (!envelope) return notFound(reply);
       if (envelope.status === 'COMPLETED') {
@@ -712,7 +723,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         });
       }
       if (envelope.status === 'VOIDED') {
-        return reply.code(409).send({ error: { code: 'ALREADY_VOIDED', message: 'Already voided.' } });
+        return reply
+          .code(409)
+          .send({ error: { code: 'ALREADY_VOIDED', message: 'Already voided.' } });
       }
       const actor = await actorOf(request);
       const voided = await prisma.$transaction(async tx => {
@@ -766,7 +779,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       if (!envelope) return notFound(reply);
       if (envelope.status !== 'COMPLETED') {
         return reply.code(409).send({
-          error: { code: 'NOT_COMPLETED', message: 'Copies can be sent once the agreement is completed.' },
+          error: {
+            code: 'NOT_COMPLETED',
+            message: 'Copies can be sent once the agreement is completed.',
+          },
         });
       }
       const download = mintToken();
@@ -799,10 +815,20 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           },
         });
       } catch (error) {
-        await audit(request, 'agreements.copies_sent', envelope, {}, false, (error as Error).message);
+        await audit(
+          request,
+          'agreements.copies_sent',
+          envelope,
+          {},
+          false,
+          (error as Error).message
+        );
         if ((error as { code?: string }).code === 'AGREEMENT_PDF_HASH_MISMATCH') {
           return reply.code(500).send({
-            error: { code: 'INTEGRITY_CHECK_FAILED', message: 'An executed file failed its integrity check.' },
+            error: {
+              code: 'INTEGRITY_CHECK_FAILED',
+              message: 'An executed file failed its integrity check.',
+            },
           });
         }
         throw error;
@@ -829,12 +855,18 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         await audit(request, 'agreements.completion_retried', envelope, {
           alreadyCompleted: result.alreadyCompleted,
         });
-        return reply.send({ data: { status: 'COMPLETED', alreadyCompleted: result.alreadyCompleted } });
+        return reply.send({
+          data: { status: 'COMPLETED', alreadyCompleted: result.alreadyCompleted },
+        });
       } catch (error) {
         const message = (error as Error).message;
         await recordEvent(
           envelope.id,
-          { type: 'COMPLETION_FAILED', actorType: 'SYSTEM', detail: { error: message, trigger: 'admin' } },
+          {
+            type: 'COMPLETION_FAILED',
+            actorType: 'SYSTEM',
+            detail: { error: message, trigger: 'admin' },
+          },
           prisma
         );
         await audit(request, 'agreements.completion_retried', envelope, {}, false, message);
@@ -849,13 +881,25 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
   // ════════════════════════════════════════════════════════════════════════
 
   const tokenLimit = {
-    rateLimit: { max: 20, timeWindow: '1 minute', keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown' },
+    rateLimit: {
+      max: 20,
+      timeWindow: '1 minute',
+      keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown',
+    },
   };
   const otpLimit = {
-    rateLimit: { max: 5, timeWindow: '1 minute', keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown' },
+    rateLimit: {
+      max: 5,
+      timeWindow: '1 minute',
+      keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown',
+    },
   };
   const verifyLimit = {
-    rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown' },
+    rateLimit: {
+      max: 10,
+      timeWindow: '1 minute',
+      keyGenerator: (r: FastifyRequest) => clientIp(r) ?? 'unknown',
+    },
   };
 
   type LoadedEnvelope = NonNullable<Awaited<ReturnType<typeof loadEnvelope>>>;
@@ -867,10 +911,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
    * status and NetEnroll's notice email. Signed or completed → 200 with the
    * status and nothing else. Otherwise the envelope, for the handler.
    */
-  async function resolveSign(
-    token: string,
-    reply: FastifyReply
-  ): Promise<LoadedEnvelope | null> {
+  async function resolveSign(token: string, reply: FastifyReply): Promise<LoadedEnvelope | null> {
     const found = await prisma.agreementEnvelope.findUnique({
       where: { signTokenHash: hashToken(token) },
       select: { id: true, status: true, expiresAt: true },
@@ -919,7 +960,11 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const session = await prisma.agreementSigningSession.findUnique({
         where: { tokenHash: hashToken(token) },
       });
-      if (session && session.envelopeId === envelope.id && session.expiresAt.getTime() > Date.now()) {
+      if (
+        session &&
+        session.envelopeId === envelope.id &&
+        session.expiresAt.getTime() > Date.now()
+      ) {
         return true;
       }
     }
@@ -977,7 +1022,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const envelope = await resolveSign(request.params.token, reply);
       if (!envelope) return reply;
       const recent = await prisma.agreementOtp.count({
-        where: { envelopeId: envelope.id, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+        where: {
+          envelopeId: envelope.id,
+          createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+        },
       });
       if (recent >= OTP_MAX_PER_HOUR) {
         return reply.code(429).send({
@@ -1021,7 +1069,11 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         });
       }
       return reply.send({
-        data: { sent: true, to: maskEmail(envelope.signerEmail), expiresInSeconds: OTP_TTL_MS / 1000 },
+        data: {
+          sent: true,
+          to: maskEmail(envelope.signerEmail),
+          expiresInSeconds: OTP_TTL_MS / 1000,
+        },
       });
     }
   );
@@ -1032,7 +1084,14 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     async (request, reply) => {
       const envelope = await resolveSign(request.params.token, reply);
       if (!envelope) return reply;
-      const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).safeParse(request.body);
+      const parsed = z
+        .object({
+          code: z
+            .string()
+            .trim()
+            .regex(/^\d{6}$/),
+        })
+        .safeParse(request.body);
       if (!parsed.success) return validation(reply, 'Enter the 6-digit code from your email.');
 
       const otp = await prisma.agreementOtp.findFirst({
@@ -1091,7 +1150,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       });
       if (claimed.count === 0) {
         return reply.code(400).send({
-          error: { code: 'CODE_EXPIRED', message: 'That code has already been used. Request a new one.' },
+          error: {
+            code: 'CODE_EXPIRED',
+            message: 'That code has already been used. Request a new one.',
+          },
         });
       }
       const session = mintToken();
@@ -1374,7 +1436,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             initials,
             method: body.method,
             signatureImageSha256,
-            documentHashes: Object.fromEntries(envelope.documents.map(d => [d.id, d.sentHtmlSha256])),
+            documentHashes: Object.fromEntries(
+              envelope.documents.map(d => [d.id, d.sentHtmlSha256])
+            ),
             intentStatement: intent,
             acceptanceStatements: Object.fromEntries(
               envelope.documents.map(d => [d.id, acceptanceStatement(d.title)])
@@ -1384,7 +1448,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         return true;
       });
       if (!committed) {
-        const now = await prisma.agreementEnvelope.findUniqueOrThrow({ where: { id: envelope.id } });
+        const now = await prisma.agreementEnvelope.findUniqueOrThrow({
+          where: { id: envelope.id },
+        });
         return reply.send({ data: { status: now.status } });
       }
 
@@ -1400,10 +1466,18 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         });
       } catch (error) {
         const message = (error as Error).message;
-        logger.error({ msg: 'Agreement completion failed after signing', envelopeId: envelope.id, err: error });
+        logger.error({
+          msg: 'Agreement completion failed after signing',
+          envelopeId: envelope.id,
+          err: error,
+        });
         await recordEvent(
           envelope.id,
-          { type: 'COMPLETION_FAILED', actorType: 'SYSTEM', detail: { error: message, trigger: 'signing' } },
+          {
+            type: 'COMPLETION_FAILED',
+            actorType: 'SYSTEM',
+            detail: { error: message, trigger: 'signing' },
+          },
           prisma
         ).catch((err: unknown) => logger.error({ msg: 'Could not record COMPLETION_FAILED', err }));
         const settings = await loadAgreementSettings(prisma).catch(() => null);
@@ -1422,7 +1496,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         return reply.send({
           data: {
             status: 'SIGNED',
-            message: 'Your signature is recorded. Your executed copies will be emailed to you shortly.',
+            message:
+              'Your signature is recorded. Your executed copies will be emailed to you shortly.',
             email: envelope.signerEmail,
           },
         });
@@ -1438,12 +1513,17 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       if (!envelope) return reply;
       if (!(await requireSession(request, reply, envelope))) return reply;
       const parsed = z.object({ note: z.string().trim().min(1).max(2000) }).safeParse(request.body);
-      if (!parsed.success) return validation(reply, 'Describe the changes you need (up to 2000 characters).');
+      if (!parsed.success)
+        return validation(reply, 'Describe the changes you need (up to 2000 characters).');
       const now = new Date();
       const done = await prisma.$transaction(async tx => {
         const claimed = await tx.agreementEnvelope.updateMany({
           where: { id: envelope.id, status: { in: OPEN } },
-          data: { status: 'CHANGES_REQUESTED', changesRequestedAt: now, changesNote: parsed.data.note },
+          data: {
+            status: 'CHANGES_REQUESTED',
+            changesRequestedAt: now,
+            changesNote: parsed.data.note,
+          },
         });
         if (claimed.count === 0) return false;
         await appendEvent(tx, envelope.id, {
@@ -1456,14 +1536,21 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         });
         return true;
       });
-      if (!done) return reply.code(409).send({ error: { code: 'STATE_CHANGED', message: 'This agreement can no longer be changed.' } });
+      if (!done)
+        return reply
+          .code(409)
+          .send({
+            error: { code: 'STATE_CHANGED', message: 'This agreement can no longer be changed.' },
+          });
       const settings = await loadAgreementSettings(prisma);
       const sender = await prisma.user.findUnique({
         where: { id: envelope.sentByUserId },
         select: { email: true },
       });
       await sendChangesRequestedAlert({
-        to: Array.from(new Set([...settings.internalCopyEmails, sender?.email ?? ''].filter(Boolean))),
+        to: Array.from(
+          new Set([...settings.internalCopyEmails, sender?.email ?? ''].filter(Boolean))
+        ),
         reference: envelope.reference,
         agencyLegalName: legalNameOf(envelope),
         signerName: envelope.signerName,
@@ -1471,12 +1558,17 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         note: parsed.data.note,
         adminUrl: adminEnvelopeUrl(envelope.id),
       });
-      return reply.send({ data: { status: 'CHANGES_REQUESTED', noticeEmail: noticeEmailOf(settings) } });
+      return reply.send({
+        data: { status: 'CHANGES_REQUESTED', noticeEmail: noticeEmailOf(settings) },
+      });
     }
   );
 
   /** Resolve a download token, or answer 410 with where to ask for a copy. */
-  async function resolveDownload(token: string, reply: FastifyReply): Promise<LoadedEnvelope | null> {
+  async function resolveDownload(
+    token: string,
+    reply: FastifyReply
+  ): Promise<LoadedEnvelope | null> {
     const found = await prisma.agreementEnvelope.findUnique({
       where: { downloadTokenHash: hashToken(token) },
       select: { id: true, status: true, downloadTokenExpiresAt: true },
@@ -1561,7 +1653,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         where: { executedPdfSha256: sha },
         include: { envelope: true },
       });
-      if (!doc || doc.envelope.status !== 'COMPLETED') return reply.send({ data: { match: false } });
+      if (!doc || doc.envelope.status !== 'COMPLETED')
+        return reply.send({ data: { match: false } });
       return reply.send({
         data: {
           match: true,

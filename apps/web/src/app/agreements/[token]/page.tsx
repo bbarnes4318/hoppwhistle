@@ -22,7 +22,13 @@ interface DownloadList {
   agencyLegalName: string;
   completedAt: string;
   sealed: boolean;
-  documents: Array<{ id: string; title: string; fileName: string; bytes: number | null; sha256: string }>;
+  documents: Array<{
+    id: string;
+    title: string;
+    fileName: string;
+    bytes: number | null;
+    sha256: string;
+  }>;
 }
 
 export default function AgreementDownloadPage(): JSX.Element {
@@ -52,9 +58,13 @@ export default function AgreementDownloadPage(): JSX.Element {
 
   async function download(doc: DownloadList['documents'][number]): Promise<void> {
     setError(null);
-    const response = await fetch(`${API}/download/${token}/${doc.id}.pdf`, { referrerPolicy: 'no-referrer' });
+    const response = await fetch(`${API}/download/${token}/${doc.id}.pdf`, {
+      referrerPolicy: 'no-referrer',
+    });
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const body = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
       setError(body?.error?.message ?? 'That file could not be downloaded.');
       return;
     }
@@ -66,7 +76,9 @@ export default function AgreementDownloadPage(): JSX.Element {
       <div className="mx-auto w-full max-w-[720px] space-y-5">
         <header className="flex items-center justify-between">
           <Logo width={180} />
-          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">Executed agreements</span>
+          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">
+            Executed agreements
+          </span>
         </header>
 
         <section className="rounded-card border border-rule bg-surface p-5 sm:p-7">
@@ -109,16 +121,24 @@ export default function AgreementDownloadPage(): JSX.Element {
                       </Button>
                     </div>
                     <div className="mt-2 flex items-start gap-2">
-                      <code className="flex-1 break-all font-mono text-[11px] text-ink-2">SHA-256 {doc.sha256}</code>
+                      <code className="flex-1 break-all font-mono text-[11px] text-ink-2">
+                        SHA-256 {doc.sha256}
+                      </code>
                       <button
                         type="button"
                         aria-label="Copy SHA-256"
                         className="text-ink-3 hover:text-ink"
                         onClick={() =>
-                          void navigator.clipboard.writeText(doc.sha256).then(() => setCopied(doc.id))
+                          void navigator.clipboard
+                            .writeText(doc.sha256)
+                            .then(() => setCopied(doc.id))
                         }
                       >
-                        {copied === doc.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied === doc.id ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
                       </button>
                     </div>
                   </li>

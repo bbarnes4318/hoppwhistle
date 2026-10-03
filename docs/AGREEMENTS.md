@@ -11,16 +11,16 @@ route under `/api/v1/platform/agreements` is
 `authenticate + requirePlatformAdmin` (API keys are refused 403) and every write
 is in the AuditLog.
 
-| Piece | Where |
-| --- | --- |
-| Admin + public API | `apps/api/src/routes/agreements.ts` |
-| Services | `apps/api/src/services/agreements/` |
-| Verbatim templates | `apps/api/src/services/agreements/templates/{msa,cpa,cpl}.ts` |
+| Piece                                       | Where                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------- |
+| Admin + public API                          | `apps/api/src/routes/agreements.ts`                                  |
+| Services                                    | `apps/api/src/services/agreements/`                                  |
+| Verbatim templates                          | `apps/api/src/services/agreements/templates/{msa,cpa,cpl}.ts`        |
 | Migration (tables, triggers, settings seed) | `apps/api/prisma/migrations/20261007000000_agreements/migration.sql` |
-| Admin screens | `apps/web/src/app/(dashboard)/admin/agreements/` |
-| Signer page | `apps/web/src/app/sign/[token]` |
-| Client download page | `apps/web/src/app/agreements/[token]` |
-| Public verify page | `apps/web/src/app/agreements/verify` |
+| Admin screens                               | `apps/web/src/app/(dashboard)/admin/agreements/`                     |
+| Signer page                                 | `apps/web/src/app/sign/[token]`                                      |
+| Client download page                        | `apps/web/src/app/agreements/[token]`                                |
+| Public verify page                          | `apps/web/src/app/agreements/verify`                                 |
 
 ## What happens
 
@@ -56,13 +56,13 @@ is in the AuditLog.
 The build exists to prove these five things for every envelope under ESIGN
 (15 U.S.C. §7001 et seq.) and Florida's UETA (Fla. Stat. §668.50).
 
-| Property | How it is proven | Where |
-| --- | --- | --- |
-| **Intent** | An explicit **Sign Agreements** action with the intent statement and a per-document acceptance statement; the exact text of each is stored on the `SIGNED` event. | `documents.ts` (`intentStatement`, `acceptanceStatement`), `POST /sign/:token/sign` |
-| **Consent** | The disclosure must be accepted before signing; the `CONSENT_GIVEN` event records its version and the SHA-256 of the text shown. | `documents.ts` (`ESIGN_DISCLOSURE_V1`), `POST /sign/:token/consent` |
-| **Attribution** | The link is sent to one address; a one-time code is sent to that same address and must be verified; every event carries IP (from `X-Real-IP` behind nginx, `lib/client-ip.ts`) and user agent; the typed name must match the named signer. | `POST /sign/:token/otp`, `/verify`, `agreement_events` |
-| **Association** | Each document's as-sent HTML and its SHA-256 are frozen at send (a trigger refuses any change). The `SIGNED` event records every document's as-sent hash; the executed render is verified to be the as-sent text plus the signature fragments and nothing else; the certificate prints the content and as-sent hashes. | `executed.ts`, `agreement_documents` trigger |
-| **Retention & accurate reproduction** | Executed PDFs are written once (no overwrite, no delete path), their SHA-256 is stored and re-checked before every download, they are digitally sealed, and the event log is append-only (trigger) and hash-chained (`verifyEventChain`). | `complete.ts`, `events.ts`, `storage.ts` (`putObjectOnce`), migration triggers |
+| Property                              | How it is proven                                                                                                                                                                                                                                                                                                       | Where                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Intent**                            | An explicit **Sign Agreements** action with the intent statement and a per-document acceptance statement; the exact text of each is stored on the `SIGNED` event.                                                                                                                                                      | `documents.ts` (`intentStatement`, `acceptanceStatement`), `POST /sign/:token/sign` |
+| **Consent**                           | The disclosure must be accepted before signing; the `CONSENT_GIVEN` event records its version and the SHA-256 of the text shown.                                                                                                                                                                                       | `documents.ts` (`ESIGN_DISCLOSURE_V1`), `POST /sign/:token/consent`                 |
+| **Attribution**                       | The link is sent to one address; a one-time code is sent to that same address and must be verified; every event carries IP (from `X-Real-IP` behind nginx, `lib/client-ip.ts`) and user agent; the typed name must match the named signer.                                                                             | `POST /sign/:token/otp`, `/verify`, `agreement_events`                              |
+| **Association**                       | Each document's as-sent HTML and its SHA-256 are frozen at send (a trigger refuses any change). The `SIGNED` event records every document's as-sent hash; the executed render is verified to be the as-sent text plus the signature fragments and nothing else; the certificate prints the content and as-sent hashes. | `executed.ts`, `agreement_documents` trigger                                        |
+| **Retention & accurate reproduction** | Executed PDFs are written once (no overwrite, no delete path), their SHA-256 is stored and re-checked before every download, they are digitally sealed, and the event log is append-only (trigger) and hash-chained (`verifyEventChain`).                                                                              | `complete.ts`, `events.ts`, `storage.ts` (`putObjectOnce`), migration triggers      |
 
 The event chain: each event's `hash` is
 `sha256(prevHash + canonicalJson({envelopeId, seq, type, occurredAt, actorType, actorUserId, actorEmail, ipAddress, userAgent, detail}))`,
@@ -71,15 +71,15 @@ the first `prevHash` being 64 zeros. The admin detail page shows
 
 ## Statuses
 
-| Status | Meaning |
-| --- | --- |
-| `SENT` | Created, signed by NetEnroll, link sent (or shown to the admin). |
-| `VIEWED` | The signer opened the link. |
-| `SIGNED` | The signature is committed; the executed PDFs are not produced yet (completion failed — **Retry completion** on the detail page). |
-| `COMPLETED` | Executed PDFs stored and delivered. Not voidable here: termination happens under MSA §15, outside the system. |
-| `CHANGES_REQUESTED` | The signer asked for changes; the link no longer works. Send a new envelope. |
-| `VOIDED` | Withdrawn by NetEnroll; the signer was told (without the reason). |
-| `EXPIRED` | 30 days passed without a signature. |
+| Status              | Meaning                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `SENT`              | Created, signed by NetEnroll, link sent (or shown to the admin).                                                                  |
+| `VIEWED`            | The signer opened the link.                                                                                                       |
+| `SIGNED`            | The signature is committed; the executed PDFs are not produced yet (completion failed — **Retry completion** on the detail page). |
+| `COMPLETED`         | Executed PDFs stored and delivered. Not voidable here: termination happens under MSA §15, outside the system.                     |
+| `CHANGES_REQUESTED` | The signer asked for changes; the link no longer works. Send a new envelope.                                                      |
+| `VOIDED`            | Withdrawn by NetEnroll; the signer was told (without the reason).                                                                 |
+| `EXPIRED`           | 30 days passed without a signature.                                                                                               |
 
 ## Verifying a PDF
 
@@ -115,14 +115,14 @@ Put the base64 output in `AGREEMENT_SEAL_P12_BASE64` and the passphrase in
 
 ## Configuration
 
-| Variable | Purpose |
-| --- | --- |
-| `AGREEMENTS_S3_BUCKET` | Bucket for executed PDFs and drawn signatures (default `agreements`), on the same `S3_*` credentials. |
-| `AGREEMENT_SEAL_P12_BASE64` | The seal certificate, base64. Optional. |
-| `AGREEMENT_SEAL_P12_PASSPHRASE` | Its passphrase. |
-| `SMTP_*` | Email. Sends are best-effort; a failed send never fails the record. |
-| `APP_URL` | The portal links point at (default `https://agents.netenroll.com`). |
-| `FIELD_ENCRYPTION_KEY` | Encrypts the stored signing token so **Resend** can rebuild the same link. |
+| Variable                        | Purpose                                                                                               |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `AGREEMENTS_S3_BUCKET`          | Bucket for executed PDFs and drawn signatures (default `agreements`), on the same `S3_*` credentials. |
+| `AGREEMENT_SEAL_P12_BASE64`     | The seal certificate, base64. Optional.                                                               |
+| `AGREEMENT_SEAL_P12_PASSPHRASE` | Its passphrase.                                                                                       |
+| `SMTP_*`                        | Email. Sends are best-effort; a failed send never fails the record.                                   |
+| `APP_URL`                       | The portal links point at (default `https://agents.netenroll.com`).                                   |
+| `FIELD_ENCRYPTION_KEY`          | Encrypts the stored signing token so **Resend** can rebuild the same link.                            |
 
 NetEnroll's notice address and email, the default signatory and the internal
 copy addresses are in **Admin → Agreements → Settings** (seeded by the

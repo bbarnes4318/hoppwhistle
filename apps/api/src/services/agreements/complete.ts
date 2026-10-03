@@ -24,11 +24,7 @@ import { auditLog } from '../audit.js';
 import { getAgreementsStorageService } from '../storage.js';
 
 import { renderCertificate } from './certificate.js';
-import {
-  sendCompletedEmail,
-  sendInternalCompletedEmail,
-  type ExecutedFile,
-} from './emails.js';
+import { sendCompletedEmail, sendInternalCompletedEmail, type ExecutedFile } from './emails.js';
 import { appendEvent } from './events.js';
 import { renderExecutedHtml } from './executed.js';
 import { etDateIso, sha256Hex, slugify } from './format.js';
@@ -56,11 +52,7 @@ const RUNNING_HEADERS: Record<string, string> = {
   CPL: 'CPL AGREEMENT · PAY-PER-CALL',
 };
 
-export function executedFileName(
-  agencyLegalName: string,
-  kind: string,
-  reference: string
-): string {
+export function executedFileName(agencyLegalName: string, kind: string, reference: string): string {
   return `${slugify(agencyLegalName)}-${kind.toLowerCase()}-executed-${reference}.pdf`;
 }
 
@@ -140,7 +132,8 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
   ]);
   const signedEvent = [...events].reverse().find(e => e.type === 'SIGNED');
   const signedDetail = (signedEvent?.detail ?? {}) as Record<string, unknown>;
-  const signerTitle = typeof signedDetail.title === 'string' ? signedDetail.title : envelope.signerTitle;
+  const signerTitle =
+    typeof signedDetail.title === 'string' ? signedDetail.title : envelope.signerTitle;
 
   let drawnPngDataUri: string | null = null;
   if (envelope.signatureMethod === 'DRAWN' && envelope.signatureImageKey) {
@@ -311,7 +304,10 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
       entityId: envelope.id,
       changes: {
         reference: envelope.reference,
-        documents: documents.map(doc => ({ kind: doc.kind, executedPdfSha256: doc.executedPdfSha256 })),
+        documents: documents.map(doc => ({
+          kind: doc.kind,
+          executedPdfSha256: doc.executedPdfSha256,
+        })),
         sealed: seal !== null,
       },
       success: true,

@@ -118,10 +118,7 @@ ${section(
       '2.10',
       '**"Account Statement"** means the statement made available in the Portal showing units delivered, amounts drawn down and the remaining Prepaid Balance.'
     ),
-    clause(
-      '2.11',
-      '**"Portal"** means the NetEnroll technology platform at agents.netenroll.com.'
-    ),
+    clause('2.11', '**"Portal"** means the NetEnroll technology platform at agents.netenroll.com.'),
     clause(
       '2.12',
       '**"Campaign Agreement"** means the CPA Agreement or the CPL Agreement, each as executed by the parties.'
@@ -134,7 +131,7 @@ ${section(
   [
     clause(
       '3.1',
-      '**Provision of Services.** NetEnroll will route inbound calls to Agency\'s agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking.'
+      "**Provision of Services.** NetEnroll will route inbound calls to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking."
     ),
     clause(
       '3.2',
@@ -170,7 +167,7 @@ ${section(
   [
     clause(
       '5.1',
-      '**Staffing Standards.** Agency shall staff sufficient licensed agents during the agreed delivery hours. Calls offered while Agency is unstaffed do not count toward Agency\'s Daily Block, but repeated failure to staff constitutes a material breach.'
+      "**Staffing Standards.** Agency shall staff sufficient licensed agents during the agreed delivery hours. Calls offered while Agency is unstaffed do not count toward Agency's Daily Block, but repeated failure to staff constitutes a material breach."
     ),
     clause(
       '5.2',
@@ -188,7 +185,7 @@ ${section(
   [
     clause(
       '6.1',
-      '**Producer Licensing.** Agency warrants that every agent answering calls holds an active state insurance producer license and the required carrier appointments in the consumer\'s state of residence.'
+      "**Producer Licensing.** Agency warrants that every agent answering calls holds an active state insurance producer license and the required carrier appointments in the consumer's state of residence."
     ),
     clause(
       '6.2',
@@ -210,7 +207,7 @@ ${section(
     ),
     clause(
       '7.2',
-      '**Proprietary Records.** Recordings are NetEnroll\'s property and will be made available to Agency on reasonable request for compliance or carrier audit purposes.'
+      "**Proprietary Records.** Recordings are NetEnroll's property and will be made available to Agency on reasonable request for compliance or carrier audit purposes."
     ),
   ].join('\n')
 )}
@@ -218,10 +215,13 @@ ${section(
 ${section(
   '8. FEES, BILLING AND PAYMENT',
   [
-    clause('8.1', '**Rates.** Agency shall pay the rates set out in each executed Campaign Agreement.'),
+    clause(
+      '8.1',
+      '**Rates.** Agency shall pay the rates set out in each executed Campaign Agreement.'
+    ),
     clause(
       '8.2',
-      '**Prepayment.** Agency pays in advance by invoice issued through NetEnroll\'s payment processor, currently Melio, by card or any other payment method offered on the invoice. Delivery begins once payment clears.'
+      "**Prepayment.** Agency pays in advance by invoice issued through NetEnroll's payment processor, currently Melio, by card or any other payment method offered on the invoice. Delivery begins once payment clears."
     ),
     clause(
       '8.3',
@@ -298,17 +298,17 @@ ${section(
   [
     clause(
       '13.1',
-      '**By Agency.** Agency shall indemnify, defend and hold harmless NetEnroll and its officers from any claims, fines, liabilities or expenses, including reasonable attorneys\' fees, arising from:',
+      "**By Agency.** Agency shall indemnify, defend and hold harmless NetEnroll and its officers from any claims, fines, liabilities or expenses, including reasonable attorneys' fees, arising from:",
       [
         '(a) agent conduct on calls;',
         '(b) outbound follow-up contact by Agency;',
         '(c) state licensing or insurance compliance failures; or',
-        '(d) breach of Agency\'s consumer data obligations.',
+        "(d) breach of Agency's consumer data obligations.",
       ]
     ),
     clause(
       '13.2',
-      '**By NetEnroll.** NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll\'s call generation or inbound routing violated the TCPA or telemarketing rules, provided the claim does not arise from Agency\'s post-transfer conduct or sales presentation.'
+      "**By NetEnroll.** NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or inbound routing violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation."
     ),
   ].join('\n')
 )}
@@ -322,7 +322,7 @@ ${section(
     ),
     clause(
       '14.2',
-      '**Aggregate Cap.** To the maximum extent permitted by law, NetEnroll\'s total aggregate liability arising out of or relating to this MSA, any Campaign Agreement or the services, whether in contract, tort (including negligence), under any indemnity (including Section 13.2) or on any other basis, is limited to the total fees paid by Agency in the one (1) month preceding the event giving rise to liability. This limit does not apply to, and does not reduce, Agency\'s payment obligations or Agency\'s obligations under Section 13.1.'
+      "**Aggregate Cap.** To the maximum extent permitted by law, NetEnroll's total aggregate liability arising out of or relating to this MSA, any Campaign Agreement or the services, whether in contract, tort (including negligence), under any indemnity (including Section 13.2) or on any other basis, is limited to the total fees paid by Agency in the one (1) month preceding the event giving rise to liability. This limit does not apply to, and does not reduce, Agency's payment obligations or Agency's obligations under Section 13.1."
     ),
   ].join('\n')
 )}
@@ -336,7 +336,7 @@ ${section(
     ),
     clause(
       '15.2',
-      '**Termination for Convenience.** Either party may terminate this MSA, or any individual Campaign Agreement, on ten (10) days\' written notice.'
+      "**Termination for Convenience.** Either party may terminate this MSA, or any individual Campaign Agreement, on ten (10) days' written notice."
     ),
     clause(
       '15.3',
@@ -351,8 +351,8 @@ ${section(
       '**Prepaid Balance on Termination.** No Prepaid Balance is refundable under any circumstance. On termination, the remaining Prepaid Balance is treated as follows:',
       [
         '(a) **Termination by Agency for Convenience.** If Agency terminates this MSA or a Campaign Agreement under Section 15.2, NetEnroll will continue delivering calls against the remaining Prepaid Balance for sixty (60) days after the termination date. Any Prepaid Balance remaining after that period is forfeited.',
-        '(b) **Termination for Agency\'s Breach.** If NetEnroll terminates this MSA or a Campaign Agreement under Section 15.3 for Agency\'s material breach, including a chargeback or payment reversal under Section 8.5 or repeated failure to staff under Section 5.1, the remaining Prepaid Balance is forfeited on the termination date. The parties agree that NetEnroll\'s damages from such a breach, including call generation costs already incurred and committed to fulfill the Prepaid Balance, are difficult to determine at the Effective Date, and that the forfeited amount is a reasonable estimate of those damages and is liquidated damages, not a penalty.',
-        '(c) **All Other Terminations.** If this MSA or a Campaign Agreement is terminated for any other reason, including by NetEnroll under Section 15.2 or by Agency under Section 3.3 or Section 15.3, NetEnroll\'s sole obligation, and Agency\'s sole and exclusive remedy, is the continued delivery of calls against the remaining Prepaid Balance, in accordance with the terms of the applicable Campaign Agreement, until the Prepaid Balance is fulfilled.',
+        "(b) **Termination for Agency's Breach.** If NetEnroll terminates this MSA or a Campaign Agreement under Section 15.3 for Agency's material breach, including a chargeback or payment reversal under Section 8.5 or repeated failure to staff under Section 5.1, the remaining Prepaid Balance is forfeited on the termination date. The parties agree that NetEnroll's damages from such a breach, including call generation costs already incurred and committed to fulfill the Prepaid Balance, are difficult to determine at the Effective Date, and that the forfeited amount is a reasonable estimate of those damages and is liquidated damages, not a penalty.",
+        "(c) **All Other Terminations.** If this MSA or a Campaign Agreement is terminated for any other reason, including by NetEnroll under Section 15.2 or by Agency under Section 3.3 or Section 15.3, NetEnroll's sole obligation, and Agency's sole and exclusive remedy, is the continued delivery of calls against the remaining Prepaid Balance, in accordance with the terms of the applicable Campaign Agreement, until the Prepaid Balance is fulfilled.",
       ]
     ),
     clause(
@@ -379,7 +379,7 @@ ${section(
     ),
     clause(
       '16.4',
-      '**Assignment.** Agency may not assign this MSA or any Campaign Agreement without NetEnroll\'s prior written consent.'
+      "**Assignment.** Agency may not assign this MSA or any Campaign Agreement without NetEnroll's prior written consent."
     ),
     clause(
       '16.5',

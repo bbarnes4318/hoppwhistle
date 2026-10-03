@@ -34,15 +34,7 @@ import { cn } from '@/lib/utils';
 
 const API = '/api/v1/public/agreements';
 
-type Step =
-  | 'loading'
-  | 'summary'
-  | 'code'
-  | 'review'
-  | 'sign'
-  | 'done'
-  | 'inactive'
-  | 'invalid';
+type Step = 'loading' | 'summary' | 'code' | 'review' | 'sign' | 'done' | 'inactive' | 'invalid';
 
 interface Summary {
   status: string;
@@ -70,13 +62,23 @@ interface DocumentsPayload {
 }
 
 interface DownloadList {
-  documents: Array<{ id: string; title: string; fileName: string; bytes: number | null; sha256: string }>;
+  documents: Array<{
+    id: string;
+    title: string;
+    fileName: string;
+    bytes: number | null;
+    sha256: string;
+  }>;
 }
 
 async function call<T>(
   path: string,
   init: { method?: string; body?: unknown; session?: string | null } = {}
-): Promise<{ status: number; data?: T; error?: { code?: string; message?: string; status?: string; noticeEmail?: string } }> {
+): Promise<{
+  status: number;
+  data?: T;
+  error?: { code?: string; message?: string; status?: string; noticeEmail?: string };
+}> {
   const headers: Record<string, string> = {};
   if (init.body !== undefined) headers['Content-Type'] = 'application/json';
   if (init.session) headers['X-Signing-Session'] = init.session;
@@ -90,13 +92,24 @@ async function call<T>(
     const json = (await response.json().catch(() => null)) as { data?: T; error?: never } | null;
     return { status: response.status, data: json?.data, error: json?.error };
   } catch {
-    return { status: 0, error: { message: 'The server is not answering right now. Try again in a moment.' } };
+    return {
+      status: 0,
+      error: { message: 'The server is not answering right now. Try again in a moment.' },
+    };
   }
 }
 
-function Card({ children, className }: { children: React.ReactNode; className?: string }): JSX.Element {
+function Card({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): JSX.Element {
   return (
-    <section className={cn('rounded-card border border-rule bg-surface p-5 sm:p-7', className)}>{children}</section>
+    <section className={cn('rounded-card border border-rule bg-surface p-5 sm:p-7', className)}>
+      {children}
+    </section>
   );
 }
 
@@ -142,7 +155,11 @@ export default function SignPage(): JSX.Element {
   const [intent, setIntent] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [done, setDone] = useState<{ message: string; email: string; downloadToken: string | null } | null>(null);
+  const [done, setDone] = useState<{
+    message: string;
+    email: string;
+    downloadToken: string | null;
+  } | null>(null);
   const [downloads, setDownloads] = useState<DownloadList | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesNote, setChangesNote] = useState('');
@@ -151,7 +168,10 @@ export default function SignPage(): JSX.Element {
   const handleFailure = useCallback(
     (result: { status: number; error?: { message?: string; noticeEmail?: string } }): void => {
       if (result.status === 410) {
-        setInactive({ message: result.error?.message ?? 'This link no longer works.', noticeEmail: result.error?.noticeEmail });
+        setInactive({
+          message: result.error?.message ?? 'This link no longer works.',
+          noticeEmail: result.error?.noticeEmail,
+        });
         setStep('inactive');
         return;
       }
@@ -166,7 +186,9 @@ export default function SignPage(): JSX.Element {
           // Storage may be unavailable; the in-memory session is cleared either way.
         }
         setSession(null);
-        setError(result.error?.message ?? 'Your verification has expired. Verify your email again.');
+        setError(
+          result.error?.message ?? 'Your verification has expired. Verify your email again.'
+        );
         setStep('code');
         return;
       }
@@ -177,7 +199,9 @@ export default function SignPage(): JSX.Element {
 
   const loadDocuments = useCallback(
     async (sessionToken: string) => {
-      const result = await call<DocumentsPayload>(`/sign/${token}/documents`, { session: sessionToken });
+      const result = await call<DocumentsPayload>(`/sign/${token}/documents`, {
+        session: sessionToken,
+      });
       if (!result.data) {
         handleFailure(result);
         return;
@@ -241,7 +265,10 @@ export default function SignPage(): JSX.Element {
   async function sendCode(): Promise<void> {
     setBusy(true);
     setError(null);
-    const result = await call<{ sent: boolean }>(`/sign/${token}/otp`, { method: 'POST', body: {} });
+    const result = await call<{ sent: boolean }>(`/sign/${token}/otp`, {
+      method: 'POST',
+      body: {},
+    });
     setBusy(false);
     if (!result.data) {
       handleFailure(result);
@@ -299,7 +326,11 @@ export default function SignPage(): JSX.Element {
     async (documentId: string) => {
       if (reviewed.has(documentId)) return;
       setReviewed(prev => new Set(prev).add(documentId));
-      const result = await call(`/sign/${token}/reviewed`, { method: 'POST', body: { documentId }, session });
+      const result = await call(`/sign/${token}/reviewed`, {
+        method: 'POST',
+        body: { documentId },
+        session,
+      });
       if (result.status !== 200) {
         setReviewed(prev => {
           const next = new Set(prev);
@@ -385,22 +416,24 @@ export default function SignPage(): JSX.Element {
     if (!docs) return;
     setBusy(true);
     setError(null);
-    const result = await call<{ status: string; message?: string; email?: string; downloadToken?: string | null }>(
-      `/sign/${token}/sign`,
-      {
-        method: 'POST',
-        session,
-        body: {
-          typedName,
-          title,
-          initials,
-          method,
-          drawnPng: method === 'DRAWN' ? canvasRef.current?.toDataURL('image/png') : undefined,
-          acceptances: accepted,
-          intentAccepted: intent,
-        },
-      }
-    );
+    const result = await call<{
+      status: string;
+      message?: string;
+      email?: string;
+      downloadToken?: string | null;
+    }>(`/sign/${token}/sign`, {
+      method: 'POST',
+      session,
+      body: {
+        typedName,
+        title,
+        initials,
+        method,
+        drawnPng: method === 'DRAWN' ? canvasRef.current?.toDataURL('image/png') : undefined,
+        acceptances: accepted,
+        intentAccepted: intent,
+      },
+    });
     setBusy(false);
     if (!result.data) {
       handleFailure(result);
@@ -415,7 +448,8 @@ export default function SignPage(): JSX.Element {
       message:
         result.data.status === 'COMPLETED'
           ? `Your agreements are signed. Executed copies have been emailed to ${docs.signer.email}.`
-          : result.data.message ?? 'Your signature is recorded. Your executed copies will be emailed to you shortly.',
+          : (result.data.message ??
+            'Your signature is recorded. Your executed copies will be emailed to you shortly.'),
       email: docs.signer.email,
       downloadToken: result.data.downloadToken ?? null,
     });
@@ -454,7 +488,8 @@ export default function SignPage(): JSX.Element {
     }
     setChangesOpen(false);
     setInactive({
-      message: 'Your request has been sent to NetEnroll. This link no longer works; NetEnroll will send revised agreements.',
+      message:
+        'Your request has been sent to NetEnroll. This link no longer works; NetEnroll will send revised agreements.',
       noticeEmail: result.data.noticeEmail,
     });
     setStep('inactive');
@@ -463,7 +498,8 @@ export default function SignPage(): JSX.Element {
   const allReviewed = docs ? docs.documents.every(d => reviewed.has(d.id)) : false;
   const nameMatches =
     docs !== null &&
-    typedName.trim().replace(/\s+/g, ' ').toLowerCase() === docs.signer.name.trim().replace(/\s+/g, ' ').toLowerCase();
+    typedName.trim().replace(/\s+/g, ' ').toLowerCase() ===
+      docs.signer.name.trim().replace(/\s+/g, ' ').toLowerCase();
   const canSign =
     docs !== null &&
     nameMatches &&
@@ -492,8 +528,8 @@ export default function SignPage(): JSX.Element {
           <Card>
             <h1 className="t-title text-ink">This link is not valid</h1>
             <p className="t-body mt-2 text-ink-2">
-              Check that you opened the full link from your email. If it still does not work, contact NetEnroll at
-              support@pvnvoice.com.
+              Check that you opened the full link from your email. If it still does not work,
+              contact NetEnroll at support@pvnvoice.com.
             </p>
           </Card>
         )}
@@ -518,8 +554,8 @@ export default function SignPage(): JSX.Element {
           <Card>
             <h1 className="t-title text-ink">Agreements for {summary.agencyLegalName}</h1>
             <p className="t-body mt-2 text-ink-2">
-              PVN LLC d/b/a NetEnroll has sent the following for your review and electronic signature. NetEnroll&rsquo;s
-              authorized signatory has already signed.
+              PVN LLC d/b/a NetEnroll has sent the following for your review and electronic
+              signature. NetEnroll&rsquo;s authorized signatory has already signed.
             </p>
             <ul className="mt-4 space-y-2">
               {summary.documents.map(doc => (
@@ -530,16 +566,27 @@ export default function SignPage(): JSX.Element {
               ))}
             </ul>
             <p className="t-body mt-4 text-ink-2">
-              To protect these agreements we will email a one-time code to <strong>{summary.signerEmailMasked}</strong>.
+              To protect these agreements we will email a one-time code to{' '}
+              <strong>{summary.signerEmailMasked}</strong>.
             </p>
-            <p className="t-meta mt-1 text-ink-3">This link expires on {etDate(summary.expiresAt)}.</p>
+            <p className="t-meta mt-1 text-ink-3">
+              This link expires on {etDate(summary.expiresAt)}.
+            </p>
             {error && (
               <div className="mt-4">
                 <Alert>{error}</Alert>
               </div>
             )}
-            <Button className="mt-5 w-full sm:w-auto" disabled={busy} onClick={() => void sendCode()}>
-              {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Mail className="mr-1.5 h-4 w-4" />}
+            <Button
+              className="mt-5 w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => void sendCode()}
+            >
+              {busy ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="mr-1.5 h-4 w-4" />
+              )}
               Send verification code
             </Button>
           </Card>
@@ -549,7 +596,8 @@ export default function SignPage(): JSX.Element {
           <Card>
             <h1 className="t-title text-ink">Enter your verification code</h1>
             <p className="t-body mt-2 text-ink-2">
-              We emailed a 6-digit code to {summary?.signerEmailMasked ?? 'your email'}. It is valid for 10 minutes.
+              We emailed a 6-digit code to {summary?.signerEmailMasked ?? 'your email'}. It is valid
+              for 10 minutes.
             </p>
             <form
               className="mt-5"
@@ -558,13 +606,16 @@ export default function SignPage(): JSX.Element {
                 void verifyCode();
               }}
             >
-              <div className="flex gap-2" onPaste={e => {
-                const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                if (digits.length === 6) {
-                  e.preventDefault();
-                  setCode(digits.split(''));
-                }
-              }}>
+              <div
+                className="flex gap-2"
+                onPaste={e => {
+                  const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                  if (digits.length === 6) {
+                    e.preventDefault();
+                    setCode(digits.split(''));
+                  }
+                }}
+              >
                 {code.map((digit, i) => (
                   <Input
                     key={i}
@@ -583,7 +634,8 @@ export default function SignPage(): JSX.Element {
                       if (value && i < 5) document.getElementById(`code-${i + 1}`)?.focus();
                     }}
                     onKeyDown={e => {
-                      if (e.key === 'Backspace' && !code[i] && i > 0) document.getElementById(`code-${i - 1}`)?.focus();
+                      if (e.key === 'Backspace' && !code[i] && i > 0)
+                        document.getElementById(`code-${i - 1}`)?.focus();
                     }}
                   />
                 ))}
@@ -598,7 +650,12 @@ export default function SignPage(): JSX.Element {
                   {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
                   Verify
                 </Button>
-                <Button type="button" variant="ghost" disabled={busy || resendIn > 0} onClick={() => void sendCode()}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy || resendIn > 0}
+                  onClick={() => void sendCode()}
+                >
                   {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
                 </Button>
               </div>
@@ -626,7 +683,11 @@ export default function SignPage(): JSX.Element {
                 {docs.disclosure.checkboxLabel}
               </label>
               {!consented && (
-                <Button className="mt-3" disabled={!consentChecked || busy} onClick={() => void giveConsent()}>
+                <Button
+                  className="mt-3"
+                  disabled={!consentChecked || busy}
+                  onClick={() => void giveConsent()}
+                >
                   Continue
                 </Button>
               )}
@@ -640,7 +701,8 @@ export default function SignPage(): JSX.Element {
             {consented && (
               <Card className="p-3 sm:p-4">
                 <p className="t-body px-1 text-ink-2">
-                  Read each agreement to the end. Each turns green once you have scrolled through it.
+                  Read each agreement to the end. Each turns green once you have scrolled through
+                  it.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2" role="tablist">
                   {docs.documents.map((doc, i) => (
@@ -658,7 +720,11 @@ export default function SignPage(): JSX.Element {
                         activeDoc === i && 'ring-2 ring-brand-ink ring-offset-1'
                       )}
                     >
-                      {reviewed.has(doc.id) ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                      {reviewed.has(doc.id) ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5" />
+                      )}
                       {doc.title}
                     </button>
                   ))}
@@ -682,8 +748,14 @@ export default function SignPage(): JSX.Element {
                   <Button disabled={!allReviewed} onClick={() => setStep('sign')}>
                     Continue to sign
                   </Button>
-                  {!allReviewed && <span className="text-xs text-ink-3">Review every document to continue.</span>}
-                  <button type="button" className="ml-auto text-xs text-ink-2 underline" onClick={() => setChangesOpen(true)}>
+                  {!allReviewed && (
+                    <span className="text-xs text-ink-3">Review every document to continue.</span>
+                  )}
+                  <button
+                    type="button"
+                    className="ml-auto text-xs text-ink-2 underline"
+                    onClick={() => setChangesOpen(true)}
+                  >
                     Request changes
                   </button>
                 </div>
@@ -697,16 +769,24 @@ export default function SignPage(): JSX.Element {
           <Card>
             <h1 className="t-title text-ink">Sign</h1>
             <p className="t-body mt-1 text-ink-2">
-              These agreements were issued to <strong>{docs.signer.name}</strong> for {docs.agencyLegalName}.
+              These agreements were issued to <strong>{docs.signer.name}</strong> for{' '}
+              {docs.agencyLegalName}.
             </p>
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="typed-name">
                   Full name
                 </label>
-                <Input id="typed-name" value={typedName} autoComplete="name" onChange={e => setTypedName(e.target.value)} />
+                <Input
+                  id="typed-name"
+                  value={typedName}
+                  autoComplete="name"
+                  onChange={e => setTypedName(e.target.value)}
+                />
                 {typedName && !nameMatches && (
-                  <p className="mt-1 text-[11px] text-dropped-ink">Type your name exactly as above: {docs.signer.name}.</p>
+                  <p className="mt-1 text-[11px] text-dropped-ink">
+                    Type your name exactly as above: {docs.signer.name}.
+                  </p>
                 )}
               </div>
               <div>
@@ -724,9 +804,13 @@ export default function SignPage(): JSX.Element {
                   value={initials}
                   maxLength={4}
                   className="w-24 uppercase"
-                  onChange={e => setInitials(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())}
+                  onChange={e =>
+                    setInitials(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())
+                  }
                 />
-                <p className="mt-1 text-[11px] text-ink-3">Printed on every page of the executed agreements.</p>
+                <p className="mt-1 text-[11px] text-ink-3">
+                  Printed on every page of the executed agreements.
+                </p>
               </div>
             </div>
 
@@ -739,7 +823,10 @@ export default function SignPage(): JSX.Element {
                     role="tab"
                     aria-selected={method === m}
                     onClick={() => setMethod(m)}
-                    className={cn('rounded-control px-3 py-1.5 text-xs font-medium text-ink-2', method === m && 'bg-surface text-ink shadow-card')}
+                    className={cn(
+                      'rounded-control px-3 py-1.5 text-xs font-medium text-ink-2',
+                      method === m && 'bg-surface text-ink shadow-card'
+                    )}
                   >
                     {m === 'TYPED' ? 'Type' : 'Draw'}
                   </button>
@@ -759,12 +846,18 @@ export default function SignPage(): JSX.Element {
                       className="h-[150px] w-full touch-none border-b border-ink"
                       aria-label="Draw your signature"
                     />
-                    <button type="button" className="mt-1 text-xs text-ink-2 underline" onClick={clearCanvas}>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs text-ink-2 underline"
+                      onClick={clearCanvas}
+                    >
                       Clear
                     </button>
                   </div>
                 )}
-                <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-3">Authorized signature</div>
+                <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-3">
+                  Authorized signature
+                </div>
               </div>
             </div>
 
@@ -783,7 +876,12 @@ export default function SignPage(): JSX.Element {
             </div>
 
             <label className="mt-5 flex items-start gap-2 rounded-control border border-rule bg-sunken p-3 text-sm text-ink">
-              <input type="checkbox" className="mt-1" checked={intent} onChange={e => setIntent(e.target.checked)} />
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={intent}
+                onChange={e => setIntent(e.target.checked)}
+              />
               <span>{docs.intentStatement}</span>
             </label>
 
@@ -801,7 +899,11 @@ export default function SignPage(): JSX.Element {
               <Button variant="ghost" onClick={() => setStep('review')}>
                 Back to the documents
               </Button>
-              <button type="button" className="ml-auto text-xs text-ink-2 underline" onClick={() => setChangesOpen(true)}>
+              <button
+                type="button"
+                className="ml-auto text-xs text-ink-2 underline"
+                onClick={() => setChangesOpen(true)}
+              >
                 Request changes
               </button>
             </div>
@@ -818,19 +920,30 @@ export default function SignPage(): JSX.Element {
             {downloads && downloads.documents.length > 0 && (
               <ul className="mt-5 space-y-2">
                 {downloads.documents.map(doc => (
-                  <li key={doc.id} className="flex flex-wrap items-center gap-3 rounded-control border border-rule p-3">
+                  <li
+                    key={doc.id}
+                    className="flex flex-wrap items-center gap-3 rounded-control border border-rule p-3"
+                  >
                     <FileText className="h-4 w-4 text-brand-ink" />
                     <span className="flex-1 text-sm">{doc.title}</span>
                     <span className="text-xs text-ink-3">{fileSize(doc.bytes)}</span>
                     <Button
                       size="sm"
-                      onClick={() => void (async () => {
-                        const response = await fetch(`${API}/download/${done.downloadToken}/${doc.id}.pdf`, {
-                          referrerPolicy: 'no-referrer',
-                        });
-                        if (response.ok) saveBlob(await response.blob(), doc.fileName);
-                        else setError('That file could not be downloaded. Use the copy in your email.');
-                      })()}
+                      onClick={() =>
+                        void (async () => {
+                          const response = await fetch(
+                            `${API}/download/${done.downloadToken}/${doc.id}.pdf`,
+                            {
+                              referrerPolicy: 'no-referrer',
+                            }
+                          );
+                          if (response.ok) saveBlob(await response.blob(), doc.fileName);
+                          else
+                            setError(
+                              'That file could not be downloaded. Use the copy in your email.'
+                            );
+                        })()
+                      }
                     >
                       <Download className="mr-1 h-3.5 w-3.5" />
                       Download
@@ -848,8 +961,8 @@ export default function SignPage(): JSX.Element {
         )}
 
         <footer className="pb-6 text-center text-[11px] text-ink-3">
-          PVN LLC d/b/a NetEnroll · Saint Augustine, Florida · Electronic signatures under the ESIGN Act and Fla. Stat.
-          §668.50
+          PVN LLC d/b/a NetEnroll · Saint Augustine, Florida · Electronic signatures under the ESIGN
+          Act and Fla. Stat. §668.50
         </footer>
       </div>
 
@@ -858,11 +971,16 @@ export default function SignPage(): JSX.Element {
           <DialogHeader>
             <DialogTitle>Request changes</DialogTitle>
             <DialogDescription>
-              Tell NetEnroll what needs to change. This link will stop working, and NetEnroll will send revised
-              agreements.
+              Tell NetEnroll what needs to change. This link will stop working, and NetEnroll will
+              send revised agreements.
             </DialogDescription>
           </DialogHeader>
-          <Textarea rows={5} maxLength={2000} value={changesNote} onChange={e => setChangesNote(e.target.value)} />
+          <Textarea
+            rows={5}
+            maxLength={2000}
+            value={changesNote}
+            onChange={e => setChangesNote(e.target.value)}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setChangesOpen(false)}>
               Cancel

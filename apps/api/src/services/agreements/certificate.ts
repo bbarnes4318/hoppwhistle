@@ -46,7 +46,8 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
   const d = (event.detail ?? {}) as Record<string, unknown>;
   const parts: string[] = [];
   const add = (label: string, value: unknown) => {
-    if (value !== undefined && value !== null && value !== '') parts.push(`${label}: ${String(value)}`);
+    if (value !== undefined && value !== null && value !== '')
+      parts.push(`${label}: ${String(value)}`);
   };
   switch (event.type) {
     case 'NETENROLL_SIGNED':
@@ -68,7 +69,10 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
       break;
     case 'DOCUMENT_REVIEWED':
       add('document', d.kind);
-      add('as-sent SHA-256', typeof d.sentHtmlSha256 === 'string' ? `${d.sentHtmlSha256.slice(0, 16)}…` : null);
+      add(
+        'as-sent SHA-256',
+        typeof d.sentHtmlSha256 === 'string' ? `${d.sentHtmlSha256.slice(0, 16)}…` : null
+      );
       break;
     case 'SIGNED':
       add('name', d.typedName);
@@ -192,7 +196,10 @@ ${logoHtml()}
 ${kv([
   ['Reference', esc(envelope.reference)],
   ['Envelope ID', `<span class="mono">${esc(envelope.id)}</span>`],
-  ['Document', `${esc(input.document.title)} <span class="muted">(${esc(input.document.templateVersion)})</span>`],
+  [
+    'Document',
+    `${esc(input.document.title)} <span class="muted">(${esc(input.document.templateVersion)})</span>`,
+  ],
   ['Agency', esc(input.agencyLegalName)],
   ['Document page count', String(input.contentPageCount)],
   ['Content SHA-256', `<span class="mono">${esc(input.contentSha256)}</span>`],
@@ -204,11 +211,21 @@ ${kv([
 <h2>SIGNER</h2>
 ${kv([
   ['Name', esc(envelope.signerName)],
-  ['Title', esc(signed ? String((signed.detail as Record<string, unknown>).title ?? envelope.signerTitle) : envelope.signerTitle)],
+  [
+    'Title',
+    esc(
+      signed
+        ? String((signed.detail as Record<string, unknown>).title ?? envelope.signerTitle)
+        : envelope.signerTitle
+    ),
+  ],
   ['Email', esc(envelope.signerEmail)],
   ['Signature', signatureRender],
   ['Initials', esc(envelope.signerInitials ?? '—')],
-  ['Adoption method', envelope.signatureMethod === 'DRAWN' ? 'Drawn signature adopted' : 'Typed signature adopted'],
+  [
+    'Adoption method',
+    envelope.signatureMethod === 'DRAWN' ? 'Drawn signature adopted' : 'Typed signature adopted',
+  ],
   ['Signed at', both(envelope.signedAt)],
   ['IP address', `<span class="mono">${esc(signed?.ipAddress ?? '—')}</span>`],
   ['User agent', `<span class="mono">${esc(signed?.userAgent ?? '—')}</span>`],
@@ -224,7 +241,10 @@ ${kv([
 ${kv([
   ['Signatory', esc(envelope.netenrollSignatoryName)],
   ['Title', esc(envelope.netenrollSignatoryTitle)],
-  ['Authorized by platform user', esc(input.netenrollAdminEmail ?? envelope.netenrollSignedByUserId)],
+  [
+    'Authorized by platform user',
+    esc(input.netenrollAdminEmail ?? envelope.netenrollSignedByUserId),
+  ],
   ['Signed at', both(envelope.netenrollSignedAt)],
   ['IP address', `<span class="mono">${esc(envelope.netenrollSignedIp ?? '—')}</span>`],
 ])}
@@ -232,7 +252,10 @@ ${kv([
 <h2>ELECTRONIC RECORDS CONSENT</h2>
 ${kv([
   ['Disclosure version', esc(String(consentDetail.disclosureVersion ?? '—'))],
-  ['Disclosure text SHA-256', `<span class="mono">${esc(String(consentDetail.disclosureSha256 ?? '—'))}</span>`],
+  [
+    'Disclosure text SHA-256',
+    `<span class="mono">${esc(String(consentDetail.disclosureSha256 ?? '—'))}</span>`,
+  ],
   ['Accepted at', both(consent?.occurredAt ?? envelope.consentedAt)],
   ['IP address', `<span class="mono">${esc(consent?.ipAddress ?? '—')}</span>`],
 ])}
@@ -241,7 +264,10 @@ ${kv([
 ${kv([
   ['Signer', esc(envelope.signerEmail)],
   ['Copies to', esc(envelope.ccEmails.length > 0 ? envelope.ccEmails.join(', ') : '—')],
-  ['NetEnroll copies', esc(input.internalCopyEmails.length > 0 ? input.internalCopyEmails.join(', ') : '—')],
+  [
+    'NetEnroll copies',
+    esc(input.internalCopyEmails.length > 0 ? input.internalCopyEmails.join(', ') : '—'),
+  ],
 ])}
 
 <h2>AUDIT TRAIL</h2>

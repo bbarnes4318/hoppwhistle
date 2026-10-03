@@ -25,7 +25,14 @@ export const STATUS_LABELS: Record<AgreementStatus, string> = {
   EXPIRED: 'Expired',
 };
 
-export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info';
+export type BadgeTone =
+  | 'default'
+  | 'secondary'
+  | 'destructive'
+  | 'outline'
+  | 'success'
+  | 'warning'
+  | 'info';
 
 export const STATUS_TONES: Record<AgreementStatus, BadgeTone> = {
   SENT: 'info',
@@ -104,7 +111,9 @@ export interface EnvelopeSummary {
   lastActivityAt?: string;
 }
 
-export function kindsOf(e: Pick<EnvelopeSummary, 'includesMsa' | 'includesCpa' | 'includesCpl'>): DocumentKind[] {
+export function kindsOf(
+  e: Pick<EnvelopeSummary, 'includesMsa' | 'includesCpa' | 'includesCpl'>
+): DocumentKind[] {
   const kinds: DocumentKind[] = [];
   if (e.includesMsa) kinds.push('MSA');
   if (e.includesCpa) kinds.push('CPA');
@@ -163,7 +172,9 @@ export async function downloadWithSession(path: string, fileName: string): Promi
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    const body = (await response.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
     return body?.error?.message ?? `Download failed (${response.status}).`;
   }
   saveBlob(await response.blob(), fileName);

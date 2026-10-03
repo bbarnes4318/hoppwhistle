@@ -14,7 +14,13 @@ import {
 } from '../services/agreements/executed.js';
 import { canonicalJson, maskEmail } from '../services/agreements/format.js';
 import type { FrozenTerms } from '../services/agreements/terms.js';
-import { digestsEqual, hashOtp, hashToken, mintToken, newReference } from '../services/agreements/tokens.js';
+import {
+  digestsEqual,
+  hashOtp,
+  hashToken,
+  mintToken,
+  newReference,
+} from '../services/agreements/tokens.js';
 
 import { testPng as png } from './helpers/png.js';
 
@@ -192,23 +198,29 @@ describe('executed document: the as-sent text plus signature fragments, nothing 
   });
 
   it('escapes a hostile typed name', () => {
-    const executed = renderExecutedHtml(msa.html, { ...signature, typedName: '<img src=x onerror=1>' });
+    const executed = renderExecutedHtml(msa.html, {
+      ...signature,
+      typedName: '<img src=x onerror=1>',
+    });
     expect(executed).not.toContain('<img src=x');
   });
 });
-
 
 describe('drawn signature validation', () => {
   it('accepts a PNG within 1200×400 as base64 or a data URI', () => {
     const ok = png(600, 200);
     expect(Buffer.isBuffer(parseSignaturePng(ok.toString('base64')))).toBe(true);
-    expect(Buffer.isBuffer(parseSignaturePng(`data:image/png;base64,${ok.toString('base64')}`))).toBe(true);
+    expect(
+      Buffer.isBuffer(parseSignaturePng(`data:image/png;base64,${ok.toString('base64')}`))
+    ).toBe(true);
   });
 
   it('refuses oversize dimensions, non-PNG bytes and garbage', () => {
     expect(parseSignaturePng(png(1201, 100).toString('base64'))).toMatch(/1200 × 400/);
     expect(parseSignaturePng(png(100, 401).toString('base64'))).toMatch(/1200 × 400/);
-    expect(parseSignaturePng(Buffer.from('GIF89a-not-a-png-at-all-padding-xx').toString('base64'))).toMatch(/not a valid PNG/);
+    expect(
+      parseSignaturePng(Buffer.from('GIF89a-not-a-png-at-all-padding-xx').toString('base64'))
+    ).toMatch(/not a valid PNG/);
     expect(parseSignaturePng('!!!')).toMatch(/not a valid PNG/);
   });
 

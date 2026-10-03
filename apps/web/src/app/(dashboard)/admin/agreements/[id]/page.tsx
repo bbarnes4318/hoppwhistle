@@ -105,9 +105,9 @@ function money(value: unknown): string {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="grid grid-cols-[160px_1fr] gap-3 border-b border-rule py-1.5 text-sm last:border-0">
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-b border-rule py-1.5 text-sm last:border-0">
       <div className="text-[11px] uppercase tracking-wide text-ink-3">{label}</div>
-      <div>{children}</div>
+      <div className="min-w-0 break-words [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
@@ -126,7 +126,9 @@ export default function AgreementDetailPage(): JSX.Element {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const response = await apiClient.get<Envelope<AgreementDetail>>(`/api/v1/platform/agreements/${id}`);
+    const response = await apiClient.get<Envelope<AgreementDetail>>(
+      `/api/v1/platform/agreements/${id}`
+    );
     setError(response.error ? response.error.message : null);
     setDetail(payload(response) ?? null);
   }, [id]);
@@ -135,7 +137,11 @@ export default function AgreementDetailPage(): JSX.Element {
     void load();
   }, [load]);
 
-  async function action(name: string, path: string, body?: unknown): Promise<Record<string, unknown> | null> {
+  async function action(
+    name: string,
+    path: string,
+    body?: unknown
+  ): Promise<Record<string, unknown> | null> {
     setBusy(name);
     setError(null);
     setNotice(null);
@@ -180,7 +186,10 @@ export default function AgreementDetailPage(): JSX.Element {
               (detail.sealed ? (
                 <Badge variant="success">Sealed</Badge>
               ) : (
-                <Badge variant="warning" title="No seal certificate was configured when this completed">
+                <Badge
+                  variant="warning"
+                  title="No seal certificate was configured when this completed"
+                >
                   Unsealed
                 </Badge>
               ))}
@@ -212,10 +221,18 @@ export default function AgreementDetailPage(): JSX.Element {
       {link && (
         <Panel className="border-ringing bg-ringing-tint">
           <PanelBody className="space-y-2">
-            <p className="text-sm font-medium">The email was not sent. Send the signer this link yourself.</p>
+            <p className="text-sm font-medium">
+              The email was not sent. Send the signer this link yourself.
+            </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 break-all rounded-control bg-surface p-2 text-xs">{link}</code>
-              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(link)}>
+              <code className="flex-1 break-all rounded-control bg-surface p-2 text-xs">
+                {link}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigator.clipboard.writeText(link)}
+              >
                 <Copy className="mr-1 h-3.5 w-3.5" />
                 Copy
               </Button>
@@ -232,26 +249,34 @@ export default function AgreementDetailPage(): JSX.Element {
             </PanelHeader>
             <PanelBody className="space-y-4">
               {detail.documents.map(doc => (
-                <div key={doc.id} className="space-y-1 border-b border-rule pb-3 last:border-0 last:pb-0">
+                <div
+                  key={doc.id}
+                  className="space-y-1 border-b border-rule pb-3 last:border-0 last:pb-0"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{doc.title}</span>
                     <Badge variant="outline" className="t-meta">
                       {doc.templateVersion}
                     </Badge>
-                    {doc.pageCount && <span className="text-xs text-ink-3">{doc.pageCount} pages</span>}
+                    {doc.pageCount && (
+                      <span className="text-xs text-ink-3">{doc.pageCount} pages</span>
+                    )}
                     <div className="ml-auto flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => void (async () => {
-                          const token = localStorage.getItem('token');
-                          const response = await fetch(
-                            `/api/v1/platform/agreements/${detail.id}/documents/${doc.id}/sent.html`,
-                            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-                          );
-                          if (response.ok) setSentHtml({ title: doc.title, html: await response.text() });
-                          else setError('The as-sent document could not be loaded.');
-                        })()}
+                        onClick={() =>
+                          void (async () => {
+                            const token = localStorage.getItem('token');
+                            const response = await fetch(
+                              `/api/v1/platform/agreements/${detail.id}/documents/${doc.id}/sent.html`,
+                              { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+                            );
+                            if (response.ok)
+                              setSentHtml({ title: doc.title, html: await response.text() });
+                            else setError('The as-sent document could not be loaded.');
+                          })()
+                        }
                       >
                         <Eye className="mr-1 h-3.5 w-3.5" />
                         View as sent
@@ -259,16 +284,20 @@ export default function AgreementDetailPage(): JSX.Element {
                       {detail.status === 'COMPLETED' && doc.executedPdfSha256 && (
                         <Button
                           size="sm"
-                          onClick={() => void (async () => {
-                            const failure = await downloadWithSession(
-                              `/api/v1/platform/agreements/${detail.id}/documents/${doc.id}.pdf`,
-                              doc.fileName
-                            );
-                            if (failure) setError(failure);
-                          })()}
+                          onClick={() =>
+                            void (async () => {
+                              const failure = await downloadWithSession(
+                                `/api/v1/platform/agreements/${detail.id}/documents/${doc.id}.pdf`,
+                                doc.fileName
+                              );
+                              if (failure) setError(failure);
+                            })()
+                          }
                         >
                           <Download className="mr-1 h-3.5 w-3.5" />
-                          Download PDF {fileSize(doc.executedPdfBytes) !== '—' && `(${fileSize(doc.executedPdfBytes)})`}
+                          Download PDF{' '}
+                          {fileSize(doc.executedPdfBytes) !== '—' &&
+                            `(${fileSize(doc.executedPdfBytes)})`}
                         </Button>
                       )}
                     </div>
@@ -303,21 +332,35 @@ export default function AgreementDetailPage(): JSX.Element {
                   {detail.events.map(event => (
                     <tr key={event.seq} className="border-b border-rule align-top last:border-0">
                       <td className="px-3 py-1.5 text-xs text-ink-3">{event.seq}</td>
-                      <td className="whitespace-nowrap px-3 py-1.5 text-xs">{etDateTime(event.occurredAt)}</td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-xs">
+                        {etDateTime(event.occurredAt)}
+                      </td>
                       <td className="px-3 py-1.5">
-                        <div title={JSON.stringify(event.detail, null, 2)}>{EVENT_LABELS[event.type] ?? event.type}</div>
-                        {event.type === 'COMPLETION_FAILED' && typeof event.detail.error === 'string' && (
-                          <div className="text-xs text-dropped-ink">{event.detail.error}</div>
-                        )}
+                        <div title={JSON.stringify(event.detail, null, 2)}>
+                          {EVENT_LABELS[event.type] ?? event.type}
+                        </div>
+                        {event.type === 'COMPLETION_FAILED' &&
+                          typeof event.detail.error === 'string' && (
+                            <div className="text-xs text-dropped-ink">{event.detail.error}</div>
+                          )}
                         {event.type === 'DOCUMENT_REVIEWED' && (
-                          <div className="text-xs text-ink-3">{String(event.detail.kind ?? '')}</div>
+                          <div className="text-xs text-ink-3">
+                            {String(event.detail.kind ?? '')}
+                          </div>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs">
-                        {event.actorType === 'NETENROLL' ? 'NetEnroll' : event.actorType === 'SIGNER' ? 'Signer' : 'System'}
+                        {event.actorType === 'NETENROLL'
+                          ? 'NetEnroll'
+                          : event.actorType === 'SIGNER'
+                            ? 'Signer'
+                            : 'System'}
                         {event.actorEmail && <div className="text-ink-3">{event.actorEmail}</div>}
                       </td>
-                      <td className="px-3 py-1.5 font-mono text-xs" title={event.userAgent ?? undefined}>
+                      <td
+                        className="px-3 py-1.5 font-mono text-xs"
+                        title={event.userAgent ?? undefined}
+                      >
                         {event.ipAddress ?? '—'}
                       </td>
                     </tr>
@@ -338,12 +381,17 @@ export default function AgreementDetailPage(): JSX.Element {
                 <Button
                   variant="outline"
                   disabled={busy !== null}
-                  onClick={() => void (async () => {
-                    const result = await action('resend', `/api/v1/platform/agreements/${detail.id}/resend`);
-                    if (!result) return;
-                    if (result.emailSent) setNotice('The signing link was emailed again.');
-                    else setLink(String(result.signUrl));
-                  })()}
+                  onClick={() =>
+                    void (async () => {
+                      const result = await action(
+                        'resend',
+                        `/api/v1/platform/agreements/${detail.id}/resend`
+                      );
+                      if (!result) return;
+                      if (result.emailSent) setNotice('The signing link was emailed again.');
+                      else setLink(String(result.signUrl));
+                    })()
+                  }
                 >
                   <Send className="mr-1.5 h-4 w-4" />
                   Resend link
@@ -352,10 +400,15 @@ export default function AgreementDetailPage(): JSX.Element {
               {detail.status === 'SIGNED' && (
                 <Button
                   disabled={busy !== null}
-                  onClick={() => void (async () => {
-                    const result = await action('complete', `/api/v1/platform/agreements/${detail.id}/complete`);
-                    if (result) setNotice('Completed. The executed copies were emailed.');
-                  })()}
+                  onClick={() =>
+                    void (async () => {
+                      const result = await action(
+                        'complete',
+                        `/api/v1/platform/agreements/${detail.id}/complete`
+                      );
+                      if (result) setNotice('Completed. The executed copies were emailed.');
+                    })()
+                  }
                 >
                   {busy === 'complete' ? (
                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -369,29 +422,39 @@ export default function AgreementDetailPage(): JSX.Element {
                 <Button
                   variant="outline"
                   disabled={busy !== null}
-                  onClick={() => void (async () => {
-                    const result = await action('copies', `/api/v1/platform/agreements/${detail.id}/send-copies`);
-                    if (!result) return;
-                    setNotice(
-                      result.emailSent
-                        ? 'Copies sent again with a new 12-month download link.'
-                        : `The email was not sent. New download link: ${String(result.downloadUrl)}`
-                    );
-                  })()}
+                  onClick={() =>
+                    void (async () => {
+                      const result = await action(
+                        'copies',
+                        `/api/v1/platform/agreements/${detail.id}/send-copies`
+                      );
+                      if (!result) return;
+                      setNotice(
+                        result.emailSent
+                          ? 'Copies sent again with a new 12-month download link.'
+                          : `The email was not sent. New download link: ${String(result.downloadUrl)}`
+                      );
+                    })()
+                  }
                 >
                   <Send className="mr-1.5 h-4 w-4" />
                   Send copies again
                 </Button>
               )}
               {detail.status !== 'COMPLETED' && detail.status !== 'VOIDED' && (
-                <Button variant="destructive" disabled={busy !== null} onClick={() => setVoidOpen(true)}>
+                <Button
+                  variant="destructive"
+                  disabled={busy !== null}
+                  onClick={() => setVoidOpen(true)}
+                >
                   <XCircle className="mr-1.5 h-4 w-4" />
                   Void
                 </Button>
               )}
               {detail.status === 'COMPLETED' && (
                 <p className="text-[11px] text-ink-3">
-                  A completed agreement is not voidable here. It is terminated under Section 15 of the MSA.
+                  A completed agreement is not voidable here. It is terminated under Section 15 of
+                  the MSA.
                 </p>
               )}
             </PanelBody>
@@ -427,7 +490,9 @@ export default function AgreementDetailPage(): JSX.Element {
                 {detail.signerName}, {detail.signerTitle}
                 <div className="text-xs text-ink-3">{detail.signerEmail}</div>
               </Row>
-              {detail.ccEmails.length > 0 && <Row label="Copies to">{detail.ccEmails.join(', ')}</Row>}
+              {detail.ccEmails.length > 0 && (
+                <Row label="Copies to">{detail.ccEmails.join(', ')}</Row>
+              )}
               <Row label="NetEnroll">
                 {detail.netenrollSignatoryName}, {detail.netenrollSignatoryTitle}
                 <div className="text-xs text-ink-3">
@@ -460,8 +525,10 @@ export default function AgreementDetailPage(): JSX.Element {
                       );
                     })}
                     <Row label="Delivery">
-                      {terms[kind].deliveryDays.join(', ')} · {terms[kind].deliveryStart}–{terms[kind].deliveryEnd} ET
-                      {terms[kind].firstDeliveryDay && ` · first day ${terms[kind].firstDeliveryDay}`}
+                      {terms[kind].deliveryDays.join(', ')} · {terms[kind].deliveryStart}–
+                      {terms[kind].deliveryEnd} ET
+                      {terms[kind].firstDeliveryDay &&
+                        ` · first day ${terms[kind].firstDeliveryDay}`}
                     </Row>
                   </div>
                 ) : null
@@ -476,8 +543,8 @@ export default function AgreementDetailPage(): JSX.Element {
           <DialogHeader>
             <DialogTitle>Void {detail.reference}</DialogTitle>
             <DialogDescription>
-              The signing link stops working and the signer is emailed that the agreements were withdrawn.
-              The reason is recorded on the audit trail; it is not sent to the signer.
+              The signing link stops working and the signer is emailed that the agreements were
+              withdrawn. The reason is recorded on the audit trail; it is not sent to the signer.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -494,15 +561,21 @@ export default function AgreementDetailPage(): JSX.Element {
             <Button
               variant="destructive"
               disabled={!voidReason.trim() || busy !== null}
-              onClick={() => void (async () => {
-                const result = await action('void', `/api/v1/platform/agreements/${detail.id}/void`, {
-                  reason: voidReason.trim(),
-                });
-                if (result) {
-                  setVoidOpen(false);
-                  setNotice('Voided.');
-                }
-              })()}
+              onClick={() =>
+                void (async () => {
+                  const result = await action(
+                    'void',
+                    `/api/v1/platform/agreements/${detail.id}/void`,
+                    {
+                      reason: voidReason.trim(),
+                    }
+                  );
+                  if (result) {
+                    setVoidOpen(false);
+                    setNotice('Voided.');
+                  }
+                })()
+              }
             >
               Void agreements
             </Button>
@@ -514,7 +587,9 @@ export default function AgreementDetailPage(): JSX.Element {
         <DialogContent className="flex h-[92vh] max-w-[min(96vw,1000px)] flex-col gap-3 p-4">
           <DialogHeader>
             <DialogTitle>{sentHtml?.title} — as sent</DialogTitle>
-            <DialogDescription>The exact document the signer reviewed, before signature.</DialogDescription>
+            <DialogDescription>
+              The exact document the signer reviewed, before signature.
+            </DialogDescription>
           </DialogHeader>
           {sentHtml && (
             <iframe

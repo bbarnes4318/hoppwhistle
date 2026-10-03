@@ -16,7 +16,10 @@ export function SignatureScript({
 }): JSX.Element {
   return (
     <span
-      className={cn('inline-block whitespace-nowrap text-[30px] leading-none text-[#0f2a4a]', className)}
+      className={cn(
+        'inline-block whitespace-nowrap text-[30px] leading-none text-[#0f2a4a]',
+        className
+      )}
       style={{ fontFamily: "'Dancing Script', cursive" }}
     >
       {name || ' '}

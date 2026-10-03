@@ -50,8 +50,12 @@ export default function VerifyAgreementPage(): JSX.Element {
       const response = await fetch(`/api/v1/public/agreements/verify?sha256=${digest}`, {
         referrerPolicy: 'no-referrer',
       });
-      const body = (await response.json().catch(() => null)) as { data?: Match; error?: { message?: string } } | null;
-      if (!response.ok || !body?.data) setError(body?.error?.message ?? 'The file could not be checked. Try again.');
+      const body = (await response.json().catch(() => null)) as {
+        data?: Match;
+        error?: { message?: string };
+      } | null;
+      if (!response.ok || !body?.data)
+        setError(body?.error?.message ?? 'The file could not be checked. Try again.');
       else setResult(body.data);
     } catch {
       setError('The file could not be read.');
@@ -65,14 +69,16 @@ export default function VerifyAgreementPage(): JSX.Element {
       <div className="mx-auto w-full max-w-[640px] space-y-5">
         <header className="flex items-center justify-between">
           <Logo width={180} />
-          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">Verify an agreement</span>
+          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">
+            Verify an agreement
+          </span>
         </header>
 
         <section className="rounded-card border border-rule bg-surface p-5 sm:p-7">
           <h1 className="t-title text-ink">Verify an executed agreement</h1>
           <p className="t-body mt-2 text-ink-2">
-            Choose a PDF to check it against NetEnroll&rsquo;s records. The file stays on your device: only its
-            SHA-256 fingerprint is sent.
+            Choose a PDF to check it against NetEnroll&rsquo;s records. The file stays on your
+            device: only its SHA-256 fingerprint is sent.
           </p>
 
           <label
@@ -93,7 +99,9 @@ export default function VerifyAgreementPage(): JSX.Element {
             )}
           >
             <FileUp className="h-6 w-6 text-ink-3" />
-            <span className="text-sm text-ink">{file ? file.name : 'Drop a PDF here, or choose one'}</span>
+            <span className="text-sm text-ink">
+              {file ? file.name : 'Drop a PDF here, or choose one'}
+            </span>
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -112,7 +120,9 @@ export default function VerifyAgreementPage(): JSX.Element {
             </p>
           )}
 
-          {hash && !busy && <p className="mt-4 break-all font-mono text-[11px] text-ink-3">SHA-256 {hash}</p>}
+          {hash && !busy && (
+            <p className="mt-4 break-all font-mono text-[11px] text-ink-3">SHA-256 {hash}</p>
+          )}
 
           {result?.match && (
             <div className="mt-4 rounded-control border border-live bg-live-tint p-4 text-live-ink">
@@ -130,7 +140,9 @@ export default function VerifyAgreementPage(): JSX.Element {
                 <dt className="text-ink-2">Completed</dt>
                 <dd>{etDate(result.completedAt)}</dd>
                 <dt className="text-ink-2">Seal</dt>
-                <dd>{result.sealed ? 'Digitally sealed by PVN LLC d/b/a NetEnroll' : 'Not sealed'}</dd>
+                <dd>
+                  {result.sealed ? 'Digitally sealed by PVN LLC d/b/a NetEnroll' : 'Not sealed'}
+                </dd>
               </dl>
             </div>
           )}
@@ -139,8 +151,8 @@ export default function VerifyAgreementPage(): JSX.Element {
             <div className="mt-4 flex items-start gap-2 rounded-control border border-dropped bg-dropped-tint p-4 text-dropped-ink">
               <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
               <p className="text-sm">
-                No executed NetEnroll agreement matches this file. A file that has been altered in any way will not
-                match.
+                No executed NetEnroll agreement matches this file. A file that has been altered in
+                any way will not match.
               </p>
             </div>
           )}

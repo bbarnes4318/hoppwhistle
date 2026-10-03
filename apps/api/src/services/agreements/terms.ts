@@ -90,9 +90,7 @@ export const termsSchema = z
         ...schedule,
       })
       .optional(),
-    netenroll: z
-      .object({ noticeAddress: z.string(), noticeEmail: z.string() })
-      .optional(),
+    netenroll: z.object({ noticeAddress: z.string(), noticeEmail: z.string() }).optional(),
   })
   .superRefine((terms, ctx) => {
     for (const kind of ['cpa', 'cpl'] as const) {

@@ -133,7 +133,10 @@ ${section(
       '1.6',
       "**Prepaid Balance.** Agency buys Billable Calls in advance by paying a NetEnroll invoice through Melio. The calls paid for form Agency's prepaid balance for the selected vertical."
     ),
-    clause('1.7', '**Drawdown.** Each Billable Call reduces the prepaid balance by the rate for its vertical.'),
+    clause(
+      '1.7',
+      '**Drawdown.** Each Billable Call reduces the prepaid balance by the rate for its vertical.'
+    ),
     clause(
       '1.8',
       '**Daily Block.** The Daily Block is the maximum number of Billable Calls delivered to Agency on a Delivery Day for each selected vertical, as stated in Part 1. Delivery pauses for the rest of the Delivery Day once it is reached.'

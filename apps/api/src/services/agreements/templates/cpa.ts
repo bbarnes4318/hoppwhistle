@@ -149,7 +149,10 @@ ${section(
       '1.5',
       "**Prepaid Balance.** Agency buys applications in advance by paying a NetEnroll invoice through Melio. The applications paid for form Agency's prepaid balance for the selected vertical."
     ),
-    clause('1.6', '**Drawdown.** Each Submitted Application reduces the prepaid balance by the rate for its vertical.'),
+    clause(
+      '1.6',
+      '**Drawdown.** Each Submitted Application reduces the prepaid balance by the rate for its vertical.'
+    ),
     clause(
       '1.7',
       '**Daily Block.** The Daily Block is the maximum number of Submitted Applications delivered to Agency on a Delivery Day for each selected vertical, as stated in Part 1. Delivery pauses for the rest of the Delivery Day once it is reached.'

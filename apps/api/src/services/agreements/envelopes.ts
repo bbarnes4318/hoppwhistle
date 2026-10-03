@@ -111,7 +111,10 @@ export async function prepareEnvelope(
   let existingMsaEffectiveDate: string | null = null;
   const tenantId = body.tenantId ?? null;
   if (tenantId) {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
     if (!tenant) throw new AgreementError(422, 'VALIDATION_ERROR', 'That agency does not exist.');
   }
 
@@ -216,7 +219,7 @@ export async function createEnvelope(
     throw new AgreementError(
       422,
       'AUTHORITY_NOT_CONFIRMED',
-      "Confirm you are authorized to sign on behalf of PVN LLC d/b/a NetEnroll."
+      'Confirm you are authorized to sign on behalf of PVN LLC d/b/a NetEnroll.'
     );
   }
   const { body, terms } = prepared;
@@ -344,7 +347,11 @@ export async function createEnvelope(
 }
 
 function titleOf(kind: AgreementDocumentKind): string {
-  return kind === 'MSA' ? 'Master Services Agreement' : kind === 'CPA' ? 'CPA Agreement' : 'CPL Agreement';
+  return kind === 'MSA'
+    ? 'Master Services Agreement'
+    : kind === 'CPA'
+      ? 'CPA Agreement'
+      : 'CPL Agreement';
 }
 
 /** Mark past-expiry SENT / VIEWED envelopes EXPIRED, each with an event. */

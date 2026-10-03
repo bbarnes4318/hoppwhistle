@@ -160,7 +160,12 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     return { id: data.envelope.id as string, token, data };
   }
 
-  const pub = (method: 'GET' | 'POST', url: string, payload?: unknown, headers: Record<string, string> = {}) =>
+  const pub = (
+    method: 'GET' | 'POST',
+    url: string,
+    payload?: unknown,
+    headers: Record<string, string> = {}
+  ) =>
     app.inject({
       method,
       url: `/api/v1/public/agreements${url}`,
@@ -189,7 +194,12 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     const session = await verify(token);
     const headers = { 'x-signing-session': session };
     const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
-    await pub('POST', `/sign/${token}/consent`, { accepted: true, disclosureVersion: docs.disclosure.version }, headers);
+    await pub(
+      'POST',
+      `/sign/${token}/consent`,
+      { accepted: true, disclosureVersion: docs.disclosure.version },
+      headers
+    );
     for (const doc of docs.documents) {
       await pub('POST', `/sign/${token}/reviewed`, { documentId: doc.id }, headers);
     }
@@ -213,9 +223,17 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
   }
 
   /** A COMPLETED envelope with a stored (fake) executed PDF, without Chrome. */
-  async function fabricateCompleted(): Promise<{ id: string; docId: string; downloadToken: string; sha: string; key: string }> {
+  async function fabricateCompleted(): Promise<{
+    id: string;
+    docId: string;
+    downloadToken: string;
+    sha: string;
+    key: string;
+  }> {
     const { id } = await create();
-    const doc = await prisma.agreementDocument.findFirstOrThrow({ where: { envelopeId: id, kind: 'CPA' } });
+    const doc = await prisma.agreementDocument.findFirstOrThrow({
+      where: { envelopeId: id, kind: 'CPA' },
+    });
     const bytes = Buffer.from(`%PDF-1.7\n% fabricated executed copy ${id}\n%%EOF\n`);
     const sha = createHash('sha256').update(bytes).digest('hex');
     const docs = await prisma.agreementDocument.findMany({ where: { envelopeId: id } });
@@ -243,7 +261,13 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         downloadTokenExpiresAt: new Date(Date.now() + 86_400_000),
       },
     });
-    return { id, docId: doc.id, downloadToken, sha, key: `agreements/${id}/${doc.id}-executed.pdf` };
+    return {
+      id,
+      docId: doc.id,
+      downloadToken,
+      sha,
+      key: `agreements/${id}/${doc.id}-executed.pdf`,
+    };
   }
 
   beforeAll(async () => {
@@ -278,7 +302,14 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
   beforeEach(async () => {
     sendMail.mockReset().mockResolvedValue({ accepted: ['x'] });
     prisma = getPrismaClient();
-    for (const table of ['agreement_envelopes', 'platform_admins', 'audit_logs', 'roles', 'tenants', 'users']) {
+    for (const table of [
+      'agreement_envelopes',
+      'platform_admins',
+      'audit_logs',
+      'roles',
+      'tenants',
+      'users',
+    ]) {
       await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
     }
     await prisma.agreementSettings.update({
@@ -292,10 +323,14 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
 
     const roles: Record<string, string> = {};
     for (const name of [RoleName.OWNER, RoleName.ADMIN, RoleName.AGENT]) {
-      roles[name] = (await prisma.role.create({ data: { name, description: name, permissions: ['admin:*'] } })).id;
+      roles[name] = (
+        await prisma.role.create({ data: { name, description: name, permissions: ['admin:*'] } })
+      ).id;
     }
     const stamp = Math.random().toString(36).slice(2, 8);
-    const tenant = await prisma.tenant.create({ data: { name: 'Summit Ridge', slug: `summit-${stamp}`, status: 'ACTIVE' } });
+    const tenant = await prisma.tenant.create({
+      data: { name: 'Summit Ridge', slug: `summit-${stamp}`, status: 'ACTIVE' },
+    });
     tenantId = tenant.id;
     await prisma.agencyProfile.create({
       data: {
@@ -371,10 +406,20 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         ['API key', { 'x-api-key': API_KEY }, 403],
       ];
       for (const [who, headers, expected] of callers) {
-        const response = await app.inject({ method: method as any, url, headers, payload: method === 'GET' ? undefined : {} });
+        const response = await app.inject({
+          method: method as any,
+          url,
+          headers,
+          payload: method === 'GET' ? undefined : {},
+        });
         expect(response.statusCode, `${who} on ${method} ${url}: ${response.body}`).toBe(expected);
       }
-      const admin = await app.inject({ method: method as any, url, headers: asAdmin(), payload: method === 'GET' ? undefined : {} });
+      const admin = await app.inject({
+        method: method as any,
+        url,
+        headers: asAdmin(),
+        payload: method === 'GET' ? undefined : {},
+      });
       expect([401, 403]).not.toContain(admin.statusCode);
     });
 
@@ -400,13 +445,25 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     });
 
     it('prefills from the agency profile', async () => {
-      const response = await app.inject({ method: 'GET', url: '/api/v1/platform/agreements/agencies?q=summit', headers: asAdmin() });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/platform/agreements/agencies?q=summit',
+        headers: asAdmin(),
+      });
       const [agency] = response.json().data;
-      expect(agency).toMatchObject({ id: tenantId, legalName: 'Summit Ridge Insurance Group LLC', executedMsa: null });
+      expect(agency).toMatchObject({
+        id: tenantId,
+        legalName: 'Summit Ridge Insurance Group LLC',
+        executedMsa: null,
+      });
     });
 
     it('lets an anonymous POST reach the public routes: no CSRF, no session cookie', async () => {
-      for (const url of ['/sign/not-a-token/otp', '/sign/not-a-token/verify', '/sign/not-a-token/sign']) {
+      for (const url of [
+        '/sign/not-a-token/otp',
+        '/sign/not-a-token/verify',
+        '/sign/not-a-token/sign',
+      ]) {
         const response = await pub('POST', url, { code: '123456' });
         expect(response.statusCode, url).toBe(404);
         expect(response.json().error.message).toBe('This signing link is not valid.');
@@ -419,10 +476,18 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
   // ══════════════════════════════════════════════════════════════════════════
   describe('create: what is refused', () => {
     const post = (payload: unknown) =>
-      app.inject({ method: 'POST', url: '/api/v1/platform/agreements', headers: asAdmin(), payload: payload as any });
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/platform/agreements',
+        headers: asAdmin(),
+        payload: payload as any,
+      });
 
     it('refuses while a settings field is empty, naming it', async () => {
-      await prisma.agreementSettings.update({ where: { id: 'default' }, data: { netenrollNoticeEmail: null } });
+      await prisma.agreementSettings.update({
+        where: { id: 'default' },
+        data: { netenrollNoticeEmail: null },
+      });
       const response = await post(body());
       expect(response.statusCode).toBe(422);
       expect(response.json().error.message).toContain("NetEnroll's notice email");
@@ -465,7 +530,10 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
 
       const done = await fabricateCompleted();
       const b = body({ existingMsaEnvelopeId: done.id, tenantId: null });
-      const mismatch = await post({ ...b, terms: { ...b.terms, agency: { ...b.terms.agency, legalName: 'Another Agency LLC' } } });
+      const mismatch = await post({
+        ...b,
+        terms: { ...b.terms, agency: { ...b.terms.agency, legalName: 'Another Agency LLC' } },
+      });
       expect(mismatch.statusCode).toBe(422);
       expect(mismatch.json().error.code).toBe('EXISTING_MSA_MISMATCH');
     });
@@ -488,10 +556,15 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       const { id, data } = await create();
       expect(data.emailSent).toBe(true);
       const invite = sendMail.mock.calls[0][0];
-      expect(invite.subject).toBe('Agreements from NetEnroll ready for your signature: Summit Ridge Insurance Group LLC');
+      expect(invite.subject).toBe(
+        'Agreements from NetEnroll ready for your signature: Summit Ridge Insurance Group LLC'
+      );
       expect(invite.replyTo).toBe('support@pvnvoice.com');
       expect(invite.html).toContain(data.signUrl);
-      const envelope = await prisma.agreementEnvelope.findUniqueOrThrow({ where: { id }, include: { documents: true } });
+      const envelope = await prisma.agreementEnvelope.findUniqueOrThrow({
+        where: { id },
+        include: { documents: true },
+      });
       expect(envelope.reference).toMatch(/^NE-[A-HJ-NP-Z2-9]{8}$/);
       expect(envelope.signerEmail).toBe('dana@summitridge.test');
       expect(envelope.signTokenEnc).toMatch(/^enc:v1:/);
@@ -499,7 +572,9 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         expect(doc.sentHtmlSha256).toBe(createHash('sha256').update(doc.sentHtml).digest('hex'));
       }
       expect((await events(id)).map(e => e.type)).toEqual(['CREATED', 'NETENROLL_SIGNED', 'SENT']);
-      expect(await prisma.auditLog.count({ where: { action: 'agreements.sent', tenantId } })).toBe(1);
+      expect(await prisma.auditLog.count({ where: { action: 'agreements.sent', tenantId } })).toBe(
+        1
+      );
     });
 
     it('records EMAIL_NOT_SENT and still returns the link when SMTP is down', async () => {
@@ -512,7 +587,11 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
 
     it('resends the same link, never a new one', async () => {
       const { id, data } = await create();
-      const response = await app.inject({ method: 'POST', url: `/api/v1/platform/agreements/${id}/resend`, headers: asAdmin() });
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/agreements/${id}/resend`,
+        headers: asAdmin(),
+      });
       expect(response.statusCode).toBe(200);
       expect(response.json().data.signUrl).toBe(data.signUrl);
       expect((await events(id)).map(e => e.type)).toContain('RESENT');
@@ -526,7 +605,9 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('refuses UPDATE and DELETE on agreement_events', async () => {
       const { id } = await create();
       await expect(
-        prisma.$executeRawUnsafe(`UPDATE "agreement_events" SET "ipAddress" = '1.1.1.1' WHERE "envelopeId" = '${id}'`)
+        prisma.$executeRawUnsafe(
+          `UPDATE "agreement_events" SET "ipAddress" = '1.1.1.1' WHERE "envelopeId" = '${id}'`
+        )
       ).rejects.toThrow(/append-only/);
       await expect(
         prisma.$executeRawUnsafe(`DELETE FROM "agreement_events" WHERE "envelopeId" = '${id}'`)
@@ -536,21 +617,31 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('refuses an UPDATE of the as-sent document', async () => {
       const { id } = await create();
       await expect(
-        prisma.$executeRawUnsafe(`UPDATE "agreement_documents" SET "sentHtml" = 'x' WHERE "envelopeId" = '${id}'`)
+        prisma.$executeRawUnsafe(
+          `UPDATE "agreement_documents" SET "sentHtml" = 'x' WHERE "envelopeId" = '${id}'`
+        )
       ).rejects.toThrow(/cannot be changed/);
     });
 
     it('refuses changing an executed PDF key once set', async () => {
       const { id } = await create();
-      await prisma.$executeRawUnsafe(`UPDATE "agreement_documents" SET "executedPdfKey" = 'k1' WHERE "envelopeId" = '${id}'`);
+      await prisma.$executeRawUnsafe(
+        `UPDATE "agreement_documents" SET "executedPdfKey" = 'k1' WHERE "envelopeId" = '${id}'`
+      );
       await expect(
-        prisma.$executeRawUnsafe(`UPDATE "agreement_documents" SET "executedPdfKey" = 'k2' WHERE "envelopeId" = '${id}'`)
+        prisma.$executeRawUnsafe(
+          `UPDATE "agreement_documents" SET "executedPdfKey" = 'k2' WHERE "envelopeId" = '${id}'`
+        )
       ).rejects.toThrow(/cannot be changed/);
     });
 
     it('refuses an UPDATE of terms, signer email or sign token hash', async () => {
       const { id } = await create();
-      for (const set of [`"terms" = '{}'::jsonb`, `"signerEmail" = 'x@y.z'`, `"signTokenHash" = 'x'`]) {
+      for (const set of [
+        `"terms" = '{}'::jsonb`,
+        `"signerEmail" = 'x@y.z'`,
+        `"signTokenHash" = 'x'`,
+      ]) {
         await expect(
           prisma.$executeRawUnsafe(`UPDATE "agreement_envelopes" SET ${set} WHERE "id" = '${id}'`)
         ).rejects.toThrow(/agreement_envelopes/);
@@ -562,22 +653,35 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('verifies ten appended events, and names the seq of a tampered row', async () => {
       const { id } = await create();
       for (let i = 0; i < 10; i += 1) {
-        await recordEvent(id, { type: 'LINK_OPENED', actorType: 'SIGNER', ipAddress: '203.0.113.9', detail: { i } });
+        await recordEvent(id, {
+          type: 'LINK_OPENED',
+          actorType: 'SIGNER',
+          ipAddress: '203.0.113.9',
+          detail: { i },
+        });
       }
       const ok = await verifyEventChain(id);
       expect(ok).toMatchObject({ ok: true, count: 13 });
 
-      await prisma.$executeRawUnsafe(`ALTER TABLE "agreement_events" DISABLE TRIGGER "agreement_events_append_only"`);
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "agreement_events" DISABLE TRIGGER "agreement_events_append_only"`
+      );
       try {
         await prisma.$executeRawUnsafe(
           `UPDATE "agreement_events" SET "ipAddress" = '198.51.100.66' WHERE "envelopeId" = '${id}' AND "seq" = 7`
         );
       } finally {
-        await prisma.$executeRawUnsafe(`ALTER TABLE "agreement_events" ENABLE TRIGGER "agreement_events_append_only"`);
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "agreement_events" ENABLE TRIGGER "agreement_events_append_only"`
+        );
       }
       expect(await verifyEventChain(id)).toMatchObject({ ok: false, brokenSeq: 7 });
 
-      const detail = await app.inject({ method: 'GET', url: `/api/v1/platform/agreements/${id}`, headers: asAdmin() });
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/api/v1/platform/agreements/${id}`,
+        headers: asAdmin(),
+      });
       expect(detail.json().data).toMatchObject({ chainValid: false, chainBrokenAt: 7 });
     });
   });
@@ -591,9 +695,18 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       const response = await pub('GET', `/sign/${token}`);
       expect(response.statusCode).toBe(200);
       const data = response.json().data;
-      expect(Object.keys(data).sort()).toEqual(['agencyLegalName', 'documents', 'expiresAt', 'signerEmailMasked', 'status']);
+      expect(Object.keys(data).sort()).toEqual([
+        'agencyLegalName',
+        'documents',
+        'expiresAt',
+        'signerEmailMasked',
+        'status',
+      ]);
       expect(data.signerEmailMasked).toBe('d***@summitridge.test');
-      expect(data.documents).toEqual([{ title: 'Master Services Agreement' }, { title: 'CPA Agreement' }]);
+      expect(data.documents).toEqual([
+        { title: 'Master Services Agreement' },
+        { title: 'CPA Agreement' },
+      ]);
       const docs = await pub('GET', `/sign/${token}/documents`);
       expect(docs.statusCode).toBe(401);
     });
@@ -605,7 +718,8 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       const code = lastCode();
       const wrong = code === '000000' ? '111111' : '000000';
       const statuses: number[] = [];
-      for (let i = 0; i < 5; i += 1) statuses.push((await pub('POST', `/sign/${token}/verify`, { code: wrong })).statusCode);
+      for (let i = 0; i < 5; i += 1)
+        statuses.push((await pub('POST', `/sign/${token}/verify`, { code: wrong })).statusCode);
       expect(statuses).toEqual([400, 400, 400, 400, 423]);
       // The right code no longer works once locked.
       expect((await pub('POST', `/sign/${token}/verify`, { code })).statusCode).toBe(423);
@@ -623,7 +737,8 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('allows five codes an hour', async () => {
       const { token } = await create();
       const statuses: number[] = [];
-      for (let i = 0; i < 6; i += 1) statuses.push((await pub('POST', `/sign/${token}/otp`)).statusCode);
+      for (let i = 0; i < 6; i += 1)
+        statuses.push((await pub('POST', `/sign/${token}/otp`)).statusCode);
       expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
     });
 
@@ -641,29 +756,57 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect(response.statusCode).toBe(422);
       expect(response.json().error.message).toContain('disclosure');
 
-      await pub('POST', `/sign/${token}/consent`, { accepted: true, disclosureVersion: 'ESIGN-2026-10-03' }, headers);
+      await pub(
+        'POST',
+        `/sign/${token}/consent`,
+        { accepted: true, disclosureVersion: 'ESIGN-2026-10-03' },
+        headers
+      );
       await pub('POST', `/sign/${token}/reviewed`, { documentId: docs.documents[0].id }, headers);
       response = await pub('POST', `/sign/${token}/sign`, signBody(docs), headers);
       expect(response.statusCode).toBe(422);
       expect(response.json().error.message).toContain('CPA Agreement');
 
       await pub('POST', `/sign/${token}/reviewed`, { documentId: docs.documents[1].id }, headers);
-      response = await pub('POST', `/sign/${token}/sign`, signBody(docs, { typedName: 'Somebody Else' }), headers);
+      response = await pub(
+        'POST',
+        `/sign/${token}/sign`,
+        signBody(docs, { typedName: 'Somebody Else' }),
+        headers
+      );
       expect(response.statusCode).toBe(422);
       expect(response.json().error.message).toContain('Dana Whitfield');
 
-      response = await pub('POST', `/sign/${token}/sign`, signBody(docs, { acceptances: {} }), headers);
+      response = await pub(
+        'POST',
+        `/sign/${token}/sign`,
+        signBody(docs, { acceptances: {} }),
+        headers
+      );
       expect(response.statusCode).toBe(422);
-      response = await pub('POST', `/sign/${token}/sign`, signBody(docs, { initials: 'D1' }), headers);
+      response = await pub(
+        'POST',
+        `/sign/${token}/sign`,
+        signBody(docs, { initials: 'D1' }),
+        headers
+      );
       expect(response.statusCode).toBe(422);
-      response = await pub('POST', `/sign/${token}/sign`, signBody(docs, { method: 'DRAWN', drawnPng: testPng(1300, 100).toString('base64') }), headers);
+      response = await pub(
+        'POST',
+        `/sign/${token}/sign`,
+        signBody(docs, { method: 'DRAWN', drawnPng: testPng(1300, 100).toString('base64') }),
+        headers
+      );
       expect(response.statusCode).toBe(422);
     });
 
     it('signs, and completes (or records COMPLETION_FAILED and completes on retry)', async () => {
       const { id, token } = await create();
       const { headers, docs } = await readyToSign(token);
-      const documents = await prisma.agreementDocument.findMany({ where: { envelopeId: id }, orderBy: { sortOrder: 'asc' } });
+      const documents = await prisma.agreementDocument.findMany({
+        where: { envelopeId: id },
+        orderBy: { sortOrder: 'asc' },
+      });
 
       // Block completion: an object already sits where the first executed PDF
       // would be written, and objects are never overwritten.
@@ -694,8 +837,12 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect((signedEvent.detail as any).documentHashes).toEqual(
         Object.fromEntries(documents.map(d => [d.id, d.sentHtmlSha256]))
       );
-      expect((signedEvent.detail as any).acceptanceStatements[documents[1].id]).toBe('I have read and agree to the CPA Agreement.');
-      expect(sendMail.mock.calls.some(c => String(c[0].subject).startsWith('Completion failed'))).toBe(true);
+      expect((signedEvent.detail as any).acceptanceStatements[documents[1].id]).toBe(
+        'I have read and agree to the CPA Agreement.'
+      );
+      expect(
+        sendMail.mock.calls.some(c => String(c[0].subject).startsWith('Completion failed'))
+      ).toBe(true);
 
       // The token cannot sign a second time.
       const again = await pub('POST', `/sign/${token}/sign`, signBody(docs), headers);
@@ -703,7 +850,11 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect((await events(id)).filter(e => e.type === 'SIGNED')).toHaveLength(1);
 
       rmSync(blocker);
-      const retry = await app.inject({ method: 'POST', url: `/api/v1/platform/agreements/${id}/complete`, headers: asAdmin() });
+      const retry = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/agreements/${id}/complete`,
+        headers: asAdmin(),
+      });
       envelope = await prisma.agreementEnvelope.findUniqueOrThrow({ where: { id } });
       if (!HAS_CHROME) {
         expect(retry.statusCode).toBe(500);
@@ -713,7 +864,10 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect(retry.statusCode, retry.body).toBe(200);
       expect(envelope.status).toBe('COMPLETED');
       expect(envelope.sealed).toBe(false);
-      const finalDocs = await prisma.agreementDocument.findMany({ where: { envelopeId: id }, orderBy: { sortOrder: 'asc' } });
+      const finalDocs = await prisma.agreementDocument.findMany({
+        where: { envelopeId: id },
+        orderBy: { sortOrder: 'asc' },
+      });
       for (const doc of finalDocs) {
         const bytes = readFileSync(join(storageDir, doc.executedPdfKey!));
         expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
@@ -724,18 +878,28 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect((completedEvent.detail as any).documents.map((d: any) => d.executedPdfSha256)).toEqual(
         finalDocs.map(d => d.executedPdfSha256)
       );
-      const completedMail = sendMail.mock.calls.map(c => c[0]).find(m => String(m.subject).startsWith('Executed agreements'));
+      const completedMail = sendMail.mock.calls
+        .map(c => c[0])
+        .find(m => String(m.subject).startsWith('Executed agreements'));
       expect(completedMail.attachments).toHaveLength(2);
       expect(completedMail.cc).toEqual(['ops@summitridge.test']);
       expect(await verifyEventChain(id)).toMatchObject({ ok: true });
 
       // Idempotent.
-      const twice = await app.inject({ method: 'POST', url: `/api/v1/platform/agreements/${id}/complete`, headers: asAdmin() });
+      const twice = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/agreements/${id}/complete`,
+        headers: asAdmin(),
+      });
       expect(twice.json().data).toMatchObject({ status: 'COMPLETED', alreadyCompleted: true });
 
       // The public verify page finds it by hash.
       const match = await pub('GET', `/verify?sha256=${finalDocs[0].executedPdfSha256}`);
-      expect(match.json().data).toMatchObject({ match: true, documentTitle: 'Master Services Agreement', sealed: false });
+      expect(match.json().data).toMatchObject({
+        match: true,
+        documentTitle: 'Master Services Agreement',
+        sealed: false,
+      });
     }, 120_000);
   });
 
@@ -752,16 +916,24 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         payload: { reason: 'Wrong rate' },
       });
       expect(voided.statusCode).toBe(200);
-      const notice = sendMail.mock.calls.map(c => c[0]).find(m => String(m.subject).startsWith('Agreements withdrawn'));
+      const notice = sendMail.mock.calls
+        .map(c => c[0])
+        .find(m => String(m.subject).startsWith('Agreements withdrawn'));
       expect(notice.text).not.toContain('Wrong rate');
       const response = await pub('GET', `/sign/${token}`);
       expect(response.statusCode).toBe(410);
-      expect(response.json().error).toMatchObject({ status: 'VOIDED', noticeEmail: 'support@pvnvoice.com' });
+      expect(response.json().error).toMatchObject({
+        status: 'VOIDED',
+        noticeEmail: 'support@pvnvoice.com',
+      });
     });
 
     it('expires a link past its date, with an EXPIRED event', async () => {
       const { id, token } = await create();
-      await prisma.agreementEnvelope.update({ where: { id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+      await prisma.agreementEnvelope.update({
+        where: { id },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
       const response = await pub('POST', `/sign/${token}/otp`);
       expect(response.statusCode).toBe(410);
       expect(response.json().error.status).toBe('EXPIRED');
@@ -771,9 +943,16 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('stops the link once changes are requested, and tells NetEnroll', async () => {
       const { token } = await create();
       const session = await verify(token);
-      const response = await pub('POST', `/sign/${token}/request-changes`, { note: 'Medicare rate should be $150' }, { 'x-signing-session': session });
+      const response = await pub(
+        'POST',
+        `/sign/${token}/request-changes`,
+        { note: 'Medicare rate should be $150' },
+        { 'x-signing-session': session }
+      );
       expect(response.statusCode).toBe(200);
-      const alert = sendMail.mock.calls.map(c => c[0]).find(m => String(m.subject).startsWith('Changes requested'));
+      const alert = sendMail.mock.calls
+        .map(c => c[0])
+        .find(m => String(m.subject).startsWith('Changes requested'));
       expect(alert.text).toContain('Medicare rate should be $150');
       expect((await pub('GET', `/sign/${token}`)).statusCode).toBe(410);
     });
@@ -817,7 +996,9 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       );
       const list = await pub('GET', `/download/${done.downloadToken}`);
       expect(list.statusCode).toBe(200);
-      expect(list.json().data.documents.find((d: any) => d.id === done.docId).sha256).toBe(done.sha);
+      expect(list.json().data.documents.find((d: any) => d.id === done.docId).sha256).toBe(
+        done.sha
+      );
       const file = await pub('GET', `/download/${done.downloadToken}/${done.docId}.pdf`);
       expect(file.statusCode).toBe(200);
       expect(createHash('sha256').update(file.rawPayload).digest('hex')).toBe(done.sha);
@@ -835,7 +1016,9 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect(admin.statusCode).toBe(500);
       expect(admin.headers['content-type']).toMatch(/json/);
       expect(admin.body).not.toContain('%PDF');
-      expect(await prisma.auditLog.count({ where: { action: 'agreements.document.integrity_failed' } })).toBe(1);
+      expect(
+        await prisma.auditLog.count({ where: { action: 'agreements.document.integrity_failed' } })
+      ).toBe(1);
       const file = await pub('GET', `/download/${done.downloadToken}/${done.docId}.pdf`);
       expect(file.statusCode).toBe(500);
     });
@@ -843,13 +1026,19 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     it('answers an unknown or expired download link with the notice email', async () => {
       const response = await pub('GET', '/download/nope');
       expect(response.statusCode).toBe(410);
-      expect(response.json().error.message).toBe('This link has expired. Contact support@pvnvoice.com for a new copy.');
+      expect(response.json().error.message).toBe(
+        'This link has expired. Contact support@pvnvoice.com for a new copy.'
+      );
     });
 
     it('verifies by hash, and only by hash', async () => {
       const done = await fabricateCompleted();
       const yes = await pub('GET', `/verify?sha256=${done.sha}`);
-      expect(yes.json().data).toMatchObject({ match: true, documentTitle: 'CPA Agreement', agencyLegalName: 'Summit Ridge Insurance Group LLC' });
+      expect(yes.json().data).toMatchObject({
+        match: true,
+        documentTitle: 'CPA Agreement',
+        agencyLegalName: 'Summit Ridge Insurance Group LLC',
+      });
       const no = await pub('GET', `/verify?sha256=${'a'.repeat(64)}`);
       expect(no.json().data).toEqual({ match: false });
       expect((await pub('GET', '/verify?sha256=xyz')).statusCode).toBe(422);
@@ -857,7 +1046,11 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
 
     it('mints a new download link when copies are sent again', async () => {
       const done = await fabricateCompleted();
-      const response = await app.inject({ method: 'POST', url: `/api/v1/platform/agreements/${done.id}/send-copies`, headers: asAdmin() });
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/agreements/${done.id}/send-copies`,
+        headers: asAdmin(),
+      });
       expect(response.statusCode, response.body).toBe(200);
       expect((await pub('GET', `/download/${done.downloadToken}`)).statusCode).toBe(410);
       const fresh = String(response.json().data.downloadUrl).split('/agreements/')[1];

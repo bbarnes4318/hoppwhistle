@@ -57,13 +57,17 @@ describe('the agreement seal', () => {
     expect(parsed.getAuthor()).toBe('PVN LLC d/b/a NetEnroll');
     expect(parsed.getSubject()).toBe('Executed agreement NE-TEST2345');
 
-    const sealed = await sealPdf(merged, { p12: throwawayP12('pass'), passphrase: 'pass' }, {
-      reason: 'Executed agreement NE-TEST2345',
-      location: 'Saint Augustine, Florida',
-      contactInfo: 'support@pvnvoice.com',
-      name: 'PVN LLC d/b/a NetEnroll',
-      signingTime: new Date('2026-10-03T12:00:00Z'),
-    });
+    const sealed = await sealPdf(
+      merged,
+      { p12: throwawayP12('pass'), passphrase: 'pass' },
+      {
+        reason: 'Executed agreement NE-TEST2345',
+        location: 'Saint Augustine, Florida',
+        contactInfo: 'support@pvnvoice.com',
+        name: 'PVN LLC d/b/a NetEnroll',
+        signingTime: new Date('2026-10-03T12:00:00Z'),
+      }
+    );
     const text = sealed.toString('latin1');
     expect(text).toContain('/ByteRange');
     expect(text).toContain('adbe.pkcs7.detached');
