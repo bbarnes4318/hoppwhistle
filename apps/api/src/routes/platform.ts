@@ -68,7 +68,12 @@ import {
   requirePlatformAdmin,
 } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { defaultPortalHost, NETENROLL_PORTAL_URL, portalHost } from '../lib/tenant-brand.js';
+import {
+  defaultPortalHost,
+  isNetEnrollOnlyTenant,
+  NETENROLL_PORTAL_URL,
+  portalHost,
+} from '../lib/tenant-brand.js';
 import { getActingUserId } from '../lib/tenant-context.js';
 import {
   markUpgradeRequestsDone,
@@ -91,6 +96,7 @@ const BRANDING_SELECT = {
   whiteLabel: true,
   domain: true,
   parentTenantId: true,
+  slug: true,
 } as const;
 
 function brandingView(tenant: {
@@ -525,6 +531,20 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
       });
       if (!before) {
         return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+
+      // Test Organization is NetEnroll's own and is always drawn as NetEnroll
+      // (lib/tenant-brand.ts). Clearing is allowed; giving it a brand is not.
+      if (
+        isNetEnrollOnlyTenant(before.slug) &&
+        ((hasTheme && body.brandTheme !== null) || (hasName && brandName) || (hasDomain && domain))
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: 'NETENROLL_ONLY_TENANT',
+            message: 'This organization always uses the NetEnroll design and cannot be re-branded',
+          },
+        });
       }
 
       // A child agency inherits its parent's domain. Giving it one of its own
