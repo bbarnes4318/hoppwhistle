@@ -41,6 +41,7 @@
     "dnc:import": "tsx src/cli/import-dnc.ts",
     "numbers:import": "tsx src/cli/numbers-import.ts",
     "dograh:cid:import": "tsx src/cli/dograh-callerid-import.ts",
+    "dograh:cid:import:prod": "node dist/cli/dograh-callerid-import.js",
     "numbers:assign": "tsx src/cli/numbers-assign.ts",
     "numbers:audit": "tsx src/cli/numbers-audit.ts",
     "numbers:sync:anveo": "tsx src/cli/numbers-sync-anveo.ts",
