@@ -102,6 +102,19 @@ const config: Config = {
           ink: 'var(--live-ink)',
           deep: 'var(--live-deep)',
         },
+        /*
+         * The softphone's "ready / on a call" accent. Unbranded it IS the live
+         * signal (the fallback); an agency brand block in globals.css may point
+         * it at the brand's own colour so the phone matches the portal. Only the
+         * phone surfaces use it -- tables, the live board and every chart keep
+         * the call-state green.
+         */
+        phone: {
+          DEFAULT: 'var(--phone, var(--live))',
+          tint: 'var(--phone-tint, var(--live-tint))',
+          ink: 'var(--phone-ink, var(--live-ink))',
+          deep: 'var(--phone-deep, var(--live-deep))',
+        },
         ringing: {
           DEFAULT: 'var(--ringing)',
           tint: 'var(--ringing-tint)',

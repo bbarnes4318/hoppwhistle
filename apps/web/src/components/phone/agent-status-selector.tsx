@@ -24,8 +24,8 @@ const statusOptions: StatusOption[] = [
   {
     value: 'available',
     label: 'Available',
-    color: 'text-live-ink',
-    bgColor: 'bg-live',
+    color: 'text-phone-ink',
+    bgColor: 'bg-phone',
     description: 'Ready to receive calls',
   },
   {
@@ -123,8 +123,8 @@ export function AgentStatusMenu({
           TOUCH_TARGET
         )}
       >
-        <span className={cn('h-2 w-2 rounded-full', onCall ? 'bg-live' : currentOption.bgColor)} />
-        <span className={onCall ? 'text-live-ink' : currentOption.color}>
+        <span className={cn('h-2 w-2 rounded-full', onCall ? 'bg-phone' : currentOption.bgColor)} />
+        <span className={onCall ? 'text-phone-ink' : currentOption.color}>
           {onCall ? 'On call' : currentOption.label}
         </span>
         {!onCall && (

@@ -8,7 +8,7 @@ import { CallerAvatar, FOCUS_RING, Kbd, ON_SIGNAL, PRESS, TOUCH_TARGET } from '.
 
 /**
  * A ringing call. Who it is, where it came from, and two buttons big enough
- * to hit without looking: Answer in the live colour, Decline in dropped, side
+ * to hit without looking: Answer in the phone colour, Decline in dropped, side
  * by side across the bottom.
  */
 export interface IncomingCallViewProps {
@@ -99,7 +99,7 @@ export function IncomingCallView({
             aria-keyshortcuts="A"
             className={cn(
               'inline-flex h-14 items-center justify-center gap-2 rounded-card text-base font-semibold',
-              'bg-live hover:bg-live-deep',
+              'bg-phone hover:bg-phone-deep',
               ON_SIGNAL,
               PRESS,
               FOCUS_RING,

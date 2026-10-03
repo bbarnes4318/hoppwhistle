@@ -354,6 +354,37 @@ describe('the Life Leads Plus brand theme', () => {
     }
   });
 
+  it('draws the softphone in the brand blue, not the NetEnroll green', () => {
+    // The phone's own tokens, not the signals: the base palette names none,
+    // so an unbranded phone falls back to --live (tailwind.config.ts).
+    expect(light.phone).toBeUndefined();
+    expect(llp.phone).toBe(llp['brand-strong']);
+    expect(llp['phone-tint']).toBe(llp['brand-tint']);
+    expect(llp['phone-ink']).toBe(llp['brand-ink']);
+    // Blue, and well clear of the ringing amber and dropped red beside it.
+    for (const t of [llp, llpDark]) {
+      expect(hue(t.phone), 'phone hue is blue').toBeGreaterThanOrEqual(200);
+      expect(hue(t.phone), 'phone hue is blue').toBeLessThanOrEqual(230);
+      expect(hueDistance(t.phone, light.ringing)).toBeGreaterThanOrEqual(60);
+      expect(hueDistance(t.phone, light.dropped)).toBeGreaterThanOrEqual(60);
+    }
+
+    const ratios: [string, number][] = [
+      ['phone white on fill', contrast('#ffffff', llp.phone)],
+      ['phone ink   on tint', contrast(llp['phone-ink'], llp['phone-tint'])],
+      ['dark phone paper on fill', contrast(dark.paper, llpDark.phone)],
+      ['dark phone paper on deep', contrast(dark.paper, llpDark['phone-deep'])],
+      ['dark phone ink   on tint', contrast(llpDark['phone-ink'], llpDark['phone-tint'])],
+    ];
+    for (const [label, ratio] of ratios) {
+      expect(ratio, label).toBeGreaterThanOrEqual(4.5);
+      const m = new RegExp(`llp ${label}\\s+(\\d+\\.\\d+):1`).exec(CSS);
+      if (!m) throw new Error(`no stated ratio for "llp ${label}" in globals.css`);
+      expect(Number(m[1])).toBe(round(ratio));
+    }
+    expect(contrast('#ffffff', llp['phone-deep'])).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('also reaches a nested theme scope, so a drawer or the live board keeps the brand', () => {
     expect(CSS).toMatch(/\[data-brand='life-leads-plus'\] \[data-theme='light'\]/);
     expect(CSS).toMatch(/\[data-brand='life-leads-plus'\] \[data-theme='dark'\]/);

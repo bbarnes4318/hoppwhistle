@@ -47,7 +47,7 @@ const DISPOSITION_TONE: Record<DispositionValue, Tone> = {
 };
 
 const TILE_SELECTED: Record<Tone, string> = {
-  live: 'border-live bg-live-tint text-live-ink',
+  live: 'border-phone bg-phone-tint text-phone-ink',
   ringing: 'border-ringing bg-ringing-tint text-ringing-ink',
   dropped: 'border-dropped bg-dropped-tint text-dropped-ink',
   money: 'border-money bg-money-tint text-money-ink',
@@ -55,7 +55,7 @@ const TILE_SELECTED: Record<Tone, string> = {
 };
 
 const TILE_DOT: Record<Tone, string> = {
-  live: 'bg-live',
+  live: 'bg-phone',
   ringing: 'bg-ringing',
   dropped: 'bg-dropped',
   money: 'bg-money',
@@ -132,7 +132,7 @@ export function WrapUpView({
           className="flex flex-col items-center justify-center px-6 py-14 text-center"
           role="status"
         >
-          <span className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-live-tint text-live-ink">
+          <span className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-phone-tint text-phone-ink">
             <CheckCircle2 className="h-6 w-6" aria-hidden />
           </span>
           <h2 id={headingId} className="t-section text-ink">
