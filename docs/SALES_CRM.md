@@ -168,6 +168,7 @@ stage forward only:
 | -------------------- | --------------------- | --------------------------------------- |
 | sent                 | `AGREEMENT_SENT`      | → AGREEMENT_SENT, if not already further |
 | first opened         | `AGREEMENT_VIEWED`    | → AGREEMENT_REVIEW, if not further      |
+| agency details entered | `AGREEMENT_DETAILS_ENTERED` (lists what the agency entered: name, entity or individual, principal and signer, address, contact, billing) | unchanged |
 | signed               | `AGREEMENT_SIGNED`    | → AGREEMENT_SIGNED, if not further      |
 | completed            | `AGREEMENT_COMPLETED` | → AGREEMENT_SIGNED, if not further      |
 | voided / expired / changes requested | `AGREEMENT_VOIDED` / `AGREEMENT_EXPIRED` / `CHANGES_REQUESTED` | unchanged |
@@ -208,6 +209,7 @@ PUT    /api/v1/platform/agreement-suites/:id platform admins: templateSetKey, se
 
 ```sh
 cat apps/api/prisma/migrations/20261009000000_sales_workspaces/migration.sql | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
+cat apps/api/prisma/migrations/20261010000000_sales_activity_details_entered/migration.sql | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
 ```
 
 `scripts/deploy-netenroll.sh` applies it (it is in `REQUIRED_MIGRATIONS` with an

@@ -130,7 +130,8 @@ REQUIRED_MIGRATIONS="
 20261007000000_agreements
 20261008000000_agreements_party_details
 20261009000000_sales_workspaces
-20261010000000_test_org_netenroll_brand
+20261010000000_sales_activity_details_entered
+20261011000000_test_org_netenroll_brand
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -534,6 +535,12 @@ migration_applied() {
       # Wrapped BEGIN..COMMIT, so its last index stands for the columns before
       # it and the backfill (an UPDATE, which leaves nothing to probe).
       echo "SELECT to_regclass('public.\"insurance_carrier_applications_publisherId_idx\"') IS NOT NULL" ;;
+    *_sales_activity_details_entered)
+      # One statement: the enum value itself.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type ty ON ty.oid = e.enumtypid
+              WHERE ty.typname = 'SalesActivityType'
+                AND e.enumlabel = 'AGREEMENT_DETAILS_ENTERED'), false)" ;;
     *_sales_workspaces)
       # Wrapped BEGIN..COMMIT. The last statement is the grant trigger, and the
       # envelope trigger function must carry the issuer columns: both together
