@@ -201,8 +201,9 @@ BEGIN
 END $$;
 
 
--- Verbatim from prisma/migrations/20261007000000_agreements/migration.sql,
--- which is where they are applied to production.
+-- From prisma/migrations/20261007000000_agreements/migration.sql, with the
+-- two trigger functions as 20261008000000_agreements_party_details replaces
+-- them. Those migrations are where they are applied to production.
 -- ---------------------------------------------------------------------------
 -- Electronic agreements: the evidence rows are immutable.
 -- ---------------------------------------------------------------------------
@@ -227,6 +228,11 @@ BEGIN
     IF NEW."sentHtml" IS DISTINCT FROM OLD."sentHtml"
        OR NEW."sentHtmlSha256" IS DISTINCT FROM OLD."sentHtmlSha256" THEN
         RAISE EXCEPTION 'agreement_documents: the as-sent document % cannot be changed.', OLD."id";
+    END IF;
+    IF OLD."presentedHtml" IS NOT NULL AND (
+         NEW."presentedHtml" IS DISTINCT FROM OLD."presentedHtml"
+         OR NEW."presentedHtmlSha256" IS DISTINCT FROM OLD."presentedHtmlSha256") THEN
+        RAISE EXCEPTION 'agreement_documents: the as-presented document % cannot be changed.', OLD."id";
     END IF;
     IF OLD."executedPdfKey" IS NOT NULL AND NEW."executedPdfKey" IS DISTINCT FROM OLD."executedPdfKey" THEN
         RAISE EXCEPTION 'agreement_documents: the executed PDF key of % cannot be changed.', OLD."id";
@@ -254,6 +260,9 @@ BEGIN
     END IF;
     IF NEW."signTokenHash" IS DISTINCT FROM OLD."signTokenHash" THEN
         RAISE EXCEPTION 'agreement_envelopes: the signing link of % is never reissued.', OLD."id";
+    END IF;
+    IF OLD."partyDetails" IS NOT NULL AND NEW."partyDetails" IS DISTINCT FROM OLD."partyDetails" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the agency details of % cannot be changed once entered.', OLD."id";
     END IF;
     RETURN NEW;
 END;

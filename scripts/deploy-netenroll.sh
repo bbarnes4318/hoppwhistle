@@ -128,6 +128,7 @@ REQUIRED_MIGRATIONS="
 20261005000000_activation_grant_licensed_states
 20261006000000_campaign_billing_model
 20261007000000_agreements
+20261008000000_agreements_party_details
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -531,6 +532,14 @@ migration_applied() {
       # Wrapped BEGIN..COMMIT, so its last index stands for the columns before
       # it and the backfill (an UPDATE, which leaves nothing to probe).
       echo "SELECT to_regclass('public.\"insurance_carrier_applications_publisherId_idx\"') IS NOT NULL" ;;
+    *_agreements_party_details)
+      # Wrapped BEGIN..COMMIT; the last column added stands for the rest, and
+      # the replaced trigger functions are checked by what they now refuse.
+      echo "SELECT count(*) = 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'agreement_documents'
+              AND column_name = 'presentedHtmlSha256'
+            AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agreement_envelopes_immutable'
+              AND prosrc LIKE '%partyDetails%')" ;;
     *_agreements)
       # Wrapped BEGIN..COMMIT; the last trigger stands for the tables, indexes
       # and triggers before it. The settings row is ON CONFLICT DO NOTHING and

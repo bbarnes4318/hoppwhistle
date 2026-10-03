@@ -43,10 +43,16 @@ export const createBodySchema = z.object({
   includesCpl: z.boolean(),
   existingMsaEnvelopeId: z.string().uuid().nullable().optional(),
   terms: z.unknown(),
-  signer: z.object({
+  /**
+   * Who the link goes to. They enter the agency's details (business or
+   * individual agent) and the signer's name and title themselves; the email
+   * is fixed here, because the one-time code is sent to it.
+   */
+  recipient: z.object({
     name: z.string().trim().min(2).max(100),
-    title: z.string().trim().min(1).max(120),
     email: z.string().trim().email().max(254),
+    /** NetEnroll's own label for the agency, for the email and its records. */
+    organization: z.string().trim().max(200).optional().nullable(),
   }),
   ccEmails: z.array(z.string().trim().email().max(254)).max(10).default([]),
   netenrollSignatory: z.object({
@@ -97,6 +103,9 @@ export async function prepareEnvelope(
   }
 
   const termsInput = { ...((body.terms ?? {}) as Record<string, unknown>) };
+  // The agency enters its own details when it signs; nothing NetEnroll typed
+  // about it is frozen into the terms.
+  delete termsInput.agency;
   if (!body.includesCpa) delete termsInput.cpa;
   if (!body.includesCpl) delete termsInput.cpl;
   if (body.includesCpa && !termsInput.cpa) {
@@ -123,9 +132,6 @@ export async function prepareEnvelope(
       where: { id: body.existingMsaEnvelopeId },
     });
     const existingTerms = existing?.terms as unknown as FrozenTerms | undefined;
-    const legalName = String(
-      ((termsInput.agency ?? {}) as Record<string, unknown>).legalName ?? ''
-    ).trim();
     if (!existing || existing.status !== 'COMPLETED' || !existing.includesMsa) {
       throw new AgreementError(
         422,
@@ -134,10 +140,8 @@ export async function prepareEnvelope(
       );
     }
     const sameTenant = tenantId !== null && existing.tenantId === tenantId;
-    const sameName =
-      legalName.length > 0 &&
-      existingTerms?.agency.legalName.trim().toLowerCase() === legalName.toLowerCase();
-    if (!sameTenant && !sameName) {
+    const sameSigner = existing.signerEmail === body.recipient.email.trim().toLowerCase();
+    if (!sameTenant && !sameSigner) {
       throw new AgreementError(
         422,
         'EXISTING_MSA_MISMATCH',
@@ -161,7 +165,7 @@ export async function prepareEnvelope(
     },
   };
   const includesMsa = !body.existingMsaEnvelopeId;
-  const signerEmail = body.signer.email.toLowerCase();
+  const signerEmail = body.recipient.email.toLowerCase();
   const ccEmails = Array.from(
     new Set(body.ccEmails.map(e => e.toLowerCase()).filter(e => e !== signerEmail))
   );
@@ -254,9 +258,11 @@ export async function createEnvelope(
           includesCpl: body.includesCpl,
           existingMsaEnvelopeId: prepared.existingMsaEnvelopeId,
           terms: terms as unknown as Prisma.InputJsonValue,
-          signerName: body.signer.name,
-          signerTitle: body.signer.title,
+          // Until the agency enters its details: the person the link went to.
+          signerName: body.recipient.name,
+          signerTitle: '',
           signerEmail: prepared.signerEmail,
+          inviteeOrganization: body.recipient.organization?.trim() || null,
           ccEmails: prepared.ccEmails,
           netenrollSignatoryName: body.netenrollSignatory.name,
           netenrollSignatoryTitle: body.netenrollSignatory.title,
@@ -300,7 +306,12 @@ export async function createEnvelope(
             templateVersion: doc.templateVersion,
             sentHtmlSha256: doc.sha256,
           })),
-          signer: { name: body.signer.name, title: body.signer.title, email: prepared.signerEmail },
+          recipient: {
+            name: body.recipient.name,
+            email: prepared.signerEmail,
+            organization: body.recipient.organization?.trim() || null,
+          },
+          agencyDetails: 'to be entered by the agency',
           ccEmails: prepared.ccEmails,
           existingMsaEnvelopeId: prepared.existingMsaEnvelopeId,
           expiresAt: expiresAt.toISOString(),
@@ -317,6 +328,7 @@ export async function createEnvelope(
           authorityConfirmation: NETENROLL_AUTHORITY_STATEMENT,
           adminUserId: actor.userId,
           adminEmail: actor.email,
+          // The offer as signed: agency fields read "To be completed by Agency".
           documentHashes: Object.fromEntries(documents.map(doc => [doc.kind, doc.sha256])),
         },
       });
@@ -328,8 +340,8 @@ export async function createEnvelope(
   const signUrl = signUrlFor(sign.token);
   const email = await sendInvitationEmail({
     to: prepared.signerEmail,
-    signerName: body.signer.name,
-    agencyLegalName: terms.agency.legalName,
+    signerName: body.recipient.name,
+    agencyLegalName: body.recipient.organization?.trim() || null,
     documentTitles: prepared.kinds.map(kind => titleOf(kind)),
     signUrl,
     expiresAt,

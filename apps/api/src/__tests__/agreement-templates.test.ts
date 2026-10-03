@@ -13,7 +13,7 @@ import {
 import type { RenderOptions } from '../services/agreements/layout.js';
 import { cpaIllustration } from '../services/agreements/templates/cpa.js';
 import type { FrozenTerms } from '../services/agreements/terms.js';
-import { termsSchema } from '../services/agreements/terms.js';
+import { agencyFromParty, partyDetailsSchema, termsSchema } from '../services/agreements/terms.js';
 
 /**
  * The agreements' legal text is verbatim: every sentence approved for the MSA
@@ -509,5 +509,91 @@ describe('terms validation', () => {
     const c = JSON.parse(JSON.stringify(base));
     c.cpa.deliveryEnd = '09:00';
     expect(termsSchema.safeParse(c).success).toBe(false);
+  });
+});
+
+describe('agency details entered by the agency', () => {
+  it('prints "To be completed by Agency" in the offer, principal row included', () => {
+    const offer: FrozenTerms = { ...TERMS, agency: undefined };
+    const { msa, cpa, cpl } = render(offer);
+    for (const doc of [msa, cpa, cpl]) {
+      const text = plainText(doc.html);
+      expect(text).toContain('AGENCY LEGAL NAME To be completed by Agency');
+      expect(text).toContain('PRINCIPAL NAME & TITLE To be completed by Agency');
+      expect(text).not.toContain('Summit Ridge');
+    }
+    expect(plainText(msa.html)).toContain('NOTICE EMAIL & PHONE To be completed by Agency');
+    expect(plainText(cpa.html)).toContain('BILLING EMAIL & PHONE To be completed by Agency');
+    // The commercial terms are all there.
+    expect(plainText(cpa.html)).toContain('Final Expense $160.00 5');
+  });
+
+  it('prints an individual agent with no principal row', () => {
+    const agency = agencyFromParty({
+      kind: 'INDIVIDUAL',
+      legalName: 'Dana Whitfield',
+      dbaName: 'Whitfield Senior Benefits',
+      stateOfResidence: 'Florida',
+      noticeAddress: '12 Ocean Ave, St. Augustine, FL 32084',
+      noticeEmail: 'dana@whitfield.test',
+      noticePhone: '(904) 555-0142',
+      billingEmail: 'dana@whitfield.test',
+      billingPhone: '(904) 555-0142',
+    });
+    const { msa, cpa, cpl } = render({ ...TERMS, agency });
+    for (const doc of [msa, cpa, cpl]) {
+      const text = plainText(doc.html);
+      expect(text).toContain('AGENCY LEGAL NAME Dana Whitfield d/b/a Whitfield Senior Benefits');
+      expect(text).toContain('STATE / ENTITY TYPE Florida / Individual (sole proprietor)');
+      expect(text).not.toContain('PRINCIPAL NAME & TITLE');
+    }
+    expect(plainText(msa.html)).toContain(
+      'AGENCY NOTICE ADDRESS 12 Ocean Ave, St. Augustine, FL 32084'
+    );
+  });
+
+  it('prints a business from its own details', () => {
+    const agency = agencyFromParty({
+      kind: 'BUSINESS',
+      legalName: 'Summit Ridge Insurance Group LLC',
+      dbaName: null,
+      stateOfFormation: 'Colorado',
+      entityType: 'Limited Liability Company',
+      noticeAddress: '100 Main Street, Denver, CO 80202',
+      principalName: 'Morgan Ridge',
+      principalTitle: 'Managing Member',
+      noticeEmail: 'dana@summitridge.test',
+      noticePhone: '(303) 555-0142',
+      billingEmail: 'billing@summitridge.test',
+      billingPhone: '(303) 555-0199',
+      signerName: 'Dana Whitfield',
+      signerTitle: 'Operations Director',
+    });
+    const text = plainText(render({ ...TERMS, agency }).msa.html);
+    expect(text).toContain('STATE / ENTITY TYPE Colorado / Limited Liability Company');
+    expect(text).toContain('PRINCIPAL NAME & TITLE Morgan Ridge, Managing Member');
+  });
+
+  it('validates what the agency enters', () => {
+    expect(partyDetailsSchema.safeParse({ kind: 'INDIVIDUAL', legalName: 'Dana' }).success).toBe(
+      false
+    );
+    expect(
+      partyDetailsSchema.safeParse({
+        kind: 'BUSINESS',
+        legalName: 'X LLC',
+        stateOfFormation: 'Colorado',
+        entityType: 'LLC',
+        noticeAddress: '1 Main',
+        noticeEmail: 'not-an-email',
+        noticePhone: '3035550142',
+        billingEmail: 'a@b.test',
+        billingPhone: '3035550142',
+        principalName: 'A',
+        principalTitle: 'B',
+        signerName: 'Al',
+        signerTitle: 'C',
+      }).success
+    ).toBe(false);
   });
 });

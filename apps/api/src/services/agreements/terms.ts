@@ -63,19 +63,29 @@ const schedule = {
 
 const PHONE = z.string().trim().min(10).max(20);
 
+/**
+ * The agency's details as printed in the Parties tables. Filled in by the
+ * agency itself when it signs (see `partyDetailsSchema` and `agencyFromParty`);
+ * envelopes sent before that existed carry them here, entered by NetEnroll.
+ * An individual licensed agent has no principal, so those are optional.
+ */
+const agencySchema = z.object({
+  kind: z.enum(['BUSINESS', 'INDIVIDUAL']).optional(),
+  legalName: z.string().trim().min(1).max(200),
+  stateEntityType: z.string().trim().min(1).max(160),
+  noticeAddress: z.string().trim().min(1).max(300),
+  principalName: z.string().trim().min(1).max(200).optional(),
+  principalTitle: z.string().trim().min(1).max(120).optional(),
+  noticeEmail: z.string().trim().email(),
+  noticePhone: PHONE,
+  billingEmail: z.string().trim().email(),
+  billingPhone: PHONE,
+});
+export type AgencyDetails = z.infer<typeof agencySchema>;
+
 export const termsSchema = z
   .object({
-    agency: z.object({
-      legalName: z.string().trim().min(1).max(200),
-      stateEntityType: z.string().trim().min(1).max(120),
-      noticeAddress: z.string().trim().min(1).max(300),
-      principalName: z.string().trim().min(1).max(200),
-      principalTitle: z.string().trim().min(1).max(120),
-      noticeEmail: z.string().trim().email(),
-      noticePhone: PHONE,
-      billingEmail: z.string().trim().email(),
-      billingPhone: PHONE,
-    }),
+    agency: agencySchema.optional(),
     effectiveDate: DATE,
     msaEffectiveDate: DATE,
     cpa: z
@@ -158,6 +168,88 @@ export type CplTerms = NonNullable<AgreementTerms['cpl']>;
 export type FrozenTerms = AgreementTerms & {
   netenroll: { noticeAddress: string; noticeEmail: string };
 };
+
+// ── The agency's own details, entered when it signs ─────────────────────────
+
+const text = (max: number) => z.string().trim().min(1).max(max);
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .nullable()
+    .transform(v => (v ? v : null));
+
+/** What a business enters. Its authorized signer may or may not be its principal. */
+const businessParty = z.object({
+  kind: z.literal('BUSINESS'),
+  legalName: text(200),
+  dbaName: optionalText(200),
+  stateOfFormation: text(60),
+  entityType: text(80),
+  noticeAddress: text(300),
+  principalName: text(200),
+  principalTitle: text(120),
+  noticeEmail: z.string().trim().email().max(254),
+  noticePhone: PHONE,
+  billingEmail: z.string().trim().email().max(254),
+  billingPhone: PHONE,
+  signerName: z.string().trim().min(2).max(100),
+  signerTitle: text(120),
+});
+
+/** What an individual licensed agent enters: no entity, no principal. They sign for themselves. */
+const individualParty = z.object({
+  kind: z.literal('INDIVIDUAL'),
+  legalName: z.string().trim().min(2).max(100),
+  dbaName: optionalText(200),
+  stateOfResidence: text(60),
+  noticeAddress: text(300),
+  noticeEmail: z.string().trim().email().max(254),
+  noticePhone: PHONE,
+  billingEmail: z.string().trim().email().max(254),
+  billingPhone: PHONE,
+});
+
+export const partyDetailsSchema = z.discriminatedUnion('kind', [businessParty, individualParty]);
+export type PartyDetails = z.infer<typeof partyDetailsSchema>;
+
+/** How an individual signs on their own behalf. */
+export const INDIVIDUAL_SIGNER_TITLE = 'Individually';
+
+/** The agency as the documents print it. */
+export function agencyFromParty(party: PartyDetails): AgencyDetails {
+  const name = party.dbaName ? `${party.legalName} d/b/a ${party.dbaName}` : party.legalName;
+  const common = {
+    legalName: name,
+    noticeAddress: party.noticeAddress,
+    noticeEmail: party.noticeEmail,
+    noticePhone: party.noticePhone,
+    billingEmail: party.billingEmail,
+    billingPhone: party.billingPhone,
+  };
+  return party.kind === 'BUSINESS'
+    ? {
+        kind: 'BUSINESS',
+        ...common,
+        stateEntityType: `${party.stateOfFormation} / ${party.entityType}`,
+        principalName: party.principalName,
+        principalTitle: party.principalTitle,
+      }
+    : {
+        kind: 'INDIVIDUAL',
+        ...common,
+        stateEntityType: `${party.stateOfResidence} / Individual (sole proprietor)`,
+      };
+}
+
+/** Who signs, from the agency's own details. */
+export function signerFromParty(party: PartyDetails): { name: string; title: string } {
+  return party.kind === 'BUSINESS'
+    ? { name: party.signerName, title: party.signerTitle }
+    : { name: party.legalName, title: INDIVIDUAL_SIGNER_TITLE };
+}
 
 /** The first message of a zod failure, for a 422 a person can act on. */
 export function firstIssueMessage(error: z.ZodError): string {
