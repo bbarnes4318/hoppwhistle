@@ -4,6 +4,7 @@ import { AlertCircle, Check, CheckCircle2, Download, FileText, Loader2, Mail } f
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { PartyDetailsForm } from '@/components/agreements/party-details-form';
 import { SignatureScript } from '@/components/agreements/signature-script';
 import { Logo } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { etDate, fileSize, saveBlob } from '@/lib/agreements';
+import { etDate, fileSize, saveBlob, type PartyDetails } from '@/lib/agreements';
 import { cn } from '@/lib/utils';
 
 /**
@@ -27,9 +28,10 @@ import { cn } from '@/lib/utils';
  * summary is shown until a one-time code emailed to the address the link was
  * sent to has been entered. Every later step carries the signing session the
  * code earns (`X-Signing-Session`); an expired session returns here to code
- * entry. The documents are shown exactly as sent, in sandboxed frames with no
- * scripts, and each is marked reviewed only once it has been scrolled to the
- * end.
+ * entry. After consenting, the signer enters the agency's own details (as a
+ * business or as an individual licensed agent); the documents are then shown
+ * completed with them, in sandboxed frames with no scripts, and each is marked
+ * reviewed only once it has been scrolled to the end.
  */
 
 const API = '/api/v1/public/agreements';
@@ -45,6 +47,10 @@ interface Summary {
 }
 
 interface DocumentsPayload {
+  partyRequired: boolean;
+  partyPrefill: PartyDetails | null;
+  inviteeOrganization: string | null;
+  individual: boolean;
   documents: Array<{
     id: string;
     kind: string;
@@ -57,7 +63,7 @@ interface DocumentsPayload {
   consented: boolean;
   signer: { name: string; title: string; email: string };
   agencyLegalName: string;
-  intentStatement: string;
+  intentStatement: string | null;
   noticeEmail: string;
 }
 
@@ -214,7 +220,8 @@ export default function SignPage(): JSX.Element {
       setConsented(result.data.consented);
       setConsentChecked(result.data.consented);
       setReviewed(new Set(result.data.documents.filter(d => d.reviewed).map(d => d.id)));
-      setTitle(t => t || result.data!.signer.title);
+      setTitle(result.data.signer.title);
+      setTypedName('');
       setStep('review');
     },
     [token, handleFailure]
@@ -322,6 +329,25 @@ export default function SignPage(): JSX.Element {
     setConsented(true);
   }
 
+  async function submitDetails(party: PartyDetails): Promise<void> {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    const result = await call(`/sign/${token}/details`, {
+      method: 'POST',
+      body: party,
+      session,
+    });
+    if (result.status !== 200 && result.error?.code !== 'DETAILS_ALREADY_ENTERED') {
+      setBusy(false);
+      handleFailure(result);
+      return;
+    }
+    await loadDocuments(session);
+    setBusy(false);
+    setActiveDoc(0);
+  }
+
   const markReviewed = useCallback(
     async (documentId: string) => {
       if (reviewed.has(documentId)) return;
@@ -426,7 +452,7 @@ export default function SignPage(): JSX.Element {
       session,
       body: {
         typedName,
-        title,
+        title: docs.individual ? 'Individually' : title,
         initials,
         method,
         drawnPng: method === 'DRAWN' ? canvasRef.current?.toDataURL('image/png') : undefined,
@@ -503,7 +529,7 @@ export default function SignPage(): JSX.Element {
   const canSign =
     docs !== null &&
     nameMatches &&
-    title.trim().length > 0 &&
+    (docs.individual || title.trim().length > 0) &&
     /^[A-Za-z]{1,4}$/.test(initials) &&
     (method === 'TYPED' || drawn) &&
     docs.documents.every(d => accepted[d.id]) &&
@@ -698,7 +724,27 @@ export default function SignPage(): JSX.Element {
               )}
             </Card>
 
-            {consented && (
+            {consented && docs.partyRequired && (
+              <Card>
+                <PartyDetailsForm
+                  prefill={docs.partyPrefill}
+                  signerName={docs.signer.name}
+                  signerEmail={docs.signer.email}
+                  organization={docs.inviteeOrganization}
+                  busy={busy}
+                  onSubmit={party => void submitDetails(party)}
+                />
+                <button
+                  type="button"
+                  className="mt-4 text-xs text-ink-2 underline"
+                  onClick={() => setChangesOpen(true)}
+                >
+                  Request changes instead
+                </button>
+              </Card>
+            )}
+
+            {consented && !docs.partyRequired && (
               <Card className="p-3 sm:p-4">
                 <p className="t-body px-1 text-ink-2">
                   Read each agreement to the end. Each turns green once you have scrolled through
@@ -769,8 +815,15 @@ export default function SignPage(): JSX.Element {
           <Card>
             <h1 className="t-title text-ink">Sign</h1>
             <p className="t-body mt-1 text-ink-2">
-              These agreements were issued to <strong>{docs.signer.name}</strong> for{' '}
-              {docs.agencyLegalName}.
+              {docs.individual ? (
+                <>
+                  You are signing as <strong>{docs.signer.name}</strong>, on your own behalf.
+                </>
+              ) : (
+                <>
+                  You are signing as <strong>{docs.signer.name}</strong> for {docs.agencyLegalName}.
+                </>
+              )}
             </p>
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -789,12 +842,22 @@ export default function SignPage(): JSX.Element {
                   </p>
                 )}
               </div>
-              <div>
-                <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="signer-title">
-                  Title
-                </label>
-                <Input id="signer-title" value={title} onChange={e => setTitle(e.target.value)} />
-              </div>
+              {docs.individual ? (
+                <div>
+                  <span className="t-meta mb-1 block font-medium text-ink-2">Signing as</span>
+                  <p className="pt-2 text-sm text-ink">An individual, on your own behalf</p>
+                </div>
+              ) : (
+                <div>
+                  <label
+                    className="t-meta mb-1 block font-medium text-ink-2"
+                    htmlFor="signer-title"
+                  >
+                    Title
+                  </label>
+                  <Input id="signer-title" value={title} onChange={e => setTitle(e.target.value)} />
+                </div>
+              )}
               <div>
                 <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="initials">
                   Initials

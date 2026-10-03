@@ -1,5 +1,5 @@
 /**
- * The CPL Agreement (pay per billable call), template CPL-2026-09-25.
+ * The CPL Agreement (pay per billable call), template CPL-2026-10-03.
  *
  * The legal text is verbatim and in the approved order -- see the note at the
  * top of msa.ts. Only the agency's terms are substituted, HTML-escaped.
@@ -25,7 +25,7 @@ import { VERTICALS, VERTICAL_NAMES, type FrozenTerms } from '../terms.js';
 import { DASH, deliveryTable, partiesTable, paymentTable } from './campaign.js';
 
 export const CPL_TITLE = 'CPL Agreement';
-export const CPL_TEMPLATE_VERSION = 'CPL-2026-09-25';
+export const CPL_TEMPLATE_VERSION = 'CPL-2026-10-03';
 
 export function render(terms: FrozenTerms, opts: RenderOptions): string {
   const cpl = terms.cpl;
@@ -45,7 +45,7 @@ ${para(
 ${callout('AT A GLANCE', [
   [
     'You Pay For',
-    'Billable Calls only: answered inbound calls that meet or exceed the agreed Buffer Duration.',
+    'Billable Calls only: answered inbound calls and Live Transfers that meet or exceed the agreed Buffer Duration.',
   ],
   [
     'Rates',
@@ -105,11 +105,11 @@ ${section(
   [
     clause(
       '1.1',
-      '**Pay-Per-Call.** Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call that meets or exceeds the Buffer Duration for that vertical.'
+      '**Pay-Per-Call.** Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call or Live Transfer that meets or exceeds the Buffer Duration for that vertical.'
     ),
     clause(
       '1.2',
-      '**Billable Call.** A Billable Call is any inbound call routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).'
+      '**Billable Call.** A Billable Call is any inbound call or Live Transfer routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).'
     ),
     clause(
       '1.3',

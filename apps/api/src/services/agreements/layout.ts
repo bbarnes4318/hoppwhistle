@@ -65,6 +65,26 @@ export function clause(num: string, text: string, items: string[] = []): string 
   return `<div class="clause"><p><span class="num">${esc(num)}</span> ${md(text)}</p>${list}</div>`;
 }
 
+/** In the offer NetEnroll signs, before the agency has entered its details. */
+export const AGENCY_PENDING = '<span class="pending">To be completed by Agency</span>';
+
+/**
+ * One agency cell: the value once the agency has entered its details, the
+ * pending note in the offer before it has.
+ */
+export function agencyCell<A>(agency: A | undefined, value: (a: A) => string): string {
+  return agency ? value(agency) : AGENCY_PENDING;
+}
+
+/**
+ * Whether the Parties tables carry a principal row. An individual licensed
+ * agent has no principal; in the offer the row is shown, pending, because the
+ * agency has not said yet which it is.
+ */
+export function hasPrincipal(agency: { principalName?: string } | undefined): boolean {
+  return !agency || Boolean(agency.principalName);
+}
+
 export function para(text: string, cls = ''): string {
   return `<p${cls ? ` class="${cls}"` : ''}>${md(text)}</p>`;
 }
@@ -186,6 +206,7 @@ ul.ack li { margin: 0 0 6px; }
 .sig-row { display: flex; border-bottom: 1px solid #d1d5db; padding: 5px 0 3px; min-height: 26px; align-items: flex-end; }
 .sig-row-label { width: 40%; flex: none; font-size: 7pt; letter-spacing: 0.1em; color: #6b7280; }
 .sig-row-value { flex: 1; font-size: 10pt; color: #111827; }
+.pending { color: #9ca3af; font-style: italic; }
 .end { margin-top: 26px; text-align: center; font-size: 8pt; font-weight: 700; letter-spacing: 0.16em; color: #6b7280; }
 .witness { margin-top: 6px; }
 `;

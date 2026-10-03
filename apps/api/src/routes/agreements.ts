@@ -79,12 +79,22 @@ import {
 import { appendEvent, recordEvent, verifyEventChain } from '../services/agreements/events.js';
 import { maskEmail, sha256Hex } from '../services/agreements/format.js';
 import {
+  agencyLabel,
+  agencyOf,
+  isIndividual,
+  needsPartyDetails,
+  partyPrefill,
+  signableHtml,
+  signableSha256,
+  submitPartyDetails,
+} from '../services/agreements/party.js';
+import {
   loadAgreementSettings,
   missingSetting,
   noticeEmailOf,
   SETTINGS_ID,
 } from '../services/agreements/settings.js';
-import type { FrozenTerms } from '../services/agreements/terms.js';
+import { INDIVIDUAL_SIGNER_TITLE, type FrozenTerms } from '../services/agreements/terms.js';
 import {
   digestsEqual,
   hashOtp,
@@ -154,8 +164,10 @@ function titlesOf(envelope: { documents: Array<{ title: string; sortOrder: numbe
   return [...envelope.documents].sort((a, b) => a.sortOrder - b.sortOrder).map(d => d.title);
 }
 
-function legalNameOf(envelope: Pick<AgreementEnvelope, 'terms'>): string {
-  return (envelope.terms as unknown as FrozenTerms).agency.legalName;
+function legalNameOf(
+  envelope: Pick<AgreementEnvelope, 'terms' | 'partyDetails' | 'inviteeOrganization' | 'signerName'>
+): string {
+  return agencyLabel(envelope);
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
@@ -389,6 +401,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       voidedAt: envelope.voidedAt,
       changesRequestedAt: envelope.changesRequestedAt,
       sealed: envelope.sealed,
+      inviteeOrganization: envelope.inviteeOrganization,
+      detailsEntered: !needsPartyDetails(envelope),
+      partyKind: agencyOf(envelope)?.kind ?? (needsPartyDetails(envelope) ? null : 'BUSINESS'),
     };
   }
 
@@ -423,7 +438,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           WHERE "reference" ILIKE ${like}
              OR "signerName" ILIKE ${like}
              OR "signerEmail" ILIKE ${like}
-             OR ("terms"->'agency'->>'legalName') ILIKE ${like}`;
+             OR ("terms"->'agency'->>'legalName') ILIKE ${like}
+             OR ("partyDetails"->>'legalName') ILIKE ${like}
+             OR ("partyDetails"->>'dbaName') ILIKE ${like}
+             OR "inviteeOrganization" ILIKE ${like}`;
         idFilter = rows.map(r => r.id);
       }
       const where = {
@@ -497,6 +515,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         data: {
           ...summarise(envelope),
           terms: envelope.terms,
+          partyDetails: envelope.partyDetails,
+          partySubmittedAt: envelope.partySubmittedAt,
           existingMsa,
           netenrollSignatoryName: envelope.netenrollSignatoryName,
           netenrollSignatoryTitle: envelope.netenrollSignatoryTitle,
@@ -514,6 +534,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             title: doc.title,
             templateVersion: doc.templateVersion,
             sentHtmlSha256: doc.sentHtmlSha256,
+            presentedHtmlSha256: doc.presentedHtmlSha256,
             contentPdfSha256: doc.contentPdfSha256,
             executedPdfSha256: doc.executedPdfSha256,
             executedPdfBytes: doc.executedPdfBytes,
@@ -538,27 +559,35 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     }
   );
 
-  fastify.get<{ Params: { id: string; documentId: string } }>(
-    '/api/v1/platform/agreements/:id/documents/:documentId/sent.html',
-    admin,
-    async (request, reply) => {
-      const envelope = await loadEnvelope(request.params.id);
-      const doc = envelope?.documents.find(d => d.id === request.params.documentId);
-      if (!envelope || !doc) return notFound(reply, 'Document not found');
-      await audit(request, 'agreements.document.viewed_as_sent', envelope, {
-        documentId: doc.id,
-        kind: doc.kind,
-      });
-      return reply
-        .header('Content-Type', 'text/html; charset=utf-8')
-        .header(
-          'Content-Security-Policy',
-          "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"
-        )
-        .header('X-Content-Type-Options', 'nosniff')
-        .send(doc.sentHtml);
-    }
-  );
+  /*
+   * sent.html: the offer exactly as NetEnroll signed and sent it.
+   * presented.html: the same document completed with the agency's own details,
+   * the text the signer reviewed and signed (404 until they have entered them).
+   */
+  for (const version of ['sent', 'presented'] as const) {
+    fastify.get<{ Params: { id: string; documentId: string } }>(
+      `/api/v1/platform/agreements/:id/documents/:documentId/${version}.html`,
+      admin,
+      async (request, reply) => {
+        const envelope = await loadEnvelope(request.params.id);
+        const doc = envelope?.documents.find(d => d.id === request.params.documentId);
+        const html = version === 'sent' ? doc?.sentHtml : doc?.presentedHtml;
+        if (!envelope || !doc || !html) return notFound(reply, 'Document not found');
+        await audit(request, `agreements.document.viewed_as_${version}`, envelope, {
+          documentId: doc.id,
+          kind: doc.kind,
+        });
+        return reply
+          .header('Content-Type', 'text/html; charset=utf-8')
+          .header(
+            'Content-Security-Policy',
+            "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"
+          )
+          .header('X-Content-Type-Options', 'nosniff')
+          .send(html);
+      }
+    );
+  }
 
   fastify.get<{ Params: { id: string; documentFile: string } }>(
     '/api/v1/platform/agreements/:id/documents/:documentFile',
@@ -1197,16 +1226,28 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         reviewed.map(r => (r.detail as Record<string, unknown>).documentId as string)
       );
       const noticeEmail = terms.netenroll.noticeEmail;
+      // Until the agency has entered its details there is nothing to review:
+      // the documents are completed with them.
+      const partyRequired = needsPartyDetails(envelope);
+      const individual = isIndividual(envelope);
       return reply.send({
         data: {
-          documents: envelope.documents.map(doc => ({
-            id: doc.id,
-            kind: doc.kind,
-            title: doc.title,
-            html: doc.sentHtml,
-            acceptanceStatement: acceptanceStatement(doc.title),
-            reviewed: reviewedIds.has(doc.id),
-          })),
+          partyRequired,
+          party: envelope.partyDetails ?? null,
+          partyPrefill: partyRequired ? await partyPrefill(envelope, prisma) : null,
+          inviteeOrganization: envelope.inviteeOrganization,
+          titles: titlesOf(envelope),
+          individual,
+          documents: partyRequired
+            ? []
+            : envelope.documents.map(doc => ({
+                id: doc.id,
+                kind: doc.kind,
+                title: doc.title,
+                html: signableHtml(doc),
+                acceptanceStatement: acceptanceStatement(doc.title),
+                reviewed: reviewedIds.has(doc.id),
+              })),
           disclosure: {
             version: ESIGN_DISCLOSURE_VERSION,
             html: disclosureHtml(noticeEmail),
@@ -1219,12 +1260,15 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             title: envelope.signerTitle,
             email: envelope.signerEmail,
           },
-          agencyLegalName: terms.agency.legalName,
-          intentStatement: intentStatement({
-            signerName: envelope.signerName,
-            titles: titlesOf(envelope),
-            agencyLegalName: terms.agency.legalName,
-          }),
+          agencyLegalName: agencyLabel(envelope),
+          intentStatement: partyRequired
+            ? null
+            : intentStatement({
+                signerName: envelope.signerName,
+                titles: titlesOf(envelope),
+                agencyLegalName: agencyLabel(envelope),
+                individual,
+              }),
           noticeEmail,
         },
       });
@@ -1281,6 +1325,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         ? envelope.documents.find(d => d.id === parsed.data.documentId)
         : undefined;
       if (!doc) return validation(reply, 'Unknown document.');
+      if (needsPartyDetails(envelope)) {
+        return validation(reply, 'Enter your details before reviewing the agreements.');
+      }
       const already = await prisma.agreementEvent.findFirst({
         where: {
           envelopeId: envelope.id,
@@ -1297,12 +1344,49 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             actorType: 'SIGNER',
             actorEmail: envelope.signerEmail,
             ...evidence(request),
-            detail: { documentId: doc.id, kind: doc.kind, sentHtmlSha256: doc.sentHtmlSha256 },
+            detail: {
+              documentId: doc.id,
+              kind: doc.kind,
+              reviewedSha256: signableSha256(doc),
+              sentHtmlSha256: doc.sentHtmlSha256,
+              presentedHtmlSha256: doc.presentedHtmlSha256 ?? null,
+            },
           },
           prisma
         );
       }
       return reply.send({ data: { reviewed: true, documentId: doc.id } });
+    }
+  );
+
+  /**
+   * The agency enters its own details: as a business, or as an individual
+   * licensed agent. Once, after consenting and before reviewing; the documents
+   * are completed with them and frozen. See services/agreements/party.ts.
+   */
+  fastify.post<{ Params: { token: string } }>(
+    '/api/v1/public/agreements/sign/:token/details',
+    { config: tokenLimit },
+    async (request, reply) => {
+      const envelope = await resolveSign(request.params.token, reply);
+      if (!envelope) return reply;
+      if (!(await requireSession(request, reply, envelope))) return reply;
+      if (!envelope.consentedAt) {
+        return validation(reply, 'Accept the electronic records disclosure first.');
+      }
+      try {
+        const party = await submitPartyDetails(
+          envelope.id,
+          request.body,
+          evidence(request),
+          prisma
+        );
+        return reply.send({ data: { saved: true, kind: party.kind } });
+      } catch (error) {
+        const handled = sendAgreementError(reply, error);
+        if (handled) return handled;
+        throw error;
+      }
     }
   );
 
@@ -1340,6 +1424,12 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       if (!envelope.consentedAt) {
         return validation(reply, 'Accept the electronic records disclosure before signing.');
       }
+      if (needsPartyDetails(envelope)) {
+        return validation(reply, 'Enter your details before signing.');
+      }
+      const individual = isIndividual(envelope);
+      // An individual licensed agent signs for themselves, in no other capacity.
+      const signerTitle = individual ? INDIVIDUAL_SIGNER_TITLE : body.title;
       const reviewed = await prisma.agreementEvent.findMany({
         where: { envelopeId: envelope.id, type: 'DOCUMENT_REVIEWED' },
         select: { detail: true },
@@ -1384,7 +1474,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       const intent = intentStatement({
         signerName: envelope.signerName,
         titles,
-        agencyLegalName: terms.agency.legalName,
+        agencyLegalName: agencyLabel(envelope),
+        individual,
       });
 
       let signatureImageKey: string | null = null;
@@ -1432,12 +1523,12 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           occurredAt: signedAt,
           detail: {
             typedName: body.typedName.trim().replace(/\s+/g, ' '),
-            title: body.title,
+            title: signerTitle,
             initials,
             method: body.method,
             signatureImageSha256,
             documentHashes: Object.fromEntries(
-              envelope.documents.map(d => [d.id, d.sentHtmlSha256])
+              envelope.documents.map(d => [d.id, signableSha256(d)])
             ),
             intentStatement: intent,
             acceptanceStatements: Object.fromEntries(
@@ -1489,7 +1580,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             new Set([...(settings?.internalCopyEmails ?? []), sender?.email ?? ''].filter(Boolean))
           ),
           reference: envelope.reference,
-          agencyLegalName: terms.agency.legalName,
+          agencyLegalName: agencyLabel(envelope),
           error: message,
           adminUrl: adminEnvelopeUrl(envelope.id),
         });
@@ -1537,11 +1628,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         return true;
       });
       if (!done)
-        return reply
-          .code(409)
-          .send({
-            error: { code: 'STATE_CHANGED', message: 'This agreement can no longer be changed.' },
-          });
+        return reply.code(409).send({
+          error: { code: 'STATE_CHANGED', message: 'This agreement can no longer be changed.' },
+        });
       const settings = await loadAgreementSettings(prisma);
       const sender = await prisma.user.findUnique({
         where: { id: envelope.sentByUserId },

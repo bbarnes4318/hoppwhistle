@@ -5392,6 +5392,8 @@ enum AgreementEventType {
   EXPIRED
   COPIES_SENT
   DOWNLOADED
+  /// The agency entered its own details; the documents were completed with them.
+  PARTY_DETAILS_SUBMITTED
 }
 
 /// One set of agreements sent to one signer. `terms`, `signerEmail` and
@@ -5411,6 +5413,13 @@ model AgreementEnvelope {
 
   /// The full form input, frozen at send. Never updated.
   terms Json
+
+  /// The agency's own details (business or individual agent), entered by the
+  /// signer before reviewing. Written once; a trigger refuses any change after.
+  partyDetails        Json?
+  partySubmittedAt    DateTime?
+  /// What NetEnroll called the recipient at send, for its own records.
+  inviteeOrganization String?
 
   signerName  String
   signerTitle String
@@ -5477,6 +5486,11 @@ model AgreementDocument {
   templateVersion   String
   sentHtml          String                @db.Text
   sentHtmlSha256    String
+  /// The document completed with the agency's own details: what the signer
+  /// reviewed and signed. Null when the details were entered at send. Written
+  /// once (trigger).
+  presentedHtml       String?               @db.Text
+  presentedHtmlSha256 String?
   /// The signed document pages, before the certificate.
   contentPdfSha256  String?
   executedPdfKey    String?

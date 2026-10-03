@@ -100,9 +100,12 @@ async function send(message: {
 export function sendInvitationEmail(params: {
   to: string;
   signerName: string;
-  agencyLegalName: string;
+  /** NetEnroll's label for the agency, when it gave one. */
+  agencyLegalName: string | null;
   documentTitles: string[];
   signUrl: string;
+  /** Whether the agency still has to enter its own details. */
+  detailsToEnter?: boolean;
   expiresAt: Date;
   noticeEmail: string;
   resend?: boolean;
@@ -114,7 +117,13 @@ export function sendInvitationEmail(params: {
 PVN LLC d/b/a NetEnroll has prepared the following for your review and electronic signature:
 ${list.map(t => `  - ${t}`).join('\n')}
 
-NetEnroll's authorized signatory has already signed.
+NetEnroll's authorized signatory has already signed.${
+    params.detailsToEnter === false
+      ? ''
+      : `
+
+Before you sign you will be asked for your details: your business (legal name, state, entity type, principal) or, if you contract as an individual licensed agent, your own.`
+  }
 
 Review and sign:
 ${params.signUrl}
@@ -129,6 +138,7 @@ Questions? Reply to ${params.noticeEmail}.`;
 <p>PVN LLC d/b/a NetEnroll has prepared the following for your review and electronic signature:</p>
 <ul>${list.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>
 <p>NetEnroll's authorized signatory has already signed.</p>
+${params.detailsToEnter === false ? '' : '<p>Before you sign you will be asked for your details: your business (legal name, state, entity type, principal) or, if you contract as an individual licensed agent, your own.</p>'}
 ${button(params.signUrl, 'Review and sign')}
 <p style="color:#55524b;">For your security we will email a one-time verification code to this address when you open the link.</p>
 <p style="color:#55524b;">This link expires on <strong>${escapeHtml(expires)}</strong>.</p>
@@ -138,7 +148,9 @@ ${button(params.signUrl, 'Review and sign')}
     kind: params.resend ? 'invitation-resend' : 'invitation',
     to: [params.to],
     replyTo: params.noticeEmail,
-    subject: `Agreements from NetEnroll ready for your signature: ${params.agencyLegalName}`,
+    subject: params.agencyLegalName
+      ? `Agreements from NetEnroll ready for your signature: ${params.agencyLegalName}`
+      : 'Agreements from NetEnroll ready for your signature',
     title: 'Agreements ready for your signature',
     html,
     text,

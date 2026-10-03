@@ -1,5 +1,5 @@
 /**
- * The Master Services Agreement, template MSA-2026-10-03.
+ * The Master Services Agreement, template MSA-2026-10-03.2.
  *
  * ── The legal text is verbatim ───────────────────────────────────────────────
  *
@@ -12,8 +12,10 @@
 
 import { esc, formatIsoDate } from '../format.js';
 import {
+  agencyCell,
   clause,
   documentHtml,
+  hasPrincipal,
   kvTable,
   md,
   para,
@@ -24,7 +26,7 @@ import {
 import type { FrozenTerms } from '../terms.js';
 
 export const MSA_TITLE = 'Master Services Agreement';
-export const MSA_TEMPLATE_VERSION = 'MSA-2026-10-03';
+export const MSA_TEMPLATE_VERSION = 'MSA-2026-10-03.2';
 
 export function render(terms: FrozenTerms, opts: RenderOptions): string {
   const a = terms.agency;
@@ -40,11 +42,18 @@ ${section(
   kvTable([
     ['NETENROLL ENTITY', 'PVN LLC d/b/a NetEnroll, a Florida limited liability company'],
     ['NETENROLL NOTICE ADDRESS & EMAIL', `${esc(n.noticeAddress)} · ${esc(n.noticeEmail)}`],
-    ['AGENCY LEGAL NAME', esc(a.legalName)],
-    ['STATE / ENTITY TYPE', esc(a.stateEntityType)],
-    ['AGENCY NOTICE ADDRESS', esc(a.noticeAddress)],
-    ['PRINCIPAL NAME & TITLE', `${esc(a.principalName)}, ${esc(a.principalTitle)}`],
-    ['NOTICE EMAIL & PHONE', `${esc(a.noticeEmail)} · ${esc(a.noticePhone)}`],
+    ['AGENCY LEGAL NAME', agencyCell(a, x => esc(x.legalName))],
+    ['STATE / ENTITY TYPE', agencyCell(a, x => esc(x.stateEntityType))],
+    ['AGENCY NOTICE ADDRESS', agencyCell(a, x => esc(x.noticeAddress))],
+    ...(hasPrincipal(a)
+      ? [
+          [
+            'PRINCIPAL NAME & TITLE',
+            agencyCell(a, x => `${esc(x.principalName)}, ${esc(x.principalTitle)}`),
+          ] as [string, string],
+        ]
+      : []),
+    ['NOTICE EMAIL & PHONE', agencyCell(a, x => `${esc(x.noticeEmail)} · ${esc(x.noticePhone)}`)],
     ['EFFECTIVE DATE', esc(formatIsoDate(terms.effectiveDate))],
   ])
 )}
@@ -88,7 +97,7 @@ ${section(
     ),
     clause(
       '2.3',
-      '**"Delivered Call"** means an inbound call routed by NetEnroll and answered by Agency.'
+      '**"Delivered Call"** means an inbound call or a Live Transfer routed by NetEnroll and answered by Agency.'
     ),
     clause(
       '2.4',
@@ -123,6 +132,10 @@ ${section(
       '2.12',
       '**"Campaign Agreement"** means the CPA Agreement or the CPL Agreement, each as executed by the parties.'
     ),
+    clause(
+      '2.13',
+      '**"Live Transfer"** means a call in which a consumer already on the line with NetEnroll or its call generation partner is connected directly to Agency.'
+    ),
   ].join('\n')
 )}
 
@@ -131,7 +144,7 @@ ${section(
   [
     clause(
       '3.1',
-      "**Provision of Services.** NetEnroll will route inbound calls to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking."
+      "**Provision of Services.** NetEnroll will route inbound calls and Live Transfers to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking."
     ),
     clause(
       '3.2',
@@ -193,7 +206,7 @@ ${section(
     ),
     clause(
       '6.3',
-      '**Outbound Contact Restrictions.** An inbound call routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.'
+      '**Outbound Contact Restrictions.** An inbound call or Live Transfer routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.'
     ),
   ].join('\n')
 )}
@@ -308,7 +321,7 @@ ${section(
     ),
     clause(
       '13.2',
-      "**By NetEnroll.** NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or inbound routing violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation."
+      "**By NetEnroll.** NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or its routing of inbound calls and Live Transfers violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation."
     ),
   ].join('\n')
 )}

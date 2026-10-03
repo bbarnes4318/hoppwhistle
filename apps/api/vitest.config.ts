@@ -143,6 +143,10 @@ const DATABASE_BACKED = [
   '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',
   '**/src/services/__tests__/pay-per-call-integration.test.ts',
+  // Seeds a tenant and its compliance overrides. On the default pool another
+  // suite's `TRUNCATE "tenants" CASCADE` deleted them mid-test, which read as
+  // an override that names no call failing to apply.
+  '**/src/services/__tests__/compliance-override.db.test.ts',
   '**/src/services/provisioning/__tests__/provisioning-service.test.ts',
   // Truncates `tenants`, `roles`, `users`, `calls`, `recordings`, `buyers`,
   // `publishers`, `campaigns` and `insurance_leads`, seeding one agency with

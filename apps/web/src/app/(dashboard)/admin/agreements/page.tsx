@@ -211,7 +211,12 @@ export default function AgreementsPage(): JSX.Element {
                         {row.reference}
                       </Link>
                     </td>
-                    <td className="px-3 py-2">{row.agencyLegalName}</td>
+                    <td className="px-3 py-2">
+                      {row.agencyLegalName}
+                      {!row.detailsEntered && (
+                        <div className="text-[11px] text-ink-3">Awaiting agency details</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         {kindsOf(row).map(kind => (

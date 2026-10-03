@@ -34,6 +34,7 @@ export const EVENT_LABELS: Record<string, string> = {
   EXPIRED: 'Expired',
   COPIES_SENT: 'Executed copies sent',
   DOWNLOADED: 'Executed copy downloaded',
+  PARTY_DETAILS_SUBMITTED: 'Agency details entered',
 };
 
 function shortUa(ua: string | null): string {
@@ -69,10 +70,14 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
       break;
     case 'DOCUMENT_REVIEWED':
       add('document', d.kind);
-      add(
-        'as-sent SHA-256',
-        typeof d.sentHtmlSha256 === 'string' ? `${d.sentHtmlSha256.slice(0, 16)}…` : null
-      );
+      {
+        const reviewedSha =
+          typeof d.reviewedSha256 === 'string' ? d.reviewedSha256 : d.sentHtmlSha256;
+        add(
+          'text SHA-256',
+          typeof reviewedSha === 'string' ? `${reviewedSha.slice(0, 16)}…` : null
+        );
+      }
       break;
     case 'SIGNED':
       add('name', d.typedName);
@@ -89,6 +94,12 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
       add('trigger', d.trigger);
       add('sent', d.sent);
       break;
+    case 'PARTY_DETAILS_SUBMITTED': {
+      const party = (d.party ?? {}) as Record<string, unknown>;
+      add('as', party.kind === 'INDIVIDUAL' ? 'individual agent' : 'business');
+      add('name', party.legalName);
+      break;
+    }
     case 'DOWNLOADED':
       add('document', d.kind);
       break;
@@ -102,7 +113,13 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
 export interface CertificateInput {
   portalUrl: string;
   envelope: AgreementEnvelope;
-  document: { id: string; title: string; templateVersion: string; sentHtmlSha256: string };
+  document: {
+    id: string;
+    title: string;
+    templateVersion: string;
+    sentHtmlSha256: string;
+    presentedHtmlSha256?: string | null;
+  };
   contentSha256: string;
   contentPageCount: number;
   completedAt: Date;
@@ -130,6 +147,7 @@ export function renderCertificate(input: CertificateInput): string {
     .reverse()
     .find(e => e.type === 'OTP_VERIFIED' && (!signed || e.seq < signed.seq));
   const consent = [...sorted].reverse().find(e => e.type === 'CONSENT_GIVEN');
+  const partyAt = sorted.find(e => e.type === 'PARTY_DETAILS_SUBMITTED')?.occurredAt ?? null;
   const consentDetail = (consent?.detail ?? {}) as Record<string, unknown>;
   const lastHash = sorted.length > 0 ? sorted[sorted.length - 1].hash : '—';
   const lastSeq = sorted.length > 0 ? sorted[sorted.length - 1].seq : 0;
@@ -203,7 +221,20 @@ ${kv([
   ['Agency', esc(input.agencyLegalName)],
   ['Document page count', String(input.contentPageCount)],
   ['Content SHA-256', `<span class="mono">${esc(input.contentSha256)}</span>`],
-  ['As-sent text SHA-256', `<span class="mono">${esc(input.document.sentHtmlSha256)}</span>`],
+  ...(input.document.presentedHtmlSha256
+    ? ([
+        [
+          'Offer text SHA-256',
+          `<span class="mono">${esc(input.document.sentHtmlSha256)}</span><br><span class="muted">As signed and sent by NetEnroll, agency details to be completed</span>`,
+        ],
+        [
+          'Signed text SHA-256',
+          `<span class="mono">${esc(input.document.presentedHtmlSha256)}</span><br><span class="muted">Completed with the agency's own details${partyAt ? ` at ${esc(iso(partyAt))}` : ''}; the text reviewed and signed</span>`,
+        ],
+      ] as Array<[string, string]>)
+    : ([
+        ['As-sent text SHA-256', `<span class="mono">${esc(input.document.sentHtmlSha256)}</span>`],
+      ] as Array<[string, string]>)),
   ['Status', 'Completed'],
   ['Completed at', both(input.completedAt)],
 ])}

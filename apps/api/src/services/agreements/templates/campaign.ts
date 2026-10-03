@@ -10,17 +10,27 @@ import {
   formatFirstDeliveryDay,
   formatIsoDate,
 } from '../format.js';
-import { kvTable } from '../layout.js';
+import { agencyCell, hasPrincipal, kvTable } from '../layout.js';
 import type { FrozenTerms } from '../terms.js';
 
 export function partiesTable(terms: FrozenTerms): string {
   const a = terms.agency;
   return kvTable([
     ['NETENROLL ENTITY', 'PVN LLC d/b/a NetEnroll, a Florida limited liability company'],
-    ['AGENCY LEGAL NAME', esc(a.legalName)],
-    ['STATE / ENTITY TYPE', esc(a.stateEntityType)],
-    ['PRINCIPAL NAME & TITLE', `${esc(a.principalName)}, ${esc(a.principalTitle)}`],
-    ['BILLING EMAIL & PHONE', `${esc(a.billingEmail)} · ${esc(a.billingPhone)}`],
+    ['AGENCY LEGAL NAME', agencyCell(a, x => esc(x.legalName))],
+    ['STATE / ENTITY TYPE', agencyCell(a, x => esc(x.stateEntityType))],
+    ...(hasPrincipal(a)
+      ? [
+          [
+            'PRINCIPAL NAME & TITLE',
+            agencyCell(a, x => `${esc(x.principalName)}, ${esc(x.principalTitle)}`),
+          ] as [string, string],
+        ]
+      : []),
+    [
+      'BILLING EMAIL & PHONE',
+      agencyCell(a, x => `${esc(x.billingEmail)} · ${esc(x.billingPhone)}`),
+    ],
     ['MSA EFFECTIVE DATE', esc(formatIsoDate(terms.msaEffectiveDate))],
   ]);
 }

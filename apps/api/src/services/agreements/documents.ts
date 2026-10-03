@@ -94,8 +94,13 @@ export function intentStatement(params: {
   signerName: string;
   titles: string[];
   agencyLegalName: string;
+  /** An individual licensed agent signs for themselves, not for an agency. */
+  individual?: boolean;
 }): string {
-  return `By selecting Sign Agreements, I, ${params.signerName}, adopt the signature and initials shown above as my electronic signature and initials, intend to sign and be legally bound by ${documentList(params.titles)}, and confirm that I am authorized to sign on behalf of ${params.agencyLegalName}.`;
+  const capacity = params.individual
+    ? 'and confirm that I am signing on my own behalf as an individual'
+    : `and confirm that I am authorized to sign on behalf of ${params.agencyLegalName}`;
+  return `By selecting Sign Agreements, I, ${params.signerName}, adopt the signature and initials shown above as my electronic signature and initials, intend to sign and be legally bound by ${documentList(params.titles)}, ${capacity}.`;
 }
 
 /** The checkbox beside each document. */

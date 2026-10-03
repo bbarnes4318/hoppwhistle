@@ -57,6 +57,7 @@ export const EVENT_LABELS: Record<string, string> = {
   OTP_FAILED: 'Wrong verification code',
   OTP_LOCKED: 'Verification code locked',
   CONSENT_GIVEN: 'Electronic records consent given',
+  PARTY_DETAILS_SUBMITTED: 'Agency details entered',
   DOCUMENT_REVIEWED: 'Document reviewed',
   SIGNED: 'Signed by agency',
   COMPLETED: 'Completed',
@@ -93,6 +94,9 @@ export interface EnvelopeSummary {
   status: AgreementStatus;
   tenantId: string | null;
   agencyLegalName: string;
+  inviteeOrganization: string | null;
+  detailsEntered: boolean;
+  partyKind: 'BUSINESS' | 'INDIVIDUAL' | null;
   includesMsa: boolean;
   includesCpa: boolean;
   includesCpl: boolean;
@@ -110,6 +114,36 @@ export interface EnvelopeSummary {
   sealed: boolean;
   lastActivityAt?: string;
 }
+
+/** The agency's details as the signer entered them (API `partyDetailsSchema`). */
+export type PartyDetails =
+  | {
+      kind: 'BUSINESS';
+      legalName: string;
+      dbaName?: string | null;
+      stateOfFormation: string;
+      entityType: string;
+      noticeAddress: string;
+      principalName: string;
+      principalTitle: string;
+      noticeEmail: string;
+      noticePhone: string;
+      billingEmail: string;
+      billingPhone: string;
+      signerName: string;
+      signerTitle: string;
+    }
+  | {
+      kind: 'INDIVIDUAL';
+      legalName: string;
+      dbaName?: string | null;
+      stateOfResidence: string;
+      noticeAddress: string;
+      noticeEmail: string;
+      noticePhone: string;
+      billingEmail: string;
+      billingPhone: string;
+    };
 
 export function kindsOf(
   e: Pick<EnvelopeSummary, 'includesMsa' | 'includesCpa' | 'includesCpl'>

@@ -13,11 +13,11 @@ import {
 import type { RenderOptions } from '../services/agreements/layout.js';
 import { cpaIllustration } from '../services/agreements/templates/cpa.js';
 import type { FrozenTerms } from '../services/agreements/terms.js';
-import { termsSchema } from '../services/agreements/terms.js';
+import { agencyFromParty, partyDetailsSchema, termsSchema } from '../services/agreements/terms.js';
 
 /**
  * The agreements' legal text is verbatim: every sentence approved for the MSA
- * (MSA-2026-10-03), the CPA Agreement and the CPL Agreement (both -2026-09-25)
+ * (MSA-2026-10-03.2), the CPA Agreement and the CPL Agreement (both -2026-10-03)
  * must appear, word for word, in the rendered document once its HTML is
  * stripped. The expected text below is an independent copy of the approved
  * text, not read from the templates, so a reworded template fails here.
@@ -124,7 +124,7 @@ const MSA_TEXT = [
   '2. DEFINITIONS',
   '2.1 "Application" means an insurance application prepared by Agency for a consumer introduced through a Delivered Call.',
   '2.2 "Submitted Application" means an Application recorded in the Portal as having reached "Submitted" status.',
-  '2.3 "Delivered Call" means an inbound call routed by NetEnroll and answered by Agency.',
+  '2.3 "Delivered Call" means an inbound call or a Live Transfer routed by NetEnroll and answered by Agency.',
   '2.4 "Billable Call" means a Delivered Call whose connected duration equals or exceeds the Buffer Duration.',
   '2.5 "Buffer Duration" means the minimum connected call time, in seconds, required for a call to be billable, as set out in the CPL Agreement.',
   '2.6 "Daily Block" means the maximum quantity of Submitted Applications or Billable Calls delivered to Agency on a Delivery Day, as set out in the applicable Campaign Agreement.',
@@ -134,8 +134,9 @@ const MSA_TEXT = [
   '2.10 "Account Statement" means the statement made available in the Portal showing units delivered, amounts drawn down and the remaining Prepaid Balance.',
   '2.11 "Portal" means the NetEnroll technology platform at agents.netenroll.com.',
   '2.12 "Campaign Agreement" means the CPA Agreement or the CPL Agreement, each as executed by the parties.',
+  '2.13 "Live Transfer" means a call in which a consumer already on the line with NetEnroll or its call generation partner is connected directly to Agency.',
   '3. SERVICES AND DELIVERY OBLIGATIONS',
-  "3.1 Provision of Services. NetEnroll will route inbound calls to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking.",
+  "3.1 Provision of Services. NetEnroll will route inbound calls and Live Transfers to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking.",
   '3.2 Delivery Obligation. NetEnroll will continue delivering calls until Agency receives the volume of Submitted Applications or Billable Calls paid for. NetEnroll bears the cost and risk of the call generation required to meet prepaid targets.',
   '3.3 Delivery Window. NetEnroll will deliver sufficient volume to fulfill paid targets within thirty (30) Business Days. If delivery remains unfulfilled after that period, delivery continues at no additional charge, no new invoice is issued until the outstanding Prepaid Balance is fulfilled, and Agency may terminate the affected Campaign Agreement on written notice.',
   '3.4 No Volume Guarantee. Call availability fluctuates with consumer demand and market conditions. Low call delivery on any given day does not constitute a breach of this MSA or any Campaign Agreement.',
@@ -149,7 +150,7 @@ const MSA_TEXT = [
   '6. LICENSING, APPOINTMENTS AND LEGAL COMPLIANCE',
   "6.1 Producer Licensing. Agency warrants that every agent answering calls holds an active state insurance producer license and the required carrier appointments in the consumer's state of residence.",
   '6.2 Conduct and Disclosures. Agency is solely responsible for sales presentations, suitability, replacement disclosures and compliance with state insurance regulations.',
-  '6.3 Outbound Contact Restrictions. An inbound call routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.',
+  '6.3 Outbound Contact Restrictions. An inbound call or Live Transfer routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.',
   '7. CALL RECORDING AND MONITORING',
   '7.1 Recording Consent. All calls delivered through the Portal are recorded. Agency consents to recording and warrants that its agents inform callers where required by applicable one-party or all-party consent laws.',
   "7.2 Proprietary Records. Recordings are NetEnroll's property and will be made available to Agency on reasonable request for compliance or carrier audit purposes.",
@@ -178,7 +179,7 @@ const MSA_TEXT = [
   '(b) outbound follow-up contact by Agency;',
   '(c) state licensing or insurance compliance failures; or',
   "(d) breach of Agency's consumer data obligations.",
-  "13.2 By NetEnroll. NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or inbound routing violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation.",
+  "13.2 By NetEnroll. NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or its routing of inbound calls and Live Transfers violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation.",
   '14. LIMITATION OF LIABILITY',
   '14.1 Consequential Damages Waiver. Neither party is liable for indirect, incidental, special or consequential damages, or for lost profits or commissions.',
   "14.2 Aggregate Cap. To the maximum extent permitted by law, NetEnroll's total aggregate liability arising out of or relating to this MSA, any Campaign Agreement or the services, whether in contract, tort (including negligence), under any indemnity (including Section 13.2) or on any other basis, is limited to the total fees paid by Agency in the one (1) month preceding the event giving rise to liability. This limit does not apply to, and does not reduce, Agency's payment obligations or Agency's obligations under Section 13.1.",
@@ -273,7 +274,7 @@ const CPA_TEXT = [
   '1.1 Pay-Per-Submitted-Application. Agency pays exclusively for Submitted Applications. Agency incurs no cost for answered calls, talk time, or calls that do not result in a Submitted Application.',
   '1.2 Flat Rates. The rates are $160.00 per Final Expense application, $160.00 per Medicare application and $100.00 per ACA (Health) application, as stated in Part 1.',
   '1.3 Submitted Application. An Application counts once, upon reaching "Submitted" status in the Portal. Carrier underwriting decisions, including approval, rating, declination or later policy lapse, do not alter the fee.',
-  '1.4 Attribution. A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call took place.',
+  '1.4 Attribution. A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call or Live Transfer took place.',
   "1.5 Prepaid Balance. Agency buys applications in advance by paying a NetEnroll invoice through Melio. The applications paid for form Agency's prepaid balance for the selected vertical.",
   '1.6 Drawdown. Each Submitted Application reduces the prepaid balance by the rate for its vertical.',
   '1.7 Daily Block. The Daily Block is the maximum number of Submitted Applications delivered to Agency on a Delivery Day for each selected vertical, as stated in Part 1. Delivery pauses for the rest of the Delivery Day once it is reached.',
@@ -289,7 +290,7 @@ const CPL_TEXT = [
   'Cost-Per-Lead · Pay-Per-Call (Buffer Duration Threshold)',
   CAMPAIGN_INTRO('CPL'),
   'AT A GLANCE',
-  'You Pay For Billable Calls only: answered inbound calls that meet or exceed the agreed Buffer Duration.',
+  'You Pay For Billable Calls only: answered inbound calls and Live Transfers that meet or exceed the agreed Buffer Duration.',
   'Rates Fixed rate per Billable Call, set per vertical in Part 1. Calls under the Buffer Duration are free.',
   'When You Pay Upfront, by invoice through Melio. Card accepted. Delivery begins once payment clears.',
   'Credits Prepaid calls do not expire while this Agreement is in force. No overrun, ever.',
@@ -309,8 +310,8 @@ const CPL_TEXT = [
   'IN WITNESS WHEREOF, the parties have executed this CPL Agreement as of the later date signed below.',
   'Schedule 1: CPL Pricing and Billing Methodology',
   'Forms part of the CPL Agreement',
-  '1.1 Pay-Per-Call. Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call that meets or exceeds the Buffer Duration for that vertical.',
-  '1.2 Billable Call. A Billable Call is any inbound call routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).',
+  '1.1 Pay-Per-Call. Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call or Live Transfer that meets or exceeds the Buffer Duration for that vertical.',
+  '1.2 Billable Call. A Billable Call is any inbound call or Live Transfer routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).',
   "1.3 Buffer Measurement. Connected time begins the moment Agency's telephony system or agent answers the call and ends when the caller or agent disconnects. Duration is measured automatically by NetEnroll's Portal telephony, which is the record used for billing.",
   '1.4 Non-Billable Calls. Calls that end before reaching the Buffer Duration, including wrong numbers, early disconnects and short transfers, are non-billable and carry no charge.',
   "1.5 Unstaffed Periods. Calls offered while Agency is unstaffed do not count toward Agency's Daily Block. Repeated failure to staff is a material breach under Section 5.1 of the MSA.",
@@ -338,9 +339,9 @@ describe('agreement templates: the legal text is verbatim', () => {
 
   it('carries the template versions', () => {
     expect([msa.templateVersion, cpa.templateVersion, cpl.templateVersion]).toEqual([
-      'MSA-2026-10-03',
-      'CPA-2026-09-25',
-      'CPL-2026-09-25',
+      'MSA-2026-10-03.2',
+      'CPA-2026-10-03',
+      'CPL-2026-10-03',
     ]);
   });
 
@@ -508,5 +509,91 @@ describe('terms validation', () => {
     const c = JSON.parse(JSON.stringify(base));
     c.cpa.deliveryEnd = '09:00';
     expect(termsSchema.safeParse(c).success).toBe(false);
+  });
+});
+
+describe('agency details entered by the agency', () => {
+  it('prints "To be completed by Agency" in the offer, principal row included', () => {
+    const offer: FrozenTerms = { ...TERMS, agency: undefined };
+    const { msa, cpa, cpl } = render(offer);
+    for (const doc of [msa, cpa, cpl]) {
+      const text = plainText(doc.html);
+      expect(text).toContain('AGENCY LEGAL NAME To be completed by Agency');
+      expect(text).toContain('PRINCIPAL NAME & TITLE To be completed by Agency');
+      expect(text).not.toContain('Summit Ridge');
+    }
+    expect(plainText(msa.html)).toContain('NOTICE EMAIL & PHONE To be completed by Agency');
+    expect(plainText(cpa.html)).toContain('BILLING EMAIL & PHONE To be completed by Agency');
+    // The commercial terms are all there.
+    expect(plainText(cpa.html)).toContain('Final Expense $160.00 5');
+  });
+
+  it('prints an individual agent with no principal row', () => {
+    const agency = agencyFromParty({
+      kind: 'INDIVIDUAL',
+      legalName: 'Dana Whitfield',
+      dbaName: 'Whitfield Senior Benefits',
+      stateOfResidence: 'Florida',
+      noticeAddress: '12 Ocean Ave, St. Augustine, FL 32084',
+      noticeEmail: 'dana@whitfield.test',
+      noticePhone: '(904) 555-0142',
+      billingEmail: 'dana@whitfield.test',
+      billingPhone: '(904) 555-0142',
+    });
+    const { msa, cpa, cpl } = render({ ...TERMS, agency });
+    for (const doc of [msa, cpa, cpl]) {
+      const text = plainText(doc.html);
+      expect(text).toContain('AGENCY LEGAL NAME Dana Whitfield d/b/a Whitfield Senior Benefits');
+      expect(text).toContain('STATE / ENTITY TYPE Florida / Individual (sole proprietor)');
+      expect(text).not.toContain('PRINCIPAL NAME & TITLE');
+    }
+    expect(plainText(msa.html)).toContain(
+      'AGENCY NOTICE ADDRESS 12 Ocean Ave, St. Augustine, FL 32084'
+    );
+  });
+
+  it('prints a business from its own details', () => {
+    const agency = agencyFromParty({
+      kind: 'BUSINESS',
+      legalName: 'Summit Ridge Insurance Group LLC',
+      dbaName: null,
+      stateOfFormation: 'Colorado',
+      entityType: 'Limited Liability Company',
+      noticeAddress: '100 Main Street, Denver, CO 80202',
+      principalName: 'Morgan Ridge',
+      principalTitle: 'Managing Member',
+      noticeEmail: 'dana@summitridge.test',
+      noticePhone: '(303) 555-0142',
+      billingEmail: 'billing@summitridge.test',
+      billingPhone: '(303) 555-0199',
+      signerName: 'Dana Whitfield',
+      signerTitle: 'Operations Director',
+    });
+    const text = plainText(render({ ...TERMS, agency }).msa.html);
+    expect(text).toContain('STATE / ENTITY TYPE Colorado / Limited Liability Company');
+    expect(text).toContain('PRINCIPAL NAME & TITLE Morgan Ridge, Managing Member');
+  });
+
+  it('validates what the agency enters', () => {
+    expect(partyDetailsSchema.safeParse({ kind: 'INDIVIDUAL', legalName: 'Dana' }).success).toBe(
+      false
+    );
+    expect(
+      partyDetailsSchema.safeParse({
+        kind: 'BUSINESS',
+        legalName: 'X LLC',
+        stateOfFormation: 'Colorado',
+        entityType: 'LLC',
+        noticeAddress: '1 Main',
+        noticeEmail: 'not-an-email',
+        noticePhone: '3035550142',
+        billingEmail: 'a@b.test',
+        billingPhone: '3035550142',
+        principalName: 'A',
+        principalTitle: 'B',
+        signerName: 'Al',
+        signerTitle: 'C',
+      }).success
+    ).toBe(false);
   });
 });

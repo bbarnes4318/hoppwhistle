@@ -49,9 +49,9 @@ const TEST_JWT_SECRET = 'agreements-suite-secret-not-used-anywhere-else';
 process.env.JWT_SECRET ??= TEST_JWT_SECRET;
 
 const HAS_CHROME = Boolean(chromeExecutable());
-const MIGRATION = join(
-  __dirname,
-  '../../prisma/migrations/20261007000000_agreements/migration.sql'
+/** Applied in order: tables, triggers and settings, then the agency-details columns. */
+const MIGRATIONS = ['20261007000000_agreements', '20261008000000_agreements_party_details'].map(
+  name => join(__dirname, `../../prisma/migrations/${name}/migration.sql`)
 );
 
 describe('Agreements suite wiring', () => {
@@ -114,17 +114,6 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       includesCpa: true,
       includesCpl: false,
       terms: {
-        agency: {
-          legalName: 'Summit Ridge Insurance Group LLC',
-          stateEntityType: 'Colorado / Limited Liability Company',
-          noticeAddress: '100 Main Street, Denver, CO 80202',
-          principalName: 'Dana Whitfield',
-          principalTitle: 'Managing Member',
-          noticeEmail: 'dana@summitridge.test',
-          noticePhone: '(303) 555-0142',
-          billingEmail: 'dana@summitridge.test',
-          billingPhone: '(303) 555-0142',
-        },
         effectiveDate: '2026-10-03',
         msaEffectiveDate: '2026-10-03',
         cpa: {
@@ -139,7 +128,11 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
           firstDeliveryDay: null,
         },
       },
-      signer: { name: 'Dana Whitfield', title: 'Managing Member', email: 'Dana@SummitRidge.test' },
+      recipient: {
+        name: 'Dana Whitfield',
+        email: 'Dana@SummitRidge.test',
+        organization: 'Summit Ridge Insurance Group LLC',
+      },
       ccEmails: ['ops@summitridge.test'],
       netenrollSignatory: { name: 'James Kelly', title: 'Managing Partner' },
       netenrollAuthorityConfirmed: true,
@@ -190,16 +183,49 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     return ok.json().data.sessionToken;
   }
 
-  async function readyToSign(token: string) {
+  /** What a business enters on the signing page. */
+  const BUSINESS_PARTY = {
+    kind: 'BUSINESS',
+    legalName: 'Summit Ridge Insurance Group LLC',
+    stateOfFormation: 'Colorado',
+    entityType: 'Limited Liability Company',
+    noticeAddress: '100 Main Street, Denver, CO 80202',
+    principalName: 'Morgan Ridge',
+    principalTitle: 'Managing Member',
+    noticeEmail: 'dana@summitridge.test',
+    noticePhone: '(303) 555-0142',
+    billingEmail: 'billing@summitridge.test',
+    billingPhone: '(303) 555-0199',
+    signerName: 'Dana Whitfield',
+    signerTitle: 'Operations Director',
+  };
+
+  /** What an individual licensed agent enters. */
+  const INDIVIDUAL_PARTY = {
+    kind: 'INDIVIDUAL',
+    legalName: 'Dana Whitfield',
+    dbaName: 'Whitfield Senior Benefits',
+    stateOfResidence: 'Florida',
+    noticeAddress: '12 Ocean Ave, St. Augustine, FL 32084',
+    noticeEmail: 'dana@summitridge.test',
+    noticePhone: '(904) 555-0142',
+    billingEmail: 'dana@summitridge.test',
+    billingPhone: '(904) 555-0142',
+  };
+
+  async function readyToSign(token: string, party: Record<string, unknown> = BUSINESS_PARTY) {
     const session = await verify(token);
     const headers = { 'x-signing-session': session };
-    const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
+    const before = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
     await pub(
       'POST',
       `/sign/${token}/consent`,
-      { accepted: true, disclosureVersion: docs.disclosure.version },
+      { accepted: true, disclosureVersion: before.disclosure.version },
       headers
     );
+    const saved = await pub('POST', `/sign/${token}/details`, party, headers);
+    expect(saved.statusCode, saved.body).toBe(200);
+    const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
     for (const doc of docs.documents) {
       await pub('POST', `/sign/${token}/reviewed`, { documentId: doc.id }, headers);
     }
@@ -283,7 +309,7 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
     // The migration installs the triggers and seeds the settings; idempotent.
     const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
     await client.connect();
-    await client.query(readFileSync(MIGRATION, 'utf8'));
+    for (const file of MIGRATIONS) await client.query(readFileSync(file, 'utf8'));
     await client.end();
 
     app = await buildApp();
@@ -529,11 +555,13 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect(notDone.json().error.code).toBe('EXISTING_MSA_INVALID');
 
       const done = await fabricateCompleted();
-      const b = body({ existingMsaEnvelopeId: done.id, tenantId: null });
-      const mismatch = await post({
-        ...b,
-        terms: { ...b.terms, agency: { ...b.terms.agency, legalName: 'Another Agency LLC' } },
-      });
+      const mismatch = await post(
+        body({
+          existingMsaEnvelopeId: done.id,
+          tenantId: null,
+          recipient: { name: 'Someone Else', email: 'someone@another.test' },
+        })
+      );
       expect(mismatch.statusCode).toBe(422);
       expect(mismatch.json().error.code).toBe('EXISTING_MSA_MISMATCH');
     });
@@ -690,6 +718,93 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
   // 6. The signer
   // ══════════════════════════════════════════════════════════════════════════
   describe('the signer flow', () => {
+    it('sends an offer with the agency fields to be completed, and completes it with what the agency enters', async () => {
+      const { id, token } = await create();
+      const offer = await prisma.agreementDocument.findMany({
+        where: { envelopeId: id },
+        orderBy: { sortOrder: 'asc' },
+      });
+      for (const doc of offer) {
+        expect(doc.sentHtml).toContain('To be completed by Agency');
+        expect(doc.sentHtml).not.toContain('Morgan Ridge');
+        expect(doc.presentedHtml).toBeNull();
+      }
+      await readyToSign(token, BUSINESS_PARTY);
+      const envelope = await prisma.agreementEnvelope.findUniqueOrThrow({
+        where: { id },
+        include: { documents: { orderBy: { sortOrder: 'asc' } } },
+      });
+      expect(envelope.signerName).toBe('Dana Whitfield');
+      expect(envelope.signerTitle).toBe('Operations Director');
+      expect(envelope.partySubmittedAt).not.toBeNull();
+      for (const [i, doc] of envelope.documents.entries()) {
+        // The offer is untouched; the completed version is what is reviewed.
+        expect(doc.sentHtml).toBe(offer[i].sentHtml);
+        expect(doc.presentedHtml).not.toContain('To be completed by Agency');
+        expect(doc.presentedHtml).toContain('Summit Ridge Insurance Group LLC');
+        expect(doc.presentedHtml).toContain('Colorado / Limited Liability Company');
+        expect(doc.presentedHtml).toContain('Morgan Ridge, Managing Member');
+        expect(doc.presentedHtmlSha256).toBe(
+          createHash('sha256').update(doc.presentedHtml!).digest('hex')
+        );
+      }
+      expect(envelope.documents[0].presentedHtml).toContain('100 Main Street, Denver, CO 80202');
+      expect(envelope.documents[1].presentedHtml).toContain(
+        'billing@summitridge.test · (303) 555-0199'
+      );
+      const submitted = (await events(id)).find(e => e.type === 'PARTY_DETAILS_SUBMITTED')!;
+      expect((submitted.detail as any).party.legalName).toBe('Summit Ridge Insurance Group LLC');
+      expect((submitted.detail as any).documents.map((d: any) => d.presentedHtmlSha256)).toEqual(
+        envelope.documents.map(d => d.presentedHtmlSha256)
+      );
+      expect(await verifyEventChain(id)).toMatchObject({ ok: true });
+
+      // Once only, and the database holds it there.
+      const session = await verify(token);
+      const again = await pub('POST', `/sign/${token}/details`, INDIVIDUAL_PARTY, {
+        'x-signing-session': session,
+      });
+      expect(again.statusCode).toBe(409);
+      await expect(
+        prisma.$executeRawUnsafe(
+          `UPDATE "agreement_envelopes" SET "partyDetails" = '{}'::jsonb WHERE "id" = '${id}'`
+        )
+      ).rejects.toThrow(/agency details/);
+      await expect(
+        prisma.$executeRawUnsafe(
+          `UPDATE "agreement_documents" SET "presentedHtml" = 'x' WHERE "envelopeId" = '${id}'`
+        )
+      ).rejects.toThrow(/as-presented/);
+    });
+
+    it('asks an individual agent for no entity or principal, and has them sign individually', async () => {
+      const { id, token } = await create();
+      const { headers, docs } = await readyToSign(token, INDIVIDUAL_PARTY);
+      expect(docs.individual).toBe(true);
+      expect(docs.intentStatement).toBe(
+        'By selecting Sign Agreements, I, Dana Whitfield, adopt the signature and initials shown above as my electronic signature and initials, intend to sign and be legally bound by the Master Services Agreement and the CPA Agreement, and confirm that I am signing on my own behalf as an individual.'
+      );
+      for (const doc of docs.documents) {
+        expect(doc.html).toContain('Dana Whitfield d/b/a Whitfield Senior Benefits');
+        expect(doc.html).toContain('Florida / Individual (sole proprietor)');
+        expect(doc.html).not.toContain('PRINCIPAL NAME &amp; TITLE');
+      }
+      const envelope = await prisma.agreementEnvelope.findUniqueOrThrow({ where: { id } });
+      expect(envelope.signerTitle).toBe('Individually');
+      // Whatever title is sent, an individual signs "Individually".
+      await pub('POST', `/sign/${token}/sign`, signBody(docs, { title: 'CEO' }), headers);
+      const signed = (await events(id)).find(e => e.type === 'SIGNED')!;
+      expect((signed.detail as any).title).toBe('Individually');
+      expect((signed.detail as any).documentHashes).toEqual(
+        Object.fromEntries(
+          (await prisma.agreementDocument.findMany({ where: { envelopeId: id } })).map(d => [
+            d.id,
+            d.presentedHtmlSha256,
+          ])
+        )
+      );
+    }, 120_000);
+
     it('shows nothing but the summary before verification', async () => {
       const { token } = await create();
       const response = await pub('GET', `/sign/${token}`);
@@ -746,15 +861,18 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       const { token } = await create();
       const session = await verify(token);
       const headers = { 'x-signing-session': session };
-      const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
-      expect(docs.documents[0].html).toContain('Master Services Agreement');
-      expect(docs.intentStatement).toBe(
-        'By selecting Sign Agreements, I, Dana Whitfield, adopt the signature and initials shown above as my electronic signature and initials, intend to sign and be legally bound by the Master Services Agreement and the CPA Agreement, and confirm that I am authorized to sign on behalf of Summit Ridge Insurance Group LLC.'
-      );
+      const pending = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json()
+        .data;
+      // Nothing to review until the agency has entered its details.
+      expect(pending.partyRequired).toBe(true);
+      expect(pending.documents).toEqual([]);
 
-      let response = await pub('POST', `/sign/${token}/sign`, signBody(docs), headers);
+      let response = await pub('POST', `/sign/${token}/sign`, signBody(pending), headers);
       expect(response.statusCode).toBe(422);
       expect(response.json().error.message).toContain('disclosure');
+      // Details come after consent.
+      response = await pub('POST', `/sign/${token}/details`, BUSINESS_PARTY, headers);
+      expect(response.statusCode).toBe(422);
 
       await pub(
         'POST',
@@ -762,6 +880,23 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         { accepted: true, disclosureVersion: 'ESIGN-2026-10-03' },
         headers
       );
+      response = await pub('POST', `/sign/${token}/sign`, signBody(pending), headers);
+      expect(response.statusCode).toBe(422);
+      expect(response.json().error.message).toContain('Enter your details');
+      expect(
+        (await pub('POST', `/sign/${token}/details`, { kind: 'BUSINESS' }, headers)).statusCode
+      ).toBe(422);
+      expect(
+        (await pub('POST', `/sign/${token}/details`, BUSINESS_PARTY, headers)).statusCode
+      ).toBe(200);
+
+      const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
+      expect(docs.partyRequired).toBe(false);
+      expect(docs.documents[0].html).toContain('Master Services Agreement');
+      expect(docs.intentStatement).toBe(
+        'By selecting Sign Agreements, I, Dana Whitfield, adopt the signature and initials shown above as my electronic signature and initials, intend to sign and be legally bound by the Master Services Agreement and the CPA Agreement, and confirm that I am authorized to sign on behalf of Summit Ridge Insurance Group LLC.'
+      );
+
       await pub('POST', `/sign/${token}/reviewed`, { documentId: docs.documents[0].id }, headers);
       response = await pub('POST', `/sign/${token}/sign`, signBody(docs), headers);
       expect(response.statusCode).toBe(422);
@@ -835,7 +970,7 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
       expect(types).toContain('COMPLETION_FAILED');
       const signedEvent = (await events(id)).find(e => e.type === 'SIGNED')!;
       expect((signedEvent.detail as any).documentHashes).toEqual(
-        Object.fromEntries(documents.map(d => [d.id, d.sentHtmlSha256]))
+        Object.fromEntries(documents.map(d => [d.id, d.presentedHtmlSha256]))
       );
       expect((signedEvent.detail as any).acceptanceStatements[documents[1].id]).toBe(
         'I have read and agree to the CPA Agreement.'

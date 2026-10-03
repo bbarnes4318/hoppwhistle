@@ -39,6 +39,7 @@ import {
   etDateTime,
   fileSize,
   type EnvelopeSummary,
+  type PartyDetails,
 } from '@/lib/agreements';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -61,12 +62,15 @@ interface AgreementDetail extends EnvelopeSummary {
   signerTypedSignature: string | null;
   signerInitials: string | null;
   signatureMethod: 'TYPED' | 'DRAWN' | null;
+  partyDetails: PartyDetails | null;
+  partySubmittedAt: string | null;
   documents: Array<{
     id: string;
     kind: string;
     title: string;
     templateVersion: string;
     sentHtmlSha256: string;
+    presentedHtmlSha256: string | null;
     contentPdfSha256: string | null;
     executedPdfSha256: string | null;
     executedPdfBytes: number | null;
@@ -112,6 +116,81 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
   );
 }
 
+/** The agency: as it entered itself, as NetEnroll entered it (older envelopes), or still to come. */
+function AgencyRows({
+  party,
+  legacy,
+  invitee,
+  submittedAt,
+}: {
+  party: PartyDetails | null;
+  legacy: any; // eslint-disable-line @typescript-eslint/no-explicit-any -- frozen JSON, read for display
+  invitee: string | null;
+  submittedAt: string | null;
+}): JSX.Element {
+  if (party) {
+    const name = party.dbaName ? `${party.legalName} d/b/a ${party.dbaName}` : party.legalName;
+    return (
+      <>
+        <Row label="Agency">
+          {name}
+          <div className="text-xs text-ink-3">
+            {party.kind === 'INDIVIDUAL' ? 'Individual licensed agent' : 'Business'} · entered by
+            the agency {etDateTime(submittedAt)}
+          </div>
+        </Row>
+        {party.kind === 'BUSINESS' ? (
+          <>
+            <Row label="State / entity">
+              {party.stateOfFormation} / {party.entityType}
+            </Row>
+            <Row label="Principal">
+              {party.principalName}, {party.principalTitle}
+            </Row>
+          </>
+        ) : (
+          <Row label="State">{party.stateOfResidence}</Row>
+        )}
+        <Row label="Notice address">{party.noticeAddress}</Row>
+        <Row label="Notice">
+          {party.noticeEmail} · {party.noticePhone}
+        </Row>
+        <Row label="Billing">
+          {party.billingEmail} · {party.billingPhone}
+        </Row>
+      </>
+    );
+  }
+  if (legacy) {
+    return (
+      <>
+        <Row label="Agency">{legacy.legalName}</Row>
+        <Row label="State / entity">{legacy.stateEntityType}</Row>
+        <Row label="Notice address">{legacy.noticeAddress}</Row>
+        {legacy.principalName && (
+          <Row label="Principal">
+            {legacy.principalName}, {legacy.principalTitle}
+          </Row>
+        )}
+        <Row label="Notice">
+          {legacy.noticeEmail} · {legacy.noticePhone}
+        </Row>
+        <Row label="Billing">
+          {legacy.billingEmail} · {legacy.billingPhone}
+        </Row>
+      </>
+    );
+  }
+  return (
+    <Row label="Agency">
+      {invitee ?? '—'}
+      <div className="text-xs text-ink-3">
+        Awaiting the agency&apos;s details. The signer enters them when they open the link.
+      </div>
+    </Row>
+  );
+}
+
 export default function AgreementDetailPage(): JSX.Element {
   const params = useParams<{ id: string }>();
   const id = params?.id;
@@ -122,7 +201,25 @@ export default function AgreementDetailPage(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState('');
-  const [sentHtml, setSentHtml] = useState<{ title: string; html: string } | null>(null);
+  const [sentHtml, setSentHtml] = useState<{
+    title: string;
+    html: string;
+    version: 'sent' | 'presented';
+  } | null>(null);
+
+  async function viewHtml(
+    docId: string,
+    title: string,
+    version: 'sent' | 'presented'
+  ): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(
+      `/api/v1/platform/agreements/${id}/documents/${docId}/${version}.html`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+    );
+    if (response.ok) setSentHtml({ title, html: await response.text(), version });
+    else setError('The document could not be loaded.');
+  }
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -265,22 +362,21 @@ export default function AgreementDetailPage(): JSX.Element {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          void (async () => {
-                            const token = localStorage.getItem('token');
-                            const response = await fetch(
-                              `/api/v1/platform/agreements/${detail.id}/documents/${doc.id}/sent.html`,
-                              { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-                            );
-                            if (response.ok)
-                              setSentHtml({ title: doc.title, html: await response.text() });
-                            else setError('The as-sent document could not be loaded.');
-                          })()
-                        }
+                        onClick={() => void viewHtml(doc.id, doc.title, 'sent')}
                       >
                         <Eye className="mr-1 h-3.5 w-3.5" />
                         View as sent
                       </Button>
+                      {doc.presentedHtmlSha256 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void viewHtml(doc.id, doc.title, 'presented')}
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" />
+                          View with agency details
+                        </Button>
+                      )}
                       {detail.status === 'COMPLETED' && doc.executedPdfSha256 && (
                         <Button
                           size="sm"
@@ -305,6 +401,12 @@ export default function AgreementDetailPage(): JSX.Element {
                   <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-0.5 text-xs">
                     <span className="text-ink-3">As-sent SHA-256</span>
                     <Hash value={doc.sentHtmlSha256} />
+                    {doc.presentedHtmlSha256 && (
+                      <>
+                        <span className="text-ink-3">Completed SHA-256</span>
+                        <Hash value={doc.presentedHtmlSha256} />
+                      </>
+                    )}
                     <span className="text-ink-3">Executed PDF SHA-256</span>
                     <Hash value={doc.executedPdfSha256} />
                   </div>
@@ -465,18 +567,12 @@ export default function AgreementDetailPage(): JSX.Element {
               <PanelTitle>Parties &amp; terms</PanelTitle>
             </PanelHeader>
             <PanelBody>
-              <Row label="Agency">{terms.agency.legalName}</Row>
-              <Row label="State / entity">{terms.agency.stateEntityType}</Row>
-              <Row label="Notice address">{terms.agency.noticeAddress}</Row>
-              <Row label="Principal">
-                {terms.agency.principalName}, {terms.agency.principalTitle}
-              </Row>
-              <Row label="Notice">
-                {terms.agency.noticeEmail} · {terms.agency.noticePhone}
-              </Row>
-              <Row label="Billing">
-                {terms.agency.billingEmail} · {terms.agency.billingPhone}
-              </Row>
+              <AgencyRows
+                party={detail.partyDetails}
+                legacy={terms.agency}
+                invitee={detail.inviteeOrganization}
+                submittedAt={detail.partySubmittedAt}
+              />
               <Row label="Effective date">{terms.effectiveDate}</Row>
               {detail.existingMsa && (
                 <Row label="Existing MSA">
@@ -487,7 +583,8 @@ export default function AgreementDetailPage(): JSX.Element {
                 </Row>
               )}
               <Row label="Signer">
-                {detail.signerName}, {detail.signerTitle}
+                {detail.signerName}
+                {detail.signerTitle && `, ${detail.signerTitle}`}
                 <div className="text-xs text-ink-3">{detail.signerEmail}</div>
               </Row>
               {detail.ccEmails.length > 0 && (
@@ -586,9 +683,14 @@ export default function AgreementDetailPage(): JSX.Element {
       <Dialog open={sentHtml !== null} onOpenChange={o => !o && setSentHtml(null)}>
         <DialogContent className="flex h-[92vh] max-w-[min(96vw,1000px)] flex-col gap-3 p-4">
           <DialogHeader>
-            <DialogTitle>{sentHtml?.title} — as sent</DialogTitle>
+            <DialogTitle>
+              {sentHtml?.title} —{' '}
+              {sentHtml?.version === 'presented' ? 'with agency details' : 'as sent'}
+            </DialogTitle>
             <DialogDescription>
-              The exact document the signer reviewed, before signature.
+              {sentHtml?.version === 'presented'
+                ? 'The document completed with the details the agency entered: the text the signer reviewed and signed.'
+                : 'The offer exactly as NetEnroll signed and sent it, before the agency entered its details.'}
             </DialogDescription>
           </DialogHeader>
           {sentHtml && (

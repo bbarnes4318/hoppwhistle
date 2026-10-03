@@ -28,6 +28,7 @@ import { sendCompletedEmail, sendInternalCompletedEmail, type ExecutedFile } fro
 import { appendEvent } from './events.js';
 import { renderExecutedHtml } from './executed.js';
 import { etDateIso, sha256Hex, slugify } from './format.js';
+import { agencyLabel, signableHtml } from './party.js';
 import {
   certificateFooterTemplate,
   documentFooterTemplate,
@@ -41,7 +42,6 @@ import {
   withBrowser,
 } from './pdf.js';
 import { loadAgreementSettings, noticeEmailOf } from './settings.js';
-import type { FrozenTerms } from './terms.js';
 import { mintToken } from './tokens.js';
 
 export const DOWNLOAD_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -118,7 +118,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
     throw new Error(`Envelope ${envelope.reference} has no committed signature`);
   }
 
-  const terms = envelope.terms as unknown as FrozenTerms;
+  const agencyName = agencyLabel(envelope);
   const settings = await loadAgreementSettings(prisma);
   const noticeEmail = noticeEmailOf(settings);
   const storage = getAgreementsStorageService();
@@ -145,7 +145,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
   if (pending.length > 0) {
     await withBrowser(async browser => {
       for (const doc of pending) {
-        const executedHtml = renderExecutedHtml(doc.sentHtml, {
+        const executedHtml = renderExecutedHtml(signableHtml(doc), {
           method: envelope.signatureMethod === 'DRAWN' ? 'DRAWN' : 'TYPED',
           typedName: envelope.signerTypedSignature!,
           drawnPngDataUri,
@@ -168,7 +168,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
           contentSha256,
           contentPageCount,
           completedAt,
-          agencyLegalName: terms.agency.legalName,
+          agencyLegalName: agencyName,
           drawnPngDataUri,
           netenrollAdminEmail: sender?.email ?? null,
           internalCopyEmails: settings.internalCopyEmails,
@@ -180,7 +180,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
         });
 
         const merged = await mergePdfs(contentPdf, certificatePdf, {
-          title: `${doc.title} — ${terms.agency.legalName}`,
+          title: `${doc.title} — ${agencyName}`,
           author: 'PVN LLC d/b/a NetEnroll',
           subject: `Executed agreement ${envelope.reference}`,
           keywords: [envelope.reference],
@@ -224,7 +224,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
     const content = await readVerifiedPdf(doc);
     files.push({
       kind: doc.kind,
-      filename: executedFileName(terms.agency.legalName, doc.kind, envelope.reference),
+      filename: executedFileName(agencyName, doc.kind, envelope.reference),
       sha256: doc.executedPdfSha256!,
       content,
     });
@@ -275,9 +275,8 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
       });
       const msaDoc = msaEnvelope?.documents[0];
       if (msaEnvelope && msaDoc?.executedPdfKey) {
-        const msaTerms = msaEnvelope.terms as unknown as FrozenTerms;
         attachments.push({
-          filename: executedFileName(msaTerms.agency.legalName, 'MSA', msaEnvelope.reference),
+          filename: executedFileName(agencyLabel(msaEnvelope), 'MSA', msaEnvelope.reference),
           sha256: msaDoc.executedPdfSha256!,
           content: await readVerifiedPdf(msaDoc),
         });
@@ -339,7 +338,7 @@ export async function deliverExecutedCopies(params: {
     where: { id: params.envelopeId },
     include: { documents: { orderBy: { sortOrder: 'asc' } } },
   });
-  const terms = envelope.terms as unknown as FrozenTerms;
+  const agencyName = agencyLabel(envelope);
   const settings = await loadAgreementSettings(prisma);
   const noticeEmail = noticeEmailOf(settings);
 
@@ -348,7 +347,7 @@ export async function deliverExecutedCopies(params: {
     attachments = [];
     for (const doc of envelope.documents) {
       attachments.push({
-        filename: executedFileName(terms.agency.legalName, doc.kind, envelope.reference),
+        filename: executedFileName(agencyName, doc.kind, envelope.reference),
         sha256: doc.executedPdfSha256!,
         content: await readVerifiedPdf(doc),
       });
@@ -358,7 +357,7 @@ export async function deliverExecutedCopies(params: {
   const signer = await sendCompletedEmail({
     to: envelope.signerEmail,
     cc: envelope.ccEmails,
-    agencyLegalName: terms.agency.legalName,
+    agencyLegalName: agencyName,
     reference: envelope.reference,
     files: attachments,
     downloadUrl: downloadPageUrl(params.downloadToken),
@@ -374,7 +373,7 @@ export async function deliverExecutedCopies(params: {
   );
   const internal = await sendInternalCompletedEmail({
     to: internalTo,
-    agencyLegalName: terms.agency.legalName,
+    agencyLegalName: agencyName,
     reference: envelope.reference,
     files: attachments,
     adminUrl: adminEnvelopeUrl(envelope.id),
