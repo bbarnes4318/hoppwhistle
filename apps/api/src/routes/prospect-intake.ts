@@ -108,14 +108,38 @@ function getTenantId(request: FastifyRequest): string | null {
 
 /**
  * Tenants whose imported leads pop for EVERY agency's incoming calls: the
- * platform's own list of people it calls on the agencies' behalf. Read per
- * request so a config change needs no code path of its own. Comma-separated.
+ * platform's own list of people it calls on the agencies' behalf.
+ *
+ * By default that is NetEnroll's own agency -- the home tenant of each
+ * platform admin -- so it works with no setup. SCREEN_POP_SHARED_TENANT_IDS
+ * (comma-separated) overrides it; set it to `none` to turn sharing off.
  */
-function screenPopSharedTenantIds(): string[] {
-  return (process.env.SCREEN_POP_SHARED_TENANT_IDS || '')
-    .split(',')
-    .map(id => id.trim())
-    .filter(Boolean);
+const SHARED_TENANTS_TTL_MS = 60_000;
+let sharedTenantsCache: { ids: string[]; at: number } | null = null;
+
+async function screenPopSharedTenantIds(): Promise<string[]> {
+  const configured = process.env.SCREEN_POP_SHARED_TENANT_IDS?.trim();
+  if (configured) {
+    if (configured.toLowerCase() === 'none') return [];
+    return configured
+      .split(',')
+      .map(id => id.trim())
+      .filter(Boolean);
+  }
+  if (sharedTenantsCache && Date.now() - sharedTenantsCache.at < SHARED_TENANTS_TTL_MS) {
+    return sharedTenantsCache.ids;
+  }
+  const admins = await prisma.platformAdmin.findMany({
+    select: { user: { select: { tenantId: true } } },
+  });
+  const ids = [...new Set(admins.map(a => a.user.tenantId).filter((id): id is string => !!id))];
+  sharedTenantsCache = { ids, at: Date.now() };
+  return ids;
+}
+
+/** Test hook: forget the cached platform-admin tenants. */
+export function resetScreenPopSharedTenantsCache(): void {
+  sharedTenantsCache = null;
 }
 
 function normalizePhone(phone: string): string {
@@ -152,8 +176,9 @@ function maskBankingField(val?: string): string | null {
  * pop. Whichever agent answers a call must see who is calling, whoever took the
  * intake, so that route stays agency-wide by design. When no intake exists it
  * falls back to the agency's imported insurance leads, also agency-wide, and
- * then to the platform's shared list (SCREEN_POP_SHARED_TENANT_IDS), which
- * crosses agencies by design and so returns contact basics only.
+ * then to the platform's shared list (NetEnroll's own agency; see
+ * screenPopSharedTenantIds), which crosses agencies by design and so returns
+ * contact basics only.
  */
 function intakeOwnerScope(request: FastifyRequest): string | null {
   if (isAgencyPrincipal(request)) return null;
@@ -635,10 +660,10 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           }
 
           // Last: the platform's shared screen-pop list -- leads NetEnroll
-          // uploads into a tenant named in SCREEN_POP_SHARED_TENANT_IDS, for
-          // the calls it provides to every agency. Another agency's agent sees
+          // uploads into its own agency, for the calls it provides to every
+          // agency (see screenPopSharedTenantIds). Another agency's agent sees
           // contact basics only, never demographics or policy details.
-          const sharedTenantIds = screenPopSharedTenantIds().filter(id => id !== tenantId);
+          const sharedTenantIds = (await screenPopSharedTenantIds()).filter(id => id !== tenantId);
           if (sharedTenantIds.length > 0) {
             const shared = await prisma.insuranceLead.findFirst({
               where: { tenantId: { in: sharedTenantIds }, phone: normalizedPhone },

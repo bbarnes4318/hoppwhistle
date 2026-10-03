@@ -417,6 +417,45 @@ describe.skipIf(!gate.available)('prospect intake agent scope', () => {
         expect(res.statusCode).toBe(404);
       });
     });
+
+    describe("by default, from NetEnroll's own agency (a platform admin's home tenant)", () => {
+      const resetCache = async () =>
+        (await import('../routes/prospect-intake.js')).resetScreenPopSharedTenantsCache();
+
+      beforeEach(async () => {
+        delete process.env.SCREEN_POP_SHARED_TENANT_IDS;
+        await prisma.platformAdmin.create({ data: { userId: a.ownerId } });
+        await resetCache();
+      });
+      afterEach(async () => {
+        delete process.env.SCREEN_POP_SHARED_TENANT_IDS;
+        await prisma.platformAdmin.deleteMany({ where: { userId: a.ownerId } });
+        await resetCache();
+      });
+
+      it('pops for another agency with no configuration', async () => {
+        const phone = await importedLead(a, 'NetEnrollList');
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/prospects/by-phone/${phone}`,
+          headers: as(b, b.agentId),
+        });
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.body).recordType).toBe('shared_lead');
+        expect(JSON.parse(res.body).prospect.firstName).toBe('NetEnrollList');
+      });
+
+      it('is off when SCREEN_POP_SHARED_TENANT_IDS=none', async () => {
+        process.env.SCREEN_POP_SHARED_TENANT_IDS = 'none';
+        const phone = await importedLead(a, 'SharingOff');
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/prospects/by-phone/${phone}`,
+          headers: as(b, b.agentId),
+        });
+        expect(res.statusCode).toBe(404);
+      });
+    });
   });
 
   describe('intakes from before ownership was recorded', () => {
