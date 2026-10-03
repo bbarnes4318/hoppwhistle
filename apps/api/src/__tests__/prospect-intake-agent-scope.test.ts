@@ -295,6 +295,66 @@ describe.skipIf(!gate.available)('prospect intake agent scope', () => {
     });
   });
 
+  describe('the screen pop falls back to imported leads', () => {
+    async function importedLead(agency: Agency, firstName: string, phone = randomPhone()) {
+      await prisma.insuranceLead.create({
+        data: {
+          tenantId: agency.tenantId,
+          vertical: 'FE',
+          phone,
+          firstName,
+          lastName: 'Imported',
+          city: 'Nashville',
+          state: 'TN',
+          zipCode: '37201',
+          source: 'csv-upload',
+        },
+      });
+      return phone;
+    }
+
+    it('pops an imported lead when the caller has no intake', async () => {
+      const phone = await importedLead(a, 'Uploaded');
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/prospects/by-phone/+1${phone}`,
+        headers: as(a, a.agentId),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.recordType).toBe('insurance_lead');
+      expect(body.prospect).toMatchObject({
+        firstName: 'Uploaded',
+        lastName: 'Imported',
+        city: 'Nashville',
+        zip: '37201',
+        leadSource: 'csv-upload',
+      });
+    });
+
+    it('prefers the intake when both exist', async () => {
+      const intake = await intakeBy(a, a.agentId, 'FromIntake');
+      await importedLead(a, 'FromImport', intake.phone);
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/prospects/by-phone/${intake.phone}`,
+        headers: as(a, a.agentId),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).prospect.firstName).toBe('FromIntake');
+    });
+
+    it("does not pop another agency's imported lead", async () => {
+      const phone = await importedLead(a, 'OtherAgencyLead');
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/prospects/by-phone/${phone}`,
+        headers: as(b, b.agentId),
+      });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
   describe('intakes from before ownership was recorded', () => {
     async function legacyIntake(firstName: string) {
       const phone = randomPhone();

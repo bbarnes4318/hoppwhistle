@@ -54,7 +54,7 @@ const defaultFields: ScreenPopField[] = [
   { id: 'company', label: 'Company', key: 'company', enabled: true, order: 4 },
   { id: 'address', label: 'Address', key: 'address', enabled: false, order: 5 },
   { id: 'city', label: 'City', key: 'city', enabled: false, order: 6 },
-  { id: 'state', label: 'State', key: 'state', enabled: false, order: 7 },
+  { id: 'state', label: 'State', key: 'state', enabled: true, order: 7 },
   { id: 'zipCode', label: 'Zip Code', key: 'zipCode', enabled: false, order: 8 },
   { id: 'leadSource', label: 'Lead Source', key: 'leadSource', enabled: true, order: 9 },
   { id: 'campaignName', label: 'Campaign', key: 'campaignName', enabled: true, order: 10 },
