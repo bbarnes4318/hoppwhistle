@@ -39,7 +39,6 @@ import type {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-
 import { clientIp, clientUserAgent } from '../lib/client-ip.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -1084,6 +1083,16 @@ export async function registerSalesRoutes(fastify: FastifyInstance): Promise<voi
     const parsed = settingsSchema.safeParse(request.body);
     if (!parsed.success) return validation(reply, firstIssue(parsed.error));
     const body = parsed.data;
+    // A white-label issuer signs and emails in its own name. Its names may not
+    // be NetEnroll's, or its agreements would read as NetEnroll's.
+    if (ws.scope === 'TENANT') {
+      const named = [body.displayName, body.legalEntityName, body.dbaName].filter(
+        (v): v is string => typeof v === 'string'
+      );
+      if (named.some(v => /net\s*enroll|pvn\s+llc/i.test(v))) {
+        return validation(reply, "A white-label suite's names cannot be NetEnroll's or PVN LLC's.");
+      }
+    }
     const data: Prisma.AgreementSuiteUpdateInput = { updatedByUserId: ws.userId };
     for (const key of Object.keys(body) as Array<keyof typeof body>) {
       if (body[key] === undefined) continue;

@@ -733,6 +733,22 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
       expect(suite.brandTheme).toBe('life-leads-plus');
     });
 
+    it("refuses a white-label suite NetEnroll's names", async () => {
+      for (const body of [
+        { displayName: 'NetEnroll' },
+        { legalEntityName: 'PVN LLC' },
+        { dbaName: 'Net Enroll' },
+      ]) {
+        const response = await call('llpOwner', 'PUT', '/api/v1/sales/settings', body);
+        expect(response.statusCode, JSON.stringify(body)).toBe(422);
+      }
+      const suite = await prisma.agreementSuite.findFirstOrThrow({
+        where: { workspace: { tenantId: ids.llp } },
+      });
+      expect(suite.displayName).toBe('Life Leads Plus');
+      expect(suite.legalEntityName).toBeNull();
+    });
+
     it("refuses NetEnroll's template set or seal for a white-label suite at the platform API", async () => {
       await call('llpOwner', 'GET', '/api/v1/sales/context');
       const suite = await prisma.agreementSuite.findFirstOrThrow({
