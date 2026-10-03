@@ -9,7 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
-import { isAgencyPrincipal } from '../lib/agent-scope.js';
+import { isAgencyPrincipal, isAgentPerson } from '../lib/agent-scope.js';
 import { enforceLicensedState } from '../lib/licensed-states.js';
 import { getActingTenantId, getActingUserId } from '../lib/tenant-context.js';
 import type { IngestOwnership } from '../services/insurance-lead-service.js';
@@ -326,6 +326,20 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       }
 
       const body = request.body;
+
+      // "Save & Send to Buyer" is the agency principal's action, as it is in
+      // the CRM (`refuseAgentDelivery` in routes/insurance-leads.ts). An agent
+      // is refused before anything is written; saving to the CRM only is
+      // unaffected. A partner on an API key is not an agent.
+      if (body?.sendToBuyer === true && isAgentPerson(request)) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only the agency owner or an administrator can send leads to a buyer.',
+          },
+        });
+      }
+
       if (!body.phone) {
         return reply.code(400).send({
           error: { code: 'VALIDATION_ERROR', message: 'Phone number is required' },

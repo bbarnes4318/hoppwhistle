@@ -1,5 +1,6 @@
 import { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { isAgentPerson } from '../lib/agent-scope.js';
 import { createRequestLogger } from '../lib/logger.js';
 import { httpRequestDuration, httpRequestTotal, httpRequestErrors } from '../lib/metrics.js';
 
@@ -43,21 +44,22 @@ export function registerLoggingMiddleware(fastify: FastifyInstance): Promise<voi
     if (request.method !== 'POST' || reply.statusCode >= 400) return payload;
 
     const requestPath = request.url.split('?')[0];
-    const inboundMatch = requestPath.match(
-      /^\/api\/v1\/insurance-leads\/inbound\/(aca|fe)$/i
-    );
+    const inboundMatch = requestPath.match(/^\/api\/v1\/insurance-leads\/inbound\/(aca|fe)$/i);
     const retryMatch = requestPath.match(
       /^\/api\/v1\/insurance-leads\/([^/]+)\/submissions\/([^/]+)\/retry$/i
     );
 
     if (!inboundMatch && !retryMatch) return payload;
 
+    // Both routes refuse an agent before this point; this is the backstop, so
+    // a route change can never turn an agent's request into a buyer post.
+    if (isAgentPerson(request)) return payload;
+
     const responseBody = parseJsonResponsePayload(payload);
     if (!responseBody) return payload;
 
     const tenantId =
-      request.user?.tenantId ||
-      (request.headers['x-demo-tenant-id'] as string | undefined);
+      request.user?.tenantId || (request.headers['x-demo-tenant-id'] as string | undefined);
     if (!tenantId) return payload;
 
     let insuranceLeadId: string | undefined;
@@ -80,15 +82,10 @@ export function registerLoggingMiddleware(fastify: FastifyInstance): Promise<voi
       const { deliverInsuranceLeadSubmission } = await import(
         '../services/insurance-lead-delivery.js'
       );
-      const result = await deliverInsuranceLeadSubmission(
-        tenantId,
-        insuranceLeadId,
-        submissionId,
-        {
-          attemptAlreadyCounted: isRetry,
-          trigger: isRetry ? 'RETRY' : 'AUTO',
-        }
-      );
+      const result = await deliverInsuranceLeadSubmission(tenantId, insuranceLeadId, submissionId, {
+        attemptAlreadyCounted: isRetry,
+        trigger: isRetry ? 'RETRY' : 'AUTO',
+      });
 
       if ('error' in result) {
         responseBody.postStatus = 'ERROR';

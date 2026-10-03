@@ -492,6 +492,47 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
         (await get('/api/v1/insurance-leads/delivery-report', as(a, a.agentId))).statusCode
       ).toBe(403);
     });
+
+    /*
+     * The inbound route posts every valid lead to the buyer -- `?deliver=true`
+     * in the handler, and otherwise the onSend hook in middleware/logging.ts --
+     * so an agent is refused before anything is ingested.
+     */
+    it('refuses an agent the inbound route, and ingests nothing', async () => {
+      const phone = `615${Math.floor(1000000 + Math.random() * 8999999)}`;
+      for (const url of [
+        '/api/v1/insurance-leads/inbound/fe',
+        '/api/v1/insurance-leads/inbound/fe?deliver=true',
+      ]) {
+        const res = await app.inject({
+          method: 'POST',
+          url,
+          headers: as(a, a.agentId),
+          payload: { firstName: 'Sent', lastName: 'ByAgent', phone, state: 'TN' },
+        });
+        expect(res.statusCode, url).toBe(403);
+      }
+      expect(
+        await prisma.insuranceLead.findFirst({ where: { tenantId: a.tenantId, phone } })
+      ).toBeNull();
+    });
+
+    it('refuses an agent a retry of their own lead’s buyer submission', async () => {
+      const submission = await prisma.insuranceLeadSubmission.create({
+        data: {
+          tenantId: a.tenantId,
+          insuranceLeadId: a.ownLeadId,
+          vertical: 'FE',
+          rawPayload: {},
+        },
+      });
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/insurance-leads/${a.ownLeadId}/submissions/${submission.id}/retry`,
+        headers: as(a, a.agentId),
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 
   describe("lead list counts are the caller's", () => {

@@ -11,7 +11,12 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-import { agentScopeFor, isAgencyPrincipal, mayReachOwnedRow } from '../lib/agent-scope.js';
+import {
+  agentScopeFor,
+  isAgencyPrincipal,
+  isAgentPerson,
+  mayReachOwnedRow,
+} from '../lib/agent-scope.js';
 import {
   permits,
   resolveStateAuthority,
@@ -151,6 +156,13 @@ const ASSIGNEE_NOT_IN_AGENCY = {
   error: { code: 'VALIDATION_ERROR', message: 'The assignee is not a user in this agency.' },
 };
 
+const AGENT_DELIVERY_REFUSED = {
+  error: {
+    code: 'FORBIDDEN',
+    message: 'Only the agency owner or an administrator can send leads to a buyer.',
+  },
+};
+
 /** Sending leads to a buyer is an owner action; an agent is refused. */
 function refuseAgentDelivery(
   request: FastifyRequest,
@@ -158,12 +170,7 @@ function refuseAgentDelivery(
 ): { error: { code: string; message: string } } | null {
   if (isAgencyPrincipal(request)) return null;
   void reply.code(403);
-  return {
-    error: {
-      code: 'FORBIDDEN',
-      message: 'Only the agency owner or an administrator can send leads to a buyer.',
-    },
-  };
+  return AGENT_DELIVERY_REFUSED;
 }
 
 interface DeliverySelector {
@@ -363,6 +370,21 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
           message: `Invalid vertical "${rawVertical}". Must be "aca", "fe", or "b2b".`,
         },
       };
+    }
+
+    /*
+     * This endpoint posts every valid lead to the buyer: `?deliver=true` here,
+     * and otherwise the onSend hook in middleware/logging.ts. Sending to a
+     * buyer is the agency principal's action, so an agent is refused outright
+     * -- before anything is ingested. An agent saves a lead to the CRM through
+     * /import, which never posts unless `deliver` is set, and refuses that too.
+     *
+     * A partner system on an API key is not an agent (`isAgentPerson`), and
+     * keeps this endpoint exactly as it was.
+     */
+    if (isAgentPerson(request)) {
+      void reply.code(403);
+      return AGENT_DELIVERY_REFUSED;
     }
 
     const body = request.body;
@@ -1276,6 +1298,11 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
     }
+
+    // A retry is a buyer post (the onSend hook in middleware/logging.ts makes
+    // it), so it is the owner's action like every other send.
+    const refused = refuseAgentDelivery(request, reply);
+    if (refused) return refused;
 
     const gate = await requireReachableLead(request, reply, tenantId, request.params.id);
     if (!gate.ok) return gate.body;
