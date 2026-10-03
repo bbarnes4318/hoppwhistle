@@ -112,3 +112,8 @@ dump.rdb
 *.p12
 *.pfx
 seal.crt
+
+# Electronic agreements: the document seal certificate and key (covered by the
+# patterns above, named here so nobody removes them). The base64 of seal.p12
+# lives only in the server's .env.
+seal.key

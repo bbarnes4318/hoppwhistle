@@ -179,6 +179,10 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `phone_numbers`, `number_charges` and `statements`:
   // the API's 1st-of-the-month run of billMonth and closeMonth.
   '**/src/__tests__/monthly-close.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `audit_logs`, `platform_admins` and
+  // `agreement_envelopes` to seed an agency, a white-label owner and a platform
+  // operator, then signs agreements end to end.
+  '**/src/__tests__/agreements.test.ts',
 ];
 
 export default defineConfig({

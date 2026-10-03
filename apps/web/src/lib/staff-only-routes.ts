@@ -87,6 +87,8 @@ export const STAFF_ONLY_ROUTES = [
   // adds the redirect the nav filter never gave them.
   '/admin/agencies',
   '/admin/onboarding',
+  // Electronic agreements: NetEnroll's contracts with its agencies.
+  '/admin/agreements',
 
   /*
    * NetEnroll's two unbuilt screens, which an agency principal was being shown

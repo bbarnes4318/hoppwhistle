@@ -417,6 +417,71 @@ export class StorageService {
   }
 
   /**
+   * Write an object under an exact key, refusing to replace one that exists.
+   *
+   * For records that must never change once written (executed agreements):
+   * there is no overwrite and no fallback to another store -- a failure here
+   * is a failure the caller sees and retries.
+   */
+  async putObjectOnce(storageKey: string, body: Buffer, contentType: string): Promise<void> {
+    if (this.isLocal) {
+      const filePath = path.join(this.localDir, storageKey);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      try {
+        // 'wx' fails if the file exists.
+        fs.writeFileSync(filePath, body, { flag: 'wx' });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          throw new Error(`Refusing to overwrite existing object ${storageKey}`);
+        }
+        throw error;
+      }
+      return;
+    }
+    if (!this.s3Client) throw new Error('S3 Client not initialized');
+    await this.ensureBucketExists();
+    if (await this.objectExists(storageKey)) {
+      throw new Error(`Refusing to overwrite existing object ${storageKey}`);
+    }
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: storageKey,
+        Body: body,
+        ContentType: contentType,
+        ChecksumSHA256: this.calculateBufferChecksum(body),
+      })
+    );
+  }
+
+  /** Whether an object exists under exactly this key, in this store. */
+  async objectExists(storageKey: string): Promise<boolean> {
+    if (this.isLocal) return fs.existsSync(path.join(this.localDir, storageKey));
+    if (!this.s3Client) throw new Error('S3 Client not initialized');
+    await this.ensureBucketExists();
+    try {
+      await this.s3Client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: storageKey }));
+      return true;
+    } catch (error: unknown) {
+      const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) return false;
+      throw error;
+    }
+  }
+
+  /** Read a whole object into memory. */
+  async getObjectBuffer(storageKey: string): Promise<Buffer> {
+    if (this.isLocal) return fs.readFileSync(path.join(this.localDir, storageKey));
+    if (!this.s3Client) throw new Error('S3 Client not initialized');
+    await this.ensureBucketExists();
+    const response = await this.s3Client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: storageKey })
+    );
+    if (!response.Body) throw new Error(`S3 object ${storageKey} has no body`);
+    return this.streamToBuffer(response.Body as Readable);
+  }
+
+  /**
    * Calculate SHA256 checksum of a buffer
    */
   private calculateBufferChecksum(buffer: Buffer): string {
@@ -478,4 +543,30 @@ export function getStorageService(): StorageService {
   }
 
   return storageService;
+}
+
+let agreementsStorageService: StorageService | null = null;
+
+/**
+ * The executed-agreements store: the same S3 / MinIO credentials as
+ * `getStorageService()`, its own bucket (`AGREEMENTS_S3_BUCKET`, default
+ * `agreements`). Objects here are written once and never deleted.
+ */
+export function getAgreementsStorageService(): StorageService {
+  if (!agreementsStorageService) {
+    agreementsStorageService = new StorageService({
+      endpoint: process.env.S3_ENDPOINT,
+      region: process.env.S3_REGION || 'us-east-1',
+      bucket: process.env.AGREEMENTS_S3_BUCKET || 'agreements',
+      accessKeyId: process.env.S3_ACCESS_KEY || '',
+      secretAccessKey: process.env.S3_SECRET_KEY || '',
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
+    });
+  }
+  return agreementsStorageService;
+}
+
+/** Test hook: forget the agreements store so env changes take effect. */
+export function resetAgreementsStorageService(): void {
+  agreementsStorageService = null;
 }

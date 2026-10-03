@@ -133,6 +133,12 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_FORCE_PATH_STYLE: 'true'
+      # Electronic agreements (docs/AGREEMENTS.md). Executed PDFs go to their own
+      # bucket on the same MinIO credentials. The seal certificate is optional:
+      # without it agreements are produced unsealed and the API logs an error.
+      AGREEMENTS_S3_BUCKET: ${AGREEMENTS_S3_BUCKET:-agreements}
+      AGREEMENT_SEAL_P12_BASE64: ${AGREEMENT_SEAL_P12_BASE64:-}
+      AGREEMENT_SEAL_P12_PASSPHRASE: ${AGREEMENT_SEAL_P12_PASSPHRASE:-}
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-hopwhistle}
       BULKVS_USERNAME: ${BULKVS_USERNAME:-}

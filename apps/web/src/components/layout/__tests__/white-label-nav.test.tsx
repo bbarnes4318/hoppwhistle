@@ -565,3 +565,29 @@ describe('whiteLabelRedirectFor', () => {
     );
   });
 });
+
+describe('Agreements and the white-label tier', () => {
+  it('is not in the white-label owner nav', () => {
+    expect(allNavItems(WHITE_LABEL_OWNER_NAV).map(item => item.href)).not.toContain(
+      '/admin/agreements'
+    );
+    expect(
+      allNavItems(
+        navFor({ isPlatformAdmin: false, isWhiteLabel: true, hasFullAccess: true } as never)
+      ).map(item => item.href)
+    ).not.toContain('/admin/agreements');
+  });
+
+  it('is in STAFF_ONLY_ROUTES and blocked for a white-label owner, open to staff', () => {
+    expect(STAFF_ONLY_ROUTES).toContain('/admin/agreements');
+    expect(
+      isRouteBlockedFor('/admin/agreements', { isPlatformAdmin: false, isWhiteLabel: true })
+    ).toBe(true);
+    expect(
+      isRouteBlockedFor('/admin/agreements/new', { isPlatformAdmin: false, isWhiteLabel: false })
+    ).toBe(true);
+    expect(
+      isRouteBlockedFor('/admin/agreements', { isPlatformAdmin: true, isWhiteLabel: false })
+    ).toBe(false);
+  });
+});

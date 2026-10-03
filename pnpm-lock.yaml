@@ -97,6 +97,9 @@ importers:
       '@fastify/websocket':
         specifier: ^8.3.0
         version: 8.3.1
+      '@fontsource/dancing-script':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@hopwhistle/routing-dsl':
         specifier: workspace:*
         version: link:../../packages/routing-dsl
@@ -139,6 +142,15 @@ importers:
       '@prisma/client':
         specifier: 6.19.0
         version: 6.19.0(prisma@6.19.0)(typescript@5.9.3)
+      '@signpdf/placeholder-pdf-lib':
+        specifier: ^3.3.0
+        version: 3.3.0(pdf-lib@1.17.1)
+      '@signpdf/signer-p12':
+        specifier: ^3.3.0
+        version: 3.3.0(node-forge@1.4.0)
+      '@signpdf/signpdf':
+        specifier: ^3.3.0
+        version: 3.3.0
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -166,12 +178,18 @@ importers:
       modesl:
         specifier: ^1.1.3
         version: 1.2.1
+      node-forge:
+        specifier: ^1.3.3
+        version: 1.4.0
       nodemailer:
         specifier: ^8.0.7
         version: 8.0.7
       openapi-typescript:
         specifier: ^7.10.1
         version: 7.10.1(typescript@5.9.3)
+      pdf-lib:
+        specifier: ^1.17.1
+        version: 1.17.1
       pg:
         specifier: ^8.11.3
         version: 8.16.3
@@ -203,6 +221,9 @@ importers:
       '@types/node':
         specifier: ^20.10.5
         version: 20.19.24
+      '@types/node-forge':
+        specifier: ^1.3.11
+        version: 1.3.14
       '@types/nodemailer':
         specifier: ^8.0.0
         version: 8.0.0
@@ -375,6 +396,9 @@ importers:
       '@deck.gl/react':
         specifier: ^8.9.34
         version: 8.9.36(@deck.gl/core@8.9.36)(@types/react@18.3.26)(react-dom@18.3.1)(react@18.3.1)
+      '@fontsource/dancing-script':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^3.3.4
         version: 3.10.0(react-hook-form@7.66.1)
@@ -2298,6 +2322,10 @@ packages:
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
     dev: false
 
+  /@fontsource/dancing-script@5.3.0:
+    resolution: {integrity: sha512-/FFbz4ZCNN+eG2a6phkZB41iKmyCC6rq2blA/kG9OFeI3/tpzLNazND1bBdEnogLhpfg7o4NfauTbEEYSpSUGg==}
+    dev: false
+
   /@grpc/grpc-js@1.14.1:
     resolution: {integrity: sha512-sPxgEWtPUR3EnRJCEtbGZG2iX8LQDUls2wUS3o27jg07KqJFMq6YDeWvMo1wfpmy3rqRdS0rivpLwhqQtEyCuQ==}
     engines: {node: '>=12.10.0'}
@@ -4122,6 +4150,18 @@ packages:
       '@noble/hashes': 1.8.0
     dev: true
 
+  /@pdf-lib/standard-fonts@1.0.0:
+    resolution: {integrity: sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==}
+    dependencies:
+      pako: 1.0.11
+    dev: false
+
+  /@pdf-lib/upng@1.0.1:
+    resolution: {integrity: sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==}
+    dependencies:
+      pako: 1.0.11
+    dev: false
+
   /@pinojs/redact@0.4.0:
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
     dev: false
@@ -5722,6 +5762,38 @@ packages:
     resolution: {integrity: sha512-jGTk8UD/RdjsNZW8qq10r0RBvxL8OWtoT+kImlzPDFilmozzM+9QmIJsmze9UiSBrFU45ZxhTYBypn9q9z/VfQ==}
     dev: true
 
+  /@signpdf/placeholder-pdf-lib@3.3.0(pdf-lib@1.17.1):
+    resolution: {integrity: sha512-DT1s617z88NvvCmo+z8jaz7lNzy7b7/fwo/movJGukpfSkl4FaLNRXIHNBCTRCP9TUb6F/axK1JulES/jY7mLQ==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+    peerDependencies:
+      pdf-lib: ^1.17.1
+    dependencies:
+      '@signpdf/utils': 3.3.0
+      pdf-lib: 1.17.1
+    dev: false
+
+  /@signpdf/signer-p12@3.3.0(node-forge@1.4.0):
+    resolution: {integrity: sha512-MLynYKgUBu29ojIueIDV34sIOFDFpP0s1gQORxCc0zhs1jfy0juqU2xQpjUayMbhzB4L0zS9dPwgHtok1f89Cg==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+    peerDependencies:
+      node-forge: ^1.3.3
+    dependencies:
+      '@signpdf/utils': 3.3.0
+      node-forge: 1.4.0
+    dev: false
+
+  /@signpdf/signpdf@3.3.0:
+    resolution: {integrity: sha512-/vy3dPTsTbLHdsKRarPQw8++UqN8GXxjEVnl4ZRl+o/zMWFqVb861RM5bxoRMGGMuPSvb1Rgt2lmVobEc0YUpw==}
+    engines: {node: '>=12'}
+    dependencies:
+      '@signpdf/utils': 3.3.0
+    dev: false
+
+  /@signpdf/utils@3.3.0:
+    resolution: {integrity: sha512-ArOP0MIhCfdChh1oZkog81TPeSY2e5TvHQmXJ682T4+SKb6Z609uAZhqMQZ9xm+YenEf/eNMSE5KVwU+EudXug==}
+    engines: {node: '>=12', yarn: '>=1.22.18'}
+    dev: false
+
   /@sinclair/typebox@0.27.8:
     resolution: {integrity: sha512-+Fj43pSMwJs4KRrH/938Uf+uAELIgVBmQzg/q1YG10djyfA3TnrU8N8XzqCh/okZdszqBQTZf96idMfE5lnwTA==}
     dev: true
@@ -6616,6 +6688,12 @@ packages:
     dependencies:
       '@types/node': 20.19.24
     dev: false
+
+  /@types/node-forge@1.3.14:
+    resolution: {integrity: sha512-mhVF2BnD4BO+jtOp7z1CdzaK4mbuK0LLQYAvdOLqHTavxFNq4zA1EmYkpnFjP8HOUzedfQkRnp0E2ulSAYSzAw==}
+    dependencies:
+      '@types/node': 20.19.24
+    dev: true
 
   /@types/node@20.19.24:
     resolution: {integrity: sha512-FE5u0ezmi6y9OZEzlJfg37mqqf6ZDSF2V/NLjUyGrR9uTZ7Sb9F7bLNZ03S4XVUNRWGA7Ck4c1kK+YnuWjl+DA==}
@@ -11911,6 +11989,11 @@ packages:
       formdata-polyfill: 4.0.10
     dev: false
 
+  /node-forge@1.4.0:
+    resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
+    engines: {node: '>= 6.13.0'}
+    dev: false
+
   /node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
     dev: false
@@ -12225,6 +12308,10 @@ packages:
   /package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
 
+  /pako@1.0.11:
+    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+    dev: false
+
   /parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -12317,6 +12404,15 @@ packages:
     dependencies:
       ieee754: 1.2.1
       resolve-protobuf-schema: 2.1.0
+    dev: false
+
+  /pdf-lib@1.17.1:
+    resolution: {integrity: sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==}
+    dependencies:
+      '@pdf-lib/standard-fonts': 1.0.0
+      '@pdf-lib/upng': 1.0.1
+      pako: 1.0.11
+      tslib: 1.14.1
     dev: false
 
   /pend@1.2.0:
@@ -14392,6 +14488,10 @@ packages:
       minimist: 1.2.8
       strip-bom: 3.0.0
     dev: true
+
+  /tslib@1.14.1:
+    resolution: {integrity: sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==}
+    dev: false
 
   /tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}

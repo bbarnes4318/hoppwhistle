@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { redactSensitivePath } from '../lib/redact-path.js';
 
 export interface AuditLogData {
   /**
@@ -75,7 +76,7 @@ export async function auditLog(data: AuditLogData): Promise<void> {
       action: data.action,
       entityType: data.entityType,
       entityId: data.entityId,
-      resource: data.resource,
+      resource: redactSensitivePath(data.resource),
       method: data.method,
       changes: data.changes as Prisma.InputJsonValue | undefined,
       ipAddress: data.ipAddress,

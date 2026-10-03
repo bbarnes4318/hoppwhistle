@@ -650,3 +650,40 @@ describe('one list, read by everyone who takes a screen away', () => {
     }
   );
 });
+
+describe('Agreements: platform admins only', () => {
+  const hrefsOf = (groups: NavGroup[]) =>
+    groups.flatMap(group => group.items).map(item => item.href);
+
+  it('sits in PLATFORM_NAV Admin, directly after Onboard an agency', () => {
+    const admin = PLATFORM_NAV.find(group => group.label === 'Admin')!;
+    const names = admin.items.map(item => item.name);
+    expect(names.indexOf('Agreements')).toBe(names.indexOf('Onboard an agency') + 1);
+    expect(admin.items.find(item => item.name === 'Agreements')).toMatchObject({
+      href: '/admin/agreements',
+      title: 'Send the MSA and campaign agreements for e-signature',
+    });
+    expect(navFor({ ...NOBODY, isPlatformAdmin: true, hasFullAccess: true })).toBe(PLATFORM_NAV);
+  });
+
+  it.each([
+    ['AGENCY_OWNER_NAV', AGENCY_OWNER_NAV],
+    ['CHILD_AGENCY_OWNER_NAV', CHILD_AGENCY_OWNER_NAV],
+    ['AGENT_NAV', AGENT_NAV],
+    ['publisherNav', publisherNav(true)],
+    ['buyerNav', buyerNav(true)],
+  ] as const)('is not in %s, working or locked', (_name, groups) => {
+    expect(hrefsOf(groups)).not.toContain('/admin/agreements');
+  });
+
+  it('is not offered to an agency owner or an agent through navFor', () => {
+    expect(hrefsOf(navFor({ ...NOBODY, hasFullAccess: true }))).not.toContain('/admin/agreements');
+    expect(hrefsOf(navFor({ ...NOBODY, isAgentOnly: true }))).not.toContain('/admin/agreements');
+  });
+
+  it('is a staff-only route', () => {
+    expect(isStaffOnlyRoute('/admin/agreements')).toBe(true);
+    expect(isStaffOnlyRoute('/admin/agreements/new')).toBe(true);
+    expect(isStaffOnlyRoute('/admin/agreements/settings')).toBe(true);
+  });
+});

@@ -130,6 +130,7 @@ model Tenant {
   numberCharges            NumberCharge[]
   statements               Statement[]
   upgradeRequests          UpgradeRequest[]
+  agreementEnvelopes       AgreementEnvelope[]
 
   @@index([slug])
   @@index([status])
@@ -5318,4 +5319,230 @@ model UpgradeRequest {
 
   @@index([tenantId])
   @@map("upgrade_requests")
+}
+
+// ============================================================================
+// Electronic agreements: the MSA and the CPA/CPL campaign agreements, signed
+// electronically. Platform admins only. See docs/AGREEMENTS.md and
+// migrations/20261007000000_agreements, which also installs the triggers that
+// make the evidence rows immutable (Prisma cannot express a trigger).
+// ============================================================================
+
+/// The singleton (`id = 'default'`) of NetEnroll's own agreement details.
+model AgreementSettings {
+  id                     String   @id @default("default")
+  netenrollNoticeAddress String?
+  netenrollNoticeEmail   String?
+  defaultSignatoryName   String   @default("James Kelly")
+  defaultSignatoryTitle  String   @default("Managing Partner")
+  /// NetEnroll addresses that receive every executed copy.
+  internalCopyEmails     String[]
+  updatedByUserId        String?
+  updatedAt              DateTime @default(now()) @updatedAt
+
+  @@map("agreement_settings")
+}
+
+enum AgreementStatus {
+  SENT
+  VIEWED
+  /// The signature is committed; the executed PDFs are not produced yet.
+  SIGNED
+  COMPLETED
+  CHANGES_REQUESTED
+  VOIDED
+  EXPIRED
+}
+
+enum AgreementDocumentKind {
+  MSA
+  CPA
+  CPL
+}
+
+enum AgreementSignatureMethod {
+  TYPED
+  DRAWN
+}
+
+enum AgreementActorType {
+  NETENROLL
+  SIGNER
+  SYSTEM
+}
+
+enum AgreementEventType {
+  CREATED
+  NETENROLL_SIGNED
+  SENT
+  EMAIL_NOT_SENT
+  RESENT
+  LINK_OPENED
+  OTP_SENT
+  OTP_VERIFIED
+  OTP_FAILED
+  OTP_LOCKED
+  CONSENT_GIVEN
+  DOCUMENT_REVIEWED
+  SIGNED
+  COMPLETED
+  COMPLETION_FAILED
+  CHANGES_REQUESTED
+  VOIDED
+  EXPIRED
+  COPIES_SENT
+  DOWNLOADED
+}
+
+/// One set of agreements sent to one signer. `terms`, `signerEmail` and
+/// `signTokenHash` never change after the row is written (database trigger).
+model AgreementEnvelope {
+  id        String          @id @default(uuid())
+  reference String          @unique
+  tenantId  String?
+  status    AgreementStatus @default(SENT)
+
+  includesMsa           Boolean
+  includesCpa           Boolean
+  includesCpl           Boolean
+  /// Set when the agency already has an executed MSA and only campaign
+  /// agreements are sent; they cite that MSA's effective date.
+  existingMsaEnvelopeId String?
+
+  /// The full form input, frozen at send. Never updated.
+  terms Json
+
+  signerName  String
+  signerTitle String
+  /// Lower-cased.
+  signerEmail String
+  ccEmails    String[]
+
+  netenrollSignatoryName   String
+  netenrollSignatoryTitle  String
+  netenrollSignedByUserId  String
+  netenrollSignedAt        DateTime
+  netenrollSignedIp        String?
+  netenrollSignedUserAgent String?
+
+  sentByUserId       String
+  sentAt             DateTime
+  expiresAt          DateTime
+  viewedAt           DateTime?
+  consentedAt        DateTime?
+  signedAt           DateTime?
+  completedAt        DateTime?
+  voidedAt           DateTime?
+  voidReason         String?
+  voidedByUserId     String?
+  changesRequestedAt DateTime?
+  changesNote        String?
+
+  /// SHA-256 of the signing link's token. The token is never reissued.
+  signTokenHash          String    @unique
+  /// The same token, encrypted (lib/field-encryption.ts), so a resend can
+  /// rebuild the link. Never returned except by create and resend.
+  signTokenEnc           String?
+  downloadTokenHash      String?   @unique
+  downloadTokenExpiresAt DateTime?
+
+  signerTypedSignature String?
+  signerInitials       String?
+  signatureMethod      AgreementSignatureMethod?
+  signatureImageKey    String?
+
+  sealed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  documents       AgreementDocument[]
+  events          AgreementEvent[]
+  otps            AgreementOtp[]
+  signingSessions AgreementSigningSession[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([sentAt])
+  @@map("agreement_envelopes")
+}
+
+/// One agreement in an envelope. `sentHtml` is exactly what the signer was
+/// shown and never changes; the executed PDF is written once.
+model AgreementDocument {
+  id                String                @id @default(uuid())
+  envelopeId        String
+  kind              AgreementDocumentKind
+  title             String
+  templateVersion   String
+  sentHtml          String                @db.Text
+  sentHtmlSha256    String
+  /// The signed document pages, before the certificate.
+  contentPdfSha256  String?
+  executedPdfKey    String?
+  executedPdfSha256 String?               @unique
+  executedPdfBytes  Int?
+  pageCount         Int?
+  sortOrder         Int
+
+  envelope AgreementEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([envelopeId])
+  @@map("agreement_documents")
+}
+
+/// The envelope's audit trail: append-only and hash-chained. Each row's `hash`
+/// covers the previous row's, so a changed or removed row breaks the chain.
+model AgreementEvent {
+  id          String             @id @default(uuid())
+  envelopeId  String
+  seq         Int
+  type        AgreementEventType
+  occurredAt  DateTime
+  actorType   AgreementActorType
+  actorUserId String?
+  actorEmail  String?
+  ipAddress   String?
+  userAgent   String?
+  detail      Json
+  prevHash    String
+  hash        String
+
+  envelope AgreementEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@unique([envelopeId, seq])
+  @@map("agreement_events")
+}
+
+/// A one-time code emailed to the signer. Only its SHA-256 is stored.
+model AgreementOtp {
+  id         String    @id @default(uuid())
+  envelopeId String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  envelope AgreementEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([envelopeId, createdAt])
+  @@map("agreement_otps")
+}
+
+/// Issued when the signer verifies a code; sent as `X-Signing-Session` on
+/// every later step. Only its SHA-256 is stored.
+model AgreementSigningSession {
+  id         String   @id @default(uuid())
+  envelopeId String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  envelope AgreementEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([envelopeId])
+  @@map("agreement_signing_sessions")
 }

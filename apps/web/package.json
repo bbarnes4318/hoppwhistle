@@ -18,6 +18,7 @@
     "@deck.gl/core": "^8.9.34",
     "@deck.gl/layers": "^8.9.34",
     "@deck.gl/react": "^8.9.34",
+    "@fontsource/dancing-script": "^5.3.0",
     "@hookform/resolvers": "^3.3.4",
     "@hopwhistle/routing-dsl": "workspace:^",
     "@hopwhistle/sdk": "workspace:*",
