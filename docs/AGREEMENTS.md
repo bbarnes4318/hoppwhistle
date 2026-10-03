@@ -99,16 +99,41 @@ download link (the old link stops working). The PDFs themselves never change.
 
 Without a seal certificate the agreements are still produced, hashed and
 verifiable, but marked **Unsealed** (and the API logs an error in production).
-To seal them, generate a certificate once on a trusted machine:
+To seal them, run this once on the production server, replacing `PASSPHRASE`
+with a passphrase of your choosing (letters and numbers) in **both** places:
 
 ```sh
-openssl req -x509 -newkey rsa:3072 -sha256 -days 3650 -nodes -keyout seal.key -out seal.crt -subj "/CN=PVN LLC d/b/a NetEnroll Document Seal/O=PVN LLC/C=US"
-openssl pkcs12 -export -inkey seal.key -in seal.crt -out seal.p12 -passout pass:<passphrase>
-base64 -w0 seal.p12
+mkdir -p /root/seal && cd /root/seal
+openssl req -x509 -newkey rsa:3072 -sha256 -days 3650 -nodes -keyout seal.key -out seal.crt -subj "/CN=PVN LLC d\/b\/a NetEnroll Document Seal/O=PVN LLC/C=US"
+openssl pkcs12 -export -inkey seal.key -in seal.crt -out seal.p12 -passout pass:PASSPHRASE
+echo "AGREEMENT_SEAL_P12_BASE64=$(base64 -w0 seal.p12)" >> /opt/hopwhistle/.env
+echo "AGREEMENT_SEAL_P12_PASSPHRASE=PASSPHRASE" >> /opt/hopwhistle/.env
 ```
 
-Put the base64 output in `AGREEMENT_SEAL_P12_BASE64` and the passphrase in
-`AGREEMENT_SEAL_P12_PASSPHRASE` in `/opt/hopwhistle/.env`, then restart the API.
+The slashes in `d\/b\/a` are escaped on purpose. `-subj` separates fields with
+`/`, so an unescaped `d/b/a` cuts the name to "PVN LLC d" (with a
+`req warning: Skipping unknown subject name attribute` line) and drops the
+organization.
+
+Check both before deploying:
+
+```sh
+openssl x509 -in /root/seal/seal.crt -noout -subject
+# subject=CN = PVN LLC d/b/a NetEnroll Document Seal, O = PVN LLC, C = US
+grep -c '^AGREEMENT_SEAL_P12_' /opt/hopwhistle/.env
+# 2
+```
+
+Then deploy so the API reads the new settings:
+
+```sh
+cd /opt/hopwhistle && scripts/deploy.sh --build api web
+```
+
+To start over (for example after a typo), remove the two lines first with
+`sed -i '/^AGREEMENT_SEAL_P12_/d' /opt/hopwhistle/.env`, then repeat the steps.
+Agreements completed after the deploy are sealed; the admin detail page shows a
+**Sealed** badge.
 
 **`seal.key`, `seal.crt` and `seal.p12` are never committed to this repository**
 (they are in `.gitignore`). Keep `seal.key`/`seal.p12` offline after setup.
