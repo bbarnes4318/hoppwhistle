@@ -59,6 +59,16 @@
 - `SMTP_PASSWORD` - SMTP password
 - `SMTP_FROM` - Email from address (default: `noreply@hopwhistle.com`)
 
+#### Electronic agreements (see `docs/AGREEMENTS.md`):
+
+- `AGREEMENTS_S3_BUCKET` - Bucket for executed agreement PDFs and drawn
+  signatures (default: `agreements`). Same `S3_*` endpoint and credentials as
+  recordings. Objects are written once and never deleted.
+- `AGREEMENT_SEAL_P12_BASE64` - The document seal certificate (PKCS#12), base64
+  on one line (`base64 -w0 seal.p12`). Optional: without it executed agreements
+  are produced **unsealed** and the API logs an error in production.
+- `AGREEMENT_SEAL_P12_PASSPHRASE` - The seal certificate's passphrase.
+
 #### BulkVS (Required for phone number provisioning):
 
 - `BULKVS_USERNAME` - BulkVS API Username (from BulkVS Portal → API → API Credentials)

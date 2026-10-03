@@ -199,3 +199,67 @@ BEGIN
       CHECK ("priceUnit" IN ('AGENCY', 'AGENT'));
   END IF;
 END $$;
+
+
+-- Verbatim from prisma/migrations/20261007000000_agreements/migration.sql,
+-- which is where they are applied to production.
+-- ---------------------------------------------------------------------------
+-- Electronic agreements: the evidence rows are immutable.
+-- ---------------------------------------------------------------------------
+
+-- The audit trail is append-only. A correction is a later event.
+CREATE OR REPLACE FUNCTION "agreement_events_append_only"() RETURNS TRIGGER AS $fn$
+BEGIN
+    RAISE EXCEPTION
+        'agreement_events is append-only: % on event % is refused.',
+        TG_OP, COALESCE(OLD."id", '?');
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "agreement_events_append_only" ON "agreement_events";
+CREATE TRIGGER "agreement_events_append_only"
+    BEFORE UPDATE OR DELETE ON "agreement_events"
+    FOR EACH ROW EXECUTE FUNCTION "agreement_events_append_only"();
+
+-- What the signer was shown never changes, and an executed PDF is written once.
+CREATE OR REPLACE FUNCTION "agreement_documents_immutable"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NEW."sentHtml" IS DISTINCT FROM OLD."sentHtml"
+       OR NEW."sentHtmlSha256" IS DISTINCT FROM OLD."sentHtmlSha256" THEN
+        RAISE EXCEPTION 'agreement_documents: the as-sent document % cannot be changed.', OLD."id";
+    END IF;
+    IF OLD."executedPdfKey" IS NOT NULL AND NEW."executedPdfKey" IS DISTINCT FROM OLD."executedPdfKey" THEN
+        RAISE EXCEPTION 'agreement_documents: the executed PDF key of % cannot be changed.', OLD."id";
+    END IF;
+    IF OLD."executedPdfSha256" IS NOT NULL AND NEW."executedPdfSha256" IS DISTINCT FROM OLD."executedPdfSha256" THEN
+        RAISE EXCEPTION 'agreement_documents: the executed PDF hash of % cannot be changed.', OLD."id";
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "agreement_documents_immutable" ON "agreement_documents";
+CREATE TRIGGER "agreement_documents_immutable"
+    BEFORE UPDATE ON "agreement_documents"
+    FOR EACH ROW EXECUTE FUNCTION "agreement_documents_immutable"();
+
+-- The frozen terms, the address the link went to and the link itself.
+CREATE OR REPLACE FUNCTION "agreement_envelopes_immutable"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NEW."terms" IS DISTINCT FROM OLD."terms" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the terms of % are frozen at send.', OLD."id";
+    END IF;
+    IF NEW."signerEmail" IS DISTINCT FROM OLD."signerEmail" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the signer email of % cannot be changed.', OLD."id";
+    END IF;
+    IF NEW."signTokenHash" IS DISTINCT FROM OLD."signTokenHash" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the signing link of % is never reissued.', OLD."id";
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "agreement_envelopes_immutable" ON "agreement_envelopes";
+CREATE TRIGGER "agreement_envelopes_immutable"
+    BEFORE UPDATE ON "agreement_envelopes"
+    FOR EACH ROW EXECUTE FUNCTION "agreement_envelopes_immutable"();

@@ -47,6 +47,17 @@ const nextConfig = {
           },
         ],
       },
+      /*
+       * The agreement signing and download links carry a token in the path, so
+       * no page under them may send a Referer anywhere.
+       */
+      ...['/sign/:path*', '/agreements/:path*'].map(source => ({
+        source,
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      })),
     ];
   },
 };

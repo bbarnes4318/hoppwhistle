@@ -251,6 +251,12 @@ async function buildServer() {
   const { registerOnboardingRoutes } = await import('./routes/onboarding.js');
   await server.register(registerOnboardingRoutes);
 
+  // Electronic agreements: the MSA and campaign agreements, signed
+  // electronically. Platform-admin routes plus the signer's public ones under
+  // /api/v1/public/agreements. See routes/agreements.ts and docs/AGREEMENTS.md.
+  const { registerAgreementRoutes } = await import('./routes/agreements.js');
+  await server.register(registerAgreementRoutes);
+
   // The white-label tier's own screens: Sales (what an agency's calls sold
   // for), Payouts (what it owes its publishers) and its downline agencies.
   // Each route is the white-label OWNER/ADMIN's or staff's, and scoped to the

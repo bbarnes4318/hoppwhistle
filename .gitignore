@@ -105,3 +105,9 @@ deep.md
 # Redis snapshot written into the working directory by a local redis-server,
 # which is how the TEST_REDIS_URL-gated suites are run. Never source.
 dump.rdb
+
+# Electronic agreements: the document seal certificate and key. Never commit
+# these; the base64 of seal.p12 lives only in the server's .env.
+seal.key
+seal.crt
+*.p12

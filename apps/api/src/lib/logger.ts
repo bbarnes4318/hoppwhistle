@@ -1,6 +1,8 @@
 import { FastifyRequest } from 'fastify';
 import { pino } from 'pino';
 
+import { redactSensitivePath } from './redact-path.js';
+
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 export const logger = pino({
@@ -37,7 +39,8 @@ export function createRequestLogger(request: FastifyRequest) {
     tenantId,
     userId,
     method: request.method,
-    url: request.url,
+    // Agreement signing and download links carry their token in the path.
+    url: redactSensitivePath(request.url),
   });
 }
 

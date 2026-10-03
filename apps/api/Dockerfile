@@ -123,6 +123,9 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api/package.json ./package.json
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/apps/api/prisma ./prisma
+# The logo the agreements inline (services/agreements/assets.ts reads
+# /app/assets/agreements relative to dist/).
+COPY --from=builder /app/apps/api/assets ./assets
 COPY --from=builder /app/scripts ./scripts
 
 USER nextjs
