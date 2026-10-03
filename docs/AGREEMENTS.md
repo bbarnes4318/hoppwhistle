@@ -5,6 +5,14 @@ NetEnroll's client agreements — the **Master Services Agreement (MSA)** and th
 and delivered from one platform-admin screen: **Admin → Agreements**
 (`/admin/agreements`).
 
+NetEnroll's agreements are the **platform suite** of NetEnroll's sales
+workspace. Each white-label issuer (Life Leads Plus first) has its **own** suite
+— its own legal entity, settings, template set, brand, links and seal — managed
+from its Sales CRM at `/sales-crm/agreements` through `/api/v1/sales/agreements`.
+The engine below is shared; the issuer is frozen onto every envelope. See
+**docs/SALES_CRM.md**. Everything in this file describes NetEnroll's suite
+unless it says otherwise.
+
 Only platform admins (users with a `PlatformAdmin` row) can see or use it. The
 screen is in `STAFF_ONLY_ROUTES` and is listed only in `PLATFORM_NAV`; every API
 route under `/api/v1/platform/agreements` is
@@ -18,6 +26,9 @@ is in the AuditLog.
 | Verbatim templates                          | `apps/api/src/services/agreements/templates/{msa,cpa,cpl}.ts`         |
 | Migration (tables, triggers, settings seed) | `apps/api/prisma/migrations/20261007000000_agreements/migration.sql`  |
 | Migration (agency-entered details)          | `apps/api/prisma/migrations/20261008000000_agreements_party_details/` |
+| Migration (sales workspaces, issuer suites) | `apps/api/prisma/migrations/20261009000000_sales_workspaces/`         |
+| Shared admin routes (both surfaces)         | `apps/api/src/routes/agreement-surface.ts`                            |
+| Suites, issuer, template sets               | `apps/api/src/services/agreements/{suites,issuer,template-sets}.ts`   |
 | Admin screens                               | `apps/web/src/app/(dashboard)/admin/agreements/`                      |
 | Signer page                                 | `apps/web/src/app/sign/[token]`                                       |
 | Client download page                        | `apps/web/src/app/agreements/[token]`                                 |
@@ -118,6 +129,13 @@ download link (the old link stops working). The PDFs themselves never change.
 
 ## The seal certificate
 
+Seals are per suite. A suite names a seal by reference (`sealSecretRef`); the
+platform suite's is `DEFAULT`, which means the two variables below. `DEFAULT` is
+refused for any other issuer, so NetEnroll's seal is never applied to a
+white-label agreement; a white-label seal `X` reads
+`AGREEMENT_SEAL_X_P12_BASE64` / `AGREEMENT_SEAL_X_P12_PASSPHRASE` (see
+docs/SALES_CRM.md).
+
 Without a seal certificate the agreements are still produced, hashed and
 verifiable, but marked **Unsealed** (and the API logs an error in production).
 To seal them, run this once on the production server, replacing `PASSPHRASE`
@@ -166,13 +184,21 @@ Agreements completed after the deploy are sealed; the admin detail page shows a
 | `AGREEMENTS_S3_BUCKET`          | Bucket for executed PDFs and drawn signatures (default `agreements`), on the same `S3_*` credentials. |
 | `AGREEMENT_SEAL_P12_BASE64`     | The seal certificate, base64. Optional.                                                               |
 | `AGREEMENT_SEAL_P12_PASSPHRASE` | Its passphrase.                                                                                       |
+| `AGREEMENT_SEAL_<REF>_P12_BASE64` / `_PASSPHRASE` | A white-label suite's own seal, when its `sealSecretRef` is `<REF>`. Optional.      |
 | `SMTP_*`                        | Email. Sends are best-effort; a failed send never fails the record.                                   |
 | `APP_URL`                       | The portal links point at (default `https://agents.netenroll.com`).                                   |
 | `FIELD_ENCRYPTION_KEY`          | Encrypts the stored signing token so **Resend** can rebuild the same link.                            |
 
 NetEnroll's notice address and email, the default signatory and the internal
 copy addresses are in **Admin → Agreements → Settings** (seeded by the
-migration). Sending is refused while either notice field is empty.
+migration). They are stored on the platform suite (`agreement_suites`); the
+legacy `agreement_settings` row is kept in step as a rollback mirror. Sending is
+refused while either notice field is empty.
+
+New NetEnroll envelopes also carry `issuerSignatory*` columns and the frozen
+`terms.issuer`; their `netenrollSignatory*` columns and `NETENROLL_SIGNED` event
+are written exactly as before. Envelopes written before suites existed have no
+`terms.issuer` and are read as NetEnroll's.
 
 ## Applying the migration
 
@@ -182,6 +208,8 @@ Production has no `_prisma_migrations` table and is never run through
 ```sh
 cat apps/api/prisma/migrations/20261007000000_agreements/migration.sql | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
 cat apps/api/prisma/migrations/20261008000000_agreements_party_details/migration.sql | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
+cat apps/api/prisma/migrations/20261009000000_sales_workspaces/migration.sql | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
 ```
 
-Both are safe to run more than once.
+All three are safe to run more than once. The third attaches every existing
+envelope to NetEnroll's platform suite without changing anything else on it.

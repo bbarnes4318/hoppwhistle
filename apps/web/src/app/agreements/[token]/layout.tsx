@@ -5,8 +5,8 @@ import type { Metadata } from 'next';
  * email. No session; never indexed; no referrer (the token is in the path).
  */
 export const metadata: Metadata = {
-  title: 'Your executed agreements · NetEnroll',
-  description: 'Download your executed agreements with PVN LLC d/b/a NetEnroll.',
+  title: 'Your executed agreements',
+  description: 'Download your executed agreements.',
   robots: 'noindex,nofollow',
   referrer: 'no-referrer',
 };

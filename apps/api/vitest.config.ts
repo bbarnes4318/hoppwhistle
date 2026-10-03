@@ -187,6 +187,10 @@ const DATABASE_BACKED = [
   // `agreement_envelopes` to seed an agency, a white-label owner and a platform
   // operator, then signs agreements end to end.
   '**/src/__tests__/agreements.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `audit_logs`, `platform_admins`,
+  // the agreement tables and every sales workspace table to seed NetEnroll,
+  // Life Leads Plus, its child, a second white-label and an ordinary agency.
+  '**/src/__tests__/sales-workspaces.test.ts',
 ];
 
 export default defineConfig({

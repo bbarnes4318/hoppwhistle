@@ -362,6 +362,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
     upgrades,
     isChild,
     isWhiteLabelAgent,
+    salesWorkspace,
     status,
     hasResolvedNoRole,
     user,
@@ -401,6 +402,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         upgrades,
         isChild,
         isWhiteLabelAgent,
+        salesWorkspace,
       }),
     [
       isPlatformAdmin,
@@ -415,6 +417,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       upgrades,
       isChild,
       isWhiteLabelAgent,
+      salesWorkspace,
     ]
   );
 

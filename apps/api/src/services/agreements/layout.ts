@@ -13,12 +13,17 @@
  * on every page; on screen the header is drawn once at the top instead.
  */
 
-import { SIGNATURE_FONT_FAMILY, netenrollLogoDataUri, signatureFontFace } from './assets.js';
+import { SIGNATURE_FONT_FAMILY, signatureFontFace } from './assets.js';
 import { esc, formatIsoDate } from './format.js';
+import {
+  NETENROLL_DOCUMENT_BRAND_COLORS,
+  netenrollDocumentBrand,
+  type DocumentBrand,
+} from './issuer.js';
 
-export const BRAND_GREEN = '#10B981';
-export const GREEN_TEXT = '#047857';
-export const LABEL_BG = '#EEF4F2';
+export const BRAND_GREEN = NETENROLL_DOCUMENT_BRAND_COLORS.accent;
+export const GREEN_TEXT = NETENROLL_DOCUMENT_BRAND_COLORS.accentText;
+export const LABEL_BG = NETENROLL_DOCUMENT_BRAND_COLORS.labelBg;
 
 /** The five places the executed render fills in. Nothing else changes. */
 export const SIG_MARKERS = {
@@ -38,6 +43,14 @@ export interface RenderOptions {
   netenrollSignatoryTitle: string;
   /** `YYYY-MM-DD`, Eastern Time. */
   netenrollSignedDate: string;
+  /**
+   * The issuing suite's look. NetEnroll's templates ignore it (their text and
+   * frame are NetEnroll's by definition); other suites' templates pass it to
+   * `documentHtml` and `signatureBlock`.
+   */
+  brand?: DocumentBrand;
+  /** The issuer's party line in the signature block, e.g. "ACME LLC d/b/a ACME LEADS". */
+  issuerPartyLabel?: string;
 }
 
 /**
@@ -131,7 +144,7 @@ export function signatureBlock(opts: RenderOptions): string {
     `<div class="sig-row"><div class="sig-row-label">${label}</div><div class="sig-row-value">${value}</div></div>`;
   return `<div class="sig-grid">
 <div class="sig-col">
-<div class="sig-party">PVN LLC d/b/a NETENROLL</div>
+<div class="sig-party">${opts.issuerPartyLabel ? esc(opts.issuerPartyLabel) : 'PVN LLC d/b/a NETENROLL'}</div>
 <div class="sig-line">${SIG_MARKERS.NETENROLL}${netenrollMark}</div>
 <div class="sig-caption">AUTHORIZED SIGNATURE</div>
 ${row('PRINTED NAME', esc(opts.netenrollSignatoryName))}
@@ -149,7 +162,11 @@ ${row('DATE', SIG_MARKERS.AGENCY_DATE)}
 </div>`;
 }
 
-const CSS = `
+function css(c: { accent: string; accentText: string; labelBg: string }): string {
+  const BRAND_GREEN = c.accent;
+  const GREEN_TEXT = c.accentText;
+  const LABEL_BG = c.labelBg;
+  return `
 @page { size: Letter; }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -210,6 +227,7 @@ ul.ack li { margin: 0 0 6px; }
 .end { margin-top: 26px; text-align: center; font-size: 8pt; font-weight: 700; letter-spacing: 0.16em; color: #6b7280; }
 .witness { margin-top: 6px; }
 `;
+}
 
 export interface DocumentFrame {
   /** The `<title>`, e.g. "Master Services Agreement". */
@@ -221,18 +239,31 @@ export interface DocumentFrame {
   subtitle: string;
   body: string;
   reference: string;
+  /** NetEnroll's when omitted. */
+  brand?: DocumentBrand;
 }
 
 /**
  * The wordmark alone. The logo file carries a "PAY-PER-APPLICATION" line under
  * it, which belongs on the CPA only (as its tagline), so it is cropped off.
  */
-export function logoHtml(): string {
-  return `<div class="logo-crop"><img src="${netenrollLogoDataUri()}" alt="NetEnroll"></div>`;
+export function logoHtml(brand: DocumentBrand = netenrollDocumentBrand()): string {
+  if (!brand.logoDataUri) return `<div class="logo-text">${esc(brand.logoAlt)}</div>`;
+  if (!brand.cropLogo) {
+    return `<div class="logo-plain"><img src="${brand.logoDataUri}" alt="${esc(brand.logoAlt)}"></div>`;
+  }
+  return `<div class="logo-crop"><img src="${brand.logoDataUri}" alt="${esc(brand.logoAlt)}"></div>`;
+}
+
+/** Logo rules for an uncropped wordmark or a text name; empty for NetEnroll's look. */
+export function logoCss(brand: DocumentBrand): string {
+  if (brand.cropLogo) return '';
+  return `.logo-plain img { height: 30px; width: auto; display: block; } .logo-text { font-size: 15pt; font-weight: 700; letter-spacing: 0.02em; color: #111827; }`;
 }
 
 /** The complete HTML document. */
 export function documentHtml(frame: DocumentFrame): string {
+  const brand = frame.brand ?? netenrollDocumentBrand();
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -240,11 +271,11 @@ export function documentHtml(frame: DocumentFrame): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>${esc(frame.title)}</title>
-<style>${signatureFontFace()}${CSS}</style>
+<style>${signatureFontFace()}${css(brand)}${logoCss(brand)}</style>
 </head>
 <body>
 <header class="masthead">
-<div>${logoHtml()}${frame.tagline ? `<div class="tagline">${esc(frame.tagline)}</div>` : ''}</div>
+<div>${logoHtml(brand)}${frame.tagline ? `<div class="tagline">${esc(frame.tagline)}</div>` : ''}</div>
 <div class="running screen-only"><div>${esc(frame.runningHeader)}</div><div class="ref">Ref ${esc(frame.reference)}</div></div>
 </header>
 <div class="eyebrow">${esc(frame.eyebrow)}</div>

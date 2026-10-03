@@ -13,6 +13,7 @@ import {
 } from '../lib/licensed-states.js';
 import { leaveActingTenant } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { salesCapabilityFor } from '../lib/sales-workspace.js';
 import { brandForTenant, configuredPortalDomain } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { loadTenantUpgrades } from '../lib/tenant-upgrades.js';
@@ -829,8 +830,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         select: { name: true },
       });
 
-      const { sendAgentInvitationEmail, invitationLink } =
-        await import('../services/agent-invite-email.js');
+      const { sendAgentInvitationEmail, invitationLink } = await import(
+        '../services/agent-invite-email.js'
+      );
       const { portalUrlForTenant } = await import('../lib/tenant-brand.js');
       const delivery = await sendAgentInvitationEmail({
         email: email.toLowerCase(),
@@ -1518,6 +1520,17 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         customScripts: userMetadata?.customScripts || null,
         // Platform state, so the client does not have to infer who it is talking
         // to from the shape of a refusal. All false/null for an agency user.
+        /*
+         * The Sales CRM (B2B prospects and the agreement suite), when this
+         * principal has one: `{ scope, level, via, workspaceName }`, else null.
+         * The same resolver the /api/v1/sales routes enforce with, so the nav
+         * cannot show a section the API would refuse -- or hide one it allows.
+         */
+        salesWorkspace: await salesCapabilityFor({
+          ...principal,
+          tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
+          roles: effectiveRoles,
+        }),
         isPlatformAdmin: isPlatformPrincipal,
         actingTenantId: principal?.actingTenantId ?? null,
         actingTenantName: principal?.actingTenantName ?? null,

@@ -131,6 +131,9 @@ model Tenant {
   statements               Statement[]
   upgradeRequests          UpgradeRequest[]
   agreementEnvelopes       AgreementEnvelope[]
+  /// This tenant's own B2B sales operation, when it is a white-label issuer.
+  /// See `SalesWorkspace`. Never inherited by child agencies.
+  salesWorkspace           SalesWorkspace?
 
   @@index([slug])
   @@index([status])
@@ -386,6 +389,11 @@ model User {
   assignedInsuranceLeads      InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
   createdInsuranceActivities  InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
   assignedInsuranceTasks      InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
+
+  /// Explicit Sales CRM / agreement-suite grants. Not a role: see
+  /// `SalesWorkspaceAccess`.
+  salesWorkspaceAccess        SalesWorkspaceAccess[] @relation("SalesWorkspaceAccessUser")
+  assignedSalesProspects      SalesProspect[]        @relation("SalesProspectAssignedTo")
 
   /// NetEnroll platform staff. Both sit outside the tenant dimension: see
   /// `PlatformAdmin` below for why they are not roles.
@@ -5369,6 +5377,8 @@ enum AgreementActorType {
   NETENROLL
   SIGNER
   SYSTEM
+  /// A white-label issuer's user acting for its own agreement suite.
+  ISSUER
 }
 
 enum AgreementEventType {
@@ -5394,6 +5404,10 @@ enum AgreementEventType {
   DOWNLOADED
   /// The agency entered its own details; the documents were completed with them.
   PARTY_DETAILS_SUBMITTED
+  /// The issuing suite's signatory signed at send. Used for every suite that is
+  /// not NetEnroll's; the issuer's frozen identity is in the detail. NetEnroll's
+  /// own envelopes keep writing NETENROLL_SIGNED, and old rows are never touched.
+  ISSUER_SIGNED
 }
 
 /// One set of agreements sent to one signer. `terms`, `signerEmail` and
@@ -5427,12 +5441,37 @@ model AgreementEnvelope {
   signerEmail String
   ccEmails    String[]
 
-  netenrollSignatoryName   String
-  netenrollSignatoryTitle  String
-  netenrollSignedByUserId  String
-  netenrollSignedAt        DateTime
+  /// NetEnroll's signature at send. Set for every NetEnroll (platform suite)
+  /// envelope and null for one issued by any other suite: NetEnroll did not
+  /// sign those. Who signed for the issuer is `issuerSignatory*` below.
+  netenrollSignatoryName   String?
+  netenrollSignatoryTitle  String?
+  netenrollSignedByUserId  String?
+  netenrollSignedAt        DateTime?
   netenrollSignedIp        String?
   netenrollSignedUserAgent String?
+
+  /// The issuing suite's signature at send, for every envelope written since
+  /// agreement suites existed (NetEnroll's included). Older envelopes have only
+  /// the netenroll* columns.
+  issuerSignatoryName   String?
+  issuerSignatoryTitle  String?
+  issuerSignedByUserId  String?
+  issuerSignedAt        DateTime?
+  issuerSignedIp        String?
+  issuerSignedUserAgent String?
+
+  /// ── Who issued it ──────────────────────────────────────────────────────────
+  ///
+  /// `tenantId` above is the RECIPIENT agency (nullable: a prospect may have no
+  /// account). These name the ISSUER: the sales workspace and its agreement
+  /// suite. Set at send and never changed (trigger). Backfilled to NetEnroll's
+  /// platform workspace for every envelope that predates them.
+  salesWorkspaceId String
+  agreementSuiteId String
+  /// The B2B prospect this was sent to, when it was sent from the Sales CRM.
+  /// Same workspace (trigger). Archiving a prospect never touches the envelope.
+  salesProspectId  String?
 
   sentByUserId       String
   sentAt             DateTime
@@ -5464,15 +5503,21 @@ model AgreementEnvelope {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant          Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  documents       AgreementDocument[]
-  events          AgreementEvent[]
-  otps            AgreementOtp[]
-  signingSessions AgreementSigningSession[]
+  tenant             Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  salesWorkspace     SalesWorkspace            @relation(fields: [salesWorkspaceId], references: [id], onDelete: Restrict)
+  agreementSuite     AgreementSuite            @relation(fields: [agreementSuiteId, salesWorkspaceId], references: [id, workspaceId], onDelete: Restrict)
+  salesProspect      SalesProspect?            @relation(fields: [salesProspectId], references: [id], onDelete: SetNull)
+  prospectActivities SalesProspectActivity[]
+  documents          AgreementDocument[]
+  events             AgreementEvent[]
+  otps               AgreementOtp[]
+  signingSessions    AgreementSigningSession[]
 
   @@index([status])
   @@index([tenantId])
   @@index([sentAt])
+  @@index([salesWorkspaceId, sentAt])
+  @@index([salesProspectId])
   @@map("agreement_envelopes")
 }
 
@@ -5559,4 +5604,226 @@ model AgreementSigningSession {
 
   @@index([envelopeId])
   @@map("agreement_signing_sessions")
+}
+
+// ============================================================================
+// Sales workspaces: the B2B Sales CRM and the agreement suite of each company
+// that sells — NetEnroll itself (PLATFORM) and each white-label issuer
+// (TENANT). Not the consumer CRM (`InsuranceLead`). See docs/SALES_CRM.md and
+// migrations/20261009000000_sales_workspaces (check constraints, the partial
+// unique index and the consistency triggers Prisma cannot express).
+// ============================================================================
+
+enum SalesWorkspaceScope {
+  /// NetEnroll's own sales operation. Exactly one; `tenantId` is null.
+  PLATFORM
+  /// One white-label tenant's private sales operation; `tenantId` names it.
+  TENANT
+}
+
+enum SalesWorkspaceStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SalesWorkspaceAccessLevel {
+  /// Everything, including settings, access grants and voiding.
+  MANAGER
+  /// Prospects, activities and sending agreements.
+  MEMBER
+  /// Read only.
+  READONLY
+}
+
+enum SalesProspectType {
+  INSURANCE_AGENCY
+  LICENSED_AGENT
+  IMO_FMO
+  CALL_CENTER
+  OTHER
+}
+
+enum SalesProspectStage {
+  NEW
+  ATTEMPTING_CONTACT
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  AGREEMENT_SENT
+  AGREEMENT_REVIEW
+  AGREEMENT_SIGNED
+  WON
+  LOST
+}
+
+enum SalesActivityType {
+  NOTE
+  CALL
+  EMAIL
+  FOLLOW_UP
+  STAGE_CHANGE
+  AGREEMENT_SENT
+  AGREEMENT_VIEWED
+  AGREEMENT_SIGNED
+  AGREEMENT_COMPLETED
+  AGREEMENT_VOIDED
+  AGREEMENT_EXPIRED
+  CHANGES_REQUESTED
+}
+
+enum AgreementSuiteStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// The company doing the selling. Everything in the Sales CRM, its agreement
+/// suite and its access grants belongs to exactly one of these.
+model SalesWorkspace {
+  id        String               @id @default(uuid())
+  scopeType SalesWorkspaceScope
+  /// Null for PLATFORM, the white-label tenant for TENANT (check constraint).
+  tenantId  String?              @unique
+  name      String
+  status    SalesWorkspaceStatus @default(ACTIVE)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  tenant     Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  suite      AgreementSuite?
+  access     SalesWorkspaceAccess[]
+  prospects  SalesProspect[]
+  activities SalesProspectActivity[]
+  envelopes  AgreementEnvelope[]
+
+  @@index([scopeType])
+  @@map("sales_workspaces")
+}
+
+/// An explicit grant of one workspace to one user of the SAME tenant. Never a
+/// role change. The tenant OWNER needs none (implicit MANAGER).
+model SalesWorkspaceAccess {
+  id              String                    @id @default(uuid())
+  workspaceId     String
+  userId          String
+  level           SalesWorkspaceAccessLevel
+  grantedByUserId String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  workspace SalesWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User           @relation("SalesWorkspaceAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("sales_workspace_access")
+}
+
+/// The issuer's agreement configuration: who it is legally, how its documents
+/// and emails look, where its links point and which template set it uses.
+/// One per workspace.
+model AgreementSuite {
+  id          String               @id @default(uuid())
+  workspaceId String               @unique
+  status      AgreementSuiteStatus @default(ACTIVE)
+
+  /// The brand as the portal and emails say it ("Life Leads Plus").
+  displayName           String
+  /// The contracting entity, entered deliberately. Never assumed from the brand.
+  legalEntityName       String?
+  dbaName               String?
+  noticeAddress         String?
+  noticeEmail           String?
+  replyToEmail          String?
+  defaultSignatoryName  String?
+  defaultSignatoryTitle String?
+  internalCopyEmails    String[]
+  /// `https://host` the signing and download links use, or null for the
+  /// issuer tenant's portal domain (else the default portal). Platform only.
+  linkOrigin            String?
+  /// A BRAND_THEME_KEYS value, or null for NetEnroll's look. Platform only.
+  brandTheme            String?
+  /// The registered template set (services/agreements/template-sets.ts), or
+  /// null when none is installed. Platform only, audited.
+  templateSetKey        String?
+  /// A reference to a seal in the environment, never the secret itself:
+  /// `DEFAULT` is AGREEMENT_SEAL_P12_*; `X` is AGREEMENT_SEAL_X_P12_*.
+  sealSecretRef         String?
+  sealLocation          String?
+  /// Envelope references read `<prefix>-XXXXXXXX`.
+  referencePrefix       String   @default("AG")
+  updatedByUserId       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace SalesWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  envelopes AgreementEnvelope[]
+
+  @@unique([id, workspaceId])
+  @@map("agreement_suites")
+}
+
+/// A B2B prospect: an agency, licensed agent, IMO/FMO or call center the
+/// workspace is selling to. Not a consumer lead.
+model SalesProspect {
+  id                 String             @id @default(uuid())
+  workspaceId        String
+  type               SalesProspectType
+  companyName        String?
+  primaryContactName String?
+  firstName          String?
+  lastName           String?
+  email              String?
+  phone              String?
+  website            String?
+  state              String?
+  address            String?
+  source             String?
+  stage              SalesProspectStage @default(NEW)
+  assignedUserId     String?
+  nextFollowUpAt     DateTime?
+  lastContactedAt    DateTime?
+  summary            String?
+  tags               String[]
+  lostReason         String?
+  createdByUserId    String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  archivedAt         DateTime?
+
+  workspace    SalesWorkspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  assignedUser User?                   @relation("SalesProspectAssignedTo", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  activities   SalesProspectActivity[]
+  envelopes    AgreementEnvelope[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId, stage])
+  @@index([workspaceId, nextFollowUpAt])
+  @@index([workspaceId, assignedUserId])
+  @@index([workspaceId, updatedAt])
+  @@map("sales_prospects")
+}
+
+/// One thing that happened to a prospect: recorded by a person, or written
+/// from an agreement event. Agreement rows carry `sourceKey` so the same
+/// lifecycle event is never written twice.
+model SalesProspectActivity {
+  id                  String            @id @default(uuid())
+  workspaceId         String
+  prospectId          String
+  type                SalesActivityType
+  body                String?
+  detail              Json?
+  agreementEnvelopeId String?
+  actorUserId         String?
+  sourceKey           String?           @unique
+  occurredAt          DateTime          @default(now())
+  createdAt           DateTime          @default(now())
+
+  workspace SalesWorkspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  prospect  SalesProspect      @relation(fields: [prospectId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  envelope  AgreementEnvelope? @relation(fields: [agreementEnvelopeId], references: [id], onDelete: SetNull)
+
+  @@index([prospectId, occurredAt])
+  @@index([workspaceId, occurredAt])
+  @@map("sales_prospect_activities")
 }

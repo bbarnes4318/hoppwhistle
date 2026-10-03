@@ -48,6 +48,7 @@ export const STATUS_TONES: Record<AgreementStatus, BadgeTone> = {
 export const EVENT_LABELS: Record<string, string> = {
   CREATED: 'Envelope created',
   NETENROLL_SIGNED: 'Signed by NetEnroll',
+  ISSUER_SIGNED: 'Signed by issuer',
   SENT: 'Sent to signer',
   EMAIL_NOT_SENT: 'Email not sent',
   RESENT: 'Link resent',
@@ -224,4 +225,54 @@ export function saveBlob(blob: Blob, fileName: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ── Surfaces ────────────────────────────────────────────────────────────────
+
+/**
+ * Which agreement suite a screen manages, and where its API and pages live.
+ *
+ *   NetEnroll's own suite   /admin/agreements, /api/v1/platform/agreements
+ *   a sales workspace's     /sales-crm/agreements, /api/v1/sales/agreements
+ *
+ * The sales API answers for the workspace the SERVER resolved from the session;
+ * this object only says which door to knock on. It names no workspace.
+ */
+export interface AgreementSurface {
+  kind: 'platform' | 'sales';
+  apiBase: string;
+  routeBase: string;
+  settingsHref: string;
+  /** "NetEnroll", "Life Leads Plus". */
+  issuerName: string;
+  /** "PVN LLC d/b/a NetEnroll", "Life Leads Plus LLC". */
+  issuerLegalName: string;
+}
+
+export const PLATFORM_AGREEMENT_SURFACE: AgreementSurface = {
+  kind: 'platform',
+  apiBase: '/api/v1/platform/agreements',
+  routeBase: '/admin/agreements',
+  settingsHref: '/admin/agreements/settings',
+  issuerName: 'NetEnroll',
+  issuerLegalName: 'PVN LLC d/b/a NetEnroll',
+};
+
+export function salesAgreementSurface(
+  issuerName: string,
+  issuerLegalName: string
+): AgreementSurface {
+  return {
+    kind: 'sales',
+    apiBase: '/api/v1/sales/agreements',
+    routeBase: '/sales-crm/agreements',
+    settingsHref: '/sales-crm/settings',
+    issuerName,
+    issuerLegalName,
+  };
+}
+
+/** The confirmation the sender ticks before signing for the issuer. */
+export function authorityStatement(surface: AgreementSurface): string {
+  return `I confirm I am authorized to sign these agreements on behalf of ${surface.issuerLegalName}, and I adopt the signature shown as my electronic signature.`;
 }

@@ -293,3 +293,12 @@ Undo these steps in reverse order. Each one is independent.
 4. **Code:** `git checkout <previous-sha>` and re-run
    `scripts/deploy.sh --build api web`, or restore the images saved in step 1
    as in `docs/DEPLOY.md` Step 1.3. There is no schema change to reverse.
+
+## Sales CRM and agreements on this domain
+
+Life Leads Plus's own Sales CRM and agreement suite (docs/SALES_CRM.md) use this
+domain for their signing and download links, because the suite's link origin is
+`portalUrlForTenant(<Life Leads Plus>)`. As everywhere else, the domain is
+presentation: the issuer of an agreement is frozen on the envelope, and the
+signer page draws the issuer's brand from the envelope whichever host it is
+opened on.

@@ -16,6 +16,8 @@ import { createRequire } from 'module';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+import { BRAND_THEME_KEYS } from '@hopwhistle/shared';
+
 function assetDirs(): string[] {
   const here = dirname(fileURLToPath(import.meta.url));
   return [
@@ -67,4 +69,22 @@ export function signatureFontFace(): string {
 export function preloadAgreementAssets(): void {
   netenrollLogoDataUri();
   signatureFontFace();
+  for (const theme of BRAND_THEME_KEYS) brandLogoDataUri(theme);
+}
+
+const brandLogos = new Map<string, string>();
+
+/**
+ * A white-label issuer's wordmark (`assets/agreements/brands/<theme>.png`,
+ * copied from `apps/web/public/brands/<theme>/wordmark.png`) as a data URI.
+ * Keyed by brand theme, never by tenant name or host.
+ */
+export function brandLogoDataUri(theme: string): string {
+  if (!/^[a-z0-9-]+$/.test(theme)) throw new Error(`Not a brand theme key: ${theme}`);
+  let uri = brandLogos.get(theme);
+  if (!uri) {
+    uri = `data:image/png;base64,${readFileSync(findAsset(`brands/${theme}.png`)).toString('base64')}`;
+    brandLogos.set(theme, uri);
+  }
+  return uri;
 }

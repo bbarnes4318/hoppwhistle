@@ -11,11 +11,18 @@ import type { AgreementEnvelope, AgreementEvent } from '@prisma/client';
 
 import { SIGNATURE_FONT_FAMILY, signatureFontFace } from './assets.js';
 import { esc, etDateTime } from './format.js';
-import { BRAND_GREEN, GREEN_TEXT, LABEL_BG, logoHtml } from './layout.js';
+import {
+  legacyNetEnrollIssuer,
+  netenrollDocumentBrand,
+  type DocumentBrand,
+  type IssuerPresentation,
+} from './issuer.js';
+import { logoCss, logoHtml } from './layout.js';
 
 export const EVENT_LABELS: Record<string, string> = {
   CREATED: 'Envelope created',
   NETENROLL_SIGNED: 'Signed by NetEnroll',
+  ISSUER_SIGNED: 'Signed by issuer',
   SENT: 'Sent to signer',
   EMAIL_NOT_SENT: 'Email not sent',
   RESENT: 'Link resent',
@@ -51,6 +58,11 @@ export function shortDetail(event: Pick<AgreementEvent, 'type' | 'detail'>): str
       parts.push(`${label}: ${String(value)}`);
   };
   switch (event.type) {
+    case 'ISSUER_SIGNED':
+      add('issuer', d.issuerLegalName);
+      add('signatory', d.signatoryName);
+      add('title', d.signatoryTitle);
+      break;
     case 'NETENROLL_SIGNED':
       add('signatory', d.signatoryName);
       add('title', d.signatoryTitle);
@@ -129,6 +141,10 @@ export interface CertificateInput {
   netenrollAdminEmail: string | null;
   internalCopyEmails: string[];
   events: AgreementEvent[];
+  /** Who issued the document; NetEnroll when omitted (every pre-suite envelope). */
+  issuer?: IssuerPresentation;
+  /** The issuer's look; NetEnroll's when omitted. */
+  brand?: DocumentBrand;
 }
 
 function iso(at: Date | null | undefined): string {
@@ -141,6 +157,16 @@ function both(at: Date | null | undefined): string {
 
 export function renderCertificate(input: CertificateInput): string {
   const { envelope, events } = input;
+  const issuer = input.issuer ?? legacyNetEnrollIssuer('');
+  const brand = input.brand ?? netenrollDocumentBrand();
+  const BRAND_GREEN = brand.accent;
+  const GREEN_TEXT = brand.accentText;
+  const LABEL_BG = brand.labelBg;
+  const signatoryName = envelope.issuerSignatoryName ?? envelope.netenrollSignatoryName ?? '';
+  const signatoryTitle = envelope.issuerSignatoryTitle ?? envelope.netenrollSignatoryTitle ?? '';
+  const signatoryUserId = envelope.issuerSignedByUserId ?? envelope.netenrollSignedByUserId ?? '';
+  const signatoryAt = envelope.issuerSignedAt ?? envelope.netenrollSignedAt;
+  const signatoryIp = envelope.issuerSignedIp ?? envelope.netenrollSignedIp;
   const sorted = [...events].sort((a, b) => a.seq - b.seq);
   const signed = [...sorted].reverse().find(e => e.type === 'SIGNED');
   const verified = [...sorted]
@@ -203,10 +229,10 @@ table.events tr { break-inside: avoid; page-break-inside: avoid; }
 table.events td.n { text-align: right; width: 22px; }
 table.events td.ua { max-width: 120px; word-break: break-word; }
 .closing { margin-top: 14px; padding: 9px 11px; border-left: 4px solid ${BRAND_GREEN}; background: #f7faf9; }
-</style></head>
+${logoCss(brand)}</style></head>
 <body>
-${logoHtml()}
-<div class="eyebrow">PVN LLC D/B/A NETENROLL · ELECTRONIC SIGNATURE RECORD</div>
+${logoHtml(brand)}
+<div class="eyebrow">${esc(issuer.legalName.toUpperCase())} · ELECTRONIC SIGNATURE RECORD</div>
 <h1>Certificate of Completion</h1>
 <div class="rule"></div>
 
@@ -225,7 +251,7 @@ ${kv([
     ? ([
         [
           'Offer text SHA-256',
-          `<span class="mono">${esc(input.document.sentHtmlSha256)}</span><br><span class="muted">As signed and sent by NetEnroll, agency details to be completed</span>`,
+          `<span class="mono">${esc(input.document.sentHtmlSha256)}</span><br><span class="muted">As signed and sent by ${esc(issuer.shortName)}, agency details to be completed</span>`,
         ],
         [
           'Signed text SHA-256',
@@ -268,16 +294,16 @@ ${kv([
   ],
 ])}
 
-<h2>NETENROLL</h2>
+<h2>${esc(issuer.shortName.toUpperCase())}</h2>
 ${kv([
-  ['Signatory', esc(envelope.netenrollSignatoryName)],
-  ['Title', esc(envelope.netenrollSignatoryTitle)],
-  [
-    'Authorized by platform user',
-    esc(input.netenrollAdminEmail ?? envelope.netenrollSignedByUserId),
-  ],
-  ['Signed at', both(envelope.netenrollSignedAt)],
-  ['IP address', `<span class="mono">${esc(envelope.netenrollSignedIp ?? '—')}</span>`],
+  ...(issuer.scope === 'PLATFORM'
+    ? []
+    : ([['Issuer', esc(issuer.legalName)]] as Array<[string, string]>)),
+  ['Signatory', esc(signatoryName)],
+  ['Title', esc(signatoryTitle)],
+  ['Authorized by platform user', esc(input.netenrollAdminEmail ?? signatoryUserId)],
+  ['Signed at', both(signatoryAt)],
+  ['IP address', `<span class="mono">${esc(signatoryIp ?? '—')}</span>`],
 ])}
 
 <h2>ELECTRONIC RECORDS CONSENT</h2>
@@ -296,7 +322,7 @@ ${kv([
   ['Signer', esc(envelope.signerEmail)],
   ['Copies to', esc(envelope.ccEmails.length > 0 ? envelope.ccEmails.join(', ') : '—')],
   [
-    'NetEnroll copies',
+    `${issuer.shortName} copies`,
     esc(input.internalCopyEmails.length > 0 ? input.internalCopyEmails.join(', ') : '—'),
   ],
 ])}

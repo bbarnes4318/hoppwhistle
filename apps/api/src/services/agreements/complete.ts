@@ -15,7 +15,12 @@
  * process so a signer's request and an admin's retry cannot race.
  */
 
-import type { AgreementDocument, PrismaClient } from '@prisma/client';
+import type {
+  AgreementDocument,
+  AgreementEnvelope,
+  AgreementSuite,
+  PrismaClient,
+} from '@prisma/client';
 
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
@@ -25,9 +30,11 @@ import { getAgreementsStorageService } from '../storage.js';
 
 import { renderCertificate } from './certificate.js';
 import { sendCompletedEmail, sendInternalCompletedEmail, type ExecutedFile } from './emails.js';
+import { notifyLifecycle } from './envelopes.js';
 import { appendEvent } from './events.js';
 import { renderExecutedHtml } from './executed.js';
 import { etDateIso, sha256Hex, slugify } from './format.js';
+import { documentBrandFor, issuerOfEnvelope, type IssuerPresentation } from './issuer.js';
 import { agencyLabel, signableHtml } from './party.js';
 import {
   certificateFooterTemplate,
@@ -38,11 +45,31 @@ import {
   printHtml,
   sealConfig,
   sealPdf,
+  sealRefFor,
   warnUnsealed,
   withBrowser,
 } from './pdf.js';
 import { loadAgreementSettings, noticeEmailOf } from './settings.js';
 import { mintToken } from './tokens.js';
+
+/** The suite that issued an envelope (its live settings: copies, seal). */
+async function suiteOf(
+  prisma: PrismaClient,
+  envelope: Pick<AgreementEnvelope, 'agreementSuiteId'>
+): Promise<AgreementSuite | null> {
+  return prisma.agreementSuite.findUnique({ where: { id: envelope.agreementSuiteId } });
+}
+
+/** The issuer's internal copy addresses; NetEnroll's legacy row if no suite row is found. */
+async function internalCopiesOf(
+  prisma: PrismaClient,
+  suite: AgreementSuite | null,
+  issuer: IssuerPresentation
+): Promise<string[]> {
+  if (suite) return suite.internalCopyEmails;
+  if (issuer.scope === 'PLATFORM') return (await loadAgreementSettings(prisma)).internalCopyEmails;
+  return [];
+}
 
 export const DOWNLOAD_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -56,12 +83,23 @@ export function executedFileName(agencyLegalName: string, kind: string, referenc
   return `${slugify(agencyLegalName)}-${kind.toLowerCase()}-executed-${reference}.pdf`;
 }
 
-export function adminEnvelopeUrl(envelopeId: string): string {
+/**
+ * Where the issuer manages an envelope: NetEnroll's admin screen, or the
+ * white-label issuer's own Sales CRM agreements screen on its own portal.
+ */
+export function adminEnvelopeUrl(envelopeId: string, issuer?: IssuerPresentation): string {
+  if (issuer && issuer.scope !== 'PLATFORM') {
+    return `${issuer.linkOrigin}/sales-crm/agreements/${envelopeId}`;
+  }
   return `${defaultPortalUrl()}/admin/agreements/${envelopeId}`;
 }
 
-export function downloadPageUrl(token: string): string {
-  return `${defaultPortalUrl()}/agreements/${token}`;
+/** The client's download page, on the issuer's portal. */
+export function downloadPageUrl(
+  token: string,
+  issuer?: Pick<IssuerPresentation, 'linkOrigin'>
+): string {
+  return `${issuer?.linkOrigin ?? defaultPortalUrl()}/agreements/${token}`;
 }
 
 /** Read a stored executed PDF and refuse it unless its hash matches. */
@@ -119,12 +157,23 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
   }
 
   const agencyName = agencyLabel(envelope);
-  const settings = await loadAgreementSettings(prisma);
-  const noticeEmail = noticeEmailOf(settings);
+  const issuer = issuerOfEnvelope(envelope);
+  const brand = documentBrandFor(issuer);
+  const suite = await suiteOf(prisma, envelope);
+  const isNetEnroll = issuer.scope === 'PLATFORM';
+  const noticeEmail = isNetEnroll
+    ? suite?.noticeEmail?.trim() || noticeEmailOf(await loadAgreementSettings(prisma))
+    : issuer.noticeEmail;
+  const internalCopyEmails = await internalCopiesOf(prisma, suite, issuer);
   const storage = getAgreementsStorageService();
   const completedAt = new Date();
-  const seal = sealConfig();
-  if (!seal) warnUnsealed();
+  // NetEnroll's seal for NetEnroll only; a white-label suite's own seal, or none.
+  const sealRef = sealRefFor(
+    issuer.scope,
+    suite ? suite.sealSecretRef : isNetEnroll ? 'DEFAULT' : null
+  );
+  const seal = sealConfig(sealRef);
+  if (!seal) warnUnsealed(sealRef);
 
   const [events, sender] = await Promise.all([
     prisma.agreementEvent.findMany({ where: { envelopeId }, orderBy: { seq: 'asc' } }),
@@ -155,14 +204,20 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
         });
 
         const contentPdf = await printHtml(browser, executedHtml, {
-          header: headerTemplate(RUNNING_HEADERS[doc.kind]),
-          footer: documentFooterTemplate(envelope.reference, envelope.signerInitials),
+          header: headerTemplate(isNetEnroll ? RUNNING_HEADERS[doc.kind] : doc.title.toUpperCase()),
+          footer: documentFooterTemplate(
+            envelope.reference,
+            envelope.signerInitials,
+            issuer.legalName
+          ),
         });
         const contentSha256 = sha256Hex(contentPdf);
         const contentPageCount = await pdfPageCount(contentPdf);
 
         const certificateHtml = renderCertificate({
-          portalUrl: defaultPortalUrl(),
+          portalUrl: issuer.linkOrigin,
+          issuer,
+          brand,
           envelope,
           document: doc,
           contentSha256,
@@ -171,7 +226,7 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
           agencyLegalName: agencyName,
           drawnPngDataUri,
           netenrollAdminEmail: sender?.email ?? null,
-          internalCopyEmails: settings.internalCopyEmails,
+          internalCopyEmails,
           events,
         });
         const certificatePdf = await printHtml(browser, certificateHtml, {
@@ -181,18 +236,22 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
 
         const merged = await mergePdfs(contentPdf, certificatePdf, {
           title: `${doc.title} — ${agencyName}`,
-          author: 'PVN LLC d/b/a NetEnroll',
+          author: issuer.legalName,
           subject: `Executed agreement ${envelope.reference}`,
           keywords: [envelope.reference],
-          creator: 'NetEnroll Agreements',
+          creator: `${issuer.shortName} Agreements`,
+          producer: `${issuer.shortName} Agreements`,
           creationDate: completedAt,
         });
         const finalPdf = seal
           ? await sealPdf(merged, seal, {
               reason: `Executed agreement ${envelope.reference}`,
-              location: 'Saint Augustine, Florida',
+              location: isNetEnroll
+                ? (suite?.sealLocation ?? 'Saint Augustine, Florida')
+                : (suite?.sealLocation ?? ''),
               contactInfo: noticeEmail,
-              name: 'PVN LLC d/b/a NetEnroll',
+              // Sealed in the issuer's own name, never NetEnroll's for another issuer.
+              name: issuer.legalName,
               signingTime: completedAt,
             })
           : merged;
@@ -295,6 +354,8 @@ async function runCompletion(envelopeId: string, prisma: PrismaClient): Promise<
     senderEmail: sender?.email ?? null,
   });
 
+  await notifyLifecycle(prisma, envelopeId, 'COMPLETED');
+
   if (envelope.tenantId) {
     await auditLog({
       tenantId: envelope.tenantId,
@@ -339,8 +400,13 @@ export async function deliverExecutedCopies(params: {
     include: { documents: { orderBy: { sortOrder: 'asc' } } },
   });
   const agencyName = agencyLabel(envelope);
-  const settings = await loadAgreementSettings(prisma);
-  const noticeEmail = noticeEmailOf(settings);
+  const issuer = issuerOfEnvelope(envelope);
+  const suite = await suiteOf(prisma, envelope);
+  const noticeEmail =
+    issuer.scope === 'PLATFORM'
+      ? suite?.noticeEmail?.trim() || noticeEmailOf(await loadAgreementSettings(prisma))
+      : issuer.noticeEmail;
+  const internalCopyEmails = await internalCopiesOf(prisma, suite, issuer);
 
   let attachments = params.attachments;
   if (!attachments) {
@@ -360,13 +426,14 @@ export async function deliverExecutedCopies(params: {
     agencyLegalName: agencyName,
     reference: envelope.reference,
     files: attachments,
-    downloadUrl: downloadPageUrl(params.downloadToken),
+    downloadUrl: downloadPageUrl(params.downloadToken, issuer),
     noticeEmail,
+    issuer,
   });
 
   const internalTo = Array.from(
     new Set(
-      [...settings.internalCopyEmails, params.senderEmail ?? '']
+      [...internalCopyEmails, params.senderEmail ?? '']
         .map(e => e.trim().toLowerCase())
         .filter(Boolean)
     )
@@ -376,13 +443,19 @@ export async function deliverExecutedCopies(params: {
     agencyLegalName: agencyName,
     reference: envelope.reference,
     files: attachments,
-    adminUrl: adminEnvelopeUrl(envelope.id),
+    adminUrl: adminEnvelopeUrl(envelope.id, issuer),
+    issuer,
   });
 
   await prisma.$transaction(tx =>
     appendEvent(tx, envelope.id, {
       type: 'COPIES_SENT',
-      actorType: params.trigger === 'admin' ? 'NETENROLL' : 'SYSTEM',
+      actorType:
+        params.trigger === 'admin'
+          ? issuer.scope === 'PLATFORM'
+            ? 'NETENROLL'
+            : 'ISSUER'
+          : 'SYSTEM',
       actorUserId: params.actorUserId ?? null,
       actorEmail: params.actorEmail ?? null,
       ipAddress: params.ipAddress ?? null,
