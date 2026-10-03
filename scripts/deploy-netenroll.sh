@@ -129,6 +129,7 @@ REQUIRED_MIGRATIONS="
 20261006000000_campaign_billing_model
 20261007000000_agreements
 20261008000000_agreements_party_details
+20261009000000_sales_workspaces
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -532,6 +533,13 @@ migration_applied() {
       # Wrapped BEGIN..COMMIT, so its last index stands for the columns before
       # it and the backfill (an UPDATE, which leaves nothing to probe).
       echo "SELECT to_regclass('public.\"insurance_carrier_applications_publisherId_idx\"') IS NOT NULL" ;;
+    *_sales_workspaces)
+      # Wrapped BEGIN..COMMIT. The last statement is the grant trigger, and the
+      # envelope trigger function must carry the issuer columns: both together
+      # stand for the tables, backfill and constraints before them.
+      echo "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sales_workspace_access_same_tenant')
+            AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agreement_envelopes_immutable'
+              AND prosrc LIKE '%salesWorkspaceId%')" ;;
     *_agreements_party_details)
       # Wrapped BEGIN..COMMIT; the last column added stands for the rest, and
       # the replaced trigger functions are checked by what they now refuse.

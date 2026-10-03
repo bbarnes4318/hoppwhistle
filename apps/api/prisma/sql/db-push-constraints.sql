@@ -272,3 +272,125 @@ DROP TRIGGER IF EXISTS "agreement_envelopes_immutable" ON "agreement_envelopes";
 CREATE TRIGGER "agreement_envelopes_immutable"
     BEFORE UPDATE ON "agreement_envelopes"
     FOR EACH ROW EXECUTE FUNCTION "agreement_envelopes_immutable"();
+
+
+-- From prisma/migrations/20261009000000_sales_workspaces/migration.sql, which
+-- is where they are applied to production: the one-PLATFORM-workspace index,
+-- the check constraints, and the triggers that keep an envelope's issuer fixed,
+-- its prospect in the same workspace, and every Sales CRM grant inside the
+-- workspace's own tenant. The envelope trigger function here replaces the one
+-- above; it is the same function plus the issuer columns.
+-- ---------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS "sales_workspaces_platform_singleton" ON "sales_workspaces"("scopeType") WHERE "scopeType" = 'PLATFORM';
+
+-- ── Check constraints ────────────────────────────────────────────────────────
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'sales_workspaces_scope_tenant_check') THEN
+    ALTER TABLE "sales_workspaces" ADD CONSTRAINT "sales_workspaces_scope_tenant_check" CHECK (
+      ("scopeType" = 'PLATFORM' AND "tenantId" IS NULL) OR ("scopeType" = 'TENANT' AND "tenantId" IS NOT NULL));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agreement_suites_reference_prefix_check') THEN
+    ALTER TABLE "agreement_suites" ADD CONSTRAINT "agreement_suites_reference_prefix_check" CHECK ("referencePrefix" ~ '^[A-Z]{2,5}$');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agreement_suites_seal_ref_check') THEN
+    -- A name, never key material: no base64 blob fits this.
+    ALTER TABLE "agreement_suites" ADD CONSTRAINT "agreement_suites_seal_ref_check" CHECK ("sealSecretRef" IS NULL OR "sealSecretRef" ~ '^[A-Z][A-Z0-9_]{0,39}$');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'sales_prospects_identity_check') THEN
+    ALTER TABLE "sales_prospects" ADD CONSTRAINT "sales_prospects_identity_check" CHECK (
+      COALESCE(NULLIF(btrim("companyName"), ''), NULLIF(btrim("primaryContactName"), ''),
+               NULLIF(btrim("firstName"), ''), NULLIF(btrim("lastName"), ''), NULLIF(btrim("email"), '')) IS NOT NULL);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agreement_envelopes_signatory_check') THEN
+    ALTER TABLE "agreement_envelopes" ADD CONSTRAINT "agreement_envelopes_signatory_check" CHECK (
+      "netenrollSignatoryName" IS NOT NULL OR "issuerSignatoryName" IS NOT NULL);
+  END IF;
+END $$;
+
+-- ── Triggers ─────────────────────────────────────────────────────────────────
+
+-- The deploy applies migrations BEFORE the new API ships. An envelope the old
+-- code writes in that window names no issuer: it can only be NetEnroll's.
+CREATE OR REPLACE FUNCTION "agreement_envelopes_default_issuer"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NEW."salesWorkspaceId" IS NULL THEN
+        SELECT w."id", a."id" INTO NEW."salesWorkspaceId", NEW."agreementSuiteId"
+        FROM "sales_workspaces" w JOIN "agreement_suites" a ON a."workspaceId" = w."id"
+        WHERE w."scopeType" = 'PLATFORM';
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "agreement_envelopes_default_issuer" ON "agreement_envelopes";
+CREATE TRIGGER "agreement_envelopes_default_issuer"
+    BEFORE INSERT ON "agreement_envelopes"
+    FOR EACH ROW EXECUTE FUNCTION "agreement_envelopes_default_issuer"();
+
+-- A linked prospect belongs to the issuing workspace.
+CREATE OR REPLACE FUNCTION "agreement_envelopes_prospect_workspace"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NEW."salesProspectId" IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM "sales_prospects" p
+        WHERE p."id" = NEW."salesProspectId" AND p."workspaceId" = NEW."salesWorkspaceId") THEN
+        RAISE EXCEPTION 'agreement_envelopes: prospect % is not in the issuing workspace.', NEW."salesProspectId";
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "agreement_envelopes_prospect_workspace" ON "agreement_envelopes";
+CREATE TRIGGER "agreement_envelopes_prospect_workspace"
+    BEFORE INSERT OR UPDATE OF "salesProspectId", "salesWorkspaceId" ON "agreement_envelopes"
+    FOR EACH ROW EXECUTE FUNCTION "agreement_envelopes_prospect_workspace"();
+
+-- 20261008000000_agreements_party_details's function, plus: the issuer is set
+-- once and never changes, and a linked prospect is never swapped for another
+-- (it may only be cleared, which is what deleting the prospect does).
+CREATE OR REPLACE FUNCTION "agreement_envelopes_immutable"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NEW."terms" IS DISTINCT FROM OLD."terms" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the terms of % are frozen at send.', OLD."id";
+    END IF;
+    IF NEW."signerEmail" IS DISTINCT FROM OLD."signerEmail" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the signer email of % cannot be changed.', OLD."id";
+    END IF;
+    IF NEW."signTokenHash" IS DISTINCT FROM OLD."signTokenHash" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the signing link of % is never reissued.', OLD."id";
+    END IF;
+    IF OLD."partyDetails" IS NOT NULL AND NEW."partyDetails" IS DISTINCT FROM OLD."partyDetails" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the agency details of % cannot be changed once entered.', OLD."id";
+    END IF;
+    IF OLD."salesWorkspaceId" IS NOT NULL AND NEW."salesWorkspaceId" IS DISTINCT FROM OLD."salesWorkspaceId" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the issuing workspace of % cannot be changed.', OLD."id";
+    END IF;
+    IF OLD."agreementSuiteId" IS NOT NULL AND NEW."agreementSuiteId" IS DISTINCT FROM OLD."agreementSuiteId" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the issuing suite of % cannot be changed.', OLD."id";
+    END IF;
+    IF OLD."salesProspectId" IS NOT NULL AND NEW."salesProspectId" IS NOT NULL
+       AND NEW."salesProspectId" IS DISTINCT FROM OLD."salesProspectId" THEN
+        RAISE EXCEPTION 'agreement_envelopes: the prospect of % cannot be changed.', OLD."id";
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+-- A grant is for a user of the workspace's own tenant, and only TENANT
+-- workspaces take grants (NetEnroll's is reached by platform admins).
+CREATE OR REPLACE FUNCTION "sales_workspace_access_same_tenant"() RETURNS TRIGGER AS $fn$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM "sales_workspaces" w JOIN "users" u ON u."id" = NEW."userId"
+        WHERE w."id" = NEW."workspaceId" AND w."scopeType" = 'TENANT'
+          AND u."tenantId" IS NOT NULL AND u."tenantId" = w."tenantId") THEN
+        RAISE EXCEPTION 'sales_workspace_access: user % is not in the tenant of workspace %.', NEW."userId", NEW."workspaceId";
+    END IF;
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "sales_workspace_access_same_tenant" ON "sales_workspace_access";
+CREATE TRIGGER "sales_workspace_access_same_tenant"
+    BEFORE INSERT OR UPDATE ON "sales_workspace_access"
+    FOR EACH ROW EXECUTE FUNCTION "sales_workspace_access_same_tenant"();
+

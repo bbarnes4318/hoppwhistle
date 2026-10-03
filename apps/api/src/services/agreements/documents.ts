@@ -65,13 +65,18 @@ export interface RenderedDocument {
   sortOrder: number;
 }
 
+/**
+ * Render the documents of an envelope. `specs` is the issuing suite's template
+ * set (template-sets.ts); NetEnroll's when omitted.
+ */
 export function renderDocuments(
   terms: FrozenTerms,
   kinds: AgreementDocumentKind[],
-  opts: RenderOptions
+  opts: RenderOptions,
+  specs: Record<AgreementDocumentKind, DocumentSpec> = DOCUMENT_SPECS
 ): RenderedDocument[] {
   return kinds.map((kind, sortOrder) => {
-    const spec = DOCUMENT_SPECS[kind];
+    const spec = specs[kind];
     const html = spec.render(terms, opts);
     return {
       kind,
@@ -153,4 +158,77 @@ ${ESIGN_DISCLOSURE_V1.items.map(item => `<p>${fill(item)}</p>`).join('\n')}`;
 
 export function disclosureSha256(noticeEmail: string): string {
   return sha256Hex(disclosureText(noticeEmail));
+}
+
+// ── The same disclosure, for an issuer other than NetEnroll ─────────────────
+//
+// ESIGN_DISCLOSURE_V1 above names NetEnroll and is shown, unchanged, on every
+// NetEnroll envelope. An envelope issued by another suite shows this version:
+// the same seven items with the issuer's names substituted, so a Life Leads
+// Plus signer is never told NetEnroll is asking them to sign. Its version and
+// text hash are recorded on CONSENT_GIVEN exactly as V1's are.
+
+export const ESIGN_DISCLOSURE_ISSUER_VERSION = 'ESIGN-ISSUER-2026-10-09';
+
+export const ESIGN_DISCLOSURE_ISSUER_V1 = {
+  title: ESIGN_DISCLOSURE_V1.title,
+  intro:
+    '{{issuer.legalName}} ("{{issuer.shortName}}") asks you to receive, review and sign the agreements listed on this page electronically. Please read this disclosure before you continue.',
+  items: [
+    '1. Scope. Your consent applies to the agreements listed on this page and to the notices, statements and records {{issuer.shortName}} provides to you under them.',
+    ESIGN_DISCLOSURE_V1.items[1],
+    '3. Paper copies. You may request a paper copy of any agreement at no charge by writing to {{issuer.noticeEmail}}. Your executed agreements are also emailed to you as PDF files and remain available for download.',
+    '4. Withdrawing consent. You may withdraw this consent at any time before you sign by selecting "Request changes" on this page or by writing to {{issuer.noticeEmail}}. Withdrawal does not affect the validity of anything signed before it.',
+    '5. Updating your contact information. Notify {{issuer.shortName}} in writing at {{issuer.noticeEmail}} of any change to your email address.',
+    '6. System requirements. A current version of Chrome, Safari, Edge or Firefox with JavaScript enabled, an email account able to receive messages from {{issuer.shortName}}, and software able to open PDF files. By consenting, you confirm you meet these requirements and can open and keep the PDF copies.',
+    ESIGN_DISCLOSURE_V1.items[6],
+  ],
+  checkbox: ESIGN_DISCLOSURE_V1.checkbox,
+} as const;
+
+/** Who a disclosure names. NetEnroll's envelopes pass `null` and get V1, verbatim. */
+export interface DisclosureIssuer {
+  legalName: string;
+  shortName: string;
+}
+
+export function disclosureVersionFor(issuer: DisclosureIssuer | null): string {
+  return issuer ? ESIGN_DISCLOSURE_ISSUER_VERSION : ESIGN_DISCLOSURE_VERSION;
+}
+
+function issuerFill(issuer: DisclosureIssuer, noticeEmail: string, escape: (s: string) => string) {
+  return (s: string) =>
+    escape(s)
+      .split('{{issuer.legalName}}')
+      .join(escape(issuer.legalName))
+      .split('{{issuer.shortName}}')
+      .join(escape(issuer.shortName))
+      .split('{{issuer.noticeEmail}}')
+      .join(escape(noticeEmail));
+}
+
+export function issuerDisclosureText(issuer: DisclosureIssuer | null, noticeEmail: string): string {
+  if (!issuer) return disclosureText(noticeEmail);
+  const fill = issuerFill(issuer, noticeEmail, s => s);
+  return [
+    ESIGN_DISCLOSURE_ISSUER_V1.title,
+    fill(ESIGN_DISCLOSURE_ISSUER_V1.intro),
+    ...ESIGN_DISCLOSURE_ISSUER_V1.items.map(fill),
+    ESIGN_DISCLOSURE_ISSUER_V1.checkbox,
+  ].join('\n\n');
+}
+
+export function issuerDisclosureHtml(issuer: DisclosureIssuer | null, noticeEmail: string): string {
+  if (!issuer) return disclosureHtml(noticeEmail);
+  const fill = issuerFill(issuer, noticeEmail, esc);
+  return `<h2>${esc(ESIGN_DISCLOSURE_ISSUER_V1.title)}</h2>
+<p>${fill(ESIGN_DISCLOSURE_ISSUER_V1.intro)}</p>
+${ESIGN_DISCLOSURE_ISSUER_V1.items.map(item => `<p>${fill(item)}</p>`).join('\n')}`;
+}
+
+export function issuerDisclosureSha256(
+  issuer: DisclosureIssuer | null,
+  noticeEmail: string
+): string {
+  return sha256Hex(issuerDisclosureText(issuer, noticeEmail));
 }

@@ -257,6 +257,13 @@ async function buildServer() {
   const { registerAgreementRoutes } = await import('./routes/agreements.js');
   await server.register(registerAgreementRoutes);
 
+  // The B2B Sales CRM and each sales workspace's own agreement suite:
+  // NetEnroll's (platform staff) and each white-label issuer's (its OWNER and
+  // the users it grants). Not the consumer CRM. See routes/sales.ts and
+  // docs/SALES_CRM.md.
+  const { registerSalesRoutes } = await import('./routes/sales.js');
+  await server.register(registerSalesRoutes);
+
   // The white-label tier's own screens: Sales (what an agency's calls sold
   // for), Payouts (what it owes its publishers) and its downline agencies.
   // Each route is the white-label OWNER/ADMIN's or staff's, and scoped to the

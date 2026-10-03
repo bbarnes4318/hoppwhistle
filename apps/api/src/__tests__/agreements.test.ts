@@ -50,7 +50,11 @@ process.env.JWT_SECRET ??= TEST_JWT_SECRET;
 
 const HAS_CHROME = Boolean(chromeExecutable());
 /** Applied in order: tables, triggers and settings, then the agency-details columns. */
-const MIGRATIONS = ['20261007000000_agreements', '20261008000000_agreements_party_details'].map(
+const MIGRATIONS = [
+  '20261007000000_agreements',
+  '20261008000000_agreements_party_details',
+  '20261009000000_sales_workspaces',
+].map(
   name => join(__dirname, `../../prisma/migrations/${name}/migration.sql`)
 );
 
@@ -814,9 +818,19 @@ describe.skipIf(!gate.available)('Electronic agreements', () => {
         'agencyLegalName',
         'documents',
         'expiresAt',
+        // The issuer's public names and brand, so the summary page is drawn in
+        // the issuer's brand whatever host it is opened on. Nothing else.
+        'issuer',
         'signerEmailMasked',
         'status',
       ]);
+      expect(data.issuer).toEqual({
+        scope: 'PLATFORM',
+        displayName: 'NetEnroll',
+        shortName: 'NetEnroll',
+        legalName: 'PVN LLC d/b/a NetEnroll',
+        brandTheme: null,
+      });
       expect(data.signerEmailMasked).toBe('d***@summitridge.test');
       expect(data.documents).toEqual([
         { title: 'Master Services Agreement' },

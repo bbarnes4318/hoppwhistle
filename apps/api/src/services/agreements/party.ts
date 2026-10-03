@@ -17,9 +17,11 @@
 import type { AgreementDocument, AgreementEnvelope, Prisma, PrismaClient } from '@prisma/client';
 
 import { renderDocuments } from './documents.js';
-import { AgreementError } from './envelopes.js';
+import { AgreementError, renderOptionsFor } from './envelopes.js';
 import { appendEvent, lockEnvelope } from './events.js';
 import { etDateIso } from './format.js';
+import { issuerOfEnvelope, type FrozenIssuer } from './issuer.js';
+import { getTemplateSet } from './template-sets.js';
 import {
   agencyFromParty,
   firstIssueMessage,
@@ -128,18 +130,44 @@ export async function submitPartyDetails(
         'The agency details have already been entered for these agreements.'
       );
     }
-    const terms = envelope.terms as unknown as FrozenTerms;
+    const terms = envelope.terms as unknown as FrozenTerms & { issuer?: FrozenIssuer };
+    // The issuing suite's own templates -- NetEnroll's for every envelope that
+    // predates suites -- never whichever suite happens to be asking.
+    const set = getTemplateSet(terms.issuer?.templateSetKey ?? 'netenroll');
+    if (!set?.documents) {
+      throw new AgreementError(
+        409,
+        'TEMPLATES_NOT_CONFIGURED',
+        'Contract templates not configured.'
+      );
+    }
+    const issuer = issuerOfEnvelope(envelope);
     const completed = renderDocuments(
       { ...terms, agency: agencyFromParty(party) },
       envelope.documents.map(d => d.kind),
-      {
+      renderOptionsFor(issuer, {
         mode: 'send',
         reference: envelope.reference,
-        netenrollSignatoryName: envelope.netenrollSignatoryName,
-        netenrollSignatoryTitle: envelope.netenrollSignatoryTitle,
-        netenrollSignedDate: etDateIso(envelope.netenrollSignedAt),
-      }
+        signatoryName: envelope.issuerSignatoryName ?? envelope.netenrollSignatoryName ?? '',
+        signatoryTitle: envelope.issuerSignatoryTitle ?? envelope.netenrollSignatoryTitle ?? '',
+        signedDate: etDateIso(
+          envelope.issuerSignedAt ?? envelope.netenrollSignedAt ?? envelope.sentAt
+        ),
+      }),
+      set.documents
     );
+    // Completed from the very text that was sent: a template that has moved on
+    // to another version since must not complete this envelope.
+    for (const doc of envelope.documents) {
+      const rendered = completed.find(c => c.kind === doc.kind)!;
+      if (rendered.templateVersion !== doc.templateVersion) {
+        throw new AgreementError(
+          409,
+          'TEMPLATE_CHANGED',
+          `The ${doc.title} was sent from template ${doc.templateVersion}, which is no longer installed. Contact the sender for new agreements.`
+        );
+      }
+    }
     for (const doc of envelope.documents) {
       const rendered = completed.find(c => c.kind === doc.kind)!;
       await tx.agreementDocument.update({

@@ -18,10 +18,11 @@ export function mintToken(): { token: string; hash: string } {
 /** Crockford-style base32 without 0, O, 1 or I: nothing to misread aloud. */
 const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-export function newReference(): string {
+/** `NE-XXXXXXXX` for NetEnroll; another suite's own prefix (`LLP-...`). */
+export function newReference(prefix = 'NE'): string {
   let out = '';
   for (let i = 0; i < 8; i += 1) out += REFERENCE_ALPHABET[randomInt(REFERENCE_ALPHABET.length)];
-  return `NE-${out}`;
+  return `${prefix}-${out}`;
 }
 
 /** A six-digit one-time code. */

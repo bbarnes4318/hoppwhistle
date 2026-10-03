@@ -27,16 +27,15 @@
  */
 
 import type {
-  AgreementDocument,
   AgreementEnvelope,
   AgreementStatus,
+  AgreementSuite,
   PrismaClient,
 } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { clientIp, clientUserAgent } from '../lib/client-ip.js';
-import { decryptField } from '../lib/field-encryption.js';
 import { logger } from '../lib/logger.js';
 import { PLATFORM_ADMIN_REQUIRED, requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -46,41 +45,34 @@ import { preloadAgreementAssets } from '../services/agreements/assets.js';
 import {
   adminEnvelopeUrl,
   completeEnvelope,
-  deliverExecutedCopies,
   downloadPageUrl,
-  DOWNLOAD_TOKEN_TTL_MS,
   executedFileName,
-  readVerifiedPdf,
 } from '../services/agreements/complete.js';
 import {
   acceptanceStatement,
-  disclosureHtml,
-  disclosureSha256,
-  disclosureText,
   ESIGN_DISCLOSURE_V1,
-  ESIGN_DISCLOSURE_VERSION,
+  disclosureVersionFor,
   intentStatement,
+  issuerDisclosureHtml,
+  issuerDisclosureSha256,
+  issuerDisclosureText,
+  type DisclosureIssuer,
 } from '../services/agreements/documents.js';
 import {
   sendChangesRequestedAlert,
   sendCompletionFailedAlert,
-  sendInvitationEmail,
   sendOtpEmail,
-  sendVoidedEmail,
 } from '../services/agreements/emails.js';
 import {
   AgreementError,
-  createEnvelope,
   expireStaleEnvelopes,
-  prepareEnvelope,
-  previewDocuments,
-  signUrlFor,
+  notifyLifecycle,
 } from '../services/agreements/envelopes.js';
-import { appendEvent, recordEvent, verifyEventChain } from '../services/agreements/events.js';
+import { appendEvent, recordEvent } from '../services/agreements/events.js';
 import { maskEmail, sha256Hex } from '../services/agreements/format.js';
+import { issuerOfEnvelope, type IssuerPresentation } from '../services/agreements/issuer.js';
 import {
   agencyLabel,
-  agencyOf,
   isIndividual,
   needsPartyDetails,
   partyPrefill,
@@ -90,10 +82,10 @@ import {
 } from '../services/agreements/party.js';
 import {
   loadAgreementSettings,
-  missingSetting,
   noticeEmailOf,
   SETTINGS_ID,
 } from '../services/agreements/settings.js';
+import { missingSuiteSetting, platformSuiteContext } from '../services/agreements/suites.js';
 import { INDIVIDUAL_SIGNER_TITLE, type FrozenTerms } from '../services/agreements/terms.js';
 import {
   digestsEqual,
@@ -103,7 +95,10 @@ import {
   newOtpCode,
 } from '../services/agreements/tokens.js';
 import { auditLog } from '../services/audit.js';
+import { installAgreementSync } from '../services/sales/agreement-sync.js';
 import { getAgreementsStorageService } from '../services/storage.js';
+
+import { registerAgreementSurface, serveExecutedPdf, titlesOf } from './agreement-surface.js';
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -160,19 +155,67 @@ export function parseSignaturePng(input: string): Buffer | string {
   return png;
 }
 
-function titlesOf(envelope: { documents: Array<{ title: string; sortOrder: number }> }): string[] {
-  return [...envelope.documents].sort((a, b) => a.sortOrder - b.sortOrder).map(d => d.title);
-}
-
-function legalNameOf(
-  envelope: Pick<AgreementEnvelope, 'terms' | 'partyDetails' | 'inviteeOrganization' | 'signerName'>
-): string {
-  return agencyLabel(envelope);
-}
-
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerAgreementRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma: PrismaClient = getPrismaClient();
+
+  /**
+   * The address a public page or email names for an envelope: its issuer's.
+   * NetEnroll's as configured now (as it always was), another issuer's as
+   * frozen at send. Never chosen by the host the page was opened on.
+   */
+  async function noticeEmailForEnvelope(envelope: AgreementEnvelope | null): Promise<string> {
+    if (envelope && issuerOfEnvelope(envelope).scope !== 'PLATFORM') {
+      return issuerOfEnvelope(envelope).noticeEmail;
+    }
+    const ctx = await platformSuiteContext(prisma).catch(() => null);
+    return (
+      ctx?.suite.noticeEmail?.trim() ||
+      noticeEmailOf(await loadAgreementSettings(prisma).catch(() => null))
+    );
+  }
+
+  /** What a signer's page may show about the issuer: names and brand, nothing internal. */
+  function publicIssuer(envelope: AgreementEnvelope) {
+    const issuer = issuerOfEnvelope(envelope);
+    return {
+      scope: issuer.scope,
+      displayName: issuer.displayName,
+      shortName: issuer.shortName,
+      legalName: issuer.legalName,
+      brandTheme: issuer.brandTheme,
+    };
+  }
+
+  /** NetEnroll's envelopes show ESIGN_DISCLOSURE_V1 verbatim; another issuer's, its own. */
+  function disclosureIssuerOf(envelope: AgreementEnvelope): DisclosureIssuer | null {
+    const issuer = issuerOfEnvelope(envelope);
+    return issuer.scope === 'PLATFORM'
+      ? null
+      : { legalName: issuer.legalName, shortName: issuer.shortName };
+  }
+
+  /** The issuer to brand an email with: undefined (NetEnroll's, unchanged) for NetEnroll. */
+  function emailIssuerOf(envelope: AgreementEnvelope): IssuerPresentation | undefined {
+    const issuer = issuerOfEnvelope(envelope);
+    return issuer.scope === 'PLATFORM' ? undefined : issuer;
+  }
+
+  /** Where the issuer's internal alerts go: its suite's copy addresses and the sender. */
+  async function internalAlertsTo(envelope: AgreementEnvelope): Promise<string[]> {
+    const suite = await prisma.agreementSuite
+      .findUnique({ where: { id: envelope.agreementSuiteId } })
+      .catch(() => null);
+    const sender = await prisma.user
+      .findUnique({ where: { id: envelope.sentByUserId }, select: { email: true } })
+      .catch(() => null);
+    return Array.from(
+      new Set([...(suite?.internalCopyEmails ?? []), sender?.email ?? ''].filter(Boolean))
+    );
+  }
+
+  // Agreement lifecycle events reach their Sales CRM prospects (best-effort).
+  installAgreementSync();
   try {
     preloadAgreementAssets();
   } catch (error) {
@@ -193,24 +236,11 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
 
   const admin = { preHandler: [authenticate, refuseApiKeys, requirePlatformAdmin] };
 
-  async function actorOf(request: FastifyRequest) {
-    const userId = getActingUserId(request)!;
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    return {
-      userId,
-      email: user?.email ?? null,
-      ipAddress: clientIp(request),
-      userAgent: clientUserAgent(request),
-    };
-  }
-
   async function audit(
     request: FastifyRequest,
     action: string,
     envelope: { id: string; tenantId: string | null } | null,
-    changes: Record<string, unknown> = {},
-    success = true,
-    error?: string
+    changes: Record<string, unknown> = {}
   ): Promise<void> {
     await auditLog({
       tenantId: envelope?.tenantId ?? null,
@@ -224,18 +254,37 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       ipAddress: clientIp(request) ?? undefined,
       userAgent: clientUserAgent(request) ?? undefined,
       requestId: request.id,
-      success,
-      error,
+      success: true,
     });
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // Admin
+  // Admin: NetEnroll's own suite (the PLATFORM sales workspace)
   // ════════════════════════════════════════════════════════════════════════
 
+  /**
+   * NetEnroll's settings, in the shape this screen has always used. They live
+   * on the platform suite now; the legacy `agreement_settings` row is written
+   * too, so a rollback to the previous release reads the same values.
+   */
+  function legacySettingsShape(suite: AgreementSuite) {
+    const ctxMissing = missingSuiteSetting({ suite, scope: 'PLATFORM' });
+    return {
+      id: SETTINGS_ID,
+      netenrollNoticeAddress: suite.noticeAddress,
+      netenrollNoticeEmail: suite.noticeEmail,
+      defaultSignatoryName: suite.defaultSignatoryName ?? 'James Kelly',
+      defaultSignatoryTitle: suite.defaultSignatoryTitle ?? 'Managing Partner',
+      internalCopyEmails: suite.internalCopyEmails,
+      updatedByUserId: suite.updatedByUserId,
+      updatedAt: suite.updatedAt,
+      missing: ctxMissing,
+    };
+  }
+
   fastify.get('/api/v1/platform/agreements/settings', admin, async (_request, reply) => {
-    const settings = await loadAgreementSettings(prisma);
-    return reply.send({ data: { ...settings, missing: missingSetting(settings) } });
+    const ctx = await platformSuiteContext(prisma);
+    return reply.send({ data: legacySettingsShape(ctx.suite) });
   });
 
   const settingsSchema = z.object({
@@ -254,7 +303,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     if (!parsed.success) {
       return validation(reply, parsed.error.issues[0]?.message ?? 'Invalid settings');
     }
-    const before = await loadAgreementSettings(prisma);
+    const ctx = await platformSuiteContext(prisma);
+    const before = legacySettingsShape(ctx.suite);
     const data = {
       netenrollNoticeAddress: parsed.data.netenrollNoticeAddress?.trim() || null,
       netenrollNoticeEmail: parsed.data.netenrollNoticeEmail?.trim().toLowerCase() || null,
@@ -265,8 +315,22 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       ),
       updatedByUserId: getActingUserId(request),
     };
-    const settings = await prisma.agreementSettings.update({ where: { id: SETTINGS_ID }, data });
+    const suite = await prisma.agreementSuite.update({
+      where: { id: ctx.suite.id },
+      data: {
+        noticeAddress: data.netenrollNoticeAddress,
+        noticeEmail: data.netenrollNoticeEmail,
+        defaultSignatoryName: data.defaultSignatoryName,
+        defaultSignatoryTitle: data.defaultSignatoryTitle,
+        internalCopyEmails: data.internalCopyEmails,
+        updatedByUserId: data.updatedByUserId,
+      },
+    });
+    await loadAgreementSettings(prisma);
+    await prisma.agreementSettings.update({ where: { id: SETTINGS_ID }, data });
     await audit(request, 'agreements.settings.updated', null, {
+      salesWorkspaceId: ctx.workspace.id,
+      agreementSuiteId: ctx.suite.id,
       before: {
         netenrollNoticeAddress: before.netenrollNoticeAddress,
         netenrollNoticeEmail: before.netenrollNoticeEmail,
@@ -276,13 +340,14 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       },
       after: data,
     });
-    return reply.send({ data: { ...settings, missing: missingSetting(settings) } });
+    return reply.send({ data: legacySettingsShape(suite) });
   });
 
   fastify.get<{ Querystring: { q?: string } }>(
     '/api/v1/platform/agreements/agencies',
     admin,
     async (request, reply) => {
+      const ctx = await platformSuiteContext(prisma);
       const q = (request.query.q ?? '').trim();
       const profiles = await prisma.agencyProfile.findMany({
         where: q
@@ -298,11 +363,19 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         take: 50,
       });
       const tenantIds = profiles.map(p => p.tenantId);
+      // Only NetEnroll's own executed MSAs: a white-label issuer's MSA with the
+      // same agency is that issuer's contract, not NetEnroll's.
       const msas =
         tenantIds.length === 0
           ? []
           : await prisma.agreementEnvelope.findMany({
-              where: { tenantId: { in: tenantIds }, status: 'COMPLETED', includesMsa: true },
+              where: {
+                tenantId: { in: tenantIds },
+                status: 'COMPLETED',
+                includesMsa: true,
+                salesWorkspaceId: ctx.workspace.id,
+                agreementSuiteId: ctx.suite.id,
+              },
               orderBy: { completedAt: 'desc' },
               select: { id: true, reference: true, tenantId: true, terms: true, completedAt: true },
             });
@@ -336,574 +409,18 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     }
   );
 
-  fastify.post('/api/v1/platform/agreements/preview', admin, async (request, reply) => {
-    try {
-      const settings = await loadAgreementSettings(prisma);
-      const prepared = await prepareEnvelope(request.body, settings, prisma);
-      const documents = previewDocuments(prepared);
-      return reply.send({
-        data: { documents: documents.map(d => ({ kind: d.kind, title: d.title, html: d.html })) },
-      });
-    } catch (error) {
-      const handled = sendAgreementError(reply, error);
-      if (handled) return handled;
-      throw error;
-    }
+  // Preview, send, list, detail, documents, resend, void, copies, completion:
+  // the shared surface, pinned to NetEnroll's suite. A white-label suite's
+  // envelopes are not in this workspace and so are not found here.
+  registerAgreementSurface(fastify, prisma, {
+    prefix: '/api/v1/platform/agreements',
+    preHandler: admin.preHandler,
+    resolve: async () => ({
+      ctx: await platformSuiteContext(prisma),
+      level: 'MANAGER',
+      auditTenantId: envelope => envelope?.tenantId ?? null,
+    }),
   });
-
-  fastify.post('/api/v1/platform/agreements', admin, async (request, reply) => {
-    try {
-      const settings = await loadAgreementSettings(prisma);
-      const prepared = await prepareEnvelope(request.body, settings, prisma);
-      const actor = await actorOf(request);
-      const created = await createEnvelope(prepared, actor, prisma);
-      await audit(request, 'agreements.sent', created.envelope, {
-        reference: created.envelope.reference,
-        documents: prepared.kinds,
-        signerEmail: prepared.signerEmail,
-        ccEmails: prepared.ccEmails,
-        emailSent: created.email.sent,
-      });
-      return reply.code(201).send({
-        data: {
-          envelope: summarise(created.envelope),
-          signUrl: created.signUrl,
-          emailSent: created.email.sent,
-          emailReason: created.email.reason ?? null,
-        },
-      });
-    } catch (error) {
-      const handled = sendAgreementError(reply, error);
-      if (handled) return handled;
-      throw error;
-    }
-  });
-
-  function summarise(envelope: AgreementEnvelope) {
-    return {
-      id: envelope.id,
-      reference: envelope.reference,
-      status: envelope.status,
-      tenantId: envelope.tenantId,
-      agencyLegalName: legalNameOf(envelope),
-      includesMsa: envelope.includesMsa,
-      includesCpa: envelope.includesCpa,
-      includesCpl: envelope.includesCpl,
-      signerName: envelope.signerName,
-      signerTitle: envelope.signerTitle,
-      signerEmail: envelope.signerEmail,
-      ccEmails: envelope.ccEmails,
-      sentAt: envelope.sentAt,
-      viewedAt: envelope.viewedAt,
-      signedAt: envelope.signedAt,
-      completedAt: envelope.completedAt,
-      expiresAt: envelope.expiresAt,
-      voidedAt: envelope.voidedAt,
-      changesRequestedAt: envelope.changesRequestedAt,
-      sealed: envelope.sealed,
-      inviteeOrganization: envelope.inviteeOrganization,
-      detailsEntered: !needsPartyDetails(envelope),
-      partyKind: agencyOf(envelope)?.kind ?? (needsPartyDetails(envelope) ? null : 'BUSINESS'),
-    };
-  }
-
-  const STATUS_VALUES: AgreementStatus[] = [
-    'SENT',
-    'VIEWED',
-    'SIGNED',
-    'COMPLETED',
-    'CHANGES_REQUESTED',
-    'VOIDED',
-    'EXPIRED',
-  ];
-
-  fastify.get<{ Querystring: { status?: string; q?: string; page?: string } }>(
-    '/api/v1/platform/agreements',
-    admin,
-    async (request, reply) => {
-      await expireStaleEnvelopes(prisma);
-      const statuses = (request.query.status ?? '')
-        .split(',')
-        .map(s => s.trim().toUpperCase())
-        .filter((s): s is AgreementStatus => STATUS_VALUES.includes(s as AgreementStatus));
-      const q = (request.query.q ?? '').trim();
-      const page = Math.max(1, Number.parseInt(request.query.page ?? '1', 10) || 1);
-      const pageSize = 25;
-
-      let idFilter: string[] | undefined;
-      if (q) {
-        const like = `%${q.replace(/[\\%_]/g, m => `\\${m}`)}%`;
-        const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "agreement_envelopes"
-          WHERE "reference" ILIKE ${like}
-             OR "signerName" ILIKE ${like}
-             OR "signerEmail" ILIKE ${like}
-             OR ("terms"->'agency'->>'legalName') ILIKE ${like}
-             OR ("partyDetails"->>'legalName') ILIKE ${like}
-             OR ("partyDetails"->>'dbaName') ILIKE ${like}
-             OR "inviteeOrganization" ILIKE ${like}`;
-        idFilter = rows.map(r => r.id);
-      }
-      const where = {
-        ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
-        ...(idFilter ? { id: { in: idFilter } } : {}),
-      };
-      const [total, rows] = await Promise.all([
-        prisma.agreementEnvelope.count({ where }),
-        prisma.agreementEnvelope.findMany({
-          where,
-          orderBy: { sentAt: 'desc' },
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-        }),
-      ]);
-      const activity =
-        rows.length === 0
-          ? []
-          : await prisma.agreementEvent.groupBy({
-              by: ['envelopeId'],
-              where: { envelopeId: { in: rows.map(r => r.id) } },
-              _max: { occurredAt: true },
-            });
-      const lastActivity = new Map(activity.map(a => [a.envelopeId, a._max.occurredAt]));
-      return reply.send({
-        data: {
-          items: rows.map(row => ({
-            ...summarise(row),
-            lastActivityAt: lastActivity.get(row.id) ?? row.sentAt,
-          })),
-          total,
-          page,
-          pageSize,
-        },
-      });
-    }
-  );
-
-  async function loadEnvelope(id: string) {
-    if (!z.string().uuid().safeParse(id).success) return null;
-    return prisma.agreementEnvelope.findUnique({
-      where: { id },
-      include: { documents: { orderBy: { sortOrder: 'asc' } } },
-    });
-  }
-
-  fastify.get<{ Params: { id: string } }>(
-    '/api/v1/platform/agreements/:id',
-    admin,
-    async (request, reply) => {
-      if (z.string().uuid().safeParse(request.params.id).success) {
-        await expireStaleEnvelopes(prisma, request.params.id);
-      }
-      const envelope = await loadEnvelope(request.params.id);
-      if (!envelope) return notFound(reply);
-      const [events, chain, sender, existingMsa] = await Promise.all([
-        prisma.agreementEvent.findMany({
-          where: { envelopeId: envelope.id },
-          orderBy: { seq: 'asc' },
-        }),
-        verifyEventChain(envelope.id, prisma),
-        prisma.user.findUnique({ where: { id: envelope.sentByUserId }, select: { email: true } }),
-        envelope.existingMsaEnvelopeId
-          ? prisma.agreementEnvelope.findUnique({
-              where: { id: envelope.existingMsaEnvelopeId },
-              select: { id: true, reference: true },
-            })
-          : Promise.resolve(null),
-      ]);
-      return reply.send({
-        data: {
-          ...summarise(envelope),
-          terms: envelope.terms,
-          partyDetails: envelope.partyDetails,
-          partySubmittedAt: envelope.partySubmittedAt,
-          existingMsa,
-          netenrollSignatoryName: envelope.netenrollSignatoryName,
-          netenrollSignatoryTitle: envelope.netenrollSignatoryTitle,
-          netenrollSignedAt: envelope.netenrollSignedAt,
-          netenrollSignedIp: envelope.netenrollSignedIp,
-          sentByEmail: sender?.email ?? null,
-          voidReason: envelope.voidReason,
-          changesNote: envelope.changesNote,
-          signerTypedSignature: envelope.signerTypedSignature,
-          signerInitials: envelope.signerInitials,
-          signatureMethod: envelope.signatureMethod,
-          documents: envelope.documents.map(doc => ({
-            id: doc.id,
-            kind: doc.kind,
-            title: doc.title,
-            templateVersion: doc.templateVersion,
-            sentHtmlSha256: doc.sentHtmlSha256,
-            presentedHtmlSha256: doc.presentedHtmlSha256,
-            contentPdfSha256: doc.contentPdfSha256,
-            executedPdfSha256: doc.executedPdfSha256,
-            executedPdfBytes: doc.executedPdfBytes,
-            pageCount: doc.pageCount,
-            fileName: executedFileName(legalNameOf(envelope), doc.kind, envelope.reference),
-          })),
-          events: events.map(e => ({
-            seq: e.seq,
-            type: e.type,
-            occurredAt: e.occurredAt,
-            actorType: e.actorType,
-            actorEmail: e.actorEmail,
-            ipAddress: e.ipAddress,
-            userAgent: e.userAgent,
-            detail: e.detail,
-            hash: e.hash,
-          })),
-          chainValid: chain.ok,
-          chainBrokenAt: chain.ok ? null : chain.brokenSeq,
-        },
-      });
-    }
-  );
-
-  /*
-   * sent.html: the offer exactly as NetEnroll signed and sent it.
-   * presented.html: the same document completed with the agency's own details,
-   * the text the signer reviewed and signed (404 until they have entered them).
-   */
-  for (const version of ['sent', 'presented'] as const) {
-    fastify.get<{ Params: { id: string; documentId: string } }>(
-      `/api/v1/platform/agreements/:id/documents/:documentId/${version}.html`,
-      admin,
-      async (request, reply) => {
-        const envelope = await loadEnvelope(request.params.id);
-        const doc = envelope?.documents.find(d => d.id === request.params.documentId);
-        const html = version === 'sent' ? doc?.sentHtml : doc?.presentedHtml;
-        if (!envelope || !doc || !html) return notFound(reply, 'Document not found');
-        await audit(request, `agreements.document.viewed_as_${version}`, envelope, {
-          documentId: doc.id,
-          kind: doc.kind,
-        });
-        return reply
-          .header('Content-Type', 'text/html; charset=utf-8')
-          .header(
-            'Content-Security-Policy',
-            "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"
-          )
-          .header('X-Content-Type-Options', 'nosniff')
-          .send(html);
-      }
-    );
-  }
-
-  fastify.get<{ Params: { id: string; documentFile: string } }>(
-    '/api/v1/platform/agreements/:id/documents/:documentFile',
-    admin,
-    async (request, reply) => {
-      const documentId = request.params.documentFile.replace(/\.pdf$/, '');
-      if (documentId === request.params.documentFile) return notFound(reply, 'Document not found');
-      const envelope = await loadEnvelope(request.params.id);
-      const doc = envelope?.documents.find(d => d.id === documentId);
-      if (!envelope || !doc) return notFound(reply, 'Document not found');
-      if (envelope.status !== 'COMPLETED' || !doc.executedPdfKey) {
-        return reply.code(409).send({
-          error: { code: 'NOT_COMPLETED', message: 'This agreement is not executed yet.' },
-        });
-      }
-      return streamExecutedPdf(request, reply, envelope, doc, async () => {
-        await audit(request, 'agreements.document.downloaded', envelope, {
-          documentId: doc.id,
-          kind: doc.kind,
-          sha256: doc.executedPdfSha256,
-        });
-      });
-    }
-  );
-
-  async function streamExecutedPdf(
-    request: FastifyRequest,
-    reply: FastifyReply,
-    envelope: AgreementEnvelope,
-    doc: AgreementDocument,
-    onServed: () => Promise<void>
-  ): Promise<FastifyReply> {
-    let bytes: Buffer;
-    try {
-      bytes = await readVerifiedPdf(doc);
-    } catch (error) {
-      const err = error as Error & { code?: string; actual?: string };
-      logger.error({
-        msg: 'Executed agreement PDF failed its integrity check; refusing to serve it',
-        envelopeId: envelope.id,
-        documentId: doc.id,
-        err: error,
-      });
-      await auditLog({
-        tenantId: envelope.tenantId,
-        userId: getActingUserId(request) ?? undefined,
-        action: 'agreements.document.integrity_failed',
-        entityType: 'AgreementDocument',
-        entityId: doc.id,
-        resource: request.url,
-        method: request.method,
-        changes: {
-          envelopeId: envelope.id,
-          expectedSha256: doc.executedPdfSha256,
-          actualSha256: err.actual ?? null,
-        },
-        ipAddress: clientIp(request) ?? undefined,
-        userAgent: clientUserAgent(request) ?? undefined,
-        requestId: request.id,
-        success: false,
-        error: err.message,
-      });
-      return reply.code(500).send({
-        error: {
-          code: 'INTEGRITY_CHECK_FAILED',
-          message:
-            'This file failed its integrity check and was not served. NetEnroll has been notified.',
-        },
-      });
-    }
-    await onServed();
-    return reply
-      .header('Content-Type', 'application/pdf')
-      .header(
-        'Content-Disposition',
-        `attachment; filename="${executedFileName(legalNameOf(envelope), doc.kind, envelope.reference)}"`
-      )
-      .header('Content-Length', String(bytes.length))
-      .header('Cache-Control', 'no-store')
-      .header('X-Content-SHA256', doc.executedPdfSha256 ?? '')
-      .send(bytes);
-  }
-
-  fastify.post<{ Params: { id: string } }>(
-    '/api/v1/platform/agreements/:id/resend',
-    admin,
-    async (request, reply) => {
-      const envelope = await loadEnvelope(request.params.id);
-      if (!envelope) return notFound(reply);
-      await expireStaleEnvelopes(prisma, envelope.id);
-      const current = await prisma.agreementEnvelope.findUniqueOrThrow({
-        where: { id: envelope.id },
-      });
-      if (!OPEN.includes(current.status)) {
-        return reply.code(409).send({
-          error: {
-            code: 'NOT_RESENDABLE',
-            message: `Only an agreement awaiting signature can be resent; this one is ${current.status}.`,
-          },
-        });
-      }
-      const token = decryptField(current.signTokenEnc);
-      if (!token) {
-        return reply.code(409).send({
-          error: {
-            code: 'NO_LINK',
-            message: 'The signing link for this agreement cannot be rebuilt.',
-          },
-        });
-      }
-      const signUrl = signUrlFor(token);
-      const settings = await loadAgreementSettings(prisma);
-      const email = await sendInvitationEmail({
-        to: current.signerEmail,
-        signerName: current.signerName,
-        agencyLegalName: legalNameOf(current),
-        documentTitles: titlesOf(envelope),
-        signUrl,
-        expiresAt: current.expiresAt,
-        noticeEmail: noticeEmailOf(settings),
-        resend: true,
-      });
-      const actor = await actorOf(request);
-      await recordEvent(
-        current.id,
-        {
-          type: 'RESENT',
-          actorType: 'NETENROLL',
-          actorUserId: actor.userId,
-          actorEmail: actor.email,
-          ipAddress: actor.ipAddress,
-          userAgent: actor.userAgent,
-          detail: { to: current.signerEmail, sent: email.sent, reason: email.reason ?? null },
-        },
-        prisma
-      );
-      await audit(request, 'agreements.resent', current, { emailSent: email.sent });
-      return reply.send({
-        data: { signUrl, emailSent: email.sent, emailReason: email.reason ?? null },
-      });
-    }
-  );
-
-  fastify.post<{ Params: { id: string } }>(
-    '/api/v1/platform/agreements/:id/void',
-    admin,
-    async (request, reply) => {
-      const parsed = z
-        .object({ reason: z.string().trim().min(1).max(500) })
-        .safeParse(request.body);
-      if (!parsed.success)
-        return validation(reply, 'Give a reason for voiding (1–500 characters).');
-      const envelope = await loadEnvelope(request.params.id);
-      if (!envelope) return notFound(reply);
-      if (envelope.status === 'COMPLETED') {
-        return reply.code(409).send({
-          error: {
-            code: 'COMPLETED',
-            message:
-              'A completed agreement cannot be voided. It is terminated under Section 15 of the MSA, outside this system.',
-          },
-        });
-      }
-      if (envelope.status === 'VOIDED') {
-        return reply
-          .code(409)
-          .send({ error: { code: 'ALREADY_VOIDED', message: 'Already voided.' } });
-      }
-      const actor = await actorOf(request);
-      const voided = await prisma.$transaction(async tx => {
-        const claimed = await tx.agreementEnvelope.updateMany({
-          where: { id: envelope.id, status: { notIn: ['COMPLETED', 'VOIDED'] } },
-          data: {
-            status: 'VOIDED',
-            voidedAt: new Date(),
-            voidReason: parsed.data.reason,
-            voidedByUserId: actor.userId,
-          },
-        });
-        if (claimed.count === 0) return false;
-        await appendEvent(tx, envelope.id, {
-          type: 'VOIDED',
-          actorType: 'NETENROLL',
-          actorUserId: actor.userId,
-          actorEmail: actor.email,
-          ipAddress: actor.ipAddress,
-          userAgent: actor.userAgent,
-          detail: { reason: parsed.data.reason, previousStatus: envelope.status },
-        });
-        return true;
-      });
-      if (!voided) {
-        return reply.code(409).send({
-          error: { code: 'STATE_CHANGED', message: 'The agreement changed state; reload it.' },
-        });
-      }
-      const settings = await loadAgreementSettings(prisma);
-      const email = await sendVoidedEmail({
-        to: envelope.signerEmail,
-        reference: envelope.reference,
-        documentTitles: titlesOf(envelope),
-        noticeEmail: noticeEmailOf(settings),
-      });
-      await audit(request, 'agreements.voided', envelope, {
-        reason: parsed.data.reason,
-        previousStatus: envelope.status,
-        signerNotified: email.sent,
-      });
-      return reply.send({ data: { status: 'VOIDED', signerNotified: email.sent } });
-    }
-  );
-
-  fastify.post<{ Params: { id: string } }>(
-    '/api/v1/platform/agreements/:id/send-copies',
-    admin,
-    async (request, reply) => {
-      const envelope = await loadEnvelope(request.params.id);
-      if (!envelope) return notFound(reply);
-      if (envelope.status !== 'COMPLETED') {
-        return reply.code(409).send({
-          error: {
-            code: 'NOT_COMPLETED',
-            message: 'Copies can be sent once the agreement is completed.',
-          },
-        });
-      }
-      const download = mintToken();
-      await prisma.agreementEnvelope.update({
-        where: { id: envelope.id },
-        data: {
-          downloadTokenHash: download.hash,
-          downloadTokenExpiresAt: new Date(Date.now() + DOWNLOAD_TOKEN_TTL_MS),
-        },
-      });
-      const actor = await actorOf(request);
-      try {
-        const result = await deliverExecutedCopies({
-          prisma,
-          envelopeId: envelope.id,
-          trigger: 'admin',
-          downloadToken: download.token,
-          senderEmail: actor.email,
-          actorUserId: actor.userId,
-          actorEmail: actor.email,
-          ipAddress: actor.ipAddress,
-          userAgent: actor.userAgent,
-        });
-        await audit(request, 'agreements.copies_sent', envelope, result);
-        return reply.send({
-          data: {
-            emailSent: result.signerSent,
-            internalSent: result.internalSent,
-            downloadUrl: downloadPageUrl(download.token),
-          },
-        });
-      } catch (error) {
-        await audit(
-          request,
-          'agreements.copies_sent',
-          envelope,
-          {},
-          false,
-          (error as Error).message
-        );
-        if ((error as { code?: string }).code === 'AGREEMENT_PDF_HASH_MISMATCH') {
-          return reply.code(500).send({
-            error: {
-              code: 'INTEGRITY_CHECK_FAILED',
-              message: 'An executed file failed its integrity check.',
-            },
-          });
-        }
-        throw error;
-      }
-    }
-  );
-
-  fastify.post<{ Params: { id: string } }>(
-    '/api/v1/platform/agreements/:id/complete',
-    admin,
-    async (request, reply) => {
-      const envelope = await loadEnvelope(request.params.id);
-      if (!envelope) return notFound(reply);
-      if (envelope.status !== 'SIGNED' && envelope.status !== 'COMPLETED') {
-        return reply.code(409).send({
-          error: {
-            code: 'NOT_SIGNED',
-            message: `Only a signed agreement can be completed; this one is ${envelope.status}.`,
-          },
-        });
-      }
-      try {
-        const result = await completeEnvelope(envelope.id, prisma);
-        await audit(request, 'agreements.completion_retried', envelope, {
-          alreadyCompleted: result.alreadyCompleted,
-        });
-        return reply.send({
-          data: { status: 'COMPLETED', alreadyCompleted: result.alreadyCompleted },
-        });
-      } catch (error) {
-        const message = (error as Error).message;
-        await recordEvent(
-          envelope.id,
-          {
-            type: 'COMPLETION_FAILED',
-            actorType: 'SYSTEM',
-            detail: { error: message, trigger: 'admin' },
-          },
-          prisma
-        );
-        await audit(request, 'agreements.completion_retried', envelope, {}, false, message);
-        logger.error({ msg: 'Agreement completion failed', envelopeId: envelope.id, err: error });
-        return reply.code(500).send({ error: { code: 'COMPLETION_FAILED', message } });
-      }
-    }
-  );
 
   // ════════════════════════════════════════════════════════════════════════
   // Public: the signer and the client
@@ -931,6 +448,14 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     },
   };
 
+  /** Public routes reach an envelope only through its token, so no workspace filter applies here. */
+  async function loadEnvelope(id: string) {
+    return prisma.agreementEnvelope.findUnique({
+      where: { id },
+      include: { documents: { orderBy: { sortOrder: 'asc' } } },
+    });
+  }
+
   type LoadedEnvelope = NonNullable<Awaited<ReturnType<typeof loadEnvelope>>>;
 
   /**
@@ -954,7 +479,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
     }
     const envelope = (await loadEnvelope(found.id))!;
     if (INACTIVE.includes(envelope.status)) {
-      const settings = await loadAgreementSettings(prisma);
+      const noticeEmail = await noticeEmailForEnvelope(envelope);
+      const issuer = publicIssuer(envelope);
       void reply.code(410).send({
         error: {
           code: 'LINK_INACTIVE',
@@ -963,9 +489,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
             envelope.status === 'EXPIRED'
               ? 'This signing link has expired.'
               : envelope.status === 'VOIDED'
-                ? 'These agreements were withdrawn by NetEnroll.'
+                ? `These agreements were withdrawn by ${issuer.shortName}.`
                 : 'Changes were requested, so this signing link no longer works.',
-          noticeEmail: noticeEmailOf(settings),
+          noticeEmail,
+          issuer,
         },
       });
       return null;
@@ -1032,13 +559,17 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           });
         }
       });
+      if (envelope.viewedAt === null) await notifyLifecycle(prisma, envelope.id, 'VIEWED');
       return reply.send({
         data: {
           status: envelope.viewedAt === null ? 'VIEWED' : envelope.status,
-          agencyLegalName: legalNameOf(envelope),
+          agencyLegalName: agencyLabel(envelope),
           documents: titlesOf(envelope).map(title => ({ title })),
           signerEmailMasked: maskEmail(envelope.signerEmail),
           expiresAt: envelope.expiresAt,
+          // From the envelope's frozen issuer, never the host: the page draws
+          // this brand whichever hostname the link was opened on.
+          issuer: publicIssuer(envelope),
         },
       });
     }
@@ -1072,11 +603,12 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           expiresAt: new Date(Date.now() + OTP_TTL_MS),
         },
       });
-      const settings = await loadAgreementSettings(prisma);
+      const noticeEmail = await noticeEmailForEnvelope(envelope);
       const email = await sendOtpEmail({
         to: envelope.signerEmail,
         code,
-        noticeEmail: noticeEmailOf(settings),
+        noticeEmail,
+        issuer: emailIssuerOf(envelope),
       });
       await recordEvent(
         envelope.id,
@@ -1093,7 +625,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         return reply.code(503).send({
           error: {
             code: 'CODE_NOT_SENT',
-            message: `We could not email your code right now. Try again shortly, or contact ${noticeEmailOf(settings)}.`,
+            message: `We could not email your code right now. Try again shortly, or contact ${noticeEmail}.`,
           },
         });
       }
@@ -1249,11 +781,12 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
                 reviewed: reviewedIds.has(doc.id),
               })),
           disclosure: {
-            version: ESIGN_DISCLOSURE_VERSION,
-            html: disclosureHtml(noticeEmail),
-            text: disclosureText(noticeEmail),
+            version: disclosureVersionFor(disclosureIssuerOf(envelope)),
+            html: issuerDisclosureHtml(disclosureIssuerOf(envelope), noticeEmail),
+            text: issuerDisclosureText(disclosureIssuerOf(envelope), noticeEmail),
             checkboxLabel: ESIGN_DISCLOSURE_V1.checkbox,
           },
+          issuer: publicIssuer(envelope),
           consented: envelope.consentedAt !== null,
           signer: {
             name: envelope.signerName,
@@ -1286,7 +819,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         .object({ accepted: z.literal(true), disclosureVersion: z.string() })
         .safeParse(request.body);
       if (!parsed.success) return validation(reply, 'Accept the disclosure to continue.');
-      if (parsed.data.disclosureVersion !== ESIGN_DISCLOSURE_VERSION) {
+      const disclosureIssuer = disclosureIssuerOf(envelope);
+      if (parsed.data.disclosureVersion !== disclosureVersionFor(disclosureIssuer)) {
         return validation(reply, 'The disclosure has changed. Reload the page and read it again.');
       }
       const noticeEmail = (envelope.terms as unknown as FrozenTerms).netenroll.noticeEmail;
@@ -1299,8 +833,8 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           ...evidence(request),
           occurredAt: now,
           detail: {
-            disclosureVersion: ESIGN_DISCLOSURE_VERSION,
-            disclosureSha256: disclosureSha256(noticeEmail),
+            disclosureVersion: disclosureVersionFor(disclosureIssuer),
+            disclosureSha256: issuerDisclosureSha256(disclosureIssuer, noticeEmail),
             checkboxLabel: ESIGN_DISCLOSURE_V1.checkbox,
           },
         });
@@ -1544,6 +1078,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         });
         return reply.send({ data: { status: now.status } });
       }
+      await notifyLifecycle(prisma, envelope.id, 'SIGNED');
 
       try {
         const result = await completeEnvelope(envelope.id, prisma);
@@ -1551,7 +1086,9 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           data: {
             status: 'COMPLETED',
             downloadToken: result.downloadToken,
-            downloadUrl: result.downloadToken ? downloadPageUrl(result.downloadToken) : null,
+            downloadUrl: result.downloadToken
+              ? downloadPageUrl(result.downloadToken, issuerOfEnvelope(envelope))
+              : null,
             email: envelope.signerEmail,
           },
         });
@@ -1571,18 +1108,13 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           },
           prisma
         ).catch((err: unknown) => logger.error({ msg: 'Could not record COMPLETION_FAILED', err }));
-        const settings = await loadAgreementSettings(prisma).catch(() => null);
-        const sender = await prisma.user
-          .findUnique({ where: { id: envelope.sentByUserId }, select: { email: true } })
-          .catch(() => null);
         await sendCompletionFailedAlert({
-          to: Array.from(
-            new Set([...(settings?.internalCopyEmails ?? []), sender?.email ?? ''].filter(Boolean))
-          ),
+          to: await internalAlertsTo(envelope),
           reference: envelope.reference,
           agencyLegalName: agencyLabel(envelope),
           error: message,
-          adminUrl: adminEnvelopeUrl(envelope.id),
+          adminUrl: adminEnvelopeUrl(envelope.id, issuerOfEnvelope(envelope)),
+          issuer: emailIssuerOf(envelope),
         });
         return reply.send({
           data: {
@@ -1631,24 +1163,19 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
         return reply.code(409).send({
           error: { code: 'STATE_CHANGED', message: 'This agreement can no longer be changed.' },
         });
-      const settings = await loadAgreementSettings(prisma);
-      const sender = await prisma.user.findUnique({
-        where: { id: envelope.sentByUserId },
-        select: { email: true },
-      });
+      await notifyLifecycle(prisma, envelope.id, 'CHANGES_REQUESTED');
       await sendChangesRequestedAlert({
-        to: Array.from(
-          new Set([...settings.internalCopyEmails, sender?.email ?? ''].filter(Boolean))
-        ),
+        to: await internalAlertsTo(envelope),
         reference: envelope.reference,
-        agencyLegalName: legalNameOf(envelope),
+        agencyLegalName: agencyLabel(envelope),
         signerName: envelope.signerName,
         signerEmail: envelope.signerEmail,
         note: parsed.data.note,
-        adminUrl: adminEnvelopeUrl(envelope.id),
+        adminUrl: adminEnvelopeUrl(envelope.id, issuerOfEnvelope(envelope)),
+        issuer: emailIssuerOf(envelope),
       });
       return reply.send({
-        data: { status: 'CHANGES_REQUESTED', noticeEmail: noticeEmailOf(settings) },
+        data: { status: 'CHANGES_REQUESTED', noticeEmail: await noticeEmailForEnvelope(envelope) },
       });
     }
   );
@@ -1668,12 +1195,16 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       !found.downloadTokenExpiresAt ||
       found.downloadTokenExpiresAt.getTime() <= Date.now()
     ) {
-      const settings = await loadAgreementSettings(prisma);
+      const owner = found
+        ? await prisma.agreementEnvelope.findUnique({ where: { id: found.id } })
+        : null;
+      const noticeEmail = await noticeEmailForEnvelope(owner);
       void reply.code(410).send({
         error: {
           code: 'LINK_EXPIRED',
-          message: `This link has expired. Contact ${noticeEmailOf(settings)} for a new copy.`,
-          noticeEmail: noticeEmailOf(settings),
+          message: `This link has expired. Contact ${noticeEmail} for a new copy.`,
+          noticeEmail,
+          ...(owner ? { issuer: publicIssuer(owner) } : {}),
         },
       });
       return null;
@@ -1690,14 +1221,15 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       return reply.send({
         data: {
           reference: envelope.reference,
-          agencyLegalName: legalNameOf(envelope),
+          agencyLegalName: agencyLabel(envelope),
           completedAt: envelope.completedAt,
           sealed: envelope.sealed,
+          issuer: publicIssuer(envelope),
           documents: envelope.documents.map(doc => ({
             id: doc.id,
             kind: doc.kind,
             title: doc.title,
-            fileName: executedFileName(legalNameOf(envelope), doc.kind, envelope.reference),
+            fileName: executedFileName(agencyLabel(envelope), doc.kind, envelope.reference),
             bytes: doc.executedPdfBytes,
             sha256: doc.executedPdfSha256,
           })),
@@ -1717,7 +1249,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
       if (!doc || documentId === request.params.documentFile || !doc.executedPdfKey) {
         return notFound(reply, 'Document not found');
       }
-      return streamExecutedPdf(request, reply, envelope, doc, async () => {
+      return serveExecutedPdf(request, reply, envelope, doc, async () => {
         await recordEvent(
           envelope.id,
           {
@@ -1749,9 +1281,10 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           match: true,
           reference: doc.envelope.reference,
           documentTitle: doc.title,
-          agencyLegalName: legalNameOf(doc.envelope),
+          agencyLegalName: agencyLabel(doc.envelope),
           completedAt: doc.envelope.completedAt,
           sealed: doc.envelope.sealed,
+          issuer: publicIssuer(doc.envelope),
         },
       });
     }

@@ -155,7 +155,10 @@ export function renderEmail({
   const header =
     b.branded && b.logoUrl
       ? `<img src="${escapeHtml(b.logoUrl)}" alt="${escapeHtml(b.productName)}" height="40" style="display:block;height:40px;width:auto;border:0;">`
-      : '<span style="color:#000000;">net</span><span style="color:#10b981;">Enroll</span>';
+      : b.branded
+        ? // A branded sender with no logo is named in text -- never drawn as NetEnroll.
+          `<span style="color:#171614;">${escapeHtml(b.productName)}</span>`
+        : '<span style="color:#000000;">net</span><span style="color:#10b981;">Enroll</span>';
 
   return `<!doctype html>
 <html lang="en">
