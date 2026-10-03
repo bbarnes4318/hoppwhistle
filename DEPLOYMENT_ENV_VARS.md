@@ -32,6 +32,12 @@
   mod_curl callers, which cannot send headers, so FreeSWITCH logs it — it is its
   own secret, used for nothing else, and cheap to rotate.
 - `FRACTEL_DEFAULT_CALLER_ID` - Default fallback FracTEL caller ID DID (e.g. `12816991120`)
+- `SCREEN_POP_SHARED_TENANT_IDS` - Optional. Comma-separated tenant IDs whose
+  imported leads (Insurance Leads → Import) pop on EVERY agency's incoming-call
+  screen when the answering agency has no record of its own for the caller.
+  Meant for the platform's own list of people it calls on the agencies' behalf.
+  Other agencies see contact basics only (name, phone, email, address, company,
+  source, notes); intakes are never shared. Unset = no cross-agency screen pop.
 - `PUBLIC_IP` - **Required.** This host's public IP, as carriers see it. It is
   the address written into the Anveo DID call-forward
   (`AnveoDIDService.configureForFreeSWITCH()`), the Vapi BYO SIP trunk gateway,

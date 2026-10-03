@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
 import { RoleName } from '@prisma/client';
 import Fastify, { FastifyInstance } from 'fastify';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
@@ -352,6 +352,70 @@ describe.skipIf(!gate.available)('prospect intake agent scope', () => {
         headers: as(b, b.agentId),
       });
       expect(res.statusCode).toBe(404);
+    });
+
+    describe('from the platform shared list (SCREEN_POP_SHARED_TENANT_IDS)', () => {
+      beforeEach(() => {
+        process.env.SCREEN_POP_SHARED_TENANT_IDS = ` ${a.tenantId} ,`;
+      });
+      afterEach(() => {
+        delete process.env.SCREEN_POP_SHARED_TENANT_IDS;
+      });
+
+      const lookup = (agency: Agency, phone: string) =>
+        app.inject({
+          method: 'GET',
+          url: `/api/v1/prospects/by-phone/${phone}`,
+          headers: as(agency, agency.agentId),
+        });
+
+      it('pops for every agency, with contact basics only', async () => {
+        const phone = randomPhone();
+        await prisma.insuranceLead.create({
+          data: {
+            tenantId: a.tenantId,
+            vertical: 'FE',
+            phone,
+            firstName: 'Shared',
+            lastName: 'Caller',
+            city: 'Memphis',
+            state: 'TN',
+            source: 'platform-list',
+            birthDate: '01/02/1950',
+            carrier: 'Acme Life',
+            monthlyPremium: '42.00',
+          },
+        });
+        const res = await lookup(b, phone);
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.body);
+        expect(body.recordType).toBe('shared_lead');
+        expect(body.prospect).toMatchObject({
+          firstName: 'Shared',
+          lastName: 'Caller',
+          city: 'Memphis',
+          state: 'TN',
+          leadSource: 'platform-list',
+        });
+        expect(body.prospect).not.toHaveProperty('dob');
+        expect(body.prospect).not.toHaveProperty('carrier');
+        expect(body.prospect).not.toHaveProperty('monthlyPremium');
+      });
+
+      it("prefers the answering agency's own lead", async () => {
+        const phone = await importedLead(a, 'PlatformCopy');
+        await importedLead(b, 'AgencyOwn', phone);
+        const res = await lookup(b, phone);
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.body).recordType).toBe('insurance_lead');
+        expect(JSON.parse(res.body).prospect.firstName).toBe('AgencyOwn');
+      });
+
+      it('never shares an intake, only imported leads', async () => {
+        const intake = await intakeBy(a, a.agentId, 'PrivateIntake');
+        const res = await lookup(b, intake.phone);
+        expect(res.statusCode).toBe(404);
+      });
     });
   });
 

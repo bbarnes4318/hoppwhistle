@@ -106,6 +106,18 @@ function getTenantId(request: FastifyRequest): string | null {
   return getActingTenantId(request);
 }
 
+/**
+ * Tenants whose imported leads pop for EVERY agency's incoming calls: the
+ * platform's own list of people it calls on the agencies' behalf. Read per
+ * request so a config change needs no code path of its own. Comma-separated.
+ */
+function screenPopSharedTenantIds(): string[] {
+  return (process.env.SCREEN_POP_SHARED_TENANT_IDS || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean);
+}
+
 function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
 }
@@ -139,7 +151,9 @@ function maskBankingField(val?: string): string | null {
  * `GET /api/v1/prospects/by-phone/:phoneNumber` is the incoming-call screen
  * pop. Whichever agent answers a call must see who is calling, whoever took the
  * intake, so that route stays agency-wide by design. When no intake exists it
- * falls back to the agency's imported insurance leads, also agency-wide.
+ * falls back to the agency's imported insurance leads, also agency-wide, and
+ * then to the platform's shared list (SCREEN_POP_SHARED_TENANT_IDS), which
+ * crosses agencies by design and so returns contact basics only.
  */
 function intakeOwnerScope(request: FastifyRequest): string | null {
   if (isAgencyPrincipal(request)) return null;
@@ -618,6 +632,52 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
                 updatedAt: lead.updatedAt,
               },
             });
+          }
+
+          // Last: the platform's shared screen-pop list -- leads NetEnroll
+          // uploads into a tenant named in SCREEN_POP_SHARED_TENANT_IDS, for
+          // the calls it provides to every agency. Another agency's agent sees
+          // contact basics only, never demographics or policy details.
+          const sharedTenantIds = screenPopSharedTenantIds().filter(id => id !== tenantId);
+          if (sharedTenantIds.length > 0) {
+            const shared = await prisma.insuranceLead.findFirst({
+              where: { tenantId: { in: sharedTenantIds }, phone: normalizedPhone },
+              orderBy: { updatedAt: 'desc' },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                email: true,
+                address: true,
+                city: true,
+                state: true,
+                zipCode: true,
+                company: true,
+                source: true,
+                notes: true,
+              },
+            });
+            if (shared) {
+              return reply.code(200).send({
+                found: true,
+                recordType: 'shared_lead',
+                prospect: {
+                  id: shared.id,
+                  firstName: shared.firstName,
+                  lastName: shared.lastName,
+                  phone: shared.phone,
+                  email: shared.email,
+                  street: shared.address,
+                  city: shared.city,
+                  state: shared.state,
+                  zip: shared.zipCode,
+                  company: shared.company,
+                  leadSource: shared.source,
+                  notes: shared.notes,
+                },
+              });
+            }
           }
 
           return reply.code(404).send({
