@@ -38,6 +38,7 @@ import {
 import { formatPhone } from '@/components/domain/phone-cell';
 import { PageHeader } from '@/components/layout/page-header';
 import { usePhone } from '@/components/phone';
+import { CallRoutingPanel } from '@/components/phone/call-routing-panel';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -214,6 +215,8 @@ function TodayScreen(): JSX.Element {
       />
 
       {error ? <Notice tone="error" title={error} /> : null}
+
+      <CallRoutingPanel />
 
       <HeroFigures data={shown} busy={busy} />
 

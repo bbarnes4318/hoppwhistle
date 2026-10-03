@@ -13,6 +13,11 @@ import { defineConfig } from 'vitest/config';
  */
 const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
+  // Truncates tenants, campaigns, calls and applications to seed a campaign
+  // billed per application. Left off this list it ran beside settlement.test.ts
+  // and the two deleted each other's fixtures: P2025 on a call it had just
+  // created, and `users_tenantId_fkey` / `calls_tenantId_fkey` in settlement.
+  '**/src/__tests__/campaign-application-billing.test.ts',
   // Truncates tenants, carriers and calls to seed two agencies' carrier routing.
   '**/src/__tests__/vonage-carrier.test.ts',
   '**/src/__tests__/tenant-isolation.test.ts',
@@ -63,6 +68,9 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `roles`, `users`, `insurance_leads` and `lead_lists`
   // to seed two agencies with two agents each.
   '**/src/__tests__/crm-agent-scope.test.ts',
+  // Truncates `tenants`, `roles`, `calls`, `insurance_leads` and
+  // `prospect_intakes` to seed two agencies with an owner and two agents each.
+  '**/src/__tests__/prospect-intake-agent-scope.test.ts',
   // Seeds two agencies, their owners and three agents each, and truncates
   // `tenants`, `roles` and the insurance tables to do it.
   '**/src/__tests__/agent-licensed-states.test.ts',

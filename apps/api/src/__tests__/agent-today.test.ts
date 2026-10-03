@@ -308,8 +308,15 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.recentCalls).toHaveLength(3);
     expect(body.recentCalls.filter((c: any) => c.application)).toHaveLength(1);
 
+    // Life Leads Plus is white-label: its agents have no Leaderboard, so no
+    // standing on it.
+    expect(body.standing).toBeNull();
+  });
+
+  it('still ranks an agent of an agency that is not white-label', async () => {
+    const body = (await get(otherAgencyAgent, tenantB)).json().data;
+    expect(body.standing).not.toBeNull();
     expect(body.standing.rank).toBe(1);
-    expect(body.standing.next).toBeNull();
   });
 
   it('lists the follow-ups due, oldest first, and only the agent’s own', async () => {
@@ -377,7 +384,7 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.summary.followUpsDue).toBe(0);
     expect(body.attention).toEqual([]);
     expect(body.recentCalls).toEqual([]);
-    expect(body.standing.rank).toBeNull();
+    expect(body.standing).toBeNull();
   });
 
   it('reads YESTERDAY and LAST_7_DAYS, and refuses anything else', async () => {
