@@ -105,3 +105,10 @@ deep.md
 # Redis snapshot written into the working directory by a local redis-server,
 # which is how the TEST_REDIS_URL-gated suites are run. Never source.
 dump.rdb
+
+# Private keys and signing bundles -- never commit. The STIR/SHAKEN key lives
+# only on the server at /etc/freeswitch/stir-shaken/private.key.
+*.key
+*.p12
+*.pfx
+seal.crt
