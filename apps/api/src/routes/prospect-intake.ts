@@ -138,7 +138,8 @@ function maskBankingField(val?: string): string | null {
  *
  * `GET /api/v1/prospects/by-phone/:phoneNumber` is the incoming-call screen
  * pop. Whichever agent answers a call must see who is calling, whoever took the
- * intake, so that route stays agency-wide by design.
+ * intake, so that route stays agency-wide by design. When no intake exists it
+ * falls back to the agency's imported insurance leads, also agency-wide.
  */
 function intakeOwnerScope(request: FastifyRequest): string | null {
   if (isAgencyPrincipal(request)) return null;
@@ -584,6 +585,41 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         });
 
         if (!prospect) {
+          // No intake yet: fall back to the agency's imported CRM leads, so a
+          // customer uploaded through Leads → Import still pops on the call.
+          // Agency-wide for the same reason as the intake lookup above.
+          const lead = await prisma.insuranceLead.findFirst({
+            where: { tenantId, phone: normalizedPhone },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (lead) {
+            return reply.code(200).send({
+              found: true,
+              recordType: 'insurance_lead',
+              prospect: {
+                id: lead.id,
+                firstName: lead.firstName,
+                lastName: lead.lastName,
+                phone: lead.phone,
+                email: lead.email,
+                dob: lead.birthDate,
+                gender: lead.gender,
+                street: lead.address,
+                city: lead.city,
+                state: lead.state,
+                zip: lead.zipCode,
+                company: lead.company,
+                carrier: lead.carrier,
+                coverageAmount: lead.coverageAmount,
+                monthlyPremium: lead.monthlyPremium,
+                leadSource: lead.source,
+                notes: lead.notes,
+                createdAt: lead.createdAt,
+                updatedAt: lead.updatedAt,
+              },
+            });
+          }
+
           return reply.code(404).send({
             found: false,
             message: 'No prospect data found for this phone number',
