@@ -9,8 +9,10 @@
 import { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { isAgencyPrincipal } from '../lib/agent-scope.js';
 import { enforceLicensedState } from '../lib/licensed-states.js';
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { getActingTenantId, getActingUserId } from '../lib/tenant-context.js';
+import type { IngestOwnership } from '../services/insurance-lead-service.js';
 
 const prisma = new PrismaClient();
 
@@ -91,7 +93,6 @@ interface ManualCrmSyncResult {
   message: string;
 }
 
-
 /**
  * The acting tenant, from `lib/tenant-context.ts`.
  *
@@ -116,6 +117,66 @@ function maskBankingField(val?: string): string | null {
   return `****${cleaned.slice(-4)}`;
 }
 
+/**
+ * The agent an intake is narrowed to, or `null` for a caller who sees the
+ * agency's intakes.
+ *
+ * ── Who is narrowed ──────────────────────────────────────────────────────────
+ *
+ * A person who is not the agency's principal: an agent sees and changes the
+ * intakes they took, the same rule `lib/agent-scope.ts` applies to the CRM.
+ * This route used to be tenant-scoped and nothing more, so any agent could list
+ * a colleague's prospects, archive them, or overwrite them by re-submitting the
+ * same phone number.
+ *
+ * An API key is NOT narrowed here, unlike the CRM. This endpoint is also a
+ * partner ingestion surface (see `no-acting-tenant-audit.test.ts`), a key acts
+ * for the agency rather than as one of its agents, and narrowing it to
+ * `NO_OWNER` would have refused every update an existing integration sends.
+ *
+ * ── What is deliberately NOT narrowed ────────────────────────────────────────
+ *
+ * `GET /api/v1/prospects/by-phone/:phoneNumber` is the incoming-call screen
+ * pop. Whichever agent answers a call must see who is calling, whoever took the
+ * intake, so that route stays agency-wide by design.
+ */
+function intakeOwnerScope(request: FastifyRequest): string | null {
+  if (isAgencyPrincipal(request)) return null;
+  return getActingUserId(request);
+}
+
+/**
+ * Whether this agent has been on a call with `phone`: answered it inbound or
+ * placed it outbound. The same "last call this agent had with the prospect"
+ * rule the CRM's application entry uses.
+ *
+ * It is what lets the agent who answered a screen-popped call save the intake
+ * form for that caller, even though a colleague took the original intake --
+ * the screen pop shows them the prospect, and refusing the save would break
+ * the call they are on.
+ */
+async function agentHadCallWith(tenantId: string, userId: string, phone: string): Promise<boolean> {
+  const call = await prisma.call.findFirst({
+    where: {
+      tenantId,
+      answeredByUserId: userId,
+      OR: [
+        { direction: 'INBOUND', callerId: { endsWith: phone } },
+        { direction: 'OUTBOUND', toNumber: { endsWith: phone } },
+      ],
+    },
+    select: { id: true },
+  });
+  return !!call;
+}
+
+const PROSPECT_HELD_ELSEWHERE = {
+  error: {
+    code: 'PROSPECT_HELD_ELSEWHERE',
+    message: 'This prospect is already in the agency and is not assigned to you.',
+  },
+};
+
 function shouldCreateInsuranceCrmLead(body: ProspectIntakePayload): boolean {
   return body.source === 'manual_crm_entry' || typeof body.sendToBuyer === 'boolean';
 }
@@ -124,40 +185,46 @@ async function syncManualLeadToInsuranceCrm(
   tenantId: string,
   normalizedPhone: string,
   body: ProspectIntakePayload,
-  clientIp: string
+  clientIp: string,
+  ownership: IngestOwnership
 ): Promise<ManualCrmSyncResult> {
   const vertical: InsuranceVertical = body.vertical === 'ACA' ? 'ACA' : 'FE';
   const sendToBuyer = body.sendToBuyer === true;
   const { ingestLead } = await import('../services/insurance-lead-service.js');
 
-  const result = await ingestLead(tenantId, vertical, {
-    firstName: body.firstName,
-    lastName: body.lastName,
-    phone: normalizedPhone,
-    email: body.email,
-    birthDate: body.dob,
-    age: body.age,
-    gender: body.gender,
-    address: body.street,
-    city: body.city,
-    state: body.state,
-    zipCode: body.zip,
-    smoker: body.smoker,
-    heightFeet: body.heightFeet,
-    heightInches: body.heightInches,
-    weight: body.weight,
-    carrier: body.carrier,
-    coverageAmount: body.coverageAmount,
-    monthlyPremium: body.monthlyPremium,
-    trustedFormUrl: body.trustedFormCertUrl,
-    leadidToken: body.leadidToken,
-    consentLanguage: body.consentLanguage,
-    recordingUrl: body.recordingUrl,
-    landingPage: body.landingPage || 'https://agents.netenroll.com/intake',
-    ipAddress: clientIp,
-    source: body.source || 'manual_crm_entry',
-    notes: body.notes,
-  });
+  const result = await ingestLead(
+    tenantId,
+    vertical,
+    {
+      firstName: body.firstName,
+      lastName: body.lastName,
+      phone: normalizedPhone,
+      email: body.email,
+      birthDate: body.dob,
+      age: body.age,
+      gender: body.gender,
+      address: body.street,
+      city: body.city,
+      state: body.state,
+      zipCode: body.zip,
+      smoker: body.smoker,
+      heightFeet: body.heightFeet,
+      heightInches: body.heightInches,
+      weight: body.weight,
+      carrier: body.carrier,
+      coverageAmount: body.coverageAmount,
+      monthlyPremium: body.monthlyPremium,
+      trustedFormUrl: body.trustedFormCertUrl,
+      leadidToken: body.leadidToken,
+      consentLanguage: body.consentLanguage,
+      recordingUrl: body.recordingUrl,
+      landingPage: body.landingPage || 'https://agents.netenroll.com/intake',
+      ipAddress: clientIp,
+      source: body.source || 'manual_crm_entry',
+      notes: body.notes,
+    },
+    ownership
+  );
 
   await prisma.insuranceActivity.updateMany({
     where: {
@@ -203,9 +270,7 @@ async function syncManualLeadToInsuranceCrm(
     };
   }
 
-  const { deliverInsuranceLeadSubmission } = await import(
-    '../services/insurance-lead-delivery.js'
-  );
+  const { deliverInsuranceLeadSubmission } = await import('../services/insurance-lead-delivery.js');
   const delivery = await deliverInsuranceLeadSubmission(
     tenantId,
     result.insuranceLeadId,
@@ -294,6 +359,57 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         return;
       }
 
+      /*
+       * One intake per phone per agency, so a submit for a number that already
+       * has one is an UPDATE of that row. For an agent the row must be theirs,
+       * or one whose caller they have been on the phone with -- otherwise
+       * re-submitting a colleague's prospect's number overwrote it. Refused
+       * before anything is written, the intake or the CRM lead.
+       */
+      const ownerScope = intakeOwnerScope(request);
+      const existingIntake = await prisma.prospectIntake.findUnique({
+        where: { tenantId_phone: { tenantId, phone: normalizedPhone } },
+        select: { agentId: true },
+      });
+      if (
+        ownerScope &&
+        existingIntake &&
+        existingIntake.agentId !== ownerScope &&
+        !(await agentHadCallWith(tenantId, ownerScope, normalizedPhone))
+      ) {
+        return reply.code(409).send(PROSPECT_HELD_ELSEWHERE);
+      }
+
+      /*
+       * The CRM lead a manual entry writes follows the CRM's own ownership
+       * rule: an agent's new lead is assigned to them, and an existing lead
+       * held by someone else is refused (`ingestLead` throws
+       * LeadHeldElsewhereError before writing). It is checked here too so the
+       * refusal lands before the intake row above is touched.
+       */
+      const crmOwnership: IngestOwnership = ownerScope
+        ? { assignToId: ownerScope, agentScoped: true }
+        : {};
+      if (ownerScope && shouldCreateInsuranceCrmLead(body)) {
+        const heldLead = await prisma.insuranceLead.findFirst({
+          where: {
+            tenantId,
+            phone: normalizedPhone,
+            vertical: body.vertical === 'ACA' ? 'ACA' : 'FE',
+          },
+          select: { assignedToId: true },
+        });
+        if (heldLead && heldLead.assignedToId !== ownerScope) {
+          return reply.code(409).send(PROSPECT_HELD_ELSEWHERE);
+        }
+      }
+
+      // Who took the intake. Kept on update -- except that a row from before
+      // the column was written goes to the agent now working it.
+      const takenBy = getActingUserId(request);
+      const claimOnUpdate =
+        existingIntake && !existingIntake.agentId && ownerScope ? { agentId: ownerScope } : {};
+
       try {
         const forwardedFor = request.headers['x-forwarded-for'];
         const clientIp =
@@ -337,11 +453,13 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             ipAddress: clientIp,
             source: body.source || 'intake_form',
             notes: body.notes,
+            ...claimOnUpdate,
             updatedAt: new Date(),
           },
           create: {
             tenantId,
             phone: normalizedPhone,
+            agentId: takenBy,
             firstName: body.firstName,
             lastName: body.lastName,
             email: body.email,
@@ -384,7 +502,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             tenantId,
             normalizedPhone,
             body,
-            clientIp
+            clientIp,
+            crmOwnership
           );
 
           return reply.code(200).send({
@@ -400,6 +519,12 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           message: 'Prospect intake saved successfully',
         });
       } catch (error) {
+        const { LeadHeldElsewhereError } = await import('../services/insurance-lead-service.js');
+        if (error instanceof LeadHeldElsewhereError) {
+          // The CRM lead was assigned to someone else between the check above
+          // and the write.
+          return reply.code(409).send(PROSPECT_HELD_ELSEWHERE);
+        }
         fastify.log.error({ event: 'prospect_intake_error', error });
         return reply.code(500).send({
           error: {
@@ -501,9 +626,12 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       });
     }
 
+    const ownerScope = intakeOwnerScope(request);
+
     try {
       const prospects = await prisma.prospectIntake.findMany({
-        where: { tenantId, status: 'ACTIVE' },
+        // An agent lists the intakes they took; see intakeOwnerScope.
+        where: { tenantId, status: 'ACTIVE', ...(ownerScope ? { agentId: ownerScope } : {}) },
         orderBy: { createdAt: 'desc' },
         take: 50,
         select: {
@@ -547,8 +675,15 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        // An agent archives only the intakes they took. A colleague's reads as
+        // not found, the same answer as another agency's.
+        const ownerScope = intakeOwnerScope(request);
         const existing = await prisma.prospectIntake.findFirst({
-          where: { id: request.params.id, tenantId },
+          where: {
+            id: request.params.id,
+            tenantId,
+            ...(ownerScope ? { agentId: ownerScope } : {}),
+          },
         });
 
         if (!existing) {
