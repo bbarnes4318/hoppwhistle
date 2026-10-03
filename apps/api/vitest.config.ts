@@ -13,6 +13,11 @@ import { defineConfig } from 'vitest/config';
  */
 const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
+  // Truncates tenants, campaigns, calls and applications to seed a campaign
+  // billed per application. Left off this list it ran beside settlement.test.ts
+  // and the two deleted each other's fixtures: P2025 on a call it had just
+  // created, and `users_tenantId_fkey` / `calls_tenantId_fkey` in settlement.
+  '**/src/__tests__/campaign-application-billing.test.ts',
   // Truncates tenants, carriers and calls to seed two agencies' carrier routing.
   '**/src/__tests__/vonage-carrier.test.ts',
   '**/src/__tests__/tenant-isolation.test.ts',
@@ -174,10 +179,6 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `phone_numbers`, `number_charges` and `statements`:
   // the API's 1st-of-the-month run of billMonth and closeMonth.
   '**/src/__tests__/monthly-close.test.ts',
-  // Truncates `tenants`, `calls`, `campaigns`, `buyers`, `publishers` and the
-  // user tables. Left off this list it ran on the threads pool beside
-  // settlement.test.ts and deleted its tenants mid-test (`calls_tenantId_fkey`).
-  '**/src/__tests__/campaign-application-billing.test.ts',
 ];
 
 export default defineConfig({

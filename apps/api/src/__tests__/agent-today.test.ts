@@ -308,8 +308,8 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.recentCalls).toHaveLength(3);
     expect(body.recentCalls.filter((c: any) => c.application)).toHaveLength(1);
 
-    // Life Leads Plus is a white-label agency, and its agents have no
-    // Leaderboard: no rank on Today either (`isWhiteLabelAgent`).
+    // Life Leads Plus is white-label: its agents have no Leaderboard, so no
+    // standing on it.
     expect(body.standing).toBeNull();
   });
 
@@ -384,6 +384,7 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.summary.followUpsDue).toBe(0);
     expect(body.attention).toEqual([]);
     expect(body.recentCalls).toEqual([]);
+    expect(body.standing).toBeNull();
   });
 
   it('reads YESTERDAY and LAST_7_DAYS, and refuses anything else', async () => {
