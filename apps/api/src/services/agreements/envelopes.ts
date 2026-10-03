@@ -557,7 +557,15 @@ export async function createEnvelope(
 type LifecycleHook = (
   prisma: PrismaClient,
   envelopeId: string,
-  event: 'SENT' | 'VIEWED' | 'SIGNED' | 'COMPLETED' | 'VOIDED' | 'EXPIRED' | 'CHANGES_REQUESTED'
+  event:
+    | 'SENT'
+    | 'VIEWED'
+    | 'DETAILS_ENTERED'
+    | 'SIGNED'
+    | 'COMPLETED'
+    | 'VOIDED'
+    | 'EXPIRED'
+    | 'CHANGES_REQUESTED'
 ) => Promise<void>;
 let lifecycleHook: LifecycleHook | null = null;
 

@@ -915,6 +915,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           evidence(request),
           prisma
         );
+        await notifyLifecycle(prisma, envelope.id, 'DETAILS_ENTERED');
         return reply.send({ data: { saved: true, kind: party.kind } });
       } catch (error) {
         const handled = sendAgreementError(reply, error);

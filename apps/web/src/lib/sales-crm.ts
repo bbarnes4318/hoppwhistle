@@ -101,6 +101,7 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   STAGE_CHANGE: 'Stage change',
   AGREEMENT_SENT: 'Agreement sent',
   AGREEMENT_VIEWED: 'Agreement viewed',
+  AGREEMENT_DETAILS_ENTERED: 'Agency details entered',
   AGREEMENT_SIGNED: 'Agreement signed',
   AGREEMENT_COMPLETED: 'Agreement completed',
   AGREEMENT_VOIDED: 'Agreement voided',
