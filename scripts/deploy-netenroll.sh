@@ -131,6 +131,7 @@ REQUIRED_MIGRATIONS="
 20261008000000_agreements_party_details
 20261009000000_sales_workspaces
 20261010000000_sales_activity_details_entered
+20261011000000_test_org_netenroll_brand
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -547,6 +548,12 @@ migration_applied() {
       echo "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sales_workspace_access_same_tenant')
             AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agreement_envelopes_immutable'
               AND prosrc LIKE '%salesWorkspaceId%')" ;;
+    *_test_org_netenroll_brand)
+      # Data only: Test Organization carries no white-label theme, name or
+      # domain. True on a database with no such tenant, which is correct.
+      echo "SELECT NOT EXISTS (SELECT 1 FROM \"tenants\" WHERE \"slug\" = 'test-org'
+              AND (\"brandTheme\" IS NOT NULL OR \"brandName\" IS NOT NULL
+                   OR \"domain\" IS NOT NULL))" ;;
     *_agreements_party_details)
       # Wrapped BEGIN..COMMIT; the last column added stands for the rest, and
       # the replaced trigger functions are checked by what they now refuse.

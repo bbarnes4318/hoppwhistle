@@ -16,6 +16,20 @@ export interface TenantBrand {
 }
 
 /**
+ * Tenants that are always drawn as NetEnroll, whatever their row says.
+ *
+ * Test Organization (`test-org`) is NetEnroll's own tenant. It must never be
+ * re-skinned as a white-label agency -- not by a theme stored on its row, not
+ * by a white-label parent, not by a portal domain. Matched by slug, which is
+ * unique and set when the tenant is created.
+ */
+export const NETENROLL_ONLY_TENANT_SLUGS: readonly string[] = ['test-org'];
+
+export function isNetEnrollOnlyTenant(slug: string | null | undefined): boolean {
+  return !!slug && NETENROLL_ONLY_TENANT_SLUGS.includes(slug);
+}
+
+/**
  * The brand of ONE tenant, named by the caller.
  *
  * ── Which tenant is the caller's decision, and it must come from the principal
@@ -45,12 +59,13 @@ export async function brandForTenant(
   const tenant = await getPrismaClient().tenant.findUnique({
     where: { id: tenantId },
     select: {
+      slug: true,
       brandTheme: true,
       brandName: true,
       parent: { select: { brandTheme: true, brandName: true } },
     },
   });
-  if (!tenant) return null;
+  if (!tenant || isNetEnrollOnlyTenant(tenant.slug)) return null;
 
   const theme = tenant.brandTheme ?? tenant.parent?.brandTheme ?? null;
   const name = tenant.brandName ?? tenant.parent?.brandName ?? null;
@@ -149,8 +164,9 @@ export async function configuredPortalDomain(
   try {
     const tenant = await getPrismaClient().tenant.findUnique({
       where: { id: tenantId },
-      select: { domain: true, parent: { select: { domain: true } } },
+      select: { slug: true, domain: true, parent: { select: { domain: true } } },
     });
+    if (isNetEnrollOnlyTenant(tenant?.slug)) return null;
     return portalHost(tenant?.domain) ?? portalHost(tenant?.parent?.domain) ?? null;
   } catch (error) {
     logger.warn({

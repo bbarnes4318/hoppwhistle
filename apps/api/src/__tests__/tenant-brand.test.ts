@@ -350,6 +350,58 @@ describe.skipIf(!gate.available)('Tenant brand theme', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Test Organization is always NetEnroll
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('Test Organization', () => {
+    async function testOrg() {
+      const t = await prisma.tenant.create({
+        data: {
+          name: 'Test Organization',
+          slug: 'test-org',
+          status: 'ACTIVE',
+          brandTheme: 'life-leads-plus',
+          brandName: 'Life Leads Plus',
+          parentTenantId: agencyA.id,
+        },
+      });
+      const owner = await prisma.user.create({
+        data: { tenantId: t.id, email: `test-org-owner-${t.id}@agency.local`, status: 'ACTIVE' },
+      });
+      return { id: t.id, ownerId: owner.id };
+    }
+
+    it('gets no brand, whatever its row or its parent says', async () => {
+      const org = await testOrg();
+      const response = await me(org.ownerId, org.id);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().brand).toBeNull();
+      expect(response.json().portalDomain).toBeNull();
+
+      await enter(org.id);
+      expect((await me(operatorId, null)).json().brand).toBeNull();
+    });
+
+    it('refuses a brand theme, name or domain 400, and allows clearing', async () => {
+      const org = await testOrg();
+      for (const payload of [
+        { brandTheme: 'life-leads-plus' },
+        { brandName: 'Life Leads Plus' },
+        { domain: 'agents.lifeleadsplus.com' },
+      ]) {
+        const response = await setBrand(operatorId, null, org.id, payload);
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe('NETENROLL_ONLY_TENANT');
+      }
+      const cleared = await setBrand(operatorId, null, org.id, {
+        brandTheme: null,
+        brandName: null,
+      });
+      expect(cleared.statusCode).toBe(200);
+      expect(cleared.json().data.brandTheme).toBeNull();
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
   // PATCH /api/v1/admin/tenants/:id/branding
   // ══════════════════════════════════════════════════════════════════════════
   describe('setting the brand', () => {
