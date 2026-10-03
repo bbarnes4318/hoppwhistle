@@ -5,7 +5,7 @@
  * does not: their own day, a console whose figures are the server's, no
  * webhooks, no column that repeats their own name. This pins those.
  */
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requested: string[] = [];
@@ -210,14 +210,25 @@ function agentToday(
 let user: typeof AGENT | typeof OWNER | typeof PREVIEW | typeof STAFF_HOLDING_AGENT = AGENT;
 let me: unknown = selfView();
 let today: unknown = agentToday();
+let callDestination = { ringOn: 'softphone', cellForwardNumber: null as string | null };
+const destinationWrites: unknown[] = [];
 
 function installFetch(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL) => {
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input);
       requested.push(`${url.pathname}${url.search}`);
       switch (url.pathname) {
+        case '/api/v1/agent/call-destination':
+          if (init?.method === 'PUT') {
+            const body = JSON.parse(String(init.body)) as { cellForwardNumber: string | null };
+            destinationWrites.push(body);
+            callDestination = body.cellForwardNumber
+              ? { ringOn: 'cell', cellForwardNumber: '+18655551234' }
+              : { ringOn: 'softphone', cellForwardNumber: null };
+          }
+          return json(callDestination);
         case '/api/auth/me':
           return json({ data: user });
         case '/api/v1/delivery/me':
@@ -302,6 +313,8 @@ beforeEach(() => {
   user = AGENT;
   me = selfView();
   today = agentToday();
+  callDestination = { ringOn: 'softphone', cellForwardNumber: null };
+  destinationWrites.length = 0;
   pathname = '/';
   search = new URLSearchParams();
   redirects = [];
@@ -530,6 +543,38 @@ describe("an agent's Today", () => {
     expect(screen.getByRole('button', { name: 'Yesterday' }).getAttribute('aria-pressed')).toBe(
       'true'
     );
+  });
+});
+
+describe("an agent's Today: where your calls ring", () => {
+  it('shows the choice and sends calls to the cell the agent enters', async () => {
+    await mountDashboard('/dashboard');
+    await waitFor(() => expect(screen.getByText('Where your calls ring')).toBeTruthy());
+    expect(screen.getByText('Your calls are ringing the softphone in this browser.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: /My cell phone/ }));
+    fireEvent.change(screen.getByLabelText('Your cell phone number (US)'), {
+      target: { value: '(865) 555-1234' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Your calls are ringing your cell phone, (865) 555-1234.')
+      ).toBeTruthy()
+    );
+    expect(destinationWrites).toEqual([{ cellForwardNumber: '(865) 555-1234' }]);
+  });
+
+  it('puts calls back on the softphone', async () => {
+    callDestination = { ringOn: 'cell', cellForwardNumber: '+18655551234' };
+    await mountDashboard('/dashboard');
+    await waitFor(() => expect(screen.getByText('Where your calls ring')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('radio', { name: /Softphone/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(destinationWrites).toEqual([{ cellForwardNumber: null }]));
   });
 });
 

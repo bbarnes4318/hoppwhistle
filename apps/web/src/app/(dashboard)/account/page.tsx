@@ -5,6 +5,7 @@ import { FileText, Shield } from 'lucide-react';
 import { ChangePasswordPanel } from '@/components/account/change-password-panel';
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
+import { CallRoutingPanel } from '@/components/phone/call-routing-panel';
 import { useAuth } from '@/hooks/use-auth';
 
 /**
@@ -53,6 +54,8 @@ export default function AccountPage(): JSX.Element {
           </dl>
         </PanelBody>
       </Panel>
+
+      <CallRoutingPanel />
 
       <ChangePasswordPanel />
 
