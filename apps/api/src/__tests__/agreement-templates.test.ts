@@ -17,7 +17,7 @@ import { termsSchema } from '../services/agreements/terms.js';
 
 /**
  * The agreements' legal text is verbatim: every sentence approved for the MSA
- * (MSA-2026-10-03), the CPA Agreement and the CPL Agreement (both -2026-09-25)
+ * (MSA-2026-10-03.2), the CPA Agreement and the CPL Agreement (both -2026-09-25)
  * must appear, word for word, in the rendered document once its HTML is
  * stripped. The expected text below is an independent copy of the approved
  * text, not read from the templates, so a reworded template fails here.
@@ -124,7 +124,7 @@ const MSA_TEXT = [
   '2. DEFINITIONS',
   '2.1 "Application" means an insurance application prepared by Agency for a consumer introduced through a Delivered Call.',
   '2.2 "Submitted Application" means an Application recorded in the Portal as having reached "Submitted" status.',
-  '2.3 "Delivered Call" means an inbound call routed by NetEnroll and answered by Agency.',
+  '2.3 "Delivered Call" means an inbound call or a Live Transfer routed by NetEnroll and answered by Agency.',
   '2.4 "Billable Call" means a Delivered Call whose connected duration equals or exceeds the Buffer Duration.',
   '2.5 "Buffer Duration" means the minimum connected call time, in seconds, required for a call to be billable, as set out in the CPL Agreement.',
   '2.6 "Daily Block" means the maximum quantity of Submitted Applications or Billable Calls delivered to Agency on a Delivery Day, as set out in the applicable Campaign Agreement.',
@@ -134,8 +134,9 @@ const MSA_TEXT = [
   '2.10 "Account Statement" means the statement made available in the Portal showing units delivered, amounts drawn down and the remaining Prepaid Balance.',
   '2.11 "Portal" means the NetEnroll technology platform at agents.netenroll.com.',
   '2.12 "Campaign Agreement" means the CPA Agreement or the CPL Agreement, each as executed by the parties.',
+  '2.13 "Live Transfer" means a call in which a consumer already on the line with NetEnroll or its call generation partner is connected directly to Agency.',
   '3. SERVICES AND DELIVERY OBLIGATIONS',
-  "3.1 Provision of Services. NetEnroll will route inbound calls to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking.",
+  "3.1 Provision of Services. NetEnroll will route inbound calls and Live Transfers to Agency's agents through the Portal and provide administrative access for call monitoring, disposition logging and prepaid balance tracking.",
   '3.2 Delivery Obligation. NetEnroll will continue delivering calls until Agency receives the volume of Submitted Applications or Billable Calls paid for. NetEnroll bears the cost and risk of the call generation required to meet prepaid targets.',
   '3.3 Delivery Window. NetEnroll will deliver sufficient volume to fulfill paid targets within thirty (30) Business Days. If delivery remains unfulfilled after that period, delivery continues at no additional charge, no new invoice is issued until the outstanding Prepaid Balance is fulfilled, and Agency may terminate the affected Campaign Agreement on written notice.',
   '3.4 No Volume Guarantee. Call availability fluctuates with consumer demand and market conditions. Low call delivery on any given day does not constitute a breach of this MSA or any Campaign Agreement.',
@@ -149,7 +150,7 @@ const MSA_TEXT = [
   '6. LICENSING, APPOINTMENTS AND LEGAL COMPLIANCE',
   "6.1 Producer Licensing. Agency warrants that every agent answering calls holds an active state insurance producer license and the required carrier appointments in the consumer's state of residence.",
   '6.2 Conduct and Disclosures. Agency is solely responsible for sales presentations, suitability, replacement disclosures and compliance with state insurance regulations.',
-  '6.3 Outbound Contact Restrictions. An inbound call routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.',
+  '6.3 Outbound Contact Restrictions. An inbound call or Live Transfer routed by NetEnroll does not grant consent for outbound telemarketing. Agency is solely responsible for compliance with the Telephone Consumer Protection Act, federal and state Do-Not-Call rules and state telemarketing laws on any outbound follow-up contact.',
   '7. CALL RECORDING AND MONITORING',
   '7.1 Recording Consent. All calls delivered through the Portal are recorded. Agency consents to recording and warrants that its agents inform callers where required by applicable one-party or all-party consent laws.',
   "7.2 Proprietary Records. Recordings are NetEnroll's property and will be made available to Agency on reasonable request for compliance or carrier audit purposes.",
@@ -178,7 +179,7 @@ const MSA_TEXT = [
   '(b) outbound follow-up contact by Agency;',
   '(c) state licensing or insurance compliance failures; or',
   "(d) breach of Agency's consumer data obligations.",
-  "13.2 By NetEnroll. NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or inbound routing violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation.",
+  "13.2 By NetEnroll. NetEnroll shall indemnify Agency against third-party claims alleging that NetEnroll's call generation or its routing of inbound calls and Live Transfers violated the TCPA or telemarketing rules, provided the claim does not arise from Agency's post-transfer conduct or sales presentation.",
   '14. LIMITATION OF LIABILITY',
   '14.1 Consequential Damages Waiver. Neither party is liable for indirect, incidental, special or consequential damages, or for lost profits or commissions.',
   "14.2 Aggregate Cap. To the maximum extent permitted by law, NetEnroll's total aggregate liability arising out of or relating to this MSA, any Campaign Agreement or the services, whether in contract, tort (including negligence), under any indemnity (including Section 13.2) or on any other basis, is limited to the total fees paid by Agency in the one (1) month preceding the event giving rise to liability. This limit does not apply to, and does not reduce, Agency's payment obligations or Agency's obligations under Section 13.1.",
@@ -338,7 +339,7 @@ describe('agreement templates: the legal text is verbatim', () => {
 
   it('carries the template versions', () => {
     expect([msa.templateVersion, cpa.templateVersion, cpl.templateVersion]).toEqual([
-      'MSA-2026-10-03',
+      'MSA-2026-10-03.2',
       'CPA-2026-09-25',
       'CPL-2026-09-25',
     ]);
