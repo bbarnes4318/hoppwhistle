@@ -85,7 +85,7 @@ export function RingOnControl({ className }: { className?: string }): JSX.Elemen
           type="button"
           className={cn(
             'inline-flex items-center gap-1.5 text-xs font-medium',
-            onCell ? 'text-live-ink' : 'text-ink-2',
+            onCell ? 'text-phone-ink' : 'text-ink-2',
             className
           )}
           title="Choose where your calls ring"

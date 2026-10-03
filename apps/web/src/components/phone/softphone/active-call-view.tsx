@@ -152,7 +152,7 @@ export function ActiveCallView({
           </>
         ) : (
           <>
-            <p className="t-label text-live-ink">Connected</p>
+            <p className="t-label text-phone-ink">Connected</p>
             <p
               className="mt-1 text-[44px] font-semibold leading-none tracking-tight tabular-nums text-ink"
               role="timer"

@@ -75,7 +75,7 @@ export function SoftphoneLauncher({
         : state === 'hold'
           ? 'bg-ringing-tint text-ringing-ink border-rule-strong'
           : state === 'connected'
-            ? 'bg-live-tint text-live-ink border-rule-strong'
+            ? 'bg-phone-tint text-phone-ink border-rule-strong'
             : 'bg-surface text-ink border-rule-strong';
 
   const handleClick = failed && onReconnect ? onReconnect : onOpen;

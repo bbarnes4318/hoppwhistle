@@ -393,6 +393,21 @@
 
     --entity-buyer: var(--brand);
 
+    /*
+     * The softphone in the brand's blue rather than NetEnroll's green: the
+     * launcher, its "Ready" and "On a call" dots, the Answer button, the
+     * availability switch. These are the phone's own tokens (tailwind
+     * `phone-*`, falling back to --live), not the signals: tables, the live
+     * board and every chart still show a connected call in the live green.
+     * Ringing and dropped stay amber and red in the phone too.
+     *   llp phone white on fill     5.97:1   (Answer, a solid dot's ground)
+     *   llp phone ink   on tint     5.97:1   (On a call, the launcher pill)
+     */
+    --phone: #0b5cd6;
+    --phone-deep: #0a47a8;
+    --phone-ink: #0a56c2;
+    --phone-tint: #eaf2fe;
+
     --radius-card: 8px;
     --radius-control: 6px;
 
@@ -433,6 +448,17 @@
     --brand-strong: #2563c9;
     --brand-strong-hover: #1d4fa3;
     --brand-fg: #121110; /* paper (dark) */
+    /*
+     * The softphone on a dark ground. A solid fill carries the dark paper
+     * (ON_SIGNAL), so the fill is the lifted blue, not the button blue.
+     *   llp dark phone paper on fill   6.58:1
+     *   llp dark phone paper on deep   4.62:1
+     *   llp dark phone ink   on tint   5.35:1
+     */
+    --phone: #3d9bff;
+    --phone-deep: #2b7fd9;
+    --phone-ink: #7ab8ff;
+    --phone-tint: #303d4b;
     --primary: 211 100% 62%; /* brand */
     --ring: 213 100% 74%; /* brand-ink */
   }

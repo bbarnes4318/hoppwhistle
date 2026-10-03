@@ -11,7 +11,7 @@ import { initialsFor, type SoftphoneTone } from './format';
  */
 
 export const TONE_DOT: Record<SoftphoneTone, string> = {
-  live: 'bg-live',
+  live: 'bg-phone',
   ringing: 'bg-ringing',
   dropped: 'bg-dropped',
   neutral: 'bg-ink-3',
@@ -19,14 +19,14 @@ export const TONE_DOT: Record<SoftphoneTone, string> = {
 
 /** The header ground and its accent bar: the state, readable from across a room. */
 export const TONE_HEADER: Record<SoftphoneTone, string> = {
-  live: 'bg-live-tint shadow-[inset_0_3px_0_0_var(--live)]',
+  live: 'bg-phone-tint shadow-[inset_0_3px_0_0_var(--phone,var(--live))]',
   ringing: 'bg-ringing-tint shadow-[inset_0_3px_0_0_var(--ringing)]',
   dropped: 'bg-dropped-tint shadow-[inset_0_3px_0_0_var(--dropped)]',
   neutral: 'bg-sunken shadow-[inset_0_3px_0_0_var(--rule-strong)]',
 };
 
 export const TONE_TEXT: Record<SoftphoneTone, string> = {
-  live: 'text-live-ink',
+  live: 'text-phone-ink',
   ringing: 'text-ringing-ink',
   dropped: 'text-dropped-ink',
   neutral: 'text-ink-2',
@@ -81,7 +81,7 @@ export function CallerAvatar({
 }): JSX.Element {
   const initials = initialsFor(name);
   const ground: Record<SoftphoneTone, string> = {
-    live: 'bg-live-tint text-live-ink',
+    live: 'bg-phone-tint text-phone-ink',
     ringing: 'bg-ringing-tint text-ringing-ink',
     dropped: 'bg-dropped-tint text-dropped-ink',
     neutral: 'bg-sunken text-ink-2',

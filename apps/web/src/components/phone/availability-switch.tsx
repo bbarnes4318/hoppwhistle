@@ -181,7 +181,7 @@ export function AvailabilityToggle({
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
           // The hit area grows to 44px on touch screens; the track stays small.
           'before:absolute before:-inset-3 before:content-[""] [@media(pointer:fine)]:before:hidden',
-          available ? 'bg-live' : 'bg-rule-strong',
+          available ? 'bg-phone' : 'bg-rule-strong',
           saving && 'opacity-60'
         )}
       >
@@ -197,7 +197,7 @@ export function AvailabilityToggle({
       <span
         className={cn(
           'text-xs font-medium leading-none',
-          available ? 'text-live-ink' : 'text-ink-2'
+          available ? 'text-phone-ink' : 'text-ink-2'
         )}
       >
         {saving ? (
