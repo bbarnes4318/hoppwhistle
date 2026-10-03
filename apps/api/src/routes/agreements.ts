@@ -1235,6 +1235,7 @@ export async function registerAgreementRoutes(fastify: FastifyInstance): Promise
           partyRequired,
           party: envelope.partyDetails ?? null,
           partyPrefill: partyRequired ? await partyPrefill(envelope, prisma) : null,
+          inviteeOrganization: envelope.inviteeOrganization,
           titles: titlesOf(envelope),
           individual,
           documents: partyRequired

@@ -19,7 +19,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   DAYS,
   DAY_SHORT,
@@ -36,7 +35,8 @@ import { cn } from '@/lib/utils';
 /**
  * A new set of agreements: the MSA (unless the agency already has one) and the
  * CPA and/or CPL Agreement, signed for NetEnroll at send and emailed to the
- * agency's signer.
+ * agency, which enters its own details (as a business or as an individual
+ * licensed agent) before reviewing and signing.
  *
  * "Sign and send" stays disabled until the documents have been previewed for
  * exactly the form as it stands -- change anything and the preview is needed
@@ -264,18 +264,12 @@ export default function NewAgreementPage(): JSX.Element {
   const [agencyOptions, setAgencyOptions] = useState<AgencyOption[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<AgencyOption | null>(null);
 
-  const [agency, setAgency] = useState({
-    legalName: '',
-    stateEntityType: '',
-    noticeAddress: '',
-    principalName: '',
-    principalTitle: '',
-    noticeEmail: '',
-    noticePhone: '',
-    billingEmail: '',
-    billingPhone: '',
-  });
-  const [billingSame, setBillingSame] = useState(true);
+  /*
+   * Who the link goes to. The agency enters its own details when it signs --
+   * as a business or as an individual licensed agent -- so nothing about its
+   * legal name, entity, address, principal or signer is typed here.
+   */
+  const [recipient, setRecipient] = useState({ name: '', email: '', organization: '' });
   const [effectiveDate, setEffectiveDate] = useState(etTodayIso());
 
   const [cpaRows, setCpaRows] = useState<Record<Vertical, CpaRow>>({
@@ -291,8 +285,6 @@ export default function NewAgreementPage(): JSX.Element {
   });
   const [cplSchedule, setCplSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
 
-  const [signer, setSigner] = useState({ name: '', title: '', email: '' });
-  const [signerTouched, setSignerTouched] = useState(false);
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [signatory, setSignatory] = useState({ name: '', title: '' });
   const [authority, setAuthority] = useState(false);
@@ -331,30 +323,17 @@ export default function NewAgreementPage(): JSX.Element {
     return () => clearTimeout(handle);
   }, [agencyQuery]);
 
-  // The signer defaults to the principal at the notice email, until edited.
-  useEffect(() => {
-    if (signerTouched) return;
-    setSigner({
-      name: agency.principalName,
-      title: agency.principalTitle,
-      email: agency.noticeEmail,
-    });
-  }, [agency.principalName, agency.principalTitle, agency.noticeEmail, signerTouched]);
-
   function chooseAgency(option: AgencyOption | null): void {
     setSelectedAgency(option);
     if (!option) {
       setMsaMode('new');
       return;
     }
-    setAgency(a => ({
-      ...a,
-      legalName: option.legalName,
-      stateEntityType: a.stateEntityType || `${option.state} / `,
-      principalName: option.contactName,
-      noticeEmail: option.contactEmail,
-      noticePhone: option.contactPhone,
-    }));
+    setRecipient({
+      name: option.contactName,
+      email: option.contactEmail,
+      organization: option.legalName,
+    });
     const schedule: Schedule = {
       deliveryDays:
         option.deliveryDays.length > 0 ? option.deliveryDays : DEFAULT_SCHEDULE.deliveryDays,
@@ -374,11 +353,6 @@ export default function NewAgreementPage(): JSX.Element {
       deliveryEnd: s.deliveryEnd,
       firstDeliveryDay: s.firstDeliveryDay || null,
     });
-    const agencyOut = {
-      ...agency,
-      billingEmail: billingSame ? agency.noticeEmail : agency.billingEmail,
-      billingPhone: billingSame ? agency.noticePhone : agency.billingPhone,
-    };
     const existing =
       msaMode === 'existing' && selectedAgency?.executedMsa ? selectedAgency.executedMsa : null;
     return {
@@ -387,7 +361,6 @@ export default function NewAgreementPage(): JSX.Element {
       includesCpl,
       existingMsaEnvelopeId: existing?.id ?? null,
       terms: {
-        agency: agencyOut,
         effectiveDate,
         msaEffectiveDate: existing?.effectiveDate ?? effectiveDate,
         cpa: includesCpa
@@ -422,13 +395,15 @@ export default function NewAgreementPage(): JSX.Element {
             }
           : undefined,
       },
-      signer,
+      recipient: {
+        name: recipient.name,
+        email: recipient.email,
+        organization: recipient.organization || null,
+      },
       ccEmails,
       netenrollSignatory: signatory,
     };
   }, [
-    agency,
-    billingSame,
     ccEmails,
     cpaRows,
     cpaSchedule,
@@ -439,8 +414,8 @@ export default function NewAgreementPage(): JSX.Element {
     includesCpl,
     msaMode,
     selectedAgency,
+    recipient,
     signatory,
-    signer,
   ]);
   const bodyKey = useMemo(() => JSON.stringify(requestBody), [requestBody]);
   const previewCurrent = previewedFor === bodyKey;
@@ -482,26 +457,11 @@ export default function NewAgreementPage(): JSX.Element {
     }
   }
 
-  const agencyField = (
-    key: keyof typeof agency,
-    label: string,
-    props: Record<string, unknown> = {}
-  ) => (
-    <Field id={`agency-${key}`} label={label}>
-      <Input
-        id={`agency-${key}`}
-        value={agency[key]}
-        onChange={e => setAgency({ ...agency, [key]: e.target.value })}
-        {...props}
-      />
-    </Field>
-  );
-
   return (
     <div className="page-canvas">
       <PageHeader
         title="New agreement"
-        description="Generate the agreements, sign them for NetEnroll and email the agency's signer a secure link."
+        description="Set the terms, sign for NetEnroll, and email the agency a secure link to enter its details and sign."
         actions={
           <Button variant="outline" asChild>
             <Link href="/admin/agreements">
@@ -578,7 +538,7 @@ export default function NewAgreementPage(): JSX.Element {
 
         <Panel>
           <PanelHeader>
-            <PanelTitle>2. Agency</PanelTitle>
+            <PanelTitle>2. Recipient</PanelTitle>
           </PanelHeader>
           <PanelBody className="space-y-3">
             <Field id="agency-search" label="Existing agency (optional)">
@@ -616,40 +576,37 @@ export default function NewAgreementPage(): JSX.Element {
                 </div>
               )}
             </Field>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {agencyField('legalName', 'Legal name')}
-              {agencyField('stateEntityType', 'State / entity type', {
-                placeholder: 'Colorado / Limited Liability Company',
-              })}
-              <div className="md:col-span-2">
-                <Field id="agency-noticeAddress" label="Notice address">
-                  <Textarea
-                    id="agency-noticeAddress"
-                    rows={2}
-                    value={agency.noticeAddress}
-                    onChange={e => setAgency({ ...agency, noticeAddress: e.target.value })}
-                  />
-                </Field>
-              </div>
-              {agencyField('principalName', 'Principal name')}
-              {agencyField('principalTitle', 'Principal title')}
-              {agencyField('noticeEmail', 'Notice email', { type: 'email' })}
-              {agencyField('noticePhone', 'Notice phone')}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field id="recipient-name" label="Send to (name)">
+                <Input
+                  id="recipient-name"
+                  value={recipient.name}
+                  onChange={e => setRecipient({ ...recipient, name: e.target.value })}
+                />
+              </Field>
+              <Field id="recipient-email" label="Send to (email)">
+                <Input
+                  id="recipient-email"
+                  type="email"
+                  value={recipient.email}
+                  onChange={e => setRecipient({ ...recipient, email: e.target.value })}
+                />
+              </Field>
+              <Field id="recipient-organization" label="Agency name (optional, for your records)">
+                <Input
+                  id="recipient-organization"
+                  value={recipient.organization}
+                  onChange={e => setRecipient({ ...recipient, organization: e.target.value })}
+                />
+              </Field>
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={billingSame}
-                onChange={e => setBillingSame(e.target.checked)}
-              />
-              Billing email and phone same as notice
-            </label>
-            {!billingSame && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {agencyField('billingEmail', 'Billing email', { type: 'email' })}
-                {agencyField('billingPhone', 'Billing phone')}
-              </div>
-            )}
+            <p className="text-[11px] text-ink-3">
+              The agency fills in its own details when it signs: as a business (legal name, state,
+              entity type, address, principal, contact details and who signs) or as an individual
+              licensed agent (their own name, address and contact details). The documents you send
+              show those fields as &ldquo;To be completed by Agency&rdquo;. The signing link and its
+              one-time code go only to this email address.
+            </p>
             <div className="max-w-xs">
               <Field id="effective-date" label="Effective date">
                 <Input
@@ -801,28 +758,9 @@ export default function NewAgreementPage(): JSX.Element {
 
         <Panel>
           <PanelHeader>
-            <PanelTitle>Signer &amp; copies</PanelTitle>
+            <PanelTitle>Copies</PanelTitle>
           </PanelHeader>
           <PanelBody className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              {(['name', 'title', 'email'] as const).map(key => (
-                <Field key={key} id={`signer-${key}`} label={`Signer ${key}`}>
-                  <Input
-                    id={`signer-${key}`}
-                    type={key === 'email' ? 'email' : 'text'}
-                    value={signer[key]}
-                    onChange={e => {
-                      setSignerTouched(true);
-                      setSigner({ ...signer, [key]: e.target.value });
-                    }}
-                  />
-                </Field>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-3">
-              The agreements are issued to this named person: they must type this exact name to
-              sign.
-            </p>
             <Field id="cc" label="Copy recipients (receive the executed copies; up to 10)">
               <EmailChips id="cc" values={ccEmails} onChange={setCcEmails} max={10} />
             </Field>
@@ -949,7 +887,7 @@ export default function NewAgreementPage(): JSX.Element {
             <DialogTitle>The email was not sent</DialogTitle>
             <DialogDescription>
               The agreements are signed for NetEnroll and recorded, but the invitation email could
-              not be sent. Send the signer this link yourself. It works only for {signer.email}.
+              not be sent. Send the signer this link yourself. It works only for {recipient.email}.
             </DialogDescription>
           </DialogHeader>
           <code className="block break-all rounded-control bg-sunken p-2 text-xs">
