@@ -11,6 +11,7 @@ import {
   normalizeLicensedStates,
   partitionLicensedStates,
 } from '../lib/licensed-states.js';
+import { leaveActingTenant } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { brandForTenant, configuredPortalDomain } from '../lib/tenant-brand.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
@@ -88,6 +89,25 @@ interface UserRole {
  */
 const INVITABLE_ROLES = ['AGENT', 'ADMIN', 'ANALYST', 'BUYER', 'PUBLISHER'] as const;
 type InvitableRole = (typeof INVITABLE_ROLES)[number];
+
+/**
+ * A platform operator's "entered agency" is a database row
+ * (`PlatformActingTenant`), not part of the session, so it used to survive
+ * signing out and back in: an operator who had entered Life Leads Plus signed
+ * in at agents.netenroll.com straight into that agency, in its white-label
+ * brand. Every sign-in and sign-out now starts them in the cross-agency view.
+ * A no-op for everyone else; the leave is audited like any other.
+ */
+async function startOutsideEveryAgency(
+  userId: string,
+  request: { ip: string; headers: { 'user-agent'?: string }; id: string }
+): Promise<void> {
+  await leaveActingTenant(userId, {
+    ipAddress: request.ip,
+    userAgent: request.headers['user-agent'],
+    requestId: request.id,
+  }).catch(() => {});
+}
 
 /**
  * Auth routes: Login, Register, Google OAuth, CSRF, Logout
@@ -272,6 +292,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     // Generate CSRF token
     const csrfToken = generateCsrfToken(sessionId);
+
+    await startOutsideEveryAgency(user.id, request);
 
     // Audit successful login
     await auditLog({
@@ -1100,6 +1122,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Generate CSRF token
     const csrfToken = generateCsrfToken(sessionId);
 
+    await startOutsideEveryAgency(user.id, request);
+
     // Audit successful Google login
     await auditLog({
       tenantId: user.tenantId,
@@ -1686,6 +1710,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         await deleteSession(sessionId);
         void reply.clearCookie('sessionId');
       }
+
+      await startOutsideEveryAgency((request.user as { userId: string }).userId, request);
 
       await auditLog({
         tenantId: (request.user as { tenantId?: string })?.tenantId ?? null,

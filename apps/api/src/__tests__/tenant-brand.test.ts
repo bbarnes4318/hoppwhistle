@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any -- assertions run over parsed JSON responses, which are dynamically typed */
 import { RoleName } from '@prisma/client';
+import { hash } from 'bcryptjs';
 import Fastify, { FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -35,6 +36,8 @@ const gate = databaseGate();
 announceSkip('Tenant brand theme', gate);
 
 const TEST_JWT_SECRET = 'tenant-brand-suite-secret-not-used-anywhere-else';
+// Sign-in signs a CSRF token with it.
+process.env.JWT_SECRET ??= TEST_JWT_SECRET;
 process.env.JWT_SECRET ??= TEST_JWT_SECRET;
 
 describe('Tenant brand suite wiring', () => {
@@ -236,6 +239,57 @@ describe.skipIf(!gate.available)('Tenant brand theme', () => {
       });
       expect(left.statusCode).toBe(200);
       expect((await me(operatorId, null)).json().brand).toBeNull();
+    });
+
+    /*
+     * The entered agency is a database row, not part of the session, so it
+     * used to outlive the session: an operator who had entered Life Leads Plus
+     * signed back in at agents.netenroll.com and was dropped straight into it,
+     * in its white-label brand.
+     */
+    it('drops the entered agency, and its brand, when the operator signs out', async () => {
+      await enter(agencyA.id);
+      expect((await me(operatorId, null)).json().brand?.theme).toBe('life-leads-plus');
+
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: tokenFor(operatorId, null),
+      });
+      expect(out.statusCode).toBe(200);
+
+      expect((await me(operatorId, null)).json().brand).toBeNull();
+      expect(
+        await prisma.platformActingTenant.findUnique({ where: { userId: operatorId } })
+      ).toBeNull();
+    });
+
+    it('starts the operator outside every agency when they sign in', async () => {
+      const email = (await prisma.user.findUniqueOrThrow({ where: { id: operatorId } })).email;
+      await prisma.user.update({
+        where: { id: operatorId },
+        data: { passwordHash: await hash('correct horse battery', 4) },
+      });
+      // Entered in an earlier session that was never signed out of.
+      await enter(agencyA.id);
+
+      const signIn = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email, password: 'correct horse battery' },
+      });
+      expect(signIn.statusCode).toBe(200);
+
+      expect((await me(operatorId, null)).json().brand).toBeNull();
+    });
+
+    it("leaves an agency user's own brand alone across sign-out", async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: tokenFor(agencyA.agentId, agencyA.id),
+      });
+      expect((await me(agencyA.agentId, agencyA.id)).json().brand?.theme).toBe('life-leads-plus');
     });
 
     it('gives a platform admin with no acting tenant no brand', async () => {
