@@ -982,7 +982,6 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const roles = (process.env.SMOKE_ROLES ?? 'ADMIN').split(',').filter(Boolean);
 const platform = process.env.SMOKE_PLATFORM !== '0';
-const actingTenant = process.env.SMOKE_ACTING_TENANT === '1';
 
 // POWER_DIALER on for a normal agency: its roles below load /call-center,
 // which is that upgrade's screen and answers 403 UPGRADE_REQUIRED without it.
@@ -1053,11 +1052,10 @@ if (platform) {
 }
 
 // Staff inside no agency is the landing state under test; staff inside an
-// agency is the sweep's other reading of the same pages.
+// agency is the sweep's other reading of the same pages. Signing in leaves any
+// entered agency (routes/auth.ts), so "inside one agency" is not written here:
+// the sweep enters it after signing in, through the API, as an operator does.
 await prisma.platformActingTenant.deleteMany({ where: { userId: user.id } });
-if (platform && actingTenant) {
-  await prisma.platformActingTenant.create({ data: { userId: user.id, tenantId: tenant.id } });
-}
 
 /*
  * A publisher or buyer user is attached to a publisher or buyer record; the
@@ -1205,13 +1203,34 @@ async function seed(services, roles, options = {}) {
         SMOKE_PASSWORD: OPERATOR.password,
         SMOKE_ROLES: roles.join(','),
         SMOKE_PLATFORM: options.platform === false ? '0' : '1',
-        SMOKE_ACTING_TENANT: options.actingTenant ? '1' : '0',
         SMOKE_WHITE_LABEL: options.whiteLabel ? '1' : '0',
         SMOKE_CHILD_ID: SMOKE_CHILD_ID,
       },
     });
     child.on('exit', code => (code === 0 ? ok() : fail(new Error(`seed exited ${code}`))));
   });
+}
+
+/**
+ * Enter the smoke agency as a signed-in operator does, from the agency
+ * switcher. It cannot be seeded ahead of time: signing in starts every
+ * operator outside every agency.
+ */
+async function enterSmokeAgency(session) {
+  const headers = {
+    authorization: `Bearer ${session.token}`,
+    'content-type': 'application/json',
+  };
+  const list = await fetch(`${FRONT}/api/v1/platform/tenants`, { headers });
+  const agency = (await list.json())?.data?.find(t => t.slug === 'platform-smoke');
+  if (!agency) throw new Error(`the smoke agency is not listed: ${list.status}`);
+  const res = await fetch(`${FRONT}/api/v1/platform/acting-tenant`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tenantId: agency.id }),
+  });
+  if (!res.ok)
+    throw new Error(`could not enter the smoke agency: ${res.status} ${await res.text()}`);
 }
 
 async function signIn() {
@@ -2937,10 +2956,10 @@ async function main() {
     if (ONLY && !entry.who.includes(ONLY)) continue;
     await seed(services, entry.roles, {
       platform: entry.platform,
-      actingTenant: entry.actingTenant,
       whiteLabel: entry.whiteLabel,
     });
     const session = await signIn();
+    if (entry.actingTenant) await enterSmokeAgency(session);
     for (const path of entry.routes) {
       await sweepRoute(browser, session, entry, path);
       sweptRoutes++;
