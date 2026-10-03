@@ -16,6 +16,7 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAgentView } from '@/hooks/use-agent-view';
 import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 import { CARRIERS, US_STATES } from '@/lib/us-states';
@@ -176,7 +177,10 @@ export function ManualLeadEntryFormV2(): JSX.Element {
   const [error, setError] = useState('');
   const [result, setResult] = useState<SubmissionResult | null>(null);
 
-  const sendToBuyer = form.deliveryChoice === 'SEND_NOW';
+  // Sending to a buyer is the agency owner's or an administrator's action; the
+  // API refuses it for an agent, so an agent is not offered it.
+  const agentView = useAgentView();
+  const sendToBuyer = !agentView && form.deliveryChoice === 'SEND_NOW';
   const calculatedAge = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
 
   const buyerRequirementsMissing = useMemo(() => {
@@ -373,10 +377,10 @@ export function ManualLeadEntryFormV2(): JSX.Element {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className={`grid gap-4 ${agentView ? '' : 'md:grid-cols-2'}`}>
           <label
             className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-              form.deliveryChoice === 'CRM_ONLY'
+              !sendToBuyer
                 ? 'border-brand bg-brand-tint'
                 : 'border-rule bg-sunken hover:border-rule-strong'
             }`}
@@ -386,7 +390,7 @@ export function ManualLeadEntryFormV2(): JSX.Element {
                 type="radio"
                 name="deliveryChoice"
                 value="CRM_ONLY"
-                checked={form.deliveryChoice === 'CRM_ONLY'}
+                checked={!sendToBuyer}
                 onChange={() => update('deliveryChoice', 'CRM_ONLY')}
                 className="mt-1"
               />
@@ -402,33 +406,35 @@ export function ManualLeadEntryFormV2(): JSX.Element {
             </div>
           </label>
 
-          <label
-            className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-              form.deliveryChoice === 'SEND_NOW'
-                ? 'border-ringing bg-ringing-tint'
-                : 'border-rule bg-sunken hover:border-rule-strong'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <input
-                type="radio"
-                name="deliveryChoice"
-                value="SEND_NOW"
-                checked={form.deliveryChoice === 'SEND_NOW'}
-                onChange={() => update('deliveryChoice', 'SEND_NOW')}
-                className="mt-1"
-              />
-              <div>
-                <div className="flex items-center gap-2 font-semibold text-ink">
-                  <Send className="h-4 w-4 text-ringing-ink" />
-                  Save &amp; Send to Buyer
+          {!agentView && (
+            <label
+              className={`cursor-pointer rounded-lg border p-4 transition-colors ${
+                form.deliveryChoice === 'SEND_NOW'
+                  ? 'border-ringing bg-ringing-tint'
+                  : 'border-rule bg-sunken hover:border-rule-strong'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="deliveryChoice"
+                  value="SEND_NOW"
+                  checked={form.deliveryChoice === 'SEND_NOW'}
+                  onChange={() => update('deliveryChoice', 'SEND_NOW')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="flex items-center gap-2 font-semibold text-ink">
+                    <Send className="h-4 w-4 text-ringing-ink" />
+                    Save &amp; Send to Buyer
+                  </div>
+                  <p className="mt-1 text-sm text-ink-2">
+                    Save the lead and immediately submit the complete buyer payload.
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-ink-2">
-                  Save the lead and immediately submit the complete buyer payload.
-                </p>
               </div>
-            </div>
-          </label>
+            </label>
+          )}
         </div>
 
         {sendToBuyer && (

@@ -110,3 +110,16 @@ export function mayReachOwnedRow(request: FastifyRequest, ownerId: string | null
   const userId = principalOf(request)?.userId;
   return !!userId && !!ownerId && ownerId === userId;
 }
+
+/**
+ * Whether this request is an agent: a signed-in person who is not the agency's
+ * principal.
+ *
+ * Narrower than `!isAgencyPrincipal`, which is also true of an API key. The
+ * ingestion endpoints -- the inbound lead webhook, prospect intake -- serve
+ * partner systems on a key, and a key acts for the agency, so the agent-only
+ * refusals on those endpoints use this instead.
+ */
+export function isAgentPerson(request: FastifyRequest): boolean {
+  return !isAgencyPrincipal(request) && !!principalOf(request)?.userId;
+}

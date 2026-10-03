@@ -372,4 +372,33 @@ describe.skipIf(!gate.available)('prospect intake agent scope', () => {
       expect(lead?.firstName).toBe('Held');
     });
   });
+  describe('sending to a buyer is the owner’s action', () => {
+    it('refuses an agent "Save & Send to Buyer", and writes nothing', async () => {
+      const phone = randomPhone();
+      const res = await submit(a, a.agentId, {
+        phone,
+        firstName: 'NotSent',
+        source: 'manual_crm_entry',
+        sendToBuyer: true,
+      });
+      expect(res.statusCode).toBe(403);
+      expect(
+        await prisma.prospectIntake.findFirst({ where: { tenantId: a.tenantId, phone } })
+      ).toBeNull();
+      expect(
+        await prisma.insuranceLead.findFirst({ where: { tenantId: a.tenantId, phone } })
+      ).toBeNull();
+    });
+
+    it('still lets an agent save to the CRM only', async () => {
+      const res = await submit(a, a.agentId, {
+        phone: randomPhone(),
+        firstName: 'CrmOnly',
+        source: 'manual_crm_entry',
+        sendToBuyer: false,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).sentToBuyer).toBe(false);
+    });
+  });
 });
