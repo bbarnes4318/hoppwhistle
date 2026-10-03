@@ -37,6 +37,7 @@ import {
   TrendingUp,
   Trophy,
   Sparkles,
+  Target,
   UserCog,
   Users,
   UsersRound,
@@ -99,6 +100,17 @@ export const PLATFORM_NAV: NavGroup[] = [
         href: '/insurance-leads/reports',
         icon: PieChart,
         title: 'Which leads Ameriquote accepted, which it refused, and why',
+      },
+    ],
+  },
+  {
+    label: 'Sales',
+    items: [
+      {
+        name: 'Sales CRM',
+        href: '/sales-crm',
+        icon: Target,
+        title: "NetEnroll's own B2B pipeline: agencies, agents and IMOs we are selling to",
       },
     ],
   },
@@ -762,6 +774,45 @@ export function agentNav(
 }
 
 /** Every item a person can actually open: not pending, not locked. */
+/**
+ * The B2B Sales CRM group: a white-label issuer's own pipeline and agreement
+ * suite. Distinct from `CRM` (`/insurance-leads`), the consumer CRM agents
+ * work every day. Shown ONLY when the server reports a sales workspace for
+ * this principal -- the owner, or somebody the owner granted -- never because
+ * of a role name the browser holds.
+ */
+export const SALES_GROUP: NavGroup = {
+  label: 'Sales',
+  items: [
+    {
+      name: 'Sales CRM',
+      href: '/sales-crm',
+      icon: Target,
+      title: 'Your B2B pipeline: agencies, licensed agents and IMOs you are selling to',
+    },
+    {
+      name: 'Agreements',
+      href: '/sales-crm/agreements',
+      icon: FileSignature,
+      title: 'Your MSA and campaign agreements, sent for e-signature',
+    },
+  ],
+};
+
+/** `groups` with the Sales group after the first (Workspace) group. */
+export function withSalesGroup(groups: NavGroup[]): NavGroup[] {
+  if (
+    groups.some(
+      group => group.label === SALES_GROUP.label && group.items.some(i => i.href === '/sales-crm')
+    )
+  ) {
+    return groups;
+  }
+  const at = groups.findIndex(group => group.label === 'Workspace');
+  const index = at >= 0 ? at + 1 : Math.min(1, groups.length);
+  return [...groups.slice(0, index), SALES_GROUP, ...groups.slice(index)];
+}
+
 export function allNavItems(groups: NavGroup[]): NavItem[] {
   return groups.flatMap(group => group.items).filter(item => !item.pending && !item.locked);
 }
@@ -792,6 +843,13 @@ export interface NavViewer {
   isChild?: boolean;
   /** An agent of a white-label agency (`useAuth().isWhiteLabelAgent`). See `agentNav`. */
   isWhiteLabelAgent?: boolean;
+  /**
+   * From `/api/auth/me`: the Sales CRM this principal may use, or null. The
+   * server's answer, from the resolver the /api/v1/sales routes enforce with --
+   * so an agent the owner granted sees the Sales group and every other agent
+   * does not.
+   */
+  salesWorkspace?: { scope: 'PLATFORM' | 'TENANT' } | null;
 }
 
 /**
@@ -810,6 +868,14 @@ export interface NavViewer {
  * Empty means the server answered and named no role this renders a nav for.
  */
 export function navFor(viewer: NavViewer): NavGroup[] {
+  // Staff's nav carries its own Sales group (PLATFORM_NAV). Everybody else gets
+  // one only when the server says they have a sales workspace.
+  if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
+  const base = baseNavFor(viewer);
+  return viewer.salesWorkspace && base.length > 0 ? withSalesGroup(base) : base;
+}
+
+function baseNavFor(viewer: NavViewer): NavGroup[] {
   if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
   if (viewer.hasFullAccess) {
     if (viewer.isWhiteLabel) return whiteLabelOwnerNav(viewer.upgrades);

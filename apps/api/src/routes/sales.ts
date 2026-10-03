@@ -616,6 +616,7 @@ export async function registerSalesRoutes(fastify: FastifyInstance): Promise<voi
             expiresAt: true,
             signerName: true,
             signerEmail: true,
+            terms: true,
           },
         }),
       ]);
@@ -637,7 +638,11 @@ export async function registerSalesRoutes(fastify: FastifyInstance): Promise<voi
             ...a,
             actor: a.actorUserId ? (actorById.get(a.actorUserId) ?? null) : null,
           })),
-          agreements: envelopes,
+          // The frozen terms stay on the server; only the date a screen shows leaves.
+          agreements: envelopes.map(({ terms, ...rest }) => ({
+            ...rest,
+            effectiveDate: (terms as { effectiveDate?: string } | null)?.effectiveDate ?? null,
+          })),
         },
       });
     }

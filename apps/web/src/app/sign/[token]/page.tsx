@@ -4,9 +4,14 @@ import { AlertCircle, Check, CheckCircle2, Download, FileText, Loader2, Mail } f
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  IssuerBrandScope,
+  IssuerLogo,
+  NETENROLL_ISSUER,
+  type PublicIssuer,
+} from '@/components/agreements/issuer-brand';
 import { PartyDetailsForm } from '@/components/agreements/party-details-form';
 import { SignatureScript } from '@/components/agreements/signature-script';
-import { Logo } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -44,6 +49,7 @@ interface Summary {
   documents: Array<{ title: string }>;
   signerEmailMasked: string;
   expiresAt: string;
+  issuer?: PublicIssuer;
 }
 
 interface DocumentsPayload {
@@ -65,6 +71,7 @@ interface DocumentsPayload {
   agencyLegalName: string;
   intentStatement: string | null;
   noticeEmail: string;
+  issuer?: PublicIssuer;
 }
 
 interface DownloadList {
@@ -83,7 +90,13 @@ async function call<T>(
 ): Promise<{
   status: number;
   data?: T;
-  error?: { code?: string; message?: string; status?: string; noticeEmail?: string };
+  error?: {
+    code?: string;
+    message?: string;
+    status?: string;
+    noticeEmail?: string;
+    issuer?: PublicIssuer;
+  };
 }> {
   const headers: Record<string, string> = {};
   if (init.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -138,6 +151,9 @@ export default function SignPage(): JSX.Element {
 
   const [step, setStep] = useState<Step>('loading');
   const [summary, setSummary] = useState<Summary | null>(null);
+  /** From the envelope, never the host. Null until the API has said. */
+  const [issuer, setIssuer] = useState<PublicIssuer | null>(null);
+  const who = issuer ?? NETENROLL_ISSUER;
   const [inactive, setInactive] = useState<{ message: string; noticeEmail?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,7 +188,11 @@ export default function SignPage(): JSX.Element {
 
   /** Answer a non-2xx the way every step must: inactive link, lost session or a message. */
   const handleFailure = useCallback(
-    (result: { status: number; error?: { message?: string; noticeEmail?: string } }): void => {
+    (result: {
+      status: number;
+      error?: { message?: string; noticeEmail?: string; issuer?: PublicIssuer };
+    }): void => {
+      if (result.error?.issuer) setIssuer(result.error.issuer);
       if (result.status === 410) {
         setInactive({
           message: result.error?.message ?? 'This link no longer works.',
@@ -216,6 +236,7 @@ export default function SignPage(): JSX.Element {
         setStep('done');
         return;
       }
+      if (result.data.issuer) setIssuer(result.data.issuer);
       setDocs(result.data);
       setConsented(result.data.consented);
       setConsentChecked(result.data.consented);
@@ -248,6 +269,7 @@ export default function SignPage(): JSX.Element {
         return;
       }
       setSummary(result.data);
+      setIssuer(result.data.issuer ?? NETENROLL_ISSUER);
       let saved: string | null = null;
       try {
         saved = sessionStorage.getItem(sessionKey);
@@ -514,8 +536,7 @@ export default function SignPage(): JSX.Element {
     }
     setChangesOpen(false);
     setInactive({
-      message:
-        'Your request has been sent to NetEnroll. This link no longer works; NetEnroll will send revised agreements.',
+      message: `Your request has been sent to ${who.shortName}. This link no longer works; ${who.shortName} will send revised agreements.`,
       noticeEmail: result.data.noticeEmail,
     });
     setStep('inactive');
@@ -536,524 +557,535 @@ export default function SignPage(): JSX.Element {
     intent;
 
   return (
-    <main className="min-h-screen bg-paper px-4 py-8 sm:px-6 sm:py-12">
-      <div className="mx-auto w-full max-w-[880px] space-y-5">
-        <header className="flex items-center justify-between">
-          <Logo width={180} />
-          <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">Secure signing</span>
-        </header>
+    <IssuerBrandScope issuer={issuer}>
+      <main className="min-h-screen bg-paper px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mx-auto w-full max-w-[880px] space-y-5">
+          <header className="flex items-center justify-between">
+            <IssuerLogo issuer={issuer} />
+            <span className="text-[11px] uppercase tracking-[0.12em] text-ink-3">
+              Secure signing
+            </span>
+          </header>
 
-        {step === 'loading' && (
-          <Card className="flex items-center justify-center py-12 text-ink-3">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading
-          </Card>
-        )}
+          {step === 'loading' && (
+            <Card className="flex items-center justify-center py-12 text-ink-3">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading
+            </Card>
+          )}
 
-        {step === 'invalid' && (
-          <Card>
-            <h1 className="t-title text-ink">This link is not valid</h1>
-            <p className="t-body mt-2 text-ink-2">
-              Check that you opened the full link from your email. If it still does not work,
-              contact NetEnroll at support@pvnvoice.com.
-            </p>
-          </Card>
-        )}
-
-        {step === 'inactive' && inactive && (
-          <Card>
-            <h1 className="t-title text-ink">This link no longer works</h1>
-            <p className="t-body mt-2 text-ink-2">{inactive.message}</p>
-            {inactive.noticeEmail && (
+          {step === 'invalid' && (
+            <Card>
+              <h1 className="t-title text-ink">This link is not valid</h1>
               <p className="t-body mt-2 text-ink-2">
-                Questions? Contact{' '}
-                <a className="text-brand-ink underline" href={`mailto:${inactive.noticeEmail}`}>
-                  {inactive.noticeEmail}
-                </a>
-                .
+                Check that you opened the full link from your email. If it still does not work,
+                contact the company that sent it to you.
               </p>
-            )}
-          </Card>
-        )}
+            </Card>
+          )}
 
-        {step === 'summary' && summary && (
-          <Card>
-            <h1 className="t-title text-ink">Agreements for {summary.agencyLegalName}</h1>
-            <p className="t-body mt-2 text-ink-2">
-              PVN LLC d/b/a NetEnroll has sent the following for your review and electronic
-              signature. NetEnroll&rsquo;s authorized signatory has already signed.
-            </p>
-            <ul className="mt-4 space-y-2">
-              {summary.documents.map(doc => (
-                <li key={doc.title} className="flex items-center gap-2 text-sm text-ink">
-                  <FileText className="h-4 w-4 text-brand-ink" />
-                  {doc.title}
-                </li>
-              ))}
-            </ul>
-            <p className="t-body mt-4 text-ink-2">
-              To protect these agreements we will email a one-time code to{' '}
-              <strong>{summary.signerEmailMasked}</strong>.
-            </p>
-            <p className="t-meta mt-1 text-ink-3">
-              This link expires on {etDate(summary.expiresAt)}.
-            </p>
-            {error && (
-              <div className="mt-4">
-                <Alert>{error}</Alert>
-              </div>
-            )}
-            <Button
-              className="mt-5 w-full sm:w-auto"
-              disabled={busy}
-              onClick={() => void sendCode()}
-            >
-              {busy ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Mail className="mr-1.5 h-4 w-4" />
+          {step === 'inactive' && inactive && (
+            <Card>
+              <h1 className="t-title text-ink">This link no longer works</h1>
+              <p className="t-body mt-2 text-ink-2">{inactive.message}</p>
+              {inactive.noticeEmail && (
+                <p className="t-body mt-2 text-ink-2">
+                  Questions? Contact{' '}
+                  <a className="text-brand-ink underline" href={`mailto:${inactive.noticeEmail}`}>
+                    {inactive.noticeEmail}
+                  </a>
+                  .
+                </p>
               )}
-              Send verification code
-            </Button>
-          </Card>
-        )}
+            </Card>
+          )}
 
-        {step === 'code' && (
-          <Card>
-            <h1 className="t-title text-ink">Enter your verification code</h1>
-            <p className="t-body mt-2 text-ink-2">
-              We emailed a 6-digit code to {summary?.signerEmailMasked ?? 'your email'}. It is valid
-              for 10 minutes.
-            </p>
-            <form
-              className="mt-5"
-              onSubmit={e => {
-                e.preventDefault();
-                void verifyCode();
-              }}
-            >
-              <div
-                className="flex gap-2"
-                onPaste={e => {
-                  const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                  if (digits.length === 6) {
-                    e.preventDefault();
-                    setCode(digits.split(''));
-                  }
-                }}
-              >
-                {code.map((digit, i) => (
-                  <Input
-                    key={i}
-                    id={`code-${i}`}
-                    aria-label={`Digit ${i + 1}`}
-                    inputMode="numeric"
-                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                    maxLength={1}
-                    value={digit}
-                    className="h-12 w-11 text-center font-mono text-lg"
-                    onChange={e => {
-                      const value = e.target.value.replace(/\D/g, '').slice(-1);
-                      const next = [...code];
-                      next[i] = value;
-                      setCode(next);
-                      if (value && i < 5) document.getElementById(`code-${i + 1}`)?.focus();
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Backspace' && !code[i] && i > 0)
-                        document.getElementById(`code-${i - 1}`)?.focus();
-                    }}
-                  />
+          {step === 'summary' && summary && (
+            <Card>
+              <h1 className="t-title text-ink">Agreements for {summary.agencyLegalName}</h1>
+              <p className="t-body mt-2 text-ink-2">
+                {who.legalName} has sent the following for your review and electronic signature.{' '}
+                {who.shortName}&rsquo;s authorized signatory has already signed.
+              </p>
+              <ul className="mt-4 space-y-2">
+                {summary.documents.map(doc => (
+                  <li key={doc.title} className="flex items-center gap-2 text-sm text-ink">
+                    <FileText className="h-4 w-4 text-brand-ink" />
+                    {doc.title}
+                  </li>
                 ))}
-              </div>
+              </ul>
+              <p className="t-body mt-4 text-ink-2">
+                To protect these agreements we will email a one-time code to{' '}
+                <strong>{summary.signerEmailMasked}</strong>.
+              </p>
+              <p className="t-meta mt-1 text-ink-3">
+                This link expires on {etDate(summary.expiresAt)}.
+              </p>
               {error && (
                 <div className="mt-4">
                   <Alert>{error}</Alert>
                 </div>
               )}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <Button type="submit" disabled={busy}>
-                  {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                  Verify
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={busy || resendIn > 0}
-                  onClick={() => void sendCode()}
-                >
-                  {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
-        {step === 'review' && docs && (
-          <>
-            <Card>
-              <h1 className="t-title text-ink">Consent to Electronic Records and Signatures</h1>
-              <div
-                className="prose-sm mt-3 max-h-72 space-y-2 overflow-y-auto rounded-control border border-rule bg-sunken p-4 text-sm text-ink-2 [&_h2]:hidden"
-                // The disclosure is the server's own constant, escaped there.
-                dangerouslySetInnerHTML={{ __html: docs.disclosure.html }}
-              />
-              <label className="mt-4 flex items-start gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={consentChecked}
-                  disabled={consented}
-                  onChange={e => setConsentChecked(e.target.checked)}
-                />
-                {docs.disclosure.checkboxLabel}
-              </label>
-              {!consented && (
-                <Button
-                  className="mt-3"
-                  disabled={!consentChecked || busy}
-                  onClick={() => void giveConsent()}
-                >
-                  Continue
-                </Button>
-              )}
-              {consented && (
-                <p className="mt-2 inline-flex items-center gap-1 text-xs text-live-ink">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Consent recorded
-                </p>
-              )}
+              <Button
+                className="mt-5 w-full sm:w-auto"
+                disabled={busy}
+                onClick={() => void sendCode()}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-1.5 h-4 w-4" />
+                )}
+                Send verification code
+              </Button>
             </Card>
+          )}
 
-            {consented && docs.partyRequired && (
-              <Card>
-                <PartyDetailsForm
-                  prefill={docs.partyPrefill}
-                  signerName={docs.signer.name}
-                  signerEmail={docs.signer.email}
-                  organization={docs.inviteeOrganization}
-                  busy={busy}
-                  onSubmit={party => void submitDetails(party)}
-                />
-                <button
-                  type="button"
-                  className="mt-4 text-xs text-ink-2 underline"
-                  onClick={() => setChangesOpen(true)}
+          {step === 'code' && (
+            <Card>
+              <h1 className="t-title text-ink">Enter your verification code</h1>
+              <p className="t-body mt-2 text-ink-2">
+                We emailed a 6-digit code to {summary?.signerEmailMasked ?? 'your email'}. It is
+                valid for 10 minutes.
+              </p>
+              <form
+                className="mt-5"
+                onSubmit={e => {
+                  e.preventDefault();
+                  void verifyCode();
+                }}
+              >
+                <div
+                  className="flex gap-2"
+                  onPaste={e => {
+                    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                    if (digits.length === 6) {
+                      e.preventDefault();
+                      setCode(digits.split(''));
+                    }
+                  }}
                 >
-                  Request changes instead
-                </button>
-              </Card>
-            )}
-
-            {consented && !docs.partyRequired && (
-              <Card className="p-3 sm:p-4">
-                <p className="t-body px-1 text-ink-2">
-                  Read each agreement to the end. Each turns green once you have scrolled through
-                  it.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2" role="tablist">
-                  {docs.documents.map((doc, i) => (
-                    <button
-                      key={doc.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeDoc === i}
-                      onClick={() => setActiveDoc(i)}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium',
-                        reviewed.has(doc.id)
-                          ? 'border-live bg-live-tint text-live-ink'
-                          : 'border-rule-strong bg-surface text-ink-2',
-                        activeDoc === i && 'ring-2 ring-brand-ink ring-offset-1'
-                      )}
-                    >
-                      {reviewed.has(doc.id) ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <FileText className="h-3.5 w-3.5" />
-                      )}
-                      {doc.title}
-                    </button>
+                  {code.map((digit, i) => (
+                    <Input
+                      key={i}
+                      id={`code-${i}`}
+                      aria-label={`Digit ${i + 1}`}
+                      inputMode="numeric"
+                      autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                      maxLength={1}
+                      value={digit}
+                      className="h-12 w-11 text-center font-mono text-lg"
+                      onChange={e => {
+                        const value = e.target.value.replace(/\D/g, '').slice(-1);
+                        const next = [...code];
+                        next[i] = value;
+                        setCode(next);
+                        if (value && i < 5) document.getElementById(`code-${i + 1}`)?.focus();
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Backspace' && !code[i] && i > 0)
+                          document.getElementById(`code-${i - 1}`)?.focus();
+                      }}
+                    />
                   ))}
                 </div>
-                {docs.documents[activeDoc] && (
-                  <iframe
-                    key={docs.documents[activeDoc].id}
-                    title={docs.documents[activeDoc].title}
-                    srcDoc={docs.documents[activeDoc].html}
-                    sandbox="allow-same-origin"
-                    onLoad={e => attachScrollWatch(e.currentTarget, docs.documents[activeDoc].id)}
-                    className="mt-3 h-[70vh] w-full rounded-control border border-rule bg-white"
-                  />
+                {error && (
+                  <div className="mt-4">
+                    <Alert>{error}</Alert>
+                  </div>
                 )}
-                <div className="mt-3 flex flex-wrap items-center gap-3 px-1">
-                  {activeDoc < docs.documents.length - 1 && (
-                    <Button variant="outline" onClick={() => setActiveDoc(activeDoc + 1)}>
-                      Next document
-                    </Button>
-                  )}
-                  <Button disabled={!allReviewed} onClick={() => setStep('sign')}>
-                    Continue to sign
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <Button type="submit" disabled={busy}>
+                    {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                    Verify
                   </Button>
-                  {!allReviewed && (
-                    <span className="text-xs text-ink-3">Review every document to continue.</span>
-                  )}
-                  <button
+                  <Button
                     type="button"
-                    className="ml-auto text-xs text-ink-2 underline"
-                    onClick={() => setChangesOpen(true)}
+                    variant="ghost"
+                    disabled={busy || resendIn > 0}
+                    onClick={() => void sendCode()}
                   >
-                    Request changes
-                  </button>
+                    {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
+                  </Button>
                 </div>
-              </Card>
-            )}
-            {error && <Alert>{error}</Alert>}
-          </>
-        )}
+              </form>
+            </Card>
+          )}
 
-        {step === 'sign' && docs && (
-          <Card>
-            <h1 className="t-title text-ink">Sign</h1>
-            <p className="t-body mt-1 text-ink-2">
-              {docs.individual ? (
-                <>
-                  You are signing as <strong>{docs.signer.name}</strong>, on your own behalf.
-                </>
-              ) : (
-                <>
-                  You are signing as <strong>{docs.signer.name}</strong> for {docs.agencyLegalName}.
-                </>
-              )}
-            </p>
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="typed-name">
-                  Full name
-                </label>
-                <Input
-                  id="typed-name"
-                  value={typedName}
-                  autoComplete="name"
-                  onChange={e => setTypedName(e.target.value)}
+          {step === 'review' && docs && (
+            <>
+              <Card>
+                <h1 className="t-title text-ink">Consent to Electronic Records and Signatures</h1>
+                <div
+                  className="prose-sm mt-3 max-h-72 space-y-2 overflow-y-auto rounded-control border border-rule bg-sunken p-4 text-sm text-ink-2 [&_h2]:hidden"
+                  // The disclosure is the server's own constant, escaped there.
+                  dangerouslySetInnerHTML={{ __html: docs.disclosure.html }}
                 />
-                {typedName && !nameMatches && (
-                  <p className="mt-1 text-[11px] text-dropped-ink">
-                    Type your name exactly as above: {docs.signer.name}.
-                  </p>
-                )}
-              </div>
-              {docs.individual ? (
-                <div>
-                  <span className="t-meta mb-1 block font-medium text-ink-2">Signing as</span>
-                  <p className="pt-2 text-sm text-ink">An individual, on your own behalf</p>
-                </div>
-              ) : (
-                <div>
-                  <label
-                    className="t-meta mb-1 block font-medium text-ink-2"
-                    htmlFor="signer-title"
-                  >
-                    Title
-                  </label>
-                  <Input id="signer-title" value={title} onChange={e => setTitle(e.target.value)} />
-                </div>
-              )}
-              <div>
-                <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="initials">
-                  Initials
-                </label>
-                <Input
-                  id="initials"
-                  value={initials}
-                  maxLength={4}
-                  className="w-24 uppercase"
-                  onChange={e =>
-                    setInitials(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())
-                  }
-                />
-                <p className="mt-1 text-[11px] text-ink-3">
-                  Printed on every page of the executed agreements.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <div className="inline-flex rounded-control bg-sunken p-1" role="tablist">
-                {(['TYPED', 'DRAWN'] as const).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="tab"
-                    aria-selected={method === m}
-                    onClick={() => setMethod(m)}
-                    className={cn(
-                      'rounded-control px-3 py-1.5 text-xs font-medium text-ink-2',
-                      method === m && 'bg-surface text-ink shadow-card'
-                    )}
-                  >
-                    {m === 'TYPED' ? 'Type' : 'Draw'}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 rounded-control border border-rule bg-white p-3">
-                {method === 'TYPED' ? (
-                  <div className="flex h-[96px] items-end border-b border-ink px-2 pb-2">
-                    <SignatureScript name={typedName} className="text-[36px]" />
-                  </div>
-                ) : (
-                  <div>
-                    <canvas
-                      ref={canvasRef}
-                      width={1000}
-                      height={300}
-                      className="h-[150px] w-full touch-none border-b border-ink"
-                      aria-label="Draw your signature"
-                    />
-                    <button
-                      type="button"
-                      className="mt-1 text-xs text-ink-2 underline"
-                      onClick={clearCanvas}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-                <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-3">
-                  Authorized signature
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-2">
-              {docs.documents.map(doc => (
-                <label key={doc.id} className="flex items-start gap-2 text-sm text-ink">
+                <label className="mt-4 flex items-start gap-2 text-sm text-ink">
                   <input
                     type="checkbox"
                     className="mt-1"
-                    checked={accepted[doc.id] ?? false}
-                    onChange={e => setAccepted({ ...accepted, [doc.id]: e.target.checked })}
+                    checked={consentChecked}
+                    disabled={consented}
+                    onChange={e => setConsentChecked(e.target.checked)}
                   />
-                  {doc.acceptanceStatement}
+                  {docs.disclosure.checkboxLabel}
                 </label>
-              ))}
-            </div>
-
-            <label className="mt-5 flex items-start gap-2 rounded-control border border-rule bg-sunken p-3 text-sm text-ink">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={intent}
-                onChange={e => setIntent(e.target.checked)}
-              />
-              <span>{docs.intentStatement}</span>
-            </label>
-
-            {error && (
-              <div className="mt-4">
-                <Alert>{error}</Alert>
-              </div>
-            )}
-
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Button size="lg" disabled={!canSign || busy} onClick={() => void sign()}>
-                {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                Sign Agreements
-              </Button>
-              <Button variant="ghost" onClick={() => setStep('review')}>
-                Back to the documents
-              </Button>
-              <button
-                type="button"
-                className="ml-auto text-xs text-ink-2 underline"
-                onClick={() => setChangesOpen(true)}
-              >
-                Request changes
-              </button>
-            </div>
-          </Card>
-        )}
-
-        {step === 'done' && done && (
-          <Card>
-            <div className="flex items-center gap-2 text-live-ink">
-              <CheckCircle2 className="h-6 w-6" />
-              <h1 className="t-title">Signed</h1>
-            </div>
-            <p className="t-body mt-3 text-ink">{done.message}</p>
-            {downloads && downloads.documents.length > 0 && (
-              <ul className="mt-5 space-y-2">
-                {downloads.documents.map(doc => (
-                  <li
-                    key={doc.id}
-                    className="flex flex-wrap items-center gap-3 rounded-control border border-rule p-3"
+                {!consented && (
+                  <Button
+                    className="mt-3"
+                    disabled={!consentChecked || busy}
+                    onClick={() => void giveConsent()}
                   >
-                    <FileText className="h-4 w-4 text-brand-ink" />
-                    <span className="flex-1 text-sm">{doc.title}</span>
-                    <span className="text-xs text-ink-3">{fileSize(doc.bytes)}</span>
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        void (async () => {
-                          const response = await fetch(
-                            `${API}/download/${done.downloadToken}/${doc.id}.pdf`,
-                            {
-                              referrerPolicy: 'no-referrer',
-                            }
-                          );
-                          if (response.ok) saveBlob(await response.blob(), doc.fileName);
-                          else
-                            setError(
-                              'That file could not be downloaded. Use the copy in your email.'
-                            );
-                        })()
-                      }
-                    >
-                      <Download className="mr-1 h-3.5 w-3.5" />
-                      Download
+                    Continue
+                  </Button>
+                )}
+                {consented && (
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-live-ink">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Consent recorded
+                  </p>
+                )}
+              </Card>
+
+              {consented && docs.partyRequired && (
+                <Card>
+                  <PartyDetailsForm
+                    prefill={docs.partyPrefill}
+                    signerName={docs.signer.name}
+                    signerEmail={docs.signer.email}
+                    organization={docs.inviteeOrganization}
+                    busy={busy}
+                    onSubmit={party => void submitDetails(party)}
+                  />
+                  <button
+                    type="button"
+                    className="mt-4 text-xs text-ink-2 underline"
+                    onClick={() => setChangesOpen(true)}
+                  >
+                    Request changes instead
+                  </button>
+                </Card>
+              )}
+
+              {consented && !docs.partyRequired && (
+                <Card className="p-3 sm:p-4">
+                  <p className="t-body px-1 text-ink-2">
+                    Read each agreement to the end. Each turns green once you have scrolled through
+                    it.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2" role="tablist">
+                    {docs.documents.map((doc, i) => (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDoc === i}
+                        onClick={() => setActiveDoc(i)}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium',
+                          reviewed.has(doc.id)
+                            ? 'border-live bg-live-tint text-live-ink'
+                            : 'border-rule-strong bg-surface text-ink-2',
+                          activeDoc === i && 'ring-2 ring-brand-ink ring-offset-1'
+                        )}
+                      >
+                        {reviewed.has(doc.id) ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5" />
+                        )}
+                        {doc.title}
+                      </button>
+                    ))}
+                  </div>
+                  {docs.documents[activeDoc] && (
+                    <iframe
+                      key={docs.documents[activeDoc].id}
+                      title={docs.documents[activeDoc].title}
+                      srcDoc={docs.documents[activeDoc].html}
+                      sandbox="allow-same-origin"
+                      onLoad={e => attachScrollWatch(e.currentTarget, docs.documents[activeDoc].id)}
+                      className="mt-3 h-[70vh] w-full rounded-control border border-rule bg-white"
+                    />
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-3 px-1">
+                    {activeDoc < docs.documents.length - 1 && (
+                      <Button variant="outline" onClick={() => setActiveDoc(activeDoc + 1)}>
+                        Next document
+                      </Button>
+                    )}
+                    <Button disabled={!allReviewed} onClick={() => setStep('sign')}>
+                      Continue to sign
                     </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {error && (
-              <div className="mt-4">
-                <Alert>{error}</Alert>
+                    {!allReviewed && (
+                      <span className="text-xs text-ink-3">Review every document to continue.</span>
+                    )}
+                    <button
+                      type="button"
+                      className="ml-auto text-xs text-ink-2 underline"
+                      onClick={() => setChangesOpen(true)}
+                    >
+                      Request changes
+                    </button>
+                  </div>
+                </Card>
+              )}
+              {error && <Alert>{error}</Alert>}
+            </>
+          )}
+
+          {step === 'sign' && docs && (
+            <Card>
+              <h1 className="t-title text-ink">Sign</h1>
+              <p className="t-body mt-1 text-ink-2">
+                {docs.individual ? (
+                  <>
+                    You are signing as <strong>{docs.signer.name}</strong>, on your own behalf.
+                  </>
+                ) : (
+                  <>
+                    You are signing as <strong>{docs.signer.name}</strong> for{' '}
+                    {docs.agencyLegalName}.
+                  </>
+                )}
+              </p>
+              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="typed-name">
+                    Full name
+                  </label>
+                  <Input
+                    id="typed-name"
+                    value={typedName}
+                    autoComplete="name"
+                    onChange={e => setTypedName(e.target.value)}
+                  />
+                  {typedName && !nameMatches && (
+                    <p className="mt-1 text-[11px] text-dropped-ink">
+                      Type your name exactly as above: {docs.signer.name}.
+                    </p>
+                  )}
+                </div>
+                {docs.individual ? (
+                  <div>
+                    <span className="t-meta mb-1 block font-medium text-ink-2">Signing as</span>
+                    <p className="pt-2 text-sm text-ink">An individual, on your own behalf</p>
+                  </div>
+                ) : (
+                  <div>
+                    <label
+                      className="t-meta mb-1 block font-medium text-ink-2"
+                      htmlFor="signer-title"
+                    >
+                      Title
+                    </label>
+                    <Input
+                      id="signer-title"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="t-meta mb-1 block font-medium text-ink-2" htmlFor="initials">
+                    Initials
+                  </label>
+                  <Input
+                    id="initials"
+                    value={initials}
+                    maxLength={4}
+                    className="w-24 uppercase"
+                    onChange={e =>
+                      setInitials(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-ink-3">
+                    Printed on every page of the executed agreements.
+                  </p>
+                </div>
               </div>
-            )}
-          </Card>
-        )}
 
-        <footer className="pb-6 text-center text-[11px] text-ink-3">
-          PVN LLC d/b/a NetEnroll · Saint Augustine, Florida · Electronic signatures under the ESIGN
-          Act and Fla. Stat. §668.50
-        </footer>
-      </div>
+              <div className="mt-5">
+                <div className="inline-flex rounded-control bg-sunken p-1" role="tablist">
+                  {(['TYPED', 'DRAWN'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={method === m}
+                      onClick={() => setMethod(m)}
+                      className={cn(
+                        'rounded-control px-3 py-1.5 text-xs font-medium text-ink-2',
+                        method === m && 'bg-surface text-ink shadow-card'
+                      )}
+                    >
+                      {m === 'TYPED' ? 'Type' : 'Draw'}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-control border border-rule bg-white p-3">
+                  {method === 'TYPED' ? (
+                    <div className="flex h-[96px] items-end border-b border-ink px-2 pb-2">
+                      <SignatureScript name={typedName} className="text-[36px]" />
+                    </div>
+                  ) : (
+                    <div>
+                      <canvas
+                        ref={canvasRef}
+                        width={1000}
+                        height={300}
+                        className="h-[150px] w-full touch-none border-b border-ink"
+                        aria-label="Draw your signature"
+                      />
+                      <button
+                        type="button"
+                        className="mt-1 text-xs text-ink-2 underline"
+                        onClick={clearCanvas}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                  <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-3">
+                    Authorized signature
+                  </div>
+                </div>
+              </div>
 
-      <Dialog open={changesOpen} onOpenChange={setChangesOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request changes</DialogTitle>
-            <DialogDescription>
-              Tell NetEnroll what needs to change. This link will stop working, and NetEnroll will
-              send revised agreements.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            rows={5}
-            maxLength={2000}
-            value={changesNote}
-            onChange={e => setChangesNote(e.target.value)}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setChangesOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={!changesNote.trim() || busy} onClick={() => void requestChanges()}>
-              Send request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </main>
+              <div className="mt-5 space-y-2">
+                {docs.documents.map(doc => (
+                  <label key={doc.id} className="flex items-start gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={accepted[doc.id] ?? false}
+                      onChange={e => setAccepted({ ...accepted, [doc.id]: e.target.checked })}
+                    />
+                    {doc.acceptanceStatement}
+                  </label>
+                ))}
+              </div>
+
+              <label className="mt-5 flex items-start gap-2 rounded-control border border-rule bg-sunken p-3 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={intent}
+                  onChange={e => setIntent(e.target.checked)}
+                />
+                <span>{docs.intentStatement}</span>
+              </label>
+
+              {error && (
+                <div className="mt-4">
+                  <Alert>{error}</Alert>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Button size="lg" disabled={!canSign || busy} onClick={() => void sign()}>
+                  {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                  Sign Agreements
+                </Button>
+                <Button variant="ghost" onClick={() => setStep('review')}>
+                  Back to the documents
+                </Button>
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-ink-2 underline"
+                  onClick={() => setChangesOpen(true)}
+                >
+                  Request changes
+                </button>
+              </div>
+            </Card>
+          )}
+
+          {step === 'done' && done && (
+            <Card>
+              <div className="flex items-center gap-2 text-live-ink">
+                <CheckCircle2 className="h-6 w-6" />
+                <h1 className="t-title">Signed</h1>
+              </div>
+              <p className="t-body mt-3 text-ink">{done.message}</p>
+              {downloads && downloads.documents.length > 0 && (
+                <ul className="mt-5 space-y-2">
+                  {downloads.documents.map(doc => (
+                    <li
+                      key={doc.id}
+                      className="flex flex-wrap items-center gap-3 rounded-control border border-rule p-3"
+                    >
+                      <FileText className="h-4 w-4 text-brand-ink" />
+                      <span className="flex-1 text-sm">{doc.title}</span>
+                      <span className="text-xs text-ink-3">{fileSize(doc.bytes)}</span>
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          void (async () => {
+                            const response = await fetch(
+                              `${API}/download/${done.downloadToken}/${doc.id}.pdf`,
+                              {
+                                referrerPolicy: 'no-referrer',
+                              }
+                            );
+                            if (response.ok) saveBlob(await response.blob(), doc.fileName);
+                            else
+                              setError(
+                                'That file could not be downloaded. Use the copy in your email.'
+                              );
+                          })()
+                        }
+                      >
+                        <Download className="mr-1 h-3.5 w-3.5" />
+                        Download
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {error && (
+                <div className="mt-4">
+                  <Alert>{error}</Alert>
+                </div>
+              )}
+            </Card>
+          )}
+
+          <footer className="pb-6 text-center text-[11px] text-ink-3">
+            {who.scope === 'PLATFORM'
+              ? 'PVN LLC d/b/a NetEnroll · Saint Augustine, Florida · '
+              : `${who.legalName} · `}
+            Electronic signatures under the ESIGN Act and Fla. Stat. §668.50
+          </footer>
+        </div>
+
+        <Dialog open={changesOpen} onOpenChange={setChangesOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request changes</DialogTitle>
+              <DialogDescription>
+                Tell {who.shortName} what needs to change. This link will stop working, and{' '}
+                {who.shortName} will send revised agreements.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              rows={5}
+              maxLength={2000}
+              value={changesNote}
+              onChange={e => setChangesNote(e.target.value)}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setChangesOpen(false)}>
+                Cancel
+              </Button>
+              <Button disabled={!changesNote.trim() || busy} onClick={() => void requestChanges()}>
+                Send request
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </main>
+    </IssuerBrandScope>
   );
 }

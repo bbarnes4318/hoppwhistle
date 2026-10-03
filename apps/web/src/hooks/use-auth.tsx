@@ -141,6 +141,19 @@ interface UserData {
    */
   isChild?: boolean;
   parentBrandName?: string | null;
+  /**
+   * The B2B Sales CRM this principal may use, from `/api/auth/me`, decided by
+   * the same resolver the `/api/v1/sales` routes enforce with. Null for no
+   * access -- an ordinary agent, a child agency, a normal agency.
+   */
+  salesWorkspace?: SalesWorkspaceCapability | null;
+}
+
+export interface SalesWorkspaceCapability {
+  scope: 'PLATFORM' | 'TENANT';
+  level: 'MANAGER' | 'MEMBER' | 'READONLY';
+  via: 'PLATFORM_ADMIN' | 'PLATFORM_SUPPORT' | 'OWNER' | 'GRANT';
+  workspaceName: string | null;
 }
 
 interface UseAuthReturn {
@@ -195,6 +208,8 @@ interface UseAuthReturn {
   isChild: boolean;
   /** What a downline agency calls its parent; null when not a child or unnamed. */
   parentBrandName: string | null;
+  /** The Sales CRM capability the server reported; null for none. */
+  salesWorkspace: SalesWorkspaceCapability | null;
   isNewUser: boolean;
   buyerId: string | null;
   publisherId: string | null;
@@ -314,6 +329,16 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         parentBrandName:
           typeof rawUser.parentBrandName === 'string' && rawUser.parentBrandName.trim()
             ? rawUser.parentBrandName
+            : null,
+        salesWorkspace:
+          rawUser.salesWorkspace &&
+          (rawUser.salesWorkspace.scope === 'PLATFORM' || rawUser.salesWorkspace.scope === 'TENANT')
+            ? {
+                scope: rawUser.salesWorkspace.scope,
+                level: rawUser.salesWorkspace.level,
+                via: rawUser.salesWorkspace.via,
+                workspaceName: rawUser.salesWorkspace.workspaceName ?? null,
+              }
             : null,
       });
       setStatus('authenticated');
@@ -542,6 +567,7 @@ export function useAuth(): UseAuthReturn {
     upgrades: user?.upgrades ?? NO_UPGRADES,
     isChild: user?.isChild === true,
     parentBrandName: user?.parentBrandName ?? null,
+    salesWorkspace: user?.salesWorkspace ?? null,
     isNewUser,
     buyerId,
     publisherId,
