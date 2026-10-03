@@ -174,6 +174,10 @@ const DATABASE_BACKED = [
   // Truncates `tenants`, `phone_numbers`, `number_charges` and `statements`:
   // the API's 1st-of-the-month run of billMonth and closeMonth.
   '**/src/__tests__/monthly-close.test.ts',
+  // Truncates `tenants`, `calls`, `campaigns`, `buyers`, `publishers` and the
+  // user tables. Left off this list it ran on the threads pool beside
+  // settlement.test.ts and deleted its tenants mid-test (`calls_tenantId_fkey`).
+  '**/src/__tests__/campaign-application-billing.test.ts',
 ];
 
 export default defineConfig({
