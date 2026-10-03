@@ -17,7 +17,7 @@ import { termsSchema } from '../services/agreements/terms.js';
 
 /**
  * The agreements' legal text is verbatim: every sentence approved for the MSA
- * (MSA-2026-10-03.2), the CPA Agreement and the CPL Agreement (both -2026-09-25)
+ * (MSA-2026-10-03.2), the CPA Agreement and the CPL Agreement (both -2026-10-03)
  * must appear, word for word, in the rendered document once its HTML is
  * stripped. The expected text below is an independent copy of the approved
  * text, not read from the templates, so a reworded template fails here.
@@ -274,7 +274,7 @@ const CPA_TEXT = [
   '1.1 Pay-Per-Submitted-Application. Agency pays exclusively for Submitted Applications. Agency incurs no cost for answered calls, talk time, or calls that do not result in a Submitted Application.',
   '1.2 Flat Rates. The rates are $160.00 per Final Expense application, $160.00 per Medicare application and $100.00 per ACA (Health) application, as stated in Part 1.',
   '1.3 Submitted Application. An Application counts once, upon reaching "Submitted" status in the Portal. Carrier underwriting decisions, including approval, rating, declination or later policy lapse, do not alter the fee.',
-  '1.4 Attribution. A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call took place.',
+  '1.4 Attribution. A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call or Live Transfer took place.',
   "1.5 Prepaid Balance. Agency buys applications in advance by paying a NetEnroll invoice through Melio. The applications paid for form Agency's prepaid balance for the selected vertical.",
   '1.6 Drawdown. Each Submitted Application reduces the prepaid balance by the rate for its vertical.',
   '1.7 Daily Block. The Daily Block is the maximum number of Submitted Applications delivered to Agency on a Delivery Day for each selected vertical, as stated in Part 1. Delivery pauses for the rest of the Delivery Day once it is reached.',
@@ -290,7 +290,7 @@ const CPL_TEXT = [
   'Cost-Per-Lead · Pay-Per-Call (Buffer Duration Threshold)',
   CAMPAIGN_INTRO('CPL'),
   'AT A GLANCE',
-  'You Pay For Billable Calls only: answered inbound calls that meet or exceed the agreed Buffer Duration.',
+  'You Pay For Billable Calls only: answered inbound calls and Live Transfers that meet or exceed the agreed Buffer Duration.',
   'Rates Fixed rate per Billable Call, set per vertical in Part 1. Calls under the Buffer Duration are free.',
   'When You Pay Upfront, by invoice through Melio. Card accepted. Delivery begins once payment clears.',
   'Credits Prepaid calls do not expire while this Agreement is in force. No overrun, ever.',
@@ -310,8 +310,8 @@ const CPL_TEXT = [
   'IN WITNESS WHEREOF, the parties have executed this CPL Agreement as of the later date signed below.',
   'Schedule 1: CPL Pricing and Billing Methodology',
   'Forms part of the CPL Agreement',
-  '1.1 Pay-Per-Call. Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call that meets or exceeds the Buffer Duration for that vertical.',
-  '1.2 Billable Call. A Billable Call is any inbound call routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).',
+  '1.1 Pay-Per-Call. Agency pays the fixed Rate per Billable Call stated in Part 1 for each inbound call or Live Transfer that meets or exceeds the Buffer Duration for that vertical.',
+  '1.2 Billable Call. A Billable Call is any inbound call or Live Transfer routed by NetEnroll and answered by Agency whose total connected duration equals or exceeds the Buffer Duration (for example, 120 seconds).',
   "1.3 Buffer Measurement. Connected time begins the moment Agency's telephony system or agent answers the call and ends when the caller or agent disconnects. Duration is measured automatically by NetEnroll's Portal telephony, which is the record used for billing.",
   '1.4 Non-Billable Calls. Calls that end before reaching the Buffer Duration, including wrong numbers, early disconnects and short transfers, are non-billable and carry no charge.',
   "1.5 Unstaffed Periods. Calls offered while Agency is unstaffed do not count toward Agency's Daily Block. Repeated failure to staff is a material breach under Section 5.1 of the MSA.",
@@ -340,8 +340,8 @@ describe('agreement templates: the legal text is verbatim', () => {
   it('carries the template versions', () => {
     expect([msa.templateVersion, cpa.templateVersion, cpl.templateVersion]).toEqual([
       'MSA-2026-10-03.2',
-      'CPA-2026-09-25',
-      'CPL-2026-09-25',
+      'CPA-2026-10-03',
+      'CPL-2026-10-03',
     ]);
   });
 

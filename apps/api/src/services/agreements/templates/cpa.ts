@@ -1,5 +1,5 @@
 /**
- * The CPA Agreement (pay per submitted application), template CPA-2026-09-25.
+ * The CPA Agreement (pay per submitted application), template CPA-2026-10-03.
  *
  * The legal text is verbatim and in the approved order -- see the note at the
  * top of msa.ts. Only the agency's terms are substituted, HTML-escaped.
@@ -25,7 +25,7 @@ import { VERTICALS, VERTICAL_NAMES, type FrozenTerms } from '../terms.js';
 import { DASH, deliveryTable, partiesTable, paymentTable } from './campaign.js';
 
 export const CPA_TITLE = 'CPA Agreement';
-export const CPA_TEMPLATE_VERSION = 'CPA-2026-09-25';
+export const CPA_TEMPLATE_VERSION = 'CPA-2026-10-03';
 
 /** Schedule 1, §1.9: 20 applications of the first selected vertical. */
 export function cpaIllustration(terms: FrozenTerms): {
@@ -137,7 +137,7 @@ ${section(
     ),
     clause(
       '1.4',
-      '**Attribution.** A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call took place.'
+      '**Attribution.** A Submitted Application is attributed to the Delivery Day on which it is submitted in the Portal, regardless of when the originating inbound call or Live Transfer took place.'
     ),
   ].join('\n')
 )}
