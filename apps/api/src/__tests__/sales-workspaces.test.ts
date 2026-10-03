@@ -17,6 +17,7 @@ import { registerReadOnlyPreview } from '../middleware/read-only-preview.js';
 import { registerStaffOnly } from '../middleware/staff-only.js';
 import { sealConfig, sealRefFor } from '../services/agreements/pdf.js';
 import { templateSetAssignable, templateSetFor } from '../services/agreements/template-sets.js';
+import { describePartyDetails } from '../services/sales/agreement-sync.js';
 import { nextStageForAgreementEvent } from '../services/sales/stage-policy.js';
 import { chromeExecutable } from '../services/statements/statements.js';
 import { resetAgreementsStorageService } from '../services/storage.js';
@@ -50,6 +51,7 @@ const MIGRATIONS = [
   '20261007000000_agreements',
   '20261008000000_agreements_party_details',
   '20261009000000_sales_workspaces',
+  '20261010000000_sales_activity_details_entered',
 ].map(name => join(__dirname, `../../prisma/migrations/${name}/migration.sql`));
 
 /**
@@ -102,10 +104,38 @@ describe('stage transition policy', () => {
     }
   });
 
-  it('changes no stage on void, expiry or a change request', () => {
-    for (const event of ['VOIDED', 'EXPIRED', 'CHANGES_REQUESTED'] as const) {
+  it('changes no stage on details entered, void, expiry or a change request', () => {
+    for (const event of ['DETAILS_ENTERED', 'VOIDED', 'EXPIRED', 'CHANGES_REQUESTED'] as const) {
       expect(nextStageForAgreementEvent('AGREEMENT_SENT', event)).toBeNull();
     }
+  });
+
+  it('describes the entered details of a business with its principal and signer', () => {
+    const text = describePartyDetails('NE-2026-0001', {
+      kind: 'BUSINESS',
+      legalName: 'Summit Ridge Insurance Group LLC',
+      dbaName: 'Summit Ridge',
+      stateOfFormation: 'Florida',
+      entityType: 'Limited Liability Company',
+      noticeAddress: '1 Main St, Jacksonville, FL 32202',
+      principalName: 'Dana Whitfield',
+      principalTitle: 'Managing Member',
+      noticeEmail: 'dana@summitridge.test',
+      noticePhone: '(904) 555-0100',
+      billingEmail: 'billing@summitridge.test',
+      billingPhone: '(904) 555-0101',
+      signerName: 'Pat Lee',
+      signerTitle: 'COO',
+    });
+    expect(text.split('\n')).toEqual([
+      'Agency details entered on agreement NE-2026-0001:',
+      'Summit Ridge Insurance Group LLC d/b/a Summit Ridge — Florida Limited Liability Company',
+      'Principal: Dana Whitfield, Managing Member',
+      'Signer: Pat Lee, COO',
+      'Address: 1 Main St, Jacksonville, FL 32202',
+      'Contact: dana@summitridge.test · (904) 555-0100',
+      'Billing: billing@summitridge.test · (904) 555-0101',
+    ]);
   });
 });
 
@@ -983,6 +1013,14 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
           headers
         );
         expect(saved.statusCode, saved.body).toBe(200);
+        // What the agency entered is on the prospect's timeline, once.
+        const entered = (await activitiesOf(prospect.id)).filter(
+          a => a.type === 'AGREEMENT_DETAILS_ENTERED'
+        );
+        expect(entered).toHaveLength(1);
+        expect(entered[0].body).toContain('Riley Agent — individual licensed agent, Florida');
+        expect(entered[0].body).toContain('Contact: riley@abcagency.test · (904) 555-0142');
+        expect(entered[0].body).not.toContain('Principal');
         const docs = (await pub('GET', `/sign/${token}/documents`, undefined, headers)).json().data;
         for (const doc of docs.documents)
           await pub('POST', `/sign/${token}/reviewed`, { documentId: doc.id }, headers);
@@ -1009,6 +1047,7 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
         const types = (await activitiesOf(prospect.id)).map(a => a.type);
         expect(types).toContain('AGREEMENT_SENT');
         expect(types).toContain('AGREEMENT_VIEWED');
+        expect(types).toContain('AGREEMENT_DETAILS_ENTERED');
         expect(types).toContain('AGREEMENT_SIGNED');
         if (HAS_CHROME) {
           expect(final.status).toBe('COMPLETED');

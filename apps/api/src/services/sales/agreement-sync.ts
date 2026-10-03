@@ -22,6 +22,7 @@ import type { AgreementEnvelope, Prisma, PrismaClient } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import { onAgreementLifecycle } from '../agreements/envelopes.js';
 import { agencyLabel } from '../agreements/party.js';
+import type { PartyDetails } from '../agreements/terms.js';
 
 import {
   ACTIVITY_FOR_EVENT,
@@ -32,6 +33,7 @@ import {
 const DESCRIPTIONS: Record<AgreementLifecycleEvent, (ref: string) => string> = {
   SENT: ref => `Agreement ${ref} sent for signature.`,
   VIEWED: ref => `Agreement ${ref} opened by the signer.`,
+  DETAILS_ENTERED: ref => `Agency details entered on agreement ${ref}.`,
   SIGNED: ref => `Agreement ${ref} signed by the agency.`,
   COMPLETED: ref => `Agreement ${ref} fully executed; executed copies delivered.`,
   VOIDED: ref => `Agreement ${ref} voided.`,
@@ -45,6 +47,8 @@ function occurredAtOf(envelope: AgreementEnvelope, event: AgreementLifecycleEven
       return envelope.sentAt;
     case 'VIEWED':
       return envelope.viewedAt ?? new Date();
+    case 'DETAILS_ENTERED':
+      return envelope.partySubmittedAt ?? new Date();
     case 'SIGNED':
       return envelope.signedAt ?? new Date();
     case 'COMPLETED':
@@ -65,6 +69,8 @@ function happened(envelope: AgreementEnvelope, event: AgreementLifecycleEvent): 
       return true;
     case 'VIEWED':
       return envelope.viewedAt !== null;
+    case 'DETAILS_ENTERED':
+      return envelope.partySubmittedAt !== null;
     case 'SIGNED':
       return envelope.signedAt !== null;
     case 'COMPLETED':
@@ -76,6 +82,29 @@ function happened(envelope: AgreementEnvelope, event: AgreementLifecycleEvent): 
     case 'CHANGES_REQUESTED':
       return envelope.status === 'CHANGES_REQUESTED';
   }
+}
+
+/**
+ * What the agency entered about itself, as the timeline shows it: who it is,
+ * how to reach it and who signs. The same details are on the agreement.
+ */
+export function describePartyDetails(ref: string, party: PartyDetails): string {
+  const name = party.dbaName ? `${party.legalName} d/b/a ${party.dbaName}` : party.legalName;
+  const lines =
+    party.kind === 'BUSINESS'
+      ? [
+          `${name} — ${party.stateOfFormation} ${party.entityType}`,
+          `Principal: ${party.principalName}, ${party.principalTitle}`,
+          `Signer: ${party.signerName}, ${party.signerTitle}`,
+        ]
+      : [`${name} — individual licensed agent, ${party.stateOfResidence}`];
+  return [
+    `Agency details entered on agreement ${ref}:`,
+    ...lines,
+    `Address: ${party.noticeAddress}`,
+    `Contact: ${party.noticeEmail} · ${party.noticePhone}`,
+    `Billing: ${party.billingEmail} · ${party.billingPhone}`,
+  ].join('\n');
 }
 
 /** Record one lifecycle event on the envelope's prospect. Idempotent. */
@@ -103,11 +132,20 @@ export async function syncAgreementToProspect(
         workspaceId: prospect.workspaceId,
         prospectId: prospect.id,
         type: ACTIVITY_FOR_EVENT[event],
-        body: DESCRIPTIONS[event](envelope.reference),
+        body:
+          event === 'DETAILS_ENTERED' && envelope.partyDetails
+            ? describePartyDetails(
+                envelope.reference,
+                envelope.partyDetails as unknown as PartyDetails
+              )
+            : DESCRIPTIONS[event](envelope.reference),
         detail: {
           reference: envelope.reference,
           envelopeStatus: envelope.status,
           agency: agencyLabel(envelope),
+          ...(event === 'DETAILS_ENTERED' && envelope.partyDetails
+            ? { party: envelope.partyDetails }
+            : {}),
           ...(event === 'VOIDED' && envelope.voidReason ? { reason: envelope.voidReason } : {}),
           ...(event === 'CHANGES_REQUESTED' && envelope.changesNote
             ? { note: envelope.changesNote }
@@ -170,6 +208,7 @@ export function installAgreementSync(): void {
 const REPLAY_ORDER: AgreementLifecycleEvent[] = [
   'SENT',
   'VIEWED',
+  'DETAILS_ENTERED',
   'SIGNED',
   'COMPLETED',
   'CHANGES_REQUESTED',

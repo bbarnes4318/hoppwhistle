@@ -19,6 +19,7 @@ import type { SalesActivityType, SalesProspectStage } from '@prisma/client';
 export type AgreementLifecycleEvent =
   | 'SENT'
   | 'VIEWED'
+  | 'DETAILS_ENTERED'
   | 'SIGNED'
   | 'COMPLETED'
   | 'VOIDED'
@@ -54,6 +55,7 @@ const TARGET: Partial<Record<AgreementLifecycleEvent, SalesProspectStage>> = {
 export const ACTIVITY_FOR_EVENT: Record<AgreementLifecycleEvent, SalesActivityType> = {
   SENT: 'AGREEMENT_SENT',
   VIEWED: 'AGREEMENT_VIEWED',
+  DETAILS_ENTERED: 'AGREEMENT_DETAILS_ENTERED',
   SIGNED: 'AGREEMENT_SIGNED',
   COMPLETED: 'AGREEMENT_COMPLETED',
   VOIDED: 'AGREEMENT_VOIDED',
