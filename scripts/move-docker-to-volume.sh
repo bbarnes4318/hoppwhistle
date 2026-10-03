@@ -2,8 +2,9 @@
 # Move Docker's storage off the root disk and onto an attached Hetzner volume.
 #
 # Why: attaching a Hetzner volume only mounts an empty disk at
-# /mnt/HC_Volume_<id>. Docker keeps writing everything (images, containers,
-# named volumes - Postgres, Dograh, recordings) to /var/lib/docker on the root
+# /mnt/HC_Volume_<id> (or wherever it was mounted, e.g. /mnt/hc-recordings).
+# Docker keeps writing everything (images, containers, named volumes - Postgres,
+# Dograh, recordings) to /var/lib/docker on the root
 # disk, so the root disk still fills up while the new volume sits unused.
 #
 # Usage (on the server, as root):
@@ -42,11 +43,11 @@ say "Block devices"
 lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
 
 if [[ -z "$VOLUME" ]]; then
-  mapfile -t found < <(findmnt -rn -o TARGET | grep -E '^/mnt/HC_Volume_' || true)
+  mapfile -t found < <(findmnt -rn -o TARGET | grep -E '^/mnt/[^/]+$' || true)
   if [[ ${#found[@]} -eq 1 ]]; then
     VOLUME="${found[0]}"
   elif [[ ${#found[@]} -gt 1 ]]; then
-    say "Several Hetzner volumes are mounted; pass the one to use:"
+    say "Several volumes are mounted under /mnt; pass the one to use:"
     printf '  %s\n' "${found[@]}"
   fi
 fi
@@ -60,7 +61,7 @@ echo "systemd journal: $(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+
 say "Volume"
 if [[ -z "$VOLUME" ]]; then
   cat <<'EOF'
-No Hetzner volume is mounted. Check the Hetzner console that the volume is
+No volume is mounted under /mnt. Check the Hetzner console that the volume is
 attached to THIS server, then mount it. If it was attached without
 "automount", the console shows the exact commands (format only if it is new
 and empty). It must be listed in /etc/fstab or it disappears on reboot.
