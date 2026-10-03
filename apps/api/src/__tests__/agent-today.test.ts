@@ -313,6 +313,12 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.standing).toBeNull();
   });
 
+  it('still ranks an agent of an agency that is not white-label', async () => {
+    const body = (await get(otherAgencyAgent, tenantB)).json().data;
+    expect(body.standing).not.toBeNull();
+    expect(body.standing.rank).toBe(1);
+  });
+
   it('lists the follow-ups due, oldest first, and only the agent’s own', async () => {
     const body = (await get(agentA, tenantA)).json().data;
     expect(body.attention.map((a: any) => a.name)).toEqual(['Carol Overdue', 'Dan Hour Ago']);
