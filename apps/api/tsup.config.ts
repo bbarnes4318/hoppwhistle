@@ -13,6 +13,7 @@ export default defineConfig({
     'cli/statements-close-month': 'src/cli/statements-close-month.ts',
     'cli/link-application-customers': 'src/cli/link-application-customers.ts',
     'cli/vonage-diagnose': 'src/cli/vonage-diagnose.ts',
+    'cli/dograh-callerid-import': 'src/cli/dograh-callerid-import.ts',
   },
   format: ['esm'],
   dts: {

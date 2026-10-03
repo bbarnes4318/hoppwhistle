@@ -4,8 +4,10 @@
  * inventory + the "Dograh State Caller IDs" pool. Dry-run by default.
  *
  * Usage:
- *   tsx src/cli/dograh-callerid-import.ts --file=../data/dograh-state-caller-ids.csv \
+ *   tsx src/cli/dograh-callerid-import.ts --file=data/dograh-state-caller-ids.csv \
  *       --tenant=<tenantId> [--provider=fractel] [--apply]
+ *
+ * In the production image (no tsx): node dist/cli/dograh-callerid-import.js ...
  */
 
 import 'dotenv-flow/config';
