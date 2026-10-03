@@ -66,7 +66,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const previewingRole = platform.previewRole != null || user?.previewRole != null;
   const downlineOwner = isChild && hasFullAccess && (!platform.isPlatformAdmin || previewingRole);
   const agentView = useAgentView();
-  const showLiveStrip = !whiteLabelView && !downlineOwner && !agentView;
+
+  /*
+   * A page that embeds another application full-bleed (the AI Voice app on
+   * /voice-agents). It is its own workspace with its own navigation and
+   * figures, so the portal's KPI strip above it is noise, and the softphone
+   * runway under <main> was a 96px blank band cut out of the frame. The page
+   * fills <main> exactly and does its own scrolling inside the frame.
+   */
+  const isEmbeddedAppPage = isEmbeddedAppPath(pathname);
+  const showLiveStrip = !whiteLabelView && !downlineOwner && !agentView && !isEmbeddedAppPage;
 
   /*
    * Who gets a softphone.
@@ -409,11 +418,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <main
             className={cn(
-              'flex-1 bg-paper flex flex-col min-h-0 overflow-y-auto',
+              'flex-1 bg-paper flex flex-col min-h-0',
+              isEmbeddedAppPage ? 'overflow-hidden' : 'overflow-y-auto',
               // The collapsed softphone floats 48px tall over the bottom-right
               // corner. 96px of runway lets every page's last element scroll
               // clear of it instead of ending underneath.
-              showFloatingDialer && 'pb-24'
+              showFloatingDialer && !isEmbeddedAppPage && 'pb-24'
             )}
           >
             {/*
@@ -442,6 +452,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </PhoneProvider>
   );
+}
+
+/** Pages that embed a full-screen application under the portal's chrome. */
+const EMBEDDED_APP_ROUTES = ['/voice-agents'];
+
+function isEmbeddedAppPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return EMBEDDED_APP_ROUTES.some(route => pathname === route || pathname.startsWith(`${route}/`));
 }
 
 /**

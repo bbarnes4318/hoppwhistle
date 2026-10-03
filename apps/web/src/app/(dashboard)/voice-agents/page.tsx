@@ -1,8 +1,10 @@
 'use client';
 
-import { Loader2, AlertTriangle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { useBrand } from '@/hooks/use-brand';
 import { apiClient } from '@/lib/api';
 
 /**
@@ -29,10 +31,25 @@ import { apiClient } from '@/lib/api';
  *    with nothing about a 404 anywhere. The same mistake had just been fixed in
  *    the call ledger. So the error branch now reads `res.error` and shows the
  *    message the API actually sent.
+ *
+ * ── Branding and layout ──────────────────────────────────────────────────────
+ *
+ * The AI Voice app skins itself as the portal that embeds it: `?brand=` on the
+ * frame's src names the brand (`netenroll`, or the agency's theme key such as
+ * `life-leads-plus`) and the app swaps its logo and palette to match. The src
+ * is only set once the session has said whose portal this is, so a
+ * white-labelled agency never sees NetEnroll's skin load first.
+ *
+ * The frame fills <main> exactly; the dashboard layout drops the KPI strip and
+ * the softphone runway on this route (see `isEmbeddedAppPath`), so nothing is
+ * stacked above the app and no blank band is cut out of the bottom of it.
  */
 export default function AIVoicePage() {
+  const { brand, settled: brandSettled } = useBrand();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [frameLoaded, setFrameLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,32 +76,68 @@ export default function AIVoicePage() {
     return () => {
       cancelled = true;
     };
+  }, [attempt]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setUrl(null);
+    setFrameLoaded(false);
+    setAttempt(n => n + 1);
   }, []);
 
   if (error) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-3 text-center">
-        <AlertTriangle className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">{error}</p>
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-card border border-rule bg-surface p-8 text-center shadow-card">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-dropped-tint">
+            <AlertTriangle aria-hidden className="h-5 w-5 text-dropped-ink" />
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-ink">Voice Agents is unavailable</h2>
+          <p className="mt-1.5 t-body text-ink-2">{error}</p>
+          <Button className="mt-6" onClick={retry}>
+            <RefreshCw aria-hidden className="mr-2 h-4 w-4" />
+            Try again
+          </Button>
+        </div>
       </div>
     );
   }
 
-  if (!url) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-3">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading AI Voice…</p>
-      </div>
-    );
-  }
+  const src = url && brandSettled ? frameSrc(url, brand?.key ?? 'netenroll') : null;
 
   return (
-    <iframe
-      src={url}
-      title="AI Voice"
-      className="h-[calc(100vh-4rem)] w-full border-0"
-      allow="microphone; autoplay; clipboard-write"
-    />
+    <div className="relative flex min-h-0 flex-1 flex-col bg-surface">
+      {!src || !frameLoaded ? (
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-paper"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <Loader2 aria-hidden className="h-6 w-6 animate-spin text-brand-ink" />
+          <p className="t-body text-ink-2">Loading Voice Agents…</p>
+        </div>
+      ) : null}
+      {src ? (
+        <iframe
+          key={src}
+          src={src}
+          title="Voice Agents"
+          className="block min-h-0 w-full flex-1 border-0"
+          allow="microphone; autoplay; clipboard-write"
+          onLoad={() => setFrameLoaded(true)}
+        />
+      ) : null}
+    </div>
   );
+}
+
+/** The AI Voice URL with the portal's brand on it (see the note above). */
+function frameSrc(base: string, brandKey: string): string {
+  try {
+    const u = new URL(base);
+    u.searchParams.set('brand', brandKey);
+    return u.toString();
+  } catch {
+    return base;
+  }
 }
