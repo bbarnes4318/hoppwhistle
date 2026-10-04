@@ -107,6 +107,23 @@ export function Topbar() {
     user?.email?.[0]?.toUpperCase() ||
     '?';
 
+  const accountTrigger = (
+    <DropdownMenuTrigger asChild>
+      <button
+        type="button"
+        className={cn(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+          'bg-brand-tint t-meta font-semibold text-brand-ink',
+          'ring-1 ring-inset ring-rule transition-colors duration-150 hover:ring-rule-strong',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        )}
+        aria-label="Account menu"
+      >
+        {initials}
+      </button>
+    </DropdownMenuTrigger>
+  );
+
   return (
     <>
       <header className="flex h-[76px] shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
@@ -228,22 +245,15 @@ export function Topbar() {
         </Tooltip>
 
         <DropdownMenu>
-          <Tooltip content="Account menu" align="end">
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-                  'bg-brand-tint t-meta font-semibold text-brand-ink',
-                  'ring-1 ring-inset ring-rule transition-colors duration-150 hover:ring-rule-strong',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                aria-label="Account menu"
-              >
-                {initials}
-              </button>
-            </DropdownMenuTrigger>
-          </Tooltip>
+          {/* A white-label agent knows what their own initials open; the hover
+              label is left off for them. The aria-label still names it. */}
+          {isWhiteLabelAgent ? (
+            accountTrigger
+          ) : (
+            <Tooltip content="Account menu" align="end">
+              {accountTrigger}
+            </Tooltip>
+          )}
           <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="t-body">
               <span className="block truncate text-ink">
