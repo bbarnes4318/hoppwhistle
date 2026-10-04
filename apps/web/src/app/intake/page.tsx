@@ -6,6 +6,7 @@ import Script from 'next/script';
 import { useEffect, useState } from 'react';
 
 import { CustomerIntakeForm } from '@/components/call-center/CustomerIntakeForm';
+import { Segmented, SegmentedItem } from '@/components/domain';
 import { ManualLeadEntryFormV2 } from '@/components/leads/manual-lead-entry-form-v2';
 import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 
@@ -74,56 +75,54 @@ export default function IntakePage(): JSX.Element {
         className="pointer-events-none absolute -left-[9999px] h-px w-px overflow-hidden"
       />
 
-      <header className="sticky top-0 z-10 border-b border-rule bg-surface/95 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-6 py-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
-              <Link
-                href="/insurance-leads"
-                className="mt-1 rounded-md p-2 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
-                aria-label="Back to CRM"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-ink">Add Customer</h1>
-                <p className="text-sm text-ink-3">
-                  Save a lead to the CRM, send it to the buyer, or complete a full application.
-                </p>
-              </div>
-            </div>
-
-            <div
-              className={`flex rounded-lg border border-rule bg-sunken p-1 ${whiteLabelView ? 'hidden' : ''}`}
+      <header className="sticky top-0 z-10 border-b border-rule bg-surface">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/insurance-leads"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink-2 transition-colors hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Back to CRM"
             >
-              <button
-                type="button"
-                onClick={() => setMode('lead')}
-                className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                  mode === 'lead' ? 'bg-brand text-brand-fg' : 'text-ink-3 hover:bg-rule hover:text-ink'
-                }`}
-              >
-                <ClipboardPlus className="h-4 w-4" />
-                CRM Lead Entry
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('application')}
-                className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                  mode === 'application'
-                    ? 'bg-brand text-brand-fg'
-                    : 'text-ink-3 hover:bg-rule hover:text-ink'
-                }`}
-              >
-                <FileText className="h-4 w-4" />
-                Full Application
-              </button>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            <div className="min-w-0">
+              <nav aria-label="Breadcrumb" className="t-meta text-ink-3">
+                <Link href="/insurance-leads" className="hover:text-ink hover:underline">
+                  CRM
+                </Link>
+                <span aria-hidden className="mx-1.5">
+                  /
+                </span>
+                <span>Add customer</span>
+              </nav>
+              <h1 className="t-title truncate text-ink">Add customer</h1>
             </div>
           </div>
+
+          {whiteLabelView ? null : (
+            <Segmented aria-label="What to add">
+              <SegmentedItem
+                active={mode === 'lead'}
+                aria-pressed={mode === 'lead'}
+                onClick={() => setMode('lead')}
+              >
+                <ClipboardPlus className="h-3.5 w-3.5" aria-hidden />
+                CRM lead
+              </SegmentedItem>
+              <SegmentedItem
+                active={mode === 'application'}
+                aria-pressed={mode === 'application'}
+                onClick={() => setMode('application')}
+              >
+                <FileText className="h-3.5 w-3.5" aria-hidden />
+                Full application
+              </SegmentedItem>
+            </Segmented>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         {mode === 'lead' ? (
           <ManualLeadEntryFormV2 />
         ) : (
