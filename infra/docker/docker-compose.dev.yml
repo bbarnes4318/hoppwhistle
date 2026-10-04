@@ -75,6 +75,7 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
       - ./clickhouse-config/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml
+      - ./clickhouse-config/no-system-logs.xml:/etc/clickhouse-server/config.d/no-system-logs.xml
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-hopwhistle}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
