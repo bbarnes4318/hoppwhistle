@@ -2,7 +2,7 @@
 
 > Prompt 0 — Read-only runtime audit. Grounded in current code at commit `130416d`. Collated from `process.env.*` usage across `apps/api`, `apps/worker`, `apps/web`, `apps/media`, `apps/monitor` and the compose files. Service tags: **A**=api, **W**=worker, **Wb**=web, **M**=media/transcriber, **Mon**=monitor, **FS**=freeswitch container, **K**=kamailio. Nothing was changed.
 
-**Deployment reality:** production runs `infra/docker/docker-compose.dev.yml` on Hetzner `5.161.16.107` via `deploy.ps1` (see `CURRENT_RUNTIME_MAP.md` §9). Defaults below are the compose-baked defaults where present. ⚠️ = weak/committed secret (see `MULTITENANT_GAP_ANALYSIS.md` §7).
+**Deployment reality:** production runs `infra/docker/docker-compose.dev.yml` on Hetzner `178.156.223.97` via `deploy.ps1` (see `CURRENT_RUNTIME_MAP.md` §9). Defaults below are the compose-baked defaults where present. ⚠️ = weak/committed secret (see `MULTITENANT_GAP_ANALYSIS.md` §7).
 
 ---
 

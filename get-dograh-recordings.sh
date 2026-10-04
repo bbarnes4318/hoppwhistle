@@ -91,7 +91,7 @@ cat <<EOF
 To get them onto your PC, run this FROM A WINDOWS POWERSHELL WINDOW
 (not here — this is the server):
 
-  scp -i \$env:USERPROFILE\\.ssh\\hetzner_pvn root@5.161.16.107:$TARBALL \$env:USERPROFILE\\Downloads\\
+  scp -i \$env:USERPROFILE\\.ssh\\hetzner_pvn root@178.156.223.97:$TARBALL \$env:USERPROFILE\\Downloads\\
 
 Or let get-dograh-recordings.ps1 do the whole thing from the PC.
 EOF

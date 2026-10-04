@@ -13,9 +13,12 @@ outside the repository, and the one that a server migration silently breaks.
 
 |               |                                 |
 | ------------- | ------------------------------- |
-| Public IP     | `5.161.16.107`                |
+| Public IP     | `5.161.16.107` (floating IP)    |
 | Provider      | Hetzner                         |
 | SIP signaling | UDP/TCP 5080 (external profile) |
+
+The website and SSH stay on the host's primary IP, `178.156.223.97`; only phone
+traffic uses the floating IP.
 
 The previous host was `45.32.213.201`. Documents written before the Hetzner
 migration still name it; they carry a stale banner and are historical.

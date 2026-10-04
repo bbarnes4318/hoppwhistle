@@ -283,7 +283,7 @@ sequenceDiagram
 
 ## 9. Deployment reality (production vs docs)
 
-- **Production is `infra/docker/docker-compose.dev.yml` on Hetzner `5.161.16.107` (`/opt/hopwhistle`), deployed by `deploy.ps1`** (branch `edit-campaign-buyer-fix`, container names `hopwhistle-*-dev`, `NODE_ENV=development`). Full self-contained stack: postgres:16, redis:7, minio, clickhouse, api, web, worker, freeswitch, kamailio, rtpengine, prometheus, grafana.
+- **Production is `infra/docker/docker-compose.dev.yml` on Hetzner `178.156.223.97` (`/opt/hopwhistle`), deployed by `deploy.ps1`** (branch `edit-campaign-buyer-fix`, container names `hopwhistle-*-dev`, `NODE_ENV=development`). Full self-contained stack: postgres:16, redis:7, minio, clickhouse, api, web, worker, freeswitch, kamailio, rtpengine, prometheus, grafana.
 - `docker-compose.prod.yml` is an **app-only overlay** (api/web/worker) attaching to the dev datastore containers via external `docker_hopwhistle-network`.
 - `docker-compose.voice.yml` is a FreeSWITCH/kamailio/rtpengine **voice edge overlay** on a _different_ DigitalOcean host (`107-170-36-116.sslip.io`) — **not** the Dograh/AI-Voice app.
 - `app.yaml` (DO App Platform) and `DEPLOYMENT.md`/`DROPLET_DEPLOY.md` describe **retired** DigitalOcean targets — see `PROTECTED_SYSTEM_INVARIANTS.md` §Stale-docs.

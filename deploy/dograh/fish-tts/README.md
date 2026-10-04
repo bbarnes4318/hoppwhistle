@@ -54,7 +54,7 @@ Three upstream files, four edits total:
 
 ```bash
 # 1. Stage the kit
-scp -r deploy/dograh/fish-tts root@5.161.16.107:/opt/dograh-patches/
+scp -r deploy/dograh/fish-tts root@178.156.223.97:/opt/dograh-patches/
 
 # 2. Dry run — reads the live files out of the container, patches nothing
 docker run --rm -v /opt/dograh-patches:/patches -v /var/run/docker.sock:/var/run/docker.sock \
