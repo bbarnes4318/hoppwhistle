@@ -123,6 +123,14 @@ async def main() -> int:
 
     conn = await asyncpg.connect(dsn=dsn)
     try:
+        # What Dograh lists as caller IDs for this config before anything is
+        # written, so a run shows the gap it closes (e.g. 281 -> 461).
+        report["config_active_before"] = await conn.fetchval(
+            "select count(*) from telephony_phone_numbers "
+            "where organization_id=$1 and telephony_configuration_id=$2 and is_active",
+            args.org_id,
+            args.tcid,
+        )
         now = datetime.now(timezone.utc)
         state_counts: Counter[str] = Counter()
         for e164, npa, state in valid:
@@ -217,6 +225,12 @@ async def main() -> int:
             )
             report["db_confirmed_pool_inventory"] = {r["state"]: r["n"] for r in actual}
             report["db_confirmed_pool_total"] = sum(r["n"] for r in actual)
+            report["config_active_after"] = await conn.fetchval(
+                "select count(*) from telephony_phone_numbers "
+                "where organization_id=$1 and telephony_configuration_id=$2 and is_active",
+                args.org_id,
+                args.tcid,
+            )
     finally:
         await conn.close()
 
