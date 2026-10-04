@@ -183,6 +183,8 @@ function agentToday(
         connectedSeconds: 412,
         disposition: 'APPLICATION_SUBMITTED',
         application: true,
+        recording: { id: 'rec-1', durationSeconds: 412 },
+        recordingPending: false,
       },
       {
         id: 'call-2',
@@ -192,6 +194,8 @@ function agentToday(
         connectedSeconds: 95,
         disposition: 'NOT_INTERESTED',
         application: false,
+        recording: null,
+        recordingPending: false,
       },
     ],
     standing: {
@@ -297,6 +301,9 @@ function installFetch(): void {
             },
           });
         default:
+          if (/^\/api\/v1\/recordings\/[^/]+\/url$/.test(url.pathname)) {
+            return json({ url: `${url.pathname.replace(/\/url$/, '/stream')}?token=t` });
+          }
           if (url.pathname.startsWith('/api/v1/platform/context')) {
             return json({ isPlatformAdmin: false, actingTenant: null });
           }
@@ -459,11 +466,58 @@ describe("an agent's Today", () => {
     const headers = within(panel)
       .getAllByRole('columnheader')
       .map(h => h.textContent);
-    expect(headers).toEqual(['Time', 'Caller', 'Duration', 'Disposition', 'Application']);
+    expect(headers).toEqual([
+      'Time',
+      'Caller',
+      'Duration',
+      'Disposition',
+      'Application',
+      'Recording',
+    ]);
     expect(within(panel).getByText('View all calls').closest('a')?.getAttribute('href')).toBe(
       '/calls'
     );
     expect(panel.querySelectorAll('tbody tr')).toHaveLength(2);
+  });
+
+  it("plays each call's recording in the row, fetching the signed URL only on play", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement
+    ) {
+      this.dispatchEvent(new Event('play'));
+      return Promise.resolve();
+    });
+    // jsdom implements neither; the player pauses its audio on unmount.
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    try {
+      await loadToday();
+      const panel = document.querySelector('[data-recent-calls]') as HTMLElement;
+      const [recorded, unrecorded] = Array.from(panel.querySelectorAll('tbody tr'));
+
+      // The length is there before anything loads; no URL has been asked for.
+      expect(within(recorded as HTMLElement).getByText('6:52')).toBeTruthy();
+      expect(requested.some(r => r.includes('/api/v1/recordings/'))).toBe(false);
+      expect(within(unrecorded as HTMLElement).getByText('Not recorded')).toBeTruthy();
+
+      fireEvent.click(
+        within(recorded as HTMLElement).getByRole('button', {
+          name: 'Play recording of (615) 555-0101',
+        })
+      );
+      await waitFor(() =>
+        expect(
+          within(recorded as HTMLElement).getByRole('button', {
+            name: 'Pause recording of (615) 555-0101',
+          })
+        ).toBeTruthy()
+      );
+      expect(requested).toContain('/api/v1/recordings/rec-1/url');
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup();
+      play.mockRestore();
+      pause.mockRestore();
+    }
   });
 
   it('gives no standing and no Leaderboard link on a white-label agency', async () => {

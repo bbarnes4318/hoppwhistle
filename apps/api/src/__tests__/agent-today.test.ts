@@ -387,6 +387,50 @@ describe.skipIf(!gate.available)('GET /api/v1/agent/today', () => {
     expect(body.standing).toBeNull();
   });
 
+  it("names each recent call's recording, the one the Calls page would play", async () => {
+    const at = (msAgo: number) => {
+      const when = earlierToday(msAgo);
+      return { createdAt: when, answeredAt: when };
+    };
+    const recorded = await answered(tenantA, idleAgent, { ...at(400_000) });
+    const stored = await prisma.recording.create({
+      data: {
+        callId: recorded,
+        url: 's3://recordings/a.wav',
+        duration: 287,
+        status: 'COMPLETED',
+      },
+    });
+    await prisma.call.update({
+      where: { id: recorded },
+      data: { primaryRecordingId: stored.id, recordingStatus: 'READY' },
+    });
+
+    // Recorded, but the file is not in storage yet.
+    const pending = await answered(tenantA, idleAgent, {
+      ...at(300_000),
+      recordingStatus: 'PROCESSING',
+    });
+    // Never recorded.
+    const none = await answered(tenantA, idleAgent, { ...at(200_000) });
+    // Its only recording deleted by retention: nothing to play.
+    const purged = await answered(tenantA, idleAgent, { ...at(100_000) });
+    await prisma.recording.create({
+      data: { callId: purged, url: 's3://recordings/b.wav', deletedAt: new Date() },
+    });
+
+    const body = (await get(idleAgent, tenantA)).json().data;
+    const byId = new Map(body.recentCalls.map((c: any) => [c.id, c]));
+
+    expect(byId.get(recorded)).toMatchObject({
+      recording: { id: stored.id, durationSeconds: 287 },
+      recordingPending: false,
+    });
+    expect(byId.get(pending)).toMatchObject({ recording: null, recordingPending: true });
+    expect(byId.get(none)).toMatchObject({ recording: null, recordingPending: false });
+    expect(byId.get(purged)).toMatchObject({ recording: null, recordingPending: false });
+  });
+
   it('reads YESTERDAY and LAST_7_DAYS, and refuses anything else', async () => {
     const yesterday = (await get(agentA, tenantA, '?period=YESTERDAY')).json().data;
     expect(yesterday.period.key).toBe('YESTERDAY');

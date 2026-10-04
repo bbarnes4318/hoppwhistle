@@ -49,6 +49,10 @@ export interface AgentRecentCall {
   connectedSeconds: number | null;
   disposition: string | null;
   application: boolean;
+  /** The recording to play, the one the Calls page plays. Null when there is none. */
+  recording: { id: string; durationSeconds: number | null } | null;
+  /** Recorded, but the file is still being stored. */
+  recordingPending: boolean;
 }
 
 export interface AgentStanding {

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, CheckCircle2, Phone, RefreshCw } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, Phone, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -35,6 +35,7 @@ import {
   chartTooltip,
   formatEnumLabel,
 } from '@/components/domain';
+import { InlineRecordingPlayer } from '@/components/domain/inline-recording-player';
 import { formatPhone } from '@/components/domain/phone-cell';
 import { PageHeader } from '@/components/layout/page-header';
 import { usePhone } from '@/components/phone';
@@ -229,8 +230,9 @@ function TodayScreen(): JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <NeedsYourAttention data={data} className="xl:col-span-5" />
-        <RecentCalls data={shown} period={period} className="xl:col-span-7" />
+        {/* Recent calls is the wider half: it carries a player in every row. */}
+        <NeedsYourAttention data={data} className="xl:col-span-4" />
+        <RecentCalls data={shown} period={period} className="xl:col-span-8" />
       </div>
     </div>
   );
@@ -722,6 +724,39 @@ function NeedsYourAttention({
   );
 }
 
+/**
+ * The recording column: a player when there is a file, "Processing" while the
+ * file is still being stored, and a dash for a call that was never recorded.
+ */
+function RecordingCell({ call }: { call: TodayData['recentCalls'][number] }): JSX.Element {
+  if (call.recording) {
+    return (
+      <InlineRecordingPlayer
+        recordingId={call.recording.id}
+        durationSeconds={call.recording.durationSeconds ?? call.connectedSeconds}
+        label={call.caller ? formatPhone(call.caller) : undefined}
+        compact
+      />
+    );
+  }
+  if (call.recordingPending) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 t-meta text-ink-3"
+        title="The recording is still being saved. It will appear here shortly."
+      >
+        <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+        Processing
+      </span>
+    );
+  }
+  return (
+    <span className="t-meta text-ink-3" title="This call was not recorded">
+      Not recorded
+    </span>
+  );
+}
+
 function RecentCalls({
   data,
   period,
@@ -737,7 +772,7 @@ function RecentCalls({
     <Panel className={cn('min-w-0', className)} data-recent-calls>
       <PanelHeader action={<SeeAll href="/calls" label="View all calls" />}>
         <PanelTitle>Recent calls</PanelTitle>
-        <PanelDescription>Your latest calls in the period</PanelDescription>
+        <PanelDescription>Your latest calls in the period, with their recordings</PanelDescription>
       </PanelHeader>
       <PanelBody flush>
         {!data ? null : rows.length === 0 ? (
@@ -754,6 +789,9 @@ function RecentCalls({
                 <TableHead className="hidden text-right sm:table-cell">Duration</TableHead>
                 <TableHead>Disposition</TableHead>
                 <TableHead className="hidden md:table-cell">Application</TableHead>
+                <TableHead className="min-w-[132px] sm:w-[176px] sm:min-w-[160px]">
+                  Recording
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -770,7 +808,7 @@ function RecentCalls({
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {call.caller ? formatPhone(call.caller) : '—'}
                   </TableCell>
-                  <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                  <TableCell className="hidden whitespace-nowrap text-right tabular-nums sm:table-cell">
                     {call.connectedSeconds ? duration(call.connectedSeconds) : '—'}
                   </TableCell>
                   <TableCell>
@@ -796,6 +834,9 @@ function RecentCalls({
                     ) : (
                       <span className="text-ink-3">—</span>
                     )}
+                  </TableCell>
+                  <TableCell className="py-2" data-recording={call.recording?.id ?? 'none'}>
+                    <RecordingCell call={call} />
                   </TableCell>
                 </TableRow>
               ))}
