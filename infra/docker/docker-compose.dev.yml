@@ -110,7 +110,12 @@ services:
       HOST: 0.0.0.0
       DATABASE_URL: postgresql://${POSTGRES_USER:-callfabric}:${POSTGRES_PASSWORD:-callfabric_dev}@postgres:5432/${POSTGRES_DB:-callfabric}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      # JWT_SECRET deliberately not set here. It comes from env_file above, which
+      # always reads /opt/hopwhistle/.env whatever the compose command. It used
+      # to be `${JWT_SECRET:-dev-secret-change-in-production}`: an entry here
+      # overrides env_file, so any compose call made without --env-file signed
+      # every login with a string that is public in this repository. With it
+      # gone, a missing secret stops the API at boot instead.
       RTPENGINE_URL: http://rtpengine:22222
       FREESWITCH_ESL_HOST: freeswitch
       FREESWITCH_ESL_PORT: 8021
