@@ -21,13 +21,21 @@ FROM donor AS sounds
 # The last two tests are the prompts inbound_route.lua plays; the build fails if
 # either is missing.
 ARG CALLIE_SOUNDS_URL=https://files.freeswitch.org/releases/sounds/freeswitch-sounds-en-us-callie-8000-1.0.53.tar.gz
-RUN mkdir -p /sounds \
+# ca-certificates is needed for the HTTPS download and only in this stage: the
+# donor installs curl with --no-install-recommends, which leaves it without a
+# CA bundle (curl exit 77). Nothing from here but /sounds reaches the image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /sounds \
     && curl -fsSL --retry 3 --retry-delay 5 "$CALLIE_SOUNDS_URL" -o /tmp/callie.tar.gz \
     && echo "callie sounds sha256: $(sha256sum /tmp/callie.tar.gz | cut -d' ' -f1)" \
     && tar -xzf /tmp/callie.tar.gz -C /sounds \
     && rm -f /tmp/callie.tar.gz \
-    && test -f /sounds/en/us/callie/ivr/8000/ivr-no_user_response.wav \
-    && test -f /sounds/en/us/callie/ivr/8000/ivr-accept_reject_voicemail.wav
+    && { test -f /sounds/en/us/callie/ivr/8000/ivr-no_user_response.wav \
+         && test -f /sounds/en/us/callie/ivr/8000/ivr-accept_reject_voicemail.wav \
+         || { echo "prompts not where vars.xml expects them; extracted layout:"; \
+              find /sounds -maxdepth 5 -type d | head -40; exit 1; }; }
 
 # Stage 2: Build the FreeSWITCH image
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
