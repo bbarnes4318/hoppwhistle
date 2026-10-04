@@ -4,7 +4,7 @@ Everything in this directory targets the **self-hosted Dograh ("AI Voice") stack
 on the Hetzner box (`/opt/dograh`, containers `dograh-api-1` etc.), which places
 Dograh AI outbound calls via Asterisk/ARI → FracTEL. It implements:
 
-1. Import of the 264 state-tagged caller-ID DIDs into `telephony_phone_numbers`
+1. Import of the state-tagged caller-ID DIDs (461 in `apps/api/data/dograh-state-caller-ids.csv`) into `telephony_phone_numbers`
    (Dograh's caller-ID rotation pool), tagged `extra_metadata.pool = "state_cid"`
    with `state`/`npa`.
 2. State-matched caller-ID selection: a Dograh campaign call picks a caller ID
@@ -75,6 +75,20 @@ one.
 
 It only reads the database and downloads what it points at — it writes nothing
 back to Dograh.
+
+## Adding caller IDs (new FracTEL DIDs)
+
+Dograh reads caller IDs only from its own `telephony_phone_numbers` table. Adding
+numbers to `apps/api/data/dograh-state-caller-ids.csv` does **not** make them show
+up in Dograh until the CSV is imported there. After merging a CSV change, on the box:
+
+```bash
+cd /opt/hopwhistle && git pull
+./sync-dograh-caller-ids.sh            # dry run: "inserted" = numbers Dograh is missing
+./sync-dograh-caller-ids.sh --apply    # write them; prints config_active_before/after
+```
+
+No restart: the next campaign batch loads the new numbers into the rotation pool.
 
 ## Policy model (kill-switchable, off by default)
 
