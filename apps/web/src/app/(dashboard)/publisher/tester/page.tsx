@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
 import { Notice } from '@/components/domain';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -252,30 +253,29 @@ function PublisherTesterPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-sm text-ink-2">
-            Send a real ping and post with your API key to check your integration end to end.
-          </p>
-          {/*
-           * There is no sandbox behind this page. The ping runs the live auction
-           * and the post leases a real transfer number from the pool, so a call
-           * placed to it reaches the winning buyer.
-           */}
-          <Notice tone="warning" role="note">
-            This leases a real number and may route a real call.
-          </Notice>
-        </div>
-        <Button
-          variant="outline"
-          onClick={handleReset}
-          className="bg-surface border-rule text-ink hover:bg-sunken flex items-center gap-1.5"
-        >
-          <RotateCcw className="h-4 w-4" />
-          Reset Tester
-        </Button>
-      </div>
+    <div className="page-canvas">
+      <PageHeader
+        description="Send a real ping and post with your API key to check your integration end to end."
+        actions={
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            className="bg-surface border-rule text-ink hover:bg-sunken flex items-center gap-1.5"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Tester
+          </Button>
+        }
+      />
+
+      {/*
+       * There is no sandbox behind this page. The ping runs the live auction
+       * and the post leases a real transfer number from the pool, so a call
+       * placed to it reaches the winning buyer.
+       */}
+      <Notice tone="warning" role="note">
+        This leases a real number and may route a real call.
+      </Notice>
 
       {/* API Key Selector */}
       <Card className="bg-surface border-rule backdrop-blur-xl">

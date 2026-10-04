@@ -14,6 +14,7 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +39,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface Campaign {
   id: string;
@@ -290,7 +292,9 @@ export default function CampaignDetailPage() {
   const handleExecuteRestart = async () => {
     setRestartLoading(true);
     try {
-      const res = await apiClient.post<RestartResult>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached`);
+      const res = await apiClient.post<RestartResult>(
+        `/api/v1/ai-campaigns/${campaignId}/restart-unreached`
+      );
       if (res.error) throw new Error(res.error.message);
       toast({
         title: 'Campaign Restarted',
@@ -346,9 +350,12 @@ export default function CampaignDetailPage() {
         })
         .filter(c => c.phoneNumber);
 
-      const res = await apiClient.post<ContactUploadResult>(`/api/v1/ai-campaigns/${campaignId}/contacts`, {
-        contacts: parsedContacts,
-      });
+      const res = await apiClient.post<ContactUploadResult>(
+        `/api/v1/ai-campaigns/${campaignId}/contacts`,
+        {
+          contacts: parsedContacts,
+        }
+      );
 
       if (res.error) throw new Error(res.error.message || 'Upload failed');
 
@@ -374,7 +381,7 @@ export default function CampaignDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="page-canvas">
         <Skeleton className="h-12 w-64" />
         <div className="grid gap-4 md:grid-cols-4">
           {[...Array(4)].map((_, i) => (
@@ -388,8 +395,8 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <h2 className="text-xl font-semibold">Campaign Not Found</h2>
+      <div className="page-canvas items-center justify-center py-12">
+        <h2 className="t-section text-ink">Campaign not found</h2>
         <Button onClick={() => router.push('/ai-campaigns')} className="mt-4">
           Back to Campaigns
         </Button>
@@ -410,69 +417,85 @@ export default function CampaignDetailPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/ai-campaigns')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-3xl font-bold tracking-tight">{campaign.name}</h2>
-              <Badge variant="outline" className={statusColors[campaign.status]}>
-                {campaign.status}
-              </Badge>
-            </div>
-            {campaign.description && (
-              <p className="text-muted-foreground mt-1">{campaign.description}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={handleRefresh}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          {(campaign.status === 'PAUSED' || campaign.status === 'COMPLETED') && (
-            <Button
-              onClick={() => void handleOpenRestartModal()}
+    <div className="page-canvas">
+      {/* The campaign's name is the page's title, in the topbar; the way back,
+          its status and description sit under it, its controls at the right. */}
+      <PageHeader
+        title={campaign.name}
+        description={
+          <span className="inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/ai-campaigns')}
+              className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink"
+            >
+              <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+              AI campaigns
+            </button>
+            <span aria-hidden className="text-ink-3">
+              ·
+            </span>
+            <Badge
               variant="outline"
-              className="border-primary/30 hover:border-primary/60 text-primary"
-              disabled={actionLoading}
+              className={cn('px-1.5 py-0 text-[11px]', statusColors[campaign.status])}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Restart Unreached
+              {campaign.status}
+            </Badge>
+            {campaign.description ? (
+              <>
+                <span aria-hidden className="text-ink-3">
+                  ·
+                </span>
+                <span>{campaign.description}</span>
+              </>
+            ) : null}
+          </span>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="icon" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4" />
             </Button>
-          )}
-          {campaign.status === 'RUNNING' ? (
-            <Button
-              onClick={() => void handlePause()}
-              variant="destructive"
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Pause className="h-4 w-4 mr-2" />
-              )}
-              Pause
-            </Button>
-          ) : campaign.status !== 'COMPLETED' ? (
-            <Button
-              onClick={() => void handleStart()}
-              disabled={actionLoading || (stats?.pendingContacts || 0) === 0}
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              Start
-            </Button>
-          ) : null}
-        </div>
-      </div>
+            {(campaign.status === 'PAUSED' || campaign.status === 'COMPLETED') && (
+              <Button
+                onClick={() => void handleOpenRestartModal()}
+                variant="outline"
+                className="border-primary/30 hover:border-primary/60 text-primary"
+                disabled={actionLoading}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Restart Unreached
+              </Button>
+            )}
+            {campaign.status === 'RUNNING' ? (
+              <Button
+                onClick={() => void handlePause()}
+                variant="destructive"
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Pause className="h-4 w-4 mr-2" />
+                )}
+                Pause
+              </Button>
+            ) : campaign.status !== 'COMPLETED' ? (
+              <Button
+                onClick={() => void handleStart()}
+                disabled={actionLoading || (stats?.pendingContacts || 0) === 0}
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                Start
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {/* Progress Bar */}
       {stats && stats.totalContacts > 0 && (

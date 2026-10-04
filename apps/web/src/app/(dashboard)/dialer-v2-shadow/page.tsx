@@ -19,8 +19,11 @@
  * Existing call-center pages are untouched; this is a new route.
  */
 
-import { AlertTriangle, Eye, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+
+import { PageHeader } from '@/components/layout/page-header';
+import { Button } from '@/components/ui/button';
 
 import {
   SHADOW_BANNER,
@@ -190,39 +193,23 @@ export default function DialerV2ShadowPage() {
   const emptyMessage = emptyStateMessage(status, decisions);
 
   return (
-    <div className="space-y-6 p-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            <Eye className="h-6 w-6" aria-hidden="true" />
-            Dialer V2 — Shadow Mode
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {status === null ? (
-              'Observation only. These are the decisions the pacing controller would have made against observed state.'
-            ) : status.originationImplemented ? (
-              <>
-                Observation only — but the service reports an origination code path in this build,
-                so the rows below are <em>not</em> necessarily hypothetical. Confirm the origination
-                controls before reading this page as a record of calls not placed.
-              </>
-            ) : (
-              <>
-                Observation only. The service reports no origination code path in this build — these
-                are decisions it <em>would</em> have made. No call has been placed.
-              </>
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </button>
-      </header>
+    <div className="page-canvas">
+      <PageHeader
+        title="Dialer V2 — Shadow mode"
+        description={
+          status === null
+            ? 'Observation only: the decisions the pacing controller would have made against observed state.'
+            : status.originationImplemented
+              ? 'Observation only — but this build reports an origination code path, so these rows are not necessarily hypothetical.'
+              : 'Observation only. No call has been placed: these are decisions the service would have made.'
+        }
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Required label. Rendered unconditionally, above every metric. */}
       <div
