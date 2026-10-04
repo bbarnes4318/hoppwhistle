@@ -35,15 +35,9 @@
  *   5. THE POLLING SETTLES. After the page is left alone, the request count
  *      stops climbing. A loop that retries a terminal refusal forever is its
  *      own defect regardless of what is on screen.
- *   6. THE LIVE STRIP IS THERE, AND IT AGREES WITH THE PAGE. The strip renders
- *      above every page in the application, so a defect in it is a defect on
- *      every screen at once. Every load asserts it rendered with figures on
- *      it; the delivery pages additionally assert that each figure the strip
- *      and the page below both carry reads the SAME string for the same
- *      tenant, because two screens disagreeing about what tonight costs is
- *      worse than one screen being wrong; and an agency that is not enrolled
- *      in billing is asserted to be shown no money at all -- not zeroes, and
- *      not em dashes either.
+ *   6. THERE IS NO LIVE STRIP. The Calls / Applications / Conversion row that
+ *      used to sit under the topbar was removed from every page; every load
+ *      asserts it has not come back.
  *
  * Then it signs out and drives the one page that runs before any of that: the
  * login screen, at desktop width and at 360px. It signs in with a keyboard and
@@ -154,8 +148,6 @@ const SWEEP = [
     who: 'agency principal (ADMIN, inside one agency)',
     roles: ['ADMIN'],
     platform: false,
-    // The reading the strip above every one of these pages must be.
-    strip: 'agency',
     routes: [
       '/dashboard',
       '/call-center',
@@ -264,11 +256,6 @@ const SWEEP = [
     who: 'agent (AGENT, inside one agency)',
     roles: ['AGENT'],
     platform: false,
-    /*
-     * No live strip: Today is an agent's live view, as it is a white-label
-     * owner's, and the strip is asserted ABSENT on every one of these loads.
-     */
-    strip: false,
     // Exactly AGENT_NAV. /dashboard is on it now: for an agent it renders
     // AgentToday, from `GET /api/v1/agent/today`, which is scoped to them on
     // the server and carries no money -- it used to be the tenant-wide admin
@@ -304,15 +291,11 @@ const SWEEP = [
      * opens on its live Floor, the CRM is in the nav without the Power Dialer,
      * /upgrades offers each upgrade with a request button, and a downline has
      * a detail page of its own.
-     *
-     * And no live strip at all: Today is the white-label owner's live view,
-     * and the strip is asserted ABSENT on every one of these loads.
      */
     who: 'white-label owner (OWNER + ADMIN, no upgrades)',
     roles: ['OWNER', 'ADMIN'],
     platform: false,
     whiteLabel: true,
-    strip: false,
     routes: [
       '/dashboard',
       '/applications',
@@ -333,8 +316,6 @@ const SWEEP = [
     who: 'publisher (PUBLISHER, inside one agency)',
     roles: ['PUBLISHER'],
     platform: false,
-    // Unchanged by the agency work: still GET /api/v1/live/metrics.
-    strip: 'publisher',
     routes: [
       '/publisher/dashboard',
       '/publisher/calls',
@@ -349,7 +330,6 @@ const SWEEP = [
     who: 'buyer (BUYER, inside one agency)',
     roles: ['BUYER'],
     platform: false,
-    strip: 'buyer',
     routes: [
       '/buyer/dashboard',
       '/buyer/calls',
@@ -363,8 +343,6 @@ const SWEEP = [
     who: 'platform admin, no agency entered',
     roles: ['ADMIN'],
     platform: true,
-    // Every agency at once, and no agency-scoped request behind it.
-    strip: 'platform',
     routes: [
       /*
        * The Live Board, which until now was a nav entry marked "Soon" with no
@@ -384,9 +362,6 @@ const SWEEP = [
     roles: ['ADMIN'],
     platform: true,
     actingTenant: true,
-    // Inside an agency, staff carry that agency's administrator roles and get
-    // that agency's reading -- the same one its own principal sees.
-    strip: 'agency',
     routes: [
       '/dashboard',
       '/delivery',
@@ -407,243 +382,19 @@ const SWEEP = [
 ];
 
 /**
- * ── The live strip, above every page ─────────────────────────────────────────
+ * ── No live strip ────────────────────────────────────────────────────────────
  *
- * It replaced four pay-per-call marketplace figures that had no source in an
- * agency portal: three rendered as em dashes and the fourth as $0.00. What is
- * there now answers the three questions an agency principal actually has -- am
- * I on pace, what is today costing me, where is my rate going -- with an agent
- * and a NetEnroll-staff reading beside it.
- *
- * Because it renders on EVERY page, a defect in it is a defect on every screen
- * at once, which is why it is asserted on every load of the sweep rather than
- * on one page of its own.
- *
- * The strip and the pages below it mark their figures with `data-figure-value`
- * (and `data-figure` / `data-figure-label` to say which figure), so this
- * compares the strings that were actually rendered rather than re-deriving
- * either number.
+ * A Calls / Applications / Conversion row used to sit under the topbar on
+ * every page. It was removed everywhere: it mostly read zeroes and dashes and
+ * repeated what the pages below already show. Asserted ABSENT on every load,
+ * so it does not quietly come back.
  */
 const STRIP_SELECTOR = '[data-testid="live-strip"]';
 
-/**
- * The one page with no strip, and it is not an oversight.
- *
- * `/call-center` returns from the dashboard layout before the chrome is built:
- * no sidebar, no topbar, a locked `h-screen w-screen overflow-hidden` viewport
- * and an integrated dialer. It has never carried the strip, in this shape or
- * the marketplace one it replaced, and putting a row above a deliberately
- * chrome-free screen an agent works a shift inside is a change to that page
- * rather than to the strip.
- *
- * Asserted ABSENT rather than skipped, so this stays a decision somebody made
- * instead of a hole in the sweep: adding the strip there means changing this
- * list on purpose.
- */
-const NO_STRIP_ROUTES = ['/call-center'];
-
-/**
- * Which strip figure is the same fact as which figure on the page below.
- *
- * A strip figure is compared against whichever of the listed labels the page
- * actually rendered; /delivery has three readings (an enrolled agency, an
- * agency that is not in the billing system, and NetEnroll staff across every
- * agency) and they do not all name a figure the same way.
- *
- * Absent from this map, deliberately: the app credits remaining and the current
- * rate on the agency's /delivery. Those are the pages' HERO figures and the strip drops them
- * there rather than repeating them -- which `MUST_NOT_APPEAR` below asserts.
- */
-const STRIP_MATCHES_PAGE = {
-  '/delivery': {
-    applications: ['Applications', 'Applications today'],
-    calls: ['Calls answered', 'Calls today'],
-    tracking: ['Tomorrow is tracking toward'],
-  },
-};
-
-/**
- * Strip figures that must NOT be on the strip on a given page, by reading.
- *
- * These are the pages' HERO figures: the largest element on the screen. The
- * strip drops them there rather than repeating them.
- *
- * Keyed by reading and path, not by path alone, and that distinction is load
- * bearing. /delivery is two pages. The agency's own panel leads on the app
- * credits remaining and on the current rate, and the strip drops both. The cross-agency page leads on "Settled today", which the
- * strip never carries — and the platform reading has a figure of its own
- * called `tonight`, a projection across every agency, which is exactly what
- * staff came to that page for.
- */
-const MUST_NOT_APPEAR = {
-  'agency:/delivery': ['block', 'rate'],
-};
-
-/**
- * Labels and values that mean money.
- *
- * An agency that a platform admin has not enrolled in billing is not gated,
- * not metered and not settled. It must be shown the operational counts and
- * nothing else -- not a zero, and not an em dash either, because an em dash
- * under a label reading "tonight" still tells somebody they owe an unknown
- * amount.
- */
-const BILLING_LABEL = /tonight|overrun|block|credit|rate|cost|debit|settlement|charge/i;
-
-/** The strip as it was actually rendered: one entry per figure, in order. */
-async function readStrip(page) {
-  return page.evaluate(selector => {
-    const strip = document.querySelector(selector);
-    if (!strip) return null;
-    return {
-      scope: strip.dataset.scope ?? null,
-      figures: Array.from(strip.querySelectorAll('[data-figure]')).map(el => ({
-        id: el.dataset.figure,
-        value: el.dataset.figureValue ?? '',
-        // The label and the caveat as a person reads them, so an assertion can
-        // be about what is on screen rather than about an attribute.
-        text: el.innerText.replace(/\s+/g, ' ').trim(),
-      })),
-    };
-  }, STRIP_SELECTOR);
-}
-
-/** The page's own figures, by label. */
-async function readPageFigures(page) {
-  return page.evaluate(() => {
-    const out = {};
-    for (const el of document.querySelectorAll('[data-figure-label]')) {
-      const label = el.dataset.figureLabel;
-      if (label && el.dataset.figureValue !== undefined) out[label] = el.dataset.figureValue;
-    }
-    return out;
-  });
-}
-
-/**
- * Everything the strip has to satisfy on one page load.
- *
- * `waitForSelector` rather than trusting the settle: the strip appears when
- * its first poll answers, and a page that compiled slowly would otherwise
- * report a missing strip that is merely late.
- */
-async function checkStrip(page, who, path, expectedScope = null, report = fail) {
-  /*
-   * `false`: this session has no strip at all. A white-label owner's Today is
-   * their live view, and the strip repeated a smaller copy of it above every
-   * page -- one more place for two readings of the same floor to disagree.
-   */
-  if (expectedScope === false) {
-    if (await page.$(STRIP_SELECTOR)) {
-      report(
-        `${who}: the live strip rendered for a white-label owner. Today replaces it; the ` +
-          'dashboard layout leaves it out for white-label and downline owners.'
-      );
-    }
-    return null;
+async function checkNoStrip(page, who, report = fail) {
+  if (await page.$(STRIP_SELECTOR)) {
+    report(`${who}: the live strip rendered. It was removed from every page.`);
   }
-
-  if (NO_STRIP_ROUTES.includes(path)) {
-    if (await page.$(STRIP_SELECTOR)) {
-      report(
-        `${who}: the live strip rendered on a page that deliberately has no chrome. If that is ` +
-          'intended, take the route out of NO_STRIP_ROUTES and say why the locked viewport can ' +
-          'afford the row.'
-      );
-    }
-    return null;
-  }
-
-  try {
-    await page.waitForSelector(STRIP_SELECTOR, { timeout: 20_000 });
-  } catch {
-    report(
-      `${who}: the live strip never rendered. It is supposed to be above every page in the ` +
-        'application, and it is the first thing a principal, an agent or a NetEnroll operator ' +
-        'looks at.'
-    );
-    return null;
-  }
-
-  const strip = await readStrip(page);
-  const figures = strip?.figures ?? [];
-  if (figures.length === 0) {
-    report(`${who}: the live strip rendered with no figures on it, which is an empty band.`);
-    return strip;
-  }
-
-  /*
-   * The right reading for the person signed in.
-   *
-   * Asserted rather than inferred from the labels, because the whole point of
-   * the strip is that a principal, an agent and NetEnroll staff are shown
-   * different things — an agent must never be handed the agency's money, and
-   * staff with no agency entered must never be handed one agency's.
-   */
-  if (expectedScope !== null && strip.scope !== expectedScope) {
-    report(
-      `${who}: the strip is the "${strip.scope}" reading; this session should get ` +
-        `"${expectedScope}".`
-    );
-  }
-
-  // Every figure says what it is. A bare number with no label is unreadable.
-  for (const figure of figures) {
-    if (!figure.text || figure.text.length === 0) {
-      report(`${who}: the strip figure "${figure.id}" rendered with no text in it.`);
-    }
-    if (figure.value && !figure.text.includes(figure.value)) {
-      report(
-        `${who}: the strip figure "${figure.id}" carries ${JSON.stringify(figure.value)} but ` +
-          `renders ${JSON.stringify(figure.text)}. The attribute the assertions read and the ` +
-          'text a person reads have come apart.'
-      );
-    }
-  }
-
-  // It must not have grown back into a band of cards. One dense row.
-  const height = await page.evaluate(
-    selector => Math.round(document.querySelector(selector)?.getBoundingClientRect().height ?? 0),
-    STRIP_SELECTOR
-  );
-  if (height > 64) {
-    report(
-      `${who}: the strip is ${height}px tall. It renders on every page in the application; at ` +
-        'that height it is a band of cards again rather than one dense row.'
-    );
-  }
-
-  const banned = MUST_NOT_APPEAR[`${strip.scope}:${path}`] ?? [];
-  for (const id of banned) {
-    if (figures.some(f => f.id === id)) {
-      report(
-        `${who}: the strip repeats "${id}", which this page already renders as its largest ` +
-          'element. A figure the page below shows as its hero is not repeated in the strip on ' +
-          'that page.'
-      );
-    }
-  }
-
-  // The strip and the page below, on the same figures, for the same tenant.
-  const pairs = STRIP_MATCHES_PAGE[path];
-  if (pairs) {
-    const pageFigures = await readPageFigures(page);
-    for (const [id, labels] of Object.entries(pairs)) {
-      const figure = figures.find(f => f.id === id);
-      if (!figure) continue;
-      const label = labels.find(candidate => candidate in pageFigures);
-      if (!label) continue;
-      if (pageFigures[label] !== figure.value) {
-        report(
-          `${who}: the strip says ${JSON.stringify(figure.value)} for "${id}" and the page ` +
-            `below says ${JSON.stringify(pageFigures[label])} for "${label}". Two screens ` +
-            'disagreeing about the same tenant on the same day is worse than one being wrong.'
-        );
-      }
-    }
-  }
-
-  return strip;
 }
 
 /**
@@ -1798,15 +1549,8 @@ async function checkRoute(browser, session, roles, route) {
   // 5. Legible on a light ground.
   await checkLegibility(page, who);
 
-  /*
-   * 6. The strip above the page, and it is the PLATFORM reading.
-   *
-   * Every session here is NetEnroll staff with no agency entered, whatever
-   * other roles they hold. An operator who also holds PUBLISHER getting the
-   * publisher reading would mean the strip had asked an agency-scoped endpoint
-   * with no agency — the 409-per-page-load loop assertion 4 above exists for.
-   */
-  await checkStrip(page, who, route.path, 'platform');
+  // 6. No live strip above the page.
+  await checkNoStrip(page, who);
 
   await context.close();
 }
@@ -2130,46 +1874,8 @@ async function inspectRoute(browser, session, entry, path, fail) {
   // 5. Legible.
   await checkLegibility(page, who, fail);
 
-  // 6. The strip above the page: it rendered, it is one row, and where it and
-  //    the page carry the same figure they carry the same number.
-  const strip = await checkStrip(page, who, path, entry.strip ?? null, fail);
-
-  /*
-   * 7. An agency not enrolled in billing is shown no money.
-   *
-   * The fixture's agency is deliberately never enrolled -- the seed writes no
-   * `AgencyBillingProfile` -- so every agency reading in this sweep is one.
-   *
-   * Scoped to the agency reading, not to "not staff": the publisher and buyer
-   * portals are a different product with their own earnings and spend, and
-   * NetEnroll's own cross-agency reading is where tonight's projected
-   * settlement across every agency belongs.
-   */
-  if (strip?.scope === 'agency') {
-    /*
-     * The premise, checked rather than assumed. If somebody enrols the fixture
-     * agency, this fails here — with the reason — instead of the assertion
-     * below quietly passing for the wrong reason.
-     */
-    if (path === '/delivery' && !state.body.includes('Billing is not enabled for this agency')) {
-      fail(
-        `${who}: the fixture agency is supposed to be unenrolled — the seed writes no ` +
-          'AgencyBillingProfile — but /delivery does not say so. The "no billing figures for an ' +
-          'unenrolled agency" checks below are then asserting nothing.'
-      );
-    }
-
-    const money = strip.figures.filter(f => f.value.includes('$') || BILLING_LABEL.test(f.text));
-    if (money.length > 0) {
-      fail(
-        `${who}: the strip shows billing figures to an agency that is not enrolled in billing:\n` +
-          money.map(f => `    ${f.id}: ${JSON.stringify(f.text)}`).join('\n') +
-          '\n  Billing is opt-in per agency and off by default. An unenrolled agency is not ' +
-          'gated, not metered and not settled, and a zero or an em dash under a label about ' +
-          'money tells a principal they owe an unknown amount.'
-      );
-    }
-  }
+  // 6. No live strip above the page.
+  await checkNoStrip(page, who, fail);
 
   await context.close();
   return {
@@ -2756,11 +2462,9 @@ async function checkDarkScope(browser, session) {
 /**
  * Leave one page alone and watch whether it keeps asking.
  *
- * The live strip polled `/api/v1/live/metrics` every five seconds on a bare
- * `setInterval`, and for an operator with no agency every one of those was a
- * 409. It polls `/api/v1/live/strip` every thirty seconds now, which answers
- * the cross-agency reading for staff with no agency rather than refusing them,
- * so the honest assertion is that a quiet page stays quiet: a handful of
+ * The live strip (since removed) once polled `/api/v1/live/metrics` every five
+ * seconds on a bare `setInterval`, and for an operator with no agency every one
+ * of those was a 409. The honest assertion is that a quiet page stays quiet: a handful of
  * requests over three quarters of a minute is a page that has settled; dozens
  * is a loop.
  */
@@ -2781,11 +2485,11 @@ async function checkPollingSettles(browser, session) {
   }
 
   /*
-   * Two pollers are correct on this page and nothing else is: /delivery's own
-   * cross-agency view every 30s, and the live strip above it every 30s. Each
-   * is jittered by ±15%, so over three quarters of a minute each can land
-   * twice; one spare covers a boundary. Anything approaching a 5s cadence --
-   * which is what the strip used to run at -- is not.
+   * /delivery's own cross-agency view polls every 30s, jittered by ±15%, so
+   * over three quarters of a minute it can land twice. The ceiling still
+   * leaves room for the second 30s poller this page had before the live strip
+   * was removed. Anything approaching a 5s cadence -- which is what the strip
+   * once ran at -- is not settled.
    */
   const ceiling = Math.ceil(IDLE_MS / 30_000) * 2 + 1;
   if (since.length > ceiling) {
@@ -3024,8 +2728,7 @@ async function main() {
   console.log(
     `browser smoke test passed: ${ROLE_SETS.length} role set(s) x ${ROUTES.length} landing route(s), ` +
       `${sweptRoutes} route load(s) across ${SWEEP.length} sessions, light and legible, ` +
-      'no prompt, nothing refused, the live strip present and agreeing with the page below it, ' +
-      'no billing figures for an agency that is not enrolled, dark scope dark, polling settles, ' +
+      'no prompt, nothing refused, no live strip, dark scope dark, polling settles, ' +
       `and the front door signs people in at ${LOGIN_VIEWPORTS.map(v => v.label).join(' and ')}.`
   );
 }
