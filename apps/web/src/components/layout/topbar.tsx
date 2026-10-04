@@ -26,11 +26,15 @@ import { cn } from '@/lib/utils';
 
 import { CommandPalette, useCommandPalette } from './command-palette';
 import { MobileNav } from './mobile-nav';
-import { usePageTitleClaimed, useCurrentPageTitle } from './use-page-title';
+import { publishTopbarSlot, usePageTitleClaimed, useCurrentPageTitle } from './use-page-title';
 
 /**
- * Topbar: 64px, the page title at the title step on the left; the command
- * palette trigger, notifications and the account menu on the right.
+ * Topbar: the page header. The page's title on the left with its one-line
+ * description under it; the page's own actions, then the command palette
+ * trigger, notifications and the account menu on the right. A page's
+ * <PageHeader> renders its description and actions into the slots here (see
+ * `useTopbarSlots`), so every page is named in the same place at the same
+ * size and the content area starts with the content.
  *
  * The search box is a button, not an input. It opens the palette, which is
  * where search actually happens — a second input that behaves differently from
@@ -43,9 +47,9 @@ export function Topbar() {
   // A white-label owner's pages, and an agent's, are named as their own
   // sidebar names them: /dashboard is "Today" to both.
   const title = useCurrentPageTitle();
-  // The page's own header shows the title when it has one; this is the
-  // fallback for a page that does not.
-  const titleOnPage = usePageTitleClaimed();
+  // A page with a title of its own (a lead's name, an agreement's reference)
+  // renders it into the heading in place of the nav name.
+  const titleClaimed = usePageTitleClaimed();
 
   // The tab is named after the page, then the product, so a floor with six
   // NetEnroll tabs open can tell them apart. Set here because every page under
@@ -82,6 +86,19 @@ export function Topbar() {
     window.location.replace('/login');
   }, []);
 
+  const titleSlot = React.useCallback(
+    (el: HTMLElement | null) => publishTopbarSlot('title', el),
+    []
+  );
+  const descriptionSlot = React.useCallback(
+    (el: HTMLElement | null) => publishTopbarSlot('description', el),
+    []
+  );
+  const actionsSlot = React.useCallback(
+    (el: HTMLElement | null) => publishTopbarSlot('actions', el),
+    []
+  );
+
   const initials =
     [user?.firstName, user?.lastName]
       .filter(Boolean)
@@ -94,11 +111,30 @@ export function Topbar() {
     <>
       <header className="flex h-[76px] shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
         <MobileNav />
-        {titleOnPage ? (
-          <div className="min-w-0 flex-1" />
-        ) : (
-          <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
-        )}
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+          <h1 className="t-title flex min-w-0 items-center text-ink" data-page-title="">
+            <span ref={titleSlot} className="min-w-0 truncate empty:hidden" />
+            {titleClaimed ? null : <span className="min-w-0 truncate">{title}</span>}
+          </h1>
+          <div
+            ref={descriptionSlot}
+            data-page-description=""
+            className="hidden min-w-0 truncate text-[13px] leading-5 text-ink-3 empty:hidden md:block [&_*]:inline [&>*:not(:last-child)]:hidden"
+          />
+        </div>
+
+        {/* The page's own actions: a period switch, an export, "New ...".
+            Docked from xl, where there is room beside the search; below that
+            the page renders them at its top. */}
+        <div
+          ref={actionsSlot}
+          data-page-actions=""
+          className="hidden shrink-0 items-center gap-2 empty:hidden xl:flex"
+        />
+        <span
+          aria-hidden
+          className="hidden h-6 w-px shrink-0 bg-rule xl:block [[data-page-actions]:empty+&]:hidden"
+        />
 
         {/* NetEnroll staff only, and rendered on every page: an operator must
             never be able to forget which agency's data they are looking at.
@@ -150,7 +186,10 @@ export function Topbar() {
           onClick={() => setOpen(true)}
           className={cn(
             'hidden h-9 items-center gap-2 rounded-lg border border-rule bg-paper px-3 shadow-[inset_0_1px_0_rgba(16,24,40,0.02)] sm:flex [&>svg]:h-4 [&>svg]:w-4',
-            'w-[280px] text-left t-body text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
+            // A page with actions docked beside it gets the room back below
+            // 1600px: the icon button below stands in for the box.
+            '[[data-page-actions]:not(:empty)~&]:max-[1599px]:hidden',
+            'w-[220px] text-left t-body min-[1600px]:w-[280px] text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
           )}
           aria-label="Open command palette"
@@ -162,8 +201,12 @@ export function Topbar() {
           </kbd>
         </button>
 
-        {/* Below sm the labelled button is replaced by an icon. */}
-        <Tooltip content="Open command palette" className="sm:hidden">
+        {/* Below sm the labelled button is replaced by an icon, and so it is
+            beside a page's docked actions below 1600px. */}
+        <Tooltip
+          content="Open command palette"
+          className="sm:hidden [[data-page-actions]:not(:empty)~&]:max-[1599px]:inline-flex"
+        >
           <button
             type="button"
             onClick={() => setOpen(true)}

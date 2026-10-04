@@ -66,3 +66,74 @@ export function usePageTitleClaimed(): boolean {
     () => false
   );
 }
+
+/*
+ * ── The topbar is the page header ────────────────────────────────────────────
+ *
+ * Every page is named in the topbar: its title, the one-line description under
+ * it, and (on a wide screen) the page's own actions at the right of the bar. A
+ * page's <PageHeader> renders those INTO the topbar through portals, so the
+ * content area starts with the content and no screen spends a 70px band
+ * restating its name under a bar that already had room for it.
+ *
+ * Portals, not a copy in a store: the description and actions stay part of the
+ * page's React tree -- its state, its context, its handlers -- and only their
+ * DOM moves. The topbar publishes the elements to render into; with no topbar
+ * mounted (a page rendered on its own), every slot is null and the header
+ * renders in place as it always did.
+ */
+
+export interface TopbarSlots {
+  title: HTMLElement | null;
+  description: HTMLElement | null;
+  actions: HTMLElement | null;
+}
+
+let slots: TopbarSlots = { title: null, description: null, actions: null };
+const slotListeners = new Set<() => void>();
+
+function subscribeSlots(listener: () => void): () => void {
+  slotListeners.add(listener);
+  return () => slotListeners.delete(listener);
+}
+
+const NO_SLOTS: TopbarSlots = { title: null, description: null, actions: null };
+
+/** The topbar's ref callback for one slot. */
+export function publishTopbarSlot(name: keyof TopbarSlots, element: HTMLElement | null): void {
+  if (slots[name] === element) return;
+  slots = { ...slots, [name]: element };
+  slotListeners.forEach(listener => listener());
+}
+
+/** Where a page's header renders into the topbar; nulls when there is none. */
+export function useTopbarSlots(): TopbarSlots {
+  return React.useSyncExternalStore(
+    subscribeSlots,
+    () => slots,
+    () => NO_SLOTS
+  );
+}
+
+/** Whether `query` matches, re-read as the window changes. False on the server. */
+export function useMediaQuery(query: string): boolean {
+  return React.useSyncExternalStore(
+    listener => {
+      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      const list = window.matchMedia(query);
+      list.addEventListener?.('change', listener);
+      return () => list.removeEventListener?.('change', listener);
+    },
+    () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(query).matches,
+    () => false
+  );
+}
+
+/**
+ * The widths at which a page's header docks into the topbar. The description
+ * needs the bar's full width beside the title, so it docks from md, where the
+ * sidebar appears; the actions need room beside the search, so from xl. Below
+ * either, that part renders at the top of the page instead.
+ */
+export const DOCK_DESCRIPTION_QUERY = '(min-width: 768px)';
+export const DOCK_ACTIONS_QUERY = '(min-width: 1280px)';

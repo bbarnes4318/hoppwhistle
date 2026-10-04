@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
-import { useClaimPageTitle, useCurrentPageTitle } from '@/components/layout/use-page-title';
+import { useCurrentPageTitle, useTopbarSlots } from '@/components/layout/use-page-title';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { InHubContext } from './hub-context';
@@ -21,8 +21,10 @@ import { InHubContext } from './hub-context';
  *
  * ── The hub names the page ───────────────────────────────────────────────────
  *
- * The title sits above the tab list, 24px under the topbar like every page
- * header, and the views under it leave their own title out (`InHubContext`).
+ * The topbar names the hub, as it names every page, and the tab list opens the
+ * content directly under it. The views under the tabs leave their own title
+ * out (`InHubContext`). With no topbar mounted, the hub titles itself above
+ * the tabs.
  *
  * ── Each tab is a whole view ─────────────────────────────────────────────────
  *
@@ -72,8 +74,8 @@ function HubTabsInner({ tabs, defaultTab, label }: HubTabsProps): JSX.Element {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active = activeTabOf(searchParams?.get('tab'), tabs, defaultTab);
-  const title = useCurrentPageTitle();
-  useClaimPageTitle(Boolean(title));
+  const nav = useCurrentPageTitle();
+  const title = useTopbarSlots().title === null ? nav : null;
 
   function select(key: string): void {
     if (key === active) return;
