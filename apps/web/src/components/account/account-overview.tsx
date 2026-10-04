@@ -22,8 +22,8 @@ export interface AccountOverviewProps {
 }
 
 /**
- * The head of the Account page: who is signed in, at a glance. An identity
- * card -- avatar, name, email, role -- with the three facts people come here to
+ * The head of the Account page: who is signed in, at a glance. A compact
+ * identity card -- avatar, name, email, role -- with the three facts people come here to
  * check (who the login belongs to, how it signs in, how long it has existed)
  * in a strip beneath.
  */
@@ -53,27 +53,22 @@ export function AccountOverview({
   ];
 
   return (
-    <Panel className="overflow-hidden" data-account-overview>
-      {/* A quiet band of the brand tint: the card's only decoration. */}
-      <div
-        aria-hidden
-        className="h-20 border-b border-rule bg-[linear-gradient(115deg,var(--brand-tint)_0%,var(--surface)_75%)] sm:h-24"
-      />
-      <div className="px-5 pb-5 min-[1440px]:px-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
+    <Panel data-account-overview>
+      <div className="p-5 min-[1440px]:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
             <div
               aria-hidden
-              className="-mt-10 flex h-20 w-20 shrink-0 select-none items-center justify-center rounded-full bg-brand-strong text-[26px] font-semibold tracking-tight text-white shadow-raised ring-4 ring-surface sm:-mt-12 sm:h-24 sm:w-24 sm:text-[30px]"
+              className="flex h-14 w-14 shrink-0 select-none items-center justify-center rounded-full bg-brand-strong text-[20px] font-semibold tracking-tight text-white shadow-card"
             >
               {initialsFor(firstName, lastName, email)}
             </div>
-            <div className="min-w-0 pb-1">
+            <div className="min-w-0">
               <h2 className="t-title truncate text-ink">{name || email}</h2>
               {name ? <p className="t-body truncate text-ink-2">{email}</p> : null}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 pb-1">
+          <div className="flex flex-wrap items-center gap-2">
             {labels.map(label => (
               <Badge key={label} variant="outline">
                 {label}
