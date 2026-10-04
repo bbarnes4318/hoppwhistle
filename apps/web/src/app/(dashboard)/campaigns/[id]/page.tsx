@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AnswerOrderControl } from '@/components/campaigns/answer-order-control';
 import { CampaignAgentsTab } from '@/components/campaigns/campaign-agents-tab';
 import { CampaignBillingNotice } from '@/components/campaigns/campaign-billing-notice';
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -712,21 +713,27 @@ export default function CampaignDetailPage() {
   }
 
   return (
-    <div className="page-canvas space-y-6">
-      {/* Breadcrumb Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <button
-            onClick={() => router.push(backHref)}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1 group"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-1" />
-            {backLabel}
-          </button>
-          <div className="flex items-center gap-3">
-            <h2 className="t-title text-ink">{campaign.name}</h2>
+    <div className="page-canvas">
+      {/* The campaign's name is the page's title, in the topbar; the way back,
+          its status, offer and region sit under it, its actions at the right. */}
+      <PageHeader
+        title={campaign.name}
+        description={
+          <span className="inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push(backHref)}
+              className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink"
+            >
+              <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+              {backLabel}
+            </button>
+            <span aria-hidden className="text-ink-3">
+              ·
+            </span>
             <Badge
               className={cn(
+                'px-1.5 py-0 text-[11px]',
                 campaign.status === 'ACTIVE' &&
                   'bg-live-tint text-live-ink hover:bg-live-tint border-transparent',
                 campaign.status === 'PAUSED' &&
@@ -737,32 +744,36 @@ export default function CampaignDetailPage() {
             >
               {campaign.status}
             </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Offer: {campaign.offerName || '—'} | Region: {campaign.country}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchCampaignData()}
-            disabled={loading}
-          >
-            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/dashboard?campaignId=${campaign.id}`)}
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            View Reports
-          </Button>
-        </div>
-      </div>
+            <span aria-hidden className="text-ink-3">
+              ·
+            </span>
+            <span>
+              Offer: {campaign.offerName || '—'} · Region: {campaign.country}
+            </span>
+          </span>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchCampaignData()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/dashboard?campaignId=${campaign.id}`)}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              View Reports
+            </Button>
+          </>
+        }
+      />
 
       {/* Tabs list */}
       <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">

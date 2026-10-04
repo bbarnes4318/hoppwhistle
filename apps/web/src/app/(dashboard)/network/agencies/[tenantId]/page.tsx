@@ -20,7 +20,7 @@ import {
   StatTileRow,
   StatusChip,
 } from '@/components/domain';
-import { useClaimPageTitle } from '@/components/layout/use-page-title';
+import { PageHeader } from '@/components/layout/page-header';
 import { ChildStatementButton } from '@/components/statements/statements-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,9 +104,6 @@ export default function NetworkAgencyPage(): JSX.Element {
   const params = useParams<{ tenantId: string }>();
   const tenantId = typeof params?.tenantId === 'string' ? params.tenantId : '';
 
-  // The agency's name is this page's title, so the topbar leaves its own out.
-  useClaimPageTitle(true);
-
   const state = usePeriod('THIS_MONTH');
   const { sendable, query } = state;
 
@@ -166,34 +163,45 @@ export default function NetworkAgencyPage(): JSX.Element {
 
   return (
     <div className="page-canvas">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <Link
-            href="/network/agencies"
-            className="inline-flex items-center gap-1 t-meta text-ink-3 hover:text-ink"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Agencies
-          </Link>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="t-title truncate text-ink">{detail?.name ?? 'Agency'}</h2>
-            {detail ? <StatusChip value={detail.status} enumName="TenantStatus" size="sm" /> : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', loading && 'animate-spin')} />
-            Refresh
-          </Button>
-          {detail ? <ChildStatementButton tenantId={detail.tenantId} name={detail.name} /> : null}
-          {detail && detail.owner.status !== 'ACCEPTED' ? (
-            <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-              {detail.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Resend invite'}
+      {/* The agency's name is the page's title, in the topbar; the way back
+          and its status sit under it, its actions at the right. */}
+      <PageHeader
+        title={detail?.name ?? 'Agency'}
+        description={
+          <span className="inline-flex items-center gap-2">
+            <Link
+              href="/network/agencies"
+              className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink"
+            >
+              <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+              Agencies
+            </Link>
+            {detail ? (
+              <>
+                <span aria-hidden className="text-ink-3">
+                  ·
+                </span>
+                <StatusChip value={detail.status} enumName="TenantStatus" size="sm" />
+              </>
+            ) : null}
+          </span>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', loading && 'animate-spin')} />
+              Refresh
             </Button>
-          ) : null}
-        </div>
-      </div>
+            {detail ? <ChildStatementButton tenantId={detail.tenantId} name={detail.name} /> : null}
+            {detail && detail.owner.status !== 'ACCEPTED' ? (
+              <Button size="sm" onClick={() => setInviteOpen(true)}>
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                {detail.owner.status === 'NOT_INVITED' ? 'Invite owner' : 'Resend invite'}
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {error && !notFound ? <Notice tone="error" title={error} /> : null}
 

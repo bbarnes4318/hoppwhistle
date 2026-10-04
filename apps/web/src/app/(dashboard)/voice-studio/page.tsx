@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -369,7 +370,7 @@ export default function VoiceStudioPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="page-canvas">
       <audio
         ref={audioRef}
         onPlay={() => setPlaying(true)}
@@ -378,21 +379,16 @@ export default function VoiceStudioPage() {
         className="hidden"
       />
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Clone a voice, hear it perform a script, then paste its id into the agent&apos;s TTS
-            config.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {model === 's2.1-pro-free' && (
+      <PageHeader
+        description="Clone a voice, hear it perform a script, then paste its id into the agent's TTS config."
+        actions={
+          model === 's2.1-pro-free' ? (
             <Badge variant="outline" className="border-ringing/40 text-ringing-ink">
               Free tier — no latency guarantee
             </Badge>
-          )}
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ------------------------------------------------ script + preview */}
@@ -407,7 +403,12 @@ export default function VoiceStudioPage() {
                     {selectedVoice.title || voiceId(selectedVoice)}
                   </span>
                   <code className="rounded bg-muted px-1 text-xs">{voiceId(selectedVoice)}</code>
-                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => void copyVoiceId()}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2"
+                    onClick={() => void copyVoiceId()}
+                  >
                     {copiedId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                     <span className="ml-1 text-xs">{copiedId ? 'Copied' : 'Copy id'}</span>
                   </Button>

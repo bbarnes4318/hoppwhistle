@@ -4,6 +4,7 @@ import { Plus, PhoneOutgoing, Pause, Play, MoreHorizontal, Trash2 } from 'lucide
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 
+import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -185,19 +186,16 @@ export default function AICampaignsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-muted-foreground">
-            Manage your automated AI outbound calling campaigns
-          </p>
-        </div>
-        <Button onClick={() => router.push('/ai-campaigns/new')} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Campaign
-        </Button>
-      </div>
+    <div className="page-canvas">
+      <PageHeader
+        description="Manage your automated AI outbound calling campaigns."
+        actions={
+          <Button onClick={() => router.push('/ai-campaigns/new')} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Campaign
+          </Button>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">

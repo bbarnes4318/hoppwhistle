@@ -1,19 +1,10 @@
 'use client';
 
-import {
-  Copy,
-  Check,
-  Key,
-  Plus,
-  Trash2,
-  Loader2,
-  BookOpen,
-  Code2,
-  Shield,
-} from 'lucide-react';
+import { Copy, Check, Key, Plus, Trash2, Loader2, BookOpen, Code2, Shield } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -172,12 +163,8 @@ function PublisherApiSetupPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      <div>
-        <p className="text-sm text-ink-2">
-          Manage API keys for ping/post traffic delivery and integration endpoints.
-        </p>
-      </div>
+    <div className="page-canvas">
+      <PageHeader description="Manage API keys for ping/post traffic delivery and integration endpoints." />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Keys List (left col) */}
@@ -428,7 +415,7 @@ function PublisherApiSetupPage() {
       {/* Generate API Key Dialog */}
       <Dialog open={openGenDialog} onOpenChange={setOpenGenDialog}>
         <DialogContent className="bg-surface border-rule text-ink max-w-md">
-          <form onSubmit={(e) => void handleGenerateKey(e)}>
+          <form onSubmit={e => void handleGenerateKey(e)}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-ink">Generate API Key</DialogTitle>
               <DialogDescription className="text-xs text-ink-2">

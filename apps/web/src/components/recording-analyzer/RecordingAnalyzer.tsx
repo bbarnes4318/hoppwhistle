@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import { PageHeader } from '@/components/layout/page-header';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,11 +100,7 @@ function StatusPill({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-function BillableBadge({
-  extracted,
-}: {
-  extracted: Record<string, unknown> | null | undefined;
-}) {
+function BillableBadge({ extracted }: { extracted: Record<string, unknown> | null | undefined }) {
   const billable =
     extracted?.['Billable'] ??
     extracted?.['Billable (Y/N)'] ??
@@ -382,29 +379,24 @@ export function RecordingAnalyzer() {
   const verticalMeta = VERTICALS.find(v => v.key === vertical);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Recording Analyzer</h1>
-          <p className="text-sm text-muted-foreground">
-            Paste recording URLs or upload audio, select a vertical and fields, and get structured
-            results per recording.
-          </p>
-        </div>
+    <div className="page-canvas">
+      <PageHeader
+        description="Paste recording URLs or upload audio, select a vertical and fields, and get structured results per recording."
+        actions={
+          <>
+            {batchId && (
+              <Badge variant="outline" className="font-mono">
+                Batch: {batchId.slice(0, 8)}…
+              </Badge>
+            )}
+            {polling && <Badge variant="secondary">Live updating…</Badge>}
 
-        <div className="flex items-center gap-2">
-          {batchId && (
-            <Badge variant="outline" className="font-mono">
-              Batch: {batchId.slice(0, 8)}…
-            </Badge>
-          )}
-          {polling && <Badge variant="secondary">Live updating…</Badge>}
-
-          <Button variant="outline" onClick={() => void exportCsv()} disabled={!batchId}>
-            Export CSV
-          </Button>
-        </div>
-      </div>
+            <Button variant="outline" onClick={() => void exportCsv()} disabled={!batchId}>
+              Export CSV
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <Alert className="border-destructive/50">
@@ -544,7 +536,11 @@ export function RecordingAnalyzer() {
                 Selected: <span className="font-mono">{selected.size}</span>
               </div>
 
-              <Button onClick={() => void handleSubmit()} disabled={isSubmitting} className="min-w-[180px]">
+              <Button
+                onClick={() => void handleSubmit()}
+                disabled={isSubmitting}
+                className="min-w-[180px]"
+              >
                 {isSubmitting ? 'Starting…' : 'Analyze Recordings'}
               </Button>
             </div>
@@ -654,7 +650,9 @@ export function RecordingAnalyzer() {
                 ) : (activeItem as RecordingAnalysisItem & { playbackUrl?: string }).playbackUrl ? (
                   <audio controls className="w-full">
                     <source
-                      src={(activeItem as RecordingAnalysisItem & { playbackUrl?: string }).playbackUrl}
+                      src={
+                        (activeItem as RecordingAnalysisItem & { playbackUrl?: string }).playbackUrl
+                      }
                     />
                   </audio>
                 ) : (

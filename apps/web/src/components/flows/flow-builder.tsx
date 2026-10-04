@@ -330,7 +330,6 @@ export function FlowBuilder() {
  <div className="flex h-full w-full flex-col overflow-hidden">
  <div className="flex items-center justify-between border-b bg-card px-3 py-2 flex-shrink-0">
  <div className="flex items-center gap-2 flex-1 min-w-0">
- <h1 className="text-lg font-bold whitespace-nowrap">Flow Builder</h1>
  <div className="flex items-center gap-1.5">
  <Label htmlFor="flow-select" className="text-xs whitespace-nowrap">Flow:</Label>
  <Select

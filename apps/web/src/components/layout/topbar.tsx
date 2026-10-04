@@ -119,7 +119,7 @@ export function Topbar() {
           <div
             ref={descriptionSlot}
             data-page-description=""
-            className="hidden min-w-0 truncate text-[13px] leading-5 text-ink-3 empty:hidden md:block [&_*]:inline [&>*:not(:last-child)]:hidden"
+            className="hidden min-w-0 truncate text-[13px] leading-5 text-ink-3 empty:hidden md:block [&>*]:block [&>*]:truncate [&>*:not(:last-child)]:hidden"
           />
         </div>
 

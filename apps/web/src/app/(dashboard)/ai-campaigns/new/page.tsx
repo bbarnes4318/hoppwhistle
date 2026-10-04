@@ -16,6 +16,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -324,27 +325,26 @@ export default function NewCampaignPage() {
   // ========================================================================
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            if (step === 'config') setStep('vertical');
-            else if (step === 'filters') setStep('config');
-            else router.push('/ai-campaigns');
-          }}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <p className="text-sm text-muted-foreground">Template-based campaign wizard</p>
-        </div>
-      </div>
+    <div className="page-canvas items-center [&>*]:w-full [&>*]:max-w-3xl">
+      <PageHeader
+        description="Template-based campaign wizard."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (step === 'config') setStep('vertical');
+              else if (step === 'filters') setStep('config');
+              else router.push('/ai-campaigns');
+            }}
+          >
+            <ArrowLeft className="mr-1.5 h-4 w-4" />
+            Back
+          </Button>
+        }
+      />
 
       {/* Step Progress */}
-      <div className="flex items-center gap-2 mb-8">
+      <div className="flex items-center gap-2">
         {steps.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2 flex-1">
             <div
