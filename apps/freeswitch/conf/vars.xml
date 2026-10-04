@@ -1,5 +1,13 @@
 <include>
   <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8"/>
+  <!--
+    Where a relative prompt like `ivr/ivr-no_user_response.wav` is looked up:
+    $${sounds_dir}/en/us/callie/ivr/<rate>/. The files are baked into the image
+    (apps/freeswitch/Dockerfile, the `sounds` stage). This replaced the stock
+    vars.xml that used to set it, so without this line every prompt was
+    looked up in the wrong place even with the files present.
+  -->
+  <X-PRE-PROCESS cmd="set" data="sound_prefix=$${sounds_dir}/en/us/callie"/>
   <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8"/>
 
   <!-- Public IP for RTP media -->

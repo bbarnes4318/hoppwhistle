@@ -3,6 +3,32 @@
 FROM debian:bookworm-slim AS donor
 RUN apt-get update && apt-get install -y --no-install-recommends openssl curl && rm -rf /var/lib/apt/lists/*
 
+# Stage 1b: The English prompts (Callie, 8 kHz).
+#
+# The safarov base image ships with NO sound files: its own entrypoint downloads
+# them at start when SOUND_RATES/SOUND_TYPES are set, and this image replaces
+# that entrypoint and never set them. So every `playback ivr/...` failed on the
+# spot: a caller nobody could take heard ~1s of silence and a hang-up instead of
+# "no one is available", and the agent-cell "press 1 to accept" prompt never
+# played, so a forwarded cell could not take the call.
+#
+# Fetched at BUILD time, not at start, so a running FreeSWITCH never depends on
+# files.freeswitch.org being up. If the download fails, the build fails, and
+# `docker compose up --build` leaves the running container untouched -- a
+# deploy is refused rather than shipping a phone system with no prompts.
+# 8 kHz only: the PSTN legs are 8 kHz, and FreeSWITCH resamples for WebRTC.
+FROM donor AS sounds
+# The last two tests are the prompts inbound_route.lua plays; the build fails if
+# either is missing.
+ARG CALLIE_SOUNDS_URL=https://files.freeswitch.org/releases/sounds/freeswitch-sounds-en-us-callie-8000-1.0.53.tar.gz
+RUN mkdir -p /sounds \
+    && curl -fsSL --retry 3 --retry-delay 5 "$CALLIE_SOUNDS_URL" -o /tmp/callie.tar.gz \
+    && echo "callie sounds sha256: $(sha256sum /tmp/callie.tar.gz | cut -d' ' -f1)" \
+    && tar -xzf /tmp/callie.tar.gz -C /sounds \
+    && rm -f /tmp/callie.tar.gz \
+    && test -f /sounds/en/us/callie/ivr/8000/ivr-no_user_response.wav \
+    && test -f /sounds/en/us/callie/ivr/8000/ivr-accept_reject_voicemail.wav
+
 # Stage 2: Build the FreeSWITCH image
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
@@ -10,6 +36,9 @@ FROM safarov/freeswitch:1.10.12
 # Graft openssl CLI and curl binaries
 COPY --from=donor /usr/bin/openssl /usr/bin/openssl
 COPY --from=donor /usr/bin/curl /usr/bin/curl
+
+# The prompts. vars.xml points sound_prefix at en/us/callie.
+COPY --from=sounds /sounds/ /usr/share/freeswitch/sounds/
 
 # Create additional directories
 RUN mkdir -p /recordings /tmp/recordings && chmod 777 /recordings /tmp/recordings

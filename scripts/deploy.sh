@@ -97,6 +97,16 @@ if docker ps --format '{{.Names}}' | grep -qx hopwhistle-freeswitch-dev; then
   fi
 fi
 
+# --- Postflight: a FreeSWITCH restart can strand a carrier on a stale UDP
+# conntrack entry, so its calls never reach the new container. Clear any.
+# See scripts/sip-conntrack.sh. Non-fatal: a failure here is reported, not a
+# reason to fail an otherwise good deploy.
+case " $SVCS " in
+  *" freeswitch "*)
+    "$ROOT/scripts/sip-conntrack.sh" --fix || RED "WARNING: could not check SIP conntrack entries (see above)"
+    ;;
+esac
+
 # --- Postflight: database identity must not drift
 VOL="$(docker inspect hopwhistle-postgres-dev --format "{{range .Mounts}}{{.Name}}{{end}}" 2>/dev/null || true)"
 if [ "$VOL" != "docker_postgres_data" ]; then
