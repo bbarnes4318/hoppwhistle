@@ -15,14 +15,15 @@ import { AgentStatusSelector } from './agent-status-selector';
 import { AvailabilitySwitch } from './availability-switch';
 import { CallControls } from './call-controls';
 import { CallTransferDialog } from './call-transfer-dialog';
-import { CustomerDetailsPanel } from './CustomerDetailsPanel';
+import { CustomerDetailsPanel, intakeSections } from './CustomerDetailsPanel';
 import { DialPad } from './dial-pad';
 import { IncomingCallModal } from './incoming-call-modal';
 import { usePhone } from './phone-provider';
 import { RingOnControl } from './ring-on-control';
-import { ScreenPop } from './screen-pop';
+import { prospectSections } from './screen-pop';
 import { ScreenPopSettings } from './screen-pop-settings';
 import { ConnectionNotice } from './softphone/connection-notice';
+import { CustomerRecord, visibleSections } from './softphone/customer-record';
 import {
   AGENT_STATUS_LABEL,
   deriveSoftphoneState,
@@ -121,6 +122,7 @@ export function AgentPhonePanel(): JSX.Element | null {
     hangupCall,
     toggleMute,
     toggleHold,
+    screenPopFields,
   } = usePhone();
 
   // Customer Intake Context - shares data with CustomerIntakeForm
@@ -360,6 +362,28 @@ export function AgentPhonePanel(): JSX.Element | null {
     />
   ) : null;
 
+  /*
+   * The caller's whole record on a ringing or live call: the lead the call
+   * arrived with, then whatever the intake form or a saved prospect adds.
+   * Shown in full -- beside the phone on a wide screen, under the caller on a
+   * narrow one -- because an agent should not click to learn who is calling.
+   */
+  const recordSections =
+    currentCall && (state === 'incoming' || onCall)
+      ? [
+          ...(currentCall.prospectData
+            ? prospectSections(currentCall.prospectData, screenPopFields)
+            : []),
+          ...(customerData ? intakeSections(customerData) : []),
+        ]
+      : [];
+  const customerRecord =
+    visibleSections(recordSections).length > 0 ? (
+      <CustomerRecord sections={recordSections} />
+    ) : null;
+  // The narrow-screen copy; from 1024px up the shell shows the side pane instead.
+  const inlineRecord = customerRecord ? <div className="lg:hidden">{customerRecord}</div> : null;
+
   const matchBadge = intakeMatchDetected ? (
     <div className="flex items-center gap-2 border-b border-rule bg-sunken px-4 py-2">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-ink" aria-hidden />
@@ -380,9 +404,7 @@ export function AgentPhonePanel(): JSX.Element | null {
         city={matchedProspect?.city}
         state={matchedProspect?.state}
       >
-        {currentCall.prospectData ? (
-          <ScreenPop data={currentCall.prospectData} variant="modal" />
-        ) : null}
+        {inlineRecord}
       </IncomingCallModal>
     );
   } else if (onCall && currentCall) {
@@ -400,16 +422,7 @@ export function AgentPhonePanel(): JSX.Element | null {
           onTransfer={() => setDialog('transfer')}
           onAddCall={() => setDialog('add')}
         >
-          {currentCall.prospectData || customerDetails ? (
-            <div className="space-y-3">
-              {currentCall.prospectData ? <ScreenPop data={currentCall.prospectData} /> : null}
-              {customerDetails ? (
-                <div className="overflow-hidden rounded-card border border-rule">
-                  {customerDetails}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {inlineRecord}
         </CallControls>
       </>
     );
@@ -486,6 +499,7 @@ export function AgentPhonePanel(): JSX.Element | null {
         }}
         onShortcuts={() => setShowShortcuts(true)}
         overlay={showShortcuts ? <ShortcutsSheet onClose={() => setShowShortcuts(false)} /> : null}
+        sidePanel={customerRecord}
       >
         {body}
       </SoftphoneShell>
