@@ -32,8 +32,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAgentView } from '@/hooks/use-agent-view';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
-import { CARRIERS, US_STATES } from '@/lib/us-states';
+import { CARRIERS, RELATIONSHIPS, US_STATES } from '@/lib/us-states';
 import { cn } from '@/lib/utils';
 
 type Vertical = 'FE' | 'ACA';
@@ -50,6 +51,7 @@ interface ManualLeadFormState {
   state: string;
   zipCode: string;
   birthDate: string;
+  age: string;
   gender: string;
   smoker: string;
   carrier: string;
@@ -57,6 +59,8 @@ interface ManualLeadFormState {
   heightFeet: string;
   heightInches: string;
   weight: string;
+  primaryBeneficiaryName: string;
+  primaryBeneficiaryRelationship: string;
   trustedFormUrl: string;
   leadIpAddress: string;
   landingPage: string;
@@ -115,6 +119,7 @@ const INITIAL_STATE: ManualLeadFormState = {
   state: '',
   zipCode: '',
   birthDate: '',
+  age: '',
   gender: '',
   smoker: '',
   carrier: '',
@@ -122,6 +127,8 @@ const INITIAL_STATE: ManualLeadFormState = {
   heightFeet: '',
   heightInches: '',
   weight: '',
+  primaryBeneficiaryName: '',
+  primaryBeneficiaryRelationship: '',
   trustedFormUrl: '',
   leadIpAddress: '',
   landingPage: '',
@@ -269,6 +276,10 @@ function Section({
  * what the buyer is sent as proof of consent. It must be the values captured
  * when the lead opted in, so it sits in its own section, collapsed until it is
  * wanted.
+ *
+ * A white-label agent's form drops the opt-in record (they never send to a
+ * buyer, and it is not their data to capture) and adds an age for when the
+ * date of birth is not known, and the primary beneficiary.
  */
 export function ManualLeadEntryFormV2(): JSX.Element {
   const [form, setForm] = useState<ManualLeadFormState>(INITIAL_STATE);
@@ -281,7 +292,13 @@ export function ManualLeadEntryFormV2(): JSX.Element {
   // Sending to a buyer is the agency owner's or an administrator's action; the
   // API refuses it for an agent, so an agent is not offered it.
   const agentView = useAgentView();
-  const calculatedAge = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
+  const { isWhiteLabelAgent } = useAuth();
+  const ageFromBirthDate = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
+  // The date of birth decides the age when there is one; the age field is for
+  // when there is not.
+  const enteredAge = form.age === '' ? null : Number(form.age);
+  const calculatedAge =
+    ageFromBirthDate ?? (isWhiteLabelAgent && enteredAge !== null ? enteredAge : null);
 
   const buyerRequirements = useMemo<Requirement[]>(() => {
     const required: Requirement[] = [
@@ -375,6 +392,15 @@ export function ManualLeadEntryFormV2(): JSX.Element {
       refuse(basics, 'Enter the first and last name, a 10-digit phone number and the state.');
       return;
     }
+    if (
+      isWhiteLabelAgent &&
+      ageFromBirthDate === null &&
+      enteredAge !== null &&
+      !(Number.isInteger(enteredAge) && enteredAge > 0 && enteredAge < 120)
+    ) {
+      refuse(['age'], 'Enter an age between 1 and 119.');
+      return;
+    }
 
     if (sendToBuyer) {
       if (buyerMissing.length > 0) {
@@ -434,6 +460,8 @@ export function ManualLeadEntryFormV2(): JSX.Element {
       heightFeet: form.heightFeet ? Number(form.heightFeet) : undefined,
       heightInches: form.heightInches === '' ? undefined : Number(form.heightInches),
       weight: form.weight ? Number(form.weight) : undefined,
+      primaryBeneficiaryName: form.primaryBeneficiaryName.trim() || undefined,
+      primaryBeneficiaryRelationship: form.primaryBeneficiaryRelationship || undefined,
       trustedFormUrl: form.trustedFormUrl.trim() || undefined,
       ipAddress: form.leadIpAddress.trim() || undefined,
       landingPage: form.landingPage.trim() || undefined,
@@ -674,6 +702,26 @@ export function ManualLeadEntryFormV2(): JSX.Element {
                 className={CONTROL}
               />
             </Field>
+            {isWhiteLabelAgent ? (
+              <Field
+                id="age"
+                label="Age"
+                hint={ageFromBirthDate !== null ? 'From the date of birth.' : undefined}
+              >
+                <Input
+                  id="age"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="119"
+                  value={ageFromBirthDate !== null ? String(ageFromBirthDate) : form.age}
+                  onChange={event => update('age', digitsOnly(event.target.value, 3))}
+                  readOnly={ageFromBirthDate !== null}
+                  aria-invalid={bad('age')}
+                  className={CONTROL}
+                />
+              </Field>
+            ) : null}
             {form.vertical === 'FE' ? (
               <Field id="gender" label="Gender">
                 <select
@@ -782,6 +830,35 @@ export function ManualLeadEntryFormV2(): JSX.Element {
                 />
               </div>
             </Field>
+            {isWhiteLabelAgent ? (
+              <>
+                <Field id="primaryBeneficiaryName" label="Primary beneficiary">
+                  <Input
+                    id="primaryBeneficiaryName"
+                    autoComplete="off"
+                    value={form.primaryBeneficiaryName}
+                    onChange={event => update('primaryBeneficiaryName', event.target.value)}
+                    className={CONTROL}
+                    placeholder="Full name"
+                  />
+                </Field>
+                <Field id="primaryBeneficiaryRelationship" label="Relationship to insured">
+                  <select
+                    id="primaryBeneficiaryRelationship"
+                    value={form.primaryBeneficiaryRelationship}
+                    onChange={event => update('primaryBeneficiaryRelationship', event.target.value)}
+                    className={CONTROL}
+                  >
+                    <option value="">Select</option>
+                    {RELATIONSHIPS.map(relationship => (
+                      <option key={relationship.value} value={relationship.value}>
+                        {relationship.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : null}
             <Field id="notes" label="Internal notes" className="sm:col-span-2">
               <textarea
                 id="notes"
@@ -795,104 +872,106 @@ export function ManualLeadEntryFormV2(): JSX.Element {
           </div>
         </Section>
 
-        <Panel data-opt-in-record>
-          <button
-            type="button"
-            onClick={() => setOptInOpen(open => !open)}
-            aria-expanded={optInOpen}
-            aria-controls="opt-in-record"
-            className="flex w-full items-center justify-between gap-3 rounded-card px-5 py-3.5 text-left transition-colors hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring min-[1440px]:px-6"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <ShieldCheck aria-hidden className="h-4 w-4 shrink-0 text-ink-3" />
-              <span className="t-section shrink-0 text-[15px] text-ink">Opt-in record</span>
-              <span className="t-meta hidden truncate text-ink-3 sm:inline">
-                TrustedForm, IP, landing page, consent
-              </span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              {optInFilled > 0 ? <Badge variant="secondary">{optInFilled} added</Badge> : null}
-              <ChevronDown
-                aria-hidden
-                className={cn(
-                  'h-4 w-4 text-ink-3 transition-transform duration-150',
-                  optInOpen && 'rotate-180'
-                )}
-              />
-            </span>
-          </button>
-          {optInOpen ? (
-            <div
-              id="opt-in-record"
-              className="grid gap-4 border-t border-rule p-5 sm:grid-cols-2 min-[1440px]:p-6"
+        {isWhiteLabelAgent ? null : (
+          <Panel data-opt-in-record>
+            <button
+              type="button"
+              onClick={() => setOptInOpen(open => !open)}
+              aria-expanded={optInOpen}
+              aria-controls="opt-in-record"
+              className="flex w-full items-center justify-between gap-3 rounded-card px-5 py-3.5 text-left transition-colors hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring min-[1440px]:px-6"
             >
-              <Field
-                id="trustedFormUrl"
-                label="TrustedForm certificate URL"
-                className="sm:col-span-2"
+              <span className="flex min-w-0 items-center gap-2">
+                <ShieldCheck aria-hidden className="h-4 w-4 shrink-0 text-ink-3" />
+                <span className="t-section shrink-0 text-[15px] text-ink">Opt-in record</span>
+                <span className="t-meta hidden truncate text-ink-3 sm:inline">
+                  TrustedForm, IP, landing page, consent
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                {optInFilled > 0 ? <Badge variant="secondary">{optInFilled} added</Badge> : null}
+                <ChevronDown
+                  aria-hidden
+                  className={cn(
+                    'h-4 w-4 text-ink-3 transition-transform duration-150',
+                    optInOpen && 'rotate-180'
+                  )}
+                />
+              </span>
+            </button>
+            {optInOpen ? (
+              <div
+                id="opt-in-record"
+                className="grid gap-4 border-t border-rule p-5 sm:grid-cols-2 min-[1440px]:p-6"
               >
-                <Input
+                <Field
                   id="trustedFormUrl"
-                  type="url"
-                  value={form.trustedFormUrl}
-                  onChange={event => update('trustedFormUrl', event.target.value)}
-                  aria-invalid={bad('trustedFormUrl')}
-                  className={CONTROL}
-                  placeholder="https://cert.trustedform.com/…"
-                />
-              </Field>
-              <Field id="leadIpAddress" label="Original IP address">
-                <Input
-                  id="leadIpAddress"
-                  value={form.leadIpAddress}
-                  onChange={event => update('leadIpAddress', event.target.value)}
-                  aria-invalid={bad('leadIpAddress')}
-                  className={cn(CONTROL, 't-data')}
-                  placeholder="75.2.92.149"
-                />
-              </Field>
-              <Field id="landingPage" label="Original landing page">
-                <Input
-                  id="landingPage"
-                  type="url"
-                  value={form.landingPage}
-                  onChange={event => update('landingPage', event.target.value)}
-                  aria-invalid={bad('landingPage')}
-                  className={CONTROL}
-                  placeholder="https://example.com/final-expense"
-                />
-              </Field>
-              <Field id="leadidToken" label="Jornaya LeadID token">
-                <Input
-                  id="leadidToken"
-                  value={form.leadidToken}
-                  onChange={event => update('leadidToken', event.target.value)}
-                  className={cn(CONTROL, 't-data')}
-                />
-              </Field>
-              <Field id="recordingUrl" label="Recording URL">
-                <Input
-                  id="recordingUrl"
-                  type="url"
-                  value={form.recordingUrl}
-                  onChange={event => update('recordingUrl', event.target.value)}
-                  aria-invalid={bad('recordingUrl')}
-                  className={CONTROL}
-                />
-              </Field>
-              <Field id="consentLanguage" label="Consent language" className="sm:col-span-2">
-                <textarea
-                  id="consentLanguage"
-                  value={form.consentLanguage}
-                  onChange={event => update('consentLanguage', event.target.value)}
-                  rows={3}
-                  className={cn(CONTROL, 'h-auto min-h-[84px] py-2')}
-                  placeholder="The exact consent disclosure the lead agreed to."
-                />
-              </Field>
-            </div>
-          ) : null}
-        </Panel>
+                  label="TrustedForm certificate URL"
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    id="trustedFormUrl"
+                    type="url"
+                    value={form.trustedFormUrl}
+                    onChange={event => update('trustedFormUrl', event.target.value)}
+                    aria-invalid={bad('trustedFormUrl')}
+                    className={CONTROL}
+                    placeholder="https://cert.trustedform.com/…"
+                  />
+                </Field>
+                <Field id="leadIpAddress" label="Original IP address">
+                  <Input
+                    id="leadIpAddress"
+                    value={form.leadIpAddress}
+                    onChange={event => update('leadIpAddress', event.target.value)}
+                    aria-invalid={bad('leadIpAddress')}
+                    className={cn(CONTROL, 't-data')}
+                    placeholder="75.2.92.149"
+                  />
+                </Field>
+                <Field id="landingPage" label="Original landing page">
+                  <Input
+                    id="landingPage"
+                    type="url"
+                    value={form.landingPage}
+                    onChange={event => update('landingPage', event.target.value)}
+                    aria-invalid={bad('landingPage')}
+                    className={CONTROL}
+                    placeholder="https://example.com/final-expense"
+                  />
+                </Field>
+                <Field id="leadidToken" label="Jornaya LeadID token">
+                  <Input
+                    id="leadidToken"
+                    value={form.leadidToken}
+                    onChange={event => update('leadidToken', event.target.value)}
+                    className={cn(CONTROL, 't-data')}
+                  />
+                </Field>
+                <Field id="recordingUrl" label="Recording URL">
+                  <Input
+                    id="recordingUrl"
+                    type="url"
+                    value={form.recordingUrl}
+                    onChange={event => update('recordingUrl', event.target.value)}
+                    aria-invalid={bad('recordingUrl')}
+                    className={CONTROL}
+                  />
+                </Field>
+                <Field id="consentLanguage" label="Consent language" className="sm:col-span-2">
+                  <textarea
+                    id="consentLanguage"
+                    value={form.consentLanguage}
+                    onChange={event => update('consentLanguage', event.target.value)}
+                    rows={3}
+                    className={cn(CONTROL, 'h-auto min-h-[84px] py-2')}
+                    placeholder="The exact consent disclosure the lead agreed to."
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </Panel>
+        )}
       </div>
 
       <aside className="grid gap-4 lg:sticky lg:top-6" aria-label="Lead summary">
