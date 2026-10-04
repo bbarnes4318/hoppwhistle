@@ -127,7 +127,8 @@ describe('the Account page', () => {
     expect(within(details).getByText('Buyer')).toBeTruthy();
 
     // A buyer has no calling section; the password form and policies are there.
-    expect(document.getElementById('calling')).toBeNull();
+    expect(document.getElementById('state-licensing')).toBeNull();
+    expect(document.getElementById('call-routing')).toBeNull();
     expect(document.querySelector('[data-change-password]')).toBeTruthy();
     expect(screen.getByLabelText('Current password')).toBeTruthy();
     expect(document.querySelectorAll('[data-legal-documents] a')).toHaveLength(4);

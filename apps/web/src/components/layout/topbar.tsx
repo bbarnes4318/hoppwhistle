@@ -265,16 +265,11 @@ export function Topbar() {
             {/* Account (your own login and password) is every role's. Settings
                 is the agency's, and a buyer or publisher portal login has none:
                 linking them there only bounced them back to their portal. A
-                white-label agent has everything they need under Account, so
-                for them that page is the one Settings entry. */}
+                white-label agent has everything they need under Account. */}
             <DropdownMenuItem asChild>
               <Link href="/account" className="t-body">
-                {isWhiteLabelAgent ? (
-                  <Settings aria-hidden className="mr-2 h-3.5 w-3.5" />
-                ) : (
-                  <User aria-hidden className="mr-2 h-3.5 w-3.5" />
-                )}
-                {isWhiteLabelAgent ? 'Settings' : 'Account'}
+                <User aria-hidden className="mr-2 h-3.5 w-3.5" />
+                Account
               </Link>
             </DropdownMenuItem>
             {isBuyerOnly || isPublisherOnly || isWhiteLabelAgent ? null : (
