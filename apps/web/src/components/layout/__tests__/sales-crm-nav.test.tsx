@@ -11,11 +11,7 @@ import {
   navFor,
   type NavViewer,
 } from '@/components/layout/nav-config';
-import {
-  isRouteBlockedFor,
-  isStaffOnlyRoute,
-  whiteLabelRedirectFor,
-} from '@/lib/staff-only-routes';
+import { isRouteBlockedFor, isStaffOnlyRoute, whiteLabelRedirectFor } from '@/lib/staff-only-routes';
 
 /**
  * The B2B Sales CRM in the navigation.
@@ -50,9 +46,7 @@ describe('Sales CRM navigation', () => {
     expect(nav).toContain('/sales-crm');
     expect(nav).toContain('/admin/agreements');
     expect(nav).toContain('/insurance-leads');
-    expect(PLATFORM_NAV.find(g => g.label === 'Sales')?.items.map(i => i.name)).toEqual([
-      'Sales CRM',
-    ]);
+    expect(PLATFORM_NAV.find(g => g.label === 'Sales')?.items.map(i => i.name)).toEqual(['Sales CRM']);
   });
 
   it('gives a white-label owner a Sales group with Sales CRM and Agreements when the server says so', () => {
@@ -64,14 +58,8 @@ describe('Sales CRM navigation', () => {
       ['Agreements', '/sales-crm/agreements'],
     ]);
     // Right after Workspace, and the consumer CRM is untouched.
-    expect(groups.map(g => g.label).indexOf('Sales')).toBe(
-      groups.map(g => g.label).indexOf('Workspace') + 1
-    );
-    expect(
-      allNavItems(groups)
-        .filter(i => i.href === '/insurance-leads')
-        .map(i => i.name)
-    ).toEqual(['CRM']);
+    expect(groups.map(g => g.label).indexOf('Sales')).toBe(groups.map(g => g.label).indexOf('Workspace') + 1);
+    expect(allNavItems(groups).filter(i => i.href === '/insurance-leads').map(i => i.name)).toEqual(['CRM']);
   });
 
   it('hides it from a white-label owner when the server reports none', () => {
@@ -92,11 +80,7 @@ describe('Sales CRM navigation', () => {
       expect.arrayContaining(['/sales-crm', '/sales-crm/agreements', '/insurance-leads'])
     );
     const without = allNavItems(navFor(agent)).map(i => i.href);
-    expect(
-      allNavItems(granted)
-        .map(i => i.href)
-        .filter(h => !h.startsWith('/sales-crm'))
-    ).toEqual(without);
+    expect(allNavItems(granted).map(i => i.href).filter(h => !h.startsWith('/sales-crm'))).toEqual(without);
   });
 
   it('hides it from a child agency owner and a normal agency owner', () => {
@@ -113,28 +97,18 @@ describe('Sales CRM navigation', () => {
     for (const item of SALES_GROUP.items) {
       expect(hasPage(item.href), item.href).toBe(true);
       expect(isStaffOnlyRoute(item.href)).toBe(false);
-      expect(isRouteBlockedFor(item.href, { isPlatformAdmin: false, isWhiteLabel: true })).toBe(
-        false
-      );
-      expect(isRouteBlockedFor(item.href, { isPlatformAdmin: false, isWhiteLabel: false })).toBe(
-        false
-      );
+      expect(isRouteBlockedFor(item.href, { isPlatformAdmin: false, isWhiteLabel: true })).toBe(false);
+      expect(isRouteBlockedFor(item.href, { isPlatformAdmin: false, isWhiteLabel: false })).toBe(false);
       expect(whiteLabelRedirectFor(item.href)).toBeNull();
     }
-    for (const path of [
-      '/sales-crm/settings',
-      '/sales-crm/agreements/new',
-      '/sales-crm/prospects/[id]',
-    ]) {
+    for (const path of ['/sales-crm/settings', '/sales-crm/agreements/new', '/sales-crm/prospects/[id]']) {
       expect(existsSync(join(APP_DIR, '(dashboard)', path, 'page.tsx')), path).toBe(true);
     }
   });
 
   it("keeps NetEnroll's agreement screens staff-only", () => {
     expect(isStaffOnlyRoute('/admin/agreements')).toBe(true);
-    expect(
-      isRouteBlockedFor('/admin/agreements', { isPlatformAdmin: false, isWhiteLabel: true })
-    ).toBe(true);
+    expect(isRouteBlockedFor('/admin/agreements', { isPlatformAdmin: false, isWhiteLabel: true })).toBe(true);
   });
 
   it('is not the call-sales /sales route the white-label tier redirects', () => {
