@@ -11,8 +11,8 @@ import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
- * "Where your calls ring", as a full panel on the agent's own pages (Today and
- * Account), where it cannot be missed.
+ * "Where your calls ring", as a full panel on the agent's Account page. It is
+ * not on Today: that page is the agent's figures, not their settings.
  *
  * The same choice as `RingOnControl` in the softphone header, and the same
  * setting the agency's Agents page writes ("Ring on"):

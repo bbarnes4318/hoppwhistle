@@ -546,10 +546,21 @@ describe("an agent's Today", () => {
   });
 });
 
-describe("an agent's Today: where your calls ring", () => {
-  it('shows the choice and sends calls to the cell the agent enters', async () => {
-    await mountDashboard('/dashboard');
+describe('where your calls ring', () => {
+  async function mountCallRouting(): Promise<void> {
+    const { CallRoutingPanel } = await import('@/components/phone/call-routing-panel');
+    render(<CallRoutingPanel />);
     await waitFor(() => expect(screen.getByText('Where your calls ring')).toBeTruthy());
+  }
+
+  it("is not on an agent's Today", async () => {
+    await mountDashboard('/dashboard');
+    await waitFor(() => expect(figure('Calls answered')).toBe('4'));
+    expect(screen.queryByText('Where your calls ring')).toBeNull();
+  });
+
+  it('shows the choice and sends calls to the cell the agent enters', async () => {
+    await mountCallRouting();
     expect(screen.getByText('Your calls are ringing the softphone in this browser.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('radio', { name: /My cell phone/ }));
@@ -568,8 +579,7 @@ describe("an agent's Today: where your calls ring", () => {
 
   it('puts calls back on the softphone', async () => {
     callDestination = { ringOn: 'cell', cellForwardNumber: '+18655551234' };
-    await mountDashboard('/dashboard');
-    await waitFor(() => expect(screen.getByText('Where your calls ring')).toBeTruthy());
+    await mountCallRouting();
 
     fireEvent.click(screen.getByRole('radio', { name: /Softphone/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
