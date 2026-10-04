@@ -116,6 +116,9 @@ services:
       # overrides env_file, so any compose call made without --env-file signed
       # every login with a string that is public in this repository. With it
       # gone, a missing secret stops the API at boot instead.
+      # Public address carriers, Vapi and softphones reach this host on (the
+      # Hetzner floating IP). Set here so it does not depend on an env file.
+      PUBLIC_IP: ${PUBLIC_IP:-5.161.16.107}
       RTPENGINE_URL: http://rtpengine:22222
       FREESWITCH_ESL_HOST: freeswitch
       FREESWITCH_ESL_PORT: 8021
@@ -354,7 +357,7 @@ services:
       OUTBOUND_SIP_PASS: ${OUTBOUND_SIP_PASS}
       OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
       FRACTEL_DEFAULT_CALLER_ID: ${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}
-      PUBLIC_IP: ${PUBLIC_IP}
+      PUBLIC_IP: ${PUBLIC_IP:-5.161.16.107}
       SIP_PUBLIC_IP: ${SIP_PUBLIC_IP:-}
       SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
       SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
@@ -421,7 +424,7 @@ services:
       FREESWITCH_NODES: ${FREESWITCH_NODES:-freeswitch:5080}
       RTPENGINE_SOCK: ${RTPENGINE_SOCK:-udp:rtpengine:22222}
       DB_URL: ${DB_URL:-}
-      PUBLIC_IP: ${PUBLIC_IP}
+      PUBLIC_IP: ${PUBLIC_IP:-5.161.16.107}
     volumes:
       - kamailio_data:/var/run/kamailio
     healthcheck:
@@ -449,7 +452,7 @@ services:
       - '10000-10100:10000-10100/udp'
     environment:
       RTPENGINE_INTERFACE: ${RTPENGINE_INTERFACE:-auto}
-      PUBLIC_IP: ${PUBLIC_IP}
+      PUBLIC_IP: ${PUBLIC_IP:-5.161.16.107}
     volumes:
       - rtpengine_recordings:/recordings
     cap_add:
