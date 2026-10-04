@@ -75,7 +75,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * fills <main> exactly and does its own scrolling inside the frame.
    */
   const isEmbeddedAppPage = isEmbeddedAppPath(pathname);
-  const showLiveStrip = !whiteLabelView && !downlineOwner && !agentView && !isEmbeddedAppPage;
+  /*
+   * The agreements pages are paperwork, not a call floor: calls, applications
+   * and conversion have nothing to do with drafting or signing an agreement.
+   */
+  const isAgreementsPage = /^\/(admin|sales-crm)\/agreements(\/|$)/.test(pathname ?? '');
+  const showLiveStrip =
+    !whiteLabelView && !downlineOwner && !agentView && !isEmbeddedAppPage && !isAgreementsPage;
 
   /*
    * Who gets a softphone.
