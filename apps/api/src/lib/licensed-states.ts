@@ -39,10 +39,15 @@
  * (`lib/principal.ts` falls back to `metadata.publisherId`), and every write
  * path into it is key-controlled. `PATCH /api/v1/users/:userId` merges a
  * metadata object and is gated on `isAdminOrOwner`; `PATCH /api/auth/me/settings`
- * is the only self-service writer and it copies three named keys
- * (`position`, `defaultScript`, `customScripts`) rather than spreading the body.
- * An AGENT therefore has no path to its own licence list -- which is the single
- * property that makes storing it here safe.
+ * copies three named keys (`position`, `defaultScript`, `customScripts`) rather
+ * than spreading the body.
+ *
+ * An AGENT's one path to its own list is `PUT /api/auth/me/licensed-states`
+ * (`routes/auth.ts`): the agent attests to their own licences from the first
+ * sign-in screen and from Account. That route writes this one key, only for the
+ * caller, validated through `partitionLicensedStates`, never empty, and audits
+ * every change with the list before and after. Nothing else an agent can reach
+ * writes it.
  *
  * The cost is that the column is untyped, so nothing at the database layer stops
  * a malformed value being stored. That is answered by normalising on BOTH sides:

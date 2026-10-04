@@ -47,9 +47,11 @@ const GOOGLE_ONLY = { ...BUYER, authMethod: 'GOOGLE', hasPassword: false };
 
 let user: Record<string, unknown> = BUYER;
 const requests: Array<{ method: string; path: string }> = [];
+const licenceWrites: unknown[] = [];
 
 beforeEach(() => {
   requests.length = 0;
+  licenceWrites.length = 0;
   user = BUYER;
   localStorage.clear();
   localStorage.setItem('token', 'old-token');
@@ -70,10 +72,16 @@ beforeEach(() => {
       switch (url.pathname) {
         case '/api/auth/me':
           return json({ data: user });
+        case '/api/auth/me/licensed-states': {
+          const body = JSON.parse(String(init?.body)) as { licensedStates: string[] };
+          licenceWrites.push(body);
+          user = { ...user, licensedStates: body.licensedStates };
+          return json({ licensedStates: body.licensedStates });
+        }
         case '/api/auth/me/sessions/revoke':
           return json({ ok: true, token: 'fresh-token' });
         case '/api/v1/agent/call-destination':
-          return user === AGENT
+          return (user.roles as string[]).includes('AGENT')
             ? json({ ringOn: 'softphone', cellForwardNumber: null })
             : json({ error: { code: 'FORBIDDEN', message: 'Agents only' } }, 403);
         case '/api/v1/platform/context':
@@ -133,6 +141,51 @@ describe('the Account page', () => {
       .map(item => item.textContent);
     expect(states).toEqual(['FL', 'GA', 'TX']);
     await waitFor(() => expect(screen.getByText('Where your calls ring')).toBeTruthy());
+  });
+
+  it('lets an agent change their states, confirming any state they add', async () => {
+    user = AGENT;
+    await mountAccount();
+    const panel = document.querySelector('[data-licensed-states]') as HTMLElement;
+    fireEvent.click(within(panel).getByRole('button', { name: /Edit states/ }));
+
+    // Drop Georgia, add Tennessee.
+    fireEvent.click(within(panel).getByRole('checkbox', { name: 'Georgia (GA)' }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: 'Tennessee (TN)' }));
+    expect(within(panel).getByText('Adding').parentElement?.textContent).toMatch(/^Adding TN\b/);
+    expect(within(panel).getByText('Removing').parentElement?.textContent).toMatch(
+      /^Removing GA\b/
+    );
+
+    // Adding a state needs the licence confirmed before it can be saved.
+    const save = within(panel).getByRole('button', { name: 'Save states' });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(
+      within(panel).getByRole('checkbox', {
+        name: 'I hold an active license in every state I am adding',
+      })
+    );
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(save);
+
+    await waitFor(() =>
+      expect(screen.getByText('Saved. Your calls now come from these states.')).toBeTruthy()
+    );
+    expect(licenceWrites).toEqual([{ licensedStates: ['FL', 'TN', 'TX'] }]);
+    const states = within(document.querySelector('[data-licensed-states]') as HTMLElement)
+      .getAllByRole('listitem')
+      .map(item => item.textContent);
+    expect(states).toEqual(['FL', 'TN', 'TX']);
+  });
+
+  it('lets an agent remove a state without the confirmation', async () => {
+    user = AGENT;
+    await mountAccount();
+    const panel = document.querySelector('[data-licensed-states]') as HTMLElement;
+    fireEvent.click(within(panel).getByRole('button', { name: /Edit states/ }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: 'Florida (FL)' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save states' }));
+    await waitFor(() => expect(licenceWrites).toEqual([{ licensedStates: ['GA', 'TX'] }]));
   });
 
   it('tells a Google sign-up how to set a password instead of showing a form it would fail', async () => {

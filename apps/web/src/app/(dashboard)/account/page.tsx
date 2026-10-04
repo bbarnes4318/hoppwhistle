@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  FileText,
-  MapPin,
-  MonitorSmartphone,
-  PhoneForwarded,
-  ShieldCheck,
-  UserRound,
-} from 'lucide-react';
+import { FileText, MonitorSmartphone, PhoneForwarded, ShieldCheck, UserRound } from 'lucide-react';
 import * as React from 'react';
 
 import { roleLabels } from '@/components/account/account-identity';
@@ -17,6 +10,7 @@ import {
   type AccountSectionLink,
 } from '@/components/account/account-section-nav';
 import { ChangePasswordPanel } from '@/components/account/change-password-panel';
+import { LicensedStatesPanel } from '@/components/account/licensed-states-panel';
 import { PoliciesPanel } from '@/components/account/policies-panel';
 import { SessionsPanel } from '@/components/account/sessions-panel';
 import { CopyButton, SettingRow, SettingRows } from '@/components/account/setting-row';
@@ -166,34 +160,11 @@ export default function AccountPage(): JSX.Element {
 
           {isAgent ? (
             <section id="calling" aria-label="Calling" className="grid scroll-mt-6 gap-6">
-              <Panel data-licensed-states>
-                <PanelHeader>
-                  <PanelTitle className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-ink-3" aria-hidden />
-                    Licensed states
-                  </PanelTitle>
-                  <PanelDescription>
-                    Calls and leads reach you only inside these states. Your administrator maintains
-                    this list.
-                  </PanelDescription>
-                </PanelHeader>
-                <PanelBody>
-                  {licensedStates.length ? (
-                    <ul className="flex flex-wrap gap-2" aria-label="Licensed states">
-                      {licensedStates.map(state => (
-                        <li
-                          key={state}
-                          className="t-data inline-flex h-8 min-w-[2.75rem] items-center justify-center rounded-control border border-rule bg-paper px-2.5 font-medium text-ink"
-                        >
-                          {state}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="t-body text-ink-3">No licensed states are on file yet.</p>
-                  )}
-                </PanelBody>
-              </Panel>
+              <LicensedStatesPanel
+                states={licensedStates}
+                editable={!isAdminOrOwner && !isPlatformAdmin}
+                readOnly={isReadOnlyPreview}
+              />
 
               <CallRoutingPanel />
             </section>

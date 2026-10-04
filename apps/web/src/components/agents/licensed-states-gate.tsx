@@ -47,8 +47,8 @@ export function LicensedStatesGate(): JSX.Element {
             <h1 className="text-xl font-semibold">Which states are you licensed in?</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               You are only sent calls and leads from the states you select, so choose every state
-              you hold a licence in. This is required before you can use the portal. If you need to
-              change it later, ask your agency administrator.
+              you hold a licence in. This is required before you can use the portal. You can change
+              it any time from your Account page.
             </p>
           </div>
         </div>

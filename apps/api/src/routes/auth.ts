@@ -1570,17 +1570,21 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   );
 
   // ============================================================================
-  // An agent records the states they are licensed in (me)
+  // An agent sets the states they are licensed in (me)
   // ============================================================================
   /**
-   * The mandatory first-login step. An agent with no licensed states is routed
-   * no calls and shown no leads, so the app will not let them past this screen.
+   * The mandatory first-login step, and afterwards the agent's own control over
+   * where their calls and leads come from, on the Account page. An agent with
+   * no licensed states is routed no calls and shown no leads, so the app will
+   * not let them past the first-login screen, and this route will not empty the
+   * list: at least one state, always. (To stop calls altogether an agent turns
+   * off taking calls; that is a different switch.)
    *
-   * It only ever FILLS an empty list. Once states are on file -- chosen here or
-   * by the agency -- changing them is the administrator's job, so an agent can
-   * not quietly widen a licence an administrator has set. The caller is read
-   * from the verified session and the target is always that same user: there is
-   * no user id in the body.
+   * It REPLACES the list. The agent attests to their own licences: the product
+   * decision is that they, not only their administrator, keep this current.
+   * Every change is audited with the list before and after, so an agency can
+   * see who widened what and when. The caller is read from the verified session
+   * and the target is always that same user: there is no user id in the body.
    */
   fastify.put(
     '/api/auth/me/licensed-states',
@@ -1632,18 +1636,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         user.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)
           ? (user.metadata as Record<string, unknown>)
           : {};
-      if (normalizeLicensedStates(metadata.licensedStates).length > 0) {
-        return reply.code(409).send({
-          error: {
-            code: 'LICENSE_ALREADY_RECORDED',
-            message:
-              'Your licensed states are already on file. Ask your administrator to change them.',
-          },
-        });
-      }
+      const previous = normalizeLicensedStates(metadata.licensedStates);
 
-      // Conditional on the list still being empty, so two racing requests (or
-      // an administrator saving at the same moment) cannot overwrite each other.
+      // Conditional on the row being unchanged since it was read, so two racing
+      // requests (or an administrator saving at the same moment) cannot
+      // silently overwrite each other.
       const updated = await prisma.user.updateMany({
         where: { id: userId, updatedAt: user.updatedAt },
         data: { metadata: { ...metadata, licensedStates: parts.licensed } },
@@ -1657,7 +1654,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       await auditLog({
         tenantId: user.tenantId ?? null,
         userId,
-        action: 'auth.licensed_states.recorded',
+        action:
+          previous.length === 0 ? 'auth.licensed_states.recorded' : 'auth.licensed_states.updated',
         entityType: 'User',
         entityId: userId,
         resource: '/api/auth/me/licensed-states',
@@ -1665,7 +1663,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ipAddress: request.ip,
         userAgent: request.headers['user-agent'],
         requestId: request.id,
-        changes: { licensedStates: parts.licensed },
+        changes: { from: previous, to: parts.licensed },
         success: true,
       });
 

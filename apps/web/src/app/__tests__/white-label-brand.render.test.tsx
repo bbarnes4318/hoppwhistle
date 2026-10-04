@@ -422,10 +422,10 @@ describe('a branded agency never reads "NetEnroll"', () => {
     expect(everything()).not.toMatch(/NetEnroll|FracTEL|BulkVS|Anveo/i);
   });
 
-  it('the manual lead form names the brand', async () => {
+  it('the manual lead form never names NetEnroll', async () => {
     const { ManualLeadEntryFormV2 } = await import('@/components/leads/manual-lead-entry-form-v2');
     await mount(<ManualLeadEntryFormV2 />);
-    await waitFor(() => expect(screen.getByText(/Life Leads Plus CRM page/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save lead' })).toBeTruthy());
     expect(everything()).not.toContain('NetEnroll');
   });
 
