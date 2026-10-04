@@ -1754,7 +1754,9 @@ async function checkAgencyNumbers(browser, session, entry, path) {
       tabs: Array.from(main.querySelectorAll('[role="tab"]')).map(el =>
         (el.textContent || '').trim()
       ),
-      buy: Array.from(main.querySelectorAll('button')).some(
+      // A page's own actions dock into the topbar on a wide screen (see
+      // PageHeader), so the control is in the header or, narrower, in <main>.
+      buy: Array.from(document.querySelectorAll('header button, main button')).some(
         el => (el.textContent || '').trim() === 'Buy numbers'
       ),
       spinning: Array.from(main.querySelectorAll('.animate-spin')).filter(el => {
