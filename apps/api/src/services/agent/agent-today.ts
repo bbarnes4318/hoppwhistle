@@ -102,7 +102,19 @@ export interface AgentRecentCall {
   disposition: string | null;
   /** A submitted, non-voided application was written on this call. */
   application: boolean;
+  /**
+   * The call's recording, when there is one to play: the same one the Calls
+   * page plays (the call's primary recording, else its latest). Playback goes
+   * through `GET /api/v1/recordings/:id/url`, which allows an agent exactly
+   * the calls they answered -- the same rule this list is built on.
+   */
+  recording: { id: string; durationSeconds: number | null } | null;
+  /** Recorded, but the file is not stored yet. False once `recording` is set. */
+  recordingPending: boolean;
 }
+
+/** Call.recordingStatus values that mean a file is still on its way. */
+const RECORDING_IN_FLIGHT = new Set(['PENDING', 'RECORDING', 'PROCESSING']);
 
 export interface AgentStanding {
   /** Null when the agent has no ranked activity in the period. */
@@ -309,6 +321,14 @@ export async function getAgentToday(
         direction: true,
         connectedDuration: true,
         disposition: true,
+        primaryRecordingId: true,
+        recordingStatus: true,
+        recordings: {
+          where: { deletedAt: null, status: { not: 'FAILED' } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, duration: true },
+        },
       },
     }),
     deps.withStanding === false
@@ -396,7 +416,30 @@ export async function getAgentToday(
       connectedSeconds: call.connectedDuration,
       disposition: call.disposition,
       application: withApplication.has(call.id),
+      ...recordingOf(call),
     })),
     standing,
+  };
+}
+
+/** The playable recording on a recent call, as the Calls page resolves it. */
+function recordingOf(call: {
+  connectedDuration: number | null;
+  primaryRecordingId: string | null;
+  recordingStatus: string | null;
+  recordings: Array<{ id: string; duration: number | null }>;
+}): Pick<AgentRecentCall, 'recording' | 'recordingPending'> {
+  const latest = call.recordings[0] ?? null;
+  const id = call.primaryRecordingId ?? latest?.id ?? null;
+  if (!id) {
+    return {
+      recording: null,
+      recordingPending: RECORDING_IN_FLIGHT.has(call.recordingStatus ?? ''),
+    };
+  }
+  const stored = latest && latest.id === id ? latest.duration : null;
+  return {
+    recording: { id, durationSeconds: stored ?? call.connectedDuration ?? null },
+    recordingPending: false,
   };
 }

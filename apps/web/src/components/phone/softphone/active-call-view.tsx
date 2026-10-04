@@ -57,6 +57,12 @@ export interface ActiveCallViewProps {
   keypad?: React.ReactNode;
   /** Prospect details under the controls. */
   children?: React.ReactNode;
+  /**
+   * Fill a full-height pane (the softphone beside the customer record): the
+   * caller at the top, the timer centred, the controls and Hang up at the
+   * bottom, level with the end of the record beside it.
+   */
+  fill?: boolean;
 }
 
 export function ActiveCallView({
@@ -81,6 +87,7 @@ export function ActiveCallView({
   onHangup,
   keypad,
   children,
+  fill = false,
 }: ActiveCallViewProps): JSX.Element {
   const number = formatPhoneNumber(phoneNumber) || 'Unknown number';
   const tone = isOnHold ? 'ringing' : 'live';
@@ -89,10 +96,16 @@ export function ActiveCallView({
     <div
       className={cn(
         'flex flex-col transition-colors duration-200 ease-out ne-motion',
-        isOnHold ? 'bg-ringing-tint' : 'bg-surface'
+        isOnHold ? 'bg-ringing-tint' : 'bg-surface',
+        fill && 'flex-1'
       )}
     >
-      <div className="flex items-center gap-3 px-4 pb-2 pt-4">
+      <div
+        className={cn(
+          'flex items-center gap-3 px-4 pb-2 pt-4',
+          fill && 'border-b border-rule px-5 pb-4 pt-5'
+        )}
+      >
         <CallerAvatar name={callerName} tone={tone} />
         <div className="min-w-0 flex-1">
           <p className="t-section truncate text-ink">{callerName ?? number}</p>
@@ -124,7 +137,13 @@ export function ActiveCallView({
         </div>
       </div>
 
-      <div className="px-4 pb-4 pt-2 text-center" aria-live="off">
+      <div
+        className={cn(
+          'px-4 pb-4 pt-2 text-center',
+          fill && 'flex flex-1 flex-col items-center justify-center py-6'
+        )}
+        aria-live="off"
+      >
         {isOnHold ? (
           <>
             <p className="t-label inline-flex items-center gap-1.5 text-ringing-ink">
@@ -132,7 +151,10 @@ export function ActiveCallView({
               On hold
             </p>
             <p
-              className="mt-1 text-[44px] font-semibold leading-none tracking-tight tabular-nums text-ringing-ink"
+              className={cn(
+                'mt-1 font-semibold leading-none tracking-tight tabular-nums text-ringing-ink',
+                fill ? 'text-[56px]' : 'text-[44px]'
+              )}
               role="timer"
               aria-label={`On hold for ${formatCallTimer(holdSeconds)}`}
             >
@@ -145,7 +167,12 @@ export function ActiveCallView({
         ) : dialing ? (
           <>
             <p className="t-label text-ink-3">Calling</p>
-            <p className="mt-1 text-[44px] font-semibold leading-none tracking-tight text-ink-3">
+            <p
+              className={cn(
+                'mt-1 font-semibold leading-none tracking-tight text-ink-3',
+                fill ? 'text-[56px]' : 'text-[44px]'
+              )}
+            >
               <span className="animate-pulse motion-reduce:animate-none">···</span>
             </p>
             <p className="t-meta mt-1.5 text-ink-3">Waiting for them to pick up</p>
@@ -154,7 +181,10 @@ export function ActiveCallView({
           <>
             <p className="t-label text-phone-ink">Connected</p>
             <p
-              className="mt-1 text-[44px] font-semibold leading-none tracking-tight tabular-nums text-ink"
+              className={cn(
+                'mt-1 font-semibold leading-none tracking-tight tabular-nums text-ink',
+                fill ? 'text-[56px]' : 'text-[44px]'
+              )}
               role="timer"
               aria-label={`Call time ${formatCallTimer(callSeconds)}`}
             >
@@ -173,7 +203,9 @@ export function ActiveCallView({
         )}
       </div>
 
-      <div className="grid grid-cols-5 gap-1.5 px-3">
+      <div
+        className={cn('grid grid-cols-5 gap-1.5 px-3', fill && 'border-t border-rule px-4 pt-5')}
+      >
         <ControlButton
           label={isMuted ? 'Unmute' : 'Mute'}
           shortcut="M"
@@ -222,7 +254,7 @@ export function ActiveCallView({
         </div>
       ) : null}
 
-      <div className="space-y-2 px-4 pb-4 pt-4">
+      <div className={cn('space-y-2 px-4 pb-4 pt-4', fill && 'px-5 pb-5')}>
         {hasHeldCalls && onMerge ? (
           <button
             type="button"

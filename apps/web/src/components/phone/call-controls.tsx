@@ -21,6 +21,8 @@ export interface CallControlsProps {
   onAddCall: () => void;
   /** Prospect details under the controls. */
   children?: ReactNode;
+  /** Fill the full-height pane beside the customer record. */
+  fill?: boolean;
 }
 
 export function CallControls({
@@ -30,6 +32,7 @@ export function CallControls({
   onTransfer,
   onAddCall,
   children,
+  fill,
 }: CallControlsProps): JSX.Element | null {
   const { currentCall, toggleMute, toggleHold, hangupCall, hasHeldCalls, mergeCalls, sendDTMF } =
     usePhone();
@@ -83,6 +86,7 @@ export function CallControls({
       onAddCall={onAddCall}
       onMerge={() => void mergeCalls()}
       onHangup={() => void hangupCall()}
+      fill={fill}
       keypad={
         <Keypad
           mode="dtmf"

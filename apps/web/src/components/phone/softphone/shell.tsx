@@ -20,6 +20,14 @@ import {
  * From 640px up it floats at the bottom right, 380px wide. Below that it is a
  * bottom sheet across the full width, because a 380px card on a 360px phone
  * is a card with no margins and a close button under the thumb.
+ *
+ * With a `sidePanel` (the customer record, on a call) it widens from 1024px up
+ * into two equal panes: the record on the left, the phone on the right, each
+ * scrolling on its own so reading the record never moves Hang up. The call
+ * views take a `fill` prop for this pane, which spreads them down its full
+ * height instead of stacking at the top of it.
+ * Narrower than that the pane is not shown: there is no room for two, and the
+ * caller passes the record inline in `children` behind `lg:hidden` instead.
  */
 export interface SoftphoneShellProps {
   state: SoftphoneState;
@@ -39,6 +47,8 @@ export interface SoftphoneShellProps {
   placement?: 'floating' | 'inline';
   /** Laid over header and body, e.g. the shortcuts sheet. */
   overlay?: React.ReactNode;
+  /** A pane beside the body on wide screens: the customer record on a call. */
+  sidePanel?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -55,11 +65,13 @@ export function SoftphoneShell({
   onShortcuts,
   placement = 'floating',
   overlay,
+  sidePanel,
   children,
 }: SoftphoneShellProps): JSX.Element {
   const meta = SOFTPHONE_STATE_META[state];
   const onCall = state === 'connected' || state === 'hold';
   const headingId = React.useId();
+  const split = Boolean(sidePanel) && !minimized;
 
   return (
     <section
@@ -71,9 +83,10 @@ export function SoftphoneShell({
               'fixed inset-x-0 bottom-0 z-40 max-h-[92dvh] rounded-t-[20px]',
               'sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[380px] sm:rounded-card',
               'sm:max-h-[min(720px,calc(100vh-32px))]',
+              split && 'lg:h-[min(720px,calc(100vh-32px))] lg:w-[800px]',
               'animate-in fade-in-0 slide-in-from-bottom-4 duration-200 motion-reduce:animate-none',
             ]
-          : 'relative w-full max-w-[380px] rounded-card'
+          : ['relative w-full rounded-card', split ? 'max-w-[800px]' : 'max-w-[380px]']
       )}
     >
       <SoftphoneMotion />
@@ -140,7 +153,23 @@ export function SoftphoneShell({
       {!minimized ? (
         <>
           {notices ? <div className="shrink-0 space-y-2 px-3 pt-3">{notices}</div> : null}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+          {split ? (
+            <div className="flex min-h-0 flex-1">
+              <aside
+                aria-label="Customer"
+                // The record card runs the pane's full height, so its bottom edge
+                // lines up with Hang up beside it.
+                className="hidden min-w-0 flex-1 overflow-y-auto overscroll-contain border-r border-rule bg-sunken p-3 lg:block [&>*]:min-h-full"
+              >
+                {sidePanel}
+              </aside>
+              <div className="min-h-0 w-full overflow-y-auto overscroll-contain lg:flex lg:w-[400px] lg:shrink-0 lg:flex-col">
+                {children}
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+          )}
         </>
       ) : null}
       {overlay}

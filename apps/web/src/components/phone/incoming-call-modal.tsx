@@ -25,6 +25,8 @@ interface IncomingCallModalProps {
   state?: string | null;
   /** Prospect details, under the caller. */
   children?: ReactNode;
+  /** Fill the full-height pane beside the customer record. */
+  fill?: boolean;
 }
 
 export function IncomingCallModal({
@@ -33,6 +35,7 @@ export function IncomingCallModal({
   city,
   state,
   children,
+  fill,
 }: IncomingCallModalProps): JSX.Element {
   const { answerCall, hangupCall } = usePhone();
   const ringSeconds = useElapsedSeconds(call.startTime ?? null);
@@ -56,6 +59,7 @@ export function IncomingCallModal({
       ringSeconds={ringSeconds}
       onAnswer={() => void answerCall()}
       onDecline={() => void hangupCall()}
+      fill={fill}
     >
       {children}
     </IncomingCallView>

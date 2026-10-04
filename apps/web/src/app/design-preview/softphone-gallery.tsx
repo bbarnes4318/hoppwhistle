@@ -88,18 +88,29 @@ const PROSPECT: ProspectData = {
   fullName: 'Maria Delgado',
   phoneNumber: '(813) 555-0142',
   email: 'maria.delgado@example.com',
-  leadSource: 'Facebook — FE 65+',
-  campaignName: 'Final Expense — Florida',
+  address: '4120 W Bay Villa Ave',
   city: 'Tampa',
   state: 'FL',
+  zipCode: '33611',
+  leadSource: 'Facebook — FE 65+',
+  campaignName: 'Final Expense — Florida',
+  notes: 'Asked for a callback after 3pm. Husband is co-signer on the current policy.',
+  customFields: {
+    dateOfBirth: '1958-03-14',
+    coverageWanted: '$15,000',
+    tobaccoUse: false,
+    currentCarrier: 'Mutual of Omaha',
+  },
 };
 
 const SCREEN_POP_FIELDS: ScreenPopField[] = [
   { id: 'fullName', label: 'Full name', key: 'fullName', enabled: true, order: 1 },
-  { id: 'phoneNumber', label: 'Phone number', key: 'phoneNumber', enabled: true, order: 2 },
+  { id: 'phoneNumber', label: 'Phone', key: 'phoneNumber', enabled: true, order: 2 },
   { id: 'email', label: 'Email', key: 'email', enabled: true, order: 3 },
+  { id: 'address', label: 'Address', key: 'address', enabled: true, order: 5 },
   { id: 'leadSource', label: 'Lead source', key: 'leadSource', enabled: true, order: 9 },
   { id: 'campaignName', label: 'Campaign', key: 'campaignName', enabled: true, order: 10 },
+  { id: 'notes', label: 'Notes', key: 'notes', enabled: true, order: 11 },
 ];
 
 const RECENT: RecentCallItem[] = [
@@ -275,8 +286,11 @@ export function MockSoftphone({
         ringSeconds={7}
         onAnswer={noop}
         onDecline={noop}
+        fill
       >
-        <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} variant="modal" />
+        <div className="lg:hidden">
+          <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} />
+        </div>
       </IncomingCallView>
     );
   } else if (onCall) {
@@ -300,12 +314,15 @@ export function MockSoftphone({
         onAddCall={noop}
         onMerge={noop}
         onHangup={noop}
+        fill={scenario === 'connected'}
         keypad={
           <Keypad mode="dtmf" size="compact" value={tones} onDigit={d => setTones(t => t + d)} />
         }
       >
         {scenario === 'connected' ? (
-          <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} />
+          <div className="lg:hidden">
+            <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} />
+          </div>
         ) : null}
       </ActiveCallView>
     );
@@ -371,6 +388,11 @@ export function MockSoftphone({
       onShortcuts={() => setShortcuts(true)}
       placement={placement}
       overlay={shortcuts ? <ShortcutsSheet onClose={() => setShortcuts(false)} /> : null}
+      sidePanel={
+        state === 'incoming' || scenario === 'connected' ? (
+          <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} />
+        ) : undefined
+      }
     >
       {body}
     </SoftphoneShell>
