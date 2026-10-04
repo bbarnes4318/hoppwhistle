@@ -18,9 +18,9 @@ describe('/voice-agents embed', () => {
   const layout = read('app', '(dashboard)', 'layout.tsx');
   const page = read('app', '(dashboard)', 'voice-agents', 'page.tsx');
 
-  it('drops the live strip and the softphone runway on the embedded page', () => {
+  it('drops the softphone runway on the embedded page, and no page has a live strip', () => {
     expect(layout).toContain("const EMBEDDED_APP_ROUTES = ['/voice-agents'];");
-    expect(layout).toMatch(/showLiveStrip = [^;]*!isEmbeddedAppPage/);
+    expect(layout).not.toContain('LiveStrip');
     expect(layout).toContain("showFloatingDialer && !isEmbeddedAppPage && 'pb-24'");
   });
 
