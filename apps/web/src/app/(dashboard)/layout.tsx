@@ -6,16 +6,13 @@ import { useEffect } from 'react';
 import { LicensedStatesGate } from '@/components/agents/licensed-states-gate';
 import { BrandThemeSync } from '@/components/brand/brand-theme-sync';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { RolePreviewBanner } from '@/components/platform/role-preview-switcher';
-import { useAgentView } from '@/hooks/use-agent-view';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
-import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { portalRedirectTarget } from '@/lib/portal-host';
 import { getRedirectPath } from '@/lib/roles';
@@ -51,31 +48,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const platform = usePlatformContext();
 
   /*
-   * No live strip for a white-label owner, a downline agency's owner or an
-   * agent: Today is their live view, and a second, smaller copy of it above
-   * every page was one more place for two numbers to disagree -- and, for an
-   * agent, a KPI header stacked between the topbar and every page's own
-   * header that the owner's portal does not have. Buyers, publishers, normal
-   * agencies and NetEnroll staff keep theirs.
-   *
-   * `useAgentView` reads the EFFECTIVE roles, so an operator previewing as
-   * AGENT loses the strip exactly as a real agent does -- and an operator who
-   * merely holds AGENT on their own account keeps the platform strip.
-   */
-  const whiteLabelView = useWhiteLabelView();
-  const previewingRole = platform.previewRole != null || user?.previewRole != null;
-  const downlineOwner = isChild && hasFullAccess && (!platform.isPlatformAdmin || previewingRole);
-  const agentView = useAgentView();
-
-  /*
    * A page that embeds another application full-bleed (the AI Voice app on
    * /voice-agents). It is its own workspace with its own navigation and
-   * figures, so the portal's KPI strip above it is noise, and the softphone
+   * figures, and the softphone
    * runway under <main> was a 96px blank band cut out of the frame. The page
    * fills <main> exactly and does its own scrolling inside the frame.
    */
   const isEmbeddedAppPage = isEmbeddedAppPath(pathname);
-  const showLiveStrip = !whiteLabelView && !downlineOwner && !agentView && !isEmbeddedAppPage;
 
   /*
    * Who gets a softphone.
@@ -412,9 +391,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-1 flex-col h-screen overflow-hidden">
           <div className="shrink-0">
             <Topbar />
-            {/* Signature 2 — below the topbar, above the page, for everybody but
-                an owner whose Today replaces it. */}
-            {showLiveStrip ? <LiveStripMount /> : null}
           </div>
           <main
             className={cn(
