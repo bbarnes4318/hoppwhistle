@@ -157,6 +157,9 @@ const DATABASE_BACKED = [
   // numbers (with a white-label parent and a child), and a child agency's
   // campaigns, brand and limits.
   '**/src/__tests__/password.test.ts',
+  // Truncates `tenants`, `roles` and `audit_logs`: an agent keeping their
+  // own licensed states.
+  '**/src/__tests__/me-licensed-states.test.ts',
   '**/src/__tests__/agency-numbers.test.ts',
   '**/src/__tests__/child-agency.test.ts',
   // Truncates `tenants`, `roles`, `audit_logs` and `upgrade_requests`: a
