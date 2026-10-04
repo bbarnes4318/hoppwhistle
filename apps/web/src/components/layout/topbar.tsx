@@ -41,7 +41,7 @@ import { publishTopbarSlot, usePageTitleClaimed, useCurrentPageTitle } from './u
  * cmd-K would be two search experiences pretending to be one.
  */
 export function Topbar() {
-  const { user, isBuyerOnly, isPublisherOnly, isWhiteLabelAgent } = useAuth();
+  const { user, isBuyerOnly, isPublisherOnly, isAgentOnly, isWhiteLabelAgent } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
   // A white-label owner's pages, and an agent's, are named as their own
@@ -265,14 +265,15 @@ export function Topbar() {
             {/* Account (your own login and password) is every role's. Settings
                 is the agency's, and a buyer or publisher portal login has none:
                 linking them there only bounced them back to their portal. A
-                white-label agent has everything they need under Account. */}
+                agent (NetEnroll's own or a white-label agency's, e.g. Life Leads
+                Plus) has everything they need under Account. */}
             <DropdownMenuItem asChild>
               <Link href="/account" className="t-body">
                 <User aria-hidden className="mr-2 h-3.5 w-3.5" />
                 Account
               </Link>
             </DropdownMenuItem>
-            {isBuyerOnly || isPublisherOnly || isWhiteLabelAgent ? null : (
+            {isBuyerOnly || isPublisherOnly || isAgentOnly ? null : (
               <DropdownMenuItem asChild>
                 <Link href="/settings" className="t-body">
                   <Settings aria-hidden className="mr-2 h-3.5 w-3.5" />
