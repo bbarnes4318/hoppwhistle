@@ -18,11 +18,11 @@
  *
  *   FONESTORM_USERNAME=... FONESTORM_PASSWORD=... \
  *   node scripts/fonestorm-move-subaccount.mjs \
- *     --from 2005555318 --to 2005555185 --device Trunk-1-178.156.223.97 [--apply]
+ *     --from 2005555318 --to 2005555185 --device Trunk-1-5.161.16.107 [--apply]
  *
  * Each run saves the --from numbers to fonestorm-<subaccount>-numbers.txt.
  * Once they have been moved to --to, route just those numbers with:
- *   --from 2005555185 --device Trunk-1-178.156.223.97 --only fonestorm-2005555318-numbers.txt --apply
+ *   --from 2005555185 --device Trunk-1-5.161.16.107 --only fonestorm-2005555318-numbers.txt --apply
  */
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 

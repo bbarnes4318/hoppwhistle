@@ -13,7 +13,7 @@ outside the repository, and the one that a server migration silently breaks.
 
 |               |                                 |
 | ------------- | ------------------------------- |
-| Public IP     | `178.156.223.97`                |
+| Public IP     | `5.161.16.107`                |
 | Provider      | Hetzner                         |
 | SIP signaling | UDP/TCP 5080 (external profile) |
 
@@ -69,7 +69,7 @@ breaks it just as silently.
 For an Anveo **retail** DID the fields are `CALL_FORWARD_TYPE = SIP_URI` and:
 
 ```
-$[E164]$@178.156.223.97:5080
+$[E164]$@5.161.16.107:5080
 ```
 
 `$[E164]$` is Anveo's own macro — it is substituted with the called number at

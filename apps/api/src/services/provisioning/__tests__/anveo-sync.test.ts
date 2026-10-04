@@ -37,7 +37,7 @@ function anveoDid(overrides: Record<string, unknown> = {}) {
     smsUrl: '',
     smsEmail: '',
     callForwardType: 'SIP_URI',
-    callForwardTo: '$[E164]$@178.156.223.97:5080',
+    callForwardTo: '$[E164]$@5.161.16.107:5080',
     status: 'ACTIVE',
     countryName: 'U.S.A',
     areaName: 'US-TX',

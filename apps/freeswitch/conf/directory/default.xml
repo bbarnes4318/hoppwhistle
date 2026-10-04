@@ -1,6 +1,8 @@
 <include>
   <!-- Main SIP Domain -->
   <domain name="$${domain}">
+    <alias name="5.161.16.107"/>
+    <!-- Primary IP; 5.161.16.107 is the floating IP. Kept so SIP addressed to either still matches. -->
     <alias name="178.156.223.97"/>
     <alias name="172.18.0.4"/>
     <alias name="172.18.0.1"/>
@@ -62,7 +64,7 @@
   </domain>
 
   <!-- Server IP Domain for direct SIP transfer URI matching -->
-  <domain name="178.156.223.97">
+  <domain name="5.161.16.107">
     <params>
       <param name="dial-string" value="{^^:sip_invite_domain=${dialed_domain}:presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})},${verto_contact(${dialed_user}@${dialed_domain})}"/>
     </params>

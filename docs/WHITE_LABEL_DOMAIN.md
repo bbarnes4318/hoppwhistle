@@ -46,7 +46,7 @@ Do the steps in this order. **Set the tenant's domain last (step 6).** From the
 moment it is saved, every link Life Leads Plus and its children are sent names
 `agents.lifeleadsplus.com`, so the host must already be serving.
 
-Run everything on the production host (`178.156.223.97`, checkout at
+Run everything on the production host (`5.161.16.107`, checkout at
 `/opt/hopwhistle`) unless a step says otherwise.
 
 ### 1. Deploy the code
@@ -71,20 +71,20 @@ In the DNS zone for `lifeleadsplus.com`, create:
 
 | Type | Name     | Value            | TTL   |
 | ---- | -------- | ---------------- | ----- |
-| `A`  | `agents` | `178.156.223.97` | `300` |
+| `A`  | `agents` | `5.161.16.107` | `300` |
 
-`178.156.223.97` is the production host recorded in `docs/DEPLOY.md`, and it is
+`5.161.16.107` is the production host recorded in `docs/DEPLOY.md`, and it is
 the one that serves `agents.netenroll.com`. Confirm that before creating the record:
 
 ```bash
-dig +short agents.netenroll.com        # must print 178.156.223.97
+dig +short agents.netenroll.com        # must print 5.161.16.107
 dig +short AAAA agents.netenroll.com   # if this prints an address, add the same AAAA for agents.lifeleadsplus.com; if empty, add none
 ```
 
 Then wait for the new record:
 
 ```bash
-dig +short agents.lifeleadsplus.com    # must print 178.156.223.97
+dig +short agents.lifeleadsplus.com    # must print 5.161.16.107
 ```
 
 Do not change any other record.

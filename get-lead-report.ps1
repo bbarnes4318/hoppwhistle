@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$ip = "178.156.223.97"
+$ip = "5.161.16.107"
 $keyPath = "C:\Users\jimbo\.ssh\hetzner_pvn"
 $downloads = "$env:USERPROFILE\Downloads"
 

@@ -58,7 +58,7 @@ Done. The files are in $OUT_DIR on this server.
 To get them onto your PC, run this FROM A WINDOWS POWERSHELL WINDOW
 (not here — this is the server):
 
-  scp -i C:\\Users\\jimbo\\.ssh\\hetzner_pvn root@178.156.223.97:$OUT_DIR/$SLUG-*.csv C:\\Users\\jimbo\\Downloads\\
+  scp -i C:\\Users\\jimbo\\.ssh\\hetzner_pvn root@5.161.16.107:$OUT_DIR/$SLUG-*.csv C:\\Users\\jimbo\\Downloads\\
 
 Do NOT re-send anything in the rejected file. Those have already spent their
 90-day duplicate window; posting them again makes them permanently unsellable.

@@ -77,15 +77,15 @@ The record **already exists and points at the wrong machine**:
 
 | hostname | resolves to | |
 | --- | --- | --- |
-| `agents.netenroll.com` | `178.156.223.97` | the portal + Dograh box |
-| `aivoice.hopwhistle.com` | `178.156.223.97` | same box |
+| `agents.netenroll.com` | `5.161.16.107` | the portal + Dograh box |
+| `aivoice.hopwhistle.com` | `5.161.16.107` | same box |
 | **`aivoice.netenroll.com`** | **`178.156.198.66`** | **the netenroll apex box — wrong** |
 | `netenroll.com` | `178.156.198.66` | |
 
 It is not a wildcard artifact: a random `*.netenroll.com` label returns
 NXDOMAIN, so this record was created explicitly.
 
-**Repoint `aivoice.netenroll.com` from `178.156.198.66` to `178.156.223.97`.**
+**Repoint `aivoice.netenroll.com` from `178.156.198.66` to `5.161.16.107`.**
 Until that is done, certbot's HTTP-01 challenge validates against `.66` and
 fails, and nothing downstream can be tested. It also matters beyond the
 certificate: Dograh derives `TURN_HOST` from `PUBLIC_HOST`, so WebRTC breaks
@@ -94,7 +94,7 @@ too if the name points at the wrong host.
 Confirm before continuing:
 
 ```bash
-dig +short aivoice.netenroll.com     # must print 178.156.223.97
+dig +short aivoice.netenroll.com     # must print 5.161.16.107
 ```
 
 ## 2. How the hostname is served

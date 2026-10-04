@@ -1,6 +1,6 @@
 # Deploying
 
-Production is one Hetzner host: **178.156.223.97**, checkout at `/opt/hopwhistle`,
+Production is one Hetzner host: **5.161.16.107**, checkout at `/opt/hopwhistle`,
 compose file `infra/docker/docker-compose.dev.yml`, deployed with
 `scripts/deploy.sh --build api web`.
 

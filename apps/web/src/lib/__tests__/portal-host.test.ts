@@ -32,6 +32,6 @@ describe('portalRedirectTarget', () => {
 
   it('never redirects local development or a bare IP', () => {
     expect(portalRedirectTarget('agents.lifeleadsplus.com', at('localhost'))).toBeNull();
-    expect(portalRedirectTarget('agents.lifeleadsplus.com', at('178.156.223.97'))).toBeNull();
+    expect(portalRedirectTarget('agents.lifeleadsplus.com', at('5.161.16.107'))).toBeNull();
   });
 });
