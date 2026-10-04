@@ -22,8 +22,10 @@ import {
  * is a card with no margins and a close button under the thumb.
  *
  * With a `sidePanel` (the customer record, on a call) it widens from 1024px up
- * into two panes: the record on the left, the phone on the right at its usual
- * 380px, each scrolling on its own so reading the record never moves Hang up.
+ * into two equal panes: the record on the left, the phone on the right, each
+ * scrolling on its own so reading the record never moves Hang up. The call
+ * views take a `fill` prop for this pane, which spreads them down its full
+ * height instead of stacking at the top of it.
  * Narrower than that the pane is not shown: there is no room for two, and the
  * caller passes the record inline in `children` behind `lg:hidden` instead.
  */
@@ -155,11 +157,13 @@ export function SoftphoneShell({
             <div className="flex min-h-0 flex-1">
               <aside
                 aria-label="Customer"
-                className="hidden min-w-0 flex-1 overflow-y-auto overscroll-contain border-r border-rule bg-sunken p-3 lg:block"
+                // The record card runs the pane's full height, so its bottom edge
+                // lines up with Hang up beside it.
+                className="hidden min-w-0 flex-1 overflow-y-auto overscroll-contain border-r border-rule bg-sunken p-3 lg:block [&>*]:min-h-full"
               >
                 {sidePanel}
               </aside>
-              <div className="min-h-0 w-full overflow-y-auto overscroll-contain lg:w-[380px] lg:shrink-0">
+              <div className="min-h-0 w-full overflow-y-auto overscroll-contain lg:flex lg:w-[400px] lg:shrink-0 lg:flex-col">
                 {children}
               </div>
             </div>

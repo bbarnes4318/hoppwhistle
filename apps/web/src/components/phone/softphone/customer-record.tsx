@@ -150,7 +150,9 @@ function RecordRow({ row }: { row: CustomerRecordRow }): JSX.Element {
         <button
           type="button"
           onClick={copy}
-          title={`Copy ${row.label.toLowerCase()}`}
+          title={
+            row.mono && !row.wide ? `${value} (click to copy)` : `Copy ${row.label.toLowerCase()}`
+          }
           aria-label={`${row.label}: ${value}. Copy`}
           className={cn(
             '-mx-1 flex w-[calc(100%+0.5rem)] items-start gap-1.5 rounded-control px-1 text-left',
@@ -160,7 +162,10 @@ function RecordRow({ row }: { row: CustomerRecordRow }): JSX.Element {
         >
           <span
             className={cn(
-              'min-w-0 flex-1 break-words leading-5 text-ink',
+              'min-w-0 flex-1 leading-5 text-ink',
+              // An email split mid-word reads as two values; one line, with the
+              // full value on hover and on copy, reads as one.
+              row.mono && !row.wide ? 'truncate' : 'break-words',
               row.mono ? 't-data' : 'text-[13px] font-medium',
               row.wide && 'whitespace-pre-wrap font-normal'
             )}

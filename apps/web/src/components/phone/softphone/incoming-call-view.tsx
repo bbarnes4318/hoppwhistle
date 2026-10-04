@@ -24,6 +24,8 @@ export interface IncomingCallViewProps {
   onDecline: () => void;
   /** Prospect details under the caller block. */
   children?: React.ReactNode;
+  /** Fill a full-height pane: the caller centred, Answer and Decline at the bottom. */
+  fill?: boolean;
 }
 
 export function IncomingCallView({
@@ -35,12 +37,23 @@ export function IncomingCallView({
   onAnswer,
   onDecline,
   children,
+  fill = false,
 }: IncomingCallViewProps): JSX.Element {
   const number = formatPhoneNumber(phoneNumber) || 'Unknown number';
 
   return (
-    <div className="flex flex-col animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-      <div className="flex flex-col items-center px-5 pb-4 pt-6 text-center">
+    <div
+      className={cn(
+        'flex flex-col animate-in fade-in-0 duration-200 motion-reduce:animate-none',
+        fill && 'flex-1'
+      )}
+    >
+      <div
+        className={cn(
+          'flex flex-col items-center px-5 pb-4 pt-6 text-center',
+          fill && 'flex-1 justify-center py-8'
+        )}
+      >
         <div className="relative rounded-full">
           <span className="sp-ring" aria-hidden />
           <CallerAvatar name={callerName} tone="ringing" size="lg" />
@@ -73,7 +86,12 @@ export function IncomingCallView({
 
       {children ? <div className="px-4 pb-4">{children}</div> : null}
 
-      <div className="sticky bottom-0 mt-auto border-t border-rule bg-surface px-4 pb-4 pt-3">
+      <div
+        className={cn(
+          'sticky bottom-0 mt-auto border-t border-rule bg-surface px-4 pb-4 pt-3',
+          fill && 'px-5 pb-5 pt-4'
+        )}
+      >
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"

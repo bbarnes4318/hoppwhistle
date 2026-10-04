@@ -286,6 +286,7 @@ export function MockSoftphone({
         ringSeconds={7}
         onAnswer={noop}
         onDecline={noop}
+        fill
       >
         <div className="lg:hidden">
           <ScreenPopView data={PROSPECT} fields={SCREEN_POP_FIELDS} />
@@ -313,6 +314,7 @@ export function MockSoftphone({
         onAddCall={noop}
         onMerge={noop}
         onHangup={noop}
+        fill={scenario === 'connected'}
         keypad={
           <Keypad mode="dtmf" size="compact" value={tones} onDigit={d => setTones(t => t + d)} />
         }

@@ -403,6 +403,7 @@ export function AgentPhonePanel(): JSX.Element | null {
         prospectName={prospectName}
         city={matchedProspect?.city}
         state={matchedProspect?.state}
+        fill={Boolean(customerRecord)}
       >
         {inlineRecord}
       </IncomingCallModal>
@@ -421,6 +422,7 @@ export function AgentPhonePanel(): JSX.Element | null {
           onKeypadToggle={() => setKeypadOpen(open => !open)}
           onTransfer={() => setDialog('transfer')}
           onAddCall={() => setDialog('add')}
+          fill={Boolean(customerRecord)}
         >
           {inlineRecord}
         </CallControls>
