@@ -3,7 +3,7 @@
     FracTEL outbound trunk (device 576613142989).
     STATIC / IP-authenticated: register MUST be false — FracTEL firewalls
     STATIC devices that attempt to register. Auth is by our source IP
-    (178.156.223.97) which FracTEL has authorized.
+    (5.161.16.107) which FracTEL has authorized.
 
     Outbound port is 5060/UDP. We define one gateway per FracTEL outbound IP
     (fractel1-6) and fail over across all of them in the dialplan bridge.

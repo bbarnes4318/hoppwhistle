@@ -938,7 +938,8 @@ local function build_step(step, show_caller)
                     "hopwhistle.com",
                     "aivoice.hopwhistle.com",
                     domain,
-                    "178.156.223.97",
+                    "5.161.16.107",
+                    "178.156.223.97", -- primary IP (5.161.16.107 is the floating IP)
                     "freeswitch",
                     "localhost"
                 }

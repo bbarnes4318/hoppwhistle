@@ -4,6 +4,11 @@ Production is one Hetzner host: **178.156.223.97**, checkout at `/opt/hopwhistle
 compose file `infra/docker/docker-compose.dev.yml`, deployed with
 `scripts/deploy.sh --build api web`.
 
+The host has two addresses. `178.156.223.97` is its primary IP: SSH and the
+website DNS records point there. `5.161.16.107` is a Hetzner floating IP used for
+phone traffic only (SIP/RTP, carrier and Vapi trunks, `PUBLIC_IP` in the compose
+file).
+
 Every step below has a verification command, the output that command produces
 when the step worked, and how to reverse it. "Check that it works" is not a
 verification step. If a step's command does not produce its stated output, stop

@@ -29,8 +29,8 @@ EXISTING_PJSIP = "[fractel]\ntype=endpoint\ncontext=from-fractel\n"
 
 
 def test_pjsip_block_points_at_freeswitch_external_profile():
-    block = pjsip_block("178.156.223.97", 5080, None)
-    assert "contact=sip:178.156.223.97:5080" in block
+    block = pjsip_block("5.161.16.107", 5080, None)
+    assert "contact=sip:5.161.16.107:5080" in block
     assert "[hopwhistle]\ntype=aor" in block
     assert "[hopwhistle]\ntype=endpoint" in block
     assert "send_pai=yes" in block and "trust_id_outbound=yes" in block

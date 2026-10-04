@@ -94,8 +94,8 @@ describe('freeswitchHost', () => {
   });
 
   it('returns the configured public IP', () => {
-    process.env.PUBLIC_IP = '178.156.223.97';
-    expect(freeswitchHost()).toBe('178.156.223.97');
+    process.env.PUBLIC_IP = '5.161.16.107';
+    expect(freeswitchHost()).toBe('5.161.16.107');
   });
 
   it('throws rather than guessing when PUBLIC_IP is unset', () => {

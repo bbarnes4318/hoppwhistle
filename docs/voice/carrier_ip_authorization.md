@@ -13,9 +13,12 @@ outside the repository, and the one that a server migration silently breaks.
 
 |               |                                 |
 | ------------- | ------------------------------- |
-| Public IP     | `178.156.223.97`                |
+| Public IP     | `5.161.16.107` (floating IP)    |
 | Provider      | Hetzner                         |
 | SIP signaling | UDP/TCP 5080 (external profile) |
+
+The website and SSH stay on the host's primary IP, `178.156.223.97`; only phone
+traffic uses the floating IP.
 
 The previous host was `45.32.213.201`. Documents written before the Hetzner
 migration still name it; they carry a stale banner and are historical.
@@ -69,7 +72,7 @@ breaks it just as silently.
 For an Anveo **retail** DID the fields are `CALL_FORWARD_TYPE = SIP_URI` and:
 
 ```
-$[E164]$@178.156.223.97:5080
+$[E164]$@5.161.16.107:5080
 ```
 
 `$[E164]$` is Anveo's own macro — it is substituted with the called number at

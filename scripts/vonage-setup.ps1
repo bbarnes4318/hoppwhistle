@@ -21,7 +21,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$ip = "178.156.223.97"
+$ip = "5.161.16.107"
 $keyPath = "C:\Users\jimbo\.ssh\hetzner_pvn"
 $sshArgs = @("-T", "-o", "IdentitiesOnly=yes", "-i", $keyPath, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10", "root@$ip")
 
