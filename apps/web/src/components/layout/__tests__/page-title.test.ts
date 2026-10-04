@@ -128,24 +128,34 @@ describe('the pages that were fixed render no title of their own', () => {
   });
 
   /**
-   * One title per page. The page header carries it now -- title, description
-   * and actions in one row at the top of the content -- and the topbar drops
-   * its copy whenever a header has claimed it. A header that rendered the
-   * title without claiming it, or a topbar that rendered its <h1> regardless,
-   * would put the second heading back on every page at once.
+   * One title per page, in the topbar. The topbar is the page header: it
+   * always names the page, and a page's PageHeader renders its description,
+   * actions and any title of its own into the topbar's slots through portals.
+   * A header or hub that printed the title in the content again whenever the
+   * topbar is there would put the second heading back on every page at once.
    */
-  it('PageHeader claims the title it shows, and the topbar drops its own copy', () => {
+  it('the topbar names every page, and PageHeader docks into it', () => {
     const header = readFileSync(join(__dirname, '..', 'page-header.tsx'), 'utf8');
     const body = header.slice(header.indexOf('export function PageHeader'));
-    expect(body).toContain('useClaimPageTitle(heading !== null)');
+    expect(body).toContain('useTopbarSlots()');
+    expect(body).toContain(
+      'createPortal(<span data-docked="">{description}</span>, descriptionTarget)'
+    );
+    expect(body).toContain('createPortal(actions, actionsTarget)');
+    // The in-page heading is the no-topbar fallback only.
+    expect(body).toContain('const standalone = slots.title === null');
     expect(body.match(/<h1/g)).toHaveLength(1);
 
     const topbar = readFileSync(join(__dirname, '..', 'topbar.tsx'), 'utf8');
-    expect(topbar).toContain('usePageTitleClaimed()');
-    expect(topbar).toMatch(/titleOnPage \? \(\s*<div className="min-w-0 flex-1" \/>/);
+    expect(topbar).toContain("publishTopbarSlot('title', el)");
+    expect(topbar).toContain("publishTopbarSlot('description', el)");
+    expect(topbar).toContain("publishTopbarSlot('actions', el)");
+    expect(topbar).toContain(
+      '{titleClaimed ? null : <span className="min-w-0 truncate">{title}</span>}'
+    );
 
     const hub = readFileSync(join(__dirname, '..', '..', 'hub', 'hub-tabs.tsx'), 'utf8');
-    expect(hub).toContain('useClaimPageTitle(Boolean(title))');
+    expect(hub).toContain('useTopbarSlots().title === null ? nav : null');
     expect(hub).toContain('<InHubContext.Provider value={true}>');
   });
 });

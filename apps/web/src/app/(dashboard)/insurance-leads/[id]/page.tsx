@@ -58,38 +58,38 @@ export default function CustomerPage() {
 
   return (
     <div className="page-canvas">
-      <div>
-        <Link
-          href="/insurance-leads"
-          className="inline-flex items-center gap-1.5 t-meta font-medium text-ink-2 hover:text-ink"
-        >
-          <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-          Back to CRM
-        </Link>
-      </div>
-
-      {lead && (
-        <PageHeader
-          description={
-            <span>
-              <span className="t-section text-ink">{leadDisplayName(lead)}</span>
-              {lead.phone ? (
-                <span className="ml-2 tabular-nums text-ink-3">
-                  {formatPhoneNumber(lead.phone)}
+      {/* The customer's name is the page's title, in the topbar; the way back
+          and their number sit under it. */}
+      <PageHeader
+        title={lead ? leadDisplayName(lead) : undefined}
+        description={
+          <span className="inline-flex items-center gap-2">
+            <Link
+              href="/insurance-leads"
+              className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink"
+            >
+              <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
+              Back to CRM
+            </Link>
+            {lead?.phone ? (
+              <>
+                <span aria-hidden className="text-ink-3">
+                  ·
                 </span>
-              ) : null}
-            </span>
-          }
-          actions={
-            lead.phone ? (
-              <Button className="gap-1.5" onClick={() => void makeCall(lead.phone)}>
-                <PhoneCall aria-hidden className="h-4 w-4" />
-                Call
-              </Button>
-            ) : null
-          }
-        />
-      )}
+                <span className="tabular-nums">{formatPhoneNumber(lead.phone)}</span>
+              </>
+            ) : null}
+          </span>
+        }
+        actions={
+          lead?.phone ? (
+            <Button className="gap-1.5" onClick={() => void makeCall(lead.phone)}>
+              <PhoneCall aria-hidden className="h-4 w-4" />
+              Call
+            </Button>
+          ) : null
+        }
+      />
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 t-body text-ink-3">

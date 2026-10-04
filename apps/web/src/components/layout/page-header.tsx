@@ -1,33 +1,47 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 
 import { InHubContext } from '@/components/hub/hub-context';
 import { cn } from '@/lib/utils';
 
-import { useClaimPageTitle, useCurrentPageTitle } from './use-page-title';
+import {
+  DOCK_ACTIONS_QUERY,
+  DOCK_DESCRIPTION_QUERY,
+  useClaimPageTitle,
+  useCurrentPageTitle,
+  useMediaQuery,
+  useTopbarSlots,
+} from './use-page-title';
 
 /**
- * PageHeader — the first row of a page's content.
+ * PageHeader — a page's name, its one-line description and its own actions.
  *
- * Title, a one-line description in ink-2 under it, and the page's own actions
- * right-aligned with 8px between them. Every page opens the same way, 24px
- * under the topbar (the canvas gutter), so moving between screens never moves
- * the eye.
+ * ── It renders in the topbar ─────────────────────────────────────────────────
  *
- * The title is the page's nav name unless `title` says otherwise, and `false`
- * leaves it out. Inside a hub the hub names the page above its tabs, so a
- * view's header there carries its description and actions only. A header that
- * shows the title claims it, and the topbar drops its own copy.
+ * The topbar is the page header. The title sits at its left with the
+ * description in ink-3 under it, and the page's actions at its right beside the
+ * search, so the content area opens on the content: no band under the bar
+ * restating what the bar already says. See `useTopbarSlots`.
  *
- * Below 768px the actions wrap underneath the description rather than
- * squeezing it, so a subtitle never runs under a button.
+ * The title is the page's nav name, which the topbar already shows, unless
+ * `title` says otherwise; a custom title is rendered into the topbar's heading
+ * in place of the nav name. `false` keeps the nav name. Inside a hub the hub's
+ * tabs sit under the topbar and the view's title is the hub's.
  *
- * `compact` keeps the description on one line (truncated, never wrapped) with
- * tighter gaps, for a working list whose header should stay one row tall.
+ * ── Where the room runs out, the page keeps it ───────────────────────────────
+ *
+ * Below 768px the description renders at the top of the page, and below 1280px
+ * the actions do, right-aligned: the bar has room for the title alone on a
+ * phone, and for the title and search on a laptop. With no topbar mounted at
+ * all (a page rendered on its own) the whole header renders in place.
+ *
+ * `compact` keeps an in-page description on one line (truncated, never
+ * wrapped), for a working list whose header should stay one row tall.
  */
 export interface PageHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
-  /** Defaults to the page's name in the viewer's nav. `false` for none. */
+  /** Defaults to the page's name in the viewer's nav. `false` for the nav name. */
   title?: React.ReactNode | false;
   description?: React.ReactNode;
   actions?: React.ReactNode;
@@ -47,39 +61,76 @@ export function PageHeader({
 }: PageHeaderProps) {
   const inHub = React.useContext(InHubContext);
   const auto = useCurrentPageTitle();
-  const heading = title === false || inHub ? null : (title ?? auto) || null;
-  useClaimPageTitle(heading !== null);
+  const slots = useTopbarSlots();
+  const wideForDescription = useMediaQuery(DOCK_DESCRIPTION_QUERY);
+  const wideForActions = useMediaQuery(DOCK_ACTIONS_QUERY);
 
-  if (!heading && !description && !actions && !meta) return null;
+  // A title of the page's own, rather than its nav name.
+  const custom = title === false || title === undefined || inHub ? null : title || null;
+  const titleTarget = custom !== null ? slots.title : null;
+  useClaimPageTitle(titleTarget !== null);
+
+  const descriptionTarget = description && wideForDescription ? slots.description : null;
+  const actionsTarget = actions && wideForActions ? slots.actions : null;
+
+  // No topbar at all: the page names itself, as it did before the bar could.
+  const standalone = slots.title === null;
+  const heading = standalone && !inHub && title !== false ? (custom ?? auto) || null : null;
+
+  const inlineDescription = descriptionTarget ? null : description;
+  const inlineActions = actionsTarget ? null : actions;
+  const showInline = heading || inlineDescription || meta || inlineActions;
 
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
-        className
-      )}
-      data-compact={compact ? '' : undefined}
-      data-page-header=""
-      {...props}
-    >
-      {heading || description || meta ? (
-        <div className="min-w-0 max-w-[72ch]">
-          {heading ? <h1 className="t-title text-ink">{heading}</h1> : null}
-          {description ? (
-            <div className={cn('t-body text-ink-2', heading && 'mt-1', compact && 'md:truncate')}>
-              {description}
+    <>
+      {titleTarget ? createPortal(custom, titleTarget) : null}
+      {/* Wrapped, so that when a view nested in a page brings a header of its
+          own the topbar can show the innermost description alone. */}
+      {descriptionTarget
+        ? createPortal(<span data-docked="">{description}</span>, descriptionTarget)
+        : null}
+      {actionsTarget ? createPortal(actions, actionsTarget) : null}
+      {showInline ? (
+        <div
+          className={cn(
+            'flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6',
+            className
+          )}
+          data-compact={compact ? '' : undefined}
+          data-page-header=""
+          {...props}
+        >
+          {heading || inlineDescription || meta ? (
+            <div className="min-w-0 max-w-[72ch]">
+              {heading ? <h1 className="t-title text-ink">{heading}</h1> : null}
+              {inlineDescription ? (
+                <div
+                  className={cn('t-body text-ink-2', heading && 'mt-1', compact && 'md:truncate')}
+                >
+                  {inlineDescription}
+                </div>
+              ) : null}
+              {meta ? (
+                <div
+                  className={cn(
+                    'flex flex-wrap items-center gap-2',
+                    (heading || inlineDescription) && 'mt-2'
+                  )}
+                >
+                  {meta}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <span className="hidden md:block" />
+          )}
+          {inlineActions ? (
+            <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0 md:justify-end">
+              {inlineActions}
             </div>
           ) : null}
-          {meta ? <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div> : null}
-        </div>
-      ) : (
-        <span className="hidden md:block" />
-      )}
-      {actions ? (
-        <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
-          {actions}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
