@@ -4,11 +4,12 @@
  *   PATCH /api/auth/me/password           signed in: { currentPassword, newPassword }
  *   POST  /api/auth/password-reset        signed out: { email }, always 202
  *   POST  /api/auth/password-reset/confirm             { token, newPassword }
+ *   POST  /api/auth/me/sessions/revoke    signed in: sign out every other device
  *
  * Every role has these, buyers and publishers included: a password is the
  * person's, not the agency's.
  *
- * Both a change and a reset bump `User.metadata.tokenVersion`, which every
+ * A change, a reset and a revoke all bump `User.metadata.tokenVersion`, which every
  * authenticator compares with the `tv` claim on the session token
  * (`lib/token-version.ts`). So a changed password signs the user out
  * everywhere else. The change route hands back a fresh token for the session
@@ -163,6 +164,75 @@ export async function registerPasswordRoutes(fastify: FastifyInstance): Promise<
 
     return reply.send({ ok: true, token });
   });
+
+  // ==========================================================================
+  // Sign out of every other device
+  // ==========================================================================
+  /*
+   * The same revocation a password change performs, without changing the
+   * password: for someone who signed in on a shared or lost machine. The
+   * session asking is handed a fresh token so it carries on; every other one
+   * is refused on its next request.
+   */
+  fastify.post(
+    '/api/auth/me/sessions/revoke',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const principal = request.user as { userId?: string } | undefined;
+      if (!principal?.userId) {
+        return reply.code(401).send({
+          error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: principal.userId },
+        select: { id: true, email: true, tenantId: true, metadata: true },
+      });
+      if (!user) {
+        return reply.code(401).send({
+          error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+        });
+      }
+
+      const current =
+        user.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)
+          ? (user.metadata as Record<string, unknown>)
+          : {};
+      const metadata = {
+        ...current,
+        tokenVersion: tokenVersionOf(user.metadata) + 1,
+      } as Prisma.InputJsonObject;
+      await prisma.user.update({ where: { id: user.id }, data: { metadata } });
+
+      await auditLog({
+        tenantId: user.tenantId,
+        userId: user.id,
+        action: 'auth.sessions.revoked',
+        entityType: 'User',
+        entityId: user.id,
+        resource: '/api/auth/me/sessions/revoke',
+        method: 'POST',
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        changes: { sessionsRevoked: true },
+        success: true,
+      });
+
+      const token = await reply.jwtSign(
+        {
+          tenantId: user.tenantId,
+          userId: user.id,
+          email: user.email,
+          tv: tokenVersionOf(metadata),
+        },
+        { expiresIn: SESSION_TOKEN_TTL }
+      );
+
+      return reply.send({ ok: true, token });
+    }
+  );
 
   // ==========================================================================
   // Forgot my password

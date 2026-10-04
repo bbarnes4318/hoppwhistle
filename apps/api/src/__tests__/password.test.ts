@@ -218,6 +218,76 @@ describe.skipIf(!gate.available)('Password change and reset', () => {
     });
   });
 
+  describe('POST /api/auth/me/sessions/revoke', () => {
+    it('requires authentication', async () => {
+      const response = await app.inject({ method: 'POST', url: '/api/auth/me/sessions/revoke' });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('signs out every other session, keeps this one, and leaves the password alone', async () => {
+      const other = (await login(ORIGINAL)).json().token;
+      const mine = (await login(ORIGINAL)).json().token;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/me/sessions/revoke',
+        headers: bearer(mine),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const fresh = response.json().token;
+      expect(fresh).toEqual(expect.any(String));
+
+      const row = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect((row.metadata as any).tokenVersion).toBe(1);
+
+      const meOld = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: bearer(other),
+      });
+      expect(meOld.statusCode).toBe(401);
+      expect(meOld.json().error.code).toBe('SESSION_REVOKED');
+      const meMine = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: bearer(mine),
+      });
+      expect(meMine.statusCode).toBe(401);
+
+      const meNew = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: bearer(fresh),
+      });
+      expect(meNew.statusCode).toBe(200);
+
+      // The password is unchanged.
+      expect((await login(ORIGINAL)).statusCode).toBe(200);
+
+      const audit = await prisma.auditLog.findFirst({ where: { action: 'auth.sessions.revoked' } });
+      expect(audit).toMatchObject({ userId, tenantId, success: true });
+    });
+  });
+
+  describe('GET /api/auth/me, for the Account page', () => {
+    it('says how the login signs in and when it was made, and never sends the hash', async () => {
+      const { token } = (await login(ORIGINAL)).json();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: bearer(token),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(body.authMethod).toBe('EMAIL');
+      expect(body.hasPassword).toBe(true);
+      // A buyer portal login belongs to its buyer company.
+      expect(body.organizationName).toBe('Acme');
+      expect(Number.isFinite(Date.parse(body.createdAt))).toBe(true);
+      expect(body).not.toHaveProperty('passwordHash');
+    });
+  });
+
   describe('POST /api/auth/password-reset', () => {
     it('answers 202 for an unknown address and sends nothing', async () => {
       const response = await app.inject({

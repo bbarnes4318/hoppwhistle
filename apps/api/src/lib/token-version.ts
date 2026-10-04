@@ -4,7 +4,8 @@
  * Every session token carries `tv`, the value of `User.metadata.tokenVersion`
  * when it was signed. Each authenticator compares that claim with the row on
  * every request, and a token whose `tv` is behind the row is refused. Bumping
- * the counter -- which a password change or a password reset does -- therefore
+ * the counter -- which a password change, a password reset, or "sign out of
+ * every other device" on the Account page does -- therefore
  * signs the user out everywhere at once, without a session table and without
  * touching JWT_SECRET for anybody else.
  *
@@ -32,5 +33,5 @@ export function isTokenRevoked(claims: unknown, metadata: unknown): boolean {
 
 export const SESSION_REVOKED = {
   code: 'SESSION_REVOKED',
-  message: 'This session has ended because the password was changed. Please sign in again.',
+  message: 'This session has ended. Please sign in again.',
 } as const;

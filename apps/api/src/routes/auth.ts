@@ -1353,22 +1353,26 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
       let publisherAccessToRecordings = false;
       let buyerAccessToRecordings = false;
+      // The company a buyer or publisher portal login belongs to, by name.
+      let portalAccountName: string | null = null;
 
       if (user.publisherId) {
         const pub = await prisma.publisher.findUnique({
           where: { id: user.publisherId },
-          select: { accessToRecordings: true },
+          select: { accessToRecordings: true, name: true },
         });
         publisherAccessToRecordings = pub?.accessToRecordings ?? false;
+        portalAccountName = pub?.name ?? null;
       }
 
       if (user.buyerId) {
         const buyer = await prisma.buyer.findUnique({
           where: { id: user.buyerId },
-          select: { metadata: true },
+          select: { metadata: true, name: true },
         });
         const buyerMetadata = buyer?.metadata as Record<string, unknown> | null;
         buyerAccessToRecordings = !!buyerMetadata?.accessToRecordings;
+        portalAccountName = buyer?.name ?? portalAccountName;
       }
 
       const userMetadata = user.metadata as Record<string, unknown> | null;
@@ -1477,6 +1481,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ? await prisma.tenant.findUnique({
             where: { id: brandTenantId },
             select: {
+              name: true,
+              brandName: true,
               parent: { select: { name: true, brandName: true, brandTheme: true } },
             },
           })
@@ -1494,6 +1500,20 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        /*
+         * For the Account page: how this login signs in, whether it has a
+         * password of its own to change (a Google sign-up has none until a
+         * reset sets one), and when it was created. Never the hash itself.
+         */
+        authMethod: user.authMethod,
+        hasPassword: !!user.passwordHash,
+        createdAt: user.createdAt.toISOString(),
+        /*
+         * Who this login belongs to, by name: the buyer or publisher company
+         * for a portal login, else the agency (its brand name first). Null in
+         * the cross-agency platform view.
+         */
+        organizationName: portalAccountName ?? (tier ? tier.brandName?.trim() || tier.name : null),
         roles: effectiveRoles,
         permissions,
         tenantId: isPlatformPrincipal ? (principal.tenantId ?? null) : user.tenantId,
