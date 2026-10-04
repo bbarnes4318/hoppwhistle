@@ -32,7 +32,7 @@ import {
  *
  * ── Where the room runs out, the page keeps it ───────────────────────────────
  *
- * Below 768px the description renders at the top of the page, and below 1280px
+ * Below 768px the description renders at the top of the page, and below 1024px
  * the actions do, right-aligned: the bar has room for the title alone on a
  * phone, and for the title and search on a laptop. With no topbar mounted at
  * all (a page rendered on its own) the whole header renders in place.

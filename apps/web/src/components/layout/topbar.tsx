@@ -124,16 +124,16 @@ export function Topbar() {
         </div>
 
         {/* The page's own actions: a period switch, an export, "New ...".
-            Docked from xl, where there is room beside the search; below that
+            Docked from lg, where the search has folded to its icon; below that
             the page renders them at its top. */}
         <div
           ref={actionsSlot}
           data-page-actions=""
-          className="hidden shrink-0 items-center gap-2 empty:hidden xl:flex"
+          className="hidden shrink-0 items-center gap-2 empty:hidden lg:flex"
         />
         <span
           aria-hidden
-          className="hidden h-6 w-px shrink-0 bg-rule xl:block [[data-page-actions]:empty+&]:hidden"
+          className="hidden h-6 w-px shrink-0 bg-rule lg:block [[data-page-actions]:empty+&]:hidden"
         />
 
         {/* NetEnroll staff only, and rendered on every page: an operator must

@@ -132,8 +132,8 @@ export function useMediaQuery(query: string): boolean {
 /**
  * The widths at which a page's header docks into the topbar. The description
  * needs the bar's full width beside the title, so it docks from md, where the
- * sidebar appears; the actions need room beside the search, so from xl. Below
+ * sidebar appears; the actions need room beside the search, so from lg. Below
  * either, that part renders at the top of the page instead.
  */
 export const DOCK_DESCRIPTION_QUERY = '(min-width: 768px)';
-export const DOCK_ACTIONS_QUERY = '(min-width: 1280px)';
+export const DOCK_ACTIONS_QUERY = '(min-width: 1024px)';
