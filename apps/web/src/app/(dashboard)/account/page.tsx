@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, MonitorSmartphone, PhoneForwarded, ShieldCheck, UserRound } from 'lucide-react';
+import { FileText, MapPin, PhoneForwarded, ShieldCheck, UserRound } from 'lucide-react';
 import * as React from 'react';
 
 import { roleLabels } from '@/components/account/account-identity';
@@ -41,7 +41,8 @@ import { useAuth } from '@/hooks/use-auth';
  * ── Layout ───────────────────────────────────────────────────────────────────
  *
  * An identity card across the top, then the settings in sections -- Profile,
- * Calling (agents only), Security, Sessions, Policies -- with a sticky table of
+ * State Licensing and Call Routing (agents only), Security (password and
+ * sessions), Legal & Compliance -- with a sticky table of
  * contents at the left from `lg`. Every section is an anchor, so
  * `/account#security` is a link someone can be sent.
  */
@@ -52,10 +53,14 @@ export default function AccountPage(): JSX.Element {
   const sections = React.useMemo<AccountSectionLink[]>(
     () => [
       { id: 'profile', label: 'Profile', icon: UserRound },
-      ...(isAgent ? [{ id: 'calling', label: 'Calling', icon: PhoneForwarded }] : []),
+      ...(isAgent
+        ? [
+            { id: 'state-licensing', label: 'State Licensing', icon: MapPin },
+            { id: 'call-routing', label: 'Call Routing', icon: PhoneForwarded },
+          ]
+        : []),
       { id: 'security', label: 'Security', icon: ShieldCheck },
-      { id: 'sessions', label: 'Sessions', icon: MonitorSmartphone },
-      { id: 'policies', label: 'Policies', icon: FileText },
+      { id: 'legal', label: 'Legal & Compliance', icon: FileText },
     ],
     [isAgent]
   );
@@ -159,15 +164,27 @@ export default function AccountPage(): JSX.Element {
           </section>
 
           {isAgent ? (
-            <section id="calling" aria-label="Calling" className="grid scroll-mt-6 gap-6">
-              <LicensedStatesPanel
-                states={licensedStates}
-                editable={!isAdminOrOwner && !isPlatformAdmin}
-                readOnly={isReadOnlyPreview}
-              />
+            <>
+              <section
+                id="state-licensing"
+                aria-label="State Licensing"
+                className="grid scroll-mt-6 gap-6"
+              >
+                <LicensedStatesPanel
+                  states={licensedStates}
+                  editable={!isAdminOrOwner && !isPlatformAdmin}
+                  readOnly={isReadOnlyPreview}
+                />
+              </section>
 
-              <CallRoutingPanel />
-            </section>
+              <section
+                id="call-routing"
+                aria-label="Call Routing"
+                className="grid scroll-mt-6 gap-6"
+              >
+                <CallRoutingPanel />
+              </section>
+            </>
           ) : null}
 
           <section id="security" aria-label="Security" className="grid scroll-mt-6 gap-6">
@@ -176,16 +193,14 @@ export default function AccountPage(): JSX.Element {
               readOnly={isReadOnlyPreview}
               username={user.email}
             />
-          </section>
 
-          <section id="sessions" aria-label="Sessions" className="grid scroll-mt-6 gap-6">
             <SessionsPanel
               sessionExpiresAt={user.sessionExpiresAt ?? null}
               readOnly={isReadOnlyPreview}
             />
           </section>
 
-          <section id="policies" aria-label="Policies" className="grid scroll-mt-6 gap-6">
+          <section id="legal" aria-label="Legal & Compliance" className="grid scroll-mt-6 gap-6">
             <PoliciesPanel />
           </section>
         </div>

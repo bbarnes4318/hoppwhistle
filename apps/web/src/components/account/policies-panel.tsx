@@ -44,7 +44,7 @@ export function PoliciesPanel(): JSX.Element {
       <PanelHeader>
         <PanelTitle className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-ink-3" aria-hidden />
-          Policies
+          Legal &amp; Compliance
         </PanelTitle>
         <PanelDescription>Privacy, terms, data retention and call recording</PanelDescription>
       </PanelHeader>
