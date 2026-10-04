@@ -1,6 +1,6 @@
 'use client';
 
-import { Headset, Loader2, Smartphone } from 'lucide-react';
+import { Headset, Loader2, PhoneForwarded, Smartphone } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle } from '@/components/domain';
@@ -89,7 +89,10 @@ export function CallRoutingPanel({ className }: { className?: string }): JSX.Ele
   return (
     <Panel className={className} data-call-routing>
       <PanelHeader>
-        <PanelTitle>Where your calls ring</PanelTitle>
+        <PanelTitle className="flex items-center gap-2">
+          <PhoneForwarded className="h-4 w-4 text-ink-3" aria-hidden />
+          Where your calls ring
+        </PanelTitle>
         <PanelDescription>
           {current.ringOn === 'cell' && storedCell
             ? `Your calls are ringing your cell phone, ${storedCell}.`

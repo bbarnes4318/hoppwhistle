@@ -81,6 +81,14 @@ interface UserData {
   email: string;
   firstName?: string;
   lastName?: string;
+  /** How this login signs in, from `/api/auth/me`: 'EMAIL' or 'GOOGLE'. */
+  authMethod?: string | null;
+  /** The login has a password of its own (a Google sign-up may not). */
+  hasPassword?: boolean;
+  /** ISO timestamp the login was created. */
+  createdAt?: string | null;
+  /** The buyer or publisher company, else the agency, this login belongs to. */
+  organizationName?: string | null;
   roles: string[];
   /**
    * The capabilities the server will actually honour, sent by `/api/auth/me`.
@@ -298,6 +306,14 @@ export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.
         email: rawUser.email,
         firstName: rawUser.firstName,
         lastName: rawUser.lastName,
+        authMethod: typeof rawUser.authMethod === 'string' ? rawUser.authMethod : null,
+        // Absent from an older API: assume a password, which is the common case.
+        hasPassword: rawUser.hasPassword !== false,
+        createdAt: typeof rawUser.createdAt === 'string' ? rawUser.createdAt : null,
+        organizationName:
+          typeof rawUser.organizationName === 'string' && rawUser.organizationName.trim()
+            ? rawUser.organizationName
+            : null,
         roles,
         permissions: Array.isArray(rawUser?.permissions) ? rawUser.permissions : [],
         buyerId: rawUser.buyerId,
