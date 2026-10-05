@@ -13,6 +13,8 @@ const { prisma, principal } = vi.hoisted(() => ({
     sharedRoutingGroupMember: { create: vi.fn() },
     campaign: { findUnique: vi.fn() },
     user: { findFirst: vi.fn() },
+    role: { findUnique: vi.fn() },
+    userRole: { create: vi.fn() },
     auditLog: { create: vi.fn() },
   },
   principal: { current: {} as Record<string, unknown> },
@@ -53,8 +55,38 @@ beforeEach(async () => {
   prisma.user.findFirst.mockImplementation(({ where }: { where: { id: string } }) =>
     Promise.resolve(
       {
-        sean: { id: 'sean', tenantId: 'agency-c', firstName: 'Sean', lastName: 'Grove' },
-        'a-agent': { id: 'a-agent', tenantId: 'agency-a', firstName: 'Ann', lastName: 'A' },
+        sean: {
+          id: 'sean',
+          tenantId: 'agency-c',
+          status: 'ACTIVE',
+          firstName: 'Sean',
+          lastName: 'Grove',
+          roles: [{ role: { name: 'AGENT' } }],
+        },
+        'a-agent': {
+          id: 'a-agent',
+          tenantId: 'agency-a',
+          status: 'ACTIVE',
+          firstName: 'Ann',
+          lastName: 'A',
+          roles: [{ role: { name: 'AGENT' } }],
+        },
+        'owner-only': {
+          id: 'owner-only',
+          tenantId: 'agency-c',
+          status: 'ACTIVE',
+          firstName: 'Sean',
+          lastName: 'Owner',
+          roles: [{ role: { name: 'OWNER' } }],
+        },
+        pending: {
+          id: 'pending',
+          tenantId: 'agency-c',
+          status: 'PENDING',
+          firstName: 'Pat',
+          lastName: 'Pending',
+          roles: [{ role: { name: 'OWNER' } }],
+        },
       }[where.id] ?? null
     )
   );
@@ -109,13 +141,50 @@ describe('adding a single agent', () => {
     });
   });
 
-  it('only finds ACTIVE users holding the AGENT role, whom the CDR can credit', async () => {
+  it('finds agents, owners and administrators -- never a buyer or publisher login', async () => {
     await addMember({ userId: 'sean' });
     expect(prisma.user.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'sean', status: 'ACTIVE', roles: { some: { role: { name: 'AGENT' } } } },
+        where: {
+          id: 'sean',
+          buyerId: null,
+          publisherId: null,
+          roles: { some: { role: { name: { in: ['AGENT', 'OWNER', 'ADMIN'] } } } },
+        },
       })
     );
+  });
+
+  it('does not touch the roles of somebody who is already an agent', async () => {
+    await addMember({ userId: 'sean' });
+    expect(prisma.userRole.create).not.toHaveBeenCalled();
+  });
+
+  it('makes an owner an agent as well, so the calls they answer are credited', async () => {
+    prisma.role.findUnique.mockResolvedValue({ id: 'role-agent', name: 'AGENT' });
+
+    const response = await addMember({ userId: 'owner-only' });
+
+    expect(response.statusCode).toBe(201);
+    expect(prisma.userRole.create).toHaveBeenCalledWith({
+      data: { userId: 'owner-only', roleId: 'role-agent' },
+    });
+    expect(prisma.sharedRoutingGroupMember.create).toHaveBeenCalledWith({
+      data: {
+        groupId: 'group-1',
+        tenantId: 'agency-c',
+        userId: 'owner-only',
+        campaignId: undefined,
+      },
+    });
+  });
+
+  it('refuses an account that is not active, and says so', async () => {
+    const response = await addMember({ userId: 'pending' });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain('pending');
+    expect(prisma.userRole.create).not.toHaveBeenCalled();
+    expect(prisma.sharedRoutingGroupMember.create).not.toHaveBeenCalled();
   });
 
   it('adds an agent from an agency that already has a campaign in the group', async () => {

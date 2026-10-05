@@ -146,9 +146,12 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
       const q = request.query.q?.trim();
       const agents = await prisma.user.findMany({
         where: {
-          status: 'ACTIVE',
           tenantId: { not: null },
-          roles: { some: { role: { name: 'AGENT' } } },
+          // Agents, and the agency's owners and administrators: adding one of
+          // those makes them an agent as well (see the add below).
+          roles: { some: { role: { name: { in: ['AGENT', 'OWNER', 'ADMIN'] } } } },
+          buyerId: null,
+          publisherId: null,
           ...(q
             ? {
                 OR: [
@@ -189,8 +192,10 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
           lastName: true,
           email: true,
           tenantId: true,
+          status: true,
           metadata: true,
           tenant: { select: { name: true } },
+          roles: { select: { role: { select: { name: true } } } },
         },
       });
       const { normalizeLicensedStates } = await import('../lib/licensed-states.js');
@@ -207,6 +212,10 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
             tenantId: a.tenantId,
             tenantName: a.tenant?.name ?? null,
             licensedStates: [...normalizeLicensedStates(meta.licensedStates)].sort(),
+            roles: a.roles.map(r => r.role.name as string),
+            isAgent: a.roles.some(r => r.role.name === 'AGENT'),
+            // Shown, not hidden: "why can't I add him" is answered by this.
+            status: a.status,
           };
         }),
       });
@@ -365,20 +374,58 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
     if (campaignId && !campaign) return notFound(reply, 'Campaign');
 
     if (userId) {
-      // An AGENT of some agency: the CDR credits only an AGENT of the
-      // answering agency, so anyone else would take calls nobody is credited
-      // with.
+      /*
+       * An agent of some agency -- or its owner or an administrator, who is
+       * made an agent here as well. The CDR credits only an AGENT of the
+       * answering agency, so an owner who took calls without the role would
+       * be credited with none of them. Adding AGENT keeps every role they had
+       * (see PUT /api/v1/users/:userId/takes-calls).
+       */
       const agent = await prisma.user.findFirst({
-        where: { id: userId, status: 'ACTIVE', roles: { some: { role: { name: 'AGENT' } } } },
-        select: { id: true, tenantId: true, firstName: true, lastName: true, email: true },
+        where: {
+          id: userId,
+          buyerId: null,
+          publisherId: null,
+          roles: { some: { role: { name: { in: ['AGENT', 'OWNER', 'ADMIN'] } } } },
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          status: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          roles: { select: { role: { select: { name: true } } } },
+        },
       });
       if (!agent?.tenantId) return notFound(reply, 'Agent');
+      if (agent.status !== 'ACTIVE') {
+        return invalid(
+          reply,
+          `This account is ${agent.status.toLowerCase()}, not active: activate it before it can take calls`
+        );
+      }
       if (campaign && campaign.tenantId !== agent.tenantId) {
         return invalid(reply, "The campaign must be one of the agent's own agency's campaigns");
       }
       if (group.members.some(m => m.userId === agent.id)) {
         return reply.code(409).send({
           error: { code: 'ALREADY_MEMBER', message: 'This agent is already in the group' },
+        });
+      }
+
+      if (!agent.roles.some(r => r.role.name === 'AGENT')) {
+        const agentRole = await prisma.role.findUnique({ where: { name: 'AGENT' } });
+        if (!agentRole) {
+          return reply.code(500).send({
+            error: { code: 'ROLE_MISSING', message: 'The AGENT role is not set up' },
+          });
+        }
+        await prisma.userRole.create({ data: { userId: agent.id, roleId: agentRole.id } });
+        await audit(request, agent.tenantId, 'user.takes_calls.enabled', agent.id, {
+          via: 'shared_routing',
+          groupId,
+          rolesBefore: agent.roles.map(r => r.role.name),
         });
       }
 
