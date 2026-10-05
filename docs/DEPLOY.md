@@ -9,6 +9,13 @@ website DNS records point there. `5.161.16.107` is a Hetzner floating IP used fo
 phone traffic only (SIP/RTP, carrier and Vapi trunks, `PUBLIC_IP` in the compose
 file).
 
+Sending from the floating IP is not automatic. `scripts/install-persistent-sip-firewall.sh`
+adds the floating IP to `eth0` and source-NATs FreeSWITCH (5070/5080, RTP
+16384-16484) and Dograh Asterisk (5062, RTP 20000-20500) to it, at every boot.
+Asterisk also advertises the IP itself: `external_media_address` and
+`external_signaling_address` in `/opt/dograh-asterisk/etc/pjsip.conf`, which is
+outside this repository.
+
 Every step below has a verification command, the output that command produces
 when the step worked, and how to reverse it. "Check that it works" is not a
 verification step. If a step's command does not produce its stated output, stop
