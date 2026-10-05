@@ -105,6 +105,12 @@ export interface RequestOptions {
    * into a number and the rest of the download thrown away.
    */
   responseType?: 'json' | 'text';
+  /**
+   * Cancels the request. A cancelled request resolves (it never throws) with
+   * `{ error: { code: 'ABORTED' } }`, which a caller that started a newer
+   * request simply ignores.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -270,6 +276,7 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
       });
 
       let data: unknown = null;
@@ -294,8 +301,7 @@ class ApiClient {
         const errorField = errorBody?.error;
         const code: string =
           (typeof errorField === 'object' ? errorField?.code : undefined) || 'UNKNOWN_ERROR';
-        const errorMessage =
-          typeof errorField === 'string' ? errorField : errorField?.message;
+        const errorMessage = typeof errorField === 'string' ? errorField : errorField?.message;
 
         /*
          * The login redirect, and the one condition it must never fire on.
@@ -340,6 +346,9 @@ class ApiClient {
 
       return { data: data as T };
     } catch (error) {
+      if (requestOptions.signal?.aborted) {
+        return { error: { code: 'ABORTED', message: 'Request cancelled' } };
+      }
       return {
         error: {
           code: 'NETWORK_ERROR',
@@ -353,11 +362,19 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' }, requestOptions);
   }
 
-  async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
-    });
+  async post<T>(
+    endpoint: string,
+    body?: unknown,
+    requestOptions?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(
+      endpoint,
+      {
+        method: 'POST',
+        body: body ? JSON.stringify(body) : undefined,
+      },
+      requestOptions
+    );
   }
 
   async put<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {

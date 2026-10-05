@@ -5,6 +5,7 @@ import {
   Bot,
   Briefcase,
   Building2,
+  Calculator,
   Contact,
   CreditCard,
   Disc3,
@@ -95,6 +96,12 @@ export const PLATFORM_NAV: NavGroup[] = [
         title: 'The floor ranked over any period: calls, dials, applications, conversion',
       },
       { name: 'CRM', href: '/insurance-leads', icon: Contact },
+      {
+        name: 'Quote',
+        href: '/quote',
+        icon: Calculator,
+        title: 'Underwrite and price final expense across every carrier',
+      },
       {
         name: 'CRM reports',
         href: '/insurance-leads/reports',
@@ -332,6 +339,7 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
       platformItem('/applications'),
       platformItem('/leaderboard'),
       platformItem('/insurance-leads'),
+      platformItem('/quote'),
     ],
   },
   {
@@ -520,6 +528,8 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
       platformItem('/applications'),
       // Every agency has the CRM; only the Power Dialer is an upgrade.
       platformItem('/insurance-leads'),
+      // The quoter is standard for every agency, white-label or not.
+      platformItem('/quote'),
       {
         name: 'Agents',
         href: '/agents',
@@ -714,6 +724,8 @@ export const AGENT_NAV: NavGroup[] = [
       platformItem('/insurance-leads', {
         title: 'Your prospects, follow-ups and submitted business',
       }),
+      // Every agent's, with or without upgrades, white-label or not.
+      platformItem('/quote', { title: 'Quote your prospect across every carrier' }),
       platformItem('/leaderboard', {
         title: 'Where you stand on the floor, and what it would take to move up',
       }),
