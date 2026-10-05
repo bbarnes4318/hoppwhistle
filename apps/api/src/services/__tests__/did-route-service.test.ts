@@ -74,4 +74,24 @@ describe('syncDidRouteForNumber for a campaign number', () => {
       }) as unknown,
     });
   });
+
+  it('leaves a DID shared across agencies alone', async () => {
+    mockPrisma.phoneNumber.findUnique.mockResolvedValue({
+      ...CAMPAIGN_NUMBER,
+      campaignId: null,
+    });
+    mockPrisma.didRoute.findFirst.mockResolvedValue({
+      id: 'route-1',
+      destination: 'Shared',
+      label: 'Shared: FL/GA split',
+      sharedRoutingGroupId: 'group-1',
+    });
+
+    await didRouteService.syncDidRouteForNumber('pn-1', 'tenant-1');
+
+    // An unassigned number's route would otherwise be deleted.
+    expect(mockPrisma.didRoute.delete).not.toHaveBeenCalled();
+    expect(mockPrisma.didRoute.update).not.toHaveBeenCalled();
+    expect(mockPrisma.didRoute.create).not.toHaveBeenCalled();
+  });
 });

@@ -107,6 +107,7 @@ model Tenant {
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
   campaignAgents           CampaignAgent[]
+  sharedRoutingMemberships SharedRoutingGroupMember[]
   leadDialReservations     LeadDialReservation[]
   voiceAgents              VoiceAgent[]
   carrierGateways          CarrierGateway[]
@@ -642,12 +643,19 @@ model DidRoute {
   publisherId String?
   publisher   Publisher?  @relation(fields: [publisherId], references: [id])
 
+  /// Set when this DID is shared across agencies. The group's member campaigns
+  /// replace `campaignId` for routing, and each call is recorded under the
+  /// agency whose agent answered it. See services/shared-routing.ts.
+  sharedRoutingGroupId String?
+  sharedRoutingGroup   SharedRoutingGroup? @relation(fields: [sharedRoutingGroupId], references: [id], onDelete: SetNull)
+
   @@unique([tenantId, did]) // One route per DID per tenant
   @@index([did]) // Fast lookup by DID (FreeSWITCH uses this)
   @@index([tenantId])
   @@index([buyerId])
   @@index([publisherId])
   @@index([status])
+  @@index([sharedRoutingGroupId])
   @@map("did_routes")
 }
 
@@ -866,6 +874,7 @@ model Campaign {
   publishers   CampaignPublisher[]
   buyers       CampaignBuyer[]
   agents       CampaignAgent[]
+  sharedRoutingMemberships SharedRoutingGroupMember[]
   dialReservations LeadDialReservation[]
 
   @@index([tenantId])
@@ -5923,4 +5932,59 @@ model SalesProspectActivity {
   @@index([prospectId, occurredAt])
   @@index([workspaceId, occurredAt])
   @@map("sales_prospect_activities")
+}
+
+/// ── One DID, several agencies ───────────────────────────────────────────────
+///
+/// A DID routed to a shared group offers each call to the agents of every
+/// member campaign, one agent at a time, in round-robin order. Only agents
+/// licensed for the caller's state (and otherwise available) are offered, so
+/// agencies that share a state take turns on it and a state only one agency
+/// covers goes to that agency alone.
+///
+/// Each member is one agency's own campaign, in that agency's tenant. Its
+/// agents are its `CampaignAgent`s and are gated exactly as on that campaign.
+/// The call is recorded, billed and reported under the member whose agent
+/// answered -- that agency's tenant and campaign -- never under the DID owner.
+///
+/// Cross-agency by design, so managed by platform staff only.
+model SharedRoutingGroup {
+  id        String                   @id @default(uuid())
+  name      String
+  status    SharedRoutingGroupStatus @default(ACTIVE)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  members   SharedRoutingGroupMember[]
+  didRoutes DidRoute[]
+
+  @@map("shared_routing_groups")
+}
+
+model SharedRoutingGroupMember {
+  id         String                   @id @default(uuid())
+  groupId    String
+  /// The member agency. Always the campaign's own tenant.
+  tenantId   String
+  campaignId String
+  status     SharedRoutingGroupStatus @default(ACTIVE)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  group    SharedRoutingGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, campaignId])
+  /// One campaign per agency per group: the answering agent's agency must name
+  /// exactly one campaign to record the call under.
+  @@unique([groupId, tenantId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@map("shared_routing_group_members")
+}
+
+enum SharedRoutingGroupStatus {
+  ACTIVE
+  PAUSED
 }

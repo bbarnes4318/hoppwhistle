@@ -89,6 +89,8 @@ export const STAFF_ONLY_ROUTES = [
   '/admin/onboarding',
   // Electronic agreements: NetEnroll's contracts with its agencies.
   '/admin/agreements',
+  // One DID shared across agencies: cross-agency routing configuration.
+  '/admin/shared-routing',
 
   /*
    * NetEnroll's two unbuilt screens, which an agency principal was being shown

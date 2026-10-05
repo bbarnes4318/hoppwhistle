@@ -658,6 +658,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         recordingEnabled: true,
         label: true,
         tenantId: true,
+        sharedRoutingGroupId: true,
       },
     });
 
@@ -672,8 +673,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
      * Before buyer selection, not after: selection reaches into campaign
      * configuration and a fallback that rings every extension on the campaign,
      * and an agency at its Overrun ceiling should not have any of that happen.
+     *
+     * A shared DID is gated per member agency instead, inside shared routing:
+     * the call is delivered to whichever agency answers, not to the DID's
+     * owner, so one held agency must not stop the others' calls.
      */
-    const gate = await isDeliveryAllowed(route.tenantId);
+    const gate = route.sharedRoutingGroupId
+      ? { allowed: true, reason: null, detail: null }
+      : await isDeliveryAllowed(route.tenantId);
     if (!gate.allowed) {
       console.warn(
         `[FS-LOOKUP] Delivery held for tenant ${route.tenantId} on DID ${normalizedDid}: ${gate.reason ?? 'unknown'}`
@@ -694,7 +701,42 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     // routing; a static route is tagged below.
     let dialString: string | null = null;
 
-    if (route.campaignId) {
+    if (route.sharedRoutingGroupId) {
+      /*
+       * One DID, several agencies: every member campaign's eligible agents,
+       * one at a time in round-robin order. The call is recorded under the
+       * answering agent's agency by the CDR handler. See
+       * services/shared-routing.ts.
+       */
+      buyerId = null;
+      try {
+        const { selectSharedRoundRobin } = await import('../services/shared-routing.js');
+        const plan = await selectSharedRoundRobin(route.sharedRoutingGroupId, {
+          callerId: caller,
+        });
+        if (plan) {
+          destination = plan.endpoint;
+          dialString = plan.dialString;
+          agentCellKeys = plan.agentCellKeys;
+          console.log(
+            `[FS-LOOKUP] Shared route: group=${route.sharedRoutingGroupId} caller=${caller} → ${plan.order.length} agent(s) in rotation`
+          );
+        } else {
+          destination = '';
+          console.log(
+            `[FS-LOOKUP] Shared route: no eligible agent in group=${route.sharedRoutingGroupId} caller=${caller}`
+          );
+        }
+      } catch (sharedErr) {
+        // Unlike a campaign, a shared route has no destination of its own to
+        // fail open to: ringing nobody is recorded as an unanswered call.
+        console.error(
+          `[FS-LOOKUP] Shared routing error for group ${route.sharedRoutingGroupId} caller ${caller}:`,
+          sharedErr
+        );
+        destination = '';
+      }
+    } else if (route.campaignId) {
       try {
         const { routingService } = await import('../services/routing.js');
         const bestBuyer = await routingService.selectBestBuyer(
@@ -916,6 +958,9 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       let buyerName: string | null = null;
       let rtbMetadata: RtbMetadata | null = null;
       let callSource = 'PAY_PER_CALL';
+      // Set when the DID is shared across agencies (see services/shared-routing.ts).
+      let sharedRoutingGroupId: string | null = null;
+      let sharedRouteMeta: Record<string, string | null> | null = null;
 
       const isRtbRouteId =
         body.routeId.startsWith('rtb-') || body.routeType === 'RTB' || body.rtbRoute;
@@ -1026,12 +1071,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             publisherId: true,
             tenantId: true,
             label: true,
+            sharedRoutingGroupId: true,
           },
         });
 
         if (!route) {
           return reply.code(404).send({ error: 'Route not found' });
         }
+        sharedRoutingGroupId = route.sharedRoutingGroupId ?? null;
 
         phoneNumberId = route.phoneNumberId;
         buyerId = sanitizeFk(body.buyerId) || sanitizeFk(route.buyerId) || null;
@@ -1040,6 +1087,60 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         publisherId = route.publisherId || null;
         tenantId = route.tenantId;
         buyerName = route.label || null;
+      }
+
+      // The route's own tenant, before a shared DID moves the call to the
+      // answering agency: the route's counters belong to the DID's owner.
+      const routeTenantId = tenantId;
+
+      /*
+       * A shared DID: the call belongs to the agency whose agent answered it.
+       *
+       * The answered leg names `agent:<userId>`; that agent's own agency must
+       * be a member of the group, and the call is recorded under that member's
+       * tenant and campaign -- call log, recording, disposition, billing and
+       * leaderboard all land with the agency that took it. The attribution
+       * below then validates the agent against that tenant as it would on the
+       * agency's own campaign. A call nobody answered, or answered by someone
+       * who is not a member agency's agent, stays with the DID's owner.
+       */
+      if (sharedRoutingGroupId) {
+        sharedRouteMeta = {
+          groupId: sharedRoutingGroupId,
+          routeId: body.routeId,
+          ownerTenantId: routeTenantId,
+          ownerCampaignId: campaignId ?? null,
+          ownerPublisherId: publisherId ?? null,
+        };
+        const { parseAnsweredParty } = await import('../services/cdr-attribution.js');
+        const party = parseAnsweredParty(body.answeredParty);
+        if (body.answeredAt && party.kind === 'agent') {
+          try {
+            const { markAnswered, resolveSharedAnswerer } = await import(
+              '../services/shared-routing.js'
+            );
+            const member = await resolveSharedAnswerer(sharedRoutingGroupId, party.id);
+            if (member) {
+              if (member.tenantId !== routeTenantId) {
+                // The DID, its publisher and its route label are the owner's;
+                // none of them is a row of the answering agency.
+                phoneNumberId = null;
+                publisherId = null;
+                buyerName = null;
+              }
+              tenantId = member.tenantId;
+              campaignId = member.campaignId;
+              sharedRouteMeta.answeredTenantId = member.tenantId;
+              await markAnswered(sharedRoutingGroupId, party.id);
+            } else {
+              console.warn(
+                `[FS-CDR] Shared route ${sharedRoutingGroupId}: answering agent ${party.id} is not in a member agency; call ${body.callId} stays with the DID owner`
+              );
+            }
+          } catch (sharedErr) {
+            console.error('[FS-CDR] Failed to resolve the shared route answerer:', sharedErr);
+          }
+        }
       }
 
       // Who answered, from the answered leg. When the CDR carries it, it
@@ -1180,9 +1281,10 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
               : null,
           answeredByUserId,
           metadata:
-            rtbMetadata || answeredByUserId || inboundCarrier
+            rtbMetadata || answeredByUserId || inboundCarrier || sharedRouteMeta
               ? {
                   ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
+                  ...(sharedRouteMeta ? { sharedRoute: sharedRouteMeta } : {}),
                   ...(answeredByUserId
                     ? { answeredByAgentId: answeredByUserId, answeredVia: answeredVia ?? 'agent_cell' }
                     : {}),
@@ -1352,7 +1454,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       // nothing instead.
       if (!body.routeId.startsWith('rtb-')) {
         await prisma.didRoute.updateMany({
-          where: { id: body.routeId, tenantId },
+          where: { id: body.routeId, tenantId: routeTenantId },
           data: {
             totalCalls: { increment: 1 },
             totalDuration: { increment: body.duration || 0 },
