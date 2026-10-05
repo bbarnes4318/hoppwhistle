@@ -21,6 +21,7 @@ export {
   type ChartTooltipRow,
   type RechartsTooltipProps,
 } from './chart-kit';
+export { CarrierLogo, type CarrierLogoProps } from './carrier-logo';
 export { DataTable, type Column, type DataTableProps } from './data-table';
 export { Dollars } from './dollars';
 export {

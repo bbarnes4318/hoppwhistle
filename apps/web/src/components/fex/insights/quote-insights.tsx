@@ -9,6 +9,7 @@
 import * as React from 'react';
 
 import {
+  CarrierLogo,
   DataTable,
   Notice,
   Panel,
@@ -87,9 +88,12 @@ export function QuoteInsights(): JSX.Element {
       id: 'plan',
       header: 'Carrier · plan',
       cell: r => (
-        <span>
-          <span className="font-medium">{r.carrier}</span>
-          <span className="text-ink-2"> · {r.product}</span>
+        <span className="flex items-center gap-2.5">
+          <CarrierLogo names={[r.carrier]} size="xs" />
+          <span className="min-w-0">
+            <span className="font-medium">{r.carrier}</span>
+            <span className="text-ink-2"> · {r.product}</span>
+          </span>
         </span>
       ),
     },

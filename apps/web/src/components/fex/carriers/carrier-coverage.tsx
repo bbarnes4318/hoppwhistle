@@ -17,6 +17,7 @@ import {
   PanelTitle,
   StatusChip,
   type Column,
+  CarrierLogo,
 } from '@/components/domain';
 import { useFexCatalog } from '@/hooks/use-fex-quote';
 import type { FexCatalogProduct } from '@/lib/fex/api';
@@ -37,43 +38,46 @@ export function CarrierCoverage(): JSX.Element {
       id: 'plan',
       header: 'Carrier · plan',
       cell: p => (
-        <div className="min-w-0 py-1">
-          <p className="text-ink">
-            <span className="font-medium">{p.family}</span>
-            <span className="text-ink-2"> · {p.product}</span>
-          </p>
-          <div className="mt-0.5 flex flex-wrap gap-1">
-            {!p.quotable ? (
-              <StatusChip
-                value="NOT_QUOTED"
-                tone="neutral"
-                size="sm"
-                dot={false}
-                label="Not quoted"
-              />
-            ) : null}
-            {p.quotable && !p.appointed ? (
-              <StatusChip
-                value="NOT_APPOINTED"
-                tone="neutral"
-                size="sm"
-                dot={false}
-                label="Not appointed"
-              />
+        <div className="flex min-w-[300px] items-start gap-3 py-1">
+          <CarrierLogo names={[p.family]} size="sm" className="mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-ink">
+              <span className="font-medium">{p.family}</span>
+              <span className="text-ink-2"> · {p.product}</span>
+            </p>
+            <div className="mt-0.5 flex flex-wrap gap-1">
+              {!p.quotable ? (
+                <StatusChip
+                  value="NOT_QUOTED"
+                  tone="neutral"
+                  size="sm"
+                  dot={false}
+                  label="Not quoted"
+                />
+              ) : null}
+              {p.quotable && !p.appointed ? (
+                <StatusChip
+                  value="NOT_APPOINTED"
+                  tone="neutral"
+                  size="sm"
+                  dot={false}
+                  label="Not appointed"
+                />
+              ) : null}
+            </div>
+            {p.alerts.length ? (
+              <details className="mt-1">
+                <summary className="t-meta cursor-pointer text-brand-ink">
+                  {p.alerts.length} carrier {p.alerts.length === 1 ? 'note' : 'notes'}
+                </summary>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-2">
+                  {p.alerts.map(a => (
+                    <li key={a}>{a}</li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
           </div>
-          {p.alerts.length ? (
-            <details className="mt-1">
-              <summary className="t-meta cursor-pointer text-brand-ink">
-                {p.alerts.length} carrier {p.alerts.length === 1 ? 'note' : 'notes'}
-              </summary>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-2">
-                {p.alerts.map(a => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
         </div>
       ),
     },
@@ -82,9 +86,14 @@ export function CarrierCoverage(): JSX.Element {
       header: 'Classes',
       hideBelow: 'lg',
       cell: p => (
-        <span className="text-ink-2">
-          {p.classes.map(c => `${c.label} (${BENEFIT_LABEL[c.benefit] ?? c.benefit})`).join(', ')}
-        </span>
+        <ul className="min-w-[200px] space-y-0.5 text-ink-2">
+          {p.classes.map(c => (
+            <li key={`${c.label}-${c.benefit}`}>
+              <span className="text-ink">{c.label}</span>
+              <span className="text-ink-3"> · {BENEFIT_LABEL[c.benefit] ?? c.benefit}</span>
+            </li>
+          ))}
+        </ul>
       ),
     },
     {

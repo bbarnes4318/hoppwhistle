@@ -20,21 +20,15 @@ import {
   type DetailField,
 } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { Plus, X } from 'lucide-react';
+import { Check, Plus, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
-import {
-  Panel,
-  PanelBody,
-  PanelHeader,
-  PanelTitle,
-  Segmented,
-  SegmentedItem,
-} from '@/components/domain';
+import { Panel, Segmented, SegmentedItem } from '@/components/domain';
 import { fexApi, type FexDrugHit } from '@/lib/fex/api';
 import { searchConditions } from '@/lib/fex/condition-search';
 import {
   ageFromDob,
+  missingForQuote,
   type DraftAction,
   type DraftCondition,
   type QuoteDraft,
@@ -62,6 +56,8 @@ export interface ConditionMeta {
 
 export interface QuoteIntakeProps {
   idPrefix: string;
+  /** Start over: clears every answer back to the agency defaults. */
+  onReset?: () => void;
   draft: QuoteDraft;
   dispatch: React.Dispatch<DraftAction>;
   conditions: ConditionMeta[];
@@ -78,14 +74,121 @@ const STATE_NAME = new Map<string, string>([
 
 const digitsOnly = (v: string) => v.replace(/[^0-9]/g, '');
 
+const applicantDone = (d: QuoteDraft) => {
+  const m = missingForQuote(d);
+  return m !== 'state' && m !== 'sex' && m !== 'age' && m !== 'dob';
+};
+const coverageDone = (d: QuoteDraft) => {
+  const n = Number((d.coverage.mode === 'face' ? d.coverage.face : d.coverage.budget) || NaN);
+  return d.coverage.mode === 'face' ? n >= 1000 && n <= 500000 : n >= 5 && n <= 2000;
+};
+const healthSummary = (d: QuoteDraft) =>
+  d.conditions.length
+    ? `${d.conditions.length} condition${d.conditions.length === 1 ? '' : 's'}`
+    : 'None entered';
+const medsSummary = (d: QuoteDraft) =>
+  d.meds.length ? `${d.meds.length} medication${d.meds.length === 1 ? '' : 's'}` : 'None entered';
+
+/**
+ * One card, four numbered steps. The two that must be answered before a quote
+ * runs show a check when done; health and medications are optional and say
+ * what has been entered.
+ */
 export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
+  const required = [applicantDone(props.draft), coverageDone(props.draft)];
+  const done = required.filter(Boolean).length;
   return (
-    <div className="space-y-4">
-      <ApplicantPanel {...props} />
-      <CoveragePanel {...props} />
-      <HealthPanel {...props} />
-      <MedicationsPanel {...props} />
-    </div>
+    <Panel className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-ink">Quote details</h2>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span
+              className="h-1.5 w-24 overflow-hidden rounded-full bg-sunken"
+              role="progressbar"
+              aria-label="Required answers"
+              aria-valuemin={0}
+              aria-valuemax={2}
+              aria-valuenow={done}
+            >
+              <span
+                className="block h-full rounded-full bg-brand transition-[width] duration-300 ne-motion"
+                style={{ width: `${(done / 2) * 100}%` }}
+              />
+            </span>
+            <span className="t-meta text-ink-3">
+              {done === 2 ? 'Ready — quoting live' : `${done} of 2 required steps`}
+            </span>
+          </div>
+        </div>
+        {props.onReset ? (
+          <button
+            type="button"
+            onClick={props.onReset}
+            className={cn(
+              't-meta inline-flex shrink-0 items-center gap-1 rounded-control px-2 py-1 text-ink-2 hover:bg-sunken hover:text-ink',
+              FOCUS
+            )}
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            New quote
+          </button>
+        ) : null}
+      </div>
+      <div className="divide-y divide-rule">
+        <ApplicantPanel {...props} />
+        <CoveragePanel {...props} />
+        <HealthPanel {...props} />
+        <MedicationsPanel {...props} />
+      </div>
+    </Panel>
+  );
+}
+
+function Step({
+  n,
+  title,
+  done,
+  optional,
+  summary,
+  hint,
+  children,
+}: {
+  n: number;
+  title: string;
+  done?: boolean;
+  optional?: boolean;
+  summary?: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}): JSX.Element {
+  const id = React.useId();
+  return (
+    <section aria-labelledby={id} className="px-4 py-4">
+      <div className="mb-3 flex items-start gap-2.5">
+        <span
+          aria-hidden
+          className={cn(
+            'mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-200 ne-motion',
+            done ? 'bg-brand text-surface' : 'bg-sunken text-ink-2'
+          )}
+        >
+          {done ? <Check className="h-3.5 w-3.5" /> : n}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 id={id} className="text-sm font-semibold text-ink">
+              {title}
+            </h3>
+            {optional ? (
+              <span className="t-meta shrink-0 text-ink-3">{summary ?? 'Optional'}</span>
+            ) : null}
+          </div>
+          {hint ? <p className="t-meta mt-0.5 text-ink-3">{hint}</p> : null}
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -97,11 +200,8 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
   const dobAge = draft.ageOrDob.mode === 'dob' ? ageFromDob(draft.ageOrDob.dob) : null;
 
   return (
-    <Panel>
-      <PanelHeader className="py-3">
-        <PanelTitle>Applicant</PanelTitle>
-      </PanelHeader>
-      <PanelBody className="grid grid-cols-2 gap-x-3 gap-y-4 p-4 min-[1440px]:p-5">
+    <Step n={1} title="Applicant" done={applicantDone(draft)}>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
         <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
           <NativeSelect
             id={p('state')}
@@ -319,8 +419,8 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
             </span>
           </div>
         </Field>
-      </PanelBody>
-    </Panel>
+      </div>
+    </Step>
   );
 }
 
@@ -337,11 +437,8 @@ function CoveragePanel({
   const customFace = face && !FACE_PRESETS.includes(Number(face)) ? face : '';
 
   return (
-    <Panel>
-      <PanelHeader className="py-3">
-        <PanelTitle>Coverage</PanelTitle>
-      </PanelHeader>
-      <PanelBody className="space-y-4 p-4 min-[1440px]:p-5">
+    <Step n={2} title="Coverage" done={coverageDone(draft)}>
+      <div className="space-y-4">
         <Segmented role="radiogroup" aria-label="Quote by" className="w-full">
           <SegmentedItem
             role="radio"
@@ -503,8 +600,8 @@ function CoveragePanel({
             </CheckRow>
           ) : null}
         </div>
-      </PanelBody>
-    </Panel>
+      </div>
+    </Step>
   );
 }
 
@@ -522,15 +619,19 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
   const quick = QUICK_CONDITIONS.filter(code => byCode.has(code));
 
   return (
-    <Panel>
-      <PanelHeader className="py-3">
-        <PanelTitle>Health history</PanelTitle>
-        <p className="t-meta mt-1 text-ink-3">
+    <Step
+      n={3}
+      title="Health history"
+      optional
+      summary={healthSummary(draft)}
+      hint={
+        <>
           Last treated means the last surgery, procedure, hospital stay or treatment change. Each
           carrier&apos;s own questions decide the result.
-        </p>
-      </PanelHeader>
-      <PanelBody className="space-y-4 p-4 min-[1440px]:p-5">
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div
           className="flex flex-wrap gap-1.5"
           role="group"
@@ -550,7 +651,7 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
                   } else dispatch({ type: 'addCondition', code });
                 }}
                 className={cn(
-                  'inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors duration-150 ne-motion',
+                  'inline-flex min-h-[28px] items-center gap-1 rounded-[14px] border px-2.5 py-1 text-left text-xs leading-snug font-medium transition-colors duration-150 ne-motion',
                   on
                     ? 'border-dropped bg-dropped-tint text-dropped-ink'
                     : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
@@ -558,9 +659,9 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
                 )}
               >
                 {on ? (
-                  <X className="h-3 w-3" aria-hidden />
+                  <X className="h-3 w-3 shrink-0" aria-hidden />
                 ) : (
-                  <Plus className="h-3 w-3" aria-hidden />
+                  <Plus className="h-3 w-3 shrink-0" aria-hidden />
                 )}
                 {shortLabel(byCode.get(code)!.label)}
               </button>
@@ -596,8 +697,8 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
             No conditions added. A clean history quotes best class.
           </p>
         )}
-      </PanelBody>
-    </Panel>
+      </div>
+    </Step>
   );
 }
 
@@ -826,11 +927,8 @@ function MedicationsPanel({
     }));
 
   return (
-    <Panel>
-      <PanelHeader className="py-3">
-        <PanelTitle>Medications</PanelTitle>
-      </PanelHeader>
-      <PanelBody className="space-y-4 p-4 min-[1440px]:p-5">
+    <Step n={4} title="Medications" optional summary={medsSummary(draft)}>
+      <div className="space-y-4">
         <Combobox
           id={`${idPrefix}-drug`}
           label="Add a medication"
@@ -937,7 +1035,7 @@ function MedicationsPanel({
         ) : (
           <p className="t-meta text-ink-3">No medications added.</p>
         )}
-      </PanelBody>
-    </Panel>
+      </div>
+    </Step>
   );
 }

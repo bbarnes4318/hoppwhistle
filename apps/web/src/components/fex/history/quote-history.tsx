@@ -11,6 +11,7 @@ import Link from 'next/link';
 import * as React from 'react';
 
 import {
+  CarrierLogo,
   DataTable,
   DrawerField,
   DrawerSection,
@@ -105,11 +106,14 @@ export function QuoteHistory(): JSX.Element {
       header: 'Selected',
       cell: q =>
         q.selectedCarrier ? (
-          <span>
-            {q.selectedCarrier}
-            <span className="text-ink-2">
-              {' '}
-              · {q.selectedProduct} · {q.selectedClass}
+          <span className="flex items-center gap-2.5">
+            <CarrierLogo names={[q.selectedCarrier, q.selectedProductId]} size="xs" />
+            <span className="min-w-0">
+              <span className="font-medium">{q.selectedCarrier}</span>
+              <span className="text-ink-2">
+                {' '}
+                · {q.selectedProduct} · {q.selectedClass}
+              </span>
             </span>
           </span>
         ) : (
@@ -263,6 +267,11 @@ function SavedQuoteDrawer({
             </DrawerField>
             {detail.selectedCarrier ? (
               <DrawerField label="Used">
+                <CarrierLogo
+                  names={[detail.selectedCarrier, detail.selectedProductId]}
+                  size="sm"
+                  className="mb-1.5 flex"
+                />
                 {detail.selectedCarrier} · {detail.selectedProduct} · {detail.selectedClass} (
                 {BENEFIT_LABEL[detail.selectedBenefit ?? ''] ?? detail.selectedBenefit}) ·{' '}
                 {money(detail.selectedPremium)}/{MODE_SHORT[detail.paymentMode]}

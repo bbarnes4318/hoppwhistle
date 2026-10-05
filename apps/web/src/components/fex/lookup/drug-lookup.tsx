@@ -7,7 +7,15 @@
 
 import * as React from 'react';
 
-import { Notice, Panel, PanelBody, PanelHeader, PanelTitle, StatusChip } from '@/components/domain';
+import {
+  CarrierLogo,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+  StatusChip,
+} from '@/components/domain';
 import { useAuth } from '@/hooks/use-auth';
 import { fexApi, type FexDrugDetail, type FexDrugHit, type FexDrugRule } from '@/lib/fex/api';
 
@@ -131,7 +139,14 @@ export function DrugLookup(): JSX.Element {
                       rules.map((rule, i) => (
                         <tr key={`${carrier}-${i}`} className="border-b border-rule align-top">
                           <td className="px-2 py-2 font-medium text-ink">
-                            {i === 0 ? carrier : ''}
+                            {i === 0 ? (
+                              <span className="flex items-center gap-2">
+                                <CarrierLogo names={[rule.family]} size="xs" />
+                                <span>{carrier}</span>
+                              </span>
+                            ) : (
+                              ''
+                            )}
                           </td>
                           <td className="hidden px-2 py-2 text-ink-2 md:table-cell">
                             {rule.printedAs}

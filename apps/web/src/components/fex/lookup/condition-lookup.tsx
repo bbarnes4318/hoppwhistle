@@ -20,6 +20,7 @@ import {
   PanelTitle,
   StatusChip,
   type Column,
+  CarrierLogo,
 } from '@/components/domain';
 import { useFexCatalog } from '@/hooks/use-fex-quote';
 import { fexApi, money, type FexResult } from '@/lib/fex/api';
@@ -88,9 +89,12 @@ export function ConditionLookup(): JSX.Element {
       id: 'plan',
       header: 'Carrier · plan',
       cell: r => (
-        <span>
-          <span className="font-medium text-ink">{r.family}</span>
-          <span className="text-ink-2"> · {r.product}</span>
+        <span className="flex items-center gap-2.5">
+          <CarrierLogo names={[r.family, r.productId]} size="xs" />
+          <span className="min-w-0">
+            <span className="font-medium text-ink">{r.family}</span>
+            <span className="text-ink-2"> · {r.product}</span>
+          </span>
         </span>
       ),
     },
