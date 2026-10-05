@@ -170,7 +170,11 @@ function ReportsPage() {
     user?.roles.includes('BUYER') &&
     !user?.roles.includes('ADMIN') &&
     !user?.roles.includes('OWNER');
-  const isAgent = user?.roles.includes('AGENT');
+  // An owner or administrator who also takes calls keeps the full reports.
+  const isAgent =
+    user?.roles.includes('AGENT') &&
+    !user?.roles.includes('ADMIN') &&
+    !user?.roles.includes('OWNER');
 
   const showProfitability = !isPublisher && !isBuyer && !isAgent;
   const showPublisherRevenue = !isBuyer && !isAgent;

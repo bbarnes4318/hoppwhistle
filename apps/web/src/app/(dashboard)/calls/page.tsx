@@ -263,12 +263,14 @@ export default function OperationsCallLogsPage() {
   // A white-label owner decides returns; the call detail offers it on the call.
   const whiteLabelView = useWhiteLabelView();
 
-  const isAgent = user?.roles.includes('AGENT');
+  const isAdminOrOwner = isAdmin || isOwner;
+  // An owner or administrator who also takes calls holds AGENT too; they keep
+  // the owner's view of the call log. "Agent" here is an agent and nothing more.
+  const isAgent = !!user?.roles.includes('AGENT') && !isAdminOrOwner;
   const isFinance = user?.roles.includes('FINANCE');
   const isBuyer = user?.roles.includes('BUYER');
   const isPublisher = user?.roles.includes('PUBLISHER');
 
-  const isAdminOrOwner = isAdmin || isOwner;
   const canSeeFinance = isAdminOrOwner || isFinance;
   /** An agent's own ledger: no returns, no money, no counterparties. */
   const agentView = !!isAgent && !isAdminOrOwner;

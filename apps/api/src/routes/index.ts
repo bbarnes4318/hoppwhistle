@@ -6493,6 +6493,129 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       };
     }
   });
+
+  /*
+   * "Takes calls": give an existing user of this agency the AGENT role, or
+   * take it away again.
+   *
+   * ── Why ──────────────────────────────────────────────────────────────────
+   *
+   * An agency owner who also works the phones had no way to become an agent:
+   * roles are set once, by the invitation, and nothing edits them. Everything
+   * that rings and credits a person keys on AGENT -- the roster, campaign
+   * assignment, the softphone, shared routing and the CDR's "who answered" --
+   * so an owner who picked up a call was credited with nothing.
+   *
+   * Adding AGENT keeps every role they had. An OWNER or ADMIN who also holds
+   * AGENT keeps the full view: every role check that narrows an agent tests
+   * owner/admin first, and the CRM's licensed-state narrowing exempts them.
+   *
+   * ── Limits ───────────────────────────────────────────────────────────────
+   *
+   *   - Administrators and owners only, inside their own agency, like PATCH
+   *     /api/v1/users/:userId above.
+   *   - A buyer or publisher login is not the agency's staff and cannot be made
+   *     an agent.
+   *   - AGENT is never removed from somebody for whom it is the only role:
+   *     that would leave an account with no role at all.
+   */
+  fastify.put<{ Params: { userId: string }; Body: { takesCalls?: unknown } }>(
+    '/api/v1/users/:userId/takes-calls',
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) return sendTenantRefusal(request, reply);
+
+      const takesCalls = request.body?.takesCalls;
+      if (typeof takesCalls !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'takesCalls must be true or false' },
+        });
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const editorProfile = await getUserProfile(request, prisma);
+      if (!editorProfile.isAdminOrOwner) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only an administrator or owner can change who takes calls',
+          },
+        });
+      }
+
+      const { userId } = request.params;
+      const target = await prisma.user.findFirst({
+        where: { id: userId, tenantId },
+        select: {
+          id: true,
+          buyerId: true,
+          publisherId: true,
+          roles: { select: { roleId: true, role: { select: { name: true } } } },
+        },
+      });
+      if (!target) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+
+      const roleNames = target.roles.map(r => r.role.name as string);
+      const isAgent = roleNames.includes('AGENT');
+
+      if (takesCalls && !isAgent) {
+        if (
+          target.buyerId ||
+          target.publisherId ||
+          roleNames.some(name => name === 'BUYER' || name === 'PUBLISHER')
+        ) {
+          return reply.code(400).send({
+            error: {
+              code: 'NOT_AGENCY_STAFF',
+              message: 'A buyer or publisher login cannot take the agency\'s calls',
+            },
+          });
+        }
+        const agentRole = await prisma.role.findUnique({ where: { name: 'AGENT' } });
+        if (!agentRole) {
+          return reply.code(500).send({
+            error: { code: 'ROLE_MISSING', message: 'The AGENT role is not set up' },
+          });
+        }
+        await prisma.userRole.create({ data: { userId: target.id, roleId: agentRole.id } });
+      }
+
+      if (!takesCalls && isAgent) {
+        if (roleNames.length === 1) {
+          return reply.code(400).send({
+            error: {
+              code: 'ONLY_ROLE',
+              message:
+                'This person is only an agent. Deactivate their account instead of removing their only role.',
+            },
+          });
+        }
+        const agentRoleId = target.roles.find(r => r.role.name === 'AGENT')!.roleId;
+        await prisma.userRole.deleteMany({ where: { userId: target.id, roleId: agentRoleId } });
+      }
+
+      if (takesCalls !== isAgent) {
+        const { auditLog } = await import('../services/audit.js');
+        await auditLog({
+          tenantId,
+          userId: (request as AuthRequest).user?.userId,
+          action: takesCalls ? 'user.takes_calls.enabled' : 'user.takes_calls.disabled',
+          entityType: 'User',
+          entityId: target.id,
+          changes: { takesCalls, rolesBefore: roleNames },
+        });
+      }
+
+      const roles = takesCalls
+        ? [...new Set([...roleNames, 'AGENT'])]
+        : roleNames.filter(name => name !== 'AGENT' || roleNames.length === 1);
+      return reply.send({
+        data: { id: target.id, takesCalls, roles: roles.map(r => r.toLowerCase()) },
+      });
+    }
+  );
 }
 
 // Public API - Reporting
