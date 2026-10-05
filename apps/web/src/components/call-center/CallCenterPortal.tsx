@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
 import { ActiveCallControls } from './ActiveCallControls';
+import { applicationPrefillFrom, quoteToCallData } from './application-prefill';
 import type { ApplicationLogPayload } from './ApplicationLogForm';
 import { ApplicationQueue } from './ApplicationQueue';
 import { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
@@ -293,60 +294,11 @@ export function CallCenterPortal(): JSX.Element {
    */
   const callDirectionRef = useRef<'inbound' | 'outbound' | null>(null);
 
-  /*
-   * What the quote and the call already know, so the agent retypes none of it.
-   *
-   * `activeCallData` is a bag with an `unknown` index signature -- the script
-   * panels write whatever they capture into it -- so every value is coerced
-   * here rather than passed through. A blank field is better than a "[object
-   * Object]" in the premium box on the screen that decides the agency's price.
-   */
-  const applicationPrefill = useMemo(() => {
-    const text = (value: unknown): string | null =>
-      typeof value === 'string' || typeof value === 'number' ? String(value) : null;
-
-    /*
-     * The quote's premium is MONTHLY -- see the CRM payload below, which sends
-     * `selectedPremium` as `monthlyPremium`. The form asks for the ANNUAL
-     * premium, because that is the figure the agency's production is reported
-     * in. So it is converted here, once, rather than prefilled raw into a box
-     * labelled "Annual premium": a monthly number in that box understates the
-     * agency's reported production by a factor of twelve, and nothing
-     * downstream would catch it.
-     */
-    const annualFromMonthly = (value: unknown): string | null => {
-      const monthly = typeof value === 'number' ? value : Number(text(value) ?? NaN);
-      if (!Number.isFinite(monthly) || monthly <= 0) return null;
-      return (Math.round(monthly * 12 * 100) / 100).toFixed(2);
-    };
-
-    /*
-     * A quote used from the Quote tab carries its premium already annualised,
-     * from the mode it was quoted in. Used as it is: dividing by twelve into
-     * `selectedPremium` and multiplying back would round, and a quarterly or
-     * annual quote would not come back exact.
-     */
-    const annual = Number(text(activeCallData?.selectedAnnualPremium) ?? NaN);
-    const premium =
-      Number.isFinite(annual) && annual > 0
-        ? annual.toFixed(2)
-        : annualFromMonthly(activeCallData?.selectedPremium);
-
-    return {
-      carrier: text(activeCallData?.selectedCarrier),
-      planType: text(activeCallData?.selectedPlanType),
-      faceAmount: text(activeCallData?.selectedCoverage),
-      premium,
-      product: text(activeCallData?.selectedProduct),
-      fexQuoteId: text(activeCallData?.fexQuoteId),
-      quoteClass: text(activeCallData?.selectedClass),
-      firstName: text(activeCallData?.firstName ?? activeCallData?.first_name),
-      lastName: text(activeCallData?.lastName ?? activeCallData?.last_name),
-      dob: text(activeCallData?.dob),
-      state: text(activeCallData?.state),
-      phone: text(activeCallData?.phone ?? activeCallData?.caller_id),
-    };
-  }, [activeCallData]);
+  // What the quote and the call already know: see `application-prefill.ts`.
+  const applicationPrefill = useMemo(
+    () => applicationPrefillFrom(activeCallData),
+    [activeCallData]
+  );
 
   /*
    * The Quote tab: the quoter on the live caller, prefilled from the call and
@@ -379,22 +331,8 @@ export function CallCenterPortal(): JSX.Element {
    * read it; the exact annual figure travels as `selectedAnnualPremium`.
    */
   const applyQuoteToApplication = useCallback((selection: FexSelection) => {
-    const annual = selection.application.annualizedPremium;
     setActiveCallData(prev =>
-      prev
-        ? ({
-            ...prev,
-            selectedCarrier: selection.application.carrier,
-            selectedPlanType: selection.application.planType,
-            selectedCoverage: selection.face,
-            selectedPremium: annual == null ? null : Math.round((annual / 12) * 100) / 100,
-            selectedAnnualPremium: annual,
-            selectedProduct: selection.application.product,
-            selectedProductId: selection.productId,
-            selectedClass: selection.classLabel,
-            fexQuoteId: selection.fexQuoteId,
-          } as ProspectData)
-        : prev
+      prev ? ({ ...prev, ...quoteToCallData(selection) } as ProspectData) : prev
     );
   }, []);
 

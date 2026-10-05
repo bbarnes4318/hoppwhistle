@@ -292,7 +292,18 @@ export function ApplicationLogForm({
           }
         : {}),
     };
-  }, [carrier, faceValue, premiumValue, firstName, lastName, prefill, quoteCarrierKept]);
+  }, [
+    carrier,
+    faceValue,
+    premiumValue,
+    firstName,
+    lastName,
+    prefill?.phone,
+    prefill?.product,
+    prefill?.planType,
+    prefill?.fexQuoteId,
+    quoteCarrierKept,
+  ]);
 
   useEffect(() => {
     onChange(payload);
