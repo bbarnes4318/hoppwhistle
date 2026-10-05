@@ -1,5 +1,5 @@
 export type CurrentView = 'roleSelect' | 'agentDashboard' | 'publisherSetup' | 'crmDashboard';
-export type ActiveCallView = 'script' | 'data' | 'captured_data';
+export type ActiveCallView = 'script' | 'data' | 'captured_data' | 'quote';
 export type SelectedScript =
   | 'sales'
   | 'medicare'

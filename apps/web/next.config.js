@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@hopwhistle/shared', '@hopwhistle/sdk'],
+  transpilePackages: ['@hopwhistle/shared', '@hopwhistle/sdk', '@hopwhistle/fex-engine'],
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
   eslint: {
     ignoreDuringBuilds: true,

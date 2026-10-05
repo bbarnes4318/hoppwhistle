@@ -98,7 +98,19 @@ export interface ApplicationLogPayload {
   firstName: string;
   lastName: string;
   phone?: string;
+  /*
+   * From a quote, and only while the agent keeps the quoted carrier: the plan
+   * name, its plan type, and the saved quote it came from. Change the carrier
+   * (or press "Not this one") and none of the three is sent -- they would
+   * describe a different policy.
+   */
+  product?: string;
+  planType?: ApplicationPlanType;
+  fexQuoteId?: string;
 }
+
+export type ApplicationPlanType = 'LEVEL' | 'GRADED' | 'ROP' | 'GUARANTEED_ISSUE';
+const PLAN_TYPES: readonly string[] = ['LEVEL', 'GRADED', 'ROP', 'GUARANTEED_ISSUE'];
 
 /** What the call already knows, so the agent does not retype it. */
 export interface ApplicationLogPrefill {
@@ -110,8 +122,15 @@ export interface ApplicationLogPrefill {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
-  /** Accepted and ignored: the form no longer asks for these. */
+  /** The quoted plan's type; sent with the quote's carrier, never asked for. */
   planType?: string | null;
+  /** The quoted plan's name. */
+  product?: string | null;
+  /** The saved quote this application is written from. */
+  fexQuoteId?: string | null;
+  /** The quoted class ("Level", "Graded"), for the "From quote" line. */
+  quoteClass?: string | null;
+  /** Accepted and ignored: the form no longer asks for these. */
   dob?: string | null;
   state?: string | null;
 }
@@ -193,6 +212,14 @@ export function ApplicationLogForm({
           `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14)}`;
   }
 
+  /*
+   * A quote the agent used, until they say it is not this one. The quote's
+   * fields are prefilled like any other; this only decides whether the plan
+   * name, type and quote link travel with the application.
+   */
+  const [quoteDismissed, setQuoteDismissed] = useState(false);
+  const fromQuote = Boolean(prefill?.fexQuoteId) && !quoteDismissed;
+
   const prefilledCarrier = prefill?.carrier ?? '';
   const knownCarrier = (APPLICATION_CARRIERS as readonly string[]).includes(prefilledCarrier);
 
@@ -223,6 +250,8 @@ export function ApplicationLogForm({
    * Save button off this, so "incomplete" and "cannot send" are one fact rather
    * than two that can disagree.
    */
+  const quoteCarrierKept = fromQuote && carrier === prefilledCarrier.trim();
+
   const payload: ApplicationLogPayload | null = useMemo(() => {
     if (!carrier) return null;
     if (!faceValue || faceValue <= 0) return null;
@@ -252,8 +281,29 @@ export function ApplicationLogForm({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: prefill?.phone ? String(prefill.phone).replace(/\D/g, '') || undefined : undefined,
+      // The quote's plan, only while the carrier is still the quoted one.
+      ...(quoteCarrierKept
+        ? {
+            ...(prefill?.product ? { product: prefill.product } : {}),
+            ...(prefill?.planType && PLAN_TYPES.includes(prefill.planType)
+              ? { planType: prefill.planType as ApplicationPlanType }
+              : {}),
+            ...(prefill?.fexQuoteId ? { fexQuoteId: prefill.fexQuoteId } : {}),
+          }
+        : {}),
     };
-  }, [carrier, faceValue, premiumValue, firstName, lastName, prefill?.phone]);
+  }, [
+    carrier,
+    faceValue,
+    premiumValue,
+    firstName,
+    lastName,
+    prefill?.phone,
+    prefill?.product,
+    prefill?.planType,
+    prefill?.fexQuoteId,
+    quoteCarrierKept,
+  ]);
 
   useEffect(() => {
     onChange(payload);
@@ -264,6 +314,32 @@ export function ApplicationLogForm({
       <h4 className="text-xs font-mono uppercase tracking-widest text-ink pb-2 border-b border-rule">
         Application written
       </h4>
+
+      {fromQuote && (
+        <p className="flex flex-wrap items-baseline justify-between gap-2 rounded border border-rule bg-sunken px-3 py-2 text-xs text-ink">
+          <span className="min-w-0">
+            From quote: {prefill?.carrier} {prefill?.product}
+            {prefill?.quoteClass ? ` · ${prefill.quoteClass}` : ''}
+            {prefill?.faceAmount
+              ? ` · ${currency.format(Number(prefill.faceAmount)).replace(/\.00$/, '')}`
+              : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setQuoteDismissed(true);
+              setCarrierChoice('');
+              setOtherCarrier('');
+              setFaceAmount('');
+              setPremium('');
+            }}
+            disabled={disabled}
+            className="shrink-0 text-brand-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Not this one
+          </button>
+        </p>
+      )}
 
       {error && (
         <div

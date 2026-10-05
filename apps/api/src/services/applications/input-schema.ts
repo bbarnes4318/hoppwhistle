@@ -66,6 +66,12 @@ export const ApplicationInputSchema = z.object({
    */
   clientRequestId: z.string().uuid(),
   insuranceLeadId: z.string().optional(),
+  /*
+   * The saved quote this application was written from, when the agent used the
+   * quoter. Optional and never a reason to refuse: `recordAgentApplication`
+   * keeps it only when the quote is in this agency and the writer may reach it.
+   */
+  fexQuoteId: z.string().uuid().optional(),
 
   carrier: required(80),
   product: z.string().optional(),

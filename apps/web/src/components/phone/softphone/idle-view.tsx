@@ -118,6 +118,7 @@ export function DeviceSettings({
   onInputChange,
   onOutputChange,
   onConfigureScreenPop,
+  quoteAutoOpen,
 }: {
   inputs: ReadonlyArray<DeviceOption>;
   outputs: ReadonlyArray<DeviceOption>;
@@ -126,8 +127,18 @@ export function DeviceSettings({
   onInputChange: (id: string) => void;
   onOutputChange: (id: string) => void;
   onConfigureScreenPop?: () => void;
+  /**
+   * The agent's own "open the quoter when a call connects": null follows the
+   * agency's setting, shown as "Agency default (On/Off)".
+   */
+  quoteAutoOpen?: {
+    value: boolean | null;
+    agencyDefault: boolean;
+    onChange: (value: boolean | null) => void;
+  };
 }): JSX.Element {
   const micId = React.useId();
+  const quoteId = React.useId();
   const speakerId = React.useId();
   const selectClass = cn(
     'h-10 w-full cursor-pointer rounded-control border border-rule-strong bg-surface px-3 text-sm text-ink',
@@ -173,6 +184,27 @@ export function DeviceSettings({
           ))}
         </select>
       </div>
+      {quoteAutoOpen ? (
+        <div>
+          <label htmlFor={quoteId} className="t-label mb-1.5 block text-ink-3">
+            Open the quoter when a call connects
+          </label>
+          <select
+            id={quoteId}
+            value={quoteAutoOpen.value === null ? 'default' : quoteAutoOpen.value ? 'on' : 'off'}
+            onChange={e =>
+              quoteAutoOpen.onChange(e.target.value === 'default' ? null : e.target.value === 'on')
+            }
+            className={selectClass}
+          >
+            <option value="default">
+              Agency default ({quoteAutoOpen.agencyDefault ? 'On' : 'Off'})
+            </option>
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+      ) : null}
       {onConfigureScreenPop ? (
         <div className="border-t border-rule pt-4">
           <p className="t-meta mb-2 text-ink-2">

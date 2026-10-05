@@ -19,6 +19,8 @@ export interface CallControlsProps {
   onKeypadToggle: () => void;
   onTransfer: () => void;
   onAddCall: () => void;
+  /** Open the quoter for this call. */
+  onQuote?: () => void;
   /** Prospect details under the controls. */
   children?: ReactNode;
   /** Fill the full-height pane beside the customer record. */
@@ -31,6 +33,7 @@ export function CallControls({
   onKeypadToggle,
   onTransfer,
   onAddCall,
+  onQuote,
   children,
   fill,
 }: CallControlsProps): JSX.Element | null {
@@ -84,6 +87,7 @@ export function CallControls({
       onKeypad={onKeypadToggle}
       onTransfer={onTransfer}
       onAddCall={onAddCall}
+      onQuote={onQuote}
       onMerge={() => void mergeCalls()}
       onHangup={() => void hangupCall()}
       fill={fill}

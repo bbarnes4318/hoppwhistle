@@ -289,6 +289,17 @@ async function buildServer() {
   // The agent's own Today: their production, follow-ups and standing, no money.
   const { registerAgentTodayRoutes } = await import('./routes/agent-today.js');
   await server.register(registerAgentTodayRoutes);
+  // The final expense quoter: the engine runs here, the carrier data never
+  // leaves this process. Read the bundle now so a missing or corrupt asset
+  // fails the boot loudly instead of the first agent's quote.
+  const { registerFexRoutes } = await import('./routes/fex.js');
+  await server.register(registerFexRoutes);
+  const { preloadFexEngine } = await import('./services/fex/bundle.js');
+  const fex = preloadFexEngine();
+  server.log.info(
+    { engineVersion: fex.version, bundleSha256: fex.bundleSha256.slice(0, 12) },
+    'FEX quote engine loaded'
+  );
 
   /*
    * Stripe's dispute webhooks. Registered as its own plugin because it installs

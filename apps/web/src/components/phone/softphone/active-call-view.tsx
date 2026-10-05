@@ -1,4 +1,5 @@
 import {
+  Calculator,
   Grid3x3,
   MapPin,
   Merge,
@@ -51,6 +52,8 @@ export interface ActiveCallViewProps {
   onKeypad: () => void;
   onTransfer: () => void;
   onAddCall: () => void;
+  /** Open the quoter. When set, a sixth control sits beside Add call. */
+  onQuote?: () => void;
   onMerge?: () => void;
   onHangup: () => void;
   /** The in-call keypad, shown when `keypadOpen`. */
@@ -83,6 +86,7 @@ export function ActiveCallView({
   onKeypad,
   onTransfer,
   onAddCall,
+  onQuote,
   onMerge,
   onHangup,
   keypad,
@@ -204,7 +208,11 @@ export function ActiveCallView({
       </div>
 
       <div
-        className={cn('grid grid-cols-5 gap-1.5 px-3', fill && 'border-t border-rule px-4 pt-5')}
+        className={cn(
+          'grid gap-1.5 px-3',
+          onQuote ? 'grid-cols-6' : 'grid-cols-5',
+          fill && 'border-t border-rule px-4 pt-5'
+        )}
       >
         <ControlButton
           label={isMuted ? 'Unmute' : 'Mute'}
@@ -246,6 +254,11 @@ export function ActiveCallView({
         >
           <UserPlus className="h-5 w-5" />
         </ControlButton>
+        {onQuote ? (
+          <ControlButton label="Quote" shortcut="Q" onClick={onQuote}>
+            <Calculator className="h-5 w-5" />
+          </ControlButton>
+        ) : null}
       </div>
 
       {keypadOpen && keypad ? (

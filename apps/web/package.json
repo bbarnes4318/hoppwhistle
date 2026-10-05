@@ -20,6 +20,7 @@
     "@deck.gl/react": "^8.9.34",
     "@fontsource/dancing-script": "^5.3.0",
     "@hookform/resolvers": "^3.3.4",
+    "@hopwhistle/fex-engine": "workspace:*",
     "@hopwhistle/routing-dsl": "workspace:^",
     "@hopwhistle/sdk": "workspace:*",
     "@hopwhistle/shared": "workspace:*",

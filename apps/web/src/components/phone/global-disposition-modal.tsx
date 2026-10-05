@@ -4,7 +4,11 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApplicationLogForm } from '@/components/call-center/ApplicationLogForm';
-import type { ApplicationLogPayload } from '@/components/call-center/ApplicationLogForm';
+import type {
+  ApplicationLogPayload,
+  ApplicationLogPrefill,
+} from '@/components/call-center/ApplicationLogForm';
+import { useQuoteSession } from '@/contexts/quote-session-context';
 import { apiClient } from '@/lib/api';
 
 import { usePhone } from './phone-provider';
@@ -22,6 +26,7 @@ import { WrapUpView } from './softphone/wrap-up-view';
 export function GlobalDispositionModal() {
   const pathname = usePathname();
   const { pendingDispositionCall, clearPendingDispositionCall } = usePhone();
+  const quoteSession = useQuoteSession();
 
   const [open, setOpen] = useState(false);
   const [selectedDisposition, setSelectedDisposition] = useState('');
@@ -158,6 +163,8 @@ export function GlobalDispositionModal() {
 
     // Mark as handled so it doesn't re-prompt
     handledCallIdsRef.current.add(pendingDispositionCall.callId);
+    // The call is written up: its quote draft and selection are done with.
+    quoteSession?.clearCall(pendingDispositionCall.callId);
 
     setSaving(false);
     setSaved(true);
@@ -172,6 +179,7 @@ export function GlobalDispositionModal() {
     pendingDispositionCall,
     application,
     resetAndClose,
+    quoteSession,
   ]);
 
   const handleSkip = useCallback(() => {
@@ -182,6 +190,40 @@ export function GlobalDispositionModal() {
   }, [pendingDispositionCall, resetAndClose]);
 
   if (!open || !pendingDispositionCall) return null;
+
+  /*
+   * The quote the agent used on this call, when there is one: the carrier,
+   * face and annualised premium go straight into the application, with the
+   * plan and the saved quote's id riding along.
+   */
+  const quoted = quoteSession?.getSelection(pendingDispositionCall.callId);
+  const prospect = (pendingDispositionCall.prospectData ?? {}) as Record<string, unknown>;
+  const customer = (quoteSession?.getContext(pendingDispositionCall.callId).customer ??
+    {}) as Record<string, unknown>;
+  const nameText = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const callerParts = (knownCallerName(pendingDispositionCall.callerName) ?? '').split(/\s+/);
+  const firstName =
+    nameText(prospect.firstName) ??
+    nameText(customer.firstName) ??
+    (callerParts.length > 1 ? callerParts[0] : null);
+  const lastName =
+    nameText(prospect.lastName) ??
+    nameText(customer.lastName) ??
+    (callerParts.length > 1 ? callerParts.slice(1).join(' ') : null);
+  const applicationPrefill: ApplicationLogPrefill = quoted
+    ? {
+        phone: pendingDispositionCall.phoneNumber,
+        carrier: quoted.application.carrier,
+        faceAmount: quoted.face,
+        premium: quoted.application.annualizedPremium,
+        product: quoted.application.product,
+        planType: quoted.application.planType,
+        fexQuoteId: quoted.fexQuoteId,
+        quoteClass: quoted.classLabel,
+        firstName,
+        lastName,
+      }
+    : { phone: pendingDispositionCall.phoneNumber };
 
   const isRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
   const wroteApplication = selectedDisposition === 'APPLICATION_SUBMITTED';
@@ -218,7 +260,7 @@ export function GlobalDispositionModal() {
       applicationSlot={
         /* The application the agent wrote, on any carrier. */
         <ApplicationLogForm
-          prefill={{ phone: pendingDispositionCall.phoneNumber }}
+          prefill={applicationPrefill}
           onChange={setApplication}
           error={applicationError}
           disabled={saving}

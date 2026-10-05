@@ -28,7 +28,10 @@
  *   POST   /api/v1/platform/acting-tenant/preview  change or clear the preview
  *   POST   /api/auth/logout                        leave entirely
  *
- * None of them touches agency data. `POST /api/v1/platform/acting-tenant` is
+ * None of them touches agency data.
+ *
+ * One further POST is exempt and is not a way out: the quoter's compute
+ * endpoint, `POST /api/v1/fex/quote`, which writes nothing (see EXEMPT). `POST /api/v1/platform/acting-tenant` is
  * deliberately NOT on the list: entering a different agency while previewing a
  * role is a state nobody asked for, and the operator can leave the preview in
  * one click first.
@@ -71,6 +74,12 @@ const EXEMPT: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'DELETE', path: '/api/v1/platform/acting-tenant' },
   { method: 'POST', path: '/api/v1/platform/acting-tenant/preview' },
   { method: 'POST', path: '/api/auth/logout' },
+  // Not a way out, and the one exemption that is not: the quoter's compute
+  // endpoint is a POST only because an applicant does not fit in a query
+  // string. It computes and writes nothing, and staff previewing an agency as
+  // an agent must be able to use the quoter. Saving a quote
+  // (POST /api/v1/fex/quotes) stays refused.
+  { method: 'POST', path: '/api/v1/fex/quote' },
 ];
 
 function pathnameOf(url: string): string {

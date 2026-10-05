@@ -157,6 +157,8 @@ const SWEEP = [
       // against.
       '/applications',
       '/insurance-leads',
+      // The final expense quoter: standard for every agency and every agent.
+      '/quote',
       '/rating',
       '/delivery',
       '/delivery/settlements',
@@ -267,6 +269,7 @@ const SWEEP = [
       // rows, and that narrowing is server-side.
       '/applications',
       '/insurance-leads',
+      '/quote',
       // An agent's own standing against the floor.
       '/leaderboard',
       '/call-center',

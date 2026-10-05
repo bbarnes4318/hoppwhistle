@@ -10,3 +10,7 @@ pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
+
+# FEX quote engine data: generated, minified, and multi-megabyte.
+apps/api/assets/fex/
+packages/fex-engine/test/*.json

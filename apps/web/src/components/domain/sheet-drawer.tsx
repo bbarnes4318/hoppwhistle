@@ -41,7 +41,7 @@ export interface SheetDrawerProps {
   footer?: React.ReactNode;
   children: React.ReactNode;
   side?: 'right' | 'left';
-  size?: 'md' | 'lg' | 'xl';
+  size?: 'md' | 'lg' | 'xl' | 'quote';
   className?: string;
   /**
    * An agency's branded header: shown in place of the title, which stays the
@@ -55,6 +55,8 @@ const SIZE_CLASS = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
+  /** The quoter over a live call: two panes wide, never past the viewport. */
+  quote: 'sm:max-w-[min(1180px,calc(100vw-2rem))]',
 } as const;
 
 export function SheetDrawer({
@@ -106,9 +108,7 @@ export function SheetDrawer({
             )}
           >
             <div className="min-w-0">
-              <DialogTitle
-                className={cn('t-section truncate text-ink', brandHeader && 'sr-only')}
-              >
+              <DialogTitle className={cn('t-section truncate text-ink', brandHeader && 'sr-only')}>
                 {title}
               </DialogTitle>
               {brandHeader}

@@ -57,6 +57,7 @@ const EXPECTED: Array<[string | undefined, Array<[string, string, string | undef
       ['Calls', '/calls', undefined],
       ['Applications', '/applications', undefined],
       ['CRM', '/insurance-leads', undefined],
+      ['Quote', '/quote', 'Underwrite and price final expense across every carrier'],
       ['Agents', '/agents', 'How your agents are doing, and who can take a call'],
     ],
   ],
@@ -93,10 +94,10 @@ describe('WHITE_LABEL_OWNER_NAV', () => {
     expect(WHITE_LABEL_OWNER_NAV.filter(group => group.items.length < 2)).toEqual([]);
   });
 
-  it('has exactly twelve items, none of them locked or pending', () => {
-    expect(items).toHaveLength(12);
+  it('has exactly thirteen items, none of them locked or pending', () => {
+    expect(items).toHaveLength(13);
     expect(items.filter(item => item.locked || item.pending)).toEqual([]);
-    expect(allNavItems(WHITE_LABEL_OWNER_NAV)).toHaveLength(12);
+    expect(allNavItems(WHITE_LABEL_OWNER_NAV)).toHaveLength(13);
   });
 
   it.each(EXPECTED.map(([label, want]) => [label ?? '(unlabelled)', want] as const))(
@@ -219,9 +220,10 @@ describe('the white-label upgrades', () => {
       '/calls',
       '/applications',
       '/insurance-leads',
+      '/quote',
       '/agents',
     ]);
-    expect(WHITE_LABEL_OWNER_NAV.flatMap(g => g.items)).toHaveLength(12);
+    expect(WHITE_LABEL_OWNER_NAV.flatMap(g => g.items)).toHaveLength(13);
   });
 });
 
@@ -244,6 +246,7 @@ describe('AGENCY_OWNER_NAV is unchanged', () => {
           ['Applications', '/applications', null],
           ['Leaderboard', '/leaderboard', null],
           ['CRM', '/insurance-leads', null],
+          ['Quote', '/quote', null],
         ],
       ],
       [

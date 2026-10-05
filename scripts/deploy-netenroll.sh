@@ -132,6 +132,7 @@ REQUIRED_MIGRATIONS="
 20261009000000_sales_workspaces
 20261010000000_sales_activity_details_entered
 20261011000000_test_org_netenroll_brand
+20261012000000_fex_quote_engine
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -548,6 +549,12 @@ migration_applied() {
       echo "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sales_workspace_access_same_tenant')
             AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agreement_envelopes_immutable'
               AND prosrc LIKE '%salesWorkspaceId%')" ;;
+    *_fex_quote_engine)
+      # Every statement is guarded (IF NOT EXISTS / duplicate_object); the
+      # last one, the application's link column index, stands for the rest.
+      echo "SELECT to_regclass('public.fex_quotes') IS NOT NULL
+            AND to_regclass('public.fex_tenant_settings') IS NOT NULL
+            AND to_regclass('public.\"insurance_carrier_applications_tenantId_fexQuoteId_idx\"') IS NOT NULL" ;;
     *_test_org_netenroll_brand)
       # Data only: Test Organization carries no white-label theme, name or
       # domain. True on a database with no such tenant, which is correct.

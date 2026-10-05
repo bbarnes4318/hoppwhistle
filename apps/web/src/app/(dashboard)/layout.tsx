@@ -6,11 +6,13 @@ import { useEffect } from 'react';
 import { LicensedStatesGate } from '@/components/agents/licensed-states-gate';
 import { BrandThemeSync } from '@/components/brand/brand-theme-sync';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { QuoteDrawer } from '@/components/fex/quote-drawer';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { RolePreviewBanner } from '@/components/platform/role-preview-switcher';
+import { QuoteSessionProvider } from '@/contexts/quote-session-context';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
@@ -306,6 +308,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Same gate. The call centre is where an agent works, but a platform
       // operator can open the page too, and they should not start a phone.
       <PhoneProvider enabled={canTakeCalls}>
+        {/* Per-call quoter state; the console's Quote tab reads it. */}
+        <QuoteSessionProvider />
         <BrandThemeSync />
         <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-paper text-ink">
           {/*
@@ -362,6 +366,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider enabled={canTakeCalls}>
+      {/* Per-call quoter state: drafts, the quote used, the drawer. */}
+      <QuoteSessionProvider />
       {/* The agency's brand theme, from the session. The authenticated shell
           only: the login page is never branded. */}
       <BrandThemeSync />
@@ -425,6 +431,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Global Disposition Modal - triggers when softphone call ends outside call center */}
         <GlobalDispositionModal />
+
+        {/* The quoter over a live call: the softphone's Quote button, Q, or on connect. */}
+        <QuoteDrawer />
       </div>
     </PhoneProvider>
   );

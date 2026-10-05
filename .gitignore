@@ -117,3 +117,9 @@ seal.crt
 # patterns above, named here so nobody removes them). The base64 of seal.p12
 # lives only in the server's .env.
 seal.key
+
+# FEX quote engine data. The blanket `*.json` rule above would drop the carrier
+# data bundle the API loads at startup and the engine's golden reference file;
+# without either the build is green and the feature is dead.
+!apps/api/assets/fex/*.json
+!packages/fex-engine/test/*.json

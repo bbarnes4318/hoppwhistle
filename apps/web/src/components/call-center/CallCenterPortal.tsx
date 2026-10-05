@@ -22,10 +22,12 @@ import {
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
+import { QuoteWorkspace } from '@/components/fex/quote-workspace';
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
 import { buttonVariants } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { useQuoteSession } from '@/contexts/quote-session-context';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
@@ -37,11 +39,15 @@ import {
   deleteInsuranceLeads,
 } from '@/lib/api/leads';
 import { markConsoleExit } from '@/lib/console-exit';
+import type { FexSelection } from '@/lib/fex/api';
+import { applyPrefill, emptyDraft } from '@/lib/fex/draft';
+import { prefillFromProspect } from '@/lib/fex/prefill';
 import { cn } from '@/lib/utils';
 
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
 import { ActiveCallControls } from './ActiveCallControls';
+import { applicationPrefillFrom, quoteToCallData } from './application-prefill';
 import type { ApplicationLogPayload } from './ApplicationLogForm';
 import { ApplicationQueue } from './ApplicationQueue';
 import { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
@@ -288,45 +294,47 @@ export function CallCenterPortal(): JSX.Element {
    */
   const callDirectionRef = useRef<'inbound' | 'outbound' | null>(null);
 
+  // What the quote and the call already know: see `application-prefill.ts`.
+  const applicationPrefill = useMemo(
+    () => applicationPrefillFrom(activeCallData),
+    [activeCallData]
+  );
+
   /*
-   * What the quote and the call already know, so the agent retypes none of it.
-   *
-   * `activeCallData` is a bag with an `unknown` index signature -- the script
-   * panels write whatever they capture into it -- so every value is coerced
-   * here rather than passed through. A blank field is better than a "[object
-   * Object]" in the premium box on the screen that decides the agency's price.
+   * The Quote tab: the quoter on the live caller, prefilled from the call and
+   * the CRM record. Its draft lives in the QuoteSession under the call id, so
+   * switching tabs keeps it.
    */
-  const applicationPrefill = useMemo(() => {
-    const text = (value: unknown): string | null =>
-      typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+  const quoteSession = useQuoteSession();
+  const quoteCallId = currentCall?.callId ?? callSessionIdRef.current ?? null;
+  const quoteProspect = useMemo(() => {
+    // The console's own placeholders ("Incoming Call") are not a name.
+    const prospect = { ...(activeCallData ?? {}) } as Record<string, unknown>;
+    if (prospect.last_name === 'Call') {
+      delete prospect.first_name;
+      delete prospect.last_name;
+    }
+    return prefillFromProspect({
+      prospectData: prospect,
+      customer: (crmData?.customer ?? null) as Record<string, unknown> | null,
+    });
+  }, [activeCallData, crmData]);
+  const quoteInitialDraft = useMemo(
+    () => applyPrefill(emptyDraft(quoteSession?.settings?.agency), quoteProspect),
+    [quoteProspect, quoteSession?.settings]
+  );
 
-    /*
-     * The quote's premium is MONTHLY -- see the CRM payload below, which sends
-     * `selectedPremium` as `monthlyPremium`. The form asks for the ANNUAL
-     * premium, because that is the figure the agency's production is reported
-     * in. So it is converted here, once, rather than prefilled raw into a box
-     * labelled "Annual premium": a monthly number in that box understates the
-     * agency's reported production by a factor of twelve, and nothing
-     * downstream would catch it.
-     */
-    const annualFromMonthly = (value: unknown): string | null => {
-      const monthly = typeof value === 'number' ? value : Number(text(value) ?? NaN);
-      if (!Number.isFinite(monthly) || monthly <= 0) return null;
-      return (Math.round(monthly * 12 * 100) / 100).toFixed(2);
-    };
-
-    return {
-      carrier: text(activeCallData?.selectedCarrier),
-      planType: text(activeCallData?.selectedPlanType),
-      faceAmount: text(activeCallData?.selectedCoverage),
-      premium: annualFromMonthly(activeCallData?.selectedPremium),
-      firstName: text(activeCallData?.firstName ?? activeCallData?.first_name),
-      lastName: text(activeCallData?.lastName ?? activeCallData?.last_name),
-      dob: text(activeCallData?.dob),
-      state: text(activeCallData?.state),
-      phone: text(activeCallData?.phone ?? activeCallData?.caller_id),
-    };
-  }, [activeCallData]);
+  /*
+   * "Use this quote": the keys `applicationPrefill` already reads, so the
+   * disposition's application form opens with the quote's carrier, face and
+   * premium. `selectedPremium` stays MONTHLY, as that memo and the CRM payload
+   * read it; the exact annual figure travels as `selectedAnnualPremium`.
+   */
+  const applyQuoteToApplication = useCallback((selection: FexSelection) => {
+    setActiveCallData(prev =>
+      prev ? ({ ...prev, ...quoteToCallData(selection) } as ProspectData) : prev
+    );
+  }, []);
 
   // Leads & Records
   const [applications, setApplications] = useState<ApplicationData[]>([]);
@@ -1466,7 +1474,10 @@ export function CallCenterPortal(): JSX.Element {
   const selectedList = leadLists.find(l => l.id === selectedListId);
   const isPreClosedListSelected = selectedList?.name?.toLowerCase() === 'preclosed';
 
-  const activeLeadListName = crmData?.customer?.list?.name || (activeCallData?.list as { name?: string } | undefined)?.name || '';
+  const activeLeadListName =
+    crmData?.customer?.list?.name ||
+    (activeCallData?.list as { name?: string } | undefined)?.name ||
+    '';
   const isPreClosedLead = activeLeadListName.toLowerCase() === 'preclosed';
 
   const isPreClosed = isPreClosedListSelected || isPreClosedLead;
@@ -1597,7 +1608,11 @@ export function CallCenterPortal(): JSX.Element {
                     </label>
                     <select
                       value={editingScriptType}
-                      onChange={e => handleScriptTypeChange(e.target.value as 'sales' | 'retention' | 'underwriting')}
+                      onChange={e =>
+                        handleScriptTypeChange(
+                          e.target.value as 'sales' | 'retention' | 'underwriting'
+                        )
+                      }
                       className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="sales">Final Expense Script</option>
@@ -1994,6 +2009,27 @@ export function CallCenterPortal(): JSX.Element {
                         <p className="text-sm">Script is not available when no call is active.</p>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {activeCallView === 'quote' && (
+                  <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+                    <QuoteWorkspace
+                      key={quoteCallId ?? 'no-call'}
+                      variant="embedded"
+                      source="CALL_CENTER"
+                      initialDraft={quoteInitialDraft}
+                      callId={quoteCallId}
+                      insuranceLeadId={
+                        (activeCallData?.id as string | undefined) ?? crmData?.customer?.id ?? null
+                      }
+                      prospectName={quoteProspect.prospectName}
+                      onUseQuote={applyQuoteToApplication}
+                      onStartApplication={() => {
+                        setSelectedDisposition('APPLICATION_SUBMITTED');
+                        setShowDisposition(true);
+                      }}
+                    />
                   </div>
                 )}
 

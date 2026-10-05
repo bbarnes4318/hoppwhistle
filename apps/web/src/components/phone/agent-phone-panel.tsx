@@ -3,7 +3,10 @@
 import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { PreQuoteCard } from '@/components/fex/pre-quote-card';
 import { useCustomerIntake } from '@/contexts/customer-intake-context';
+import { useQuoteSession } from '@/contexts/quote-session-context';
+import { fexApi } from '@/lib/fex/api';
 import {
   DEFAULT_INTAKE_DATA,
   type Beneficiary,
@@ -128,6 +131,9 @@ export function AgentPhonePanel(): JSX.Element | null {
   // Customer Intake Context - shares data with CustomerIntakeForm
   const { formData } = useCustomerIntake();
 
+  // The quoter for this call: the Quote button, Q, and the pre-quote card.
+  const quoteSession = useQuoteSession();
+
   const [minimized, setMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<IdleTab>('dialpad');
   const [showScreenPopSettings, setShowScreenPopSettings] = useState(false);
@@ -212,6 +218,16 @@ export function AgentPhonePanel(): JSX.Element | null {
     }
   }, [currentCall, intakePhoneDigits, isIntakePhoneValid, openPhonePanel]);
 
+  // The prospect matched by phone prefills the quoter for this call.
+  const liveCallId = currentCall?.callId;
+  useEffect(() => {
+    if (quoteSession && liveCallId && matchedProspect) {
+      quoteSession.setContext(liveCallId, {
+        matchedProspect: matchedProspect as unknown as Record<string, unknown>,
+      });
+    }
+  }, [quoteSession, liveCallId, matchedProspect]);
+
   // A new call starts with the keypad closed and no dialog left over.
   useEffect(() => {
     if (!onCall) {
@@ -256,6 +272,9 @@ export function AgentPhonePanel(): JSX.Element | null {
           if (onCall) setKeypadOpen(open => !open);
           else setActiveTab('dialpad');
           break;
+        case 'quote':
+          if (onCall && currentCall) quoteSession?.openFor(currentCall);
+          break;
         case 'close':
           if (showShortcuts) setShowShortcuts(false);
           else if (isPhonePanelOpen) closePhonePanel();
@@ -279,6 +298,8 @@ export function AgentPhonePanel(): JSX.Element | null {
       closePhonePanel,
       onCall,
       showShortcuts,
+      currentCall,
+      quoteSession,
     ]
   );
 
@@ -377,12 +398,26 @@ export function AgentPhonePanel(): JSX.Element | null {
           ...(customerData ? intakeSections(customerData) : []),
         ]
       : [];
-  const customerRecord =
+  const record =
     visibleSections(recordSections).length > 0 ? (
       <CustomerRecord sections={recordSections} />
     ) : null;
+  // On a ringing or live call the quoter's first look leads the record pane.
+  const preQuote =
+    quoteSession && currentCall && (state === 'incoming' || onCall) ? <PreQuoteCard /> : null;
+  const customerRecord = record ? (
+    <div className="space-y-3">
+      {preQuote}
+      {record}
+    </div>
+  ) : null;
   // The narrow-screen copy; from 1024px up the shell shows the side pane instead.
-  const inlineRecord = customerRecord ? <div className="lg:hidden">{customerRecord}</div> : null;
+  // With no record there is no side pane, so the card sits under the call at every width.
+  const inlineRecord = customerRecord ? (
+    <div className="lg:hidden">{customerRecord}</div>
+  ) : preQuote ? (
+    <div className="pt-1">{preQuote}</div>
+  ) : null;
 
   const matchBadge = intakeMatchDetected ? (
     <div className="flex items-center gap-2 border-b border-rule bg-sunken px-4 py-2">
@@ -422,6 +457,7 @@ export function AgentPhonePanel(): JSX.Element | null {
           onKeypadToggle={() => setKeypadOpen(open => !open)}
           onTransfer={() => setDialog('transfer')}
           onAddCall={() => setDialog('add')}
+          onQuote={quoteSession ? () => quoteSession.openFor(currentCall) : undefined}
           fill={Boolean(customerRecord)}
         >
           {inlineRecord}
@@ -594,6 +630,8 @@ function PhoneSettings({
 }): JSX.Element {
   const { audioDevices, selectedAudioInput, selectedAudioOutput, setAudioInput, setAudioOutput } =
     usePhone();
+  const quoteSession = useQuoteSession();
+  const fexSettings = quoteSession?.settings ?? null;
 
   const toOption = (d: MediaDeviceInfo, fallback: string): { deviceId: string; label: string } => ({
     deviceId: d.deviceId,
@@ -609,6 +647,18 @@ function PhoneSettings({
       onInputChange={setAudioInput}
       onOutputChange={setAudioOutput}
       onConfigureScreenPop={onConfigureScreenPop}
+      quoteAutoOpen={
+        quoteSession && fexSettings
+          ? {
+              value: fexSettings.me.autoOpenOnCall,
+              agencyDefault: fexSettings.agency.autoOpenOnCall,
+              onChange: value => {
+                quoteSession.setSettings({ ...fexSettings, me: { autoOpenOnCall: value } });
+                void fexApi.saveMySettings(value);
+              },
+            }
+          : undefined
+      }
     />
   );
 }

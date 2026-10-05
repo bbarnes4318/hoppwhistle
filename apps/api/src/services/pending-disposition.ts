@@ -85,6 +85,9 @@ export async function mergePendingDisposition(
         clientRequestId: application.clientRequestId,
         callId: input.callId,
         insuranceLeadId: application.insuranceLeadId ?? null,
+        // No request here to say whether the writer is a principal, so only a
+        // quote they saved themselves is linked.
+        fexQuoteId: application.fexQuoteId ?? null,
         carrier: application.carrier,
         product: application.product ?? null,
         planType: application.planType ?? null,

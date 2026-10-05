@@ -140,6 +140,7 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
         ['Applications', '/applications', false],
         ['Leaderboard', '/leaderboard', false],
         ['CRM', '/insurance-leads', false],
+        ['Quote', '/quote', false],
       ],
     ],
     [
@@ -406,6 +407,7 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
           ['Calls', '/calls'],
           ['Applications', '/applications'],
           ['CRM', '/insurance-leads'],
+          ['Quote', '/quote'],
           ['Leaderboard', '/leaderboard'],
         ],
       ],
@@ -423,6 +425,7 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
           ['Calls', '/calls'],
           ['Applications', '/applications'],
           ['CRM', '/insurance-leads'],
+          ['Quote', '/quote'],
           ['Leaderboard', '/leaderboard'],
         ],
       ],
@@ -685,5 +688,61 @@ describe('Agreements: platform admins only', () => {
     expect(isStaffOnlyRoute('/admin/agreements')).toBe(true);
     expect(isStaffOnlyRoute('/admin/agreements/new')).toBe(true);
     expect(isStaffOnlyRoute('/admin/agreements/settings')).toBe(true);
+  });
+});
+
+describe('Quote: the final expense quoter is standard for every working role', () => {
+  const quoteItem = (groups: NavGroup[]) =>
+    allNavItems(groups).find(item => item.href === '/quote');
+  const allItems = (groups: NavGroup[]) => groups.flatMap(group => group.items);
+
+  const viewers: Array<[string, Parameters<typeof navFor>[0]]> = [
+    ['platform staff', { ...NOBODY, isPlatformAdmin: true, hasFullAccess: true }],
+    ['an agency principal', { ...NOBODY, hasFullAccess: true }],
+    ['a downline agency principal', { ...NOBODY, hasFullAccess: true, isChild: true }],
+    ['a white-label principal', { ...NOBODY, hasFullAccess: true, isWhiteLabel: true }],
+    [
+      'a white-label principal with upgrades',
+      { ...NOBODY, hasFullAccess: true, isWhiteLabel: true, upgrades: ['POWER_DIALER'] },
+    ],
+    ['an agent without upgrades', { ...NOBODY, isAgentOnly: true, upgrades: [] }],
+    [
+      'an agent with the Power Dialer',
+      { ...NOBODY, isAgentOnly: true, upgrades: ['POWER_DIALER'] },
+    ],
+    [
+      'a white-label agent',
+      { ...NOBODY, isAgentOnly: true, isWhiteLabelAgent: true, upgrades: [] },
+    ],
+  ];
+
+  it.each(viewers)('gives %s /quote, never locked', (_who, viewer) => {
+    const item = quoteItem(navFor(viewer));
+    expect(item).toBeDefined();
+    expect(item!.locked).toBeUndefined();
+    // Present in the raw groups too, not only in the openable list.
+    expect(allItems(navFor(viewer)).filter(i => i.href === '/quote')).toHaveLength(1);
+  });
+
+  it('does not give publishers, buyers or read-only accounts the quoter', () => {
+    for (const viewer of [
+      { ...NOBODY, isPublisherOnly: true },
+      { ...NOBODY, isBuyerOnly: true },
+      { ...NOBODY, isReadonlyOnly: true },
+    ]) {
+      expect(allItems(navFor(viewer)).map(i => i.href)).not.toContain('/quote');
+    }
+  });
+
+  it('sits directly after the CRM', () => {
+    for (const groups of [PLATFORM_NAV, AGENCY_OWNER_NAV, CHILD_AGENCY_OWNER_NAV, AGENT_NAV]) {
+      const group = groups.find(g => g.items.some(i => i.href === '/quote'))!;
+      const hrefs = group.items.map(i => i.href);
+      expect(hrefs[hrefs.indexOf('/quote') - 1]).toBe('/insurance-leads');
+    }
+  });
+
+  it('is not a staff-only route', () => {
+    expect(isStaffOnlyRoute('/quote')).toBe(false);
   });
 });

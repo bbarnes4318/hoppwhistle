@@ -39,6 +39,7 @@ import { Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { isAgencyPrincipal } from '../lib/agent-scope.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
@@ -192,6 +193,8 @@ export async function registerApplicationRoutes(fastify: FastifyInstance): Promi
         clientRequestId: body.clientRequestId,
         callId: body.callId ?? null,
         insuranceLeadId: body.insuranceLeadId ?? null,
+        fexQuoteId: body.fexQuoteId ?? null,
+        writerIsPrincipal: isAgencyPrincipal(request),
         carrier: body.carrier,
         product: body.product ?? null,
         planType: body.planType ?? null,
