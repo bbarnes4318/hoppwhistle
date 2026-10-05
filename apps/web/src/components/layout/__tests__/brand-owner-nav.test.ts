@@ -35,6 +35,22 @@ describe('Powerhouse Insurance owner nav', () => {
     expect(nav.some(group => group.items.length === 0)).toBe(false);
   });
 
+  it('puts Publishers under Administration, above Settings, and drops the empty Call Sales', () => {
+    const nav = navFor({ ...OWNER, brandTheme: 'powerhouse-insurance' });
+    const admin = nav.find(group => group.label === 'Administration')!;
+    const hrefs = admin.items.map(item => item.href);
+    expect(hrefs).toContain('/publishers');
+    expect(hrefs.indexOf('/publishers')).toBe(hrefs.indexOf('/settings') - 1);
+    expect(nav.map(group => group.label)).not.toContain('Call Sales');
+    expect(allNavItems(nav).filter(item => item.href === '/publishers')).toHaveLength(1);
+  });
+
+  it('keeps Publishers under Call Sales for every other brand', () => {
+    const nav = navFor({ ...OWNER, brandTheme: 'life-leads-plus' });
+    const sales = nav.find(group => group.label === 'Call Sales')!;
+    expect(sales.items.map(item => item.href)).toContain('/publishers');
+  });
+
   it('hides the same items for a non-white-label Powerhouse agency, with one Campaigns', () => {
     const list = names({ ...OWNER, isWhiteLabel: false, brandTheme: 'powerhouse-insurance' });
     expect(list.filter(name => name === 'Campaigns')).toHaveLength(1);
