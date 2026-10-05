@@ -398,7 +398,7 @@ export function QuoteWorkspace({
           </div>
         ) : null}
 
-        <Toolbar aria-label="Sort and filter results">
+        <Toolbar aria-label="Sort and filter results" className="xl:flex-wrap">
           <Segmented role="radiogroup" aria-label="Sort">
             <SegmentedItem
               role="radio"
