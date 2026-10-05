@@ -862,6 +862,11 @@ export interface NavViewer {
    * does not.
    */
   salesWorkspace?: { scope: 'PLATFORM' | 'TENANT' } | null;
+  /**
+   * The agency's brand theme key from `/api/auth/me` (`user.brand.theme`), or
+   * null for the default look. See `brandOwnerNav`.
+   */
+  brandTheme?: string | null;
 }
 
 /**
@@ -884,7 +889,68 @@ export function navFor(viewer: NavViewer): NavGroup[] {
   // one only when the server says they have a sales workspace.
   if (viewer.isPlatformAdmin && !viewer.previewing) return PLATFORM_NAV;
   const base = baseNavFor(viewer);
-  return viewer.salesWorkspace && base.length > 0 ? withSalesGroup(base) : base;
+  const nav = viewer.salesWorkspace && base.length > 0 ? withSalesGroup(base) : base;
+  return viewer.hasFullAccess ? brandOwnerNav(nav, viewer.brandTheme) : nav;
+}
+
+/**
+ * Per-brand changes to an OWNER's or ADMIN's navigation.
+ *
+ *   powerhouse-insurance  Campaigns as an entry of its own (on the white-label
+ *                         tier it is otherwise only a tab of Routing), and no
+ *                         Sales CRM, Agreements, Buyers, Agencies or Upgrades.
+ *
+ * Hiding is the sidebar and the command palette only; the routes themselves
+ * are unchanged.
+ */
+const BRAND_OWNER_NAV: Record<string, { hide: readonly string[]; add: NavItem[] }> = {
+  'powerhouse-insurance': {
+    hide: [
+      '/sales-crm',
+      '/sales-crm/agreements',
+      '/buyers',
+      '/network/agencies',
+      '/admin/agencies',
+      '/upgrades',
+      '/revenue',
+    ],
+    add: [platformItem('/campaigns')],
+  },
+};
+
+/** Brands whose owners open `/campaigns` itself rather than Routing's tab. */
+export const CAMPAIGNS_PAGE_BRANDS: readonly string[] = ['powerhouse-insurance'];
+
+export function brandOwnerNav(groups: NavGroup[], brandTheme?: string | null): NavGroup[] {
+  const rules = brandTheme ? BRAND_OWNER_NAV[brandTheme] : undefined;
+  if (!rules || groups.length === 0) return groups;
+
+  let nav = groups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => !rules.hide.includes(item.href)),
+    }))
+    .filter(group => group.items.length > 0);
+
+  for (const add of rules.add) {
+    if (nav.some(group => group.items.some(item => item.href === add.href))) continue;
+    // Beside Routing where there is one, otherwise at the foot of Workspace.
+    let placed = false;
+    nav = nav.map(group => {
+      const at = group.items.findIndex(item => item.href === '/routing');
+      if (placed || at < 0) return group;
+      placed = true;
+      return { ...group, items: [...group.items.slice(0, at), add, ...group.items.slice(at)] };
+    });
+    if (!placed) {
+      const at = Math.max(
+        0,
+        nav.findIndex(group => group.label === 'Workspace')
+      );
+      nav = nav.map((group, i) => (i === at ? { ...group, items: [...group.items, add] } : group));
+    }
+  }
+  return nav;
 }
 
 function baseNavFor(viewer: NavViewer): NavGroup[] {

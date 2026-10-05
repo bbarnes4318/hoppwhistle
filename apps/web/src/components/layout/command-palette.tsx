@@ -97,7 +97,7 @@ export function CommandPalette({
   const pages = React.useMemo(() => {
     // The sidebar's own answer, from the same function, so the palette never
     // offers a page the sidebar does not -- including under a role preview.
-    const groups = navFor({ ...auth, previewing });
+    const groups = navFor({ ...auth, previewing, brandTheme: auth.user?.brand?.theme ?? null });
     if (groups.length > 0) return allNavItems(groups);
     return allNavItems(PLATFORM_NAV).filter(i => i.href === '/dashboard');
   }, [auth, previewing]);
