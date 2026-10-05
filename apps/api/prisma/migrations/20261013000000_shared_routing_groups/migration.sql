@@ -2,6 +2,8 @@
 -- whose agents are offered calls in round-robin order. Each call is recorded
 -- under the agency whose agent answered it.
 
+BEGIN;
+
 CREATE TYPE "SharedRoutingGroupStatus" AS ENUM ('ACTIVE', 'PAUSED');
 
 CREATE TABLE "shared_routing_groups" (
@@ -48,3 +50,5 @@ CREATE INDEX "did_routes_sharedRoutingGroupId_idx" ON "did_routes"("sharedRoutin
 ALTER TABLE "did_routes"
   ADD CONSTRAINT "did_routes_sharedRoutingGroupId_fkey"
   FOREIGN KEY ("sharedRoutingGroupId") REFERENCES "shared_routing_groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+COMMIT;
