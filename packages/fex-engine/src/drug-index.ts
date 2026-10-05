@@ -125,17 +125,25 @@ export class DrugIndex {
   /**
    * Typeahead over every brand, generic, alias and misspelling. Ranked: exact
    * name, then prefix, then word-start, then substring; shorter names first
-   * within a rank. One row per ingredient.
+   * within a rank. One row per ingredient. A single letter matches name
+   * prefixes only, alphabetically, so typing "a" lists the A medications.
    */
   search(query: string, limit = 12): DrugIngredient[] {
+    return this.searchNames(query, limit).map(hit => hit.ingredient);
+  }
+
+  /** `search`, plus the name each ingredient matched on (lowercase, as indexed). */
+  searchNames(query: string, limit = 12): Array<{ ingredient: DrugIngredient; matched: string }> {
     const q = query.toLowerCase().trim();
-    if (q.length < 2) return [];
+    if (!q) return [];
+    const prefixOnly = q.length === 1;
     const hits: Array<{ ingredient: DrugIngredient; score: number; via: string }> = [];
     const seen = new Set<string>();
     for (const [name, id] of Object.entries(this.bundle.drugs.nameIndex)) {
       let score = -1;
       if (name === q) score = 0;
       else if (name.startsWith(q)) score = 1;
+      else if (prefixOnly) continue;
       else if (name.includes(' ' + q) || name.includes('/' + q)) score = 2;
       else if (name.includes(q)) score = 3;
       if (score < 0 || seen.has(id + '|' + score)) continue;
@@ -145,13 +153,17 @@ export class DrugIndex {
         hits.push({ ingredient, score, via: name });
       }
     }
-    hits.sort((a, b) => a.score - b.score || a.via.length - b.via.length);
-    const out: DrugIngredient[] = [];
+    hits.sort(
+      prefixOnly
+        ? (a, b) => a.score - b.score || a.via.localeCompare(b.via)
+        : (a, b) => a.score - b.score || a.via.length - b.via.length
+    );
+    const out: Array<{ ingredient: DrugIngredient; matched: string }> = [];
     const ids = new Set<string>();
     for (const hit of hits) {
       if (!ids.has(hit.ingredient.id)) {
         ids.add(hit.ingredient.id);
-        out.push(hit.ingredient);
+        out.push({ ingredient: hit.ingredient, matched: hit.via });
       }
       if (out.length >= limit) break;
     }

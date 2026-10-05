@@ -909,6 +909,16 @@ function DetailInput({
 
 // ─── Medications ─────────────────────────────────────────────────────────────
 
+/**
+ * The brand or alias a search hit matched on, when it isn't the generic name,
+ * so typing "E" shows "Eliquis · apixaban" rather than an unexplained apixaban.
+ */
+function matchedBrand(hit: FexDrugHit): string | undefined {
+  const matched = hit.matched;
+  if (!matched || matched === hit.generic.toLowerCase()) return undefined;
+  return hit.brands.find(b => b.toLowerCase() === matched) ?? matched;
+}
+
 function MedicationsPanel({
   idPrefix,
   draft,
@@ -926,14 +936,14 @@ function MedicationsPanel({
 
   React.useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
+    if (!q) {
       setHits([]);
       return;
     }
     const controller = new AbortController();
     setSearching(true);
     const timer = setTimeout(() => {
-      void fexApi.searchDrugs(q, 10, controller.signal).then(result => {
+      void fexApi.searchDrugs(q, 20, controller.signal).then(result => {
         if (controller.signal.aborted) return;
         setHits(result.ok ? result.data : []);
         setSearching(false);
@@ -950,7 +960,12 @@ function MedicationsPanel({
     .filter(h => !added.has(h.id))
     .map(h => ({
       id: h.id,
-      label: (
+      label: matchedBrand(h) ? (
+        <>
+          <span className="capitalize">{matchedBrand(h)}</span>
+          <span className="text-ink-2"> · {h.generic}</span>
+        </>
+      ) : (
         <>
           <span className="capitalize">{h.generic}</span>
           {h.brands.length ? <span className="text-ink-2"> · {h.brands.join(', ')}</span> : null}
@@ -969,7 +984,7 @@ function MedicationsPanel({
           onQueryChange={setQuery}
           placeholder="Brand or generic: Eliquis, metformin…"
           options={options}
-          minChars={2}
+          minChars={1}
           loading={searching}
           emptyText="No medication by that name"
           onPick={id => {

@@ -132,6 +132,8 @@ export interface FexCatalog {
 
 export interface FexDrugHit {
   id: string;
+  /** The brand, generic or alias the query matched (lowercase). */
+  matched?: string;
   generic: string;
   brands: string[];
   drugClass: string | null;
