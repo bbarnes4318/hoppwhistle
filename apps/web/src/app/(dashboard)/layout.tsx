@@ -308,10 +308,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Same gate. The call centre is where an agent works, but a platform
       // operator can open the page too, and they should not start a phone.
       <PhoneProvider enabled={canTakeCalls}>
-        <QuoteSessionProvider>
-          <BrandThemeSync />
-          <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-paper text-ink">
-            {/*
+        {/* Per-call quoter state; the console's Quote tab reads it. */}
+        <QuoteSessionProvider />
+        <BrandThemeSync />
+        <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-paper text-ink">
+          {/*
             The way out of a preview, on the one page that had no way out.
 
             ── The lockout this reached production as ────────────────────────
@@ -334,11 +335,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             let the strip take its height and leave the rest to the console,
             which still fills the viewport.
           */}
-            <ErrorBoundary label="The role-preview banner" fallback={() => null}>
-              <RolePreviewBanner />
-            </ErrorBoundary>
+          <ErrorBoundary label="The role-preview banner" fallback={() => null}>
+            <RolePreviewBanner />
+          </ErrorBoundary>
 
-            {/*
+          {/*
             The cross-agency prompt applies here too.
 
             This branch returns before the one below, so it used to skip the
@@ -352,19 +353,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             fullscreen page that throws would otherwise take the whole app with
             it, with no chrome left to navigate away from.
           */}
-            <ErrorBoundary label="This page" resetKey={pathname ?? ''}>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {settling ? (
-                  <SettlingPlaceholder />
-                ) : needsAgency ? (
-                  <CrossAgencyPrompt />
-                ) : (
-                  children
-                )}
-              </div>
-            </ErrorBoundary>
-          </div>
-        </QuoteSessionProvider>
+          <ErrorBoundary label="This page" resetKey={pathname ?? ''}>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
+            </div>
+          </ErrorBoundary>
+        </div>
       </PhoneProvider>
     );
   }
@@ -373,11 +367,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <PhoneProvider enabled={canTakeCalls}>
       {/* Per-call quoter state: drafts, the quote used, the drawer. */}
-      <QuoteSessionProvider>
-        {/* The agency's brand theme, from the session. The authenticated shell
+      <QuoteSessionProvider />
+      {/* The agency's brand theme, from the session. The authenticated shell
           only: the login page is never branded. */}
-        <BrandThemeSync />
-        {/*
+      <BrandThemeSync />
+      {/*
         `relative` is load-bearing. The shell is the viewport and only its
         regions scroll -- but `overflow-hidden` clips an absolutely positioned
         descendant only when the shell is that descendant's containing block.
@@ -387,34 +381,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         page then scrolled the whole document, which slid the full-height rail
         up and left a blank strip under it.
       */}
-        <div className="relative flex h-screen overflow-hidden bg-paper text-ink">
-          {/*
+      <div className="relative flex h-screen overflow-hidden bg-paper text-ink">
+        {/*
           The whole document is light, so the shell needs no theme scope of its
           own: the sidebar, the topbar and every page under <main> read the
           same :root tokens. The one dark screen — the admin live board — wraps
           itself in <ThemeScope theme="dark"> when it is built, and nothing
           outside that subtree is affected.
         */}
-          {/* The rail is 208px wide and does not shrink, so below md it is
+        {/* The rail is 208px wide and does not shrink, so below md it is
             replaced by MobileNav's drawer in the topbar. */}
-          <div className="hidden h-full shrink-0 md:flex">
-            <Sidebar />
+        <div className="hidden h-full shrink-0 md:flex">
+          <Sidebar />
+        </div>
+        <div className="flex flex-1 flex-col h-screen overflow-hidden">
+          <div className="shrink-0">
+            <Topbar />
           </div>
-          <div className="flex flex-1 flex-col h-screen overflow-hidden">
-            <div className="shrink-0">
-              <Topbar />
-            </div>
-            <main
-              className={cn(
-                'flex-1 bg-paper flex flex-col min-h-0',
-                isEmbeddedAppPage ? 'overflow-hidden' : 'overflow-y-auto',
-                // The collapsed softphone floats 48px tall over the bottom-right
-                // corner. 96px of runway lets every page's last element scroll
-                // clear of it instead of ending underneath.
-                showFloatingDialer && !isEmbeddedAppPage && 'pb-24'
-              )}
-            >
-              {/*
+          <main
+            className={cn(
+              'flex-1 bg-paper flex flex-col min-h-0',
+              isEmbeddedAppPage ? 'overflow-hidden' : 'overflow-y-auto',
+              // The collapsed softphone floats 48px tall over the bottom-right
+              // corner. 96px of runway lets every page's last element scroll
+              // clear of it instead of ending underneath.
+              showFloatingDialer && !isEmbeddedAppPage && 'pb-24'
+            )}
+          >
+            {/*
               A page that throws loses the page, not the shell. Before this, an
               uncaught render error anywhere under the layout unmounted the
               whole tree from the root: the sidebar, the topbar and the agency
@@ -425,29 +419,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               clears the boundary rather than leaving somebody stuck on the
               message.
             */}
-              <ErrorBoundary label="This page" resetKey={pathname}>
-                {settling ? (
-                  <SettlingPlaceholder />
-                ) : needsAgency ? (
-                  <CrossAgencyPrompt />
-                ) : (
-                  children
-                )}
-              </ErrorBoundary>
-            </main>
-            {/* Footer removed - legal links accessible via Settings page */}
-          </div>
-
-          {/* Agent Phone Panel - Floating softphone (hidden on call center page) */}
-          {showFloatingDialer && <AgentPhonePanel />}
-
-          {/* Global Disposition Modal - triggers when softphone call ends outside call center */}
-          <GlobalDispositionModal />
-
-          {/* The quoter over a live call: the softphone's Quote button, Q, or on connect. */}
-          <QuoteDrawer />
+            <ErrorBoundary label="This page" resetKey={pathname}>
+              {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
+            </ErrorBoundary>
+          </main>
+          {/* Footer removed - legal links accessible via Settings page */}
         </div>
-      </QuoteSessionProvider>
+
+        {/* Agent Phone Panel - Floating softphone (hidden on call center page) */}
+        {showFloatingDialer && <AgentPhonePanel />}
+
+        {/* Global Disposition Modal - triggers when softphone call ends outside call center */}
+        <GlobalDispositionModal />
+
+        {/* The quoter over a live call: the softphone's Quote button, Q, or on connect. */}
+        <QuoteDrawer />
+      </div>
     </PhoneProvider>
   );
 }

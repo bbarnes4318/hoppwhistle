@@ -64,13 +64,6 @@ export interface QuoteSessionValue {
   version: number;
 }
 
-const QuoteSessionContext = React.createContext<QuoteSessionValue | null>(null);
-
-/** The session, or null outside a provider (the /quote page works without one). */
-export function useQuoteSession(): QuoteSessionValue | null {
-  return React.useContext(QuoteSessionContext);
-}
-
 /** Whether a connected call should open the quoter by itself. Pure, for tests. */
 export function shouldAutoOpen(input: {
   agencySetting: boolean;
@@ -93,64 +86,142 @@ interface Entry {
   lookup?: Promise<CustomerLookupCustomer | null>;
 }
 
-export function QuoteSessionProvider({ children }: { children: React.ReactNode }): JSX.Element {
+const store = {
+  entries: new Map<string, Entry>(),
+  drawerCallId: null as string | null,
+  settings: null as FexSettings | null,
+  mounted: 0,
+  version: 0,
+  listeners: new Set<() => void>(),
+};
+
+function emit(): void {
+  store.version += 1;
+  store.listeners.forEach(listener => listener());
+}
+
+function entry(callId: string): Entry {
+  let e = store.entries.get(callId);
+  if (!e) store.entries.set(callId, (e = { context: {} }));
+  return e;
+}
+
+function clearCall(callId: string): void {
+  store.entries.delete(callId);
+  if (store.drawerCallId === callId) store.drawerCallId = null;
+  emit();
+}
+
+function lookupCustomer(callId: string, phone: string): Promise<CustomerLookupCustomer | null> {
+  const e = entry(callId);
+  if (e.context.customer !== undefined) return Promise.resolve(e.context.customer);
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10) {
+    e.context.customer = null;
+    return Promise.resolve(null);
+  }
+  e.lookup ??= fetchCustomerLookup(digits)
+    .then(result => result?.customer ?? null)
+    .catch(() => null)
+    .then(customer => {
+      e.context.customer = customer;
+      emit();
+      return customer;
+    });
+  return e.lookup;
+}
+
+const actions = {
+  openFor: (call: Pick<CallInfo, 'callId'> | null | undefined) => {
+    if (!call?.callId) return;
+    store.drawerCallId = call.callId;
+    emit();
+  },
+  closeDrawer: () => {
+    store.drawerCallId = null;
+    emit();
+  },
+  getDraft: (id: string) => store.entries.get(id)?.draft,
+  // Not emitted: the workspace that owns the draft already has it on screen.
+  setDraft: (id: string, draft: QuoteDraft) => {
+    entry(id).draft = draft;
+  },
+  getSelection: (id: string) => store.entries.get(id)?.selection,
+  setSelection: (id: string, selection: FexSelection | null) => {
+    entry(id).selection = selection ?? undefined;
+    emit();
+  },
+  getContext: (id: string) => store.entries.get(id)?.context ?? {},
+  setContext: (id: string, patch: CallContext) => {
+    const e = entry(id);
+    e.context = { ...e.context, ...patch };
+    emit();
+  },
+  lookupCustomer,
+  clearCall,
+  setSettings: (settings: FexSettings) => {
+    store.settings = settings;
+    emit();
+  },
+};
+
+function subscribe(listener: () => void): () => void {
+  store.listeners.add(listener);
+  return () => store.listeners.delete(listener);
+}
+
+const getVersion = () => store.version;
+
+/** The session, or null when no QuoteSessionProvider is mounted. */
+export function useQuoteSession(): QuoteSessionValue | null {
+  const version = React.useSyncExternalStore(subscribe, getVersion, getVersion);
+  return React.useMemo(
+    () =>
+      store.mounted > 0
+        ? { ...actions, drawerCallId: store.drawerCallId, settings: store.settings, version }
+        : null,
+    [version]
+  );
+}
+
+/** Tests only: forget everything. */
+export function resetQuoteSession(): void {
+  store.entries.clear();
+  store.drawerCallId = null;
+  store.settings = null;
+  emit();
+}
+
+/**
+ * Runs the session for the signed-in shell. Self-closing in the layout;
+ * `children`, when given (tests), render as they are.
+ */
+export function QuoteSessionProvider({ children }: { children?: React.ReactNode }): JSX.Element {
   const { currentCall, phoneStatus } = usePhone();
   const pathname = usePathname();
+  const session = useQuoteSession();
+  const settings = session?.settings ?? null;
 
-  const entries = React.useRef(new Map<string, Entry>());
-  const [version, setVersion] = React.useState(0);
-  const bump = React.useCallback(() => setVersion(v => v + 1), []);
-  const [drawerCallId, setDrawerCallId] = React.useState<string | null>(null);
-  const [settings, setSettings] = React.useState<FexSettings | null>(null);
-
-  const entry = React.useCallback((callId: string): Entry => {
-    let e = entries.current.get(callId);
-    if (!e) entries.current.set(callId, (e = { context: {} }));
-    return e;
+  React.useLayoutEffect(() => {
+    store.mounted += 1;
+    emit();
+    return () => {
+      store.mounted -= 1;
+      emit();
+    };
   }, []);
-
-  const clearCall = React.useCallback(
-    (callId: string) => {
-      entries.current.delete(callId);
-      setDrawerCallId(open => (open === callId ? null : open));
-      bump();
-    },
-    [bump]
-  );
-
-  const lookupCustomer = React.useCallback(
-    (callId: string, phone: string): Promise<CustomerLookupCustomer | null> => {
-      const e = entry(callId);
-      if (e.context.customer !== undefined) return Promise.resolve(e.context.customer);
-      const digits = phone.replace(/\D/g, '');
-      if (digits.length < 10) {
-        e.context.customer = null;
-        return Promise.resolve(null);
-      }
-      e.lookup ??= fetchCustomerLookup(digits)
-        .then(result => result?.customer ?? null)
-        .catch(() => null)
-        .then(customer => {
-          e.context.customer = customer;
-          bump();
-          return customer;
-        });
-      return e.lookup;
-    },
-    [entry, bump]
-  );
 
   // The agency's and the agent's settings, once the phone is in use.
   React.useEffect(() => {
-    if (phoneStatus === 'disabled' || settings) return;
+    if (phoneStatus === 'disabled' || store.settings) return;
     let active = true;
     void fexApi.settings().then(result => {
-      if (active && result.ok) setSettings(result.data);
+      if (active && result.ok) actions.setSettings(result.data);
     });
     return () => {
       active = false;
     };
-  }, [phoneStatus, settings]);
+  }, [phoneStatus]);
 
   // Open on connect, once per call.
   const autoOpened = React.useRef(new Set<string>());
@@ -177,10 +248,10 @@ export function QuoteSessionProvider({ children }: { children: React.ReactNode }
           vertical: customer?.vertical ?? null,
         })
       ) {
-        setDrawerCallId(callId);
+        actions.openFor({ callId });
       }
     });
-  }, [callId, connected, settings, phone, lookupCustomer]);
+  }, [callId, connected, settings, phone]);
 
   // Forget a call 30 minutes after it ends (its disposition usually clears it sooner).
   const previousCall = React.useRef<string | null>(null);
@@ -197,41 +268,11 @@ export function QuoteSessionProvider({ children }: { children: React.ReactNode }
         clearCall(previous);
       }, CALL_ENTRY_TTL_MS)
     );
-  }, [liveCallId, clearCall]);
+  }, [liveCallId]);
   React.useEffect(() => {
     const timers = expiry.current;
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  const value = React.useMemo<QuoteSessionValue>(
-    () => ({
-      drawerCallId,
-      openFor: call => {
-        if (call?.callId) setDrawerCallId(call.callId);
-      },
-      closeDrawer: () => setDrawerCallId(null),
-      getDraft: id => entries.current.get(id)?.draft,
-      setDraft: (id, draft) => {
-        entry(id).draft = draft;
-      },
-      getSelection: id => entries.current.get(id)?.selection,
-      setSelection: (id, selection) => {
-        entry(id).selection = selection ?? undefined;
-        bump();
-      },
-      getContext: id => entries.current.get(id)?.context ?? {},
-      setContext: (id, patch) => {
-        const e = entry(id);
-        e.context = { ...e.context, ...patch };
-      },
-      lookupCustomer,
-      clearCall,
-      settings,
-      setSettings,
-      version,
-    }),
-    [drawerCallId, entry, bump, lookupCustomer, clearCall, settings, version]
-  );
-
-  return <QuoteSessionContext.Provider value={value}>{children}</QuoteSessionContext.Provider>;
+  return <>{children}</>;
 }

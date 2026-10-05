@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 
 import { ComponentGallery } from './component-gallery';
 import { ThemePane } from './preview-content';
+import { QuoterGallery } from './quoter-gallery';
 import { SoftphoneGallery } from './softphone-gallery';
 
 /**
@@ -120,6 +121,20 @@ export default function DesignPreviewPage() {
             , where it floats as it does in the app and becomes a bottom sheet below 640px.
           </p>
           <SoftphoneGallery />
+        </section>
+
+        {/*
+          The quoter's result rows -- Level, Graded, Refer, Price only,
+          Declined and one opened -- and the selected-quote bar, from static
+          mock results. No API and no engine behind them.
+        */}
+        <section>
+          <h2 className="t-title mb-1 text-ink">Quoter</h2>
+          <p className="t-body mb-3 max-w-3xl text-ink-2">
+            Every result-row state of the final expense quoter, and the bar a used quote pins under
+            the results.
+          </p>
+          <QuoterGallery />
         </section>
       </div>
     </main>

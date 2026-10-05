@@ -8,7 +8,15 @@
 
 import type { SoftphoneState } from './format';
 
-export type ShortcutAction = 'answer' | 'decline' | 'mute' | 'hold' | 'keypad' | 'close' | 'help';
+export type ShortcutAction =
+  | 'answer'
+  | 'decline'
+  | 'mute'
+  | 'hold'
+  | 'keypad'
+  | 'quote'
+  | 'close'
+  | 'help';
 
 export interface ShortcutDef {
   keys: string[];
@@ -23,6 +31,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: ['M'], label: 'Mute or unmute', when: 'On a call' },
   { keys: ['H'], label: 'Hold or resume', when: 'On a call' },
   { keys: ['K'], label: 'Show or hide the keypad', when: 'Any time' },
+  { keys: ['Q'], label: 'Open the quoter', when: 'On a call' },
   { keys: ['0–9', '*', '#'], label: 'Type on the keypad', when: 'Keypad open' },
   { keys: ['Enter'], label: 'Call the number', when: 'Keypad open' },
   { keys: ['Esc'], label: 'Close the phone', when: 'Any time' },
@@ -99,6 +108,9 @@ export function resolveShortcut(event: KeyLike, state: SoftphoneState): Shortcut
     case 'h':
     case 'H':
       return onCall ? 'hold' : null;
+    case 'q':
+    case 'Q':
+      return onCall ? 'quote' : null;
     case 'k':
     case 'K':
       return state === 'incoming' ? null : 'keypad';

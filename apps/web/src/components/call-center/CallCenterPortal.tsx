@@ -22,10 +22,12 @@ import {
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
+import { QuoteWorkspace } from '@/components/fex/quote-workspace';
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
 import { buttonVariants } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { useQuoteSession } from '@/contexts/quote-session-context';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
@@ -37,6 +39,9 @@ import {
   deleteInsuranceLeads,
 } from '@/lib/api/leads';
 import { markConsoleExit } from '@/lib/console-exit';
+import type { FexSelection } from '@/lib/fex/api';
+import { applyPrefill, emptyDraft } from '@/lib/fex/draft';
+import { prefillFromProspect } from '@/lib/fex/prefill';
 import { cn } from '@/lib/utils';
 
 import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
@@ -315,11 +320,26 @@ export function CallCenterPortal(): JSX.Element {
       return (Math.round(monthly * 12 * 100) / 100).toFixed(2);
     };
 
+    /*
+     * A quote used from the Quote tab carries its premium already annualised,
+     * from the mode it was quoted in. Used as it is: dividing by twelve into
+     * `selectedPremium` and multiplying back would round, and a quarterly or
+     * annual quote would not come back exact.
+     */
+    const annual = Number(text(activeCallData?.selectedAnnualPremium) ?? NaN);
+    const premium =
+      Number.isFinite(annual) && annual > 0
+        ? annual.toFixed(2)
+        : annualFromMonthly(activeCallData?.selectedPremium);
+
     return {
       carrier: text(activeCallData?.selectedCarrier),
       planType: text(activeCallData?.selectedPlanType),
       faceAmount: text(activeCallData?.selectedCoverage),
-      premium: annualFromMonthly(activeCallData?.selectedPremium),
+      premium,
+      product: text(activeCallData?.selectedProduct),
+      fexQuoteId: text(activeCallData?.fexQuoteId),
+      quoteClass: text(activeCallData?.selectedClass),
       firstName: text(activeCallData?.firstName ?? activeCallData?.first_name),
       lastName: text(activeCallData?.lastName ?? activeCallData?.last_name),
       dob: text(activeCallData?.dob),
@@ -327,6 +347,56 @@ export function CallCenterPortal(): JSX.Element {
       phone: text(activeCallData?.phone ?? activeCallData?.caller_id),
     };
   }, [activeCallData]);
+
+  /*
+   * The Quote tab: the quoter on the live caller, prefilled from the call and
+   * the CRM record. Its draft lives in the QuoteSession under the call id, so
+   * switching tabs keeps it.
+   */
+  const quoteSession = useQuoteSession();
+  const quoteCallId = currentCall?.callId ?? callSessionIdRef.current ?? null;
+  const quoteProspect = useMemo(() => {
+    // The console's own placeholders ("Incoming Call") are not a name.
+    const prospect = { ...(activeCallData ?? {}) } as Record<string, unknown>;
+    if (prospect.last_name === 'Call') {
+      delete prospect.first_name;
+      delete prospect.last_name;
+    }
+    return prefillFromProspect({
+      prospectData: prospect,
+      customer: (crmData?.customer ?? null) as Record<string, unknown> | null,
+    });
+  }, [activeCallData, crmData]);
+  const quoteInitialDraft = useMemo(
+    () => applyPrefill(emptyDraft(quoteSession?.settings?.agency), quoteProspect),
+    [quoteProspect, quoteSession?.settings]
+  );
+
+  /*
+   * "Use this quote": the keys `applicationPrefill` already reads, so the
+   * disposition's application form opens with the quote's carrier, face and
+   * premium. `selectedPremium` stays MONTHLY, as that memo and the CRM payload
+   * read it; the exact annual figure travels as `selectedAnnualPremium`.
+   */
+  const applyQuoteToApplication = useCallback((selection: FexSelection) => {
+    const annual = selection.application.annualizedPremium;
+    setActiveCallData(prev =>
+      prev
+        ? ({
+            ...prev,
+            selectedCarrier: selection.application.carrier,
+            selectedPlanType: selection.application.planType,
+            selectedCoverage: selection.face,
+            selectedPremium: annual == null ? null : Math.round((annual / 12) * 100) / 100,
+            selectedAnnualPremium: annual,
+            selectedProduct: selection.application.product,
+            selectedProductId: selection.productId,
+            selectedClass: selection.classLabel,
+            fexQuoteId: selection.fexQuoteId,
+          } as ProspectData)
+        : prev
+    );
+  }, []);
 
   // Leads & Records
   const [applications, setApplications] = useState<ApplicationData[]>([]);
@@ -1466,7 +1536,10 @@ export function CallCenterPortal(): JSX.Element {
   const selectedList = leadLists.find(l => l.id === selectedListId);
   const isPreClosedListSelected = selectedList?.name?.toLowerCase() === 'preclosed';
 
-  const activeLeadListName = crmData?.customer?.list?.name || (activeCallData?.list as { name?: string } | undefined)?.name || '';
+  const activeLeadListName =
+    crmData?.customer?.list?.name ||
+    (activeCallData?.list as { name?: string } | undefined)?.name ||
+    '';
   const isPreClosedLead = activeLeadListName.toLowerCase() === 'preclosed';
 
   const isPreClosed = isPreClosedListSelected || isPreClosedLead;
@@ -1597,7 +1670,11 @@ export function CallCenterPortal(): JSX.Element {
                     </label>
                     <select
                       value={editingScriptType}
-                      onChange={e => handleScriptTypeChange(e.target.value as 'sales' | 'retention' | 'underwriting')}
+                      onChange={e =>
+                        handleScriptTypeChange(
+                          e.target.value as 'sales' | 'retention' | 'underwriting'
+                        )
+                      }
                       className="flex h-9 w-full rounded-md border border-rule bg-sunken px-3 py-1.5 text-xs text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="sales">Final Expense Script</option>
@@ -1994,6 +2071,27 @@ export function CallCenterPortal(): JSX.Element {
                         <p className="text-sm">Script is not available when no call is active.</p>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {activeCallView === 'quote' && (
+                  <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+                    <QuoteWorkspace
+                      key={quoteCallId ?? 'no-call'}
+                      variant="embedded"
+                      source="CALL_CENTER"
+                      initialDraft={quoteInitialDraft}
+                      callId={quoteCallId}
+                      insuranceLeadId={
+                        (activeCallData?.id as string | undefined) ?? crmData?.customer?.id ?? null
+                      }
+                      prospectName={quoteProspect.prospectName}
+                      onUseQuote={applyQuoteToApplication}
+                      onStartApplication={() => {
+                        setSelectedDisposition('APPLICATION_SUBMITTED');
+                        setShowDisposition(true);
+                      }}
+                    />
                   </div>
                 )}
 
