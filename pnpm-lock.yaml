@@ -672,6 +672,21 @@ importers:
         specifier: ^1.1.0
         version: 1.6.1(@types/node@20.19.24)(jsdom@26.1.0)
 
+  packages/fex-engine:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.5
+        version: 20.19.24
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.0(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.0
+        version: 1.6.1(@types/node@20.19.24)(jsdom@26.1.0)
+
   packages/routing-dsl:
     dependencies:
       '@hopwhistle/shared':
