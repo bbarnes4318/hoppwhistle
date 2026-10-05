@@ -4,6 +4,8 @@
 
 import { apiClient } from '../api';
 
+import { fetchAllUsers } from './users';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -413,7 +415,7 @@ export interface UserSummary {
 }
 
 export async function fetchUsers(): Promise<{ data: UserSummary[] }> {
-  const res = await apiClient.get<{ data: UserSummary[] }>('/api/v1/users');
+  const res = await fetchAllUsers<UserSummary>();
   return res.data as unknown as { data: UserSummary[] };
 }
 

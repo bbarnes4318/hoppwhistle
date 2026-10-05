@@ -24,6 +24,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
+import { fetchAllUsers } from '@/lib/api/users';
 
 interface EditNumberDialogProps {
   open: boolean;
@@ -94,7 +95,7 @@ export function EditNumberDialog({
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
-      const response = await apiClient.get<{ data: User[] }>('/api/v1/users');
+      const response = await fetchAllUsers<User>();
       if (response.data?.data) {
         setUsers(response.data.data);
       }

@@ -64,6 +64,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useBrand } from '@/hooks/use-brand';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient } from '@/lib/api';
+import { fetchAllUsers } from '@/lib/api/users';
 import { jurisdictionName } from '@/lib/licensable-jurisdictions';
 import { cn } from '@/lib/utils';
 
@@ -284,7 +285,7 @@ export function TeamMembersView({
     setRosterError(null);
 
     const [userResult, rosterResult] = await Promise.allSettled([
-      apiClient.get<{ data: User[] }>('/api/v1/users'),
+      fetchAllUsers<User>(),
       apiClient.get<{ data: Roster }>('/api/v1/agent-roster'),
     ]);
 

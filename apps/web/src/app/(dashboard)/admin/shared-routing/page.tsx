@@ -45,6 +45,10 @@ interface AgentOption {
   tenantId: string;
   tenantName: string | null;
   licensedStates: string[];
+  roles: string[];
+  /** False for an owner or administrator: adding them makes them an agent too. */
+  isAgent: boolean;
+  status: string;
 }
 
 function memberAgentName(member: Member): string {
@@ -216,6 +220,13 @@ function AddAgent({
           <span className="font-medium">{picked.name}</span>
           <span className="text-ink-3"> · {picked.tenantName ?? 'No agency'}</span>
         </p>
+        {!picked.isAgent && (
+          <p className="t-body text-ink-3">
+            {picked.name} is {picked.roles.join('/').toLowerCase()} of this agency and is not an
+            agent yet. Adding them makes them an agent as well (they keep their other roles), so
+            they get the softphone and are credited with the calls they answer.
+          </p>
+        )}
         <p className="t-body text-ink-3">
           Licensed in:{' '}
           {picked.licensedStates.length > 0
@@ -253,7 +264,7 @@ function AddAgent({
   return (
     <div className="space-y-2">
       <Input
-        placeholder="Search agents by name, email or agency"
+        placeholder="Search agents, owners or admins by name, email or agency"
         value={q}
         onChange={event => setQ(event.target.value)}
       />
@@ -266,14 +277,23 @@ function AddAgent({
                 <span className="text-ink-3">
                   {' '}
                   · {option.tenantName ?? 'No agency'}
+                  {!option.isAgent &&
+                    ` · ${option.roles.join('/').toLowerCase()}, will be made an agent`}
+                  {option.status !== 'ACTIVE' && ` · ${option.status.toLowerCase()}`}
                   {option.licensedStates.length > 0 && ` · ${option.licensedStates.join(', ')}`}
                 </span>
               </span>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={inGroup.has(option.id)}
-                title={inGroup.has(option.id) ? 'Already in the group' : undefined}
+                disabled={inGroup.has(option.id) || option.status !== 'ACTIVE'}
+                title={
+                  inGroup.has(option.id)
+                    ? 'Already in the group'
+                    : option.status !== 'ACTIVE'
+                      ? 'This account is not active, so it cannot take calls'
+                      : undefined
+                }
                 onClick={() => setPicked(option)}
               >
                 Choose
