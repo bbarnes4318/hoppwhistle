@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
-import { BrandWordmark } from '@/components/brand/brand-lockup';
+import { BrandLockupImage, BrandWordmark } from '@/components/brand/brand-lockup';
 import { Logo } from '@/components/brand/logo';
 import { resolveBrand, type ActiveBrand, type ServerBrand } from '@/lib/brand-themes';
 import { cn } from '@/lib/utils';
@@ -89,22 +89,8 @@ export function LoginBrandLogo({
     );
   }
   if (surface === 'dark' && brand.lockupOnDark) {
-    // The full lockup, tagline included: the panel is the one place with room
-    // for it to read.
-    const { src, width, height } = brand.lockupOnDark;
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={brand.name}
-        width={width}
-        height={height}
-        className={cn('block h-auto max-w-full select-none', className)}
-        draggable={false}
-        translate="no"
-        data-testid="brand-logo"
-      />
-    );
+    // The full lockup, tagline included.
+    return <BrandLockupImage brand={brand} className={className} />;
   }
   return <BrandWordmark brand={brand} surface={surface} className={className} />;
 }
