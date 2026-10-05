@@ -44,7 +44,7 @@ export function Field({
 }): JSX.Element {
   return (
     <div className={cn('min-w-0', className)}>
-      <label htmlFor={htmlFor} className="t-label mb-1.5 flex items-baseline text-ink-2">
+      <label htmlFor={htmlFor} className="t-label mb-1 flex items-baseline text-ink-2">
         {label}
         {fromLead ? <FromLeadTag /> : null}
       </label>

@@ -64,6 +64,8 @@ export interface ResultRowProps {
   priceOnly?: boolean;
   /** This row is the quote in use. */
   selected?: boolean;
+  /** Marks the best row of the list: "Lowest price" or "Most coverage". */
+  badge?: string;
 }
 
 function feeText(fee: NonNullable<FexResult['facts']>['policyFeeAnnual']): string {
@@ -126,10 +128,19 @@ function Flags({ result, priceOnly }: { result: FexResult; priceOnly: boolean })
 }
 
 /** The premium, large, with its mode and the annual figure under it. */
-function Price({ line, size = 'md' }: { line: QuoteLine; size?: 'md' | 'lg' }): JSX.Element {
+function Price({
+  line,
+  size = 'md',
+  face,
+}: {
+  line: QuoteLine;
+  size?: 'md' | 'lg';
+  /** Put the coverage beside the yearly figure: "$10,000 · $526/yr". */
+  face?: number;
+}): JSX.Element {
   if (line.premium == null) {
     return (
-      <div className={size === 'lg' ? 'text-left' : 'text-right'}>
+      <div className="text-right">
         <p className="t-num text-base font-semibold text-ink">—</p>
         <p className="t-meta text-ink-3">{line.premiumNote ?? 'Single premium'}</p>
       </div>
@@ -137,37 +148,34 @@ function Price({ line, size = 'md' }: { line: QuoteLine; size?: 'md' | 'lg' }): 
   }
   const annual = line.annual;
   return (
-    <div className={size === 'lg' ? 'text-left' : 'text-right'}>
+    <div className="text-right">
       <p className="whitespace-nowrap tabular-nums text-ink">
         <span
           className={cn(
             't-num font-semibold tracking-tight',
-            size === 'lg' ? 'text-[34px] leading-none' : 'text-xl leading-tight'
+            size === 'lg' ? 'text-[28px] leading-none' : 'text-xl leading-tight'
           )}
         >
           {money(line.premium)}
         </span>
-        <span className={cn('ml-0.5 text-ink-3', size === 'lg' ? 'text-base' : 'text-xs')}>
+        <span className={cn('ml-0.5 text-ink-3', size === 'lg' ? 'text-sm' : 'text-xs')}>
           /{MODE_SHORT[line.mode]}
         </span>
       </p>
-      {annual != null && line.mode !== 'annual' ? (
+      {face != null ? (
+        <p className="t-meta mt-0.5 inline-flex items-center gap-1 whitespace-nowrap tabular-nums text-ink-3">
+          {line.faceAdjusted ? (
+            <Tooltip content={line.faceAdjusted} side="top" align="end">
+              <Info className="h-3 w-3 text-ringing-ink" aria-label={line.faceAdjusted} />
+            </Tooltip>
+          ) : null}
+          <span className="font-medium text-ink-2">{wholeDollars(face)}</span>
+          {annual != null && line.mode !== 'annual' ? ` · ${money(annual)}/yr` : ''}
+        </p>
+      ) : annual != null && line.mode !== 'annual' ? (
         <p className="t-meta tabular-nums text-ink-3">{money(annual)} a year</p>
       ) : null}
     </div>
-  );
-}
-
-function FaceValue({ line }: { line: QuoteLine }): JSX.Element {
-  return (
-    <p className="t-num flex items-center gap-1 text-sm font-medium tabular-nums text-ink">
-      {wholeDollars(line.face)}
-      {line.faceAdjusted ? (
-        <Tooltip content={line.faceAdjusted} side="top" align="end">
-          <Info className="h-3.5 w-3.5 text-ringing-ink" aria-label={line.faceAdjusted} />
-        </Tooltip>
-      ) : null}
-    </p>
   );
 }
 
@@ -230,6 +238,7 @@ export function ResultRow({
   isStaff = false,
   priceOnly = false,
   selected = false,
+  badge,
 }: ResultRowProps): JSX.Element {
   const best = result.best;
   const declined = !result.eligible;
@@ -240,11 +249,12 @@ export function ResultRow({
       className={cn(
         'group/row border-b border-rule transition-colors duration-150 ne-motion last:border-0',
         expanded ? 'bg-sunken/60' : 'hover:bg-sunken/40',
+        badge && !expanded && 'bg-brand-tint/40 shadow-[inset_3px_0_0_var(--brand)]',
         selected && 'bg-brand-tint/50'
       )}
       data-product={result.productId}
     >
-      <div className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4">
+      <div className="flex items-center gap-3 px-3 py-2 sm:gap-4 sm:px-4">
         <button
           type="button"
           aria-expanded={expanded}
@@ -266,16 +276,24 @@ export function ResultRow({
               <CarrierLogo names={[result.family, result.productId]} size="xs" />
               <span className="truncate text-[13px] font-medium text-ink-2">{result.family}</span>
             </span>
-            <span
-              className={cn(
-                'line-clamp-2 block text-[15px] font-semibold leading-snug',
-                declined ? 'text-ink-2' : 'text-ink'
-              )}
-              title={result.product}
-            >
-              {result.product}
+            <span className="flex min-w-0 items-center gap-2">
+              {badge ? (
+                <span className="t-label inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-tint px-2 py-0.5 text-brand-ink">
+                  <ShieldCheck className="h-3 w-3" aria-hidden />
+                  {badge}
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  'block truncate text-[15px] font-semibold leading-snug',
+                  declined ? 'text-ink-2' : 'text-ink'
+                )}
+                title={result.product}
+              >
+                {result.product}
+              </span>
             </span>
-            <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
               {declined ? (
                 <>
                   <StatusChip
@@ -301,20 +319,8 @@ export function ResultRow({
           </span>
 
           {!declined && best ? (
-            <span className="hidden w-[96px] shrink-0 text-right 2xl:block">
-              <span className="t-meta block text-ink-3">Coverage</span>
-              <span className="flex justify-end">
-                <FaceValue line={best} />
-              </span>
-            </span>
-          ) : null}
-
-          {!declined && best ? (
-            <span className="block w-[104px] shrink-0">
-              <Price line={best} />
-              <span className="t-meta block text-right text-ink-3 2xl:hidden">
-                {wholeDollars(best.face)} coverage
-              </span>
+            <span className="block w-[124px] shrink-0">
+              <Price line={best} face={best.face} />
             </span>
           ) : null}
 
@@ -357,98 +363,6 @@ export function ResultRow({
         <ResultDetail id={detailId} result={result} onUse={onUse} busy={busy} isStaff={isStaff} />
       ) : null}
     </li>
-  );
-}
-
-/**
- * A top pick: the same answer as a row, laid out as a card for the three
- * options an agent will present first.
- */
-export function TopPickCard({
-  result,
-  label,
-  highlight = false,
-  onUse,
-  onDetails,
-  busy = false,
-  selected = false,
-}: {
-  result: FexResult;
-  label: string;
-  highlight?: boolean;
-  onUse?: (result: FexResult, line: QuoteLine) => void;
-  onDetails?: (result: FexResult) => void;
-  busy?: boolean;
-  selected?: boolean;
-}): JSX.Element | null {
-  const best = result.best;
-  if (!best) return null;
-  return (
-    <article
-      aria-label={`${label}: ${result.family} ${result.product}`}
-      className={cn(
-        'relative flex min-w-0 flex-col rounded-card border bg-surface p-4 shadow-card transition-shadow duration-150 ne-motion hover:shadow-raised',
-        highlight ? 'border-brand ring-1 ring-brand' : 'border-rule'
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              't-label inline-flex items-center gap-1 rounded-full px-2 py-0.5',
-              highlight ? 'bg-brand-tint text-brand-ink' : 'bg-sunken text-ink-2'
-            )}
-          >
-            {highlight ? <ShieldCheck className="h-3 w-3" aria-hidden /> : null}
-            {label}
-          </span>
-          {selected ? <StatusChip value="SELECTED" tone="live" size="sm" label="In use" /> : null}
-        </div>
-      </div>
-
-      <CarrierLogo names={[result.family, result.productId]} size="lg" className="mt-3 w-full" />
-      <p className="sr-only">{result.family}</p>
-      <p
-        className="mt-3 line-clamp-2 text-base font-semibold leading-snug text-ink"
-        title={result.product}
-      >
-        {result.product}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <ClassChip line={best} />
-        <Flags result={result} priceOnly={!result.uwLoaded} />
-      </div>
-
-      <div className="mt-auto pt-4">
-        <div className="border-t border-rule pt-4">
-          <Price line={best} size="lg" />
-          <dl className="mt-2 flex items-baseline gap-1.5 text-sm">
-            <dt className="text-ink-3">Coverage</dt>
-            <dd>
-              <FaceValue line={best} />
-            </dd>
-          </dl>
-        </div>
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        {onUse ? (
-          <Button
-            className="flex-1"
-            variant={selected ? 'outline' : highlight ? 'default' : 'outline'}
-            disabled={busy}
-            onClick={() => onUse(result, best)}
-          >
-            {busy ? 'Saving…' : selected ? 'Use again' : 'Use this quote'}
-          </Button>
-        ) : null}
-        {onDetails ? (
-          <Button variant="ghost" onClick={() => onDetails(result)}>
-            Why
-          </Button>
-        ) : null}
-      </div>
-    </article>
   );
 }
 

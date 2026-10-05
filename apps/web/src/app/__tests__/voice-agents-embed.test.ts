@@ -19,7 +19,8 @@ describe('/voice-agents embed', () => {
   const page = read('app', '(dashboard)', 'voice-agents', 'page.tsx');
 
   it('drops the softphone runway on the embedded page, and no page has a live strip', () => {
-    expect(layout).toContain("const EMBEDDED_APP_ROUTES = ['/voice-agents'];");
+    // The quoter fills <main> too: its form and results scroll on their own.
+    expect(layout).toContain("const EMBEDDED_APP_ROUTES = ['/voice-agents', '/quote'];");
     expect(layout).not.toContain('LiveStrip');
     expect(layout).toContain("showFloatingDialer && !isEmbeddedAppPage && 'pb-24'");
   });

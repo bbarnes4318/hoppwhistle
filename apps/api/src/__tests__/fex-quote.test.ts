@@ -305,7 +305,9 @@ describe.skipIf(!gate.available)('FEX quote engine API', () => {
       });
       expect(res.statusCode).toBe(200);
       const data = res.json().data;
-      expect(data.products.length).toBe(35);
+      // 35 in the bundle, less Prosperity, which the agency no longer quotes.
+      expect(data.products.length).toBe(34);
+      expect(data.products.some((p: any) => /prosperity/i.test(p.family))).toBe(false);
       expect(data.products.some((p: any) => !p.quotable)).toBe(true);
       expect(data.conditions.length).toBeGreaterThan(100);
       expect(res.body).not.toContain('"tables"');

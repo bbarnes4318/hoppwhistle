@@ -444,8 +444,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
-/** Pages that embed a full-screen application under the portal's chrome. */
-const EMBEDDED_APP_ROUTES = ['/voice-agents'];
+/**
+ * Pages that fill <main> exactly and scroll inside themselves: an embedded
+ * full-screen application, or the quoter, whose form and results share one
+ * laptop screen. They keep their own clear of the softphone.
+ */
+const EMBEDDED_APP_ROUTES = ['/voice-agents', '/quote'];
 
 function isEmbeddedAppPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
