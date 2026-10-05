@@ -23,7 +23,7 @@
  *
  * ── It answers the whole question, not a piece of it ─────────────────────────
  *
- * `GET /api/v1/agent-roster` deliberately returns licence, SIP identity,
+ * `GET /api/v1/agent-roster` deliberately returns license, SIP identity,
  * concurrency, live softphone status and campaign assignments together. They
  * are four separate systems and an agent is only working when ALL of them line
  * up; a screen that showed three would leave somebody guessing which one is
@@ -209,9 +209,9 @@ export async function readStatuses(userIds: string[]): Promise<Map<string, strin
 /**
  * Why this agent is not taking calls, or null when nothing is stopping them.
  *
- * Ordered by what has to be fixed first. An agent with no licence AND no
- * campaign is told about the licence, because granting the campaign changes
- * nothing until the licence exists. One reason at a time, the earliest one.
+ * Ordered by what has to be fixed first. An agent with no license AND no
+ * campaign is told about the license, because granting the campaign changes
+ * nothing until the license exists. One reason at a time, the earliest one.
  *
  * The agent's own on/off switch comes LAST, after every setup blocker. It is
  * the only reason here that is not the agency's to fix and not a fault: an
@@ -1053,7 +1053,7 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
    * DELETE /api/v1/agent-roster/:userId/schedule
    *
    * Stop enforcing hours for this agent, returning them to the state every
-   * agent starts in: routable whenever licence, registration and concurrency
+   * agent starts in: routable whenever license, registration and concurrency
    * allow it.
    *
    * Not the same as `PUT { days: [] }`, which is an agent on leave and stops
@@ -1158,7 +1158,7 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
       /*
        * Merged, never replaced. `metadata` also carries `licensedStates` and
        * `extension`; writing a fresh object here would silently revoke an
-       * agent's licence as a side effect of changing their call limit.
+       * agent's license as a side effect of changing their call limit.
        */
       const existing =
         agent.metadata && typeof agent.metadata === 'object' && !Array.isArray(agent.metadata)

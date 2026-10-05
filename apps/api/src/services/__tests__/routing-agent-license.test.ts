@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The licence gate in `getEligibleEndpoints`.
+ * The license gate in `getEligibleEndpoints`.
  *
  * Until this existed, `metadata.licensedStates` decided which CRM leads an
  * agent could open and decided NOTHING about calls -- so the same agent the CRM
@@ -86,7 +86,7 @@ function assignment(extension: string) {
   };
 }
 
-/** An active user with a softphone extension and, optionally, a licence. */
+/** An active user with a softphone extension and, optionally, a license. */
 function agent(id: string, extension: string, licensedStates?: string[]) {
   return {
     id,
@@ -137,7 +137,7 @@ describe('routing excludes an agent from a state they are not licensed in', () =
     expect(await eligibleExtensions(both, ['1000'], 'TX')).toEqual([]);
   });
 
-  it('reads a stored licence through the same normaliser the CRM uses', async () => {
+  it('reads a stored license through the same normaliser the CRM uses', async () => {
     // Lower case and padded: a row written by hand, or by an older client.
     const sloppy = [agent('u-tn', '1000', [' tn ', 'ga'] as string[])];
 
@@ -153,18 +153,18 @@ describe('routing excludes an agent from a state they are not licensed in', () =
  * Getting either of these wrong does not produce a compliance failure -- it
  * produces silence on the phones, which is why each has a case of its own.
  */
-describe('the licence gate fails open where it has no fact to act on', () => {
+describe('the license gate fails open where it has no fact to act on', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   /*
-   * THE ONE THAT WOULD TAKE THE FLOOR DOWN. There is no licence data to
+   * THE ONE THAT WOULD TAKE THE FLOOR DOWN. There is no license data to
    * back-fill from (docs/AGENT_LICENSED_STATES_ROLLOUT.md), so every agent
    * starts unconfigured. Deny-by-default here would exclude every agent from
    * every state-identified call on the first deploy.
    */
-  it('does not filter an agent with no licence recorded', async () => {
+  it('does not filter an agent with no license recorded', async () => {
     const noKey = await eligibleExtensions([agent('u-none', '1000')], ['1000'], 'TN');
     expect(noKey).toEqual(['1000']);
 
@@ -172,7 +172,7 @@ describe('the licence gate fails open where it has no fact to act on', () => {
     expect(emptyList).toEqual(['1000']);
   });
 
-  it('still holds a configured agent to their licence while others are unconfigured', async () => {
+  it('still holds a configured agent to their license while others are unconfigured', async () => {
     const eligible = await eligibleExtensions(
       [agent('u-none', '1000'), agent('u-fl', '1001', ['FL'])],
       ['1000', '1001'],
@@ -188,7 +188,7 @@ describe('the licence gate fails open where it has no fact to act on', () => {
    * licensed agents from those calls would drop traffic on a fact nobody
    * established.
    */
-  it('passes every licence when the call has no resolved state', async () => {
+  it('passes every license when the call has no resolved state', async () => {
     const eligible = await eligibleExtensions(
       [agent('u-tn', '1000', ['TN']), agent('u-fl', '1001', ['FL'])],
       ['1000', '1001'],
@@ -200,7 +200,7 @@ describe('the licence gate fails open where it has no fact to act on', () => {
 
   /*
    * An endpoint that resolves to no user at all -- an external buyer, a cell
-   * phone. A licence is a fact about a person; there is no person here.
+   * phone. A license is a fact about a person; there is no person here.
    */
   it('does not filter a destination that is not an agent', async () => {
     prisma.campaignBuyer.findMany.mockResolvedValue([assignment('+18005551212')]);

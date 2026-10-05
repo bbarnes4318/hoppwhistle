@@ -130,12 +130,12 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   offline: { label: 'Offline', className: 'text-muted-foreground' },
 };
 
-export function RosterLicenceCell({ states }: { states: string[] }): JSX.Element {
+export function RosterLicenseCell({ states }: { states: string[] }): JSX.Element {
   if (states.length === 0) {
     return (
       <span
         className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
-        title="No licence recorded. This agent is served no leads and routed no state-identified calls."
+        title="No license recorded. This agent is served no leads and routed no state-identified calls."
       >
         <AlertTriangle className="h-3 w-3" />
         None

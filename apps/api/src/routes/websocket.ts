@@ -90,7 +90,7 @@ async function authenticateWebSocket(
   const query = (request.query ?? {}) as Record<string, unknown>;
 
   // Browsers cannot set headers on a WebSocket handshake, so the token may
-  // arrive as a query parameter. That is a transport limitation, not a licence
+  // arrive as a query parameter. That is a transport limitation, not a license
   // to trust it: the value is still a credential that is verified below, and it
   // never names a tenant.
   const apiKey =

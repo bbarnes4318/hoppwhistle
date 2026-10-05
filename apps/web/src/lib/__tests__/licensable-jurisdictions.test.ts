@@ -18,7 +18,7 @@ import {
  * differently:
  *
  *   NARROWER than the server is silent. A missing DC means an administrator
- *   cannot grant a DC licence, the save succeeds with everything else, and the
+ *   cannot grant a DC license, the save succeeds with everything else, and the
  *   agent is simply never routed a DC call. Nothing reports it.
  *
  *   WIDER than the server is loud but total. PATCH /api/v1/users/:userId
@@ -99,7 +99,7 @@ describe('jurisdictionName', () => {
   });
 
   /*
-   * A licence row written before the server started validating may hold a code
+   * A license row written before the server started validating may hold a code
    * this list does not carry. Showing the code is a worse label but a true one;
    * showing "undefined" beside somebody's name is not.
    */

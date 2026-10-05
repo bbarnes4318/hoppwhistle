@@ -44,7 +44,7 @@
 -- Every existing agent becomes available, and that is the whole safety property
 -- of this migration. A default of false would take the entire platform off the
 -- queue the moment it deployed, with every agent wondering why the phones went
--- quiet -- the same trap the licence and schedule rollouts were written to
+-- quiet -- the same trap the license and schedule rollouts were written to
 -- avoid.
 --
 -- `availabilityChangedAt` stays NULL until somebody first toggles it, so "never

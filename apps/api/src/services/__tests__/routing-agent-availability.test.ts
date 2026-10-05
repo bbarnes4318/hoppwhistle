@@ -200,7 +200,7 @@ describe('the switch does not replace the other gates', () => {
       { userId: 'u-1', extension: '1000', availableForCalls: true, licensedStates: ['FL'] },
     ]);
 
-    // Being on the queue is not a licence.
+    // Being on the queue is not a license.
     expect(eligible).toEqual([]);
   });
 

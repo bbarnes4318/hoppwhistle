@@ -6207,7 +6207,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
             status: true,
             createdAt: true,
             lastLoginAt: true,
-            // The licence list lives here. Without it on this read there is no
+            // The license list lives here. Without it on this read there is no
             // way to see what was granted -- only the PATCH response echoed it,
             // which means the screen that sets it could not show it.
             metadata: true,
@@ -6374,13 +6374,13 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           ...body.metadata,
         };
 
-        // `metadata.licensedStates` is the AGENT licence list that
+        // `metadata.licensedStates` is the AGENT license list that
         // `lib/licensed-states.ts` enforces against, and this endpoint -- admin
         // and owner only -- is the only way to set it. The column is untyped, so
         // this is where the type is checked.
         //
         // Rejecting beats normalising away the bad entries: an administrator who
-        // pastes "Tennesee" and is told nothing has granted a licence they think
+        // pastes "Tennesee" and is told nothing has granted a license they think
         // they granted, and the agent finds out by being refused a call. The
         // read side in `licensed-states.ts` still drops anything it cannot
         // resolve, because a row written before this check existed may hold one.

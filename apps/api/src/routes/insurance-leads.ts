@@ -47,7 +47,7 @@ function getTenantId(request: FastifyRequest): string | null {
  * Reads the lead's own `state` column, which is the only authoritative answer
  * -- not a state the request supplied, and not the state of the list the lead
  * arrived in. A lead whose state is null or unreadable is refused to a
- * restricted agent, because nothing shows it is inside their licence.
+ * restricted agent, because nothing shows it is inside their license.
  */
 function permitsLead(authority: StateAuthority, lead: unknown): boolean {
   return permits(authority, (lead as { state?: unknown } | null)?.state);
@@ -67,7 +67,7 @@ type LeadGate =
  *
  * ── Two questions, both of which must answer yes ─────────────────────────────
  *
- * Ownership ("is this lead mine?") and licence ("may I work this state?") are
+ * Ownership ("is this lead mine?") and license ("may I work this state?") are
  * independent, and neither implies the other. An agent may hold a lead in a
  * state they are not licensed for -- an import or a reassignment can produce
  * exactly that -- and being licensed in a state has never made the agency's
@@ -82,7 +82,7 @@ type LeadGate =
  *
  * A lead the caller DOES hold but is not licensed for is a 403. Its existence
  * is no secret from the person it is assigned to, and answering 404 would send
- * their administrator hunting a missing row instead of a missing licence.
+ * their administrator hunting a missing row instead of a missing license.
  */
 async function requireReachableLead(
   request: FastifyRequest,
@@ -719,7 +719,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
      * licensed in a state does not make another agent's lead yours.
      *
      * `undefined` for everybody else leaves the query byte-for-byte what it
-     * was. An agent with no licence gets `[]`, which matches no rows, rather
+     * was. An agent with no license gets `[]`, which matches no rows, rather
      * than an early refusal: this is a grid, the honest rendering of "you may
      * work nothing here" is an empty grid, and a 403 on page load would strand
      * them on a screen with no way to see why.
@@ -1207,7 +1207,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     // The lead is already known to be this tenant's -- `getLeadById` scopes by
-    // tenantId -- so the only question left is the licence, and 403 is the
+    // tenantId -- so the only question left is the license, and 403 is the
     // honest answer. A cross-tenant id never reaches this line; it left as the
     // 404 above.
     const stateAuthority = await resolveStateAuthority(request, tenantId);
@@ -1267,7 +1267,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     // A third question only a write can raise: where is the agent trying to
     // leave it? Without this, `PATCH { state: 'TN' }` on a lead a
     // Tennessee-only agent holds in Florida is a one-request way to move it
-    // inside their own licence and then work it.
+    // inside their own license and then work it.
     const stateAuthority = await resolveStateAuthority(request, tenantId);
     if (
       Object.prototype.hasOwnProperty.call(request.body, 'state') &&

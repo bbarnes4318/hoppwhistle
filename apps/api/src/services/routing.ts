@@ -309,7 +309,7 @@ export class RoutingService {
      *
      * These rows join `allEndpoints` BEFORE every gate below, so an agent
      * assigned this way is held to exactly the same rules as one reached
-     * through a buyer endpoint: the accepted-state filter, the licence gate,
+     * through a buyer endpoint: the accepted-state filter, the license gate,
      * and the concurrency limit, in that order. Nothing here grants anything.
      *
      * ── The destination is the extension, resolved here ──────────────────────
@@ -322,7 +322,7 @@ export class RoutingService {
      * screen with "Has not opened the softphone yet", which is the actionable
      * form of the same fact.
      *
-     * `acceptedStates` is empty: an agent's geography is their LICENCE, which
+     * `acceptedStates` is empty: an agent's geography is their LICENSE, which
      * the gate below reads from `metadata.licensedStates`. Copying it into a
      * second field here would be a second copy to disagree with the first.
      */
@@ -394,7 +394,7 @@ export class RoutingService {
            * `buyerId` is the AGENT's id, and `endpointId` is null. This is not
            * a buyer: the field carries the routed party's identity through the
            * pipeline below, which logs it and matches on it, and putting the
-           * agent's id there is what makes the concurrency gate and the licence
+           * agent's id there is what makes the concurrency gate and the license
            * gate resolve the same agent the destination belongs to.
            */
           buyerId: agent.id,
@@ -533,12 +533,12 @@ export class RoutingService {
        * Its OWN try/catch, and not the enclosing one, deliberately.
        *
        * The enclosing block fails open: a throw anywhere in it is logged and
-       * skips the WHOLE agent filter -- the licence gate and the concurrency
+       * skips the WHOLE agent filter -- the license gate and the concurrency
        * gate with it. That is a defensible default for a status lookup, and a
        * dangerous one for this read, because this read can fail for a reason
        * the others cannot: code deployed ahead of the migration, where
        * `agent_sip_credentials` does not exist yet. Letting that bubble would
-       * take the LICENCE GATE down platform-wide -- an agent rung for a state
+       * take the LICENSE GATE down platform-wide -- an agent rung for a state
        * they cannot write -- as a side effect of a table being absent.
        *
        * So a failure here degrades to exactly one thing: no credential-backed
@@ -632,7 +632,7 @@ export class RoutingService {
       const agentMaxConcurrent = new Map<string, number>();
       /**
        * Each agent's licensed jurisdictions, from the same `metadata` this loop
-       * is already reading -- so the licence gate below costs no extra query.
+       * is already reading -- so the license gate below costs no extra query.
        *
        * An agent with no entry, or an empty one, is UNCONFIGURED, and the gate
        * treats that differently from "licensed nowhere". See the gate itself.
@@ -770,7 +770,7 @@ export class RoutingService {
             normalizedEndpoint = { ...normalizedEndpoint, answeringUserId: userId };
 
             /*
-             * Licence gate: an agent is not rung for a state they cannot write.
+             * License gate: an agent is not rung for a state they cannot write.
              *
              * `metadata.licensedStates` already decides which CRM leads an
              * agent may open (`lib/licensed-states.ts`). Until this existed it
@@ -783,14 +783,14 @@ export class RoutingService {
              *
              * This is the whole reason the rule here is not the CRM's.
              * `docs/AGENT_LICENSED_STATES_ROLLOUT.md` records that there is no
-             * licence data to back-fill from and that every agent therefore
+             * license data to back-fill from and that every agent therefore
              * starts with nothing. The CRM can default to deny on that and cost
              * an agent a lead list. Routing cannot: deny-by-default on a
-             * database that has never recorded a licence excludes EVERY agent
+             * database that has never recorded a license excludes EVERY agent
              * from EVERY state-identified call, which is not a compliance
              * posture, it is the phones not ringing.
              *
-             * So an agent with no licence recorded is not filtered here, and an
+             * So an agent with no license recorded is not filtered here, and an
              * agent WITH one is held to it exactly. Enforce what you have been
              * told; do not invent a constraint from the absence of data. The
              * users screen marks every unconfigured agent so the gap is visible
@@ -801,12 +801,12 @@ export class RoutingService {
              * `callerState` is null when the ANI is withheld or its area code
              * resolves to nothing. Excluding licensed agents from those calls
              * would drop traffic on a fact nobody established, so a stateless
-             * call passes every licence.
+             * call passes every license.
              */
             const licensed = agentLicensedStates.get(userId);
             if (callerState && licensed && !licensed.has(callerState)) {
               logger.info({
-                msg: 'Agent-licence: Endpoint EXCLUDED (agent not licensed in caller state)',
+                msg: 'Agent-license: Endpoint EXCLUDED (agent not licensed in caller state)',
                 buyerId: normalizedEndpoint.buyerId,
                 buyerName: normalizedEndpoint.buyerName,
                 destination: normalizedEndpoint.destination,

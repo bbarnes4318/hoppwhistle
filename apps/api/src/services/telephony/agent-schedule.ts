@@ -4,7 +4,7 @@
  * ── The gap this fills ───────────────────────────────────────────────────────
  *
  * `AgencyProfile` carries delivery days and hours for the WHOLE agency, and
- * routing knew nothing about hours at all: it gated on licence, SIP
+ * routing knew nothing about hours at all: it gated on license, SIP
  * registration and concurrency and nothing else. An agency running two shifts
  * could not express it, so an agent who finished at 2pm kept being rung at 7pm
  * -- the call reached a phone nobody was sitting at, and was not offered to the
@@ -14,7 +14,7 @@
  *
  * `isWithinSchedule` answers `true` for an agent with NO schedule. Every agent
  * starts without one, and answering `false` would take an entire platform off
- * the queue the moment this shipped. The same posture the licence gate takes,
+ * the queue the moment this shipped. The same posture the license gate takes,
  * for the same reason: enforce what you have been told, never invent a
  * constraint from the absence of data.
  *

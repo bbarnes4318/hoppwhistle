@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
  *
  * It writes the same setting the agency's Agents page writes ("Ring on"), so
  * either side sees the other's choice. Routing still holds a cell-forwarding
- * agent to their on/off switch, licence, schedule and busy checks, and credits
+ * agent to their on/off switch, license, schedule and busy checks, and credits
  * the answered call to them.
  */
 interface CallDestination {

@@ -427,7 +427,7 @@ model User {
   ///
   /// Every existing agent gets `true` on the migration. A default of false
   /// would take the entire platform off the queue the moment this deployed,
-  /// which is the same trap the licence and schedule rollouts were written to
+  /// which is the same trap the license and schedule rollouts were written to
   /// avoid.
   availableForCalls      Boolean   @default(true)
   /// When `availableForCalls` last changed, so a supervisor can see "off since
@@ -2640,7 +2640,7 @@ enum AgentSipCredentialStatus {
 ///
 /// `AgencyProfile` carries `deliveryDays`, `deliveryStartTime` and
 /// `deliveryEndTime` for the WHOLE agency, and routing knew nothing about
-/// hours at all -- only licence, registration and concurrency. An agency
+/// hours at all -- only license, registration and concurrency. An agency
 /// running two shifts could not express it, so an agent who finished at 2pm
 /// kept being rung at 7pm: the call reached a phone nobody was sitting at, and
 /// was not offered to the agent who was.
@@ -2650,7 +2650,7 @@ enum AgentSipCredentialStatus {
 /// An agent with no row here is NOT restricted. Every agent starts without one,
 /// and a default of "unavailable" would take an entire platform off the queue
 /// the moment this shipped. The gate only ever excludes an agent who HAS a
-/// schedule and is outside it -- the same posture as the licence gate in
+/// schedule and is outside it -- the same posture as the license gate in
 /// `services/routing.ts`, and for the same reason: enforce what you have been
 /// told, never invent a constraint from the absence of data.
 ///

@@ -4,7 +4,7 @@
  * ── The gap ──────────────────────────────────────────────────────────────────
  *
  * `AgencyProfile` carried delivery days and hours for the WHOLE agency, and
- * routing knew nothing about hours at all -- it gated on licence, SIP
+ * routing knew nothing about hours at all -- it gated on license, SIP
  * registration and concurrency and nothing else. An agency running two shifts
  * could not express it, so an agent who finished at 2pm kept being rung at 7pm:
  * the call reached a phone nobody was sitting at and was not offered to the
@@ -288,7 +288,7 @@ describe('the gate does not replace the ones already there', () => {
       clock: { day: 'WED', minutes: 13 * 60 },
     });
 
-    // Being on shift is not a licence.
+    // Being on shift is not a license.
     expect(eligible).toEqual([]);
   });
 

@@ -587,7 +587,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       //
       // `kind: 'none'` is dialled through deliberately. A toll-free, 900 or
       // otherwise non-geographic number that matches no CRM record has no
-      // jurisdiction to hold a licence in, and refusing it would stop agents
+      // jurisdiction to hold a license in, and refusing it would stop agents
       // calling carriers, their own office and each other -- while granting
       // nothing, because such a number cannot reach a prospect in a state the
       // agent is barred from. A record that names an unreadable state is the
@@ -1786,7 +1786,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // The screen pop is the lead's record: name, address, state, notes. An
       // agent who may not work this state may not read it either, so the
-      // licence is checked against the STORED state rather than the queried
+      // license is checked against the STORED state rather than the queried
       // number -- the record is the authority, and it is the record being
       // served.
       const authority = await resolveStateAuthority(request, tenantId);

@@ -4,7 +4,7 @@
  *
  * ── The defect this exists for ───────────────────────────────────────────────
  *
- * An insurance agent may only work a prospect in a state they hold a licence
+ * An insurance agent may only work a prospect in a state they hold a license
  * for. Nothing on the server knew that. The only thing resembling a licensed
  * state anywhere in the product was a state dropdown in the browser, and a
  * dropdown is a suggestion: `POST /api/v1/agent/call/originate` took a phone
@@ -43,7 +43,7 @@
  * than spreading the body.
  *
  * An AGENT's one path to its own list is `PUT /api/auth/me/licensed-states`
- * (`routes/auth.ts`): the agent attests to their own licences from the first
+ * (`routes/auth.ts`): the agent attests to their own licenses from the first
  * sign-in screen and from Account. That route writes this one key, only for the
  * caller, validated through `partitionLicensedStates`, never empty, and audits
  * every change with the list before and after. Nothing else an agent can reach
@@ -53,7 +53,7 @@
  * a malformed value being stored. That is answered by normalising on BOTH sides:
  * the admin write path validates (see `routes/index.ts`), and every read here
  * re-normalises and silently drops anything it cannot resolve to a canonical
- * code. A licence list that has rotted reads as a shorter list, never as a
+ * code. A license list that has rotted reads as a shorter list, never as a
  * wider one.
  *
  * ── Default deny ─────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@
  * function for this: it fails OPEN twice over -- an empty list means "national,
  * accept everything" and an unknown caller state is allowed through. Those are
  * the correct semantics for buyer geo-routing, where the list is a preference
- * and dropping a call costs money. They are the exact inverse of a licence,
+ * and dropping a call costs money. They are the exact inverse of a license,
  * where an empty list means "not licensed anywhere" and an unknown state means
  * "cannot show this is permitted". The two must not share an implementation.
  */
@@ -89,13 +89,13 @@ import { getStateFromPhoneNumber } from './geo.js';
 import { getPrismaClient } from './prisma.js';
 
 /**
- * Every jurisdiction an agent can hold a licence in.
+ * Every jurisdiction an agent can hold a license in.
  *
  * This is the union of the two lists the codebase already carries -- the 50
  * states plus DC from `lib/geo.ts#isValidStateCode`, and the five territories
  * `services/insurance-lead-validator.ts` accepts on an inbound lead. The union
  * is deliberate: a lead can already be ingested with `state: 'PR'`, and a set
- * that could not express a Puerto Rico licence would make that lead
+ * that could not express a Puerto Rico license would make that lead
  * permanently unworkable by every agent rather than workable by the licensed
  * ones.
  *
@@ -261,13 +261,13 @@ export function normalizeStateCode(raw: unknown): string | null {
   return NAME_TO_CODE[folded] ?? null;
 }
 
-/** Every jurisdiction a licence may name. Exported for the admin write path. */
+/** Every jurisdiction a license may name. Exported for the admin write path. */
 export function isLicensableState(code: string): boolean {
   return LICENSABLE_JURISDICTIONS.has(code);
 }
 
 /**
- * A stored licence list, split into what enforcement will honour and what it
+ * A stored license list, split into what enforcement will honour and what it
  * will silently drop.
  *
  * The `rejected` half exists for the operator, not for the enforcement: a list
@@ -277,7 +277,7 @@ export function isLicensableState(code: string): boolean {
  * keeping it here rather than in the CLI is what stops the tool that reports
  * readiness from disagreeing with the code that enforces it.
  */
-export interface LicencePartition {
+export interface LicensePartition {
   /** Canonical codes, sorted and de-duplicated. What `permits()` will match. */
   licensed: string[];
   /** Entries that resolve to no jurisdiction. They grant nothing. */
@@ -285,12 +285,12 @@ export interface LicencePartition {
 }
 
 /**
- * Split a stored licence list. Anything that is not an array is wholly
+ * Split a stored license list. Anything that is not an array is wholly
  * rejected rather than treated as absent -- `licensedStates: "TN"` is a
- * configuration mistake with a visible cause, and reporting it as "no licence"
+ * configuration mistake with a visible cause, and reporting it as "no license"
  * would send somebody looking for a missing row instead of a wrong type.
  */
-export function partitionLicensedStates(raw: unknown): LicencePartition {
+export function partitionLicensedStates(raw: unknown): LicensePartition {
   if (raw === undefined || raw === null) return { licensed: [], rejected: [] };
   if (!Array.isArray(raw)) return { licensed: [], rejected: [raw] };
 
@@ -307,7 +307,7 @@ export function partitionLicensedStates(raw: unknown): LicencePartition {
 }
 
 /**
- * Normalize a whole licence list, dropping everything unrecognisable.
+ * Normalize a whole license list, dropping everything unrecognisable.
  *
  * Used on the read side here and on the admin write side in `routes/index.ts`,
  * so what an administrator is told they saved is exactly what will be enforced.
@@ -327,10 +327,10 @@ export interface LicensedStatePrincipal {
 type MaybeAuthenticatedRequest = { user?: LicensedStatePrincipal };
 
 /**
- * Roles that are never narrowed by a licence.
+ * Roles that are never narrowed by a license.
  *
  * An agency's principal and its administrators run the agency; they are not
- * working a book of business and the product has never asked them for a licence
+ * working a book of business and the product has never asked them for a license
  * number. Narrowing them would lock an owner out of their own CRM on the first
  * request. ANALYST, PUBLISHER, BUYER and READONLY are not listed because they
  * are not listed anywhere here -- only AGENT is restricted, so every other role
@@ -347,7 +347,7 @@ const UNRESTRICTED_ROLES = new Set(['OWNER', 'ADMIN']);
  * takes calls; the wider grant wins, as it does everywhere else in this RBAC.
  *
  * A platform operator is exempt -- their capability is deliberately outside the
- * tenant dimension and they hold no licence anywhere -- with one exception: an
+ * tenant dimension and they hold no license anywhere -- with one exception: an
  * operator who has explicitly entered a role PREVIEW as AGENT is asking the
  * question "what does an agent here actually see?", and the honest answer
  * includes this narrowing. The preview is read-only (`middleware/read-only-preview.ts`),
@@ -383,7 +383,7 @@ export const UNRESTRICTED: StateAuthority = { restricted: false };
  *
  * Scoped by `tenantId` as well as `id`: the user id comes from a verified token
  * but the acting tenant can be changed by a platform operator, and a lookup by
- * id alone would read one tenant's licence list while serving another tenant's
+ * id alone would read one tenant's license list while serving another tenant's
  * rows. A mismatch returns the empty set, which denies.
  */
 export async function loadLicensedStates(
@@ -440,7 +440,7 @@ export function permits(authority: StateAuthority, state: unknown): boolean {
   return authority.licensed.has(code);
 }
 
-/** The refusal an agent gets for a state they do not hold a licence in. */
+/** The refusal an agent gets for a state they do not hold a license in. */
 export const STATE_NOT_LICENSED = {
   code: 'STATE_NOT_LICENSED',
   message: 'You are not licensed to work records in this state.',

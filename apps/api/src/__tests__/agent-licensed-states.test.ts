@@ -13,7 +13,7 @@ import { announceSkip, databaseGate } from './helpers/live-services.js';
  *
  * ── Why this exists beside the module suite ──────────────────────────────────
  *
- * `lib/__tests__/licensed-states.test.ts` proves the DECISION -- what a licence
+ * `lib/__tests__/licensed-states.test.ts` proves the DECISION -- what a license
  * permits, and that nothing in a request can widen it. It cannot prove that any
  * route asks. This suite is the wiring: real handlers, a real principal built by
  * `registerApiV1Auth` from a real token, and a real database.
@@ -21,7 +21,7 @@ import { announceSkip, databaseGate } from './helpers/live-services.js';
  * ── Ownership is held constant on purpose ────────────────────────────────────
  *
  * Every lead below is assigned to the agent making the request, so ownership
- * always answers yes and the licence is the only variable. A lead that failed
+ * always answers yes and the license is the only variable. A lead that failed
  * both gates would pass this suite for the wrong reason, and
  * `crm-agent-scope.test.ts` already owns the ownership dimension.
  *
@@ -55,10 +55,10 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
     /** Holds `metadata.licensedStates: []`. Licensed nowhere. */
     unlicensedAgentId: string;
     /** Has no `licensedStates` key at all. */
-    nolicenceAgentId: string;
+    nolicenseAgentId: string;
     /** TN, assigned to `agentId`. */
     tnLeadId: string;
-    /** FL, assigned to `agentId` -- held, but out of licence. */
+    /** FL, assigned to `agentId` -- held, but out of license. */
     flLeadId: string;
     /** No state recorded at all, assigned to `agentId`. */
     statelessLeadId: string;
@@ -123,7 +123,7 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
     const owner = await mkUser('owner', roleIds.OWNER);
     const agent = await mkUser('agent', roleIds.AGENT, { licensedStates: ['TN'] });
     const unlicensed = await mkUser('unlicensed', roleIds.AGENT, { licensedStates: [] });
-    const nolicence = await mkUser('nolicence', roleIds.AGENT, { position: 'Licensed Agent' });
+    const nolicense = await mkUser('nolicense', roleIds.AGENT, { position: 'Licensed Agent' });
 
     const list = await prisma.leadList.create({
       data: { tenantId: tenant.id, name: `${label} List`, vertical: 'FE' },
@@ -152,7 +152,7 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
       ownerId: owner.id,
       agentId: agent.id,
       unlicensedAgentId: unlicensed.id,
-      nolicenceAgentId: nolicence.id,
+      nolicenseAgentId: nolicense.id,
       tnLeadId: tn.id,
       flLeadId: fl.id,
       statelessLeadId: stateless.id,
@@ -201,14 +201,14 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
     });
 
     it('refuses the same agent a lead they OWN in a state they do not hold', async () => {
-      // Ownership says yes and the licence says no. Both must answer yes.
+      // Ownership says yes and the license says no. Both must answer yes.
       const res = await get(`/api/v1/insurance-leads/${a.flLeadId}`, as(a, a.agentId));
       expect(res.statusCode).toBe(403);
       expect(JSON.parse(res.body).error.code).toBe('STATE_NOT_LICENSED');
     });
 
     it('refuses a lead with no state recorded', async () => {
-      // Nothing shows this record is inside the licence, so it is not served.
+      // Nothing shows this record is inside the license, so it is not served.
       expect(
         (await get(`/api/v1/insurance-leads/${a.statelessLeadId}`, as(a, a.agentId))).statusCode
       ).toBe(403);
@@ -220,7 +220,7 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
       }
     });
 
-    it('refuses another agency, licence or no licence', async () => {
+    it('refuses another agency, license or no license', async () => {
       // b's agent is licensed in TN too. That is not a way into a's TN lead.
       expect(
         (await get(`/api/v1/insurance-leads/${a.tnLeadId}`, as(b, b.agentId))).statusCode
@@ -234,20 +234,20 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
   describe('default deny', () => {
     it('refuses an agent whose licensed-state set is empty', async () => {
       // This agent holds no leads either, so the 404 comes first -- which is
-      // the point: an empty licence never widens anything.
+      // the point: an empty license never widens anything.
       const res = await get('/api/v1/insurance-leads', as(a, a.unlicensedAgentId));
       expect(res.statusCode).toBe(200);
       expect(idsIn(res.body)).toEqual([]);
     });
 
     it('refuses an agent with no licensedStates key at all', async () => {
-      const res = await get('/api/v1/insurance-leads', as(a, a.nolicenceAgentId));
+      const res = await get('/api/v1/insurance-leads', as(a, a.nolicenseAgentId));
       expect(res.statusCode).toBe(200);
       expect(idsIn(res.body)).toEqual([]);
     });
   });
 
-  describe('the list and its export are narrowed to the licence', () => {
+  describe('the list and its export are narrowed to the license', () => {
     it('shows a licensed agent only the leads in states they hold', async () => {
       const res = await get('/api/v1/insurance-leads?limit=100', as(a, a.agentId));
       expect(res.statusCode).toBe(200);
@@ -275,7 +275,7 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
     });
   });
 
-  describe('a write cannot move a lead inside the licence', () => {
+  describe('a write cannot move a lead inside the license', () => {
     it('accepts an edit to a lead in a licensed state', async () => {
       expect((await patch(a.tnLeadId, as(a, a.agentId), { notes: 'called' })).statusCode).toBe(200);
     });
@@ -290,8 +290,8 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
       expect(row?.state).toBe('TN');
     });
 
-    it('refuses pulling an out-of-licence lead into the licence', async () => {
-      // The FL lead is held by this agent but out of licence, so the edit is
+    it('refuses pulling an out-of-license lead into the license', async () => {
+      // The FL lead is held by this agent but out of license, so the edit is
       // refused on the lead's CURRENT state before the body is even considered.
       const res = await patch(a.flLeadId, as(a, a.agentId), { state: 'TN' });
       expect(res.statusCode).toBe(403);
@@ -307,7 +307,7 @@ describe.skipIf(!gate.available)('Agent licensed states', () => {
     });
   });
 
-  describe('nothing in the request widens the licence', () => {
+  describe('nothing in the request widens the license', () => {
     it('ignores a state in the query string', async () => {
       const res = await get('/api/v1/insurance-leads?limit=100&state=FL', as(a, a.agentId));
       expect(idsIn(res.body)).not.toContain(a.flLeadId);

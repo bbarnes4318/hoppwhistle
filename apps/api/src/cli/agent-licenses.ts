@@ -9,20 +9,20 @@
  * ── Why this cannot be a backfill ────────────────────────────────────────────
  *
  * There is no column anywhere in this schema that records an agent's insurance
- * licence. Every `state` the database holds belongs to somebody else: the
+ * license. Every `state` the database holds belongs to somebody else: the
  * prospect's address (`Lead.state`, `InsuranceLead.state`, `ProspectIntake.state`),
  * the applicant's (`InsuranceCarrierApplication.state`), the buyer's routing
  * preference (`BuyerEndpoint.acceptedStates`), or the agency's single home state
- * (`AgencyProfile.state`). None of them is a licence, and the two that look
+ * (`AgencyProfile.state`). None of them is a license, and the two that look
  * closest are the most dangerous:
  *
  *   * the states of the leads an agent has HANDLED is a record of what they were
- *     given, which is the thing the licence is supposed to constrain -- reading
- *     it back as their licence would ratify every past violation;
+ *     given, which is the thing the license is supposed to constrain -- reading
+ *     it back as their license would ratify every past violation;
  *   * the agency's home state is one state for the whole agency, and an agency
  *     in Tennessee employs agents licensed in Florida.
  *
- * So the licence is typed in by somebody who knows it, and this is where they
+ * So the license is typed in by somebody who knows it, and this is where they
  * type it. It infers nothing. `--set` takes exactly the states given and no
  * others, which is also what makes it idempotent: running it twice leaves the
  * same list.
@@ -36,7 +36,7 @@
  * `normalizeStateCode()` the enforcement uses, so what an operator is told they
  * granted is exactly what will be enforced, and it prints before and after.
  *
- * It does NOT create accounts and does not grant roles. A licence on an account
+ * It does NOT create accounts and does not grant roles. A license on an account
  * that holds no AGENT role constrains nothing, and is reported rather than
  * refused: configuring somebody the day before they are made an agent is
  * legitimate.
@@ -54,13 +54,13 @@ import { getPrismaClient } from '../lib/prisma.js';
 const prisma = getPrismaClient();
 
 /**
- * The licence as stored, split the way enforcement will read it.
+ * The license as stored, split the way enforcement will read it.
  *
  * Deliberately `partitionLicensedStates` from the enforcement module rather
  * than a second parser here: a report that disagreed with the code it is
  * reporting readiness for would be worse than no report.
  */
-function readLicence(metadata: unknown) {
+function readLicense(metadata: unknown) {
   return partitionLicensedStates((metadata as { licensedStates?: unknown } | null)?.licensedStates);
 }
 
@@ -83,7 +83,7 @@ async function report(): Promise<number> {
   const agents = users.map(user => ({
     email: user.email,
     tenant: user.tenant?.name ?? '(no agency)',
-    ...readLicence(user.metadata),
+    ...readLicense(user.metadata),
   }));
 
   const width = Math.max(...agents.map(a => a.email.length), 5);
@@ -112,10 +112,10 @@ async function report(): Promise<number> {
 
   if (blocked.length > 0) {
     console.log();
-    console.log('These agents can perform no state-authorized operation until a licence is set:');
+    console.log('These agents can perform no state-authorized operation until a license is set:');
     for (const agent of blocked) console.log(`  ${agent.email}`);
     console.log();
-    console.log('Set each one to the licence they actually hold, e.g.');
+    console.log('Set each one to the license they actually hold, e.g.');
     console.log(
       `  pnpm --filter @hopwhistle/api agents:licenses -- --set ${blocked[0].email} TN,FL`
     );
@@ -147,7 +147,7 @@ async function list(email: string): Promise<number> {
   const user = await findAccount(email);
   if (!user) return 1;
 
-  const { licensed, rejected } = readLicence(user.metadata);
+  const { licensed, rejected } = readLicense(user.metadata);
   console.log(`${user.email}  (${user.tenant?.name ?? 'no agency'})`);
   console.log(`  roles:    ${user.roles.map(r => r.role.name).join(',') || '(none)'}`);
   console.log(`  licensed: ${licensed.join(',') || '(none — blocked)'}`);
@@ -158,11 +158,11 @@ async function list(email: string): Promise<number> {
 }
 
 /**
- * Replace the licence with exactly these states.
+ * Replace the license with exactly these states.
  *
  * The whole call is refused if any entry is not a state, rather than the bad
  * entries being dropped: an operator who pastes "Tennesee" and is told nothing
- * has granted a licence they believe they granted, and the agent finds out by
+ * has granted a license they believe they granted, and the agent finds out by
  * being refused a call. Same rule as `PATCH /api/v1/users/:userId`.
  */
 async function set(email: string, spec: string): Promise<number> {
@@ -175,7 +175,7 @@ async function set(email: string, spec: string): Promise<number> {
     .filter(Boolean);
 
   if (requested.length === 0) {
-    console.error('No states given. Use --clear to remove a licence.');
+    console.error('No states given. Use --clear to remove a license.');
     return 2;
   }
 
@@ -192,7 +192,7 @@ async function set(email: string, spec: string): Promise<number> {
     return 2;
   }
 
-  const before = readLicence(user.metadata);
+  const before = readLicense(user.metadata);
   const after = [...new Set(codes)].sort();
 
   // Merged, never replaced: `metadata` also carries the softphone extension,
@@ -208,7 +208,7 @@ async function set(email: string, spec: string): Promise<number> {
   console.log(`  after:  ${after.join(',')}`);
   if (!roles.includes('AGENT')) {
     console.log(`  note:   this account holds ${roles.join(',') || 'no role'}, not AGENT, so the`);
-    console.log('          licence constrains nothing today. It applies if AGENT is granted.');
+    console.log('          license constrains nothing today. It applies if AGENT is granted.');
   }
   return 0;
 }
@@ -217,7 +217,7 @@ async function clear(email: string): Promise<number> {
   const user = await findAccount(email);
   if (!user) return 1;
 
-  const before = readLicence(user.metadata);
+  const before = readLicense(user.metadata);
   const metadata = { ...((user.metadata as Record<string, unknown> | null) ?? {}) };
   delete metadata.licensedStates;
 
@@ -234,10 +234,10 @@ const USAGE = [
   '',
   '  (no arguments)           report every AGENT and whether they are licensed',
   '  --list  <email>          one account',
-  '  --set   <email> <TN,FL>  replace that account’s licence with exactly these states',
-  '  --clear <email>          remove the licence entirely',
+  '  --set   <email> <TN,FL>  replace that account’s license with exactly these states',
+  '  --clear <email>          remove the license entirely',
   '',
-  'Nothing here infers a licence from other data. Requires DATABASE_URL.',
+  'Nothing here infers a license from other data. Requires DATABASE_URL.',
 ].join('\n');
 
 async function main(): Promise<number> {

@@ -186,7 +186,7 @@ describe('the gate does not replace the ones already there', () => {
       callerState: 'TN',
     });
 
-    // Being registered is not a licence.
+    // Being registered is not a license.
     expect(eligible).toEqual([]);
   });
 

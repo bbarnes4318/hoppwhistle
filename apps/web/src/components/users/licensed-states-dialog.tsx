@@ -25,7 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * Where an agent's licences are typed in.
+ * Where an agent's licenses are typed in.
  *
  * ── What was here before ─────────────────────────────────────────────────────
  *
@@ -34,23 +34,23 @@ import { cn } from '@/lib/utils';
  * DENY, and the only way to set it was `apps/api/src/cli/agent-licenses.ts` --
  * a shell on the API host. So the one control that decides what an agent may
  * legally work could only be operated by somebody with production shell access,
- * and the administrator who actually knows the licence had no way to enter it.
+ * and the administrator who actually knows the license had no way to enter it.
  *
  * The endpoint was always there: PATCH /api/v1/users/:userId merges metadata,
  * validates every code, and is admin-and-owner only. This is its screen.
  *
- * ── A licence is a legal fact, so the form does not guess ────────────────────
+ * ── A license is a legal fact, so the form does not guess ────────────────────
  *
  * No preselection, no "same as the agency", no inferring from the states an
  * agent has already worked. `docs/AGENT_LICENSED_STATES_ROLLOUT.md` sets out
  * why the last one is the worst of them: the states an agent has been GIVEN are
- * the very thing the licence constrains, so reading them back as the licence
+ * the very thing the license constrains, so reading them back as the license
  * would ratify every past violation. What opens is what is stored.
  *
  * ── Saving replaces, and says so ─────────────────────────────────────────────
  *
  * The PATCH sets `licensedStates` to exactly the selection, so removing a state
- * here removes the licence. The footer names the additions and removals before
+ * here removes the license. The footer names the additions and removals before
  * the button is pressed, because "save" on a form that silently replaces a
  * legal grant should not be the first time somebody learns what it is doing.
  */
@@ -78,7 +78,7 @@ export function LicensedStatesDialog({
   /*
    * Reset to what is stored every time the dialog opens, and whenever it is
    * pointed at a different person. Without the second, closing on one agent and
-   * opening on the next showed the first agent's licence over the second's name
+   * opening on the next showed the first agent's license over the second's name
    * -- and the save would have written it.
    */
   useEffect(() => {
@@ -145,7 +145,7 @@ export function LicensedStatesDialog({
     if (response.error) {
       // The server names the codes it refused. Showing its message rather than
       // a generic failure is the difference between fixing a typo and guessing.
-      setError(response.error.message || 'The licence could not be saved.');
+      setError(response.error.message || 'The license could not be saved.');
       return;
     }
 
@@ -303,7 +303,7 @@ export function LicensedStatesDialog({
             </Button>
             <Button onClick={() => void save()} disabled={!dirty || saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save licence
+              Save license
             </Button>
           </div>
         </DialogFooter>

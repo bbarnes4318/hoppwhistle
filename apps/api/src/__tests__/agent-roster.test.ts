@@ -21,11 +21,11 @@
  *      insert outside a transaction leaves a window where the agent is on no
  *      campaign and the dialer routes nothing to them.
  *   3. `blockedReason` names the EARLIEST blocker. Granting a campaign to an
- *      agent with no licence changes nothing, so telling somebody about the
+ *      agent with no license changes nothing, so telling somebody about the
  *      campaign first sends them to do work that has no effect.
  *   4. The concurrency write MERGES metadata. `metadata` also carries
  *      `licensedStates`; replacing the object would silently revoke an agent's
- *      licence as a side effect of changing their call limit.
+ *      license as a side effect of changing their call limit.
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -142,7 +142,7 @@ describe('GET /api/v1/agent-roster', () => {
     expect(agent.campaignIds).toEqual(['c-1']);
   });
 
-  it('names the licence before the campaign when both are missing', async () => {
+  it('names the license before the campaign when both are missing', async () => {
     prisma.user.findMany.mockResolvedValue([agentRow({ metadata: {} })]);
     prisma.campaignAgent.findMany.mockResolvedValue([]);
 
@@ -153,7 +153,7 @@ describe('GET /api/v1/agent-roster', () => {
     expect(response.json().data.agents[0].blockedReason).toMatch(/licensed states/i);
   });
 
-  it('names the campaign once the licence exists', async () => {
+  it('names the campaign once the license exists', async () => {
     prisma.user.findMany.mockResolvedValue([agentRow()]);
     prisma.campaignAgent.findMany.mockResolvedValue([]);
 
@@ -379,7 +379,7 @@ describe('PATCH /api/v1/agent-roster/:userId', () => {
 
     /*
      * The property this exists for. A fresh object here would silently revoke
-     * the agent's licence as a side effect of changing their call limit.
+     * the agent's license as a side effect of changing their call limit.
      */
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'u-1' },

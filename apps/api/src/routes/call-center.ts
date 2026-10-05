@@ -115,7 +115,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
       // for a number the caller already has in hand, and it was already scoped
       // to the tenant.
       const stateAuthority = await resolveStateAuthority(request, tenantId);
-      const matchedBeforeLicence =
+      const matchedBeforeLicense =
         insuranceLeads.length + genericLeads.length + prospectIntakes.length;
 
       const licensedOnly = <T extends { state: string | null }>(records: T[]): T[] =>
@@ -133,7 +133,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
       // duplicate of a lead they are barred from.
       if (
         stateAuthority.restricted &&
-        matchedBeforeLicence > 0 &&
+        matchedBeforeLicense > 0 &&
         licensedInsuranceLeads.length +
           licensedGenericLeads.length +
           licensedProspectIntakes.length ===

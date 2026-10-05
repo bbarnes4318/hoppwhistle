@@ -1,7 +1,7 @@
 /**
  * Fee resolution for the State Value Evaluator.
  *
- * The cost of a non-resident licence is not a property of the target state
+ * The cost of a non-resident license is not a property of the target state
  * alone: a dozen jurisdictions charge a non-resident whatever that applicant's
  * *home* state charges one of theirs. So every amount here is a function of
  * (target state, resident state), never a fixed column.
@@ -40,7 +40,7 @@ export interface FeeRecord {
    * when that state's schedule has no row for the applicant's resident state.
    */
   postedFee: number;
-  /** Charged per line of authority rather than per licence. */
+  /** Charged per line of authority rather than per license. */
   perLoa?: true;
   /** The amount is not fixed (Illinois prorates to the expiration date). */
   variable?: true;
@@ -186,7 +186,7 @@ function isRetaliatoryOn(record: FeeRecord, asOf: Date): boolean {
 }
 
 /**
- * The cost for an agent resident in `residentCode` to licence in `targetCode`.
+ * The cost for an agent resident in `residentCode` to license in `targetCode`.
  *
  * Resolution order: unsourced -> retaliatory schedule -> retaliatory fallback
  * (unverified) -> posted fee.
