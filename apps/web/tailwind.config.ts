@@ -84,6 +84,10 @@ const config: Config = {
         paper: 'var(--paper)',
         surface: 'var(--surface)',
         sunken: 'var(--sunken)',
+        'logo-plate': {
+          DEFAULT: 'var(--logo-plate)',
+          ink: 'var(--logo-plate-ink)',
+        },
 
         ink: {
           DEFAULT: 'var(--ink)',

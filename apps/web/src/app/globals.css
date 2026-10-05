@@ -41,6 +41,10 @@
     --paper: #f5f6f8;
     --surface: #ffffff;
     --sunken: #eef0f3;
+    /* Carrier logos are drawn for a white page: their plate stays light in
+       every theme and brand, or a navy wordmark vanishes on a dark panel. */
+    --logo-plate: #ffffff;
+    --logo-plate-ink: #101828;
 
     /* --- ink ------------------------------------------------------------ */
     --ink: #101828;
@@ -191,6 +195,8 @@
     --paper: #121110;
     --surface: #1b1a18;
     --sunken: #232120;
+    --logo-plate: #f5f6f8;
+    --logo-plate-ink: #101828;
 
     --ink: #f0eee9;
     --ink-2: #a8a49b;
