@@ -64,6 +64,14 @@ function findBundle(name: string): string {
   throw new Error(`FEX data bundle ${name} not found (looked in ${assetDirs().join(', ')})`);
 }
 
+/**
+ * Carrier families the agency no longer quotes. The bundle file is the
+ * reviewed carrier data and is never edited; these are dropped from the copy
+ * in memory, so they appear nowhere -- not in a quote, the catalog, or a
+ * lookup. Matched on the family name, case-insensitively.
+ */
+export const RETIRED_FAMILIES: readonly string[] = ['Prosperity'];
+
 let cached: FexEngine | null = null;
 
 /**
@@ -79,6 +87,8 @@ export function getFexEngine(): FexEngine {
   if (!Array.isArray(bundle.products) || !Array.isArray(bundle.conditions) || !bundle.tables) {
     throw new Error(`FEX data bundle ${path} is not a bundle (products/conditions/tables missing)`);
   }
+  const retired = new Set(RETIRED_FAMILIES.map(f => f.toLowerCase()));
+  bundle.products = bundle.products.filter(p => !retired.has(p.family.toLowerCase()));
 
   cached = {
     bundle,

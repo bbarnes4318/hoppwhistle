@@ -59,13 +59,6 @@ export interface QuoteWorkspaceProps {
 
 type SortKey = 'price' | 'face';
 
-const MODE_TITLE = {
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  semiannual: 'Semi-annual',
-  annual: 'Annual',
-} as const;
-
 /** Plain text for the clipboard. No health details, ever. */
 export function quoteSummaryText(
   result: FexResult,
@@ -265,22 +258,6 @@ export function QuoteWorkspace({
 
   // ── Results pane ─────────────────────────────────────────────────────────
   const firstLabel = effectiveSort === 'face' ? 'Most coverage' : 'Lowest price';
-  const who = [
-    draft.state,
-    draft.sex === 'F' ? 'Female' : draft.sex === 'M' ? 'Male' : null,
-    age != null ? `age ${age}` : null,
-    draft.tobacco ? 'tobacco' : 'non-tobacco',
-    draft.coverage.mode === 'face'
-      ? wholeDollars(Number(draft.coverage.face))
-      : `${money(Number(draft.coverage.budget))} budget`,
-    MODE_TITLE[draft.paymentMode].toLowerCase(),
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  const health =
-    draft.conditions.length || draft.meds.length
-      ? `${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}, ${draft.meds.length} medication${draft.meds.length === 1 ? '' : 's'}`
-      : 'No health conditions entered';
 
   let body: React.ReactNode;
   if (!ready) {
@@ -356,64 +333,114 @@ export function QuoteWorkspace({
         )}
         aria-busy={quote.stale}
       >
-        {/* The answer in one line, and who it is for. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-tight tracking-tight text-ink">
-              {groups.qualifies.length === 0
-                ? 'No carrier qualifies yet'
-                : `${groups.qualifies.length} ${groups.qualifies.length === 1 ? 'carrier qualifies' : 'carriers qualify'}`}
-              {lowestAny !== null ? (
-                <span className="font-normal text-ink-2">
-                  {' '}
-                  from{' '}
-                  <span className="font-semibold tabular-nums text-ink">{money(lowestAny)}</span>/
-                  {MODE_SHORT[draft.paymentMode]}
-                </span>
-              ) : null}
-            </h2>
-            <p className="t-meta mt-0.5 truncate text-ink-2">
-              {who} · {health}
-              {quote.stale ? (
-                <span className="ml-2 inline-flex items-center gap-1 text-brand-ink">
-                  <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
-                  Updating
-                </span>
-              ) : null}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5" aria-label="Summary">
-            <SummaryPill
-              label="Level from"
-              value={lowestLevel === null ? '—' : money(lowestLevel)}
+        {/* The answer, as figures, with the sort and filters under it. Stays
+            pinned while the list scrolls beneath. */}
+        <section
+          aria-label="Summary"
+          className="sticky top-0 z-10 overflow-hidden rounded-card border border-rule bg-surface shadow-card"
+        >
+          <div
+            className={cn(
+              'grid grid-cols-2 divide-rule sm:divide-x',
+              needsIndication.size ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
+            )}
+          >
+            <Stat
+              label="Carriers qualify"
+              value={String(groups.qualifies.length)}
+              sub={`of ${results.length} quoted`}
+              tone={groups.qualifies.length ? 'live' : 'dropped'}
             />
-            <SummaryPill
+            <Stat
+              label="Lowest premium"
+              value={lowestAny === null ? '—' : money(lowestAny)}
+              sub={lowestAny === null ? undefined : `/${MODE_SHORT[draft.paymentMode]}`}
+            />
+            <Stat
+              label="Lowest level"
+              value={lowestLevel === null ? '—' : money(lowestLevel)}
+              sub={lowestLevel === null ? undefined : `/${MODE_SHORT[draft.paymentMode]}`}
+            />
+            <Stat
               label="Declined"
               value={String(groups.declined.length)}
-              onClick={
+              action={
                 groups.declined.length
-                  ? () => {
-                      setShowDeclined(true);
-                      requestAnimationFrame(() =>
-                        declinedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      );
+                  ? {
+                      label: 'View',
+                      onClick: () => {
+                        setShowDeclined(true);
+                        requestAnimationFrame(() =>
+                          declinedRef.current?.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start',
+                          })
+                        );
+                      },
                     }
                   : undefined
               }
             />
-            <SummaryPill
-              label="Needs answers"
-              value={String(needsIndication.size)}
-              tone={needsIndication.size ? 'warn' : undefined}
-              onClick={
-                needsIndication.size
-                  ? () => bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  : undefined
-              }
-            />
+            {needsIndication.size ? (
+              <Stat
+                label="Needs answers"
+                value={String(needsIndication.size)}
+                tone="ringing"
+                action={{
+                  label: 'Answer',
+                  onClick: () =>
+                    bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+                }}
+              />
+            ) : null}
           </div>
-        </div>
-
+          <div
+            role="toolbar"
+            aria-label="Sort and filter results"
+            className="flex flex-wrap items-center justify-between gap-2 border-t border-rule bg-sunken/40 px-3 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="t-label text-ink-3">Sort</span>
+              <Segmented role="radiogroup" aria-label="Sort" className="h-8">
+                <SegmentedItem
+                  role="radio"
+                  aria-checked={effectiveSort === 'price'}
+                  active={effectiveSort === 'price'}
+                  className="h-7 px-3 text-[13px]"
+                  onClick={() => setSort(draft.coverage.mode === 'budget' ? 'price' : null)}
+                >
+                  Lowest price
+                </SegmentedItem>
+                <SegmentedItem
+                  role="radio"
+                  aria-checked={effectiveSort === 'face'}
+                  active={effectiveSort === 'face'}
+                  className="h-7 px-3 text-[13px]"
+                  onClick={() => setSort(draft.coverage.mode === 'budget' ? null : 'face')}
+                >
+                  Most coverage
+                </SegmentedItem>
+              </Segmented>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {quote.stale ? (
+                <span className="t-meta mr-1 inline-flex items-center gap-1 text-brand-ink">
+                  <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
+                  Updating
+                </span>
+              ) : null}
+              <FilterChip pressed={levelOnly} onClick={() => setLevelOnly(v => !v)}>
+                Level only
+              </FilterChip>
+              <FilterChip pressed={hideStale} onClick={() => setHideStale(v => !v)}>
+                Hide older rate books
+              </FilterChip>
+              <FilterChip pressed={showNotAppointed} onClick={() => setShowNotAppointed(v => !v)}>
+                Show not appointed
+              </FilterChip>
+            </div>
+          </div>
+        </section>
         {quote.status === 'error' ? (
           <Notice
             tone="error"
@@ -470,44 +497,6 @@ export function QuoteWorkspace({
             </ul>
           </div>
         ) : null}
-
-        {/* Every carrier. */}
-        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 bg-paper px-1 py-1.5">
-          <h3 className="t-section text-ink">Every carrier</h3>
-          <div
-            role="toolbar"
-            aria-label="Sort and filter results"
-            className="flex flex-wrap items-center gap-1.5"
-          >
-            <Segmented role="radiogroup" aria-label="Sort">
-              <SegmentedItem
-                role="radio"
-                aria-checked={effectiveSort === 'price'}
-                active={effectiveSort === 'price'}
-                onClick={() => setSort(draft.coverage.mode === 'budget' ? 'price' : null)}
-              >
-                Lowest price
-              </SegmentedItem>
-              <SegmentedItem
-                role="radio"
-                aria-checked={effectiveSort === 'face'}
-                active={effectiveSort === 'face'}
-                onClick={() => setSort(draft.coverage.mode === 'budget' ? null : 'face')}
-              >
-                Most coverage
-              </SegmentedItem>
-            </Segmented>
-            <FilterChip pressed={levelOnly} onClick={() => setLevelOnly(v => !v)}>
-              Level only
-            </FilterChip>
-            <FilterChip pressed={hideStale} onClick={() => setHideStale(v => !v)}>
-              Hide older rate books
-            </FilterChip>
-            <FilterChip pressed={showNotAppointed} onClick={() => setShowNotAppointed(v => !v)}>
-              Show not appointed
-            </FilterChip>
-          </div>
-        </div>
 
         <ResultGroup title="Qualifies" count={groups.qualifies.length} tone="live">
           {groups.qualifies.length ? (
@@ -642,44 +631,58 @@ export function QuoteWorkspace({
   );
 }
 
-function SummaryPill({
+const STAT_TONE = {
+  live: 'bg-live',
+  dropped: 'bg-dropped',
+  ringing: 'bg-ringing',
+} as const;
+
+/** One figure in the summary: a label, the number, and what to do about it. */
+function Stat({
   label,
   value,
+  sub,
   tone,
-  onClick,
+  action,
 }: {
   label: string;
   value: string;
-  tone?: 'warn';
-  onClick?: () => void;
+  sub?: string;
+  tone?: keyof typeof STAT_TONE;
+  action?: { label: string; onClick: () => void };
 }): JSX.Element {
-  const content = (
-    <>
-      <span className="text-ink-2">{label}</span>
-      <span
-        className={cn(
-          't-num font-semibold tabular-nums',
-          tone === 'warn' ? 'text-ringing-ink' : 'text-ink'
-        )}
-      >
-        {value}
-      </span>
-    </>
-  );
-  const cls = cn(
-    'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs',
-    tone === 'warn' ? 'border-ringing bg-ringing-tint' : 'border-rule bg-surface'
-  );
-  return onClick ? (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(cls, 'transition-colors duration-150 ne-motion hover:bg-sunken', FOCUS)}
-    >
-      {content}
-    </button>
-  ) : (
-    <span className={cls}>{content}</span>
+  return (
+    <div className="min-w-0 border-rule px-4 py-2.5 [&:nth-child(n+3)]:border-t sm:[&:nth-child(n+3)]:border-t-0">
+      <p className="t-label flex items-center gap-1.5 truncate text-ink-3">
+        {tone ? (
+          <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', STAT_TONE[tone])} />
+        ) : null}
+        {label}
+      </p>
+      <p className="mt-0.5 flex items-baseline gap-1 whitespace-nowrap">
+        <span
+          className={cn(
+            'text-xl font-semibold leading-tight tracking-tight tabular-nums',
+            tone === 'ringing' ? 'text-ringing-ink' : 'text-ink'
+          )}
+        >
+          {value}
+        </span>
+        {sub ? <span className="text-xs text-ink-3">{sub}</span> : null}
+        {action ? (
+          <button
+            type="button"
+            onClick={action.onClick}
+            className={cn(
+              'ml-auto rounded-control px-1 text-xs font-medium text-brand-ink hover:underline',
+              FOCUS
+            )}
+          >
+            {action.label}
+          </button>
+        ) : null}
+      </p>
+    </div>
   );
 }
 
@@ -698,7 +701,7 @@ function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[40px]',
+        'inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[40px]',
         pressed
           ? 'border-brand-ink bg-brand-tint text-brand-ink'
           : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',

@@ -36,8 +36,45 @@ describe('carrierBrand', () => {
     expect(carrierBrand('Sons of Norway')?.logo).toBe('/carriers/sons-of-norway.webp');
     expect(carrierBrand('Security National')?.logo).toBe('/carriers/security-national.webp');
     expect(carrierBrand('Sentinel Security Life')?.logo).toBe('/carriers/sentinel-security.webp');
-    // Accendo is Aetna too, but not Continental Life.
-    expect(carrierBrand('Accendo / Aetna')).toBeNull();
+  });
+
+  it('has a logo for every quoter family but the ones still missing', () => {
+    const families = [
+      'Accendo / Aetna',
+      'Aetna / Continental Life',
+      'American Amicable / Occidental',
+      'Americo',
+      'BetterLife',
+      'CICA Life',
+      'Catholic Financial',
+      'Family Benefit / Trinity',
+      'Fidelity Life',
+      'GCU',
+      'Liberty Bankers',
+      'LifeShield',
+      'Mutual of Omaha',
+      'Physicians Mutual / Physicians Life',
+      'Security National',
+      'Sentinel Security Life',
+      'Sons of Norway',
+      'Transamerica',
+    ];
+    for (const f of families) expect(carrierBrand(f)?.logo, f).toMatch(/^\/carriers\/.+\.webp$/);
+    // Accendo and Continental Life are both Aetna, with different marks.
+    expect(carrierBrand('Accendo / Aetna')?.logo).toBe('/carriers/accendo-aetna.webp');
+    expect(carrierBrand('Aetna / Continental Life')?.logo).toBe(
+      '/carriers/continental-life-aetna.webp'
+    );
+  });
+
+  it('never confuses Bankers Fidelity with Fidelity Life', () => {
+    expect(carrierBrand('Bankers Fidelity')).toBeNull();
+  });
+
+  it('matches the application form names', () => {
+    for (const n of ['Aflac', 'SBLI', 'CICA', 'GTL', 'Corebridge', 'TransAmerica', 'Gerber']) {
+      expect(carrierBrand(n)?.logo, n).toBeTruthy();
+    }
   });
 
   it('never gives American Amicable the Americo logo', () => {
@@ -52,7 +89,7 @@ describe('carrierBrand', () => {
 
   it('returns null for a carrier with no logo', () => {
     expect(carrierBrand('Prosperity')).toBeNull();
-    expect(carrierBrand('GCU')).toBeNull();
+    expect(carrierBrand('Foresters')).toBeNull();
     expect(carrierBrand()).toBeNull();
   });
 });
