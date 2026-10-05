@@ -7,6 +7,7 @@ import { LicensedStatesGate } from '@/components/agents/licensed-states-gate';
 import { BrandThemeSync } from '@/components/brand/brand-theme-sync';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { QuoteDrawer } from '@/components/fex/quote-drawer';
+import { CAMPAIGNS_PAGE_BRANDS } from '@/components/layout/nav-config';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
@@ -127,7 +128,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const previewing = platform.previewRole != null || user.previewRole != null;
     if (!platform.loading && isWhiteLabel && (!platform.isPlatformAdmin || previewing)) {
       const destination = whiteLabelRedirectFor(`${pathname ?? ''}${window.location.search}`);
-      if (destination) {
+      // A brand whose owners have Campaigns as its own entry keeps the page.
+      const keepsCampaignsPage =
+        pathname?.replace(/\/$/, '') === '/campaigns' &&
+        CAMPAIGNS_PAGE_BRANDS.includes(user.brand?.theme ?? '');
+      if (destination && !keepsCampaignsPage) {
         router.replace(destination);
         return;
       }

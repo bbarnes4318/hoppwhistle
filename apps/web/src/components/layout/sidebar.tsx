@@ -403,6 +403,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         isChild,
         isWhiteLabelAgent,
         salesWorkspace,
+        brandTheme: user?.brand?.theme ?? null,
       }),
     [
       isPlatformAdmin,
@@ -418,6 +419,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
       isChild,
       isWhiteLabelAgent,
       salesWorkspace,
+      user?.brand?.theme,
     ]
   );
 
