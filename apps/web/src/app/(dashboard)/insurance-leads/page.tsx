@@ -32,6 +32,7 @@ import {
   ToolbarSearch,
   ToolbarSelect,
   tileDollars,
+  CarrierLogo,
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { defaultCrmView, isCrmView, type CrmView } from '@/components/leads/crm-view';
@@ -787,10 +788,15 @@ export default function CrmPage() {
                           {app.state || '—'}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-2">
-                          {app.carrier}
-                          {app.product ? (
-                            <span className="text-ink-3"> · {app.product}</span>
-                          ) : null}
+                          <span className="inline-flex items-center gap-2">
+                            <CarrierLogo names={[app.carrier]} size="xs" />
+                            <span>
+                              {app.carrier}
+                              {app.product ? (
+                                <span className="text-ink-3"> · {app.product}</span>
+                              ) : null}
+                            </span>
+                          </span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-xs">
                           <MoneyCell amount={app.faceAmount} unit="major" tone="none" />

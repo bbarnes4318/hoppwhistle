@@ -355,7 +355,12 @@ describe('QuoteWorkspace', () => {
         onUseQuote={onUseQuote}
       />
     );
-    const use = await screen.findByRole('button', { name: 'Use this quote' });
+    // The top pick and its row in the full list are the same plan; the card comes first.
+    const [use] = await screen.findAllByRole('button', { name: 'Use this quote' });
+    expect(within(use.closest('article')!).getByText('Mutual of Omaha')).toBeTruthy();
+    expect(
+      use.closest('article')!.querySelector('[data-carrier-logo="Mutual of Omaha"] img')
+    ).toBeTruthy();
     fireEvent.click(use);
 
     await waitFor(() => expect(onUseQuote).toHaveBeenCalledTimes(1));

@@ -13,6 +13,7 @@
 import { Calculator } from 'lucide-react';
 import * as React from 'react';
 
+import { CarrierLogo } from '@/components/domain';
 import { usePhone } from '@/components/phone/phone-provider';
 import { Button } from '@/components/ui/button';
 import { useQuoteSession } from '@/contexts/quote-session-context';
@@ -25,6 +26,7 @@ export function PreQuoteCard(): JSX.Element | null {
   const { currentCall } = usePhone();
   const callId = currentCall?.callId ?? null;
   const [summary, setSummary] = React.useState<{
+    families: string[];
     count: number;
     lowest: number | null;
     face: number;
@@ -67,7 +69,11 @@ export function PreQuoteCard(): JSX.Element | null {
       if (controller.signal.aborted || !result.ok) return;
       const qualifies = result.data.results.filter(r => r.eligible && r.uwLoaded && r.appointed);
       const premiums = qualifies.map(r => r.best?.premium).filter((p): p is number => p != null);
+      const byPrice = [...qualifies].sort(
+        (a, b) => (a.best?.premium ?? Infinity) - (b.best?.premium ?? Infinity)
+      );
       setSummary({
+        families: [...new Set(byPrice.map(r => r.family))].slice(0, 4),
         count: qualifies.length,
         lowest: premiums.length ? Math.min(...premiums) : null,
         face: body.face ?? 0,
@@ -99,6 +105,16 @@ export function PreQuoteCard(): JSX.Element | null {
               </>
             ) : null}
           </p>
+          {summary.families.length ? (
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Lowest-priced carriers">
+              {summary.families.map(f => (
+                <li key={f} title={f}>
+                  <CarrierLogo names={[f]} size="xs" />
+                  <span className="sr-only">{f}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       <Button

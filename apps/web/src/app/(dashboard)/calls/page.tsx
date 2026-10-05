@@ -30,6 +30,7 @@ import {
   ToolbarSearch,
   formatEnumLabel,
   toolbarTrigger,
+  CarrierLogo,
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -1125,7 +1126,10 @@ export default function OperationsCallLogsPage() {
       }
       case 'application':
         return call.application ? (
-          <span className="font-medium text-ink">{call.application.carrier}</span>
+          <span className="inline-flex items-center gap-2 font-medium text-ink">
+            <CarrierLogo names={[call.application.carrier]} size="xs" />
+            {call.application.carrier}
+          </span>
         ) : (
           '—'
         );

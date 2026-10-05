@@ -1,21 +1,41 @@
 'use client';
 
 /**
- * One carrier's answer, on one line -- and, opened, why.
+ * One carrier's answer -- as a row in the list, as a top-pick card, and as the
+ * selected-quote bar.
  *
- * The line carries what decides a sale: carrier and plan, the class and its
- * benefit, the face, and the premium, large. Opened (click, Enter or Space),
- * it shows the reasons in the order the carrier would apply them with the page
- * each comes from, the other classes the applicant qualifies for, and the
- * plan's published limits.
+ * ── What a row carries ───────────────────────────────────────────────────────
+ *
+ * Read left to right the way an agent decides: who (logo, carrier, plan), what
+ * they qualify for (class chip, Refer, Price only), how much cover, and what it
+ * costs -- the premium is the largest thing on the line, with the annual
+ * figure under it. "Use this quote" is the one primary action; everything else
+ * is behind Details or the overflow menu.
+ *
+ * Opened, a row explains itself: the carrier's reasons in the order they
+ * apply, each with the page it is printed on; the other classes on offer; and
+ * the plan's published limits.
  */
 
 import { BENEFIT_LABEL } from '@hopwhistle/fex-engine/catalog';
 import type { QuoteLine } from '@hopwhistle/fex-engine/types';
-import { ChevronDown, Copy, ExternalLink, Info, MoreHorizontal, Save } from 'lucide-react';
+import {
+  AlertTriangle,
+  BookOpen,
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Info,
+  Layers,
+  MoreHorizontal,
+  Save,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 import * as React from 'react';
 
-import { StatusChip } from '@/components/domain';
+import { CarrierLogo, StatusChip } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -42,6 +62,8 @@ export interface ResultRowProps {
   isStaff?: boolean;
   /** Tagged "Price only" (health questions not loaded). */
   priceOnly?: boolean;
+  /** This row is the quote in use. */
+  selected?: boolean;
 }
 
 function feeText(fee: NonNullable<FexResult['facts']>['policyFeeAnnual']): string {
@@ -60,6 +82,143 @@ function feeText(fee: NonNullable<FexResult['facts']>['policyFeeAnnual']): strin
     .join(' · ');
 }
 
+/** The class a line is written in, as one chip. */
+function ClassChip({ line }: { line: QuoteLine }): JSX.Element {
+  const benefit = BENEFIT_LABEL[line.benefit] ?? line.benefit;
+  // "Graded Benefit · Graded" says it twice; the class name often carries the benefit.
+  const label = line.classLabel.toLowerCase().includes(benefit.toLowerCase())
+    ? line.classLabel
+    : `${line.classLabel} · ${benefit}`;
+  return (
+    <StatusChip
+      value={line.benefit}
+      tone={benefitTone(line.benefit)}
+      size="sm"
+      label={label}
+      title={label}
+      className="max-w-full justify-start overflow-hidden whitespace-nowrap"
+    />
+  );
+}
+
+function Flags({ result, priceOnly }: { result: FexResult; priceOnly: boolean }): JSX.Element {
+  const tone = result.facts?.ratesStatus.tone;
+  return (
+    <>
+      {result.refer ? <StatusChip value="REFER" tone="ringing" size="sm" label="Refer" /> : null}
+      {priceOnly ? (
+        <StatusChip value="PRICE_ONLY" tone="neutral" size="sm" dot={false} label="Price only" />
+      ) : null}
+      {(tone === 'warn' || tone === 'mod') && result.facts ? (
+        <Tooltip
+          content={`${result.facts.ratesStatus.label}${result.facts.sourceDate ? ` · ${result.facts.sourceDate}` : ''}`}
+          side="top"
+        >
+          <span className="t-meta inline-flex items-center gap-1 text-ink-3">
+            <AlertTriangle className="h-3 w-3 text-ringing" aria-hidden />
+            <span className="sr-only">Rates: </span>
+            {result.facts.ratesStatus.label}
+          </span>
+        </Tooltip>
+      ) : null}
+    </>
+  );
+}
+
+/** The premium, large, with its mode and the annual figure under it. */
+function Price({ line, size = 'md' }: { line: QuoteLine; size?: 'md' | 'lg' }): JSX.Element {
+  if (line.premium == null) {
+    return (
+      <div className={size === 'lg' ? 'text-left' : 'text-right'}>
+        <p className="t-num text-base font-semibold text-ink">—</p>
+        <p className="t-meta text-ink-3">{line.premiumNote ?? 'Single premium'}</p>
+      </div>
+    );
+  }
+  const annual = line.annual;
+  return (
+    <div className={size === 'lg' ? 'text-left' : 'text-right'}>
+      <p className="whitespace-nowrap tabular-nums text-ink">
+        <span
+          className={cn(
+            't-num font-semibold tracking-tight',
+            size === 'lg' ? 'text-[34px] leading-none' : 'text-xl leading-tight'
+          )}
+        >
+          {money(line.premium)}
+        </span>
+        <span className={cn('ml-0.5 text-ink-3', size === 'lg' ? 'text-base' : 'text-xs')}>
+          /{MODE_SHORT[line.mode]}
+        </span>
+      </p>
+      {annual != null && line.mode !== 'annual' ? (
+        <p className="t-meta tabular-nums text-ink-3">{money(annual)} a year</p>
+      ) : null}
+    </div>
+  );
+}
+
+function FaceValue({ line }: { line: QuoteLine }): JSX.Element {
+  return (
+    <p className="t-num flex items-center gap-1 text-sm font-medium tabular-nums text-ink">
+      {wholeDollars(line.face)}
+      {line.faceAdjusted ? (
+        <Tooltip content={line.faceAdjusted} side="top" align="end">
+          <Info className="h-3.5 w-3.5 text-ringing-ink" aria-label={line.faceAdjusted} />
+        </Tooltip>
+      ) : null}
+    </p>
+  );
+}
+
+function MoreMenu({
+  result,
+  line,
+  onUse,
+  onCopy,
+  onSave,
+  compactUse,
+}: {
+  result: FexResult;
+  line: QuoteLine;
+  onUse?: ResultRowProps['onUse'];
+  onCopy?: ResultRowProps['onCopy'];
+  onSave?: ResultRowProps['onSave'];
+  compactUse: boolean;
+}): JSX.Element | null {
+  if (!onCopy && !onSave && !(onUse && compactUse)) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`More for ${result.family} ${result.product}`}
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {onUse && compactUse ? (
+          <DropdownMenuItem className="min-[560px]:hidden" onSelect={() => onUse(result, line)}>
+            <Check className="mr-2 h-4 w-4" aria-hidden /> Use this quote
+          </DropdownMenuItem>
+        ) : null}
+        {onCopy ? (
+          <DropdownMenuItem onSelect={() => onCopy(result)}>
+            <Copy className="mr-2 h-4 w-4" aria-hidden /> Copy quote summary
+          </DropdownMenuItem>
+        ) : null}
+        {onSave ? (
+          <DropdownMenuItem onSelect={() => onSave(result)}>
+            <Save className="mr-2 h-4 w-4" aria-hidden /> Save quote
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function ResultRow({
   result,
   expanded,
@@ -70,126 +229,104 @@ export function ResultRow({
   busy = false,
   isStaff = false,
   priceOnly = false,
+  selected = false,
 }: ResultRowProps): JSX.Element {
   const best = result.best;
   const declined = !result.eligible;
   const detailId = `fex-detail-${result.productId}`;
-  const ratesTone = result.facts?.ratesStatus.tone;
-  const showRatesDot = ratesTone === 'warn' || ratesTone === 'mod';
 
   return (
     <li
       className={cn(
-        'border-b border-rule last:border-0',
-        expanded && 'bg-sunken/50',
-        declined && 'text-ink-2'
+        'group/row border-b border-rule transition-colors duration-150 ne-motion last:border-0',
+        expanded ? 'bg-sunken/60' : 'hover:bg-sunken/40',
+        selected && 'bg-brand-tint/50'
       )}
       data-product={result.productId}
     >
-      <div className="flex min-h-[56px] items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
-        <div
-          role="button"
-          tabIndex={0}
+      <div className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4">
+        <button
+          type="button"
           aria-expanded={expanded}
           aria-controls={detailId}
           onClick={onToggle}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onToggle();
-            }
-          }}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control sm:gap-3',
+            'flex min-w-0 flex-1 items-center gap-3 rounded-control text-left sm:gap-4',
             FOCUS
           )}
         >
+          <CarrierLogo
+            names={[result.family, result.productId]}
+            size="md"
+            className={cn('hidden min-[560px]:inline-flex', declined && 'opacity-50 grayscale')}
+          />
+          <span className="min-w-0 flex-1">
+            {/* The plate names the carrier from 560px up; below that, say it in words. */}
+            <span className="mb-0.5 flex items-center gap-2 min-[560px]:sr-only">
+              <CarrierLogo names={[result.family, result.productId]} size="xs" />
+              <span className="truncate text-[13px] font-medium text-ink-2">{result.family}</span>
+            </span>
+            <span
+              className={cn(
+                'line-clamp-2 block text-[15px] font-semibold leading-snug',
+                declined ? 'text-ink-2' : 'text-ink'
+              )}
+              title={result.product}
+            >
+              {result.product}
+            </span>
+            <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+              {declined ? (
+                <>
+                  <StatusChip
+                    value="DECLINED"
+                    tone="dropped"
+                    size="sm"
+                    label={result.outcome === 'DECLINE' ? 'Decline' : 'Not available'}
+                  />
+                  {result.ineligibleReason ? (
+                    <span className="t-meta min-w-0 truncate text-ink-2">
+                      {result.ineligibleReason}
+                    </span>
+                  ) : null}
+                </>
+              ) : best ? (
+                <ClassChip line={best} />
+              ) : null}
+              <Flags result={result} priceOnly={priceOnly} />
+              {selected ? (
+                <StatusChip value="SELECTED" tone="live" size="sm" label="In use" />
+              ) : null}
+            </span>
+          </span>
+
+          {!declined && best ? (
+            <span className="hidden w-[96px] shrink-0 text-right 2xl:block">
+              <span className="t-meta block text-ink-3">Coverage</span>
+              <span className="flex justify-end">
+                <FaceValue line={best} />
+              </span>
+            </span>
+          ) : null}
+
+          {!declined && best ? (
+            <span className="block w-[104px] shrink-0">
+              <Price line={best} />
+              <span className="t-meta block text-right text-ink-3 2xl:hidden">
+                {wholeDollars(best.face)} coverage
+              </span>
+            </span>
+          ) : null}
+
           <ChevronDown
             aria-hidden
             className={cn(
-              'h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none',
+              'hidden h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none sm:block',
               expanded && 'rotate-180'
             )}
           />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-ink">
-              {result.family}
-              <span className="font-normal text-ink-2"> · {result.product}</span>
-            </p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-              {declined ? (
-                <StatusChip
-                  value="DECLINED"
-                  tone="dropped"
-                  size="sm"
-                  label={result.outcome === 'DECLINE' ? 'Decline' : 'Not available'}
-                />
-              ) : best ? (
-                <StatusChip
-                  value={best.benefit}
-                  tone={benefitTone(best.benefit)}
-                  size="sm"
-                  label={`${best.classLabel} · ${BENEFIT_LABEL[best.benefit] ?? best.benefit}`}
-                />
-              ) : null}
-              {result.refer ? (
-                <StatusChip value="REFER" tone="ringing" size="sm" label="Refer" />
-              ) : null}
-              {priceOnly ? (
-                <StatusChip
-                  value="PRICE_ONLY"
-                  tone="neutral"
-                  size="sm"
-                  dot={false}
-                  label="Price only"
-                />
-              ) : null}
-              {declined && result.ineligibleReason ? (
-                <span className="t-meta min-w-0 truncate text-ink-2">
-                  {result.ineligibleReason}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {!declined && best ? (
-            <div className="hidden shrink-0 text-right sm:block">
-              <p className="t-meta text-ink-3">Face</p>
-              <p className="t-num flex items-center justify-end gap-1 text-sm tabular-nums text-ink">
-                {wholeDollars(best.face)}
-                {best.faceAdjusted ? (
-                  <Tooltip content={best.faceAdjusted} side="top" align="end">
-                    <Info className="h-3.5 w-3.5 text-ink-3" aria-label={best.faceAdjusted} />
-                  </Tooltip>
-                ) : null}
-              </p>
-            </div>
-          ) : null}
-
-          {!declined && best ? (
-            <div className="w-[92px] shrink-0 text-right sm:w-[104px]">
-              <p className="t-num text-lg font-semibold leading-tight tabular-nums text-ink">
-                {best.premium == null ? '—' : money(best.premium)}
-              </p>
-              <p className="t-meta flex items-center justify-end gap-1 text-ink-3">
-                {showRatesDot && result.facts ? (
-                  <Tooltip
-                    content={`${result.facts.ratesStatus.label}${result.facts.sourceDate ? ` · ${result.facts.sourceDate}` : ''}`}
-                    side="top"
-                    align="end"
-                  >
-                    <span
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-ringing"
-                      aria-label={result.facts.ratesStatus.label}
-                      role="img"
-                    />
-                  </Tooltip>
-                ) : null}
-                {best.premium == null ? (best.premiumNote ?? 'Single premium') : best.modeLabel}
-              </p>
-            </div>
-          ) : null}
-        </div>
+          <span className="sr-only">{expanded ? 'Hide details' : 'Show details'}</span>
+        </button>
 
         {!declined && best && (onUse || onCopy || onSave) ? (
           <div className="flex shrink-0 items-center gap-1">
@@ -197,43 +334,21 @@ export function ResultRow({
               <Button
                 size="sm"
                 disabled={busy}
+                variant={selected ? 'outline' : 'default'}
                 onClick={() => onUse(result, best)}
-                className="hidden min-[480px]:inline-flex"
+                className="hidden min-[560px]:inline-flex"
               >
                 {busy ? 'Saving…' : 'Use this quote'}
               </Button>
             ) : null}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`More for ${result.family} ${result.product}`}
-                >
-                  <MoreHorizontal className="h-4 w-4" aria-hidden />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {onUse ? (
-                  <DropdownMenuItem
-                    className="min-[480px]:hidden"
-                    onSelect={() => onUse(result, best)}
-                  >
-                    Use this quote
-                  </DropdownMenuItem>
-                ) : null}
-                {onCopy ? (
-                  <DropdownMenuItem onSelect={() => onCopy(result)}>
-                    <Copy className="mr-2 h-4 w-4" aria-hidden /> Copy quote summary
-                  </DropdownMenuItem>
-                ) : null}
-                {onSave ? (
-                  <DropdownMenuItem onSelect={() => onSave(result)}>
-                    <Save className="mr-2 h-4 w-4" aria-hidden /> Save quote
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <MoreMenu
+              result={result}
+              line={best}
+              onUse={onUse}
+              onCopy={onCopy}
+              onSave={onSave}
+              compactUse
+            />
           </div>
         ) : null}
       </div>
@@ -242,6 +357,123 @@ export function ResultRow({
         <ResultDetail id={detailId} result={result} onUse={onUse} busy={busy} isStaff={isStaff} />
       ) : null}
     </li>
+  );
+}
+
+/**
+ * A top pick: the same answer as a row, laid out as a card for the three
+ * options an agent will present first.
+ */
+export function TopPickCard({
+  result,
+  label,
+  highlight = false,
+  onUse,
+  onDetails,
+  busy = false,
+  selected = false,
+}: {
+  result: FexResult;
+  label: string;
+  highlight?: boolean;
+  onUse?: (result: FexResult, line: QuoteLine) => void;
+  onDetails?: (result: FexResult) => void;
+  busy?: boolean;
+  selected?: boolean;
+}): JSX.Element | null {
+  const best = result.best;
+  if (!best) return null;
+  return (
+    <article
+      aria-label={`${label}: ${result.family} ${result.product}`}
+      className={cn(
+        'relative flex min-w-0 flex-col rounded-card border bg-surface p-4 shadow-card transition-shadow duration-150 ne-motion hover:shadow-raised',
+        highlight ? 'border-brand ring-1 ring-brand' : 'border-rule'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              't-label inline-flex items-center gap-1 rounded-full px-2 py-0.5',
+              highlight ? 'bg-brand-tint text-brand-ink' : 'bg-sunken text-ink-2'
+            )}
+          >
+            {highlight ? <ShieldCheck className="h-3 w-3" aria-hidden /> : null}
+            {label}
+          </span>
+          {selected ? <StatusChip value="SELECTED" tone="live" size="sm" label="In use" /> : null}
+        </div>
+      </div>
+
+      <CarrierLogo names={[result.family, result.productId]} size="lg" className="mt-3 w-full" />
+      <p className="sr-only">{result.family}</p>
+      <p
+        className="mt-3 line-clamp-2 text-base font-semibold leading-snug text-ink"
+        title={result.product}
+      >
+        {result.product}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <ClassChip line={best} />
+        <Flags result={result} priceOnly={!result.uwLoaded} />
+      </div>
+
+      <div className="mt-auto pt-4">
+        <div className="border-t border-rule pt-4">
+          <Price line={best} size="lg" />
+          <dl className="mt-2 flex items-baseline gap-1.5 text-sm">
+            <dt className="text-ink-3">Coverage</dt>
+            <dd>
+              <FaceValue line={best} />
+            </dd>
+          </dl>
+        </div>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        {onUse ? (
+          <Button
+            className="flex-1"
+            variant={selected ? 'outline' : highlight ? 'default' : 'outline'}
+            disabled={busy}
+            onClick={() => onUse(result, best)}
+          >
+            {busy ? 'Saving…' : selected ? 'Use again' : 'Use this quote'}
+          </Button>
+        ) : null}
+        {onDetails ? (
+          <Button variant="ghost" onClick={() => onDetails(result)}>
+            Why
+          </Button>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function Section({
+  icon: Icon,
+  title,
+  className,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <section
+      aria-label={title}
+      className={cn('min-w-0 rounded-card border border-rule bg-surface p-4', className)}
+    >
+      <h4 className="t-label mb-3 flex items-center gap-1.5 text-ink-2">
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+        {title}
+      </h4>
+      {children}
+    </section>
   );
 }
 
@@ -262,37 +494,52 @@ function ResultDetail({
   return (
     <div
       id={id}
-      className="grid gap-5 border-t border-rule px-4 pb-5 pt-4 animate-in fade-in-0 duration-150 motion-reduce:animate-none lg:grid-cols-3"
+      className="grid gap-3 px-3 pb-4 animate-in fade-in-0 slide-in-from-top-1 duration-150 motion-reduce:animate-none sm:px-4 md:grid-cols-2"
     >
-      <section aria-label="Why this result" className="min-w-0">
-        <h4 className="t-label mb-2 text-ink-3">Why this result</h4>
+      <Section icon={ShieldCheck} title="Why this result">
         {!result.uwLoaded ? (
-          <p className="text-sm text-ink-2">
+          <p className="mb-2 rounded-control bg-sunken px-3 py-2 text-sm text-ink-2">
             This carrier&apos;s health questions are not loaded yet; the best class is shown for
             price only.
           </p>
         ) : null}
         {result.reasons.length ? (
-          <ol className="space-y-2">
+          <ol className="space-y-2.5">
             {result.reasons.map((reason, i) => (
-              <li key={i} className="text-sm text-ink">
-                <div className="flex items-start gap-2">
-                  <StatusChip
-                    value={reason.outcome}
-                    tone={outcomeTone(reason.outcome)}
-                    size="sm"
-                    dot={false}
-                    label={
-                      reason.outcome === 'DECLINE'
-                        ? 'Decline'
-                        : reason.outcome === 'REFER'
-                          ? 'Refer'
-                          : undefined
-                    }
-                    className="mt-0.5 shrink-0"
-                  />
-                  <span className="min-w-0">
-                    {reason.text}
+              <li key={i} className="flex items-start gap-2.5 text-sm text-ink">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                    reason.outcome === 'DECLINE'
+                      ? 'bg-dropped-tint text-dropped-ink'
+                      : outcomeTone(reason.outcome) === 'ringing'
+                        ? 'bg-ringing-tint text-ringing-ink'
+                        : 'bg-live-tint text-live-ink'
+                  )}
+                >
+                  {reason.outcome === 'DECLINE' ? (
+                    <X className="h-3 w-3" />
+                  ) : (
+                    <Check className="h-3 w-3" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block">{reason.text}</span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-2">
+                    <StatusChip
+                      value={reason.outcome}
+                      tone={outcomeTone(reason.outcome)}
+                      size="sm"
+                      dot={false}
+                      label={
+                        reason.outcome === 'DECLINE'
+                          ? 'Decline'
+                          : reason.outcome === 'REFER'
+                            ? 'Refer'
+                            : undefined
+                      }
+                    />
                     {reason.page != null ? (
                       reason.url ? (
                         <a
@@ -300,35 +547,34 @@ function ResultDetail({
                           target="_blank"
                           rel="noopener noreferrer"
                           className={cn(
-                            't-meta ml-1.5 inline-flex items-center gap-0.5 text-brand-ink hover:underline',
+                            't-meta inline-flex items-center gap-0.5 text-brand-ink hover:underline',
                             FOCUS
                           )}
                         >
-                          p.{reason.page}
+                          Page {reason.page}
                           <ExternalLink className="h-3 w-3" aria-hidden />
                           <span className="sr-only"> (opens the carrier document)</span>
                         </a>
                       ) : (
-                        <span className="t-meta ml-1.5 text-ink-3">p.{reason.page}</span>
+                        <span className="t-meta text-ink-3">Page {reason.page}</span>
                       )
                     ) : null}
-                    {isStaff && reason.note ? (
-                      <span className="t-meta mt-0.5 block text-ink-3">
-                        Source note: {reason.note}
-                      </span>
-                    ) : null}
                   </span>
-                </div>
+                  {isStaff && reason.note ? (
+                    <span className="t-meta mt-1 block text-ink-3">Source note: {reason.note}</span>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ol>
         ) : result.eligible && result.uwLoaded ? (
-          <p className="text-sm text-ink-2">
+          <p className="flex items-start gap-2 text-sm text-ink">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-live-ink" aria-hidden />
             No health question, guide rule, medication or build limit triggered — best class.
           </p>
         ) : null}
         {result.assumptions.length ? (
-          <div className="mt-3">
+          <div className="mt-3 border-t border-rule pt-3">
             <h5 className="t-label mb-1 text-ink-3">Assumed</h5>
             <ul className="list-disc space-y-0.5 pl-4 text-sm text-ink-2">
               {result.assumptions.map(a => (
@@ -337,10 +583,9 @@ function ResultDetail({
             </ul>
           </div>
         ) : null}
-      </section>
+      </Section>
 
-      <section aria-label="Other options" className="min-w-0">
-        <h4 className="t-label mb-2 text-ink-3">Other options</h4>
+      <Section icon={Layers} title="Other options">
         {result.others.length ? (
           <table className="w-full text-sm">
             <thead className="sr-only">
@@ -357,20 +602,17 @@ function ResultDetail({
                   key={`${line.classCode}-${line.payPeriod ?? ''}`}
                   className="border-b border-rule last:border-0"
                 >
-                  <td className="py-1.5 pr-2">
-                    <span className="text-ink">{line.classLabel}</span>
-                    <span className="t-meta block text-ink-3">
-                      {BENEFIT_LABEL[line.benefit] ?? line.benefit}
+                  <td className="py-2 pr-2">
+                    <span className="block font-medium text-ink">{line.classLabel}</span>
+                    <span className="t-meta text-ink-3">
+                      {BENEFIT_LABEL[line.benefit] ?? line.benefit} · {wholeDollars(line.face)}
                     </span>
                   </td>
-                  <td className="t-num py-1.5 pr-2 text-right tabular-nums">
-                    {wholeDollars(line.face)}
-                  </td>
-                  <td className="t-num py-1.5 pr-2 text-right tabular-nums">
+                  <td className="t-num whitespace-nowrap py-2 pr-2 text-right tabular-nums">
                     {line.premium == null ? '—' : money(line.premium)}
                     <span className="t-meta text-ink-3">/{MODE_SHORT[line.mode]}</span>
                   </td>
-                  <td className="py-1.5 text-right">
+                  <td className="py-2 text-right">
                     {onUse ? (
                       <Button
                         size="sm"
@@ -389,12 +631,11 @@ function ResultDetail({
         ) : (
           <p className="text-sm text-ink-2">No other class for this applicant.</p>
         )}
-      </section>
+      </Section>
 
-      <section aria-label="Plan facts" className="min-w-0">
-        <h4 className="t-label mb-2 text-ink-3">Plan facts</h4>
+      <Section icon={BookOpen} title="Plan facts" className="md:col-span-2">
         {facts ? (
-          <dl className="space-y-1.5 text-sm">
+          <dl className="grid gap-x-6 gap-y-2 text-sm lg:grid-cols-2">
             <Fact label="Issue ages">{facts.issueAges.join('; ')}</Fact>
             <Fact label="Face limits">
               {facts.faceLimits
@@ -425,7 +666,7 @@ function ResultDetail({
           </dl>
         ) : null}
         {facts?.alerts.length ? (
-          <div className="mt-3">
+          <div className="mt-3 border-t border-rule pt-3">
             <h5 className="t-label mb-1 text-ink-3">Carrier notes</h5>
             <ul className="list-disc space-y-0.5 pl-4 text-sm text-ink-2">
               {facts.alerts.map(a => (
@@ -453,14 +694,14 @@ function ResultDetail({
             </ul>
           </details>
         ) : null}
-      </section>
+      </Section>
     </div>
   );
 }
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="grid grid-cols-[108px_1fr] gap-2">
+    <div className="grid grid-cols-[104px_1fr] gap-2">
       <dt className="t-meta pt-0.5 text-ink-3">{label}</dt>
       <dd className="min-w-0 break-words text-ink">{children}</dd>
     </div>
@@ -485,19 +726,25 @@ export function SelectedQuoteBar({
   return (
     <div
       role="status"
-      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-surface px-4 py-3 shadow-raised"
+      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-brand bg-surface px-4 py-3 shadow-pop"
     >
+      <CarrierLogo names={[selection.carrier, selection.productId]} size="md" />
       <div className="min-w-0 flex-1">
-        <p className="t-label text-ink-3">Selected</p>
+        <p className="t-label flex items-center gap-1 text-brand-ink">
+          <Check className="h-3 w-3" aria-hidden />
+          Selected
+        </p>
         <p className="truncate text-sm text-ink">
-          <span className="font-medium">{selection.carrier}</span> · {selection.product} ·{' '}
-          {selection.classLabel} ·{' '}
-          <span className="t-num tabular-nums">{wholeDollars(selection.face)}</span> ·{' '}
-          <span className="t-num font-semibold tabular-nums">
+          <span className="font-semibold">{selection.carrier}</span> · {selection.product} ·{' '}
+          {selection.classLabel}
+        </p>
+        <p className="t-num text-sm tabular-nums text-ink-2">
+          {wholeDollars(selection.face)} ·{' '}
+          <span className="font-semibold text-ink">
             {money(selection.premium)}/{MODE_SHORT[selection.mode]}
           </span>
         </p>
-        {note ? <p className="t-meta text-ink-2">{note}</p> : null}
+        {note ? <p className="t-meta mt-0.5 text-ink-2">{note}</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {onStart ? (

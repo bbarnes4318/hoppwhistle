@@ -19,6 +19,7 @@ import {
   ToolbarActions,
   ToolbarDateRange,
   ToolbarSelect,
+  CarrierLogo,
 } from '@/components/domain';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
@@ -616,7 +617,12 @@ export default function ApplicationsPage() {
                             submitted(row.submittedAt)
                           )}
                         </td>
-                        <td className="font-medium text-ink">{row.carrier}</td>
+                        <td className="font-medium text-ink">
+                          <span className="flex items-center gap-2">
+                            <CarrierLogo names={[row.carrier]} size="xs" />
+                            <span>{row.carrier}</span>
+                          </span>
+                        </td>
                         <td className="!text-ink-2">
                           {row.planType ? (PLAN_LABELS[row.planType] ?? row.planType) : '—'}
                         </td>

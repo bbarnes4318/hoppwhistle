@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { CarrierLogo } from '@/components/domain/carrier-logo';
+
 /**
  * Logging an application the agent wrote themselves, on any carrier.
  *
@@ -317,12 +319,15 @@ export function ApplicationLogForm({
 
       {fromQuote && (
         <p className="flex flex-wrap items-baseline justify-between gap-2 rounded border border-rule bg-sunken px-3 py-2 text-xs text-ink">
-          <span className="min-w-0">
-            From quote: {prefill?.carrier} {prefill?.product}
-            {prefill?.quoteClass ? ` · ${prefill.quoteClass}` : ''}
-            {prefill?.faceAmount
-              ? ` · ${currency.format(Number(prefill.faceAmount)).replace(/\.00$/, '')}`
-              : ''}
+          <span className="flex min-w-0 items-center gap-2">
+            <CarrierLogo names={[prefill?.carrier]} size="xs" />
+            <span className="min-w-0">
+              From quote: {prefill?.carrier} {prefill?.product}
+              {prefill?.quoteClass ? ` · ${prefill.quoteClass}` : ''}
+              {prefill?.faceAmount
+                ? ` · ${currency.format(Number(prefill.faceAmount)).replace(/\.00$/, '')}`
+                : ''}
+            </span>
           </span>
           <button
             type="button"
@@ -355,21 +360,24 @@ export function ApplicationLogForm({
           Carrier
           <Req />
         </label>
-        <select
-          id="app-carrier"
-          value={carrierChoice}
-          onChange={e => setCarrierChoice(e.target.value)}
-          disabled={disabled}
-          className={FIELD}
-        >
-          <option value="">Select carrier…</option>
-          {APPLICATION_CARRIERS.map(name => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-          <option value={OTHER_CARRIER}>{OTHER_CARRIER}</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {carrier ? <CarrierLogo names={[carrier]} size="sm" /> : null}
+          <select
+            id="app-carrier"
+            value={carrierChoice}
+            onChange={e => setCarrierChoice(e.target.value)}
+            disabled={disabled}
+            className={FIELD}
+          >
+            <option value="">Select carrier…</option>
+            {APPLICATION_CARRIERS.map(name => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            <option value={OTHER_CARRIER}>{OTHER_CARRIER}</option>
+          </select>
+        </div>
         {carrierChoice === OTHER_CARRIER && (
           <input
             type="text"

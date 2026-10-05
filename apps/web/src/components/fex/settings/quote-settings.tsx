@@ -11,7 +11,14 @@ import { FACE_PRESETS, PAYMENT_MODES } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
 import * as React from 'react';
 
-import { Notice, Panel, PanelBody, PanelHeader, PanelTitle } from '@/components/domain';
+import {
+  CarrierLogo,
+  Notice,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+} from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
@@ -94,7 +101,10 @@ export function QuoteSettings(): JSX.Element {
             <legend className="sr-only">Appointed plans</legend>
             {families.map(([family, products]) => (
               <div key={family}>
-                <p className="t-label mb-1.5 text-ink-2">{family}</p>
+                <p className="t-label mb-1.5 flex items-center gap-2 text-ink-2">
+                  <CarrierLogo names={[family]} size="xs" />
+                  {family}
+                </p>
                 <div className="space-y-1.5">
                   {products.map(p => (
                     <CheckRow
