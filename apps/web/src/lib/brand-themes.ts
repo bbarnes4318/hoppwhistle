@@ -51,6 +51,15 @@ export const BRAND_THEMES: Record<BrandThemeKey, BrandTheme> = {
     favicon: '/brands/life-leads-plus/favicon-32.png',
     appleTouchIcon: '/brands/life-leads-plus/apple-touch-icon.png',
   },
+  'powerhouse-insurance': {
+    name: 'Powerhouse Insurance',
+    mark: '/brands/powerhouse-insurance/mark.png',
+    markSmall: '/brands/powerhouse-insurance/mark-128.png',
+    wordmark: '/brands/powerhouse-insurance/wordmark.png',
+    wordmarkOnDark: '/brands/powerhouse-insurance/wordmark-on-dark.png',
+    favicon: '/brands/powerhouse-insurance/favicon-32.png',
+    appleTouchIcon: '/brands/powerhouse-insurance/apple-touch-icon.png',
+  },
 };
 
 /** The brand as `/api/auth/me` sends it. */

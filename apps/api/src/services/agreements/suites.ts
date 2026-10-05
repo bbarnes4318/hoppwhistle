@@ -144,7 +144,12 @@ export async function ensureTenantWorkspace(
             templateSetFor({ scope: 'TENANT', templateSetKey: brandTheme, brandTheme }).set
               ? brandTheme
               : null,
-          referencePrefix: brandTheme === 'life-leads-plus' ? 'LLP' : 'AG',
+          referencePrefix:
+            brandTheme === 'life-leads-plus'
+              ? 'LLP'
+              : brandTheme === 'powerhouse-insurance'
+                ? 'PHI'
+                : 'AG',
         },
       });
     } catch {
