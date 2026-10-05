@@ -169,6 +169,62 @@ if command -v ip6tables >/dev/null 2>&1; then
   done
   ip6tables -w -A "$V6_CHAIN" -j RETURN
 fi
+
+# ---------------------------------------------------------------------------
+# Phone traffic leaves from the floating IP
+# ---------------------------------------------------------------------------
+# PHONE_IP is a Hetzner floating IP used only for telephony; the website, DNS
+# and SSH stay on the host's primary IP. Carriers authorise calls by source
+# IP (FracTEL's trunk is set to PHONE_IP), but the kernel sends from the
+# primary IP unless told otherwise: FreeSWITCH is behind Docker's MASQUERADE
+# and Dograh Asterisk (host network) uses the default route's source. Both
+# are rewritten here by source port.
+#
+# Hetzner does not configure a floating IP on the interface, and neither the
+# address nor these NAT rules survive a reboot, which is why they live here.
+PHONE_IP="${PHONE_IP:-5.161.16.107}"
+SNAT_CHAIN="HOPWHISTLE_PHONE_SNAT"
+
+# `replace` adds the address, or leaves it as is when already present.
+ip addr replace "$PHONE_IP/32" dev "$WAN_IF"
+
+iptables -w -t nat -N "$SNAT_CHAIN" 2>/dev/null || true
+iptables -w -t nat -F "$SNAT_CHAIN"
+while iptables -w -t nat -C POSTROUTING -o "$WAN_IF" -j "$SNAT_CHAIN" 2>/dev/null; do
+  iptables -w -t nat -D POSTROUTING -o "$WAN_IF" -j "$SNAT_CHAIN"
+done
+# First in POSTROUTING, so it runs before Docker's MASQUERADE.
+iptables -w -t nat -I POSTROUTING 1 -o "$WAN_IF" -j "$SNAT_CHAIN"
+
+# FreeSWITCH: SIP 5070/5080, RTP 16384-16484.
+iptables -w -t nat -A "$SNAT_CHAIN" -p udp -m multiport --sports 5070,5080,16384:16484 -j SNAT --to-source "$PHONE_IP"
+iptables -w -t nat -A "$SNAT_CHAIN" -p tcp -m multiport --sports 5070,5080 -j SNAT --to-source "$PHONE_IP"
+# Dograh Asterisk: SIP 5062, RTP 20000-20500 (/opt/dograh-asterisk/etc/rtp.conf).
+iptables -w -t nat -A "$SNAT_CHAIN" -p udp -m multiport --sports 5062,20000:20500 -j SNAT --to-source "$PHONE_IP"
+iptables -w -t nat -A "$SNAT_CHAIN" -p tcp --sport 5062 -j SNAT --to-source "$PHONE_IP"
+iptables -w -t nat -A "$SNAT_CHAIN" -j RETURN
+
+# The same rules were first added by hand, straight into POSTROUTING; drop
+# those copies so there is one source of truth.
+for spec in \
+  "-p udp -m multiport --sports 5070,5080,16384:16484" \
+  "-p tcp -m multiport --sports 5070,5080" \
+  "-p udp --sport 5062" \
+  "-p tcp --sport 5062" \
+  "-p udp --sport 20000:20500"; do
+  # shellcheck disable=SC2086
+  while iptables -w -t nat -C POSTROUTING -o "$WAN_IF" $spec -j SNAT --to-source "$PHONE_IP" 2>/dev/null; do
+    iptables -w -t nat -D POSTROUTING -o "$WAN_IF" $spec -j SNAT --to-source "$PHONE_IP"
+  done
+done
+
+# Long-lived SIP flows (OPTIONS keepalives) keep the NAT mapping they were
+# created with, so clear them or they go on leaving from the primary IP.
+if command -v conntrack >/dev/null 2>&1; then
+  for port in 5062 5070 5080; do
+    conntrack -D -p udp --orig-port-src "$port" >/dev/null 2>&1 || true
+  done
+fi
 FIREWALL
 
 chmod 0755 "$SCRIPT_PATH"
@@ -205,5 +261,8 @@ if command -v ip6tables >/dev/null 2>&1; then
   ip6tables -C INPUT -j "$V6_CHAIN"
   ip6tables -S "$V6_CHAIN"
 fi
+ip -4 addr show dev "$WAN_IF" | grep inet
+iptables -t nat -S HOPWHISTLE_PHONE_SNAT
+iptables -t nat -S POSTROUTING
 
 echo "PERSISTENT TELEPHONY FIREWALL INSTALLED"
