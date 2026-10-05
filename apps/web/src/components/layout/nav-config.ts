@@ -45,6 +45,7 @@ import {
   Wallet,
   Waypoints,
   Webhook,
+  Shuffle,
 } from 'lucide-react';
 
 import { MY_PAYROLL_ENABLED } from '@/lib/feature-flags';
@@ -221,6 +222,12 @@ export const PLATFORM_NAV: NavGroup[] = [
       { name: 'Webhooks', href: '/settings/webhooks', icon: Webhook },
       { name: 'DNC Lists', href: '/settings/dnc', icon: ShieldBan },
       { name: 'VOIP Carrier Routing', href: '/settings/carriers', icon: PhoneForwarded },
+      {
+        name: 'Shared DIDs',
+        href: '/admin/shared-routing',
+        icon: Shuffle,
+        title: 'One number for several agencies, round robin to their licensed agents',
+      },
       { name: 'Quotas & Budgets', href: '/settings/quotas', icon: Wallet },
       { name: 'Payroll Admin', href: '/admin/payroll', icon: BadgeDollarSign },
       {

@@ -470,6 +470,10 @@ async function buildServer() {
   const { registerCarrierRoutingRoutes } = await import('./routes/carrier-routing.js');
   await server.register(registerCarrierRoutingRoutes);
 
+  // One DID shared across agencies, round-robin to their agents (staff only)
+  const { registerSharedRoutingRoutes } = await import('./routes/shared-routing.js');
+  await server.register(registerSharedRoutingRoutes);
+
   // Register the FreeSWITCH user directory. mod_xml_curl asks this endpoint who
   // a SIP username is on every registration and every call to an agent, so each
   // agent can hold their own password instead of the one that used to be shared

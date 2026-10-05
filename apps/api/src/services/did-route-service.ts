@@ -31,6 +31,22 @@ export class DidRouteService {
         return;
       }
 
+      // A DID shared across agencies is routed by its group, not by the
+      // number's user or campaign, and is managed on the shared-routing
+      // screens. Re-deriving it from the number would undo that -- and an
+      // unassigned number would have its route deleted outright.
+      const currentRoute = await prisma.didRoute.findFirst({
+        where: { phoneNumberId: phoneNumber.id },
+        select: { sharedRoutingGroupId: true },
+      });
+      if (currentRoute?.sharedRoutingGroupId) {
+        logger.info({
+          msg: 'syncDidRouteForNumber: DID is shared across agencies; leaving its route alone',
+          number: phoneNumber.number,
+        });
+        return;
+      }
+
       const hasCampaign = !!phoneNumber.campaignId;
       const hasUser = !!phoneNumber.userId;
 

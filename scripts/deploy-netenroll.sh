@@ -133,6 +133,7 @@ REQUIRED_MIGRATIONS="
 20261010000000_sales_activity_details_entered
 20261011000000_test_org_netenroll_brand
 20261012000000_fex_quote_engine
+20261013000000_shared_routing_groups
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -555,6 +556,11 @@ migration_applied() {
       echo "SELECT to_regclass('public.fex_quotes') IS NOT NULL
             AND to_regclass('public.fex_tenant_settings') IS NOT NULL
             AND to_regclass('public.\"insurance_carrier_applications_tenantId_fexQuoteId_idx\"') IS NOT NULL" ;;
+    *_shared_routing_groups)
+      # Wrapped BEGIN..COMMIT; the last statement, the did_routes foreign key,
+      # stands for the tables, indexes and column before it.
+      echo "SELECT EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'did_routes_sharedRoutingGroupId_fkey')" ;;
     *_test_org_netenroll_brand)
       # Data only: Test Organization carries no white-label theme, name or
       # domain. True on a database with no such tenant, which is correct.
