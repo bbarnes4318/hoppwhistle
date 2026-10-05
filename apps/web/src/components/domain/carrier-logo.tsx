@@ -71,7 +71,7 @@ export function CarrierLogo({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-control border border-rule bg-surface',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-control border border-rule bg-logo-plate',
         square ? s.square : s.box,
         className
       )}
@@ -96,14 +96,14 @@ export function CarrierLogo({
         <span className="flex min-w-0 flex-col items-center px-2 text-center leading-none">
           <span
             className={cn(
-              'line-clamp-2 max-w-full font-bold leading-[1.1] tracking-tight text-ink',
+              'line-clamp-2 max-w-full font-bold leading-[1.1] tracking-tight text-logo-plate-ink',
               primary.length > 14 ? 'text-[13px]' : size === 'lg' ? 'text-[17px]' : 'text-[15px]'
             )}
           >
             {primary}
           </span>
           {secondary ? (
-            <span className="mt-1 max-w-full truncate text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+            <span className="mt-1 max-w-full truncate text-[9px] font-semibold uppercase tracking-[0.08em] text-logo-plate-ink opacity-60">
               {secondary}
             </span>
           ) : null}

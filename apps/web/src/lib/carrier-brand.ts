@@ -107,7 +107,23 @@ const BRANDS: ReadonlyArray<{ test: RegExp; brand: CarrierBrand }> = [
     test: /corebridge/,
     brand: { logo: '/carriers/corebridge.webp', shape: 'wide', name: 'Corebridge Financial' },
   },
-  // Bankers Fidelity is a different company; only "Fidelity Life" matches.
+  {
+    test: /bankers fidelity/,
+    brand: { logo: '/carriers/bankers-fidelity.webp', shape: 'wide', name: 'Bankers Fidelity' },
+  },
+  {
+    test: /foresters/,
+    brand: { logo: '/carriers/foresters.webp', shape: 'wide', name: 'Foresters Financial' },
+  },
+  {
+    test: /chubb|^combined\b|combined insurance/,
+    brand: {
+      logo: '/carriers/chubb-combined.webp',
+      shape: 'wide',
+      name: 'Combined, a Chubb Company',
+    },
+  },
+  // Bankers Fidelity (above) is a different company; only "Fidelity Life" matches.
   {
     test: /fidelity life/,
     brand: { logo: '/carriers/fidelity-life.webp', shape: 'wide', name: 'Fidelity Life' },
