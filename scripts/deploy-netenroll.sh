@@ -134,6 +134,7 @@ REQUIRED_MIGRATIONS="
 20261011000000_test_org_netenroll_brand
 20261012000000_fex_quote_engine
 20261013000000_shared_routing_groups
+20261014000000_shared_routing_agent_members
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -556,6 +557,11 @@ migration_applied() {
       echo "SELECT to_regclass('public.fex_quotes') IS NOT NULL
             AND to_regclass('public.fex_tenant_settings') IS NOT NULL
             AND to_regclass('public.\"insurance_carrier_applications_tenantId_fexQuoteId_idx\"') IS NOT NULL" ;;
+    *_shared_routing_agent_members)
+      # Wrapped BEGIN..COMMIT; the last statement, the campaign-or-agent
+      # check, stands for the dropped indexes, the column and the key before it.
+      echo "SELECT EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'shared_routing_group_members_campaign_or_agent')" ;;
     *_shared_routing_groups)
       # Wrapped BEGIN..COMMIT; the last statement, the did_routes foreign key,
       # stands for the tables, indexes and column before it.

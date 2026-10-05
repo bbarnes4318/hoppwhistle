@@ -14,8 +14,9 @@ import type { Envelope } from '@/lib/api';
 /**
  * Shared DIDs: one number, several agencies, round robin.
  *
- * A group pools the agents of one campaign per agency. A call to any DID on
- * the group is offered to the agents licensed for the caller's state, one at a
+ * A group pools agents: whole campaigns (one per agency) and individual agents
+ * of any agency, added whether or not they are on a campaign. A call to any
+ * DID on the group is offered to the agents licensed for the caller's state, one at a
  * time, in round-robin order across every agency, and is recorded under the
  * agency whose agent answers it. See apps/api/src/services/shared-routing.ts.
  *
@@ -29,9 +30,27 @@ interface Member {
   id: string;
   status: Status;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
+  /** Set when the member is a single agent rather than a whole campaign. */
+  userId: string | null;
   tenant: { name: string };
-  campaign: { name: string; status: string; _count: { agents: number } };
+  user: { firstName: string | null; lastName: string | null; email: string } | null;
+  campaign: { name: string; status: string; _count: { agents: number } } | null;
+}
+
+interface AgentOption {
+  id: string;
+  name: string;
+  email: string;
+  tenantId: string;
+  tenantName: string | null;
+  licensedStates: string[];
+}
+
+function memberAgentName(member: Member): string {
+  const user = member.user;
+  if (!user) return 'Agent';
+  return [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
 }
 
 interface Group {
@@ -89,7 +108,8 @@ function AddMember({
     return () => clearTimeout(timer);
   }, [q]);
 
-  const memberTenants = new Set(group.members.map(m => m.tenantId));
+  // One whole campaign per agency. Agents added individually don't count.
+  const memberTenants = new Set(group.members.filter(m => !m.userId).map(m => m.tenantId));
 
   const add = async (campaignId: string) => {
     const response = await apiClient.post(`${BASE}/${group.id}/members`, { campaignId });
@@ -130,6 +150,138 @@ function AddMember({
           <li className="t-body px-3 py-2 text-ink-3">No campaigns found.</li>
         )}
       </ul>
+    </div>
+  );
+}
+
+function AddAgent({
+  group,
+  onChanged,
+  onError,
+}: {
+  group: Group;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}): JSX.Element {
+  const [q, setQ] = useState('');
+  const [options, setOptions] = useState<AgentOption[]>([]);
+  const [picked, setPicked] = useState<AgentOption | null>(null);
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
+  const [campaignId, setCampaignId] = useState('');
+
+  useEffect(() => {
+    if (q.trim().length < 2) {
+      setOptions([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void apiClient
+        .get<Envelope<AgentOption[]>>(`${BASE}/options/agents?q=${encodeURIComponent(q)}`)
+        .then(response => setOptions(payload(response) ?? []));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  useEffect(() => {
+    setCampaignId('');
+    if (!picked) {
+      setCampaigns([]);
+      return;
+    }
+    void apiClient
+      .get<
+        Envelope<{ id: string; name: string }[]>
+      >(`${BASE}/options/agency-campaigns?tenantId=${encodeURIComponent(picked.tenantId)}`)
+      .then(response => setCampaigns(payload(response) ?? []));
+  }, [picked]);
+
+  const inGroup = new Set(group.members.map(m => m.userId).filter(Boolean));
+
+  const add = async () => {
+    if (!picked) return;
+    const response = await apiClient.post(`${BASE}/${group.id}/members`, {
+      userId: picked.id,
+      ...(campaignId ? { campaignId } : {}),
+    });
+    if (response.error) onError(response.error.message);
+    setPicked(null);
+    setQ('');
+    onChanged();
+  };
+
+  if (picked) {
+    return (
+      <div className="space-y-2 rounded border border-rule p-3">
+        <p className="t-body">
+          <span className="font-medium">{picked.name}</span>
+          <span className="text-ink-3"> · {picked.tenantName ?? 'No agency'}</span>
+        </p>
+        <p className="t-body text-ink-3">
+          Licensed in:{' '}
+          {picked.licensedStates.length > 0
+            ? picked.licensedStates.join(', ')
+            : 'none set (rings for every state)'}
+        </p>
+        <label className="t-body block space-y-1">
+          <span>Record their calls under</span>
+          <select
+            className="w-full rounded border border-rule bg-surface px-2 py-1"
+            value={campaignId}
+            onChange={event => setCampaignId(event.target.value)}
+          >
+            <option value="">Their agency only (no campaign)</option>
+            {campaigns.map(campaign => (
+              <option key={campaign.id} value={campaign.id}>
+                {campaign.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => void add()}>
+            <Plus className="mr-1 h-3 w-3" />
+            Add agent
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Input
+        placeholder="Search agents by name, email or agency"
+        value={q}
+        onChange={event => setQ(event.target.value)}
+      />
+      {options.length > 0 && (
+        <ul className="max-h-48 divide-y divide-rule overflow-y-auto rounded border border-rule">
+          {options.map(option => (
+            <li key={option.id} className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="t-body min-w-0 truncate">
+                <span className="font-medium">{option.name}</span>
+                <span className="text-ink-3">
+                  {' '}
+                  · {option.tenantName ?? 'No agency'}
+                  {option.licensedStates.length > 0 && ` · ${option.licensedStates.join(', ')}`}
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={inGroup.has(option.id)}
+                title={inGroup.has(option.id) ? 'Already in the group' : undefined}
+                onClick={() => setPicked(option)}
+              >
+                Choose
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -236,7 +388,7 @@ function GroupCard({
           </CardTitle>
           <CardDescription>
             Round robin across {group.members.length}{' '}
-            {group.members.length === 1 ? 'agency' : 'agencies'}. Only agents licensed for the
+            {group.members.length === 1 ? 'member' : 'members'}. Only agents licensed for the
             caller&rsquo;s state are offered the call.
           </CardDescription>
         </div>
@@ -272,14 +424,29 @@ function GroupCard({
       </CardHeader>
       <CardContent className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3">
-          <h3 className="t-label">Agencies</h3>
+          <h3 className="t-label">Agencies and agents</h3>
           <ul className="divide-y divide-rule rounded border border-rule">
             {group.members.map(member => (
               <li key={member.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="t-body min-w-0">
-                  <span className="font-medium">{member.tenant.name}</span> · {member.campaign.name}
-                  <span className="text-ink-3"> · {member.campaign._count.agents} agents</span>
-                </span>
+                {member.userId ? (
+                  <span className="t-body min-w-0">
+                    <span className="font-medium">{memberAgentName(member)}</span>
+                    <span className="text-ink-3">
+                      {' '}
+                      · agent · {member.tenant.name}
+                      {member.campaign ? ` · records under ${member.campaign.name}` : ''}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="t-body min-w-0">
+                    <span className="font-medium">{member.tenant.name}</span> ·{' '}
+                    {member.campaign?.name ?? 'Campaign'}
+                    <span className="text-ink-3">
+                      {' '}
+                      · {member.campaign?._count.agents ?? 0} agents
+                    </span>
+                  </span>
+                )}
                 <span className="flex shrink-0 items-center gap-2">
                   <StatusBadge status={member.status} />
                   <Button
@@ -308,10 +475,13 @@ function GroupCard({
               </li>
             ))}
             {group.members.length === 0 && (
-              <li className="t-body px-3 py-2 text-ink-3">No agencies yet.</li>
+              <li className="t-body px-3 py-2 text-ink-3">No agencies or agents yet.</li>
             )}
           </ul>
+          <p className="t-label">Add a whole campaign</p>
           <AddMember group={group} onChanged={onChanged} onError={onError} />
+          <p className="t-label">Add a single agent</p>
+          <AddAgent group={group} onChanged={onChanged} onError={onError} />
         </section>
 
         <section className="space-y-3">

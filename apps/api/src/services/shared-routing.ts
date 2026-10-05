@@ -4,10 +4,11 @@
  * ── What it does ────────────────────────────────────────────────────────────
  *
  * A DID whose route names a `SharedRoutingGroup` is not routed to one
- * campaign. Each ACTIVE member is one agency's own campaign, and for every call
- * this module:
+ * campaign. Each ACTIVE member is either one agency's own campaign (all its
+ * agents) or a single agent of any agency, added individually whether or not
+ * they are on a campaign. For every call this module:
  *
- *   1. asks each member campaign for its eligible agents, through the same
+ *   1. asks each member for its eligible agents, through the same
  *      `getEligibleEndpoints` a normal campaign call uses -- so the licence
  *      gate (caller's state), availability toggle, working hours, softphone
  *      registration and concurrency all apply exactly as they do there, and
@@ -161,7 +162,8 @@ export async function markAnswered(groupId: string, userId: string): Promise<voi
 
 export interface SharedMember {
   tenantId: string;
-  campaignId: string;
+  /** Null when the answering agent's calls are recorded under the agency alone. */
+  campaignId: string | null;
 }
 
 export interface SharedRoutePlan {
@@ -181,31 +183,55 @@ interface AgentLeg {
   ringSeconds: number;
 }
 
+type GetEligible = (
+  tenantId: string,
+  campaignId: string | null,
+  callData: CallData,
+  options?: { onlyAgentUserIds?: string[] }
+) => Promise<EligibleEndpoint[]>;
+
+function metadataOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 /**
  * Build the round-robin plan for one call to a shared group, or null when no
  * agent in any member agency can take it.
+ *
+ * A member is a whole campaign (its ACTIVE agents) or a single agent. Both
+ * are gated the same way; an agent member just skips the campaign's agent
+ * list, so they ring whether or not they are on any campaign.
  */
 export async function selectSharedRoundRobin(
   groupId: string,
   callData: CallData,
   deps: {
-    getEligibleEndpoints?: (
-      tenantId: string,
-      campaignId: string,
-      callData: CallData
-    ) => Promise<EligibleEndpoint[]>;
+    getEligibleEndpoints?: GetEligible;
     deliveryAllowed?: (tenantId: string) => Promise<{ allowed: boolean }>;
     rotate?: (groupId: string, candidates: string[]) => Promise<string[]>;
   } = {}
 ): Promise<SharedRoutePlan | null> {
   const prisma = getPrismaClient();
-  const getEligible =
+  const getEligible: GetEligible =
     deps.getEligibleEndpoints ??
-    ((tenantId: string, campaignId: string, data: CallData) =>
-      routingService.getEligibleEndpoints(tenantId, campaignId, data));
-  const deliveryAllowed =
+    ((tenantId, campaignId, data, options) =>
+      routingService.getEligibleEndpoints(tenantId, campaignId, data, options));
+  const deliveryAllowedFn =
     deps.deliveryAllowed ?? ((tenantId: string) => isDeliveryAllowed(tenantId));
   const rotateFn = deps.rotate ?? rotate;
+
+  // One gate read per agency per call, however many members it has.
+  const gates = new Map<string, Promise<{ allowed: boolean }>>();
+  const deliveryAllowed = (tenantId: string) => {
+    let gate = gates.get(tenantId);
+    if (!gate) {
+      gate = deliveryAllowedFn(tenantId);
+      gates.set(tenantId, gate);
+    }
+    return gate;
+  };
 
   const group = await prisma.sharedRoutingGroup.findUnique({
     where: { id: groupId },
@@ -217,7 +243,9 @@ export async function selectSharedRoundRobin(
         select: {
           tenantId: true,
           campaignId: true,
+          userId: true,
           campaign: { select: { status: true, metadata: true, tenantId: true } },
+          user: { select: { tenantId: true } },
         },
       },
     },
@@ -230,10 +258,14 @@ export async function selectSharedRoundRobin(
   // Every member at once: one slow agency must not hold up the others' legs.
   const perMember = await Promise.all(
     group.members.map(async member => {
-      // A member row always names the campaign's own tenant; a mismatch means
-      // the campaign moved, and its agents are not this member's to offer.
-      if (member.campaign.tenantId !== member.tenantId) return [];
-      if (member.campaign.status !== 'ACTIVE') return [];
+      // A member always names its own agency's campaign and agent; a mismatch
+      // means one of them moved, and is not this member's to offer.
+      if (member.campaign && member.campaign.tenantId !== member.tenantId) return [];
+      if (member.userId) {
+        if (member.user?.tenantId !== member.tenantId) return [];
+      } else if (!member.campaign || member.campaign.status !== 'ACTIVE') {
+        return [];
+      }
 
       const gate = await deliveryAllowed(member.tenantId);
       if (!gate.allowed) {
@@ -245,16 +277,15 @@ export async function selectSharedRoundRobin(
         return [];
       }
 
-      const meta =
-        member.campaign.metadata &&
-        typeof member.campaign.metadata === 'object' &&
-        !Array.isArray(member.campaign.metadata)
-          ? (member.campaign.metadata as Record<string, unknown>)
-          : {};
+      const meta = metadataOf(member.campaign?.metadata);
       const seconds = ringSeconds(meta.agentRingSeconds, DEFAULT_AGENT_RING_SECONDS);
 
       try {
-        const endpoints = await getEligible(member.tenantId, member.campaignId, callData);
+        const endpoints = member.userId
+          ? await getEligible(member.tenantId, null, callData, {
+              onlyAgentUserIds: [member.userId],
+            })
+          : await getEligible(member.tenantId, member.campaignId, callData);
         const legs: AgentLeg[] = [];
         for (const endpoint of endpoints) {
           const userId = endpoint.answeringUserId ?? endpoint.agentUserId;
@@ -263,12 +294,13 @@ export async function selectSharedRoundRobin(
         }
         return legs;
       } catch (error) {
-        // One agency's failure loses its agents, not the whole call.
+        // One member's failure loses its agents, not the whole call.
         logger.error({
-          msg: 'Shared routing: could not read a member campaign; skipping it',
+          msg: 'Shared routing: could not read a member; skipping it',
           groupId,
           tenantId: member.tenantId,
           campaignId: member.campaignId,
+          userId: member.userId,
           error: (error as Error).message,
         });
         return [];
@@ -276,8 +308,8 @@ export async function selectSharedRoundRobin(
     })
   );
 
-  // One leg per agent. An agent reached twice (softphone and assigned DID on
-  // the same campaign) keeps the first.
+  // One leg per agent. An agent reached twice (on a member campaign and as an
+  // agent member, or by softphone and assigned DID) keeps the first.
   const byAgent = new Map<string, AgentLeg>();
   for (const leg of perMember.flat()) {
     if (!leg.endpoint.destination.trim()) continue;
@@ -310,9 +342,16 @@ export async function selectSharedRoundRobin(
 }
 
 /**
- * The member a call answered by `userId` belongs to: that agent's own agency
- * and its campaign in the group. Null when the agent is not an ACTIVE agent of
- * an agency in the group -- the call then stays with the DID's owner.
+ * Where a call answered by `userId` is recorded: that agent's own agency, and
+ * the campaign it goes under there --
+ *
+ *   - the agent's own member's campaign, when they were added individually
+ *     and given one;
+ *   - otherwise the agency's campaign member in the group, if it has one;
+ *   - otherwise no campaign: the call is the agency's and the agent's alone.
+ *
+ * Null when the agent's agency is not in the group at all, either way -- the
+ * call then stays with the DID's owner.
  */
 export async function resolveSharedAnswerer(
   groupId: string,
@@ -325,9 +364,16 @@ export async function resolveSharedAnswerer(
   });
   if (!user?.tenantId) return null;
 
-  const member = await prisma.sharedRoutingGroupMember.findFirst({
+  const members = await prisma.sharedRoutingGroupMember.findMany({
     where: { groupId, tenantId: user.tenantId },
-    select: { tenantId: true, campaignId: true },
+    select: { tenantId: true, campaignId: true, userId: true },
   });
-  return member ?? null;
+  const own = members.find(m => m.userId === userId);
+  const campaignMember = members.find(m => !m.userId && m.campaignId);
+  if (!own && !campaignMember) return null;
+
+  return {
+    tenantId: user.tenantId,
+    campaignId: own?.campaignId ?? campaignMember?.campaignId ?? null,
+  };
 }
