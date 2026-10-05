@@ -38,8 +38,11 @@ describe('carrierBrand', () => {
     expect(carrierBrand('Sentinel Security Life')?.logo).toBe('/carriers/sentinel-security.webp');
   });
 
-  it('has a logo for every quoter family but the ones still missing', () => {
+  it('has a logo for every quoter family', () => {
     const families = [
+      'Bankers Fidelity',
+      'Chubb / Combined',
+      'Foresters',
       'Accendo / Aetna',
       'Aetna / Continental Life',
       'American Amicable / Occidental',
@@ -68,7 +71,8 @@ describe('carrierBrand', () => {
   });
 
   it('never confuses Bankers Fidelity with Fidelity Life', () => {
-    expect(carrierBrand('Bankers Fidelity')).toBeNull();
+    expect(carrierBrand('Bankers Fidelity')?.logo).toBe('/carriers/bankers-fidelity.webp');
+    expect(carrierBrand('Fidelity Life')?.logo).toBe('/carriers/fidelity-life.webp');
   });
 
   it('matches the application form names', () => {
@@ -89,7 +93,7 @@ describe('carrierBrand', () => {
 
   it('returns null for a carrier with no logo', () => {
     expect(carrierBrand('Prosperity')).toBeNull();
-    expect(carrierBrand('Foresters')).toBeNull();
+    expect(carrierBrand('Acme Mutual')).toBeNull();
     expect(carrierBrand()).toBeNull();
   });
 });
