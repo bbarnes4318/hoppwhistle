@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Loader2,
   MapPin,
+  PhoneCall,
   Plus,
   RefreshCw,
   Shield,
@@ -117,16 +118,22 @@ interface User {
 }
 
 /**
- * Only an agent is gated on a license.
+ * Whoever takes calls has a license that matters.
  *
- * `lib/licensed-states.ts` restricts a principal that holds AGENT and is not
- * staff, so showing an empty license beside an owner or a buyer would report a
- * gap that does not exist and send somebody granting licenses to people who do
- * not need them.
+ * Call routing rings an agent only for callers in states they are licensed in,
+ * and that includes an owner or administrator who also takes calls (holds
+ * AGENT). The CRM's lead narrowing exempts owners and administrators, but the
+ * phone does not, so their license is shown and editable here too. Somebody
+ * who does not take calls -- an owner who only runs the agency, a buyer -- has
+ * no license to show.
  */
 function isLicenseGated(user: User): boolean {
-  const roles = user.roles.map(role => role.toUpperCase());
-  return roles.includes('AGENT') && !roles.includes('OWNER') && !roles.includes('ADMIN');
+  return user.roles.some(role => role.toUpperCase() === 'AGENT');
+}
+
+/** An owner or administrator, who may also take calls or stop taking them. */
+function isPrincipalRole(user: User): boolean {
+  return user.roles.some(role => ['OWNER', 'ADMIN'].includes(role.toUpperCase()));
 }
 
 /**
@@ -381,6 +388,23 @@ export function TeamMembersView({
       else next.add(id);
       return next;
     });
+  }
+
+  /*
+   * An owner or administrator who works the phones too: give them the AGENT
+   * role (keeping theirs), so they appear on the roster, can be assigned to
+   * campaigns and shared DIDs, get a softphone, and are credited with the
+   * calls they answer. Or take it away again.
+   */
+  async function setTakesCalls(user: User, takesCalls: boolean): Promise<void> {
+    setSavingId(user.id);
+    try {
+      const response = await apiClient.put(`/api/v1/users/${user.id}/takes-calls`, { takesCalls });
+      if (response.error) setError(response.error.message);
+      await load();
+    } finally {
+      setSavingId(null);
+    }
   }
 
   async function setCampaigns(agent: RosterAgent, campaignIds: string[]): Promise<void> {
@@ -690,24 +714,42 @@ export function TeamMembersView({
                       </TableCell>
 
                       <TableCell className="text-right">
-                        {isLicenseGated(user) ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setLicenseUser(user)}
-                            disabled={!hasFullAccess}
-                            title={
-                              hasFullAccess
-                                ? undefined
-                                : 'Only an owner or administrator can change a license'
-                            }
-                          >
-                            <MapPin className="h-3.5 w-3.5" />
-                            License
-                          </Button>
-                        ) : (
-                          <span className="text-sm text-ink-3">—</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {hasFullAccess && isPrincipalRole(user) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => void setTakesCalls(user, !isLicenseGated(user))}
+                              title={
+                                isLicenseGated(user)
+                                  ? 'Stop sending calls to this person (they keep their other roles)'
+                                  : 'Also make this person an agent, so they can be sent calls and credited with them'
+                              }
+                            >
+                              <PhoneCall className="h-3.5 w-3.5" />
+                              {isLicenseGated(user) ? 'Stop taking calls' : 'Takes calls'}
+                            </Button>
+                          ) : null}
+                          {isLicenseGated(user) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setLicenseUser(user)}
+                              disabled={!hasFullAccess}
+                              title={
+                                hasFullAccess
+                                  ? undefined
+                                  : 'Only an owner or administrator can change a license'
+                              }
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                              License
+                            </Button>
+                          ) : hasFullAccess && isPrincipalRole(user) ? null : (
+                            <span className="text-sm text-ink-3">—</span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>,
 
