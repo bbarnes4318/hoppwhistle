@@ -897,13 +897,24 @@ export function navFor(viewer: NavViewer): NavGroup[] {
  * Per-brand changes to an OWNER's or ADMIN's navigation.
  *
  *   powerhouse-insurance  Campaigns as an entry of its own (on the white-label
- *                         tier it is otherwise only a tab of Routing), and no
- *                         Sales CRM, Agreements, Buyers, Agencies or Upgrades.
+ *                         tier it is otherwise only a tab of Routing), no
+ *                         Sales CRM, Agreements, Buyers, Agencies or Upgrades,
+ *                         and Publishers under Administration -- which, with
+ *                         Buyers and Revenue hidden, leaves no Call Sales
+ *                         heading at all.
  *
  * Hiding is the sidebar and the command palette only; the routes themselves
  * are unchanged.
  */
-const BRAND_OWNER_NAV: Record<string, { hide: readonly string[]; add: NavItem[] }> = {
+interface BrandNavRules {
+  hide: readonly string[];
+  add: NavItem[];
+  /** Items moved to another heading: placed above its Settings, else at its foot.
+   *  A nav without that heading leaves the item where it was. */
+  move?: ReadonlyArray<{ href: string; to: string }>;
+}
+
+const BRAND_OWNER_NAV: Record<string, BrandNavRules> = {
   'powerhouse-insurance': {
     hide: [
       '/sales-crm',
@@ -915,6 +926,7 @@ const BRAND_OWNER_NAV: Record<string, { hide: readonly string[]; add: NavItem[] 
       '/revenue',
     ],
     add: [platformItem('/campaigns')],
+    move: [{ href: '/publishers', to: 'Administration' }],
   },
 };
 
@@ -925,12 +937,26 @@ export function brandOwnerNav(groups: NavGroup[], brandTheme?: string | null): N
   const rules = brandTheme ? BRAND_OWNER_NAV[brandTheme] : undefined;
   if (!rules || groups.length === 0) return groups;
 
-  let nav = groups
-    .map(group => ({
-      ...group,
-      items: group.items.filter(item => !rules.hide.includes(item.href)),
-    }))
-    .filter(group => group.items.length > 0);
+  let nav = groups.map(group => ({
+    ...group,
+    items: group.items.filter(item => !rules.hide.includes(item.href)),
+  }));
+
+  for (const { href, to } of rules.move ?? []) {
+    const item = nav.flatMap(group => group.items).find(i => i.href === href);
+    if (!item || !nav.some(group => group.label === to)) continue;
+    nav = nav.map(group => {
+      if (group.label !== to) return { ...group, items: group.items.filter(i => i.href !== href) };
+      const items = group.items.filter(i => i.href !== href);
+      const at = items.findIndex(i => i.href === '/settings');
+      return {
+        ...group,
+        items: at < 0 ? [...items, item] : [...items.slice(0, at), item, ...items.slice(at)],
+      };
+    });
+  }
+
+  nav = nav.filter(group => group.items.length > 0);
 
   for (const add of rules.add) {
     if (nav.some(group => group.items.some(item => item.href === add.href))) continue;
