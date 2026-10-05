@@ -1,10 +1,10 @@
 /**
  * Every spelling a carrier's name arrives in finds the same logo -- and a
- * carrier without one gets a monogram, never a wrong logo.
+ * carrier without one gets none, never a wrong logo.
  */
 import { describe, expect, it } from 'vitest';
 
-import { carrierBrand, monogramFor } from '../carrier-brand';
+import { carrierBrand } from '../carrier-brand';
 
 describe('carrierBrand', () => {
   it('matches the quoter family, the application name and the product id', () => {
@@ -42,14 +42,5 @@ describe('carrierBrand', () => {
     expect(carrierBrand('Liberty Bankers')).toBeNull();
     expect(carrierBrand('Aetna / Continental Life')).toBeNull();
     expect(carrierBrand()).toBeNull();
-  });
-});
-
-describe('monogramFor', () => {
-  it('uses the first two words of the name before any slash or bracket', () => {
-    expect(monogramFor('Liberty Bankers')).toBe('LB');
-    expect(monogramFor('Aetna / Continental Life')).toBe('AE');
-    expect(monogramFor('GCU')).toBe('GC');
-    expect(monogramFor('Sentinel Security (SSL)')).toBe('SS');
   });
 });

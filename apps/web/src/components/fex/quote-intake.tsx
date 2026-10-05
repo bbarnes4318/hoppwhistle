@@ -72,6 +72,18 @@ const STATE_NAME = new Map<string, string>([
   ['DC', 'District of Columbia'],
 ]);
 
+/** The conditions agents hear most, shown as one-tap chips ahead of the rest. */
+const FEATURED_CONDITIONS: readonly string[] = [
+  'DIABETES',
+  'DIABETES_INSULIN',
+  'COPD',
+  'CHF',
+  'HEART_ATTACK',
+  'STROKE',
+  'CANCER',
+  'OXYGEN',
+];
+
 const digitsOnly = (v: string) => v.replace(/[^0-9]/g, '');
 
 const applicantDone = (d: QuoteDraft) => {
@@ -616,7 +628,15 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [conditions, query, draft.conditions]
   );
-  const quick = QUICK_CONDITIONS.filter(code => byCode.has(code));
+  const [showAllQuick, setShowAllQuick] = React.useState(false);
+  const allQuick = QUICK_CONDITIONS.filter(code => byCode.has(code));
+  // The ones agents hear most first; the rest of the knockout list one tap away.
+  const featured = FEATURED_CONDITIONS.filter(code => allQuick.includes(code));
+  const rest = allQuick.filter(code => !featured.includes(code));
+  const quick = showAllQuick
+    ? [...featured, ...rest]
+    : [...featured, ...rest.filter(code => added.has(code))];
+  const hiddenCount = showAllQuick ? 0 : rest.filter(code => !added.has(code)).length;
 
   return (
     <Step
@@ -667,6 +687,19 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
               </button>
             );
           })}
+          {hiddenCount > 0 || showAllQuick ? (
+            <button
+              type="button"
+              aria-expanded={showAllQuick}
+              onClick={() => setShowAllQuick(v => !v)}
+              className={cn(
+                'inline-flex min-h-[28px] items-center rounded-[14px] px-2.5 py-1 text-xs font-medium text-brand-ink hover:underline',
+                FOCUS
+              )}
+            >
+              {showAllQuick ? 'Fewer' : `${hiddenCount} more`}
+            </button>
+          ) : null}
         </div>
 
         <Combobox

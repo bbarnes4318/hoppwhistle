@@ -8,7 +8,7 @@
  * normalised name, most specific pattern first. "American Amicable" is checked
  * before "Americo", which is a prefix of it.
  *
- * A carrier with no logo here gets a monogram (`monogramFor`), never a blank.
+ * A carrier with no logo here gets its name set as a wordmark (`CarrierLogo`).
  * Logos live in `public/carriers/`, trimmed to their mark on a transparent
  * background.
  */
@@ -65,12 +65,4 @@ export function carrierBrand(...names: Array<string | null | undefined>): Carrie
     if (hit) return hit.brand;
   }
   return null;
-}
-
-/** Two letters for a carrier with no logo: "Liberty Bankers" -> "LB", "GCU" -> "GC". */
-export function monogramFor(name: string): string {
-  const head = name.split(/\s*[/(]\s*/)[0];
-  const words = head.split(/[\s-]+/).filter(w => /[a-z0-9]/i.test(w));
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-  return (words[0] ?? name).slice(0, 2).toUpperCase();
 }

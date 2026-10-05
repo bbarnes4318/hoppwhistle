@@ -114,8 +114,8 @@ function Flags({ result, priceOnly }: { result: FexResult; priceOnly: boolean })
           content={`${result.facts.ratesStatus.label}${result.facts.sourceDate ? ` · ${result.facts.sourceDate}` : ''}`}
           side="top"
         >
-          <span className="t-meta inline-flex items-center gap-1 text-ringing-ink">
-            <AlertTriangle className="h-3 w-3" aria-hidden />
+          <span className="t-meta inline-flex items-center gap-1 text-ink-3">
+            <AlertTriangle className="h-3 w-3 text-ringing" aria-hidden />
             <span className="sr-only">Rates: </span>
             {result.facts.ratesStatus.label}
           </span>
@@ -258,18 +258,21 @@ export function ResultRow({
           <CarrierLogo
             names={[result.family, result.productId]}
             size="md"
-            className={cn('hidden min-[420px]:inline-flex', declined && 'opacity-50 grayscale')}
+            className={cn('hidden min-[560px]:inline-flex', declined && 'opacity-50 grayscale')}
           />
           <span className="min-w-0 flex-1">
+            {/* The plate names the carrier from 560px up; below that, say it in words. */}
+            <span className="mb-0.5 flex items-center gap-2 min-[560px]:sr-only">
+              <CarrierLogo names={[result.family, result.productId]} size="xs" />
+              <span className="truncate text-[13px] font-medium text-ink-2">{result.family}</span>
+            </span>
             <span
               className={cn(
                 'line-clamp-2 block text-[15px] font-semibold leading-snug',
                 declined ? 'text-ink-2' : 'text-ink'
               )}
+              title={result.product}
             >
-              {result.family}
-            </span>
-            <span className="block truncate text-sm text-ink-2" title={result.product}>
               {result.product}
             </span>
             <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
@@ -389,7 +392,7 @@ export function TopPickCard({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col items-start gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             className={cn(
               't-label inline-flex items-center gap-1 rounded-full px-2 py-0.5',
@@ -401,13 +404,14 @@ export function TopPickCard({
           </span>
           {selected ? <StatusChip value="SELECTED" tone="live" size="sm" label="In use" /> : null}
         </div>
-        <CarrierLogo names={[result.family, result.productId]} size="md" fixedWidth={false} />
       </div>
 
-      <p className="mt-3 truncate text-base font-semibold text-ink" title={result.family}>
-        {result.family}
-      </p>
-      <p className="truncate text-sm text-ink-2" title={result.product}>
+      <CarrierLogo names={[result.family, result.productId]} size="lg" className="mt-3 w-full" />
+      <p className="sr-only">{result.family}</p>
+      <p
+        className="mt-3 line-clamp-2 text-base font-semibold leading-snug text-ink"
+        title={result.product}
+      >
         {result.product}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
