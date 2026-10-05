@@ -34,12 +34,12 @@ per-file `unicode-range`, so a second file at the same weight would never be
 selected. It needs a merged subset file or hand-written `@font-face` rules with
 explicit `unicode-range`.
 
-## Licences
+## Licenses
 
 All three are SIL Open Font License 1.1, which permits redistribution in this
-form. Each family's licence is committed beside its files:
+form. Each family's license is committed beside its files:
 
-| Family              | Licence                      | Upstream                                  |
+| Family              | License                      | Upstream                                  |
 | ------------------- | ---------------------------- | ----------------------------------------- |
 | Bricolage Grotesque | `OFL-BricolageGrotesque.txt` | https://github.com/ateliertriay/bricolage |
 | Inter               | `OFL-Inter.txt`              | https://github.com/rsms/inter             |

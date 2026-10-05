@@ -4,7 +4,7 @@
 --
 -- `agency_profiles` carries `deliveryDays`, `deliveryStartTime` and
 -- `deliveryEndTime` for the WHOLE agency, and routing knew nothing about hours
--- at all -- it gated on licence, SIP registration and concurrency and nothing
+-- at all -- it gated on license, SIP registration and concurrency and nothing
 -- else. An agency running two shifts could not express it, so an agent who
 -- finished at 2pm kept being rung at 7pm: the call reached a phone nobody was
 -- sitting at, and was not offered to the agent who was.
@@ -23,7 +23,7 @@
 -- deployed, with nothing on any screen explaining why the phones went quiet.
 --
 -- It is the same posture `docs/AGENT_LICENSED_STATES_ROLLOUT.md` records for
--- licences, for the same reason: enforce what you have been told, never invent
+-- licenses, for the same reason: enforce what you have been told, never invent
 -- a constraint from the absence of data.
 --
 -- An EMPTY `days` array is different from having no row, and deliberately so:

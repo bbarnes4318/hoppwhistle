@@ -25,7 +25,7 @@
  * An agent who has not opened the softphone since this shipped has no
  * credential row. They still have to be reachable, so metadata still resolves
  * for them -- and a failure reading the credential table degrades to that same
- * path rather than taking the licence gate down with it.
+ * path rather than taking the license gate down with it.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -118,7 +118,7 @@ beforeEach(() => {
 });
 
 describe('a credential beats metadata', () => {
-  it('holds the credential holder to their licence, not the stale metadata owner', async () => {
+  it('holds the credential holder to their license, not the stale metadata owner', async () => {
     /*
      * The collision the migration leaves behind. `u-old` kept 1000 as a
      * credential and is licensed in TN. `u-stale` is a DIFFERENT agent whose
@@ -126,7 +126,7 @@ describe('a credential beats metadata', () => {
      * went global -- and who is licensed only in FL.
      *
      * The call is from TN. Believing metadata maps 1000 to `u-stale`, whose FL
-     * licence excludes them, and the licensed agent's phone never rings. The
+     * license excludes them, and the licensed agent's phone never rings. The
      * credential is the truth, so 1000 is `u-old` and the call connects.
      */
     const eligible = await eligibleExtensions({
@@ -142,9 +142,9 @@ describe('a credential beats metadata', () => {
     expect(eligible).toEqual(['1000']);
   });
 
-  it('excludes the credential holder when THEIR licence does not cover the caller', async () => {
+  it('excludes the credential holder when THEIR license does not cover the caller', async () => {
     // The mirror image, so the assertion above cannot pass by the gate simply
-    // being off: same shape, licences swapped, and the call must not connect.
+    // being off: same shape, licenses swapped, and the call must not connect.
     const eligible = await eligibleExtensions({
       users: [
         { id: 'u-old', metadata: { extension: '1000', licensedStates: ['FL'] } },
@@ -162,7 +162,7 @@ describe('a credential beats metadata', () => {
     /*
      * One agent, reallocated. Their credential says 1001; their metadata still
      * says 1000, which now belongs to another agency. A campaign assignment
-     * naming 1001 must resolve to them and be held to their licence.
+     * naming 1001 must resolve to them and be held to their license.
      */
     const eligible = await eligibleExtensions({
       users: [{ id: 'u-moved', metadata: { extension: '1000', licensedStates: ['FL'] } }],
@@ -188,12 +188,12 @@ describe('metadata still resolves an agent who has no credential', () => {
     expect(eligible).toEqual(['1005']);
   });
 
-  it('keeps the licence gate working when the credential table cannot be read', async () => {
+  it('keeps the license gate working when the credential table cannot be read', async () => {
     /*
      * Code deployed ahead of the migration: `agent_sip_credentials` does not
      * exist. The read is in its own try/catch precisely so this degrades to the
      * metadata path instead of throwing into the enclosing handler, which fails
-     * OPEN and would skip the licence gate for every call on the platform.
+     * OPEN and would skip the license gate for every call on the platform.
      *
      * An unlicensed agent must still not be rung.
      */

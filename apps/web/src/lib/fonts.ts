@@ -25,8 +25,8 @@ import localFont from 'next/font/local';
  * at the same weight would never be used. It needs either a merged subset file
  * or hand-written @font-face rules with explicit unicode-range.
  *
- * Licences: Bricolage Grotesque, Inter and IBM Plex Mono are all SIL Open Font
- * License 1.1, which permits redistribution in this form. Each family's licence
+ * Licenses: Bricolage Grotesque, Inter and IBM Plex Mono are all SIL Open Font
+ * License 1.1, which permits redistribution in this form. Each family's license
  * is committed beside its files as fonts/OFL-<Family>.txt.
  */
 

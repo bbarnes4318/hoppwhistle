@@ -10,7 +10,7 @@ FreeSWITCH on this same host. That has three costs:
 - **FracTEL dependency**: if FracTEL fails, every AI transfer fails with it.
 - **Wrong number**: the call reaches Hopwhistle with Dograh's rotating outbound
   caller ID rather than the lead's own number. The litigator check, state
-  routing, agent licence gating and CRM matching all key on that number.
+  routing, agent license gating and CRM matching all key on that number.
 
 After this change, Asterisk hands the call straight to FreeSWITCH on this host.
 FreeSWITCH receives an ordinary inbound call to the same campaign DID, **from the

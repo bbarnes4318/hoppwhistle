@@ -28,7 +28,7 @@ import { jurisdictionName } from '@/lib/licensable-jurisdictions';
  * `PUT /api/auth/me/licensed-states`, the same route the first-login screen
  * uses, which replaces the list, never empties it, and audits each change.
  *
- * Adding a state is the agent attesting to a licence, so a save that adds one
+ * Adding a state is the agent attesting to a license, so a save that adds one
  * asks them to confirm it first. Removing one needs no confirmation: it only
  * narrows what reaches them.
  */

@@ -5,7 +5,7 @@
  * THEIR leg instead of the softphone. The properties asserted here:
  *
  *   1. The destination is the cell, and it needs no SIP credential.
- *   2. It is still the agent: licence, availability and working hours apply,
+ *   2. It is still the agent: license, availability and working hours apply,
  *      resolved from the leg's agent id since a cell cannot be mapped back.
  *   3. The softphone registration gate does not apply -- there is no softphone.
  *   4. In `selectBestBuyer` the cell rings WITH the agent group (not as one
@@ -146,7 +146,7 @@ describe('a cell-forwarding agent', () => {
     ).toEqual(['1042']);
   });
 
-  it('is still held to their licence', async () => {
+  it('is still held to their license', async () => {
     expect(
       await destinations({
         assignments: [assignment({ userId: 'u-1', cell: CELL })],

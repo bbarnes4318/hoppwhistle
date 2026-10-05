@@ -31,7 +31,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import {
   CellForwardField,
   ReadinessCell,
-  RosterLicenceCell,
+  RosterLicenseCell,
   ScheduleCell,
   type Roster,
   type RosterAgent,
@@ -72,7 +72,7 @@ import { cn } from '@/lib/utils';
  *
  * ── Why this used to be two screens ──────────────────────────────────────────
  *
- * `/settings/users` listed every account -- roles, status, licence -- and
+ * `/settings/users` listed every account -- roles, status, license -- and
  * `/settings/agents` listed the agents AGAIN with the four things that decide
  * whether one of them ever rings: their licensed states, a SIP extension, how
  * many calls at once, and a campaign to take them from. Both pages listed the
@@ -117,28 +117,28 @@ interface User {
 }
 
 /**
- * Only an agent is gated on a licence.
+ * Only an agent is gated on a license.
  *
  * `lib/licensed-states.ts` restricts a principal that holds AGENT and is not
- * staff, so showing an empty licence beside an owner or a buyer would report a
- * gap that does not exist and send somebody granting licences to people who do
+ * staff, so showing an empty license beside an owner or a buyer would report a
+ * gap that does not exist and send somebody granting licenses to people who do
  * not need them.
  */
-function isLicenceGated(user: User): boolean {
+function isLicenseGated(user: User): boolean {
   const roles = user.roles.map(role => role.toUpperCase());
   return roles.includes('AGENT') && !roles.includes('OWNER') && !roles.includes('ADMIN');
 }
 
 /**
- * One agent's licence, read at a glance.
+ * One agent's license, read at a glance.
  *
  * Three states, and the middle one is the reason this column exists. An empty
- * licence is not a blank cell: it is default-deny in force, and an
+ * license is not a blank cell: it is default-deny in force, and an
  * administrator scanning this table needs to see that it is the reason an agent
  * is getting no work -- not wonder whether the column failed to load.
  */
-function LicenceCell({ user }: { user: User }): JSX.Element {
-  if (!isLicenceGated(user)) {
+function LicenseCell({ user }: { user: User }): JSX.Element {
+  if (!isLicenseGated(user)) {
     return <span className="text-sm text-ink-3">—</span>;
   }
 
@@ -148,7 +148,7 @@ function LicenceCell({ user }: { user: User }): JSX.Element {
     return (
       <span
         className="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full bg-ringing-tint px-2.5 text-[12px] font-medium text-ringing-ink"
-        title="No licence recorded. This agent is served no leads and routed no state-identified calls."
+        title="No license recorded. This agent is served no leads and routed no state-identified calls."
       >
         <AlertTriangle className="h-3 w-3" />
         None recorded
@@ -250,7 +250,7 @@ export function TeamMembersView({
 
   const [inviteUserOpen, setInviteUserOpen] = useState(false);
   const [inviteAgentOpen, setInviteAgentOpen] = useState(false);
-  const [licenceUser, setLicenceUser] = useState<User | null>(null);
+  const [licenseUser, setLicenseUser] = useState<User | null>(null);
   const [scheduleAgent, setScheduleAgent] = useState<RosterAgent | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -666,7 +666,7 @@ export function TeamMembersView({
                       </TableCell>
 
                       <TableCell>
-                        <LicenceCell user={user} />
+                        <LicenseCell user={user} />
                       </TableCell>
 
                       <TableCell>
@@ -690,20 +690,20 @@ export function TeamMembersView({
                       </TableCell>
 
                       <TableCell className="text-right">
-                        {isLicenceGated(user) ? (
+                        {isLicenseGated(user) ? (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setLicenceUser(user)}
+                            onClick={() => setLicenseUser(user)}
                             disabled={!hasFullAccess}
                             title={
                               hasFullAccess
                                 ? undefined
-                                : 'Only an owner or administrator can change a licence'
+                                : 'Only an owner or administrator can change a license'
                             }
                           >
                             <MapPin className="h-3.5 w-3.5" />
-                            Licence
+                            License
                           </Button>
                         ) : (
                           <span className="text-sm text-ink-3">—</span>
@@ -833,10 +833,10 @@ export function TeamMembersView({
                             <button
                               type="button"
                               className="align-middle hover:opacity-80"
-                              onClick={() => setLicenceUser(user)}
+                              onClick={() => setLicenseUser(user)}
                               title="Edit licensed states"
                             >
-                              <RosterLicenceCell states={agent.licensedStates} />
+                              <RosterLicenseCell states={agent.licensedStates} />
                             </button>
                           </div>
                         </TableCell>
@@ -877,13 +877,13 @@ export function TeamMembersView({
       />
 
       <LicensedStatesDialog
-        open={licenceUser !== null}
+        open={licenseUser !== null}
         onOpenChange={open => {
-          if (!open) setLicenceUser(null);
+          if (!open) setLicenseUser(null);
         }}
-        user={licenceUser}
+        user={licenseUser}
         onSaved={() => {
-          setLicenceUser(null);
+          setLicenseUser(null);
           void load();
         }}
       />

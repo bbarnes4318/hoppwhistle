@@ -1340,7 +1340,7 @@ a.rounded-card:hover,
 /* ==========================================================================
    VENDOR CHROME
    React Flow paints its own attribution link in a fixed grey that lands at
-   2.79:1 on --paper. It is required to stay visible by the library's licence,
+   2.79:1 on --paper. It is required to stay visible by the library's license,
    so it is restyled rather than hidden.
    ========================================================================== */
 
@@ -1348,7 +1348,7 @@ a.rounded-card:hover,
  * `!important`, and not lightly: @xyflow/react's stylesheet is imported by the
  * component (src/components/flows/flow-builder.tsx), so it is emitted after
  * this file and wins every tie at equal specificity. Raising the specificity
- * here would be a race against a selector we do not control. The licence
+ * here would be a race against a selector we do not control. The license
  * requires the attribution stay visible, and at #999 on --paper it is 2.79:1 —
  * visible in the sense of present, not in the sense of readable.
  */

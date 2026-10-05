@@ -107,9 +107,9 @@ describe.skipIf(!gate.available)('CRM agent scope', () => {
      *
      * Ownership and licensed state are separate gates and this suite is about
      * the first one, so the second is satisfied for every case here rather than
-     * exercised: an agent with no licence is refused every lead in the agency,
+     * exercised: an agent with no license is refused every lead in the agency,
      * which would make each assertion below pass for the wrong reason.
-     * `lib/__tests__/licensed-states.test.ts` is where the licence itself is
+     * `lib/__tests__/licensed-states.test.ts` is where the license itself is
      * tested. No assertion in this file was changed to accommodate it -- the
      * refusals it checks are still ownership refusals, and still 404.
      */

@@ -3,7 +3,7 @@
  *
  * An agency agent who takes calls on their own mobile rather than the browser
  * softphone stores that number in `users.metadata.cellForwardNumber`. Routing
- * then dials the cell as THAT AGENT's leg -- still held to their licence,
+ * then dials the cell as THAT AGENT's leg -- still held to their license,
  * schedule, availability and busy checks -- and the CDR credits the answered
  * call to them (`calls.answeredByUserId`), so their numbers land on the
  * leaderboard and agent stats exactly as a softphone call would.

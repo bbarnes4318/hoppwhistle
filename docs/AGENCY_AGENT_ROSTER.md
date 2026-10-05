@@ -38,7 +38,7 @@ join the endpoint list *before* every existing gate, so an agent reached this
 way is held to exactly the same rules as one reached through a buyer endpoint:
 
 - the accepted-state filter,
-- the **licensed-state gate** — assignment is not a licence,
+- the **licensed-state gate** — assignment is not a license,
 - the per-agent **concurrency limit**,
 - and `status = ACTIVE` on the account.
 
@@ -77,7 +77,7 @@ The server computes the blocking one, in this order:
 5. Has not opened the softphone yet
 
 **Earliest wins, deliberately.** Granting a campaign to an agent with no
-licence changes nothing, so naming the campaign first sends somebody to do work
+license changes nothing, so naming the campaign first sends somebody to do work
 that has no effect. An agent with nothing blocking them shows their live
 softphone status instead, which is the only thing left that decides whether the
 next call rings.
@@ -192,7 +192,7 @@ the bug.
 agency's `deliveryTimeZone`. Set from the roster screen.
 
 `AgencyProfile` carries delivery days and hours for the **whole agency**, and
-routing knew nothing about hours at all — it gated on licence, registration and
+routing knew nothing about hours at all — it gated on license, registration and
 concurrency and nothing else. An agency running two shifts could not express it,
 so an agent who finished at 2pm kept being rung at 7pm: the call reached a phone
 nobody was sitting at, and was not offered to the agent who was.
@@ -202,7 +202,7 @@ there is deliberately **no backfill** — not even the agency's own delivery
 window. The agency window is a billing concept, not a staffing one; applying it
 as a routing gate would silence every agent who works outside it the moment this
 deployed, with nothing on any screen explaining why the phones went quiet. Same
-posture as the licence gate: enforce what you have been told, never invent a
+posture as the license gate: enforce what you have been told, never invent a
 constraint from the absence of data. An unresolvable timezone and a malformed
 time also enforce nothing.
 

@@ -1,7 +1,7 @@
 /**
  * The gates a BUYER endpoint must pass before inbound routing rings it.
  *
- * Agents have their own gates in `routing.ts` (licence, schedule,
+ * Agents have their own gates in `routing.ts` (license, schedule,
  * registration, concurrency). Until these existed a buyer was held to almost
  * nothing on the inbound path: a buyer at its daily cap, closed for the night,
  * or out of prepaid money was rung anyway, and the call was either wasted on a

@@ -525,7 +525,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         metadata: {
           position: userPosition,
           defaultScript: defaultScript,
-          // The licence the inviting administrator recorded. Without it a new
+          // The license the inviting administrator recorded. Without it a new
           // agent starts with no licensed states at all.
           ...(grant.licensedStates.length > 0
             ? { licensedStates: normalizeLicensedStates(grant.licensedStates) }
@@ -1416,7 +1416,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
        */
       const licensedStates = normalizeLicensedStates(userMetadata?.licensedStates);
       // Never for NetEnroll staff or a role preview: an operator previewing an
-      // agency as an AGENT is looking at the screens, not working a licence, and
+      // agency as an AGENT is looking at the screens, not working a license, and
       // a preview is read-only so the screen could not be completed anyway.
       const needsLicensedStates =
         licensedStates.length === 0 &&
@@ -1580,7 +1580,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
    * list: at least one state, always. (To stop calls altogether an agent turns
    * off taking calls; that is a different switch.)
    *
-   * It REPLACES the list. The agent attests to their own licences: the product
+   * It REPLACES the list. The agent attests to their own licenses: the product
    * decision is that they, not only their administrator, keep this current.
    * Every change is audited with the list before and after, so an agency can
    * see who widened what and when. The caller is read from the verified session
@@ -1605,7 +1605,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
       if (principal.previewRole) {
         return reply.code(403).send({
-          error: { code: 'FORBIDDEN', message: 'A role preview cannot record a licence' },
+          error: { code: 'FORBIDDEN', message: 'A role preview cannot record a license' },
         });
       }
 

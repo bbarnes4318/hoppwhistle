@@ -124,7 +124,7 @@ export function StateValueTool() {
 
   /**
    * Fees, value index and rank for every jurisdiction except the resident
-   * state, which is dropped: an agent needs no non-resident licence at home.
+   * state, which is dropped: an agent needs no non-resident license at home.
    */
   const scored = useMemo<ScoredState[]>(() => {
     const priced = STATES.filter(s => s.code !== residence).map(s => ({

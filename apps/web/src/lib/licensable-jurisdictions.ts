@@ -1,13 +1,13 @@
 /**
- * The jurisdictions an agent can hold a licence in.
+ * The jurisdictions an agent can hold a license in.
  *
  * ── Why this is not `US_STATES` ──────────────────────────────────────────────
  *
  * `lib/us-states.ts` is a 50-entry dropdown list for a prospect's address, and
- * it is the wrong list for a licence. The server accepts 56 codes --
+ * it is the wrong list for a license. The server accepts 56 codes --
  * `LICENSABLE_JURISDICTIONS` in `apps/api/src/lib/licensed-states.ts` -- which
  * is the 50 states plus the District of Columbia and the five inhabited
- * territories. Insurance producers genuinely hold DC and Puerto Rico licences,
+ * territories. Insurance producers genuinely hold DC and Puerto Rico licenses,
  * so a picker built from the address list would silently refuse to grant six
  * jurisdictions the enforcement is perfectly willing to honour, and nothing
  * would report that: the save would succeed with the remaining states and the
@@ -25,7 +25,7 @@
  * Census regions, plus a territories group. They are here so the picker can
  * offer "select every state in the South" -- an agency licensed across a region
  * would otherwise be fifteen individual clicks, and a fifteen-click form is one
- * somebody abandons halfway with a half-granted licence saved.
+ * somebody abandons halfway with a half-granted license saved.
  */
 
 export interface Jurisdiction {

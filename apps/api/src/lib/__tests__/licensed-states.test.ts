@@ -1,5 +1,5 @@
 /**
- * What an AGENT's licence does and does not let them do.
+ * What an AGENT's license does and does not let them do.
  *
  * These are module tests rather than route tests on purpose. Every enforcement
  * point added in this change -- `agent/call/originate`, `agent/lead/lookup`,
@@ -35,8 +35,8 @@ const {
   UNRESTRICTED,
 } = await import('../licensed-states.js');
 
-/** A user row carrying exactly this licence list. */
-function userWithLicence(states: unknown) {
+/** A user row carrying exactly this license list. */
+function userWithLicense(states: unknown) {
   return { metadata: states === undefined ? {} : { licensedStates: states } };
 }
 
@@ -49,7 +49,7 @@ const AGENT = { userId: 'agent-1', tenantId: 'tenant-a', roles: ['AGENT'] };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(['TN']));
+  mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(['TN']));
   mockPrisma.insuranceLead.findFirst.mockResolvedValue(null);
   mockPrisma.lead.findFirst.mockResolvedValue(null);
 });
@@ -81,7 +81,7 @@ describe('normalizeStateCode', () => {
   });
 });
 
-describe('reporting a stored licence back to an operator', () => {
+describe('reporting a stored license back to an operator', () => {
   // What `cli/agent-licenses.ts` and scripts/licensed-states-report.sh show.
   // A blocked agent needs to see WHY, so the entries enforcement drops are kept
   // rather than thrown away -- and they come from the same function that decides
@@ -93,7 +93,7 @@ describe('reporting a stored licence back to an operator', () => {
     });
   });
 
-  it('reports a partly-rotten licence as the narrower list it really is', () => {
+  it('reports a partly-rotten license as the narrower list it really is', () => {
     expect(partitionLicensedStates(['TN', 'Atlantis'])).toEqual({
       licensed: ['TN'],
       rejected: ['Atlantis'],
@@ -101,8 +101,8 @@ describe('reporting a stored licence back to an operator', () => {
   });
 
   it('rejects a non-array outright rather than reporting it as absent', () => {
-    // `licensedStates: "TN"` is a wrong type, not a missing licence, and saying
-    // "no licence" would send somebody hunting a row that is already there.
+    // `licensedStates: "TN"` is a wrong type, not a missing license, and saying
+    // "no license" would send somebody hunting a row that is already there.
     expect(partitionLicensedStates('TN')).toEqual({ licensed: [], rejected: ['TN'] });
   });
 
@@ -117,7 +117,7 @@ describe('reporting a stored licence back to an operator', () => {
   });
 });
 
-describe('who is subject to a licence', () => {
+describe('who is subject to a license', () => {
   it('restricts an AGENT', () => {
     expect(isStateRestrictedAgent(AGENT)).toBe(true);
   });
@@ -159,9 +159,9 @@ describe('who is subject to a licence', () => {
   });
 });
 
-describe('the licence comes from the database, in the acting tenant', () => {
+describe('the license comes from the database, in the acting tenant', () => {
   it('reads User.metadata.licensedStates for the authenticated user', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(['tn', 'Florida']));
+    mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(['tn', 'Florida']));
 
     const licensed = await loadLicensedStates('agent-1', 'tenant-a');
 
@@ -195,7 +195,7 @@ describe('the licence comes from the database, in the acting tenant', () => {
   });
 
   it('never trusts a licensedStates claim on the principal', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(['TN']));
+    mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(['TN']));
 
     const authority = await resolveStateAuthority(
       requestAs({ ...AGENT, licensedStates: ['FL', 'TX', 'CA'] }),
@@ -215,7 +215,7 @@ describe('default deny', () => {
   });
 
   it('denies an agent with no licensedStates key at all', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(undefined));
+    mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(undefined));
     const authority = await resolveStateAuthority(requestAs(AGENT), 'tenant-a');
     expect(permits(authority, 'TN')).toBe(false);
   });
@@ -224,8 +224,8 @@ describe('default deny', () => {
     expect(permits(restricted([]), 'TN')).toBe(false);
   });
 
-  it('denies an agent whose licence list normalises to empty', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(['XX', 'Atlantis', 7]));
+  it('denies an agent whose license list normalises to empty', async () => {
+    mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(['XX', 'Atlantis', 7]));
     const authority = await resolveStateAuthority(requestAs(AGENT), 'tenant-a');
     expect(permits(authority, 'TN')).toBe(false);
   });
@@ -255,7 +255,7 @@ describe('default deny', () => {
 
 describe('the regression this change exists to prevent', () => {
   it('accepts the licensed state and refuses the same request with another one', async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(userWithLicence(['TN']));
+    mockPrisma.user.findFirst.mockResolvedValue(userWithLicense(['TN']));
     const authority = await resolveStateAuthority(requestAs(AGENT), 'tenant-a');
 
     // PATCH /api/v1/insurance-leads/:id { state: 'TN' } -- allowed.
@@ -263,7 +263,7 @@ describe('the regression this change exists to prevent', () => {
 
     // The identical request with the state swapped -- refused. This is the
     // bypass the PATCH guard closes: without it, rewriting a Florida lead's
-    // state to TN would pull it inside a Tennessee-only agent's licence.
+    // state to TN would pull it inside a Tennessee-only agent's license.
     expect(permits(authority, 'FL')).toBe(false);
   });
 });
@@ -306,7 +306,7 @@ describe('the state of a dialled number comes from authoritative data', () => {
   });
 
   it('reports a non-geographic number with no record as carrying no state', async () => {
-    // Toll-free. There is no jurisdiction to hold a licence in, so the
+    // Toll-free. There is no jurisdiction to hold a license in, so the
     // originate guard lets it through rather than stopping agents calling
     // carriers and their own office.
     expect(await resolveStateForPhone('tenant-a', '18005551234')).toEqual({ kind: 'none' });

@@ -4,15 +4,15 @@
 # ── What it answers ──────────────────────────────────────────────────────────
 #
 # PR #120 makes an AGENT's access conditional on the states they are licensed in,
-# and it defaults to deny: an agent with no licence performs no state-authorized
+# and it defaults to deny: an agent with no license performs no state-authorized
 # operation, and a lead with no readable state is served to no agent. That is the
-# correct rule, and on a database that has never recorded a licence it means every
+# correct rule, and on a database that has never recorded a license it means every
 # agent starts with nothing.
 #
 # There is nothing to infer it from. No column in this schema records an agent's
-# insurance licence; every `state` the database holds belongs to a prospect, an
+# insurance license; every `state` the database holds belongs to a prospect, an
 # applicant, a buyer's routing preference, or the agency's single home state.
-# So this does not propose licences. It reports who has none, so that somebody
+# So this does not propose licenses. It reports who has none, so that somebody
 # who knows the real answer can set them with
 #
 #   pnpm --filter @hopwhistle/api agents:licenses -- --set <email> TN,FL
@@ -98,7 +98,7 @@ echo "database: $(psql "$URL" -tAc 'select current_database()' | tr -d '[:space:
 echo "read-only: every statement below is a SELECT."
 
 # ═════════════════════════════════════════════════════════════════════════════
-HEAD "1. Every AGENT, and the licence they hold today"
+HEAD "1. Every AGENT, and the license they hold today"
 # ═════════════════════════════════════════════════════════════════════════════
 echo "'licensed_states' is what enforcement will read. NULL means the key is absent."
 q agents "
@@ -116,7 +116,7 @@ ORDER BY t.name NULLS FIRST, u.email;"
 # ═════════════════════════════════════════════════════════════════════════════
 HEAD "2. AGENTs who would be blocked by the deploy"
 # ═════════════════════════════════════════════════════════════════════════════
-echo "Each of these performs NO state-authorized operation until a licence is set."
+echo "Each of these performs NO state-authorized operation until a license is set."
 q agents-blocked "
 WITH agents AS (
   SELECT u.id, u.email, t.name AS agency, u.metadata -> 'licensedStates' AS ls
@@ -143,10 +143,10 @@ WHERE ls IS NULL
 ORDER BY agency NULLS FIRST, email;"
 
 # ═════════════════════════════════════════════════════════════════════════════
-HEAD "3. Licence entries enforcement cannot read"
+HEAD "3. License entries enforcement cannot read"
 # ═════════════════════════════════════════════════════════════════════════════
 echo "Stored, but not a jurisdiction — dropped on read, so they grant nothing."
-q licence-entries-rotten "
+q license-entries-rotten "
 SELECT u.email, e.v AS entry
 FROM users u
 JOIN user_roles ur ON ur.\"userId\" = u.id
@@ -252,7 +252,7 @@ WHERE l.\"assignedToId\" IS NOT NULL
   AND upper(trim(l.state)) IN ($JURISDICTIONS);")"
 
 echo "AGENT accounts:                    $AGENTS"
-echo "  … with a usable licence:         $((AGENTS - BLOCKED))"
+echo "  … with a usable license:         $((AGENTS - BLOCKED))"
 echo "  … blocked until one is set:      $BLOCKED"
 echo "AGENT-owned leads with a state:    $LEADS_OK"
 echo "AGENT-owned leads without one:     $LEADS_BAD"
@@ -261,11 +261,11 @@ STATUS=0
 
 if [ "$BLOCKED" -gt 0 ]; then
   RED "NOT READY: $BLOCKED of $AGENTS agents would have no access after the deploy."
-  echo "  Set each one's real licence — this is typed in, never inferred:"
+  echo "  Set each one's real license — this is typed in, never inferred:"
   echo "    pnpm --filter @hopwhistle/api agents:licenses -- --set <email> TN,FL"
   STATUS=1
 else
-  GRN "Every AGENT holds a usable licence."
+  GRN "Every AGENT holds a usable license."
 fi
 
 if [ "$LEADS_BAD" -gt 0 ]; then

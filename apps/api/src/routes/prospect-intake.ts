@@ -401,13 +401,13 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       // this endpoint writes it to `ProspectIntake` and -- for a manual CRM
       // entry -- on into `InsuranceLead` via `ingestLead`. It is the one place
       // in this change where the state under test comes from the request, so it
-      // is validated against the agent's licence rather than trusted: an agent
+      // is validated against the agent's license rather than trusted: an agent
       // cannot create a record in a state they may not work, then read it back
       // through the CRM because the record now says so.
       //
       // An absent or unreadable state is refused for a restricted agent. That
       // is the default-deny rule and not an oversight: an intake with no state
-      // is a record no licence can cover, and letting it through would make
+      // is a record no license can cover, and letting it through would make
       // "leave the dropdown alone" the way past this check.
       if (!(await enforceLicensedState(request, reply, tenantId, body.state))) {
         return;

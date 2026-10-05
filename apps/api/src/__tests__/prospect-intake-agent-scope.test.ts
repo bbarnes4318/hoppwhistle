@@ -102,7 +102,7 @@ describe.skipIf(!gate.available)('prospect intake agent scope', () => {
     const tenant = await prisma.tenant.create({
       data: { name: `${label} Insurance`, slug, status: 'ACTIVE' },
     });
-    // Licensed in TN, and every intake here is TN: the licence is a separate
+    // Licensed in TN, and every intake here is TN: the license is a separate
     // gate (`licensed-states.test.ts`), satisfied rather than exercised.
     const mkUser = async (name: string, roleId: string, licensedStates?: string[]) =>
       prisma.user.create({

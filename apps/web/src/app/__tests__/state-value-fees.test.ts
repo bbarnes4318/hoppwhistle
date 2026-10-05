@@ -141,7 +141,7 @@ describe('per-line-of-authority states', () => {
     }
   });
 
-  it('does not multiply a per-licence state', () => {
+  it('does not multiply a per-license state', () => {
     expect(resolveFee('OH', 'FL', { loaCount: 3, asOf: AS_OF }).stateFee).toBe(10);
   });
 });

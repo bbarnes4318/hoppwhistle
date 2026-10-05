@@ -15,7 +15,7 @@
  *
  *   1. An assignment produces a destination — the agent's SIP extension.
  *   2. It is held to EVERY existing gate. An agent reached this way is not on a
- *      privileged path: licence, concurrency and account status all still
+ *      privileged path: license, concurrency and account status all still
  *      apply, and the assertions below are the proof, not the claim.
  *   3. An agent with no usable softphone is not a destination. Ringing an
  *      extension that cannot register is a call into nothing, and the caller
@@ -86,7 +86,7 @@ function assignedAgent(options: {
   };
 }
 
-/** An active user row carrying a licence, as the gate reads it. */
+/** An active user row carrying a license, as the gate reads it. */
 function userRow(id: string, licensedStates?: string[]) {
   return {
     id,
@@ -194,7 +194,7 @@ describe('is held to the same gates as any other destination', () => {
       callerState: 'TN',
     });
 
-    // Assignment is not a licence. An agency putting an agent on a campaign
+    // Assignment is not a license. An agency putting an agent on a campaign
     // must not be able to route them work they cannot legally write.
     expect(destinations).toEqual([]);
   });

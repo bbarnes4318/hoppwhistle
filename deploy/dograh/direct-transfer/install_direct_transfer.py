@@ -5,7 +5,7 @@ Today a Dograh transfer is ``PJSIP/+1<DID>@fractel``: Asterisk dials the
 campaign DID out through FracTEL and FracTEL delivers it back to FreeSWITCH on
 this same host. That pays the carrier twice, makes every transfer depend on
 FracTEL, and the call arrives with Dograh's outbound caller ID, so Hopwhistle
-screens and routes it (litigator check, state, licence) on the wrong number.
+screens and routes it (litigator check, state, license) on the wrong number.
 
 This installs two things into the ``dograh-asterisk`` configuration:
 

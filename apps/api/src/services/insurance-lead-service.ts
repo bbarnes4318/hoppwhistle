@@ -70,7 +70,7 @@ export interface LeadFilters {
    * never by spreading `request.query`, which is what keeps that true.
    *
    * An empty array is a real value meaning "no states", not "unset": an agent
-   * with no licence sees nothing.
+   * with no license sees nothing.
    */
   licensedStates?: string[];
   /**
