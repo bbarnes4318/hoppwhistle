@@ -496,131 +496,137 @@
   }
 
   /*
-   * Powerhouse Insurance — light. The same enterprise skin as Life Leads Plus
-   * (cool neutrals, 8px cards, a hairline and almost no shadow) in the
-   * agency's own colours: a royal violet for action over violet-tinted
-   * neutrals. The logo is white lettering, so the brand's colour lives here.
-   * Violet sits well clear of the ringing amber, the dropped red and the live
-   * green, so no brand colour can be mistaken for a call state.
+   * Powerhouse Insurance — light. Navy and gold, the agency's own palette:
    *
-   *   phi brand-ink  on surface      7.97:1
-   *   phi brand-ink  on paper        7.36:1
-   *   phi brand-ink  on sunken       6.88:1
-   *   phi brand-ink  on brand-tint   6.90:1   (active tab, selected row)
-   *   phi white on brand-strong      6.77:1   (the primary button)
-   *   phi white on brand-strong-hover 9.32:1
-   *   phi brand-fg   on brand        4.79:1
-   *   phi ink-3      on paper        6.30:1
-   *   phi ink-3      on sunken       5.90:1
+   *   #040C50 navy       action, links, the navigation column, the panel
+   *   #EDC410 gold       the active-item marker and accents on navy only
+   *   #E4BF87 champagne  secondary accent on navy (icons, the panel's marks)
+   *   #F1F1F5 mist       the page ground
+   *   #575A78 slate      secondary text
+   *   #A4A3B1 pewter     input borders; icons on navy
+   *
+   * Gold never appears on a light ground: as text it fails contrast, and as
+   * a fill beside the ringing amber it would read as a call state. On the
+   * navy it is unmistakably the brand.
+   *
+   *   phi brand-ink  on surface      17.89:1
+   *   phi brand-ink  on paper        15.88:1
+   *   phi brand-ink  on sunken       14.67:1
+   *   phi brand-ink  on brand-tint   14.67:1   (active tab, selected row)
+   *   phi white on brand-strong      17.89:1   (the primary button)
+   *   phi white on brand-strong-hover 12.84:1
+   *   phi brand-fg   on brand        17.89:1
+   *   phi ink-3      on paper         5.94:1
+   *   phi ink-3      on sunken        5.49:1
    */
   :root:not([data-theme='dark'])[data-brand='powerhouse-insurance'],
   [data-brand='powerhouse-insurance'] [data-theme='light'] {
-    --paper: #f6f5fb;
+    --paper: #f1f1f5;
     --surface: #ffffff;
-    --sunken: #efedf7;
+    --sunken: #e8e8ef;
 
-    --ink: #16112b;
-    --ink-2: #433b5c;
-    --ink-3: #5e5677;
+    --ink: #0d1030;
+    --ink-2: #3a3d5c;
+    --ink-3: #575a78;
 
-    --rule: #e6e3ef;
-    --rule-strong: #cfcadf;
+    --rule: #dfdfe7;
+    --rule-strong: #c4c3cf;
 
-    --brand: #9466f7;
-    --brand-ink: #5b2bc9;
-    --brand-tint: #f1ecfe;
-    --brand-fg: #16112b;
-    --brand-strong: #6533e0; /* primary button fill, white text */
-    --brand-strong-hover: #4f22b8;
+    --brand: #040c50;
+    --brand-ink: #040c50;
+    --brand-tint: #e6e8f4;
+    --brand-fg: #ffffff;
+    --brand-strong: #040c50; /* primary button fill, white text */
+    --brand-strong-hover: #1b2680;
 
     --entity-buyer: var(--brand);
 
     /*
-     * The softphone in the brand's violet, as Life Leads Plus's is in its blue.
-     *   phi phone white on fill     6.77:1   (Answer, a solid dot's ground)
-     *   phi phone ink   on tint     6.90:1   (On a call, the launcher pill)
+     * The softphone in the brand navy.
+     *   phi phone white on fill     17.89:1   (Answer, a solid dot's ground)
+     *   phi phone ink   on tint     14.67:1   (On a call, the launcher pill)
      */
-    --phone: #6533e0;
-    --phone-deep: #4f22b8;
-    --phone-ink: #5b2bc9;
-    --phone-tint: #f1ecfe;
+    --phone: #040c50;
+    --phone-deep: #1b2680;
+    --phone-ink: #040c50;
+    --phone-tint: #e6e8f4;
 
     --radius-card: 8px;
     --radius-control: 6px;
 
-    --shadow-card: 0 1px 2px rgba(22, 17, 43, 0.04);
-    --shadow-raised: 0 4px 12px -2px rgba(22, 17, 43, 0.1), 0 2px 4px -2px rgba(22, 17, 43, 0.05);
-    --shadow-pop: 0 16px 32px -8px rgba(22, 17, 43, 0.18), 0 4px 8px -4px rgba(22, 17, 43, 0.08);
+    --shadow-card: 0 1px 2px rgba(4, 12, 80, 0.05);
+    --shadow-raised: 0 4px 12px -2px rgba(4, 12, 80, 0.1), 0 2px 4px -2px rgba(4, 12, 80, 0.05);
+    --shadow-pop: 0 16px 32px -8px rgba(4, 12, 80, 0.2), 0 4px 8px -4px rgba(4, 12, 80, 0.08);
 
     /* shadcn aliases, derived from the values above */
-    --background: 250 43% 97%; /* paper */
-    --foreground: 252 43% 12%; /* ink */
-    --card-foreground: 252 43% 12%;
-    --popover-foreground: 252 43% 12%;
-    --primary: 257 74% 54%; /* brand-strong */
+    --background: 240 17% 95%; /* paper */
+    --foreground: 235 57% 12%; /* ink */
+    --card-foreground: 235 57% 12%;
+    --popover-foreground: 235 57% 12%;
+    --primary: 234 90% 16%; /* brand-strong */
     --primary-foreground: 0 0% 100%;
-    --secondary: 252 38% 95%; /* sunken */
-    --secondary-foreground: 252 43% 12%;
-    --muted: 252 38% 95%;
-    --muted-foreground: 255 16% 40%; /* ink-3 */
-    --accent: 252 38% 95%;
-    --accent-foreground: 252 43% 12%;
-    --border: 255 27% 91%; /* rule */
-    --input: 254 25% 83%; /* rule-strong: inputs read as inputs */
-    --ring: 258 65% 48%; /* brand-ink */
+    --secondary: 240 18% 92%; /* sunken */
+    --secondary-foreground: 235 57% 12%;
+    --muted: 240 18% 92%;
+    --muted-foreground: 235 16% 41%; /* ink-3 */
+    --accent: 240 18% 92%;
+    --accent-foreground: 235 57% 12%;
+    --border: 240 14% 89%; /* rule */
+    --input: 248 9% 67%; /* #A4A3B1 pewter: inputs read as inputs */
+    --ring: 234 90% 16%; /* brand-ink */
     --radius: 0.5rem;
   }
 
   /*
-   * Powerhouse Insurance — dark. The violet lifted for a dark ground; the
-   * button fill stays deep enough to carry white text.
-   *   phi dark brand on paper        6.93:1
-   *   phi dark brand on surface      6.39:1
-   *   phi dark white on brand-strong 6.03:1
+   * Powerhouse Insurance — dark. The navy lifted to a periwinkle that reads
+   * on a dark ground; the button fill stays deep enough to carry white text.
+   *   phi dark brand on paper        7.86:1
+   *   phi dark brand on surface      7.25:1
+   *   phi dark white on brand-strong 10.32:1
    */
   [data-theme='dark'][data-brand='powerhouse-insurance'],
   [data-brand='powerhouse-insurance'] [data-theme='dark'] {
-    --brand: #a78bfa;
-    --brand-ink: #c4b5fd;
-    --brand-strong: #6d3ee6;
-    --brand-strong-hover: #5a2fc4;
+    --brand: #9aa3e6;
+    --brand-ink: #c3c8f2;
+    --brand-strong: #2a3594;
+    --brand-strong-hover: #1f2a80;
     --brand-fg: #121110; /* paper (dark) */
     /*
-     *   phi dark phone paper on fill   6.93:1
-     *   phi dark phone paper on deep   5.02:1
-     *   phi dark phone ink   on tint   6.78:1
+     *   phi dark phone paper on fill   7.86:1
+     *   phi dark phone paper on deep   5.74:1
+     *   phi dark phone ink   on tint   8.25:1
      */
-    --phone: #a78bfa;
-    --phone-deep: #8b6ef0;
-    --phone-ink: #c4b5fd;
-    --phone-tint: #36304a;
-    --primary: 255 92% 76%; /* brand */
-    --ring: 252 95% 85%; /* brand-ink */
+    --phone: #9aa3e6;
+    --phone-deep: #7d88d9;
+    --phone-ink: #c3c8f2;
+    --phone-tint: #2a2d45;
+    --primary: 233 60% 75%; /* brand */
+    --ring: 234 64% 86%; /* brand-ink */
   }
 
   /*
-   * The navigation column, in the brand's midnight violet. Same mechanism as
-   * Life Leads Plus's navy: the nav tokens re-declared for this subtree.
+   * The navigation column in the brand navy, with the gold as the active
+   * item's marker and a champagne wash behind it.
    *
-   *   phi nav text   on navy         11.91:1
-   *   phi nav icon   on navy          6.84:1
-   *   phi nav label  on navy          6.84:1
-   *   phi nav bar    on navy          6.41:1   (the active item's marker)
+   *   phi nav text   on navy         12.52:1
+   *   phi nav icon   on navy          7.20:1
+   *   phi nav label  on navy          7.20:1
+   *   phi nav bar    on navy         10.65:1   (the active item's gold marker)
    */
   [data-brand='powerhouse-insurance'] [data-brand-nav] {
-    --surface: #1a1240;
-    --paper: #1a1240;
+    --surface: #040c50;
+    --paper: #040c50;
     --ink: #ffffff;
-    --ink-2: #d8d2ec;
-    --ink-3: #a79cc9;
+    --ink-2: #d6d7e3;
+    --ink-3: #a4a3b1;
     --rule: rgba(255, 255, 255, 0.08);
     --rule-strong: rgba(255, 255, 255, 0.16);
     --sunken: rgba(255, 255, 255, 0.06);
-    --brand: #a78bfa;
+    --brand: #edc410;
     --brand-ink: #ffffff;
-    --brand-tint: rgba(167, 139, 250, 0.16);
-    background-image: linear-gradient(180deg, #24195a 0%, #1a1240 55%, #140e33 100%);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
+    --brand-tint: rgba(228, 191, 135, 0.14);
+    background-image: linear-gradient(180deg, #0a1466 0%, #040c50 55%, #030a42 100%);
+    box-shadow: inset -1px 0 0 rgba(237, 196, 16, 0.18);
     color-scheme: dark;
   }
 }
@@ -646,9 +652,9 @@
      llp panel ink     on navy     16.23:1
      llp panel ink-2   on navy     10.95:1
      llp panel ink-3   on navy      7.37:1
-     phi panel ink     on navy     17.43:1
-     phi panel ink-2   on navy     10.56:1
-     phi panel ink-3   on navy      6.84:1
+     phi panel ink     on navy     17.89:1
+     phi panel ink-2   on navy     12.52:1
+     phi panel ink-3   on navy      7.20:1
    ========================================================================== */
 
 @layer base {
@@ -716,28 +722,28 @@
   }
 
   [data-brand='powerhouse-insurance'] [data-auth-page] {
-    --auth-canvas: #f7f6fb;
+    --auth-canvas: #f1f1f5;
 
-    --auth-panel: #1a1240;
-    --auth-panel-image: linear-gradient(165deg, #24195a 0%, #1a1240 52%, #150f36 100%);
+    --auth-panel: #040c50;
+    --auth-panel-image: linear-gradient(165deg, #0a1466 0%, #040c50 52%, #030a42 100%);
     --auth-panel-ink: #ffffff;
-    --auth-panel-ink-2: #cdc5e6;
-    --auth-panel-ink-3: #a79cc9;
-    --auth-panel-rule: rgba(255, 255, 255, 0.1);
-    --auth-grid: rgba(167, 156, 201, 0.06);
-    --auth-glow: rgba(148, 102, 247, 0.14);
-    --auth-accent: #a78bfa;
-    --auth-edge: rgba(167, 139, 250, 0.35);
+    --auth-panel-ink-2: #d6d7e3;
+    --auth-panel-ink-3: #a4a3b1;
+    --auth-panel-rule: rgba(228, 191, 135, 0.22);
+    --auth-grid: rgba(164, 163, 177, 0.06);
+    --auth-glow: rgba(237, 196, 16, 0.08);
+    --auth-accent: #edc410;
+    --auth-edge: rgba(237, 196, 16, 0.4);
     --auth-mark-ground: rgba(255, 255, 255, 0.04);
-    --auth-mark-rule: rgba(167, 156, 201, 0.22);
-    --auth-mark-ink: #c4b5fd;
+    --auth-mark-rule: rgba(228, 191, 135, 0.3);
+    --auth-mark-ink: #e4bf87;
 
-    --auth-card-shadow: 0 1px 2px rgba(22, 17, 43, 0.04), 0 16px 40px -16px rgba(22, 17, 43, 0.14);
-    --auth-card-rule: #e6e3ef;
-    --auth-field-rule: #cfcadf;
-    --auth-field-hover: #a39dba;
-    --auth-focus-halo: rgba(101, 51, 224, 0.15);
-    --auth-info-rule: #ddd2fb;
+    --auth-card-shadow: 0 1px 2px rgba(4, 12, 80, 0.05), 0 16px 40px -16px rgba(4, 12, 80, 0.16);
+    --auth-card-rule: #dfdfe7;
+    --auth-field-rule: #a4a3b1;
+    --auth-field-hover: #575a78;
+    --auth-focus-halo: rgba(4, 12, 80, 0.16);
+    --auth-info-rule: #cfd2e8;
   }
 }
 
