@@ -20,10 +20,11 @@ import {
   type DetailField,
 } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { Check, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, Info, Plus, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
 import { Panel, Segmented, SegmentedItem } from '@/components/domain';
+import { Tooltip } from '@/components/ui/tooltip';
 import { fexApi, type FexDrugHit } from '@/lib/fex/api';
 import { searchConditions } from '@/lib/fex/condition-search';
 import {
@@ -80,8 +81,6 @@ const FEATURED_CONDITIONS: readonly string[] = [
   'CHF',
   'HEART_ATTACK',
   'STROKE',
-  'CANCER',
-  'OXYGEN',
 ];
 
 const digitsOnly = (v: string) => v.replace(/[^0-9]/g, '');
@@ -111,12 +110,12 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
   const done = required.filter(Boolean).length;
   return (
     <Panel className="overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-ink">Quote details</h2>
-          <div className="mt-1.5 flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="whitespace-nowrap text-[15px] font-semibold text-ink">Quote details</h2>
+          <div className="flex items-center gap-2">
             <span
-              className="h-1.5 w-24 overflow-hidden rounded-full bg-sunken"
+              className="h-1.5 w-14 overflow-hidden rounded-full bg-sunken"
               role="progressbar"
               aria-label="Required answers"
               aria-valuemin={0}
@@ -128,8 +127,8 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
                 style={{ width: `${(done / 2) * 100}%` }}
               />
             </span>
-            <span className="t-meta text-ink-3">
-              {done === 2 ? 'Ready — quoting live' : `${done} of 2 required steps`}
+            <span className="t-meta whitespace-nowrap text-ink-3">
+              {done === 2 ? 'Quoting live' : `${done} of 2 required`}
             </span>
           </div>
         </div>
@@ -164,6 +163,7 @@ function Step({
   optional,
   summary,
   hint,
+  aside,
   children,
 }: {
   n: number;
@@ -171,33 +171,37 @@ function Step({
   done?: boolean;
   optional?: boolean;
   summary?: string;
-  hint?: React.ReactNode;
+  /** One line of guidance, behind the title's info mark. */
+  hint?: string;
+  /** A control that belongs to the whole step, at the right of its title. */
+  aside?: React.ReactNode;
   children: React.ReactNode;
 }): JSX.Element {
   const id = React.useId();
   return (
-    <section aria-labelledby={id} className="px-4 py-4">
-      <div className="mb-3 flex items-start gap-2.5">
+    <section aria-labelledby={id} className="px-4 py-2">
+      <div className="mb-1 flex min-h-[24px] items-center gap-2">
         <span
           aria-hidden
           className={cn(
-            'mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-200 ne-motion',
+            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors duration-200 ne-motion',
             done ? 'bg-brand text-surface' : 'bg-sunken text-ink-2'
           )}
         >
-          {done ? <Check className="h-3.5 w-3.5" /> : n}
+          {done ? <Check className="h-3 w-3" /> : n}
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <h3 id={id} className="text-sm font-semibold text-ink">
-              {title}
-            </h3>
-            {optional ? (
-              <span className="t-meta shrink-0 text-ink-3">{summary ?? 'Optional'}</span>
-            ) : null}
-          </div>
-          {hint ? <p className="t-meta mt-0.5 text-ink-3">{hint}</p> : null}
-        </div>
+        <h3 id={id} className="text-[13px] font-semibold text-ink">
+          {title}
+        </h3>
+        {hint ? (
+          <Tooltip content={hint} side="top">
+            <Info className="h-3.5 w-3.5 text-ink-3" aria-label={hint} />
+          </Tooltip>
+        ) : null}
+        <span className="ml-auto flex shrink-0 items-center">
+          {aside ??
+            (optional ? <span className="t-meta text-ink-3">{summary ?? 'Optional'}</span> : null)}
+        </span>
       </div>
       {children}
     </section>
@@ -213,7 +217,9 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
 
   return (
     <Step n={1} title="Applicant" done={applicantDone(draft)}>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+      {/* Three across, the order an agent asks: where, who, how old; then the
+          tobacco, height and weight questions. */}
+      <div className="grid grid-flow-row-dense grid-cols-3 gap-x-2.5 gap-y-2">
         <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
           <NativeSelect
             id={p('state')}
@@ -222,10 +228,10 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
               dispatch({ type: 'set', patch: { state: e.target.value }, fields: ['state'] })
             }
           >
-            <option value="">Select…</option>
+            <option value="">—</option>
             {STATES.map(code => (
-              <option key={code} value={code}>
-                {code} · {STATE_NAME.get(code) ?? code}
+              <option key={code} value={code} title={STATE_NAME.get(code)}>
+                {code}
               </option>
             ))}
           </NativeSelect>
@@ -244,7 +250,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                 role="radio"
                 aria-checked={draft.sex === value}
                 active={draft.sex === value}
-                className="flex-1"
+                className="flex-1 px-1 text-[13px]"
                 onClick={() => dispatch({ type: 'set', patch: { sex: value }, fields: ['sex'] })}
               >
                 {label}
@@ -253,8 +259,8 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
           </Segmented>
         </Field>
 
-        <div className="col-span-2">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className={cn('min-w-0', draft.ageOrDob.mode === 'dob' && 'col-span-3')}>
+          <div className="mb-1 flex items-center justify-between gap-1">
             <label
               htmlFor={draft.ageOrDob.mode === 'age' ? p('age') : p('dob')}
               className="t-label flex items-baseline text-ink-2"
@@ -266,7 +272,10 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
             </label>
             <button
               type="button"
-              className={cn('t-meta rounded-control px-1 text-brand-ink hover:underline', FOCUS)}
+              className={cn(
+                't-meta whitespace-nowrap rounded-control text-brand-ink hover:underline',
+                FOCUS
+              )}
               onClick={() =>
                 dispatch({
                   type: 'set',
@@ -283,7 +292,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                 })
               }
             >
-              {draft.ageOrDob.mode === 'age' ? 'Use date of birth' : 'Use age'}
+              {draft.ageOrDob.mode === 'age' ? 'Use DOB' : 'Use age'}
             </button>
           </div>
           {draft.ageOrDob.mode === 'age' ? (
@@ -302,7 +311,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
               }
             />
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="relative">
               <TextInput
                 id={p('dob')}
                 type="date"
@@ -315,18 +324,17 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                   })
                 }
               />
-              <span className="t-meta shrink-0 tabular-nums text-ink-2" aria-live="polite">
+              <span
+                className="t-meta pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 tabular-nums text-ink-2"
+                aria-live="polite"
+              >
                 {dobAge !== null ? `Age ${dobAge}` : ''}
               </span>
             </div>
           )}
         </div>
 
-        <Field
-          label="Tobacco or nicotine in the last 12 months"
-          className="col-span-2"
-          fromLead={lead('tobacco')}
-        >
+        <Field label="Tobacco" fromLead={lead('tobacco')}>
           <Segmented
             role="radiogroup"
             aria-label="Tobacco or nicotine in the last 12 months"
@@ -343,7 +351,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                 role="radio"
                 aria-checked={draft.tobacco === value}
                 active={draft.tobacco === value}
-                className="flex-1"
+                className="flex-1 px-1 text-[13px]"
                 onClick={() =>
                   dispatch({ type: 'set', patch: { tobacco: value }, fields: ['tobacco'] })
                 }
@@ -355,7 +363,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
         </Field>
 
         <Field label="Height" htmlFor={p('ft')} fromLead={lead('height')}>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1">
             <div className="relative">
               <TextInput
                 id={p('ft')}
@@ -371,11 +379,11 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                     fields: ['height'],
                   })
                 }
-                className="pr-7"
+                className="px-2 pr-5"
               />
               <span
                 aria-hidden
-                className="t-meta pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+                className="t-meta pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-3"
               >
                 ft
               </span>
@@ -394,11 +402,11 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                     fields: ['height'],
                   })
                 }
-                className="pr-7"
+                className="px-2 pr-5"
               />
               <span
                 aria-hidden
-                className="t-meta pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+                className="t-meta pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-3"
               >
                 in
               </span>
@@ -449,14 +457,17 @@ function CoveragePanel({
   const customFace = face && !FACE_PRESETS.includes(Number(face)) ? face : '';
 
   return (
-    <Step n={2} title="Coverage" done={coverageDone(draft)}>
-      <div className="space-y-4">
-        <Segmented role="radiogroup" aria-label="Quote by" className="w-full">
+    <Step
+      n={2}
+      title="Coverage"
+      done={coverageDone(draft)}
+      aside={
+        <Segmented role="radiogroup" aria-label="Quote by" className="h-7">
           <SegmentedItem
             role="radio"
             aria-checked={draft.coverage.mode === 'face'}
             active={draft.coverage.mode === 'face'}
-            className="flex-1"
+            className="h-6 px-2.5 text-xs"
             onClick={() =>
               draft.coverage.mode !== 'face' &&
               dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: '10000' } } })
@@ -468,7 +479,7 @@ function CoveragePanel({
             role="radio"
             aria-checked={draft.coverage.mode === 'budget'}
             active={draft.coverage.mode === 'budget'}
-            className="flex-1"
+            className="h-6 px-2.5 text-xs"
             onClick={() =>
               draft.coverage.mode !== 'budget' &&
               dispatch({
@@ -481,16 +492,18 @@ function CoveragePanel({
             Monthly budget
           </SegmentedItem>
         </Segmented>
-
+      }
+    >
+      <div className="space-y-2.5">
         {draft.coverage.mode === 'face' ? (
           <div>
-            <p className="t-label mb-1.5 flex items-baseline text-ink-2" id={p('face-label')}>
+            <p className="sr-only" id={p('face-label')}>
               Face amount
-              {draft.prefilled.has('face') ? (
-                <span className="t-meta ml-1.5 font-normal text-ink-3">From lead</span>
-              ) : null}
             </p>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby={p('face-label')}>
+            {draft.prefilled.has('face') ? (
+              <p className="t-meta mb-1 text-ink-3">Face amount from lead</p>
+            ) : null}
+            <div className="grid grid-cols-6 gap-1" role="group" aria-labelledby={p('face-label')}>
               {FACE_PRESETS.map(amount => {
                 const on = Number(face) === amount;
                 return (
@@ -506,7 +519,7 @@ function CoveragePanel({
                       })
                     }
                     className={cn(
-                      'h-8 rounded-control border px-2.5 text-sm font-medium tabular-nums transition-colors duration-150 ne-motion',
+                      'h-8 rounded-control border px-1 text-[13px] font-medium tabular-nums transition-colors duration-150 ne-motion',
                       on
                         ? 'border-brand-ink bg-brand-tint text-brand-ink'
                         : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
@@ -518,7 +531,12 @@ function CoveragePanel({
                 );
               })}
             </div>
-            <div className="relative mt-2">
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-x-3">
+          {draft.coverage.mode === 'face' ? (
+            <div className="relative self-end">
               <span
                 aria-hidden
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3"
@@ -541,66 +559,61 @@ function CoveragePanel({
                 className="pl-6"
               />
             </div>
-          </div>
-        ) : (
-          <Field
-            label="Monthly budget"
-            htmlFor={p('budget')}
-            hint="Each carrier shows the largest face that fits the budget."
-          >
-            <div className="relative">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3"
-              >
-                $
-              </span>
-              <TextInput
-                id={p('budget')}
-                inputMode="decimal"
-                placeholder="50"
-                value={draft.coverage.budget}
-                onChange={e =>
-                  dispatch({
-                    type: 'set',
-                    patch: {
-                      coverage: {
-                        mode: 'budget',
-                        budget: e.target.value.replace(/[^0-9.]/g, '').slice(0, 7),
+          ) : (
+            <Field label="Monthly budget" htmlFor={p('budget')}>
+              <div className="relative">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3"
+                >
+                  $
+                </span>
+                <TextInput
+                  id={p('budget')}
+                  inputMode="decimal"
+                  placeholder="50"
+                  value={draft.coverage.budget}
+                  onChange={e =>
+                    dispatch({
+                      type: 'set',
+                      patch: {
+                        coverage: {
+                          mode: 'budget',
+                          budget: e.target.value.replace(/[^0-9.]/g, '').slice(0, 7),
+                        },
                       },
-                    },
-                  })
-                }
-                className="pl-6"
-              />
-            </div>
+                    })
+                  }
+                  className="pl-6"
+                />
+              </div>
+            </Field>
+          )}
+
+          <Field label="Payment" htmlFor={p('mode')}>
+            <NativeSelect
+              id={p('mode')}
+              value={draft.paymentMode}
+              onChange={e =>
+                dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
+              }
+            >
+              {PAYMENT_MODES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </NativeSelect>
           </Field>
-        )}
+        </div>
 
-        <Field label="Payment" htmlFor={p('mode')}>
-          <NativeSelect
-            id={p('mode')}
-            value={draft.paymentMode}
-            onChange={e =>
-              dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
-            }
-          >
-            {PAYMENT_MODES.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-
-        <div className="space-y-2.5">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px]">
           <CheckRow
             id={p('activity')}
             checked={draft.activityCredit}
             onChange={checked => dispatch({ type: 'set', patch: { activityCredit: checked } })}
           >
-            Exercises 3+ days a week
-            <span className="t-meta block text-ink-3">Transamerica activity credit</span>
+            <span title="Transamerica activity credit">Exercises 3+ days/wk</span>
           </CheckRow>
           {showAetnaMedSupp ? (
             <CheckRow
@@ -608,7 +621,7 @@ function CoveragePanel({
               checked={draft.aetnaMedSupp}
               onChange={checked => dispatch({ type: 'set', patch: { aetnaMedSupp: checked } })}
             >
-              Has a qualifying Aetna/CVS Medicare Supplement
+              <span title="Has a qualifying Aetna/CVS Medicare Supplement">Aetna Med Supp</span>
             </CheckRow>
           ) : null}
         </div>
@@ -644,19 +657,21 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
       title="Health history"
       optional
       summary={healthSummary(draft)}
-      hint={
-        <>
-          Last treated means the last surgery, procedure, hospital stay or treatment change. Each
-          carrier&apos;s own questions decide the result.
-        </>
-      }
+      hint="Last treated means the last surgery, procedure, hospital stay or treatment change. Each carrier's own questions decide the result."
     >
-      <div className="space-y-4">
-        <div
-          className="flex flex-wrap gap-1.5"
-          role="group"
-          aria-label="Common knockout conditions"
-        >
+      <div className="space-y-2">
+        <Combobox
+          id={`${idPrefix}-condition`}
+          label="Add a condition"
+          query={query}
+          onQueryChange={setQuery}
+          placeholder="Search conditions: diabetes, stent, COPD…"
+          options={matches.map(c => ({ id: c.code, label: c.label, meta: c.category }))}
+          onPick={code => dispatch({ type: 'addCondition', code })}
+          emptyText="No condition by that name"
+        />
+
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Common knockout conditions">
           {quick.map(code => {
             const on = added.has(code);
             return (
@@ -671,7 +686,7 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
                   } else dispatch({ type: 'addCondition', code });
                 }}
                 className={cn(
-                  'inline-flex min-h-[28px] items-center gap-1 rounded-[14px] border px-2.5 py-1 text-left text-xs leading-snug font-medium transition-colors duration-150 ne-motion',
+                  'inline-flex min-h-[26px] items-center gap-1 rounded-[13px] border px-2 py-0.5 text-left text-xs font-medium leading-snug transition-colors duration-150 ne-motion',
                   on
                     ? 'border-dropped bg-dropped-tint text-dropped-ink'
                     : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
@@ -693,7 +708,7 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
               aria-expanded={showAllQuick}
               onClick={() => setShowAllQuick(v => !v)}
               className={cn(
-                'inline-flex min-h-[28px] items-center rounded-[14px] px-2.5 py-1 text-xs font-medium text-brand-ink hover:underline',
+                'inline-flex min-h-[26px] items-center rounded-[13px] px-2 py-0.5 text-xs font-medium text-brand-ink hover:underline',
                 FOCUS
               )}
             >
@@ -702,19 +717,8 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
           ) : null}
         </div>
 
-        <Combobox
-          id={`${idPrefix}-condition`}
-          label="Add a condition"
-          query={query}
-          onQueryChange={setQuery}
-          placeholder="Search conditions: diabetes, stent, COPD…"
-          options={matches.map(c => ({ id: c.code, label: c.label, meta: c.category }))}
-          onPick={code => dispatch({ type: 'addCondition', code })}
-          emptyText="No condition by that name"
-        />
-
         {draft.conditions.length ? (
-          <ul className="space-y-2.5">
+          <ul className="space-y-2">
             {draft.conditions.map(c => (
               <ConditionCard
                 key={c.key}
@@ -725,11 +729,7 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
               />
             ))}
           </ul>
-        ) : (
-          <p className="t-meta text-ink-3">
-            No conditions added. A clean history quotes best class.
-          </p>
-        )}
+        ) : null}
       </div>
     </Step>
   );
@@ -752,9 +752,9 @@ function ConditionCard({
   const fields = CONDITION_DETAIL_FIELDS[condition.code] ?? [];
 
   return (
-    <li className="rounded-card border border-rule bg-sunken/60 p-3">
+    <li className="rounded-card border border-rule bg-sunken/60 px-3 py-2">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="text-[13px] font-medium text-ink">{label}</p>
         <button
           type="button"
           aria-label={`Remove ${label}`}
@@ -767,7 +767,7 @@ function ConditionCard({
           <X className="h-4 w-4" aria-hidden />
         </button>
       </div>
-      <div className="mt-2 grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
+      <div className="mt-1.5 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
         <Field label="Diagnosed / happened" htmlFor={p('dx')}>
           <NativeSelect
             id={p('dx')}
@@ -808,7 +808,7 @@ function ConditionCard({
         id={p('meds')}
         checked={condition.onMeds}
         onChange={onMeds => update({ onMeds })}
-        className="mt-2.5"
+        className="mt-2"
       >
         On maintenance medication
       </CheckRow>
@@ -961,7 +961,7 @@ function MedicationsPanel({
 
   return (
     <Step n={4} title="Medications" optional summary={medsSummary(draft)}>
-      <div className="space-y-4">
+      <div className="space-y-2">
         <Combobox
           id={`${idPrefix}-drug`}
           label="Add a medication"
@@ -987,7 +987,7 @@ function MedicationsPanel({
           }}
         />
         {draft.meds.length ? (
-          <ul className="space-y-2.5">
+          <ul className="space-y-2">
             {draft.meds.map(med => {
               const p = (s: string) => `${idPrefix}-${med.key}-${s}`;
               const asked = needsIndication.get(med.drugId);
@@ -996,9 +996,12 @@ function MedicationsPanel({
                 : (asked ?? []).map(code => ({ code, label: labelOf.get(code) ?? code }));
               const askUse = (med.multiUse || Boolean(asked)) && options.length > 0;
               return (
-                <li key={med.key} className="rounded-card border border-rule bg-sunken/60 p-3">
+                <li
+                  key={med.key}
+                  className="rounded-card border border-rule bg-sunken/60 px-3 py-2"
+                >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium capitalize text-ink">{med.name}</p>
+                    <p className="text-[13px] font-medium capitalize text-ink">{med.name}</p>
                     <button
                       type="button"
                       aria-label={`Remove ${med.name}`}
@@ -1011,7 +1014,7 @@ function MedicationsPanel({
                       <X className="h-4 w-4" aria-hidden />
                     </button>
                   </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
+                  <div className="mt-1.5 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                     <Field label="Still taking?" htmlFor={p('taken')}>
                       <NativeSelect
                         id={p('taken')}
@@ -1065,9 +1068,7 @@ function MedicationsPanel({
               );
             })}
           </ul>
-        ) : (
-          <p className="t-meta text-ink-3">No medications added.</p>
-        )}
+        ) : null}
       </div>
     </Step>
   );

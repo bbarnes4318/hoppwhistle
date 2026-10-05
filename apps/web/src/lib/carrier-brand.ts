@@ -40,6 +40,34 @@ const BRANDS: ReadonlyArray<{ test: RegExp; brand: CarrierBrand }> = [
     brand: { logo: '/carriers/ahl.webp', shape: 'square', name: 'American Home Life' },
   },
   {
+    test: /liberty bankers/,
+    brand: { logo: '/carriers/liberty-bankers.webp', shape: 'wide', name: 'Liberty Bankers' },
+  },
+  {
+    test: /continental life/,
+    brand: {
+      logo: '/carriers/continental-life-aetna.webp',
+      shape: 'wide',
+      name: 'Continental Life by Aetna',
+    },
+  },
+  {
+    test: /sons of norway/,
+    brand: { logo: '/carriers/sons-of-norway.webp', shape: 'wide', name: 'Sons of Norway' },
+  },
+  {
+    test: /security national/,
+    brand: { logo: '/carriers/security-national.webp', shape: 'wide', name: 'Security National' },
+  },
+  {
+    test: /sentinel security/,
+    brand: {
+      logo: '/carriers/sentinel-security.webp',
+      shape: 'wide',
+      name: 'Sentinel Security Life',
+    },
+  },
+  {
     test: /royal neighbors/,
     brand: {
       logo: '/carriers/royal-neighbors.webp',

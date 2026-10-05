@@ -25,8 +25,8 @@ import { cn } from '@/lib/utils';
 const SIZE = {
   xs: { box: 'h-7 w-[64px]', square: 'h-7 w-7' },
   sm: { box: 'h-9 w-[84px]', square: 'h-9 w-9' },
-  md: { box: 'h-14 w-[136px]', square: 'h-14 w-14' },
-  lg: { box: 'h-16 w-[176px]', square: 'h-16 w-16' },
+  md: { box: 'h-12 w-[128px]', square: 'h-12 w-12' },
+  lg: { box: 'h-14 w-[168px]', square: 'h-14 w-14' },
 } as const;
 
 type Size = keyof typeof SIZE;

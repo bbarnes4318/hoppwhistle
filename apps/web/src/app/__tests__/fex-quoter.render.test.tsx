@@ -355,12 +355,11 @@ describe('QuoteWorkspace', () => {
         onUseQuote={onUseQuote}
       />
     );
-    // The top pick and its row in the full list are the same plan; the card comes first.
+    // The first row is the best one, marked as such, with the carrier's logo.
     const [use] = await screen.findAllByRole('button', { name: 'Use this quote' });
-    expect(within(use.closest('article')!).getByText('Mutual of Omaha')).toBeTruthy();
-    expect(
-      use.closest('article')!.querySelector('[data-carrier-logo="Mutual of Omaha"] img')
-    ).toBeTruthy();
+    const row = use.closest('li')!;
+    expect(within(row).getByText('Lowest price')).toBeTruthy();
+    expect(row.querySelector('[data-carrier-logo="Mutual of Omaha"] img')).toBeTruthy();
     fireEvent.click(use);
 
     await waitFor(() => expect(onUseQuote).toHaveBeenCalledTimes(1));

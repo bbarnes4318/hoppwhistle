@@ -41,7 +41,7 @@ import { cn } from '@/lib/utils';
 
 import { FOCUS } from './parts';
 import { QuoteIntake } from './quote-intake';
-import { ResultRow, SelectedQuoteBar, TopPickCard } from './result-row';
+import { ResultRow, SelectedQuoteBar } from './result-row';
 
 export interface QuoteWorkspaceProps {
   variant: 'page' | 'drawer' | 'embedded';
@@ -261,21 +261,10 @@ export function QuoteWorkspace({
     selected: selection?.productId === r.productId,
   });
 
-  const fill = variant !== 'page';
   const ready = Boolean(toApplicant(draft));
 
   // ── Results pane ─────────────────────────────────────────────────────────
-  const selectedId = selection?.productId ?? null;
-  const topPicks = groups.qualifies.filter(r => r.best).slice(0, 3);
   const firstLabel = effectiveSort === 'face' ? 'Most coverage' : 'Lowest price';
-  const openDetails = (r: FexResult) => {
-    setExpanded(r.productId);
-    requestAnimationFrame(() =>
-      document
-        .querySelector(`[data-product="${CSS.escape(r.productId)}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    );
-  };
   const who = [
     draft.state,
     draft.sex === 'F' ? 'Female' : draft.sex === 'M' ? 'Male' : null,
@@ -338,20 +327,15 @@ export function QuoteWorkspace({
   } else if (!quote.data) {
     body = (
       <div className="space-y-4" aria-busy="true" aria-label="Quoting every carrier">
-        <Skeleton className="h-16 w-full rounded-card" />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map(i => (
-            <Skeleton key={i} className="h-[264px] w-full rounded-card" />
-          ))}
-        </div>
+        <Skeleton className="h-12 w-full rounded-card" />
         <Panel>
           <ul>
             {Array.from({ length: 5 }).map((_, i) => (
               <li
                 key={i}
-                className="flex h-[76px] items-center gap-4 border-b border-rule px-4 last:border-0"
+                className="flex h-16 items-center gap-4 border-b border-rule px-4 last:border-0"
               >
-                <Skeleton className="h-11 w-[92px]" />
+                <Skeleton className="h-12 w-[128px]" />
                 <span className="flex-1 space-y-2">
                   <Skeleton className="h-3 w-40" />
                   <Skeleton className="h-3 w-24" />
@@ -367,15 +351,15 @@ export function QuoteWorkspace({
     body = (
       <div
         className={cn(
-          'space-y-5 transition-opacity duration-150 ne-motion',
+          'space-y-3 transition-opacity duration-150 ne-motion',
           quote.stale && 'opacity-60'
         )}
         aria-busy={quote.stale}
       >
         {/* The answer in one line, and who it is for. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
-            <h2 className="text-[22px] font-semibold leading-tight tracking-tight text-ink">
+            <h2 className="text-lg font-semibold leading-tight tracking-tight text-ink">
               {groups.qualifies.length === 0
                 ? 'No carrier qualifies yet'
                 : `${groups.qualifies.length} ${groups.qualifies.length === 1 ? 'carrier qualifies' : 'carriers qualify'}`}
@@ -388,7 +372,7 @@ export function QuoteWorkspace({
                 </span>
               ) : null}
             </h2>
-            <p className="t-meta mt-1 truncate text-ink-2">
+            <p className="t-meta mt-0.5 truncate text-ink-2">
               {who} · {health}
               {quote.stale ? (
                 <span className="ml-2 inline-flex items-center gap-1 text-brand-ink">
@@ -398,7 +382,7 @@ export function QuoteWorkspace({
               ) : null}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2" aria-label="Summary">
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Summary">
             <SummaryPill
               label="Level from"
               value={lowestLevel === null ? '—' : money(lowestLevel)}
@@ -453,7 +437,7 @@ export function QuoteWorkspace({
           <div
             ref={bannerRef}
             role="alert"
-            className="rounded-card border border-ringing bg-ringing-tint p-4"
+            className="rounded-card border border-ringing bg-ringing-tint px-3 py-2.5"
           >
             <p className="flex items-center gap-2 text-sm font-semibold text-ringing-ink">
               <HelpCircle className="h-4 w-4" aria-hidden />
@@ -462,7 +446,7 @@ export function QuoteWorkspace({
             <p className="t-meta mt-0.5 text-ink-2">
               Until you answer, each carrier applies the strictest use it lists.
             </p>
-            <ul className="mt-3 space-y-2.5">
+            <ul className="mt-2 space-y-1.5">
               {[...needsIndication.entries()].map(([drugId, need]) => (
                 <li key={drugId} className="flex flex-wrap items-center gap-1.5">
                   <span className="mr-1 min-w-[96px] text-sm font-medium capitalize text-ink">
@@ -474,7 +458,7 @@ export function QuoteWorkspace({
                       type="button"
                       onClick={() => dispatch({ type: 'setIndication', drugId, indication: code })}
                       className={cn(
-                        'h-8 rounded-full border border-rule-strong bg-surface px-3 text-xs font-medium text-ink transition-colors duration-150 ne-motion hover:border-brand-ink hover:bg-brand-tint hover:text-brand-ink',
+                        'h-7 rounded-full border border-rule-strong bg-surface px-3 text-xs font-medium text-ink transition-colors duration-150 ne-motion hover:border-brand-ink hover:bg-brand-tint hover:text-brand-ink',
                         FOCUS
                       )}
                     >
@@ -487,33 +471,13 @@ export function QuoteWorkspace({
           </div>
         ) : null}
 
-        {/* The three to present first. */}
-        {topPicks.length ? (
-          <section aria-label="Top picks">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {topPicks.map((r, i) => (
-                <TopPickCard
-                  key={r.productId}
-                  result={r}
-                  label={i === 0 ? firstLabel : `Option ${i + 1}`}
-                  highlight={i === 0}
-                  busy={busy === r.productId}
-                  selected={selectedId === r.productId}
-                  onUse={(res, line) => void use(res, line)}
-                  onDetails={openDetails}
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
         {/* Every carrier. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 bg-paper px-1 py-1.5">
           <h3 className="t-section text-ink">Every carrier</h3>
           <div
             role="toolbar"
             aria-label="Sort and filter results"
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-1.5"
           >
             <Segmented role="radiogroup" aria-label="Sort">
               <SegmentedItem
@@ -547,7 +511,13 @@ export function QuoteWorkspace({
 
         <ResultGroup title="Qualifies" count={groups.qualifies.length} tone="live">
           {groups.qualifies.length ? (
-            groups.qualifies.map(r => <ResultRow key={r.productId} {...rowProps(r)} />)
+            groups.qualifies.map((r, i) => (
+              <ResultRow
+                key={r.productId}
+                {...rowProps(r)}
+                badge={i === 0 && r.best ? firstLabel : undefined}
+              />
+            ))
           ) : (
             <li className="px-4 py-8 text-center text-sm text-ink-2">
               No appointed carrier qualifies with these answers. Open the declined list to see why.
@@ -598,8 +568,10 @@ export function QuoteWorkspace({
   return (
     <div
       className={cn(
-        'relative lg:grid lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)] lg:gap-6',
-        fill && 'lg:h-full lg:min-h-0'
+        // From lg up the workspace fills its parent and never scrolls as a
+        // whole: the form and the results each scroll on their own, so both
+        // stay on one laptop screen.
+        'relative lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] lg:gap-5'
       )}
       data-variant={variant}
     >
@@ -628,12 +600,7 @@ export function QuoteWorkspace({
 
       <section
         aria-label="Applicant and health"
-        className={cn(
-          'min-w-0',
-          fill
-            ? 'lg:min-h-0 lg:overflow-y-auto lg:pr-1'
-            : 'lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:pr-1'
-        )}
+        className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1"
       >
         <QuoteIntake
           idPrefix={idPrefix}
@@ -655,14 +622,13 @@ export function QuoteWorkspace({
         ref={resultsRef}
         aria-label="Results"
         aria-live="polite"
-        className={cn(
-          'mt-4 flex min-w-0 flex-col lg:mt-0',
-          fill && 'lg:min-h-0 lg:overflow-y-auto lg:pr-1'
-        )}
+        // pb-16 keeps the last row, and the sticky selected bar, clear of the
+        // floating softphone in the corner.
+        className="mt-4 flex min-w-0 flex-col lg:mt-0 lg:min-h-0 lg:overflow-y-auto lg:pb-16 lg:pr-1"
       >
         <div className="flex-1">{body}</div>
         {selection ? (
-          <div className="sticky bottom-0 z-10 mt-4 pb-1">
+          <div className="sticky bottom-0 z-10 mt-3 pb-1">
             <SelectedQuoteBar
               selection={selection}
               onStart={onStartApplication}
@@ -701,7 +667,7 @@ function SummaryPill({
     </>
   );
   const cls = cn(
-    'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs',
+    'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs',
     tone === 'warn' ? 'border-ringing bg-ringing-tint' : 'border-rule bg-surface'
   );
   return onClick ? (
@@ -732,7 +698,7 @@ function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[40px]',
+        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[40px]',
         pressed
           ? 'border-brand-ink bg-brand-tint text-brand-ink'
           : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
@@ -807,7 +773,7 @@ function ResultGroup({
             aria-expanded={open}
             onClick={toggle}
             className={cn(
-              'flex w-full items-center justify-between gap-2 bg-sunken/50 px-4 py-3 text-left',
+              'flex w-full items-center justify-between gap-2 bg-sunken/50 px-4 py-2 text-left',
               open && 'border-b border-rule',
               FOCUS
             )}
@@ -815,7 +781,7 @@ function ResultGroup({
             {heading}
           </button>
         ) : (
-          <span className="flex items-center justify-between gap-2 border-b border-rule bg-sunken/50 px-4 py-3">
+          <span className="flex items-center justify-between gap-2 border-b border-rule bg-sunken/50 px-4 py-2">
             {heading}
           </span>
         )}

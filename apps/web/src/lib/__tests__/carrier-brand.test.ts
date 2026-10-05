@@ -28,6 +28,18 @@ describe('carrierBrand', () => {
     expect(carrierBrand('Royal Neighbors of America')?.logo).toBe('/carriers/royal-neighbors.webp');
   });
 
+  it('matches the quoter families for the newer logos', () => {
+    expect(carrierBrand('Liberty Bankers')?.logo).toBe('/carriers/liberty-bankers.webp');
+    expect(carrierBrand('Aetna / Continental Life')?.logo).toBe(
+      '/carriers/continental-life-aetna.webp'
+    );
+    expect(carrierBrand('Sons of Norway')?.logo).toBe('/carriers/sons-of-norway.webp');
+    expect(carrierBrand('Security National')?.logo).toBe('/carriers/security-national.webp');
+    expect(carrierBrand('Sentinel Security Life')?.logo).toBe('/carriers/sentinel-security.webp');
+    // Accendo is Aetna too, but not Continental Life.
+    expect(carrierBrand('Accendo / Aetna')).toBeNull();
+  });
+
   it('never gives American Amicable the Americo logo', () => {
     expect(carrierBrand('American Amicable')?.name).toBe('American Amicable');
     expect(carrierBrand('americo_eagle_premier')?.name).toBe('Americo');
@@ -35,12 +47,12 @@ describe('carrierBrand', () => {
 
   it('takes the first name that matches and skips blanks', () => {
     expect(carrierBrand(null, undefined, '', 'moo_living_promise')?.name).toBe('Mutual of Omaha');
-    expect(carrierBrand('Liberty Bankers', 'Americo')?.name).toBe('Americo');
+    expect(carrierBrand('Prosperity', 'Americo')?.name).toBe('Americo');
   });
 
   it('returns null for a carrier with no logo', () => {
-    expect(carrierBrand('Liberty Bankers')).toBeNull();
-    expect(carrierBrand('Aetna / Continental Life')).toBeNull();
+    expect(carrierBrand('Prosperity')).toBeNull();
+    expect(carrierBrand('GCU')).toBeNull();
     expect(carrierBrand()).toBeNull();
   });
 });
