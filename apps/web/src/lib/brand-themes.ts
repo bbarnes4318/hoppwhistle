@@ -37,6 +37,18 @@ export interface BrandTheme {
    * plate.
    */
   wordmarkOnDark: string;
+  /**
+   * The wordmark files' intrinsic canvas. Omitted, the 900×154 every wordmark
+   * shipped at first; a stacked wordmark gives its own so it fills the slot's
+   * width instead of sitting small inside a borrowed canvas.
+   */
+  wordmarkSize?: { width: number; height: number };
+  /**
+   * The full lockup (wordmark and tagline), reversed out for a dark ground:
+   * the sign-in panel, where there is room for the tagline to read. Omitted,
+   * the panel shows `wordmarkOnDark`.
+   */
+  lockupOnDark?: { src: string; width: number; height: number };
   favicon: string;
   appleTouchIcon: string;
 }
@@ -57,6 +69,8 @@ export const BRAND_THEMES: Record<BrandThemeKey, BrandTheme> = {
     markSmall: '/brands/powerhouse-insurance/mark-128.png',
     wordmark: '/brands/powerhouse-insurance/wordmark.png',
     wordmarkOnDark: '/brands/powerhouse-insurance/wordmark-on-dark.png',
+    wordmarkSize: { width: 900, height: 233 },
+    lockupOnDark: { src: '/brands/powerhouse-insurance/logo.png', width: 1087, height: 371 },
     favicon: '/brands/powerhouse-insurance/favicon-32.png',
     appleTouchIcon: '/brands/powerhouse-insurance/apple-touch-icon.png',
   },

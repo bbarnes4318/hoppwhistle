@@ -245,6 +245,29 @@ describe('LoginBrandLogo', () => {
     );
   });
 
+  it('shows Powerhouse Insurance its full lockup on the panel, and its own wordmark canvas on light', () => {
+    const phi = { theme: 'powerhouse-insurance', name: 'Powerhouse Insurance' };
+    render(
+      <LoginBrandProvider brand={phi}>
+        <LoginBrandLogo surface="dark" />
+      </LoginBrandProvider>
+    );
+    const dark = screen.getByTestId('brand-logo');
+    expect(dark.getAttribute('src')).toBe('/brands/powerhouse-insurance/logo.png');
+    expect(dark.getAttribute('alt')).toBe('Powerhouse Insurance');
+    expect([dark.getAttribute('width'), dark.getAttribute('height')]).toEqual(['1087', '371']);
+    cleanup();
+
+    render(
+      <LoginBrandProvider brand={phi}>
+        <LoginBrandLogo />
+      </LoginBrandProvider>
+    );
+    const light = screen.getByTestId('brand-logo');
+    expect(light.getAttribute('src')).toBe('/brands/powerhouse-insurance/wordmark.png');
+    expect([light.getAttribute('width'), light.getAttribute('height')]).toEqual(['900', '233']);
+  });
+
   it("is NetEnroll's lockup with no brand", () => {
     render(
       <LoginBrandProvider brand={null}>

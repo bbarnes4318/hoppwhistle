@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 export type BrandSurface = 'dark' | 'light';
 
 /**
- * The intrinsic canvas of both wordmark files. Set as width/height attributes
+ * The default intrinsic canvas of both wordmark files, for a theme that does
+ * not give its own (`BrandTheme.wordmarkSize`). Set as width/height attributes
  * so the box is reserved before the image arrives; the CSS width is the
  * caller's and the height follows the ratio.
  */
@@ -70,8 +71,8 @@ export function BrandWordmark({
     <img
       src={surface === 'dark' ? brand.wordmarkOnDark : brand.wordmark}
       alt={brand.name}
-      width={WORDMARK_WIDTH}
-      height={WORDMARK_HEIGHT}
+      width={brand.wordmarkSize?.width ?? WORDMARK_WIDTH}
+      height={brand.wordmarkSize?.height ?? WORDMARK_HEIGHT}
       className={cn('block h-auto max-w-full select-none', className)}
       draggable={false}
       translate="no"
