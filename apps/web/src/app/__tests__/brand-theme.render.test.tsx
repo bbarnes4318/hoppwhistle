@@ -152,6 +152,13 @@ describe('the agency brand theme in the authenticated shell', () => {
       expect(screen.getByLabelText('Life Leads Plus home')).toBeTruthy();
     });
 
+    it('keeps the Life Leads Plus rail at its own width', async () => {
+      await mountShell();
+      await screen.findByTestId('brand-logo');
+      const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
+      expect(rail?.className).toContain('w-[236px]');
+    });
+
     it('draws the navigation rail in the brand navy', async () => {
       await mountShell();
       await screen.findByTestId('brand-logo');
@@ -212,6 +219,23 @@ describe('the agency brand theme in the authenticated shell', () => {
 
       expect(document.documentElement.hasAttribute('data-brand')).toBe(false);
       expect(iconHrefs()).toEqual(['/favicon-32.png', '/icon-512.png', '/apple-touch-icon.png']);
+    });
+  });
+
+  describe('with a Powerhouse Insurance brand from /api/auth/me', () => {
+    beforeEach(() => {
+      brand = { theme: 'powerhouse-insurance', name: 'Powerhouse Insurance' };
+    });
+
+    it('carries the full logo, tagline included, in a wider rail', async () => {
+      await mountShell();
+      const logo = await screen.findByTestId('brand-logo');
+      expect(logo.getAttribute('src')).toBe('/brands/powerhouse-insurance/logo.png');
+      expect(logo.getAttribute('alt')).toBe('Powerhouse Insurance');
+      expect(screen.getByLabelText('Powerhouse Insurance home')).toBeTruthy();
+      const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
+      expect(rail?.className).toContain('w-[264px]');
+      expect(rail?.querySelector('[data-brand-row]')?.className).toContain('h-[116px]');
     });
   });
 

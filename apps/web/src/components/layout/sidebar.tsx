@@ -434,7 +434,11 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
         'flex h-full min-h-0 flex-col bg-surface',
         drawer
           ? 'w-full'
-          : cn('sticky top-0 shrink-0 border-r border-rule', brand ? 'w-[236px]' : 'w-[232px]')
+          : cn(
+              'sticky top-0 shrink-0 border-r border-rule',
+              // A theme whose rail carries its full lockup gets the width for it.
+              brand?.lockupOnDark ? 'w-[264px]' : brand ? 'w-[236px]' : 'w-[232px]'
+            )
       )}
       /*
        * An agency brand draws the rail in its navy. The attribute re-scopes the
@@ -456,7 +460,15 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
          * block is taller than the topbar on purpose -- the navy column is its
          * own surface, so its rule does not have to meet the topbar's.
          */
-        <div className="flex h-[76px] shrink-0 items-center border-b border-rule px-5">
+        <div
+          className={cn(
+            'flex shrink-0 items-center border-b border-rule',
+            // The full lockup is a stacked mark: centred in a taller row so the
+            // wordmark and tagline sit with even space around them.
+            brand.lockupOnDark ? 'h-[116px] justify-center px-6' : 'h-[76px] px-5'
+          )}
+          data-brand-row=""
+        >
           <Link
             href="/dashboard"
             className="flex items-center rounded-control"

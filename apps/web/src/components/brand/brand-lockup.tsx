@@ -28,6 +28,16 @@ const LOCATION_CLASS = {
 } as const;
 
 /**
+ * The same places for a theme whose chrome carries its full lockup
+ * (`BrandTheme.lockupOnDark`): the rail is widened and its brand row made
+ * taller for it (sidebar.tsx), so the tagline is set large enough to read.
+ */
+const LOCKUP_LOCATION_CLASS = {
+  sidebar: 'w-[216px]',
+  drawer: 'w-[180px]',
+} as const;
+
+/**
  * An agency's wordmark, laid out for the product's chrome: the navy rail and
  * the navy header of the mobile drawer. Sits directly on whatever surface it is
  * told it is on.
@@ -43,6 +53,11 @@ export function BrandLockup({
   location?: keyof typeof LOCATION_CLASS;
   className?: string;
 }): JSX.Element {
+  if (surface === 'dark' && brand.lockupOnDark) {
+    return (
+      <BrandLockupImage brand={brand} className={cn(LOCKUP_LOCATION_CLASS[location], className)} />
+    );
+  }
   return (
     <BrandWordmark
       brand={brand}
@@ -73,6 +88,34 @@ export function BrandWordmark({
       alt={brand.name}
       width={brand.wordmarkSize?.width ?? WORDMARK_WIDTH}
       height={brand.wordmarkSize?.height ?? WORDMARK_HEIGHT}
+      className={cn('block h-auto max-w-full select-none', className)}
+      draggable={false}
+      translate="no"
+      data-testid="brand-logo"
+    />
+  );
+}
+
+/**
+ * The agency's full lockup -- wordmark and tagline -- reversed out for a dark
+ * ground, at any width. Only for a theme that ships one (`lockupOnDark`).
+ */
+export function BrandLockupImage({
+  brand,
+  className,
+}: {
+  brand: ActiveBrand;
+  className?: string;
+}): JSX.Element | null {
+  if (!brand.lockupOnDark) return null;
+  const { src, width, height } = brand.lockupOnDark;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={brand.name}
+      width={width}
+      height={height}
       className={cn('block h-auto max-w-full select-none', className)}
       draggable={false}
       translate="no"
