@@ -147,9 +147,20 @@ export class RoutingService {
    */
   async getEligibleEndpoints(
     tenantId: string,
-    campaignId: string,
-    callData: CallData
+    campaignId: string | null,
+    callData: CallData,
+    /**
+     * `onlyAgentUserIds`: route to exactly these agents of `tenantId`, and
+     * nothing else -- no buyers, and not the campaign's agent list. Shared
+     * routing uses this for an agent added to a group on their own. Every
+     * per-agent gate below applies to them exactly as to a campaign agent.
+     */
+    options: { onlyAgentUserIds?: string[] } = {}
   ): Promise<EligibleEndpoint[]> {
+    const onlyAgents = options.onlyAgentUserIds;
+    if (!onlyAgents && !campaignId) {
+      throw new Error('getEligibleEndpoints needs a campaign or an explicit agent list');
+    }
     const callerState = this.resolveCallerState(callData);
 
     logger.info({
@@ -161,7 +172,8 @@ export class RoutingService {
 
     const campaignBuyers = await this.prisma.campaignBuyer.findMany({
       where: {
-        campaignId,
+        // An explicit agent list routes to agents only: match no buyer row.
+        campaignId: onlyAgents ? { in: [] } : campaignId ?? undefined,
         status: 'ACTIVE',
         tenantId,
       },
@@ -327,26 +339,28 @@ export class RoutingService {
      * second field here would be a second copy to disagree with the first.
      */
     try {
-      const agentAssignments = await this.prisma.campaignAgent.findMany({
-        where: { tenantId, campaignId, status: 'ACTIVE' },
-        select: {
-          userId: true,
-          priority: true,
-          user: {
-            select: {
-              id: true,
-              status: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              metadata: true,
-              sipCredential: {
-                select: { extension: true, status: true, passwordEncrypted: true },
-              },
-            },
-          },
+      const agentSelect = {
+        id: true,
+        status: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        metadata: true,
+        sipCredential: {
+          select: { extension: true, status: true, passwordEncrypted: true },
         },
-      });
+      } as const;
+      const agentAssignments = onlyAgents
+        ? (
+            await this.prisma.user.findMany({
+              where: { id: { in: onlyAgents }, tenantId },
+              select: agentSelect,
+            })
+          ).map(user => ({ userId: user.id, priority: null as number | null, user }))
+        : await this.prisma.campaignAgent.findMany({
+            where: { tenantId, campaignId: campaignId ?? undefined, status: 'ACTIVE' },
+            select: { userId: true, priority: true, user: { select: agentSelect } },
+          });
 
       for (const assignment of agentAssignments) {
         const agent = assignment.user;

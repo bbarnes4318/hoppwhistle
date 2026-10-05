@@ -61,7 +61,9 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
             status: true,
             tenantId: true,
             campaignId: true,
+            userId: true,
             tenant: { select: { name: true } },
+            user: { select: { firstName: true, lastName: true, email: true } },
             campaign: {
               select: {
                 name: true,
@@ -134,6 +136,98 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
           activeAgents: c._count.agents,
         })),
       });
+    }
+  );
+
+  fastify.get<{ Querystring: { q?: string } }>(
+    `${base}/options/agents`,
+    guard,
+    async (request, reply) => {
+      const q = request.query.q?.trim();
+      const agents = await prisma.user.findMany({
+        where: {
+          status: 'ACTIVE',
+          tenantId: { not: null },
+          roles: { some: { role: { name: 'AGENT' } } },
+          ...(q
+            ? {
+                OR: [
+                  { firstName: { contains: q, mode: 'insensitive' as const } },
+                  { lastName: { contains: q, mode: 'insensitive' as const } },
+                  { email: { contains: q, mode: 'insensitive' as const } },
+                  { tenant: { name: { contains: q, mode: 'insensitive' as const } } },
+                  // "Sean Grove": first and last name typed together.
+                  ...(q.includes(' ')
+                    ? [
+                        {
+                          AND: [
+                            {
+                              firstName: {
+                                contains: q.split(/\s+/)[0],
+                                mode: 'insensitive' as const,
+                              },
+                            },
+                            {
+                              lastName: {
+                                contains: q.split(/\s+/).slice(1).join(' '),
+                                mode: 'insensitive' as const,
+                              },
+                            },
+                          ],
+                        },
+                      ]
+                    : []),
+                ],
+              }
+            : {}),
+        },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        take: 100,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          tenantId: true,
+          metadata: true,
+          tenant: { select: { name: true } },
+        },
+      });
+      const { normalizeLicensedStates } = await import('../lib/licensed-states.js');
+      return reply.send({
+        data: agents.map(a => {
+          const meta =
+            a.metadata && typeof a.metadata === 'object' && !Array.isArray(a.metadata)
+              ? (a.metadata as Record<string, unknown>)
+              : {};
+          return {
+            id: a.id,
+            name: [a.firstName, a.lastName].filter(Boolean).join(' ') || a.email,
+            email: a.email,
+            tenantId: a.tenantId,
+            tenantName: a.tenant?.name ?? null,
+            licensedStates: [...normalizeLicensedStates(meta.licensedStates)].sort(),
+          };
+        }),
+      });
+    }
+  );
+
+  /*
+   * One agency's campaigns, for an agent member's "record calls under" choice.
+   */
+  fastify.get<{ Querystring: { tenantId?: string } }>(
+    `${base}/options/agency-campaigns`,
+    guard,
+    async (request, reply) => {
+      const tenantId = request.query.tenantId;
+      if (!tenantId) return invalid(reply, 'tenantId is required');
+      const campaigns = await prisma.campaign.findMany({
+        where: { tenantId, status: 'ACTIVE' },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      });
+      return reply.send({ data: campaigns });
     }
   );
 
@@ -238,54 +332,98 @@ export async function registerSharedRoutingRoutes(fastify: FastifyInstance): Pro
     }
   );
 
-  fastify.post<{ Params: { groupId: string }; Body: { campaignId?: string } }>(
-    `${base}/:groupId/members`,
-    guard,
-    async (request, reply) => {
-      const { groupId } = request.params;
-      const campaignId = request.body?.campaignId;
-      if (!campaignId) return invalid(reply, 'campaignId is required');
+  /*
+   * Add a member: a whole campaign (`{ campaignId }`), or one agent
+   * (`{ userId, campaignId? }`). An agent is in the rotation whether or not
+   * they are on any campaign; `campaignId` there only names the campaign of
+   * their own agency that the calls they answer are recorded under.
+   */
+  fastify.post<{
+    Params: { groupId: string };
+    Body: { campaignId?: string; userId?: string };
+  }>(`${base}/:groupId/members`, guard, async (request, reply) => {
+    const { groupId } = request.params;
+    const campaignId = request.body?.campaignId || null;
+    const userId = request.body?.userId || null;
+    if (!campaignId && !userId) return invalid(reply, 'campaignId or userId is required');
 
-      const group = await prisma.sharedRoutingGroup.findUnique({
-        where: { id: groupId },
-        select: { id: true, members: { select: { tenantId: true, campaignId: true } } },
+    const group = await prisma.sharedRoutingGroup.findUnique({
+      where: { id: groupId },
+      select: {
+        id: true,
+        members: { select: { tenantId: true, campaignId: true, userId: true } },
+      },
+    });
+    if (!group) return notFound(reply, 'Shared routing group');
+
+    const campaign = campaignId
+      ? await prisma.campaign.findUnique({
+          where: { id: campaignId },
+          select: { id: true, tenantId: true, name: true },
+        })
+      : null;
+    if (campaignId && !campaign) return notFound(reply, 'Campaign');
+
+    if (userId) {
+      // An AGENT of some agency: the CDR credits only an AGENT of the
+      // answering agency, so anyone else would take calls nobody is credited
+      // with.
+      const agent = await prisma.user.findFirst({
+        where: { id: userId, status: 'ACTIVE', roles: { some: { role: { name: 'AGENT' } } } },
+        select: { id: true, tenantId: true, firstName: true, lastName: true, email: true },
       });
-      if (!group) return notFound(reply, 'Shared routing group');
-
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: campaignId },
-        select: { id: true, tenantId: true, name: true },
-      });
-      if (!campaign) return notFound(reply, 'Campaign');
-
-      if (group.members.some(m => m.campaignId === campaign.id)) {
-        return reply.code(409).send({
-          error: { code: 'ALREADY_MEMBER', message: 'This campaign is already in the group' },
-        });
+      if (!agent?.tenantId) return notFound(reply, 'Agent');
+      if (campaign && campaign.tenantId !== agent.tenantId) {
+        return invalid(reply, "The campaign must be one of the agent's own agency's campaigns");
       }
-      // The answering agent's agency must name exactly one campaign to record
-      // the call under.
-      if (group.members.some(m => m.tenantId === campaign.tenantId)) {
+      if (group.members.some(m => m.userId === agent.id)) {
         return reply.code(409).send({
-          error: {
-            code: 'AGENCY_ALREADY_MEMBER',
-            message:
-              'This agency already has a campaign in the group. One campaign per agency: put the agents on that campaign.',
-          },
+          error: { code: 'ALREADY_MEMBER', message: 'This agent is already in the group' },
         });
       }
 
       const member = await prisma.sharedRoutingGroupMember.create({
-        data: { groupId, tenantId: campaign.tenantId, campaignId: campaign.id },
+        data: { groupId, tenantId: agent.tenantId, userId: agent.id, campaignId: campaign?.id },
       });
-      await audit(request, campaign.tenantId, 'shared_routing.member.added', groupId, {
+      await audit(request, agent.tenantId, 'shared_routing.member.added', groupId, {
         memberId: member.id,
-        campaignId: campaign.id,
-        campaignName: campaign.name,
+        userId: agent.id,
+        agent: [agent.firstName, agent.lastName].filter(Boolean).join(' ') || agent.email,
+        campaignId: campaign?.id ?? null,
       });
       return reply.code(201).send({ data: await loadGroup(groupId) });
     }
-  );
+
+    // A whole campaign.
+    if (!campaign) return notFound(reply, 'Campaign');
+    const campaignMembers = group.members.filter(m => !m.userId);
+    if (campaignMembers.some(m => m.campaignId === campaign.id)) {
+      return reply.code(409).send({
+        error: { code: 'ALREADY_MEMBER', message: 'This campaign is already in the group' },
+      });
+    }
+    // The answering agent's agency must name exactly one campaign to record
+    // the call under.
+    if (campaignMembers.some(m => m.tenantId === campaign.tenantId)) {
+      return reply.code(409).send({
+        error: {
+          code: 'AGENCY_ALREADY_MEMBER',
+          message:
+            'This agency already has a campaign in the group. One campaign per agency: put the agents on that campaign, or add them individually.',
+        },
+      });
+    }
+
+    const member = await prisma.sharedRoutingGroupMember.create({
+      data: { groupId, tenantId: campaign.tenantId, campaignId: campaign.id },
+    });
+    await audit(request, campaign.tenantId, 'shared_routing.member.added', groupId, {
+      memberId: member.id,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+    });
+    return reply.code(201).send({ data: await loadGroup(groupId) });
+  });
 
   fastify.patch<{ Params: { groupId: string; memberId: string }; Body: { status?: string } }>(
     `${base}/:groupId/members/:memberId`,

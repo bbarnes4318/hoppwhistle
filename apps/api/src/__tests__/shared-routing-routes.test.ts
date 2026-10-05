@@ -12,6 +12,7 @@ const { prisma, principal } = vi.hoisted(() => ({
     sharedRoutingGroup: { findUnique: vi.fn() },
     sharedRoutingGroupMember: { create: vi.fn() },
     campaign: { findUnique: vi.fn() },
+    user: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
   principal: { current: {} as Record<string, unknown> },
@@ -38,7 +39,7 @@ beforeEach(async () => {
   principal.current = STAFF;
   prisma.sharedRoutingGroup.findUnique.mockResolvedValue({
     id: 'group-1',
-    members: [{ tenantId: 'agency-a', campaignId: 'camp-a' }],
+    members: [{ tenantId: 'agency-a', campaignId: 'camp-a', userId: null }],
   });
   prisma.campaign.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
     Promise.resolve(
@@ -49,6 +50,14 @@ beforeEach(async () => {
     )
   );
   prisma.sharedRoutingGroupMember.create.mockResolvedValue({ id: 'member-b' });
+  prisma.user.findFirst.mockImplementation(({ where }: { where: { id: string } }) =>
+    Promise.resolve(
+      {
+        sean: { id: 'sean', tenantId: 'agency-c', firstName: 'Sean', lastName: 'Grove' },
+        'a-agent': { id: 'a-agent', tenantId: 'agency-a', firstName: 'Ann', lastName: 'A' },
+      }[where.id] ?? null
+    )
+  );
 
   app = Fastify();
   await registerSharedRoutingRoutes(app);
@@ -87,5 +96,57 @@ describe('POST /api/v1/platform/shared-routing-groups/:groupId/members', () => {
 
     expect(response.statusCode).toBe(403);
     expect(prisma.sharedRoutingGroupMember.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('adding a single agent', () => {
+  it('adds them under their own agency, with no campaign', async () => {
+    const response = await addMember({ userId: 'sean' });
+
+    expect(response.statusCode).toBe(201);
+    expect(prisma.sharedRoutingGroupMember.create).toHaveBeenCalledWith({
+      data: { groupId: 'group-1', tenantId: 'agency-c', userId: 'sean', campaignId: undefined },
+    });
+  });
+
+  it('only finds ACTIVE users holding the AGENT role, whom the CDR can credit', async () => {
+    await addMember({ userId: 'sean' });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'sean', status: 'ACTIVE', roles: { some: { role: { name: 'AGENT' } } } },
+      })
+    );
+  });
+
+  it('adds an agent from an agency that already has a campaign in the group', async () => {
+    const response = await addMember({ userId: 'a-agent', campaignId: 'camp-a2' });
+
+    expect(response.statusCode).toBe(201);
+    expect(prisma.sharedRoutingGroupMember.create).toHaveBeenCalledWith({
+      data: { groupId: 'group-1', tenantId: 'agency-a', userId: 'a-agent', campaignId: 'camp-a2' },
+    });
+  });
+
+  it("refuses a campaign from another agency than the agent's", async () => {
+    const response = await addMember({ userId: 'sean', campaignId: 'camp-b' });
+
+    expect(response.statusCode).toBe(400);
+    expect(prisma.sharedRoutingGroupMember.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an agent already in the group', async () => {
+    prisma.sharedRoutingGroup.findUnique.mockResolvedValue({
+      id: 'group-1',
+      members: [{ tenantId: 'agency-c', campaignId: null, userId: 'sean' }],
+    });
+
+    const response = await addMember({ userId: 'sean' });
+
+    expect(response.statusCode).toBe(409);
+  });
+
+  it('404s an unknown or non-agent user', async () => {
+    const response = await addMember({ userId: 'nobody' });
+    expect(response.statusCode).toBe(404);
   });
 });

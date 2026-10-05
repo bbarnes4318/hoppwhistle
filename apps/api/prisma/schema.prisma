@@ -398,6 +398,7 @@ model User {
   /// Explicit Sales CRM / agreement-suite grants. Not a role: see
   /// `SalesWorkspaceAccess`.
   salesWorkspaceAccess        SalesWorkspaceAccess[] @relation("SalesWorkspaceAccessUser")
+  sharedRoutingMemberships    SharedRoutingGroupMember[]
   assignedSalesProspects      SalesProspect[]        @relation("SalesProspectAssignedTo")
 
   /// NetEnroll platform staff. Both sit outside the tenant dimension: see
@@ -5964,23 +5965,30 @@ model SharedRoutingGroup {
 model SharedRoutingGroupMember {
   id         String                   @id @default(uuid())
   groupId    String
-  /// The member agency. Always the campaign's own tenant.
+  /// The member's agency: the campaign's own tenant, or the agent's.
   tenantId   String
-  campaignId String
+  /// A whole campaign: every ACTIVE agent assigned to it is in the rotation.
+  /// On an agent member, the campaign their answered calls are recorded under
+  /// (optional; without one they are recorded under the agency alone).
+  campaignId String?
+  /// A single agent, in the rotation whether or not they are on a campaign.
+  userId     String?
   status     SharedRoutingGroupStatus @default(ACTIVE)
   createdAt  DateTime                 @default(now())
   updatedAt  DateTime                 @updatedAt
 
   group    SharedRoutingGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaign Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign Campaign?          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([groupId, campaignId])
-  /// One campaign per agency per group: the answering agent's agency must name
-  /// exactly one campaign to record the call under.
-  @@unique([groupId, tenantId])
+  /// An agent is in a group once. A campaign member is one per agency,
+  /// enforced by the API: the answering agency must name one campaign.
+  @@unique([groupId, userId])
+  @@index([groupId, tenantId])
   @@index([tenantId])
   @@index([campaignId])
+  @@index([userId])
   @@map("shared_routing_group_members")
 }
 

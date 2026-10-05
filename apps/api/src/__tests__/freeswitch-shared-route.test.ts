@@ -238,4 +238,16 @@ describe('POST /api/v1/freeswitch/cdr on a shared DID', () => {
     expect(createdCall()).toMatchObject({ tenantId: OWNER, answeredByUserId: null });
     expect(shared.markAnswered).not.toHaveBeenCalled();
   });
+
+  it('records a call answered by an agent added on their own under their agency, with no campaign', async () => {
+    shared.resolveSharedAnswerer.mockResolvedValue({ tenantId: AGENCY_B, campaignId: null });
+
+    await app.inject({ method: 'POST', url: '/api/v1/freeswitch/cdr', payload: cdr() });
+
+    expect(createdCall()).toMatchObject({
+      tenantId: AGENCY_B,
+      campaignId: null,
+      answeredByUserId: AGENT_B,
+    });
+  });
 });
