@@ -27,6 +27,22 @@ CallerIdPool "Dograh State Caller IDs") via
 | `tests/test_state_caller_id.py`       | Pure-python tests (also runnable in the container).                                                                                                                                                  |
 | `tests/test_export_recordings.py`     | Pure-python tests for the export's date window, discovery and location handling.                                                                                                                     |
 
+## Is the server keeping up? (load check)
+
+On the box, any time calls are running:
+
+```bash
+cd /opt/hopwhistle && git pull
+./check-dograh-load.sh              # one read-only snapshot
+./check-dograh-load.sh --watch 60   # refresh every minute during a campaign
+```
+
+It reports host CPU/memory/disk, Dograh container health (restarts, OOM kills),
+live Asterisk calls vs. the concurrency slots Dograh holds in Redis vs. the org
+limit, today's call counts and anything queued or stuck, and the last 30 minutes
+of api/Asterisk errors, then a verdict with the fix for each problem. Exit 0 =
+OK (warnings possible), 2 = a problem needs attention.
+
 ## Pulling recordings for a date window
 
 The AI voice calls are Dograh's, not Hopwhistle's: its own Postgres, its own
