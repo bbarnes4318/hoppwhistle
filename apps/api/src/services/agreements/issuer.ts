@@ -157,7 +157,7 @@ const THEME_DOCUMENT_COLORS: Record<
   { accent: string; accentText: string; labelBg: string }
 > = {
   'life-leads-plus': { accent: '#0081F1', accentText: '#0A56C2', labelBg: '#EAF2FE' },
-  'powerhouse-insurance': { accent: '#9466F7', accentText: '#5B2BC9', labelBg: '#F1ECFE' },
+  'powerhouse-insurance': { accent: '#040C50', accentText: '#040C50', labelBg: '#F1F1F5' },
 };
 
 export function netenrollDocumentBrand(): DocumentBrand {

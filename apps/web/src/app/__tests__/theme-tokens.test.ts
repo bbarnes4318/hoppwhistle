@@ -459,6 +459,26 @@ describe('the Powerhouse Insurance brand theme', () => {
     );
   });
 
+  it("is the agency's specified palette: navy and gold over mist and slate", () => {
+    expect(phi).toMatchObject({
+      paper: '#f1f1f5',
+      'ink-3': '#575a78',
+      brand: '#040c50',
+      'brand-strong': '#040c50',
+    });
+    expect(nav).toMatchObject({ surface: '#040c50', brand: '#edc410', 'ink-3': '#a4a3b1' });
+    const auth = tokens(/\[data-brand='powerhouse-insurance'\] \[data-auth-page\]\s*\{/);
+    expect(auth).toMatchObject({
+      'auth-panel': '#040c50',
+      'auth-accent': '#edc410',
+      'auth-mark-ink': '#e4bf87',
+    });
+    // Gold is for the navy only: never a light-ground token.
+    for (const t of [phi, phiDark]) {
+      expect(Object.values(t)).not.toContain('#edc410');
+    }
+  });
+
   it('also reaches a nested theme scope', () => {
     expect(CSS).toMatch(/\[data-brand='powerhouse-insurance'\] \[data-theme='light'\]/);
     expect(CSS).toMatch(/\[data-brand='powerhouse-insurance'\] \[data-theme='dark'\]/);
