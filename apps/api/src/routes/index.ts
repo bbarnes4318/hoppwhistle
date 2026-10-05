@@ -3,6 +3,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
+import { isAgencyPrincipal } from '../lib/agent-scope.js';
 import { OPEN_DISPUTE } from '../lib/dispute-status.js';
 import { normalizeLicensedStates, normalizeStateCode } from '../lib/licensed-states.js';
 import { isPlatformAdminRequest, requirePlatformAdmin } from '../lib/platform-context.js';
@@ -4868,6 +4869,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           clientRequestId: applicationInput.clientRequestId,
           callId: resolvedCallId,
           insuranceLeadId: applicationInput.insuranceLeadId ?? null,
+          fexQuoteId: applicationInput.fexQuoteId ?? null,
+          writerIsPrincipal: isAgencyPrincipal(request),
           carrier: applicationInput.carrier,
           product: applicationInput.product ?? null,
           planType: applicationInput.planType ?? null,
@@ -5319,6 +5322,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
             clientRequestId: parsed.data.clientRequestId,
             callId,
             insuranceLeadId: parsed.data.insuranceLeadId ?? null,
+            fexQuoteId: parsed.data.fexQuoteId ?? null,
+            writerIsPrincipal: isAgencyPrincipal(request),
             carrier: parsed.data.carrier,
             product: parsed.data.product ?? null,
             planType: parsed.data.planType ?? null,

@@ -71,6 +71,7 @@
     "@fastify/swagger-ui": "^4.2.0",
     "@fastify/websocket": "^8.3.0",
     "@fontsource/dancing-script": "^5.3.0",
+    "@hopwhistle/fex-engine": "workspace:*",
     "@hopwhistle/routing-dsl": "workspace:*",
     "@hopwhistle/shared": "workspace:*",
     "@hopwhistle/worker": "workspace:*",

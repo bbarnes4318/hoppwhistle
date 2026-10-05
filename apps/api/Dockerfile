@@ -29,6 +29,7 @@ COPY apps/worker/package.json ./apps/worker/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/routing-dsl/package.json ./packages/routing-dsl/
 COPY packages/sdk/package.json ./packages/sdk/
+COPY packages/fex-engine/package.json ./packages/fex-engine/
 
 # Fix: Allow updating lockfile
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

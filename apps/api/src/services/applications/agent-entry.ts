@@ -92,6 +92,15 @@ export interface AgentApplicationInput {
    */
   callId?: string | null;
   insuranceLeadId?: string | null;
+  /**
+   * The saved quote this was written from. NOT written as given: kept only when
+   * a quote with this id exists in this agency and the writer saved it or is an
+   * agency principal (`writerIsPrincipal`); otherwise stored as null. Never a
+   * reason to refuse the application.
+   */
+  fexQuoteId?: string | null;
+  /** The writer sees the agency's book (OWNER/ADMIN), from `isAgencyPrincipal(request)`. */
+  writerIsPrincipal?: boolean;
 
   carrier: string;
   product?: string | null;
@@ -106,6 +115,30 @@ export interface AgentApplicationInput {
   dob?: string | null;
   state?: string | null;
   phone?: string | null;
+}
+
+/**
+ * The quote link an application may carry, or null.
+ *
+ * Same rule as every owned row (`lib/agent-scope.ts`): the quote must be this
+ * agency's, and an agent may link only a quote they saved. A link that fails
+ * either test is dropped, not refused -- a wrong quote id is a client defect,
+ * and refusing the application over it would lose business that was written.
+ */
+async function reachableFexQuoteId(
+  prisma: ReturnType<typeof getPrismaClient>,
+  input: Pick<
+    AgentApplicationInput,
+    'tenantId' | 'createdById' | 'fexQuoteId' | 'writerIsPrincipal'
+  >
+): Promise<string | null> {
+  if (!input.fexQuoteId) return null;
+  const quote = await prisma.fexQuote.findFirst({
+    where: { id: input.fexQuoteId, tenantId: input.tenantId },
+    select: { id: true, createdById: true },
+  });
+  if (!quote) return null;
+  return input.writerIsPrincipal || quote.createdById === input.createdById ? quote.id : null;
 }
 
 /**
@@ -143,6 +176,7 @@ export async function recordAgentApplication(
     submittedAt
   );
   const tags = await callTags(prisma, input.tenantId, callId);
+  const fexQuoteId = await reachableFexQuoteId(prisma, input);
 
   let application: { id: string; tenantId: string; submittedAt: Date | null } & Record<
     string,
@@ -175,6 +209,7 @@ export async function recordAgentApplication(
         buyerId: tags.buyerId,
         publisherId: tags.publisherId,
         insuranceLeadId: input.insuranceLeadId ?? null,
+        fexQuoteId,
 
         carrier: input.carrier,
         /*

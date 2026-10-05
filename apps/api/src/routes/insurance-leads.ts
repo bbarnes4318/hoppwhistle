@@ -1119,6 +1119,8 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
           clientRequestId: input.clientRequestId,
           callId,
           insuranceLeadId: lead.id,
+          fexQuoteId: input.fexQuoteId ?? null,
+          writerIsPrincipal: isAgencyPrincipal(request),
           carrier: input.carrier,
           product: input.product ?? null,
           planType: input.planType ?? null,

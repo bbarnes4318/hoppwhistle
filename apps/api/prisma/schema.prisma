@@ -134,6 +134,10 @@ model Tenant {
   /// This tenant's own B2B sales operation, when it is a white-label issuer.
   /// See `SalesWorkspace`. Never inherited by child agencies.
   salesWorkspace           SalesWorkspace?
+  /// Saved final expense quotes. See `FexQuote`.
+  fexQuotes                FexQuote[]
+  /// This agency's quoter settings. Absent means the defaults.
+  fexSettings              FexTenantSettings?
 
   @@index([slug])
   @@index([status])
@@ -445,6 +449,9 @@ model User {
   payrollPayouts PayrollPayout[]
   voiceAgents    VoiceAgent[]
   campaignAgents CampaignAgent[]
+
+  /// Final expense quotes this person saved.
+  fexQuotesCreated FexQuote[] @relation("FexQuoteCreatedBy")
 
   @@index([tenantId, email])
   @@index([tenantId, status])
@@ -3486,6 +3493,11 @@ model InsuranceCarrierApplication {
   /// See `services/applications/call-attribution.ts`.
   callAttribution  CallAttribution @default(NONE)
 
+  /// The saved `FexQuote` this application was written from, when the agent
+  /// used the quoter. Plain id, same as `insuranceLeadId` and `callId`. Kept
+  /// only when the quote is in this agency and the writer may reach it.
+  fexQuoteId       String?
+
   // Product
   carrier        String   @default("American Amicable")
   product        String   @default("Senior Choice")
@@ -3641,7 +3653,91 @@ model InsuranceCarrierApplication {
   @@index([prospectIntakeId])
   @@index([insuranceLeadId])
   @@index([callId])
+  /// Quote -> application conversion on the quoter's Insights.
+  @@index([tenantId, fexQuoteId])
   @@map("insurance_carrier_applications")
+}
+
+// ============================================================================
+// Final expense quote engine
+//
+// The engine and the carrier data live in packages/fex-engine and
+// apps/api/assets/fex. These two tables hold what agents SAVE from it and what
+// an agency sets for its quoter. A quote is computed on every edit and written
+// only when an agent saves or uses it. Health answers are sensitive: the
+// applicant and the results are stored encrypted (`encryptField`), and only
+// the non-health summary columns are in the clear.
+// ============================================================================
+
+model FexQuote {
+  id              String  @id @default(uuid())
+  tenantId        String
+  createdById     String
+  /// PAGE | SOFTPHONE | CALL_CENTER
+  source          String
+  callId          String?
+  insuranceLeadId String?
+  /// "v18" -- the bundle file the quote was made with
+  engineVersion   String
+  bundleSha256    String
+
+  // Summary in the clear, for lists and reporting. No health information.
+  prospectName      String?
+  state             String
+  age               Int?
+  sex               String
+  tobacco           Boolean
+  faceAmount        Int?
+  budget            Decimal? @db.Decimal(10, 2)
+  /// monthly | quarterly | semiannual | annual
+  paymentMode       String
+  eligibleCount     Int
+  lowestPremium     Decimal? @db.Decimal(10, 2)
+  selectedProductId String?
+  selectedCarrier   String?
+  selectedProduct   String?
+  selectedClass     String?
+  selectedBenefit   String?
+  selectedFace      Int?
+  /// Modal premium, in paymentMode
+  selectedPremium   Decimal? @db.Decimal(10, 2)
+
+  /// encryptField("gz1:" + base64(gzip(JSON.stringify(applicant))))
+  applicantEncrypted String
+  /// encryptField("gz1:" + base64(gzip(JSON.stringify(results))))
+  resultsEncrypted   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User   @relation("FexQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, createdById, createdAt])
+  @@index([tenantId, callId])
+  @@index([tenantId, insuranceLeadId])
+  @@map("fex_quotes")
+}
+
+model FexTenantSettings {
+  tenantId            String   @id
+  /// false = every quotable product is shown as appointed
+  appointedOnly       Boolean  @default(false)
+  appointedProductIds String[] @default([])
+  defaultFace         Int      @default(10000)
+  defaultMode         String   @default("monthly")
+  /// Show products whose health questions are not loaded (price only)
+  showPriceOnly       Boolean  @default(true)
+  /// Open the quoter automatically when an agent's call connects
+  autoOpenOnCall      Boolean  @default(true)
+  updatedById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("fex_tenant_settings")
 }
 
 // ============================================================================

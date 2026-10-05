@@ -194,6 +194,10 @@ const DATABASE_BACKED = [
   // the agreement tables and every sales workspace table to seed NetEnroll,
   // Life Leads Plus, its child, a second white-label and an ordinary agency.
   '**/src/__tests__/sales-workspaces.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `audit_logs`, `calls`,
+  // `insurance_leads`, `insurance_carrier_applications`, the platform admin
+  // tables and both quoter tables to seed two agencies, staff and a preview.
+  '**/src/__tests__/fex-quote.test.ts',
 ];
 
 export default defineConfig({
