@@ -10,7 +10,7 @@
  * `apps/web/src/app/globals.css`, its entry to the web registry, and its
  * assets under `apps/web/public/brands/<key>/`.
  */
-export const BRAND_THEME_KEYS = ['life-leads-plus'] as const;
+export const BRAND_THEME_KEYS = ['life-leads-plus', 'powerhouse-insurance'] as const;
 
 export type BrandThemeKey = (typeof BRAND_THEME_KEYS)[number];
 
@@ -24,4 +24,5 @@ export function isBrandThemeKey(value: unknown): value is BrandThemeKey {
  */
 export const BRAND_THEME_NAMES: Record<BrandThemeKey, string> = {
   'life-leads-plus': 'Life Leads Plus',
+  'powerhouse-insurance': 'Powerhouse Insurance',
 };

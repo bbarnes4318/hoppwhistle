@@ -391,6 +391,80 @@ describe('the Life Leads Plus brand theme', () => {
   });
 });
 
+describe('the Powerhouse Insurance brand theme', () => {
+  const LIGHT = /:root:not\(\[data-theme='dark'\]\)\[data-brand='powerhouse-insurance'\]/;
+  const DARK = /\[data-theme='dark'\]\[data-brand='powerhouse-insurance'\]/;
+  const NAV = /\[data-brand='powerhouse-insurance'\] \[data-brand-nav\]/;
+  const phi = tokens(LIGHT);
+  const phiDark = tokens(DARK);
+  const nav = tokens(NAV);
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const stated = (label: string): number => {
+    const m = new RegExp(`phi ${label}\\s+(\\d+\\.\\d+):1`).exec(CSS);
+    if (!m) throw new Error(`no stated ratio for "phi ${label}" in globals.css`);
+    return Number(m[1]);
+  };
+
+  it.each([
+    ['brand-ink  on surface', () => contrast(phi['brand-ink'], phi.surface)],
+    ['brand-ink  on paper', () => contrast(phi['brand-ink'], phi.paper)],
+    ['brand-ink  on sunken', () => contrast(phi['brand-ink'], phi.sunken)],
+    ['brand-ink  on brand-tint', () => contrast(phi['brand-ink'], phi['brand-tint'])],
+    ['white on brand-strong', () => contrast('#ffffff', phi['brand-strong'])],
+    ['white on brand-strong-hover', () => contrast('#ffffff', phi['brand-strong-hover'])],
+    ['brand-fg   on brand', () => contrast(phi['brand-fg'], phi.brand)],
+    ['ink-3      on paper', () => contrast(phi['ink-3'], phi.paper)],
+    ['ink-3      on sunken', () => contrast(phi['ink-3'], phi.sunken)],
+    ['phone white on fill', () => contrast('#ffffff', phi.phone)],
+    ['phone ink   on tint', () => contrast(phi['phone-ink'], phi['phone-tint'])],
+    ['dark brand on paper', () => contrast(phiDark.brand, dark.paper)],
+    ['dark brand on surface', () => contrast(phiDark.brand, dark.surface)],
+    ['dark white on brand-strong', () => contrast('#ffffff', phiDark['brand-strong'])],
+    ['dark phone paper on fill', () => contrast(dark.paper, phiDark.phone)],
+    ['dark phone paper on deep', () => contrast(dark.paper, phiDark['phone-deep'])],
+    ['dark phone ink   on tint', () => contrast(phiDark['phone-ink'], phiDark['phone-tint'])],
+    ['nav text   on navy', () => contrast(nav['ink-2'], nav.surface)],
+    ['nav icon   on navy', () => contrast(nav['ink-3'], nav.surface)],
+    ['nav bar    on navy', () => contrast(nav.brand, nav.surface)],
+  ])('%s clears 4.5:1 and is stated in the stylesheet', (label, ratio) => {
+    expect(ratio()).toBeGreaterThanOrEqual(4.5);
+    expect(stated(label)).toBe(round(ratio()));
+  });
+
+  it('light: ink and ink-2 clear 4.5:1 on every light surface', () => {
+    for (const fg of ['ink', 'ink-2'] as const) {
+      for (const bg of ['surface', 'paper', 'sunken'] as const) {
+        expect(contrast(phi[fg], phi[bg]), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('dark: the button hover carries white and the brand-fg is the dark paper', () => {
+    expect(contrast('#ffffff', phiDark['brand-strong-hover'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(phiDark['brand-ink'], dark.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(phiDark['brand-fg']).toBe(dark.paper);
+    expect(contrast(phiDark['brand-fg'], phiDark.brand)).toBeGreaterThanOrEqual(4.5);
+    expect(nav['brand-ink']).toBe('#ffffff');
+  });
+
+  it('is its own colour scheme, clear of every call-state signal', () => {
+    for (const t of [phi, phiDark]) {
+      expect(hueDistance(t.phone, light.ringing)).toBeGreaterThanOrEqual(60);
+      expect(hueDistance(t.phone, light.dropped)).toBeGreaterThanOrEqual(60);
+      expect(hueDistance(t.brand, light.live)).toBeGreaterThanOrEqual(60);
+    }
+    expect(phi.phone).toBe(phi['brand-strong']);
+    expect(phi.brand).not.toBe(
+      tokens(/:root:not\(\[data-theme='dark'\]\)\[data-brand='life-leads-plus'\]/).brand
+    );
+  });
+
+  it('also reaches a nested theme scope', () => {
+    expect(CSS).toMatch(/\[data-brand='powerhouse-insurance'\] \[data-theme='light'\]/);
+    expect(CSS).toMatch(/\[data-brand='powerhouse-insurance'\] \[data-theme='dark'\]/);
+  });
+});
+
 /**
  * The sign-in page's brand panel. NetEnroll's is light (its lockup has black
  * lettering); a white-label agency's is its navy. Every text colour the
@@ -400,6 +474,7 @@ describe('the Life Leads Plus brand theme', () => {
 describe('the sign-in panel', () => {
   const ne = tokens(/\[data-auth-page\]\s*\{/);
   const llp = tokens(/\[data-brand='life-leads-plus'\] \[data-auth-page\]\s*\{/);
+  const phi = tokens(/\[data-brand='powerhouse-insurance'\] \[data-auth-page\]\s*\{/);
   const round = (n: number) => Math.round(n * 100) / 100;
 
   it('is light for NetEnroll and navy for Life Leads Plus', () => {
@@ -414,8 +489,11 @@ describe('the sign-in panel', () => {
     ['llp', 'ink', 'navy'],
     ['llp', 'ink-2', 'navy'],
     ['llp', 'ink-3', 'navy'],
+    ['phi', 'ink', 'navy'],
+    ['phi', 'ink-2', 'navy'],
+    ['phi', 'ink-3', 'navy'],
   ] as const)('%s panel %s clears 4.5:1 and is stated in the stylesheet', (who, fg, ground) => {
-    const set = who === 'ne' ? ne : llp;
+    const set = who === 'ne' ? ne : who === 'llp' ? llp : phi;
     const ratio = contrast(set[`auth-panel-${fg}`], set['auth-panel']);
     expect(ratio).toBeGreaterThanOrEqual(4.5);
     const m = new RegExp(`${who}\\s+panel ${fg}\\s+on ${ground}\\s+(\\d+\\.\\d+):1`).exec(CSS);

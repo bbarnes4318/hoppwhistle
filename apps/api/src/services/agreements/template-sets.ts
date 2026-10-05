@@ -21,7 +21,8 @@
  *
  * ── A set with no text ───────────────────────────────────────────────────────
  *
- * `life-leads-plus` is registered with `documents: null`. No approved Life
+ * `life-leads-plus` and `powerhouse-insurance` are registered with
+ * `documents: null`, and the same applies to each. No approved Life
  * Leads Plus contract text exists in this repository, and NetEnroll's is not
  * Life Leads Plus's to send. Its suite therefore reads "Contract templates not
  * configured" and every preview and send is refused. To install approved text:
@@ -85,7 +86,7 @@ export function registerTemplateSet(set: TemplateSet): void {
 
 /** Remove a set registered by a test. Never used by the application. */
 export function unregisterTemplateSet(key: string): void {
-  if (key === 'netenroll' || key === 'life-leads-plus') {
+  if (key === 'netenroll' || key === 'life-leads-plus' || key === 'powerhouse-insurance') {
     throw new Error(`The ${key} template set cannot be removed`);
   }
   REGISTRY.delete(key);
@@ -115,6 +116,16 @@ registerTemplateSet({
   documents: null,
   installNote:
     'Approved Life Leads Plus MSA, CPA and CPL text has not been installed. See apps/api/src/services/agreements/template-sets.ts.',
+});
+
+registerTemplateSet({
+  key: 'powerhouse-insurance',
+  label: 'Powerhouse Insurance — MSA, CPA, CPL',
+  scope: 'TENANT',
+  brandTheme: 'powerhouse-insurance',
+  documents: null,
+  installNote:
+    'Approved Powerhouse Insurance MSA, CPA and CPL text has not been installed. See apps/api/src/services/agreements/template-sets.ts.',
 });
 
 export type TemplateSetState =
