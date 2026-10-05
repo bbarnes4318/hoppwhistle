@@ -245,22 +245,25 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
       if (!tenantId) return;
       const query = request.query as { q?: unknown; limit?: unknown };
       const q = typeof query.q === 'string' ? query.q.trim() : '';
-      if (q.length < 2) return reply.send({ data: [] });
+      if (!q) return reply.send({ data: [] });
       const requested = Number(query.limit);
       const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 20) : 10;
 
       const engine = getFexEngine();
-      const data = engine.drugs.search(q.slice(0, 80), limit).map(drug => ({
-        id: drug.id,
-        generic: drug.generic,
-        brands: (drug.brands ?? []).slice(0, 3),
-        drugClass: drug.drug_class,
-        multiUse: engine.drugs.multiUse(drug.id),
-        indications: engine.drugs.indicationOptions(drug.id).map(code => ({
-          code,
-          label: engine.conditionsByCode.get(code)?.label ?? code,
-        })),
-      }));
+      const data = engine.drugs
+        .searchNames(q.slice(0, 80), limit)
+        .map(({ ingredient: drug, matched }) => ({
+          id: drug.id,
+          matched,
+          generic: drug.generic,
+          brands: (drug.brands ?? []).slice(0, 3),
+          drugClass: drug.drug_class,
+          multiUse: engine.drugs.multiUse(drug.id),
+          indications: engine.drugs.indicationOptions(drug.id).map(code => ({
+            code,
+            label: engine.conditionsByCode.get(code)?.label ?? code,
+          })),
+        }));
       return reply.send({ data });
     }
   );

@@ -129,4 +129,18 @@ describe('fex-engine v18', () => {
     expect(drugs.resolve('Eliquis')).toBe('apixaban');
     expect(drugs.search('metf', 5)[0]?.id).toBe('metformin');
   });
+
+  it('lists medications starting with a single typed letter', () => {
+    const drugs = new DrugIndex(bundle);
+    const hits = drugs.search('m', 20);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) {
+      const names = [hit.generic, ...(hit.brands ?? [])].map(n => n.toLowerCase());
+      const viaIndex = Object.entries(bundle.drugs.nameIndex).some(
+        ([name, id]) => id === hit.id && name.startsWith('m')
+      );
+      expect(viaIndex || names.some(n => n.startsWith('m'))).toBe(true);
+    }
+    expect(drugs.search('me', 20).map(h => h.id)).toContain('metformin');
+  });
 });

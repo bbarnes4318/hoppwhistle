@@ -66,6 +66,12 @@ export interface QuoteIntakeProps {
   showAetnaMedSupp: boolean;
   /** Drug ids the last quote said need their use confirmed. */
   needsIndication: Map<string, string[]>;
+  /**
+   * Which steps to render. The quote page splits the form: who and how much
+   * in the left column, health and medications across the top of the right
+   * one, so nothing has to scroll. Everywhere else it is one card.
+   */
+  part?: 'all' | 'who' | 'health';
 }
 
 const STATE_NAME = new Map<string, string>([
@@ -106,6 +112,18 @@ const medsSummary = (d: QuoteDraft) =>
  * what has been entered.
  */
 export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
+  const part = props.part ?? 'all';
+  if (part === 'health') {
+    return (
+      // Not overflow-hidden: the search lists open over the results below.
+      <Panel>
+        <div className="divide-y divide-rule xl:grid xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+          <HealthPanel {...props} />
+          <MedicationsPanel {...props} />
+        </div>
+      </Panel>
+    );
+  }
   const required = [applicantDone(props.draft), coverageDone(props.draft)];
   const done = required.filter(Boolean).length;
   return (
@@ -149,8 +167,12 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
       <div className="divide-y divide-rule">
         <ApplicantPanel {...props} />
         <CoveragePanel {...props} />
-        <HealthPanel {...props} />
-        <MedicationsPanel {...props} />
+        {part === 'all' ? (
+          <>
+            <HealthPanel {...props} />
+            <MedicationsPanel {...props} />
+          </>
+        ) : null}
       </div>
     </Panel>
   );
@@ -632,7 +654,21 @@ function CoveragePanel({
 
 // ─── Health history ──────────────────────────────────────────────────────────
 
-function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps): JSX.Element {
+/**
+ * The added conditions and medications. Beside the results (the split quote
+ * page) a long list scrolls in place, under its search box, so the search
+ * stays on screen and the results keep their room.
+ */
+const addedListClass = (part: QuoteIntakeProps['part']) =>
+  cn('space-y-2', part === 'health' && 'lg:max-h-[34vh] lg:overflow-y-auto lg:pr-1');
+
+function HealthPanel({
+  idPrefix,
+  draft,
+  dispatch,
+  conditions,
+  part,
+}: QuoteIntakeProps): JSX.Element {
   const [query, setQuery] = React.useState('');
   const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
   const added = new Set(draft.conditions.map(c => c.code));
@@ -718,7 +754,7 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
         </div>
 
         {draft.conditions.length ? (
-          <ul className="space-y-2">
+          <ul className={addedListClass(part)}>
             {draft.conditions.map(c => (
               <ConditionCard
                 key={c.key}
@@ -909,12 +945,23 @@ function DetailInput({
 
 // ─── Medications ─────────────────────────────────────────────────────────────
 
+/**
+ * The brand or alias a search hit matched on, when it isn't the generic name,
+ * so typing "E" shows "Eliquis · apixaban" rather than an unexplained apixaban.
+ */
+function matchedBrand(hit: FexDrugHit): string | undefined {
+  const matched = hit.matched;
+  if (!matched || matched === hit.generic.toLowerCase()) return undefined;
+  return hit.brands.find(b => b.toLowerCase() === matched) ?? matched;
+}
+
 function MedicationsPanel({
   idPrefix,
   draft,
   dispatch,
   conditions,
   needsIndication,
+  part,
 }: QuoteIntakeProps): JSX.Element {
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<FexDrugHit[]>([]);
@@ -926,14 +973,14 @@ function MedicationsPanel({
 
   React.useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
+    if (!q) {
       setHits([]);
       return;
     }
     const controller = new AbortController();
     setSearching(true);
     const timer = setTimeout(() => {
-      void fexApi.searchDrugs(q, 10, controller.signal).then(result => {
+      void fexApi.searchDrugs(q, 20, controller.signal).then(result => {
         if (controller.signal.aborted) return;
         setHits(result.ok ? result.data : []);
         setSearching(false);
@@ -950,7 +997,12 @@ function MedicationsPanel({
     .filter(h => !added.has(h.id))
     .map(h => ({
       id: h.id,
-      label: (
+      label: matchedBrand(h) ? (
+        <>
+          <span className="capitalize">{matchedBrand(h)}</span>
+          <span className="text-ink-2"> · {h.generic}</span>
+        </>
+      ) : (
         <>
           <span className="capitalize">{h.generic}</span>
           {h.brands.length ? <span className="text-ink-2"> · {h.brands.join(', ')}</span> : null}
@@ -969,7 +1021,7 @@ function MedicationsPanel({
           onQueryChange={setQuery}
           placeholder="Brand or generic: Eliquis, metformin…"
           options={options}
-          minChars={2}
+          minChars={1}
           loading={searching}
           emptyText="No medication by that name"
           onPick={id => {
@@ -987,7 +1039,7 @@ function MedicationsPanel({
           }}
         />
         {draft.meds.length ? (
-          <ul className="space-y-2">
+          <ul className={addedListClass(part)}>
             {draft.meds.map(med => {
               const p = (s: string) => `${idPrefix}-${med.key}-${s}`;
               const asked = needsIndication.get(med.drugId);
