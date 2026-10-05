@@ -88,5 +88,23 @@ export function LoginBrandLogo({
       </span>
     );
   }
+  if (surface === 'dark' && brand.lockupOnDark) {
+    // The full lockup, tagline included: the panel is the one place with room
+    // for it to read.
+    const { src, width, height } = brand.lockupOnDark;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={brand.name}
+        width={width}
+        height={height}
+        className={cn('block h-auto max-w-full select-none', className)}
+        draggable={false}
+        translate="no"
+        data-testid="brand-logo"
+      />
+    );
+  }
   return <BrandWordmark brand={brand} surface={surface} className={className} />;
 }
