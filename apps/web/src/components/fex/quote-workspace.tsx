@@ -255,10 +255,6 @@ export function QuoteWorkspace({
   });
 
   const ready = Boolean(toApplicant(draft));
-  // The quote page splits the form so none of it scrolls: who and how much on
-  // the left, health and medications across the top of the right column with
-  // the results under them. The drawer and the call-center tab keep one card.
-  const split = variant === 'page';
 
   // ── Results pane ─────────────────────────────────────────────────────────
   const firstLabel = effectiveSort === 'face' ? 'Most coverage' : 'Lowest price';
@@ -272,25 +268,23 @@ export function QuoteWorkspace({
           headline="Enter state, sex, age and coverage to see every carrier."
           body="Results update as you type. Add conditions and medications for each carrier's real answer, with the reason and the page it comes from."
         />
-        {split ? null : (
-          <ol className="grid gap-px border-t border-rule bg-rule sm:grid-cols-3">
-            {[
-              ['1', 'Who', 'State, sex, age or date of birth, tobacco'],
-              ['2', 'How much', 'A face amount, or a monthly budget'],
-              ['3', 'Health', 'Conditions and medications, if any'],
-            ].map(([n, title, text]) => (
-              <li key={n} className="flex gap-3 bg-surface p-4">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-sm font-semibold text-brand-ink">
-                  {n}
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold text-ink">{title}</span>
-                  <span className="t-meta text-ink-2">{text}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
+        <ol className="grid gap-px border-t border-rule bg-rule sm:grid-cols-3">
+          {[
+            ['1', 'Who', 'State, sex, age or date of birth, tobacco'],
+            ['2', 'How much', 'A face amount, or a monthly budget'],
+            ['3', 'Health', 'Conditions and medications, if any'],
+          ].map(([n, title, text]) => (
+            <li key={n} className="flex gap-3 bg-surface p-4">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-sm font-semibold text-brand-ink">
+                {n}
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-ink">{title}</span>
+                <span className="t-meta text-ink-2">{text}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
       </Panel>
     );
   } else if (quote.status === 'error' && !quote.data) {
@@ -560,19 +554,6 @@ export function QuoteWorkspace({
     );
   }
 
-  const intakeProps = {
-    idPrefix,
-    draft,
-    dispatch,
-    conditions: catalog?.conditions ?? [],
-    showAetnaMedSupp: accendoAppointed,
-    needsIndication: new Map([...needsIndication.entries()].map(([id, n]) => [id, n.options])),
-    onReset: () => {
-      dispatch({ type: 'replace', draft: emptyDraft(session?.settings?.agency) });
-      setExpanded(null);
-    },
-  };
-
   return (
     <div
       className={cn(
@@ -607,48 +588,45 @@ export function QuoteWorkspace({
       ) : null}
 
       <section
-        aria-label={split ? 'Applicant and coverage' : 'Applicant and health'}
+        aria-label="Applicant and health"
         className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1"
       >
-        <QuoteIntake {...intakeProps} part={split ? 'who' : 'all'} />
+        <QuoteIntake
+          idPrefix={idPrefix}
+          draft={draft}
+          dispatch={dispatch}
+          conditions={catalog?.conditions ?? []}
+          showAetnaMedSupp={accendoAppointed}
+          needsIndication={
+            new Map([...needsIndication.entries()].map(([id, n]) => [id, n.options]))
+          }
+          onReset={() => {
+            dispatch({ type: 'replace', draft: emptyDraft(session?.settings?.agency) });
+            setExpanded(null);
+          }}
+        />
       </section>
 
-      <div className="flex min-w-0 flex-col lg:min-h-0">
-        {split ? (
-          // No overflow here: it would clip the search lists. A long list of
-          // conditions or medications scrolls inside its own step instead.
-          <section
-            aria-label="Health and medications"
-            className="relative z-20 mt-4 shrink-0 lg:mt-0"
-          >
-            <QuoteIntake {...intakeProps} part="health" />
-          </section>
+      <section
+        ref={resultsRef}
+        aria-label="Results"
+        aria-live="polite"
+        // pb-16 keeps the last row, and the sticky selected bar, clear of the
+        // floating softphone in the corner.
+        className="mt-4 flex min-w-0 flex-col lg:mt-0 lg:min-h-0 lg:overflow-y-auto lg:pb-16 lg:pr-1"
+      >
+        <div className="flex-1">{body}</div>
+        {selection ? (
+          <div className="sticky bottom-0 z-10 mt-3 pb-1">
+            <SelectedQuoteBar
+              selection={selection}
+              onStart={onStartApplication}
+              note={selectedNote}
+              onClear={() => setSelection(null)}
+            />
+          </div>
         ) : null}
-
-        <section
-          ref={resultsRef}
-          aria-label="Results"
-          aria-live="polite"
-          // pb-16 keeps the last row, and the sticky selected bar, clear of the
-          // floating softphone in the corner.
-          className={cn(
-            'mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-16 lg:pr-1',
-            split ? 'lg:mt-3' : 'lg:mt-0'
-          )}
-        >
-          <div className="flex-1">{body}</div>
-          {selection ? (
-            <div className="sticky bottom-0 z-10 mt-3 pb-1">
-              <SelectedQuoteBar
-                selection={selection}
-                onStart={onStartApplication}
-                note={selectedNote}
-                onClear={() => setSelection(null)}
-              />
-            </div>
-          ) : null}
-        </section>
-      </div>
+      </section>
     </div>
   );
 }
