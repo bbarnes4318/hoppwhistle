@@ -225,9 +225,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                   "Vonage rejects a caller ID that is not on your account.")
             return 1
         print(asterisk(args.container,
-                       f"channel originate Local/{to}*1{cid}@vonage-test/n application Playback tt-monkeys").strip()
+                       f"channel originate Local/{to}*1{cid}@vonage-test/n application Echo").strip()
               or "originate sent")
-        print("Your phone should ring and play a short recording. If it does not, check:\n"
+        # Echo, not Playback: dograh-asterisk ships without sound files, and a
+        # missing prompt hangs up the moment the call is answered.
+        print("Your phone should ring. Answer and speak: you should hear yourself echoed back.\n"
+              "If it does not ring, or you hear nothing, check:\n"
               f"  docker logs --since 2m {args.container} 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]'")
         return 0
 

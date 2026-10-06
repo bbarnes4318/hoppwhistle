@@ -249,7 +249,7 @@ def main() -> int:
     cid = ask("Caller ID to show (one of the Vonage numbers)", numbers[0])
     step([sys.executable, installer, "--test-call", cell, "--caller-id", cid])
     print("Wait up to 30 seconds for the phone to ring.")
-    if not yes("Did your phone ring and play a recording?"):
+    if not yes("Did your phone ring, and did you hear your own voice echoed back?"):
         print("\nStopped before changing Dograh. Send this output to Claude:\n"
               "  docker logs --since 3m dograh-asterisk 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]' | tail -40")
         return 1
