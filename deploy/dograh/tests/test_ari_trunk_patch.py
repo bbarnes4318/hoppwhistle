@@ -11,7 +11,16 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ari-trunk"))
 
-from apply_ari_trunk_patch import MARKER, MARKER_V2, PatchError, patch_file, patch_source, patch_v1  # noqa: E402
+from apply_ari_trunk_patch import (  # noqa: E402
+    MARKER,
+    MARKER_V2,
+    MARKER_V3,
+    PatchError,
+    patch_file,
+    patch_source,
+    patch_v1,
+    patch_v2,
+)  # noqa: E402
 
 # The shape of the deployed provider.py around lines 86-94 and 410-426.
 STAND_IN = '''"""ARI provider."""
@@ -124,7 +133,7 @@ def test_dial_prefix_applies_to_outbound_nanp_only():
 
 
 def test_no_prefix_by_default():
-    saved = with_env(DOGRAH_ARI_TRUNK=None, DOGRAH_ARI_DIAL_PREFIX=None)
+    saved = with_env(DOGRAH_ARI_TRUNK=None, DOGRAH_ARI_DIAL_PREFIX=None, DOGRAH_ARI_DIAL_FORMAT=None)
     try:
         p = load(patch_source(STAND_IN))
         assert p.outbound("+15551234567")["endpoint"] == "PJSIP/+15551234567@fractel"
@@ -145,6 +154,46 @@ def test_v1_file_is_upgraded_and_keeps_original_backup():
         assert patch_file(path, apply=True).changed
         assert open(path + ".bak-ari-trunk").read() == STAND_IN
         assert open(path + ".bak-ari-trunk-v2").read() == v1
+
+
+def test_v2_file_is_upgraded_to_v3():
+    v2 = patch_v2(STAND_IN)
+    assert MARKER_V2 in v2 and MARKER_V3 not in v2
+    full = patch_source(v2)
+    assert MARKER_V3 in full and full == patch_source(STAND_IN) and patch_source(full) == full
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "provider.py")
+        open(path, "w").write(v2)
+        open(path + ".bak-ari-trunk", "w").write(STAND_IN)
+        open(path + ".bak-ari-trunk-v2", "w").write("v1")
+        assert patch_file(path, apply=True).changed
+        assert open(path + ".bak-ari-trunk").read() == STAND_IN
+        assert open(path + ".bak-ari-trunk-v3").read() == v2
+
+
+def test_vonage_dial_format_strips_plus_on_outbound_only():
+    saved = with_env(DOGRAH_ARI_TRUNK="vonage", DOGRAH_ARI_DIAL_FORMAT="nanp11",
+                     DOGRAH_ARI_DIAL_PREFIX=None, DOGRAH_ARI_TRANSFER_TRUNK="fractel")
+    try:
+        p = load(patch_source(STAND_IN))
+        assert p.outbound("+15551234567")["endpoint"] == "PJSIP/15551234567@vonage"
+        assert p.outbound("5551234567")["endpoint"] == "PJSIP/15551234567@vonage"
+        assert p.outbound("+442071234567")["endpoint"] == "PJSIP/+442071234567@vonage"
+        assert p.outbound("+15551234567@sbc")["endpoint"] == "PJSIP/+15551234567@sbc"
+        assert p.transfer("+14233398241")["endpoint"] == "PJSIP/+14233398241@fractel"
+        os.environ["DOGRAH_ARI_DIAL_FORMAT"] = "nanp10"
+        assert p.outbound("+15551234567")["endpoint"] == "PJSIP/5551234567@vonage"
+    finally:
+        restore(saved)
+
+
+def test_prefix_wins_over_format():
+    saved = with_env(DOGRAH_ARI_TRUNK="anveo", DOGRAH_ARI_DIAL_PREFIX="012345", DOGRAH_ARI_DIAL_FORMAT="nanp10")
+    try:
+        p = load(patch_source(STAND_IN))
+        assert p.outbound("+15551234567")["endpoint"] == "PJSIP/01234515551234567@anveo"
+    finally:
+        restore(saved)
 
 
 if __name__ == "__main__":

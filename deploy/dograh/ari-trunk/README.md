@@ -20,6 +20,10 @@ things:
   outbound US numbers as `<prefix>1XXXXXXXXXX`. Anveo Direct needs this, see
   `deploy/dograh/anveo-trunk`. It's unset by default and never used on transfers.
   Running the patcher on a file with the first version upgrades it in place.
+- **Optional number format (V3)**: `DOGRAH_ARI_DIAL_FORMAT=nanp11` dials outbound
+  US numbers as `1XXXXXXXXXX` (`nanp10`: `XXXXXXXXXX`). Vonage refuses a `+`; see
+  `deploy/dograh/vonage-trunk`. The default `e164` changes nothing, a prefix
+  takes precedence, and transfers are never reformatted.
 
 ## Apply
 
@@ -44,7 +48,7 @@ the Dograh API image** (`api`, and any campaign or worker service built from it;
     volumes:
       - /opt/dograh-patches/ari-trunk/provider.py:/app/api/services/telephony/providers/ari/provider.py:ro
     environment:
-      DOGRAH_ARI_TRUNK: twilio             # or fractel to go back
+      DOGRAH_ARI_TRUNK: twilio             # or vonage / anveo; fractel to go back
       # DOGRAH_ARI_TRANSFER_TRUNK: fractel # only if transfers should stay on FracTEL
 ```
 

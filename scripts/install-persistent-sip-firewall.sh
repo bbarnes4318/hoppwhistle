@@ -34,7 +34,7 @@ CARRIER_IPS=(
 )
 
 # Additional carriers allowed to deliver INBOUND calls to FreeSWITCH's external
-# profile (5080). Of these, only Twilio may also reach Dograh Asterisk (5062),
+# profile (5080). Of these, only Twilio and Vonage may also reach Dograh Asterisk (5062),
 # for in-dialog requests on outbound AI calls; see the host chain below.
 # Entries may be single IPs or CIDR ranges.
 #
@@ -55,6 +55,14 @@ TWILIO_SIP_SOURCES=(
   54.172.60.0/30
   54.244.51.0/30
   168.86.128.0/18
+)
+
+# Vonage SIP signaling and media ranges. Re-check against
+# https://api.support.vonage.com/hc/en-us/articles/360035471331 before relying
+# on Vonage inbound; a missing range shows up as dropped Vonage INVITEs.
+VONAGE_SIP_SOURCES=(
+  216.147.0.0/18
+  168.100.64.0/18
 )
 
 # ---------------------------------------------------------------------------
@@ -79,7 +87,7 @@ for ip in "${CARRIER_IPS[@]}"; do
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$ip/32" -p tcp --dport 5080 -j RETURN
 done
 
-for src in "${ANVEO_SIP_SOURCES[@]}" "${TWILIO_SIP_SOURCES[@]}"; do
+for src in "${ANVEO_SIP_SOURCES[@]}" "${TWILIO_SIP_SOURCES[@]}" "${VONAGE_SIP_SOURCES[@]}"; do
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p udp --dport 5080 -j RETURN
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p tcp --dport 5080 -j RETURN
 done
@@ -130,8 +138,9 @@ done
 # one Asterisk dialled, so they are not covered by ESTABLISHED above. Without
 # this, a callee hangup is dropped and the AI keeps talking to dead air.
 # New inbound calls from Twilio are still refused: the trunk's context is
-# `twilio-no-inbound`, which hangs up.
-for src in "${TWILIO_SIP_SOURCES[@]}"; do
+# `twilio-no-inbound`, which hangs up. The same holds for Vonage on the
+# `vonage` trunk (deploy/dograh/vonage-trunk), context `vonage-no-inbound`.
+for src in "${TWILIO_SIP_SOURCES[@]}" "${VONAGE_SIP_SOURCES[@]}"; do
   iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$src" -p udp --dport 5062 -j RETURN
   iptables -w -A "$HOST_CHAIN" -i "$WAN_IF" -s "$src" -p tcp --dport 5062 -j RETURN
 done

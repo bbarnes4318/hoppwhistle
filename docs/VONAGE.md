@@ -15,10 +15,12 @@ The browser never talks to Vonage, no Vonage Client SDK is involved, and no Vapi
 component is in the path. Vonage is reached only because the carrier-routing
 resolver (`packages/shared/src/carrier-routing`) resolves a `vonage` gateway.
 
-Dograh's own direct Vonage provider (Dograh → Vonage Voice API → PSTN) is a
-different architecture and is not configured here. The Hoppwhistle `DOGRAH_AI`
-route is Dograh BYOC → FreeSWITCH (`vapi_outbound` context) → the `DOGRAH_AI`
-waterfall, where Vonage is eligible like any other carrier.
+**Dograh AI calls do not use this path.** Dograh dials from its own Asterisk
+(`dograh-asterisk`) straight to a carrier trunk; they never reach FreeSWITCH, so
+switching Vonage on in the `DOGRAH_AI` waterfall does not move them. (That
+waterfall serves the FreeSWITCH `vapi` profile on 5070, which the host firewall
+closes.) To send Dograh's AI calls over Vonage, add the `vonage` trunk to
+Dograh's Asterisk: see `deploy/dograh/vonage-trunk/README.md`.
 
 ## What carries a Vonage call
 
@@ -54,7 +56,9 @@ waterfall, where Vonage is eligible like any other carrier.
    sure they are **not** linked to a Voice Application (an application link
    takes the call away from SIP forwarding).
 4. **Firewall.** Allow Vonage's SIP signalling and RTP to reach UDP 5080 and
-   the RTP range FreeSWITCH uses (16384–16484).
+   the RTP range FreeSWITCH uses (16384–16484). `scripts/install-persistent-sip-firewall.sh`
+   allows Vonage's ranges (216.147.0.0/18, 168.100.64.0/18) on 5080, and on 5062
+   for the Dograh trunk.
 
 ## Configuration
 
