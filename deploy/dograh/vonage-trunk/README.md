@@ -18,6 +18,19 @@ Dograh ─ARI─► dograh-asterisk ─PJSIP/1XXXXXXXXXX@vonage─► sip.nexmo.
 | `../anveo-trunk/set_caller_id_pool.py` | Leaves only your Vonage numbers active as Dograh caller IDs. Vonage rejects any caller ID that isn't on the account. |
 | `scripts/install-persistent-sip-firewall.sh` | Lets Vonage reach FreeSWITCH on 5080 (inbound DIDs) and Asterisk on 5062 (the callee's BYE). |
 
+## One command
+
+On the server as root (the Hetzner Cloud web console works, no SSH key needed):
+
+```bash
+cd /opt/hopwhistle && git pull && python3 deploy/dograh/vonage-trunk/setup_vonage.py
+```
+
+`setup_vonage.py` asks for the Vonage API key and secret, checks them against
+Vonage, and runs every step below, asking before each change to Dograh. It
+stops, with Dograh untouched, if the test call doesn't ring. The rest of this
+page is the same thing step by step.
+
 ## Before you start
 
 - **Vonage settings on the host.** Run `scripts/vonage-setup.ps1` from your PC,
