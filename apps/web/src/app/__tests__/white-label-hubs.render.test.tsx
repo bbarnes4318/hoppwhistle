@@ -845,6 +845,8 @@ describe('the white-label portal', () => {
       expect(activeTab()).toBe('roster');
       expect(screen.getByRole('button', { name: 'Invite agent or manager' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Invite user' })).toBeNull();
+      // An existing agent is made a manager from the row, without re-inviting.
+      expect(screen.getByRole('button', { name: 'Make manager' })).toBeTruthy();
 
       const { rolesOffered } = await import('@/components/users/invite-user-dialog');
       expect(
