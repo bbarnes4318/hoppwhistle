@@ -66,8 +66,9 @@ import { cn } from '@/lib/utils';
 
 import { ComparePanel, CompareTray } from './compare-panel';
 import { CheckRow, FOCUS, shortLabel } from './parts';
-import { healthSearchId, QuoteIntake } from './quote-intake';
-import { ResultRow, SelectedQuoteBar } from './result-row';
+import { healthSearchId, medsSearchId, QuoteIntake } from './quote-intake';
+import { ResultCard } from './result-card';
+import { SelectedQuoteBar } from './result-row';
 
 export interface QuoteWorkspaceProps {
   variant: 'page' | 'drawer' | 'embedded';
@@ -364,15 +365,21 @@ export function QuoteWorkspace({
 
   const ready = Boolean(toApplicant(draft));
 
-  const focusHealthSearch = React.useCallback(() => {
-    const input = document.getElementById(healthSearchId(idPrefix));
-    if (!input) return;
-    setEditing(true);
-    requestAnimationFrame(() => {
-      input.scrollIntoView({ block: 'nearest' });
-      input.focus();
-    });
-  }, [idPrefix]);
+  /** Alt+H: the condition search; Alt+M: the medication search. */
+  const focusHealthSearch = React.useCallback(
+    (code?: string) => {
+      const input = document.getElementById(
+        code === 'KeyM' ? medsSearchId(idPrefix) : healthSearchId(idPrefix)
+      );
+      if (!input) return;
+      setEditing(true);
+      requestAnimationFrame(() => {
+        input.scrollIntoView({ block: 'nearest' });
+        input.focus();
+      });
+    },
+    [idPrefix]
+  );
 
   /*
    * Keyboard. Alt+H (or Alt+M) jumps to the health search from anywhere in the
@@ -389,7 +396,7 @@ export function QuoteWorkspace({
       if (document.querySelector('[role="dialog"]')) return;
       if (rootRef.current?.contains(event.target as Node)) return; // handled below
       event.preventDefault();
-      focusHealthSearch();
+      focusHealthSearch(event.code);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -403,7 +410,7 @@ export function QuoteWorkspace({
       (event.code === 'KeyH' || event.code === 'KeyM')
     ) {
       event.preventDefault();
-      focusHealthSearch();
+      focusHealthSearch(event.code);
       return;
     }
     const target = event.target as HTMLElement;
@@ -596,198 +603,230 @@ export function QuoteWorkspace({
           </div>
         ) : null}
 
-        {/* The answer in four figures, with the sort and filters beside
-            them, drawn as the head of the card of carriers that qualify. A
-            sibling of every group rather than inside the card, so it stays
-            pinned while any of them -- price only, the declines -- scrolls
-            beneath. */}
-        <section
-          aria-label="Summary"
-          className="sticky top-0 z-10 rounded-t-card border border-rule bg-surface"
-        >
-          <div className="flex min-h-[62px] flex-wrap items-center gap-x-5 gap-y-2 py-2.5 pl-5 pr-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
-              <Metric
-                value={String(groups.qualifies.length)}
-                of={`of ${results.length}`}
-                caption="Qualify"
-                label={`${groups.qualifies.length} of ${results.length} carriers qualify`}
-              />
-              <MetricRule />
-              <Metric
-                value={lowestAny === null ? '—' : money(lowestAny)}
-                caption={`Lowest / ${mode}`}
-                label={`Lowest premium: ${lowestAny === null ? 'none' : `${money(lowestAny)} /${mode}`}`}
-              />
-              <MetricRule />
-              <Metric
-                value={lowestLevel === null ? '—' : money(lowestLevel)}
-                caption="Best level"
-                label={`Lowest level premium: ${lowestLevel === null ? 'none' : money(lowestLevel)}`}
-              />
-              <MetricRule />
-              <Metric
-                value={String(groups.declined.length)}
-                caption="Declined"
-                label={`${groups.declined.length} declined`}
-                onClick={groups.declined.length ? showDeclinedList : undefined}
-              />
-              {needsIndication.size || changes.length ? (
-                <span className="flex flex-wrap items-center gap-1">
-                  {needsIndication.size ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      }
-                      className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-[12px] font-semibold text-ringing-ink hover:bg-ringing-tint',
-                        FOCUS
-                      )}
-                    >
-                      <HelpCircle className="h-3.5 w-3.5" aria-hidden />
-                      {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
-                    </button>
-                  ) : null}
-                  {changes.length ? <ChangesNote changes={changes} /> : null}
+        {/* The recommendation header: the answer in a sentence, the two
+            prices that matter beside it, the sort and filters at the right.
+            Pinned while the cards scroll beneath. */}
+        <section aria-label="Summary" className="sticky top-0 z-10 bg-paper pb-2.5 pt-0.5">
+          <div className="rounded-[14px] border border-rule bg-surface px-5 py-3 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+              <h2 className="text-[20px] font-semibold leading-7 tracking-[-0.01em] text-ink">
+                {groups.qualifies.length} carrier{groups.qualifies.length === 1 ? '' : 's'} qualify
+                <span className="ml-2 text-[13px] font-normal tracking-normal text-ink-3">
+                  of {results.length} quoted
                 </span>
-              ) : null}
-            </div>
-
-            <div
-              role="toolbar"
-              aria-label="Sort and filter results"
-              className="ml-auto flex items-center gap-0.5"
-            >
-              {quote.stale ? (
-                <span className="mr-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
-                  <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
-                  <span className="sr-only cq-lg:not-sr-only">Updating</span>
-                </span>
-              ) : null}
-              <label
-                htmlFor={`${idPrefix}-sort`}
-                className="sr-only pl-1 text-[12px] text-ink-3 cq-lg:not-sr-only"
+              </h2>
+              <div
+                role="toolbar"
+                aria-label="Sort and filter results"
+                className="flex items-center gap-0.5"
               >
-                Sort
-              </label>
-              <span className="relative inline-flex items-center">
-                <select
-                  id={`${idPrefix}-sort`}
-                  value={effectiveSort}
-                  onChange={e => {
-                    const next = e.target.value as SortKey;
-                    // The mode's own default sort is the API's order.
-                    const natural = draft.coverage.mode === 'budget' ? 'face' : 'price';
-                    setSort(next === natural ? null : next);
-                  }}
-                  className={cn(
-                    'h-8 cursor-pointer appearance-none rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12.5px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-rule-strong hover:bg-surface',
-                    FOCUS
-                  )}
-                >
-                  <option value="price">Lowest price</option>
-                  <option value="face">Most coverage</option>
-                </select>
-                <ChevronDown
-                  className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-ink-3"
-                  aria-hidden
-                />
-              </span>
-              <span aria-hidden className="mx-1.5 h-4 w-px bg-rule" />
-              <button
-                type="button"
-                aria-pressed={levelOnly}
-                onClick={() => setLevelOnly(v => !v)}
-                className={cn(
-                  'inline-flex h-8 items-center gap-2 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
-                  levelOnly ? 'text-ink' : 'text-ink-2 hover:text-ink',
-                  FOCUS
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border',
-                    levelOnly ? 'border-brand-strong bg-brand-strong text-white' : 'border-ink-3'
-                  )}
-                >
-                  {levelOnly ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
-                </span>
-                Level only
-              </button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
+                {quote.stale ? (
+                  <span className="mr-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
+                    <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
+                    <span className="sr-only cq-lg:not-sr-only">Updating</span>
+                  </span>
+                ) : null}
+                <label htmlFor={`${idPrefix}-sort`} className="pl-1 text-[12.5px] text-ink-3">
+                  Sort
+                </label>
+                <span className="relative inline-flex items-center">
+                  <select
+                    id={`${idPrefix}-sort`}
+                    value={effectiveSort}
+                    onChange={e => {
+                      const next = e.target.value as SortKey;
+                      // The mode's own default sort is the API's order.
+                      const natural = draft.coverage.mode === 'budget' ? 'face' : 'price';
+                      setSort(next === natural ? null : next);
+                    }}
                     className={cn(
-                      'inline-flex h-8 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
-                      filterCount ? 'text-ink' : 'text-ink-2 hover:text-ink',
+                      'h-8 cursor-pointer appearance-none rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12.5px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-rule-strong hover:bg-surface',
                       FOCUS
                     )}
                   >
-                    <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                    <span className="sr-only cq-md:not-sr-only">Filters</span>
-                    {filterCount ? (
-                      <span className="rounded-full bg-ink px-1.5 text-[10.5px] font-semibold leading-4 text-surface">
-                        {filterCount}
+                    <option value="price">Lowest price</option>
+                    <option value="face">Most coverage</option>
+                  </select>
+                  <ChevronDown
+                    className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-ink-3"
+                    aria-hidden
+                  />
+                </span>
+                <button
+                  type="button"
+                  aria-pressed={levelOnly}
+                  onClick={() => setLevelOnly(v => !v)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-2 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
+                    levelOnly ? 'text-ink' : 'text-ink-2 hover:text-ink',
+                    FOCUS
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border',
+                      levelOnly ? 'border-brand-strong bg-brand-strong text-white' : 'border-ink-3'
+                    )}
+                  >
+                    {levelOnly ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+                  </span>
+                  Level only
+                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'inline-flex h-8 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
+                        filterCount ? 'text-ink' : 'text-ink-2 hover:text-ink',
+                        FOCUS
+                      )}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                      <span className="sr-only cq-md:not-sr-only">Filters</span>
+                      {filterCount ? (
+                        <span className="rounded-full bg-ink px-1.5 text-[10.5px] font-semibold leading-4 text-surface">
+                          {filterCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-64 space-y-2 p-3">
+                    <CheckRow
+                      id={`${idPrefix}-hide-stale`}
+                      checked={hideStale}
+                      onChange={setHideStale}
+                      className="text-[13px]"
+                    >
+                      Hide older rate books
+                      <span className="t-meta block text-ink-3">Carriers marked Rate verify</span>
+                    </CheckRow>
+                    <CheckRow
+                      id={`${idPrefix}-not-appointed`}
+                      checked={showNotAppointed}
+                      onChange={setShowNotAppointed}
+                      className="text-[13px]"
+                    >
+                      Show not appointed
+                      <span className="t-meta block text-ink-3">
+                        Carriers you cannot write, for reference
                       </span>
-                    ) : null}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 space-y-2 p-3">
-                  <CheckRow
-                    id={`${idPrefix}-hide-stale`}
-                    checked={hideStale}
-                    onChange={setHideStale}
-                    className="text-[13px]"
-                  >
-                    Hide older rate books
-                    <span className="t-meta block text-ink-3">Carriers marked Rate verify</span>
-                  </CheckRow>
-                  <CheckRow
-                    id={`${idPrefix}-not-appointed`}
-                    checked={showNotAppointed}
-                    onChange={setShowNotAppointed}
-                    className="text-[13px]"
-                  >
-                    Show not appointed
-                    <span className="t-meta block text-ink-3">
-                      Carriers you cannot write, for reference
-                    </span>
-                  </CheckRow>
-                </PopoverContent>
-              </Popover>
+                    </CheckRow>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px] text-ink-2">
+              <span>
+                Best price{' '}
+                <span className="text-[15px] font-semibold tabular-nums text-ink">
+                  {lowestAny === null ? '—' : money(lowestAny)}
+                </span>
+                {lowestAny === null ? null : <span className="text-ink-3">/{mode}</span>}
+              </span>
+              <span>
+                Best level{' '}
+                <span className="text-[15px] font-semibold tabular-nums text-ink">
+                  {lowestLevel === null ? '—' : money(lowestLevel)}
+                </span>
+                {lowestLevel === null ? null : <span className="text-ink-3">/{mode}</span>}
+              </span>
+              {groups.declined.length ? (
+                <button
+                  type="button"
+                  onClick={showDeclinedList}
+                  className={cn(
+                    'inline-flex items-center gap-0.5 rounded-[4px] text-ink-2 underline-offset-2 hover:text-ink hover:underline',
+                    FOCUS
+                  )}
+                >
+                  {groups.declined.length} declined
+                  <ChevronRight className="h-3.5 w-3.5 self-center" aria-hidden />
+                </button>
+              ) : (
+                <span className="text-ink-3">None declined</span>
+              )}
+              {needsIndication.size ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-[4px] font-semibold text-ringing-ink hover:underline',
+                    FOCUS
+                  )}
+                >
+                  <HelpCircle className="h-3.5 w-3.5 self-center" aria-hidden />
+                  {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
+                </button>
+              ) : null}
+              {changes.length ? <ChangesNote changes={changes} /> : null}
+            </p>
           </div>
         </section>
-        <Panel className="!mt-0 overflow-hidden rounded-t-none border-t-0">
-          <h3 id={qualifiesHeading} className="sr-only">
-            Qualifies, {groups.qualifies.length}
-          </h3>
-          <ul aria-labelledby={qualifiesHeading}>
-            {groups.qualifies.length ? (
-              groups.qualifies.map((r, i) => (
-                <ResultRow
-                  key={r.productId}
-                  {...rowProps(r)}
-                  badge={i === 0 && topEarned(r) ? firstLabel : undefined}
-                  tag={
-                    r.productId === bestLevelId &&
-                    !(i === 0 && topEarned(r) && effectiveSort === 'price')
-                      ? 'Best level'
-                      : undefined
-                  }
-                />
-              ))
-            ) : (
-              <li className="px-5 py-10 text-center text-[13px] text-ink-2">
-                No appointed carrier qualifies with these answers. Open the declined list to see
-                why.
-              </li>
-            )}
-          </ul>
-        </Panel>
+
+        {/* The carriers that qualify, in three weights: the recommendation,
+            the two runners-up side by side, then every other one as a quiet
+            card of its own. */}
+        <h3 id={qualifiesHeading} className="sr-only">
+          Qualifies, {groups.qualifies.length}
+        </h3>
+        {groups.qualifies.length ? (
+          <div aria-labelledby={qualifiesHeading} role="group" className="space-y-2.5">
+            <ul>
+              <ResultCard
+                variant="hero"
+                {...rowProps(groups.qualifies[0])}
+                labels={[
+                  'Recommended',
+                  ...(topEarned(groups.qualifies[0]) ? [firstLabel] : []),
+                  ...(groups.qualifies[0].productId === bestLevelId &&
+                  !(topEarned(groups.qualifies[0]) && effectiveSort === 'price')
+                    ? ['Best level']
+                    : []),
+                ]}
+              />
+            </ul>
+            {groups.qualifies.length > 1 ? (
+              <ul className="grid items-start gap-2.5 cq-md:grid-cols-2">
+                {groups.qualifies.slice(1, 3).map((r, i) => (
+                  <ResultCard
+                    key={r.productId}
+                    variant="pick"
+                    {...rowProps(r)}
+                    labels={[`#${i + 2}`, ...(r.productId === bestLevelId ? ['Best level'] : [])]}
+                  />
+                ))}
+              </ul>
+            ) : null}
+            {groups.qualifies.length > 3 ? (
+              <section aria-label="Other qualifying carriers" className="pt-1">
+                <h3 className="mb-2 px-1 text-[12.5px] font-semibold text-ink-2">
+                  Other qualifying carriers
+                  <span className="ml-1.5 font-normal tabular-nums text-ink-3">
+                    {groups.qualifies.length - 3}
+                  </span>
+                </h3>
+                <ul className="space-y-2">
+                  {groups.qualifies.slice(3).map(r => (
+                    <ResultCard
+                      key={r.productId}
+                      variant="quiet"
+                      {...rowProps(r)}
+                      labels={r.productId === bestLevelId ? ['Best level'] : []}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        ) : (
+          <p className="rounded-[14px] border border-rule bg-surface px-5 py-10 text-center text-[13px] text-ink-2 shadow-card">
+            No appointed carrier qualifies with these answers. Open the declined list to see why.
+          </p>
+        )}
 
         {groups.priceOnly.length ? (
           <ResultGroup
@@ -796,7 +835,7 @@ export function QuoteWorkspace({
             count={groups.priceOnly.length}
           >
             {groups.priceOnly.map(r => (
-              <ResultRow key={r.productId} {...rowProps(r)} />
+              <ResultCard key={r.productId} variant="quiet" {...rowProps(r)} />
             ))}
           </ResultGroup>
         ) : null}
@@ -804,13 +843,13 @@ export function QuoteWorkspace({
         {showNotAppointed && groups.notAppointed.length ? (
           <ResultGroup title="Not appointed" count={groups.notAppointed.length}>
             {groups.notAppointed.map(r => (
-              <ResultRow key={r.productId} {...rowProps(r, !r.uwLoaded)} />
+              <ResultCard key={r.productId} variant="quiet" {...rowProps(r, !r.uwLoaded)} />
             ))}
           </ResultGroup>
         ) : null}
 
         {groups.declined.length ? (
-          <div ref={declinedRef} className="scroll-mt-20">
+          <div ref={declinedRef} className="scroll-mt-28">
             <ResultGroup
               title="Declined or not available"
               count={groups.declined.length}
@@ -819,7 +858,7 @@ export function QuoteWorkspace({
               onOpenChange={setShowDeclined}
             >
               {groups.declined.map(r => (
-                <ResultRow key={r.productId} {...rowProps(r)} />
+                <ResultCard key={r.productId} variant="quiet" {...rowProps(r)} />
               ))}
             </ResultGroup>
           </div>
@@ -964,66 +1003,6 @@ export function QuoteWorkspace({
   );
 }
 
-/**
- * One figure in the summary: the number over a small caption, so four of them
- * read as a row of answers rather than a line of telemetry.
- */
-function Metric({
-  value,
-  of,
-  caption,
-  label,
-  onClick,
-}: {
-  value: string;
-  /** Quiet words after the number ("of 24"). */
-  of?: string;
-  /** The caption under it ("Qualify"). */
-  caption: string;
-  /** The whole figure in words, for screen readers. */
-  label: string;
-  /** Makes the figure a button (the declined list). */
-  onClick?: () => void;
-}): JSX.Element {
-  const content = (
-    <>
-      <span aria-hidden className="flex items-baseline gap-1 whitespace-nowrap">
-        <span className="text-[18px] font-semibold leading-6 tracking-[-0.01em] tabular-nums text-ink">
-          {value}
-        </span>
-        {of ? <span className="text-[12px] tabular-nums text-ink-3">{of}</span> : null}
-      </span>
-      <span
-        aria-hidden
-        className="mt-0.5 flex items-center gap-0.5 whitespace-nowrap text-[10px] font-semibold uppercase leading-3 tracking-[0.08em] text-ink-3"
-      >
-        {caption}
-        {onClick ? <ChevronRight className="h-3 w-3" /> : null}
-      </span>
-      <span className="sr-only">{label}</span>
-    </>
-  );
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          '-mx-1.5 flex flex-col items-start rounded-control px-1.5 py-0.5 text-left transition-colors duration-150 ne-motion hover:bg-sunken',
-          FOCUS
-        )}
-      >
-        {content}
-      </button>
-    );
-  }
-  return <p className="flex flex-col items-start">{content}</p>;
-}
-
-function MetricRule(): JSX.Element {
-  return <span aria-hidden className="hidden h-8 w-px bg-rule cq-sm:block" />;
-}
-
 /** "3 outcomes changed", and which, from the last edit. */
 function ChangesNote({ changes }: { changes: OutcomeChange[] }): JSX.Element {
   return (
@@ -1105,11 +1084,9 @@ function ResultGroup({
   const headingId = React.useId();
   const heading = (
     <>
-      <span className="flex min-w-0 items-baseline gap-2">
-        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-2">
-          {title}
-        </span>
-        <span className="text-[12px] font-semibold tabular-nums text-ink-3">{count}</span>
+      <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="text-[12.5px] font-semibold text-ink-2">{title}</span>
+        <span className="text-[12.5px] tabular-nums text-ink-3">{count}</span>
         {description ? (
           <span className="truncate text-[12px] text-ink-3">· {description}</span>
         ) : null}
@@ -1129,28 +1106,29 @@ function ResultGroup({
     </>
   );
   return (
-    <Panel className="overflow-hidden">
-      <h3 id={headingId} className="m-0">
+    <section className="pt-2">
+      <h3 id={headingId} className="m-0 mb-2">
         {collapsible ? (
           <button
             type="button"
             aria-expanded={open}
             onClick={toggle}
             className={cn(
-              'flex h-10 w-full items-center justify-between gap-2 px-5 text-left transition-colors duration-150 ne-motion hover:bg-[#f8f9fb]',
-              open && 'border-b border-rule',
+              'flex h-8 w-full items-center justify-between gap-2 rounded-control px-1 text-left hover:bg-sunken',
               FOCUS
             )}
           >
             {heading}
           </button>
         ) : (
-          <span className="flex h-10 items-center justify-between gap-2 border-b border-rule px-5">
-            {heading}
-          </span>
+          <span className="flex h-8 items-center justify-between gap-2 px-1">{heading}</span>
         )}
       </h3>
-      {open ? <ul aria-labelledby={headingId}>{children}</ul> : null}
-    </Panel>
+      {open ? (
+        <ul aria-labelledby={headingId} className="space-y-2">
+          {children}
+        </ul>
+      ) : null}
+    </section>
   );
 }

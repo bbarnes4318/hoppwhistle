@@ -344,6 +344,30 @@ describe('QuoteWorkspace', () => {
     );
   });
 
+  it('keeps Medications as its own section, each with its use asked beneath it', async () => {
+    quoteResults = () => [
+      result({
+        needsIndication: [
+          { drugId: 'gabapentin', name: 'gabapentin', options: ['NEUROPATHY', 'SEIZURES'] },
+        ],
+      }),
+    ];
+    const draft: QuoteDraft = {
+      ...READY,
+      meds: [{ key: 'm1', drugId: 'gabapentin', name: 'gabapentin', lastTakenMonthsAgo: 0 }],
+    };
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
+    // Four sections, Health and Medications each with their own search.
+    for (const name of ['Applicant', 'Coverage', 'Health', 'Medications'])
+      expect(screen.getByRole('heading', { name })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Add a condition' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Add a medication' })).toBeTruthy();
+    // The medication is listed, and its use is asked right under it.
+    const meds = screen.getByRole('heading', { name: 'Medications' }).closest('section')!;
+    expect(within(meds).getByText('gabapentin')).toBeTruthy();
+    expect(await within(meds).findByLabelText('Prescribed for')).toBeTruthy();
+  });
+
   it('posts a used quote once and hands the selection on', async () => {
     const onUseQuote = vi.fn();
     render(
@@ -406,17 +430,21 @@ describe('the Quote page', () => {
     expect(tabNames()).toEqual(['Quote', 'History', 'Underwriting', 'Carriers']);
   });
 
-  it('gives an owner Insights and Settings after them', () => {
+  it('gives an owner Insights after them, and Settings from the account menu', () => {
     auth.value = { hasFullAccess: true, isPlatformAdmin: false };
     render(<QuotePage />);
-    expect(tabNames()).toEqual([
-      'Quote',
-      'History',
-      'Underwriting',
-      'Carriers',
-      'Insights',
-      'Settings',
-    ]);
+    expect(tabNames()).toEqual(['Quote', 'History', 'Underwriting', 'Carriers', 'Insights']);
+  });
+
+  it('still opens Settings at its URL for an owner', () => {
+    auth.value = { hasFullAccess: true, isPlatformAdmin: false };
+    window.history.replaceState(null, '', '/quote?tab=settings');
+    render(<QuotePage />);
+    expect(screen.getAllByRole('tab').some(t => t.getAttribute('aria-selected') === 'true')).toBe(
+      false
+    );
+    expect(document.querySelector('[role="tabpanel"][data-state="active"]')).not.toBeNull();
+    window.history.replaceState(null, '', '/');
   });
 
   it('opens an agent asking for Settings on the quoter instead', () => {

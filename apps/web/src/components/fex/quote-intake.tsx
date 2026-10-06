@@ -31,7 +31,6 @@ import type { PaymentMode } from '@hopwhistle/fex-engine/types';
 import { Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
-import { Panel } from '@/components/domain';
 import { Tooltip } from '@/components/ui/tooltip';
 import { fexApi, type FexDrugHit } from '@/lib/fex/api';
 import { searchConditions } from '@/lib/fex/condition-search';
@@ -98,6 +97,9 @@ const FEATURED_CONDITIONS: readonly string[] = [
   'STROKE',
 ];
 
+/** How agents say the longest common conditions, on their chips. */
+const CHIP_NAME: Record<string, string> = { CHF: 'CHF', HEART_ATTACK: 'Heart attack' };
+
 const digitsOnly = (v: string) => v.replace(/[^0-9]/g, '');
 
 const applicantDone = (d: QuoteDraft) => {
@@ -131,41 +133,18 @@ function labelFor(buckets: ReadonlyArray<readonly [string, unknown]>, months: un
   return buckets.find(([, m]) => m === months)?.[0];
 }
 
+const STEPS = ['Applicant', 'Coverage', 'Health', 'Medications'] as const;
+
 export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
-  const missing = missingForQuote(props.draft);
   return (
-    // Not overflow-hidden: the health search's list drops out of the panel.
-    <Panel>
-      <div className="flex h-11 items-center justify-between gap-2 border-b border-rule px-4">
-        <p className="flex min-w-0 items-center gap-2 text-[12px] font-medium" aria-live="polite">
-          <span
-            aria-hidden
-            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', missing ? 'bg-ink-3' : 'bg-live')}
-          />
-          <span className={cn('truncate', missing ? 'text-ink-2' : 'text-live-ink')}>
-            {missing ? (MISSING_TEXT[missing] ?? 'Needs more answers') : 'Quoting live'}
-          </span>
-        </p>
-        {props.onReset ? (
-          <button
-            type="button"
-            onClick={props.onReset}
-            className={cn(
-              '-mr-2 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium text-ink-2 transition-colors duration-150 ne-motion hover:bg-sunken hover:text-ink',
-              FOCUS
-            )}
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-            New quote
-          </button>
-        ) : null}
-      </div>
-      <div className="divide-y divide-rule">
-        <ApplicantSection {...props} />
-        <CoverageSection {...props} />
-        <HealthSection {...props} />
-      </div>
-    </Panel>
+    // Four cards, one per question an agent asks, in the order they ask it.
+    // Not overflow-hidden: the searches' lists drop out of their cards.
+    <div className="space-y-2.5">
+      <ApplicantSection {...props} />
+      <CoverageSection {...props} />
+      <HealthSection {...props} />
+      <MedicationsSection {...props} />
+    </div>
   );
 }
 
@@ -176,7 +155,7 @@ function Section({
   aside,
   children,
 }: {
-  title: string;
+  title: (typeof STEPS)[number];
   done?: boolean;
   /** One line of guidance, behind the title's info mark. */
   hint?: string;
@@ -185,13 +164,26 @@ function Section({
   children: React.ReactNode;
 }): JSX.Element {
   const id = React.useId();
+  const n = STEPS.indexOf(title) + 1;
   return (
-    <section aria-labelledby={id} className="px-4 pb-5 pt-4">
-      <div className="mb-3 flex min-h-[28px] items-center gap-1.5">
-        <h3 id={id} className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">
+    <section
+      aria-labelledby={id}
+      className="rounded-card border border-rule bg-surface px-4 pb-4 pt-3 shadow-card"
+    >
+      <div className="mb-3 flex min-h-[28px] items-center gap-2.5">
+        <span
+          aria-hidden
+          className={cn(
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold',
+            done ? 'bg-live-tint text-live-ink' : 'bg-sunken text-ink-2'
+          )}
+        >
+          {done ? <Check className="h-3.5 w-3.5" /> : n}
+        </span>
+        <h3 id={id} className="text-[14px] font-semibold text-ink">
           {title}
         </h3>
-        {done ? <Check className="h-3.5 w-3.5 text-live-ink" aria-label="Complete" /> : null}
+        {done ? <span className="sr-only">Complete</span> : null}
         {hint ? (
           <Tooltip content={hint} side="top">
             <Info className="h-3.5 w-3.5 text-ink-3" aria-label={hint} />
@@ -206,7 +198,8 @@ function Section({
 
 // ─── Applicant ───────────────────────────────────────────────────────────────
 
-function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.Element {
+function ApplicantSection({ idPrefix, draft, dispatch, onReset }: QuoteIntakeProps): JSX.Element {
+  const missing = missingForQuote(draft);
   const p = (s: string) => `${idPrefix}-${s}`;
   const lead = (f: Parameters<QuoteDraft['prefilled']['has']>[0]) => draft.prefilled.has(f);
   const dobMode = draft.ageOrDob.mode === 'dob';
@@ -234,7 +227,40 @@ function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.
   );
 
   return (
-    <Section title="Applicant" done={applicantDone(draft)}>
+    <Section
+      title="Applicant"
+      done={applicantDone(draft)}
+      aside={
+        <>
+          <span
+            className={cn(
+              'flex items-center gap-1.5 text-[12px] font-medium',
+              missing ? 'text-ink-3' : 'text-live-ink'
+            )}
+            aria-live="polite"
+          >
+            <span
+              aria-hidden
+              className={cn('h-1.5 w-1.5 rounded-full', missing ? 'bg-ink-3' : 'bg-live')}
+            />
+            {missing ? (MISSING_TEXT[missing] ?? 'Needs more answers') : 'Quoting live'}
+          </span>
+          {onReset ? (
+            <button
+              type="button"
+              onClick={onReset}
+              className={cn(
+                '-mr-1.5 inline-flex h-7 items-center gap-1 rounded-control px-1.5 text-[12px] font-medium text-ink-2 hover:bg-sunken hover:text-ink',
+                FOCUS
+              )}
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              New quote
+            </button>
+          ) : null}
+        </>
+      }
+    >
       {/* Two rows of three, the order an agent asks: where, who, how old;
           then tobacco, height and weight. */}
       <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
@@ -643,84 +669,33 @@ function useDrugSearch(query: string): { hits: FexDrugHit[]; searching: boolean 
   return { hits, searching };
 }
 
-function HealthSection({
-  idPrefix,
-  draft,
-  dispatch,
-  conditions,
-  needsIndication,
-}: QuoteIntakeProps): JSX.Element {
+function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps): JSX.Element {
   const [query, setQuery] = React.useState('');
   const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
   const added = new Set(draft.conditions.map(c => c.code));
   const conditionMatches = React.useMemo(
-    () => searchConditions(conditions, query, 8).filter(c => !added.has(c.code)),
+    () => searchConditions(conditions, query, 10).filter(c => !added.has(c.code)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [conditions, query, draft.conditions]
   );
-  const { hits, searching } = useDrugSearch(query);
-  const addedDrugs = new Set(draft.meds.map(m => m.drugId));
-
-  // One list, two groups: the conditions dictionary and the drug search, both
-  // the same sources the lookups use.
-  const options: ComboOption[] = [
-    ...conditionMatches.map(c => ({
-      id: `c:${c.code}`,
-      label: c.label,
-      meta: c.category,
-      group: 'Conditions',
-    })),
-    ...hits
-      .filter(h => !addedDrugs.has(h.id))
-      .slice(0, 8)
-      .map(h => ({
-        id: `d:${h.id}`,
-        group: 'Medications',
-        label: matchedBrand(h) ? (
-          <>
-            <span className="capitalize">{matchedBrand(h)}</span>
-            <span className="text-ink-2"> · {h.generic}</span>
-          </>
-        ) : (
-          <>
-            <span className="capitalize">{h.generic}</span>
-            {h.brands.length ? (
-              <span className="text-ink-2"> · {h.brands.slice(0, 2).join(', ')}</span>
-            ) : null}
-          </>
-        ),
-        meta: h.drugClass ?? undefined,
-      })),
-  ];
-
-  const pick = (id: string) => {
-    if (id.startsWith('c:')) {
-      dispatch({ type: 'addCondition', code: id.slice(2) });
-      return;
-    }
-    const hit = hits.find(h => h.id === id.slice(2));
-    if (!hit) return;
-    dispatch({
-      type: 'addMed',
-      med: {
-        drugId: hit.id,
-        name: hit.brands[0] ? `${hit.generic} (${hit.brands[0]})` : hit.generic,
-        indications: hit.indications,
-        multiUse: hit.multiUse,
-      },
-    });
-  };
+  const options: ComboOption[] = conditionMatches.map(c => ({
+    id: c.code,
+    label: c.label,
+    meta: c.category,
+  }));
 
   const [showAllQuick, setShowAllQuick] = React.useState(false);
   const allQuick = QUICK_CONDITIONS.filter(code => byCode.has(code));
   // The ones agents hear most first; the rest of the knockout list one tap away.
   const featured = FEATURED_CONDITIONS.filter(code => allQuick.includes(code));
+  // Chips say what agents say ("CHF"); the full name is their accessible one.
   const rest = allQuick.filter(code => !featured.includes(code));
   const quick = showAllQuick ? [...featured, ...rest] : featured;
   const hiddenCount = showAllQuick ? 0 : rest.length;
   // A chip's short name, unless two chips would read the same ("Diabetes"
   // twice): then both say it in full.
   const chipLabel = (code: string) => {
+    if (CHIP_NAME[code]) return CHIP_NAME[code];
     const label = byCode.get(code)!.label;
     const short = shortLabel(label);
     const clash = quick.some(
@@ -729,41 +704,34 @@ function HealthSection({
     return clash ? label : short;
   };
 
-  const summary = [
-    draft.conditions.length
-      ? `${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}`
-      : null,
-    draft.meds.length ? `${draft.meds.length} med${draft.meds.length === 1 ? '' : 's'}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
   return (
     <Section
       title="Health"
       hint="Last treated means the last surgery, procedure, hospital stay or treatment change. Each carrier's own questions decide the result."
-      aside={<span className="t-meta text-ink-3">{summary || 'Optional'}</span>}
+      aside={
+        <span className="text-[12px] text-ink-3">
+          {draft.conditions.length
+            ? `${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}`
+            : 'None added'}
+        </span>
+      }
     >
-      <div className="space-y-3.5">
+      <div className="space-y-3">
         <Combobox
           id={healthSearchId(idPrefix)}
           inputClassName="h-10 text-[14px]"
-          label="Add a condition or medication"
+          label="Add a condition"
           hideLabel
           query={query}
           onQueryChange={setQuery}
-          placeholder="Search condition or medication…"
+          placeholder="Search conditions…"
           options={options}
-          onPick={pick}
-          loading={searching}
+          onPick={code => dispatch({ type: 'addCondition', code })}
           shortcut="Alt+H"
-          emptyText="No condition or medication by that name"
+          emptyText="No condition by that name"
         />
 
         <div>
-          <p className={FIELD_LABEL} aria-hidden>
-            Common
-          </p>
           <div
             className="flex flex-wrap gap-1.5"
             role="group"
@@ -813,7 +781,7 @@ function HealthSection({
 
         {draft.conditions.length ? (
           <div>
-            <h4 className="t-label mb-0.5 text-ink-3">Conditions</h4>
+            <p className={FIELD_LABEL}>Selected conditions</p>
             <ul className="divide-y divide-rule rounded-control border border-rule">
               {draft.conditions.map(c => (
                 <ConditionRow
@@ -827,10 +795,100 @@ function HealthSection({
             </ul>
           </div>
         ) : null}
+      </div>
+    </Section>
+  );
+}
 
+/** The id of the medication search box, for the workspace's Alt+M. */
+export const medsSearchId = (idPrefix: string): string => `${idPrefix}-meds`;
+
+/**
+ * Medications: their own search and their own list. Each medication shows
+ * what it is taken for, and when a carrier needs that answered, the question
+ * sits directly under the medication.
+ */
+function MedicationsSection({
+  idPrefix,
+  draft,
+  dispatch,
+  conditions,
+  needsIndication,
+}: QuoteIntakeProps): JSX.Element {
+  const [query, setQuery] = React.useState('');
+  const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
+  const { hits, searching } = useDrugSearch(query);
+  const addedDrugs = new Set(draft.meds.map(m => m.drugId));
+  const options: ComboOption[] = hits
+    .filter(h => !addedDrugs.has(h.id))
+    .slice(0, 10)
+    .map(h => ({
+      id: h.id,
+      label: matchedBrand(h) ? (
+        <>
+          <span className="capitalize">{matchedBrand(h)}</span>
+          <span className="text-ink-2"> · {h.generic}</span>
+        </>
+      ) : (
+        <>
+          <span className="capitalize">{h.generic}</span>
+          {h.brands.length ? (
+            <span className="text-ink-2"> · {h.brands.slice(0, 2).join(', ')}</span>
+          ) : null}
+        </>
+      ),
+      meta: h.drugClass ?? undefined,
+    }));
+
+  const pick = (id: string) => {
+    const hit = hits.find(h => h.id === id);
+    if (!hit) return;
+    dispatch({
+      type: 'addMed',
+      med: {
+        drugId: hit.id,
+        name: hit.brands[0] ? `${hit.generic} (${hit.brands[0]})` : hit.generic,
+        indications: hit.indications,
+        multiUse: hit.multiUse,
+      },
+    });
+  };
+
+  const unanswered = draft.meds.filter(m => needsIndication.has(m.drugId) && !m.indication).length;
+
+  return (
+    <Section
+      title="Medications"
+      aside={
+        <span
+          className={cn('text-[12px]', unanswered ? 'font-medium text-ringing-ink' : 'text-ink-3')}
+        >
+          {unanswered
+            ? `${unanswered} need${unanswered === 1 ? 's' : ''} a use`
+            : draft.meds.length
+              ? `${draft.meds.length} medication${draft.meds.length === 1 ? '' : 's'}`
+              : 'None added'}
+        </span>
+      }
+    >
+      <div className="space-y-3">
+        <Combobox
+          id={medsSearchId(idPrefix)}
+          inputClassName="h-10 text-[14px]"
+          label="Add a medication"
+          hideLabel
+          query={query}
+          onQueryChange={setQuery}
+          placeholder="Search medications, brand or generic…"
+          options={options}
+          onPick={pick}
+          loading={searching}
+          shortcut="Alt+M"
+          emptyText="No medication by that name"
+        />
         {draft.meds.length ? (
           <div>
-            <h4 className="t-label mb-0.5 text-ink-3">Medications</h4>
+            <p className={FIELD_LABEL}>Selected medications</p>
             <ul className="divide-y divide-rule rounded-control border border-rule">
               {draft.meds.map(med => (
                 <MedicationRow
