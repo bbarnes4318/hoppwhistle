@@ -3,17 +3,19 @@
 /**
  * Quote: underwrite and price final expense across every carrier.
  *
- * Every agent's and every agency's -- standard, not an upgrade. Five tabs for
- * everyone (the quoter, saved quotes, the two lookups and the carrier data),
- * and two more for an agency's principal and NetEnroll staff: how the agency
- * quotes, and its quoter settings. The tab is in the URL (`?tab=`), so a
- * reload or a shared link opens the same one; an unknown tab, or one this
- * person may not open, is the quoter.
+ * Every agent's and every agency's -- standard, not an upgrade. Four sections
+ * for everyone -- the quoter, saved quotes, Underwriting (the condition and
+ * drug lookups) and the carrier data -- and two quieter ones for an agency's
+ * principal and NetEnroll staff: how the agency quotes, and its quoter
+ * settings. The tab is in the URL (`?tab=`), so a reload or a shared link
+ * opens the same one; an unknown tab, or one this person may not open, is the
+ * quoter.
  *
  * The engine runs on the server. Nothing this page loads carries a rate table,
  * a rule record or a prescription list.
  */
 
+import { BarChart3, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
@@ -23,6 +25,7 @@ import { QuoteHistory } from '@/components/fex/history/quote-history';
 import { QuoteInsights } from '@/components/fex/insights/quote-insights';
 import { ConditionLookup } from '@/components/fex/lookup/condition-lookup';
 import { DrugLookup } from '@/components/fex/lookup/drug-lookup';
+import { ChoiceGroup } from '@/components/fex/parts';
 import { QuoteWorkspace } from '@/components/fex/quote-workspace';
 import { QuoteSettings } from '@/components/fex/settings/quote-settings';
 import { useMediaQuery, useTopbarSlots } from '@/components/layout/topbar-slots';
@@ -31,18 +34,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { useFexSettings } from '@/hooks/use-fex-quote';
 import { emptyDraft } from '@/lib/fex/draft';
-import { quoteTabsFor, type QuoteTabKey } from '@/lib/fex/tabs';
+import { quoteSectionsFor, quoteTabsFor, sectionOf, type QuoteTabKey } from '@/lib/fex/tabs';
 import { cn } from '@/lib/utils';
 
 export default function QuotePage(): JSX.Element {
   const router = useRouter();
   const { hasFullAccess, isPlatformAdmin } = useAuth();
-  const tabs = quoteTabsFor(hasFullAccess || isPlatformAdmin);
+  const principal = hasFullAccess || isPlatformAdmin;
+  const tabs = quoteTabsFor(principal);
+  const sections = quoteSectionsFor(principal);
 
   const [requested, setRequested] = React.useState<string | null>(() =>
     typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')
   );
   const tab: QuoteTabKey = tabs.find(t => t.key === requested)?.key ?? 'quote';
+  // Underwriting opens on the lookup last used here.
+  const lastLookup = React.useRef<'conditions' | 'drugs'>(tab === 'drugs' ? 'drugs' : 'conditions');
+  if (tab === 'conditions' || tab === 'drugs') lastLookup.current = tab;
 
   const choose = (next: string) => {
     setRequested(next);
@@ -52,6 +60,7 @@ export default function QuotePage(): JSX.Element {
     const search = query.toString();
     router.replace(`${window.location.pathname}${search ? `?${search}` : ''}`, { scroll: false });
   };
+  const chooseSection = (key: string) => choose(key === 'underwriting' ? lastLookup.current : key);
 
   /*
    * From lg up the tabs ARE the page header: they render into the topbar
@@ -64,20 +73,38 @@ export default function QuotePage(): JSX.Element {
   const wide = useMediaQuery('(min-width: 1024px)');
   const docked = wide && nav !== null;
 
+  /*
+   * Four workspace sections at full weight; the principal's Insights and
+   * Settings after a hairline, smaller and muted, so nothing in the bar
+   * competes with Quote.
+   */
   const tabList = (
     <TabsList
       aria-label="Quote sections"
-      className={cn(docked ? 'h-full gap-5 border-b-0' : 'gap-5')}
+      className={cn(docked ? 'h-full gap-6 border-b-0' : 'gap-6')}
     >
-      {tabs.map(t => (
-        <TabsTrigger
-          key={t.key}
-          value={t.key}
-          className={cn('text-[13px]', docked ? 'h-full' : 'h-9')}
-        >
-          {t.label}
-        </TabsTrigger>
-      ))}
+      {sections.map((s, i) => {
+        const Icon = s.key === 'insights' ? BarChart3 : s.key === 'settings' ? Settings : null;
+        return (
+          <React.Fragment key={s.key}>
+            {s.secondary && !sections[i - 1]?.secondary ? (
+              <span aria-hidden className="h-4 w-px shrink-0 self-center bg-rule" />
+            ) : null}
+            <TabsTrigger
+              value={s.key}
+              className={cn(
+                docked ? 'h-full' : 'h-10',
+                s.secondary
+                  ? 'gap-1.5 text-[12.5px] text-ink-3 data-[state=active]:text-ink'
+                  : 'text-[13.5px]'
+              )}
+            >
+              {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
+              {s.label}
+            </TabsTrigger>
+          </React.Fragment>
+        );
+      })}
     </TabsList>
   );
 
@@ -88,19 +115,25 @@ export default function QuotePage(): JSX.Element {
     // other tab scrolls as a page. Below md, pb-24 keeps the last line clear
     // of the floating softphone (from md up it sits in the topbar).
     <div className="flex h-full min-h-0 flex-col overflow-y-auto px-3 pb-24 pt-2 md:px-4 md:pb-6 lg:overflow-hidden lg:px-3 lg:pb-3 lg:pt-3">
-      <Tabs value={tab} onValueChange={choose} className="flex flex-col lg:min-h-0 lg:flex-1">
+      <Tabs
+        value={sectionOf(tab)}
+        onValueChange={chooseSection}
+        className="flex flex-col lg:min-h-0 lg:flex-1"
+      >
         {docked ? createPortal(tabList, nav) : tabList}
-        <TabsContent value="quote" className={cn('lg:min-h-0 lg:flex-1', docked ? 'mt-0' : 'mt-3')}>
+        {/* The quoter stops growing at 1600px: past that a row only gains
+            empty space between the plan and its price. */}
+        <TabsContent
+          value="quote"
+          className={cn('w-full max-w-[1600px] lg:min-h-0 lg:flex-1', docked ? 'mt-0' : 'mt-3')}
+        >
           <QuoteTab />
         </TabsContent>
         <TabsContent value="history" className={SCROLLING_TAB}>
           <QuoteHistory />
         </TabsContent>
-        <TabsContent value="conditions" className={SCROLLING_TAB}>
-          <ConditionLookup />
-        </TabsContent>
-        <TabsContent value="drugs" className={SCROLLING_TAB}>
-          <DrugLookup />
+        <TabsContent value="underwriting" className={SCROLLING_TAB}>
+          <UnderwritingTab lookup={tab === 'drugs' ? 'drugs' : 'conditions'} onChoose={choose} />
         </TabsContent>
         <TabsContent value="carriers" className={SCROLLING_TAB}>
           <CarrierCoverage />
@@ -124,12 +157,37 @@ export default function QuotePage(): JSX.Element {
 const SCROLLING_TAB =
   'mt-3 lg:-mr-2 lg:mt-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-1 lg:pb-6 lg:pr-2';
 
+/** Underwriting: the condition and drug lookups, one switch between them. */
+function UnderwritingTab({
+  lookup,
+  onChoose,
+}: {
+  lookup: 'conditions' | 'drugs';
+  onChoose: (key: 'conditions' | 'drugs') => void;
+}): JSX.Element {
+  return (
+    <div>
+      <ChoiceGroup
+        label="Underwriting lookup"
+        options={[
+          { value: 'conditions' as const, label: 'Condition lookup' },
+          { value: 'drugs' as const, label: 'Drug lookup' },
+        ]}
+        value={lookup}
+        onChange={onChoose}
+        className="mb-4 h-9 w-full max-w-[320px]"
+      />
+      {lookup === 'drugs' ? <DrugLookup /> : <ConditionLookup />}
+    </div>
+  );
+}
+
 function QuoteTab(): JSX.Element {
   const { settings, loading } = useFexSettings();
   if (loading && !settings) {
     return (
       <div
-        className="grid h-full gap-3 lg:grid-cols-[minmax(320px,340px)_1fr] xl:grid-cols-[minmax(350px,380px)_1fr]"
+        className="grid h-full gap-3 lg:grid-cols-[minmax(330px,352px)_1fr] xl:grid-cols-[minmax(368px,392px)_1fr]"
         aria-busy="true"
       >
         <Skeleton className="h-96 w-full" />

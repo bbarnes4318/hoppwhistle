@@ -15,7 +15,7 @@ import type { StatusTone } from '@/components/domain';
 import { cn } from '@/lib/utils';
 
 export const CONTROL =
-  'h-9 w-full min-w-0 rounded-control border border-rule-strong bg-surface px-3 text-sm font-medium text-ink placeholder:font-normal placeholder:text-ink-3 ' +
+  'h-[38px] w-full min-w-0 rounded-control border border-rule-strong bg-surface px-3 text-sm font-medium text-ink placeholder:font-normal placeholder:text-ink-3 ' +
   'transition-[border-color,box-shadow] duration-150 ease-out ne-motion hover:border-ink-3 ' +
   'focus-visible:border-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ' +
   'disabled:cursor-not-allowed disabled:bg-sunken disabled:text-ink-3 [@media(pointer:coarse)]:min-h-[44px]';
@@ -24,8 +24,16 @@ export const FOCUS =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface';
 
 export function FromLeadTag(): JSX.Element {
-  return <span className="t-meta ml-1.5 font-normal text-ink-3">From lead</span>;
+  return <span className="ml-1.5 text-[11px] font-normal text-ink-3">From lead</span>;
 }
+
+/**
+ * A field's label: small, sentence case and quieter than the value under it,
+ * so the eye reads the answers, not the questions. Section titles are the
+ * only uppercase in the form.
+ */
+export const FIELD_LABEL =
+  'mb-[5px] flex items-baseline text-[11px] font-medium leading-[14px] text-ink-2';
 
 export function Field({
   label,
@@ -44,10 +52,7 @@ export function Field({
 }): JSX.Element {
   return (
     <div className={cn('min-w-0', className)}>
-      <label
-        htmlFor={htmlFor}
-        className="mb-1 flex items-baseline text-[10.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-ink-2"
-      >
+      <label htmlFor={htmlFor} className={FIELD_LABEL}>
         {label}
         {fromLead ? <FromLeadTag /> : null}
       </label>
@@ -177,9 +182,10 @@ export interface Choice<T> {
  * `role="radio"` with a roving tab stop, so Tab enters once and the arrow keys
  * move AND select, exactly like native radios. Home and End jump to the ends.
  *
+ * Both tones are ONE control: a sunken track, no rule between the segments.
  * `strong` fills the chosen segment with the primary colour -- for the
  * choices an agent must be able to read at a glance (the face amount).
- * `quiet` is the sunken track with a raised white segment.
+ * `quiet` raises the chosen segment in white.
  */
 export function ChoiceGroup<T>({
   label,
@@ -249,10 +255,7 @@ export function ChoiceGroup<T>({
       aria-label={labelledBy ? undefined : label}
       aria-labelledby={labelledBy}
       className={cn(
-        'flex h-9 min-w-0 items-stretch',
-        tone === 'quiet'
-          ? 'gap-0.5 rounded-control bg-sunken p-[3px]'
-          : 'overflow-hidden rounded-control border border-rule-strong bg-surface',
+        'flex h-[38px] min-w-0 items-stretch gap-0.5 rounded-control bg-sunken p-[3px]',
         className
       )}
     >
@@ -272,23 +275,17 @@ export function ChoiceGroup<T>({
             onClick={() => onChange(option.value, 'click')}
             onKeyDown={onKeyDown(index)}
             className={cn(
-              'inline-flex min-w-0 flex-1 items-center justify-center whitespace-nowrap px-1 text-[13px] font-medium tabular-nums',
+              'inline-flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-[6px] px-1 text-[13px] font-medium tabular-nums',
               'transition-[color,background-color,box-shadow] duration-150 ease-out ne-motion',
               'focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               '[@media(pointer:coarse)]:min-h-[40px]',
               tone === 'quiet'
-                ? cn(
-                    'rounded-[5px]',
-                    on
-                      ? 'bg-surface font-semibold text-ink shadow-card'
-                      : 'text-ink-2 hover:text-ink'
-                  )
-                : cn(
-                    'border-l border-rule-strong first:border-l-0',
-                    on
-                      ? 'bg-brand-strong font-semibold text-white'
-                      : 'text-ink-2 hover:bg-sunken hover:text-ink'
-                  ),
+                ? on
+                  ? 'bg-surface font-semibold text-ink shadow-card'
+                  : 'text-ink-2 hover:text-ink'
+                : on
+                  ? 'bg-brand-strong font-semibold text-white shadow-card'
+                  : 'text-ink-2 hover:bg-surface hover:text-ink',
               itemClassName
             )}
           >
@@ -300,7 +297,10 @@ export function ChoiceGroup<T>({
   );
 }
 
-/** The benefit, as one word an agent reads at a glance. */
+/**
+ * The benefit, as one word an agent reads at a glance. Empty when the carrier
+ * does not say ("UNKNOWN"): no word is better than a badge that reads UNKNOWN.
+ */
 export function benefitWord(benefit: string | null | undefined): string {
   switch (benefit) {
     case 'LEVEL':
@@ -314,7 +314,24 @@ export function benefitWord(benefit: string | null | undefined): string {
     case 'GUARANTEED_ISSUE':
     case 'GI':
       return 'Guaranteed issue';
+    case 'UNKNOWN':
+    case null:
+    case undefined:
+      return '';
     default:
-      return benefit ?? '';
+      return benefit;
+  }
+}
+
+/** The benefit as its badge says it: as short as agents say it ("ROP", "GI"). */
+export function benefitShort(benefit: string | null | undefined): string {
+  switch (benefit) {
+    case 'ROP':
+      return 'ROP';
+    case 'GUARANTEED_ISSUE':
+    case 'GI':
+      return 'GI';
+    default:
+      return benefitWord(benefit);
   }
 }

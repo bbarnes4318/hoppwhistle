@@ -22,6 +22,7 @@ import type { QuoteLine } from '@hopwhistle/fex-engine/types';
 import {
   ArrowDown,
   Calculator,
+  Check,
   ChevronDown,
   ChevronRight,
   HelpCircle,
@@ -64,7 +65,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ComparePanel, CompareTray } from './compare-panel';
-import { CheckRow, FOCUS } from './parts';
+import { CheckRow, FOCUS, shortLabel } from './parts';
 import { healthSearchId, QuoteIntake } from './quote-intake';
 import { ResultRow, SelectedQuoteBar } from './result-row';
 
@@ -329,6 +330,19 @@ export function QuoteWorkspace({
     [compare, results]
   );
 
+  /*
+   * The name a health answer is reported under on a row ("COPD → Graded"),
+   * only when the applicant gave exactly one: one condition and no
+   * medication. The engine does not say which condition a rule matched, so
+   * with two or more the row says "2 health answers" rather than guess.
+   */
+  const healthSubject = React.useMemo(() => {
+    if (draft.conditions.length !== 1 || draft.meds.length) return null;
+    const code = draft.conditions[0].code;
+    const label = catalog?.conditions.find(c => c.code === code)?.label;
+    return label ? shortLabel(label) : null;
+  }, [draft.conditions, draft.meds, catalog]);
+
   const rowProps = (r: FexResult, priceOnly = false) => ({
     result: r,
     expanded: expanded === r.productId,
@@ -343,7 +357,9 @@ export function QuoteWorkspace({
     compared: compare.includes(r.productId),
     onCompareToggle: () => toggleCompare(r.productId),
     compareFull: compare.length >= COMPARE_MAX,
+    comparing: compare.length > 0,
     change: changeById.get(r.productId),
+    healthSubject,
   });
 
   const ready = Boolean(toApplicant(draft));
@@ -485,151 +501,219 @@ export function QuoteWorkspace({
     );
   } else if (!quote.data) {
     body = (
-      <div className="space-y-3" aria-busy="true" aria-label="Quoting every carrier">
-        <Skeleton className="h-[52px] w-full rounded-card" />
-        <Panel>
-          <ul>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <li
-                key={i}
-                className="flex h-16 items-center gap-3 border-b border-rule px-3 last:border-0"
-              >
-                <Skeleton className="h-11 w-[120px]" />
-                <span className="flex-1 space-y-2">
-                  <Skeleton className="h-3 w-40" />
-                  <Skeleton className="h-3 w-24" />
-                </span>
-                <Skeleton className="h-5 w-20" />
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      </div>
+      <Panel className="overflow-hidden" aria-busy="true" aria-label="Quoting every carrier">
+        <div className="flex h-[62px] items-center gap-8 border-b border-rule px-5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <span key={i} className="space-y-1.5">
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-2.5 w-16" />
+            </span>
+          ))}
+        </div>
+        <ul>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <li
+              key={i}
+              className="flex h-[84px] items-center gap-4 border-b border-rule pl-[44px] pr-4 last:border-0"
+            >
+              <Skeleton className="hidden h-[50px] w-[120px] cq-md:block" />
+              <span className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-48" />
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </span>
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="hidden h-[34px] w-[96px] cq-sm:block" />
+            </li>
+          ))}
+        </ul>
+      </Panel>
     );
   } else {
+    const qualifiesHeading = `${idPrefix}-qualifies`;
     body = (
       <div
         className={cn(
-          'space-y-2.5 transition-opacity duration-150 ne-motion',
+          'space-y-3 transition-opacity duration-150 ne-motion',
           quote.stale && 'opacity-60'
         )}
         aria-busy={quote.stale}
       >
-        {/* The answer in one line -- how many qualify, the lowest premium, the
-            lowest Level, the declines -- with the sort and filters beside it.
-            Pinned while the list scrolls beneath. */}
+        {quote.status === 'error' ? (
+          <Notice
+            tone="error"
+            action={
+              <Button size="sm" variant="outline" onClick={quote.retry}>
+                Retry
+              </Button>
+            }
+          >
+            {quote.error} The results below are from the last good quote.
+          </Notice>
+        ) : null}
+
+        {quote.data.licensed === false ? (
+          <Notice tone="warning">
+            You are not licensed in {draft.state}. Quotes are shown for reference.
+          </Notice>
+        ) : null}
+
+        {needsIndication.size ? (
+          <div
+            ref={bannerRef}
+            role="alert"
+            className="rounded-card border border-ringing bg-ringing-tint px-4 py-3"
+          >
+            <p className="flex items-center gap-2 text-[13px] font-semibold text-ringing-ink">
+              <HelpCircle className="h-4 w-4" aria-hidden />
+              Confirm what these are prescribed for
+            </p>
+            <p className="mt-0.5 text-[12px] text-ink-2">
+              Until you answer, each carrier applies the strictest use it lists.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {[...needsIndication.entries()].map(([drugId, need]) => (
+                <li key={drugId} className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 min-w-[96px] text-[13px] font-medium capitalize text-ink">
+                    {need.name}
+                  </span>
+                  {need.options.map(code => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => dispatch({ type: 'setIndication', drugId, indication: code })}
+                      className={cn(
+                        'h-7 rounded-control border border-rule-strong bg-surface px-2.5 text-xs font-medium text-ink transition-colors duration-150 ne-motion hover:border-ink-2',
+                        FOCUS
+                      )}
+                    >
+                      {catalog?.conditions.find(c => c.code === code)?.label ?? code}
+                    </button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {/* The answer in four figures, with the sort and filters beside
+            them, drawn as the head of the card of carriers that qualify. A
+            sibling of every group rather than inside the card, so it stays
+            pinned while any of them -- price only, the declines -- scrolls
+            beneath. */}
         <section
           aria-label="Summary"
-          className="sticky top-0 z-10 rounded-card border border-rule bg-surface shadow-card"
+          className="sticky top-0 z-10 rounded-t-card border border-rule bg-surface"
         >
-          <div className="flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-              <Figure
-                dot={groups.qualifies.length ? 'live' : 'dropped'}
+          <div className="flex min-h-[62px] flex-wrap items-center gap-x-5 gap-y-2 py-2.5 pl-5 pr-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+              <Metric
                 value={String(groups.qualifies.length)}
-                after={`of ${results.length} qualify`}
-                label="Carriers qualify"
+                of={`of ${results.length}`}
+                caption="Qualify"
+                label={`${groups.qualifies.length} of ${results.length} carriers qualify`}
               />
-              <Divider />
-              <Figure
-                caption="Lowest"
-                label="Lowest premium"
+              <MetricRule />
+              <Metric
                 value={lowestAny === null ? '—' : money(lowestAny)}
-                after={lowestAny === null ? undefined : `/${mode}`}
+                caption={`Lowest / ${mode}`}
+                label={`Lowest premium: ${lowestAny === null ? 'none' : `${money(lowestAny)} /${mode}`}`}
               />
-              <Divider />
-              <Figure
-                caption="Level"
-                label="Lowest level"
+              <MetricRule />
+              <Metric
                 value={lowestLevel === null ? '—' : money(lowestLevel)}
+                caption="Best level"
+                label={`Lowest level premium: ${lowestLevel === null ? 'none' : money(lowestLevel)}`}
               />
-              <Divider />
-              {groups.declined.length ? (
-                <button
-                  type="button"
-                  onClick={showDeclinedList}
-                  className={cn(
-                    'inline-flex items-baseline gap-1 rounded-control px-1 text-ink hover:bg-sunken',
-                    FOCUS
-                  )}
-                >
-                  <span className="text-[17px] font-semibold tabular-nums">
-                    {groups.declined.length}
-                  </span>
-                  <span className="text-[12px] text-ink-2">declined</span>
-                  <ChevronRight className="h-3.5 w-3.5 self-center text-ink-3" aria-hidden />
-                </button>
-              ) : (
-                <Figure value="0" after="declined" label="Declined" />
-              )}
-              {needsIndication.size ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-control bg-ringing-tint px-2 py-0.5 text-[12px] font-semibold text-ringing-ink',
-                    FOCUS
-                  )}
-                >
-                  <HelpCircle className="h-3.5 w-3.5" aria-hidden />
-                  {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
-                </button>
+              <MetricRule />
+              <Metric
+                value={String(groups.declined.length)}
+                caption="Declined"
+                label={`${groups.declined.length} declined`}
+                onClick={groups.declined.length ? showDeclinedList : undefined}
+              />
+              {needsIndication.size || changes.length ? (
+                <span className="flex flex-wrap items-center gap-1">
+                  {needsIndication.size ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      }
+                      className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-[12px] font-semibold text-ringing-ink hover:bg-ringing-tint',
+                        FOCUS
+                      )}
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" aria-hidden />
+                      {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
+                    </button>
+                  ) : null}
+                  {changes.length ? <ChangesNote changes={changes} /> : null}
+                </span>
               ) : null}
-              {changes.length ? <ChangesNote changes={changes} /> : null}
             </div>
 
             <div
               role="toolbar"
               aria-label="Sort and filter results"
-              className="ml-auto flex items-center gap-1.5"
+              className="ml-auto flex items-center gap-0.5"
             >
               {quote.stale ? (
-                <span className="t-meta mr-1 inline-flex items-center gap-1 text-ink-2">
+                <span className="mr-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
                   <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
                   <span className="sr-only cq-lg:not-sr-only">Updating</span>
                 </span>
               ) : null}
-              <label htmlFor={`${idPrefix}-sort`} className="sr-only">
+              <label
+                htmlFor={`${idPrefix}-sort`}
+                className="sr-only pl-1 text-[12px] text-ink-3 cq-lg:not-sr-only"
+              >
                 Sort
               </label>
-              <select
-                id={`${idPrefix}-sort`}
-                value={effectiveSort}
-                onChange={e => {
-                  const next = e.target.value as SortKey;
-                  // The mode's own default sort is the API's order.
-                  const natural = draft.coverage.mode === 'budget' ? 'face' : 'price';
-                  setSort(next === natural ? null : next);
-                }}
-                className={cn(
-                  'h-8 cursor-pointer rounded-control border border-rule-strong bg-surface pl-2 pr-6 text-[12px] font-medium text-ink hover:border-ink-3',
-                  FOCUS
-                )}
-              >
-                <option value="price">Lowest price</option>
-                <option value="face">Most coverage</option>
-              </select>
+              <span className="relative inline-flex items-center">
+                <select
+                  id={`${idPrefix}-sort`}
+                  value={effectiveSort}
+                  onChange={e => {
+                    const next = e.target.value as SortKey;
+                    // The mode's own default sort is the API's order.
+                    const natural = draft.coverage.mode === 'budget' ? 'face' : 'price';
+                    setSort(next === natural ? null : next);
+                  }}
+                  className={cn(
+                    'h-8 cursor-pointer appearance-none rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12.5px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-rule-strong hover:bg-surface',
+                    FOCUS
+                  )}
+                >
+                  <option value="price">Lowest price</option>
+                  <option value="face">Most coverage</option>
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-ink-3"
+                  aria-hidden
+                />
+              </span>
+              <span aria-hidden className="mx-1.5 h-4 w-px bg-rule" />
               <button
                 type="button"
                 aria-pressed={levelOnly}
                 onClick={() => setLevelOnly(v => !v)}
                 className={cn(
-                  'inline-flex h-8 items-center gap-1.5 rounded-control border px-2 text-[12px] font-medium transition-colors duration-150 ne-motion',
-                  levelOnly
-                    ? 'border-live bg-live-tint text-live-ink'
-                    : 'border-rule-strong bg-surface text-ink-2 hover:text-ink',
+                  'inline-flex h-8 items-center gap-2 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
+                  levelOnly ? 'text-ink' : 'text-ink-2 hover:text-ink',
                   FOCUS
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
-                    'h-3 w-3 rounded-[3px] border',
-                    levelOnly ? 'border-live bg-live' : 'border-ink-3'
+                    'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border',
+                    levelOnly ? 'border-brand-strong bg-brand-strong text-white' : 'border-ink-3'
                   )}
-                />
+                >
+                  {levelOnly ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+                </span>
                 Level only
               </button>
               <Popover>
@@ -637,15 +721,13 @@ export function QuoteWorkspace({
                   <button
                     type="button"
                     className={cn(
-                      'inline-flex h-8 items-center gap-1.5 rounded-control border px-2 text-[12px] font-medium',
-                      filterCount
-                        ? 'border-ink-2 text-ink'
-                        : 'border-rule-strong bg-surface text-ink-2 hover:text-ink',
+                      'inline-flex h-8 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
+                      filterCount ? 'text-ink' : 'text-ink-2 hover:text-ink',
                       FOCUS
                     )}
                   >
                     <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                    <span className="sr-only cq-lg:not-sr-only">Filters</span>
+                    <span className="sr-only cq-md:not-sr-only">Filters</span>
                     {filterCount ? (
                       <span className="rounded-full bg-ink px-1.5 text-[10.5px] font-semibold leading-4 text-surface">
                         {filterCount}
@@ -679,100 +761,48 @@ export function QuoteWorkspace({
             </div>
           </div>
         </section>
-
-        {quote.status === 'error' ? (
-          <Notice
-            tone="error"
-            action={
-              <Button size="sm" variant="outline" onClick={quote.retry}>
-                Retry
-              </Button>
-            }
-          >
-            {quote.error} The results below are from the last good quote.
-          </Notice>
-        ) : null}
-
-        {quote.data.licensed === false ? (
-          <Notice tone="warning">
-            You are not licensed in {draft.state}. Quotes are shown for reference.
-          </Notice>
-        ) : null}
-
-        {needsIndication.size ? (
-          <div
-            ref={bannerRef}
-            role="alert"
-            className="rounded-card border border-ringing bg-ringing-tint px-3 py-2"
-          >
-            <p className="flex items-center gap-2 text-[13px] font-semibold text-ringing-ink">
-              <HelpCircle className="h-4 w-4" aria-hidden />
-              Confirm what these are prescribed for
-            </p>
-            <p className="t-meta mt-0.5 text-ink-2">
-              Until you answer, each carrier applies the strictest use it lists.
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {[...needsIndication.entries()].map(([drugId, need]) => (
-                <li key={drugId} className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 min-w-[96px] text-[13px] font-medium capitalize text-ink">
-                    {need.name}
-                  </span>
-                  {need.options.map(code => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => dispatch({ type: 'setIndication', drugId, indication: code })}
-                      className={cn(
-                        'h-7 rounded-control border border-rule-strong bg-surface px-2.5 text-xs font-medium text-ink transition-colors duration-150 ne-motion hover:border-ink-2',
-                        FOCUS
-                      )}
-                    >
-                      {catalog?.conditions.find(c => c.code === code)?.label ?? code}
-                    </button>
-                  ))}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <ResultGroup title="Qualifies" count={groups.qualifies.length} tone="live">
-          {groups.qualifies.length ? (
-            groups.qualifies.map((r, i) => (
-              <ResultRow
-                key={r.productId}
-                {...rowProps(r)}
-                badge={i === 0 && topEarned(r) ? firstLabel : undefined}
-                tag={
-                  r.productId === bestLevelId &&
-                  !(i === 0 && topEarned(r) && effectiveSort === 'price')
-                    ? 'Best level'
-                    : undefined
-                }
-              />
-            ))
-          ) : (
-            <li className="px-4 py-8 text-center text-[13px] text-ink-2">
-              No appointed carrier qualifies with these answers. Open the declined list to see why.
-            </li>
-          )}
-        </ResultGroup>
+        <Panel className="!mt-0 overflow-hidden rounded-t-none border-t-0">
+          <h3 id={qualifiesHeading} className="sr-only">
+            Qualifies, {groups.qualifies.length}
+          </h3>
+          <ul aria-labelledby={qualifiesHeading}>
+            {groups.qualifies.length ? (
+              groups.qualifies.map((r, i) => (
+                <ResultRow
+                  key={r.productId}
+                  {...rowProps(r)}
+                  badge={i === 0 && topEarned(r) ? firstLabel : undefined}
+                  tag={
+                    r.productId === bestLevelId &&
+                    !(i === 0 && topEarned(r) && effectiveSort === 'price')
+                      ? 'Best level'
+                      : undefined
+                  }
+                />
+              ))
+            ) : (
+              <li className="px-5 py-10 text-center text-[13px] text-ink-2">
+                No appointed carrier qualifies with these answers. Open the declined list to see
+                why.
+              </li>
+            )}
+          </ul>
+        </Panel>
 
         {groups.priceOnly.length ? (
           <ResultGroup
-            title="Price only — health questions not loaded"
+            title="Price only"
+            description="Health questions not loaded"
             count={groups.priceOnly.length}
-            tone="neutral"
           >
             {groups.priceOnly.map(r => (
-              <ResultRow key={r.productId} {...rowProps(r, true)} />
+              <ResultRow key={r.productId} {...rowProps(r)} />
             ))}
           </ResultGroup>
         ) : null}
 
         {showNotAppointed && groups.notAppointed.length ? (
-          <ResultGroup title="Not appointed" count={groups.notAppointed.length} tone="neutral">
+          <ResultGroup title="Not appointed" count={groups.notAppointed.length}>
             {groups.notAppointed.map(r => (
               <ResultRow key={r.productId} {...rowProps(r, !r.uwLoaded)} />
             ))}
@@ -780,11 +810,10 @@ export function QuoteWorkspace({
         ) : null}
 
         {groups.declined.length ? (
-          <div ref={declinedRef} className="scroll-mt-16">
+          <div ref={declinedRef} className="scroll-mt-20">
             <ResultGroup
               title="Declined or not available"
               count={groups.declined.length}
-              tone="dropped"
               collapsible
               open={showDeclined}
               onOpenChange={setShowDeclined}
@@ -861,7 +890,7 @@ export function QuoteWorkspace({
           // its parent and never scrolls as a whole: the form and the results
           // each scroll on their own, so both stay on one laptop screen.
           'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-3',
-          'cq-lg:grid-cols-[minmax(320px,340px)_minmax(0,1fr)] cq-xl:grid-cols-[minmax(350px,380px)_minmax(0,1fr)]'
+          'cq-lg:grid-cols-[minmax(330px,352px)_minmax(0,1fr)] cq-xl:grid-cols-[minmax(368px,392px)_minmax(0,1fr)]'
         )}
       >
         {narrowBar}
@@ -935,47 +964,64 @@ export function QuoteWorkspace({
   );
 }
 
-const FIGURE_DOT = {
-  live: 'bg-live',
-  dropped: 'bg-dropped',
-} as const;
-
-/** One figure in the summary line: the number dominant, its words small. */
-function Figure({
+/**
+ * One figure in the summary: the number over a small caption, so four of them
+ * read as a row of answers rather than a line of telemetry.
+ */
+function Metric({
   value,
+  of,
   caption,
-  after,
   label,
-  dot,
+  onClick,
 }: {
   value: string;
-  /** Small words before the number ("Lowest"). */
-  caption?: string;
-  /** Small words after it ("/mo", "of 24 qualify"). */
-  after?: string;
-  /** The figure's full name, for screen readers. */
+  /** Quiet words after the number ("of 24"). */
+  of?: string;
+  /** The caption under it ("Qualify"). */
+  caption: string;
+  /** The whole figure in words, for screen readers. */
   label: string;
-  dot?: keyof typeof FIGURE_DOT;
+  /** Makes the figure a button (the declined list). */
+  onClick?: () => void;
 }): JSX.Element {
-  return (
-    <p
-      className="flex items-baseline gap-1 whitespace-nowrap"
-      aria-label={`${label}: ${value}${after?.startsWith('/') ? ` ${after}` : ''}`}
-    >
-      {dot ? (
-        <span aria-hidden className={cn('h-2 w-2 self-center rounded-full', FIGURE_DOT[dot])} />
-      ) : null}
-      {caption ? <span className="text-[12px] text-ink-2">{caption}</span> : null}
-      <span className="text-[17px] font-semibold tabular-nums leading-6 tracking-[-0.01em] text-ink">
-        {value}
+  const content = (
+    <>
+      <span aria-hidden className="flex items-baseline gap-1 whitespace-nowrap">
+        <span className="text-[18px] font-semibold leading-6 tracking-[-0.01em] tabular-nums text-ink">
+          {value}
+        </span>
+        {of ? <span className="text-[12px] tabular-nums text-ink-3">{of}</span> : null}
       </span>
-      {after ? <span className="text-[12px] text-ink-2">{after}</span> : null}
-    </p>
+      <span
+        aria-hidden
+        className="mt-0.5 flex items-center gap-0.5 whitespace-nowrap text-[10px] font-semibold uppercase leading-3 tracking-[0.08em] text-ink-3"
+      >
+        {caption}
+        {onClick ? <ChevronRight className="h-3 w-3" /> : null}
+      </span>
+      <span className="sr-only">{label}</span>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          '-mx-1.5 flex flex-col items-start rounded-control px-1.5 py-0.5 text-left transition-colors duration-150 ne-motion hover:bg-sunken',
+          FOCUS
+        )}
+      >
+        {content}
+      </button>
+    );
+  }
+  return <p className="flex flex-col items-start">{content}</p>;
 }
 
-function Divider(): JSX.Element {
-  return <span aria-hidden className="hidden h-5 w-px bg-rule cq-sm:block" />;
+function MetricRule(): JSX.Element {
+  return <span aria-hidden className="hidden h-8 w-px bg-rule cq-sm:block" />;
 }
 
 /** "3 outcomes changed", and which, from the last edit. */
@@ -986,7 +1032,7 @@ function ChangesNote({ changes }: { changes: OutcomeChange[] }): JSX.Element {
         <button
           type="button"
           className={cn(
-            'inline-flex items-center gap-1 rounded-control border border-rule-strong px-2 py-0.5 text-[12px] font-medium text-ink-2 hover:text-ink',
+            'inline-flex h-7 items-center gap-1 rounded-control px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 ne-motion hover:bg-sunken hover:text-ink',
             FOCUS
           )}
         >
@@ -1028,25 +1074,24 @@ function ChangesNote({ changes }: { changes: OutcomeChange[] }): JSX.Element {
   );
 }
 
-const GROUP_DOT = {
-  live: 'bg-live',
-  neutral: 'bg-ink-3',
-  dropped: 'bg-dropped',
-} as const;
-
+/**
+ * A secondary group under the main list: price-only carriers, those not
+ * appointed, the declines. A quiet heading and a count; the declines fold.
+ */
 function ResultGroup({
   title,
+  description,
   count,
   children,
-  tone,
   collapsible = false,
   open: controlledOpen,
   onOpenChange,
 }: {
   title: string;
+  /** Said after the title, quieter ("Health questions not loaded"). */
+  description?: string;
   count: number;
   children: React.ReactNode;
-  tone: keyof typeof GROUP_DOT;
   collapsible?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -1060,15 +1105,17 @@ function ResultGroup({
   const headingId = React.useId();
   const heading = (
     <>
-      <span className="flex items-center gap-2">
-        <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', GROUP_DOT[tone])} />
-        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-2">
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-2">
           {title}
         </span>
-        <span className="text-[12px] font-semibold tabular-nums text-ink">{count}</span>
+        <span className="text-[12px] font-semibold tabular-nums text-ink-3">{count}</span>
+        {description ? (
+          <span className="truncate text-[12px] text-ink-3">· {description}</span>
+        ) : null}
       </span>
       {collapsible ? (
-        <span className="flex items-center gap-1 text-[12px] font-medium text-ink-2">
+        <span className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-ink-2">
           {open ? 'Hide' : 'Show'}
           <ChevronDown
             aria-hidden
@@ -1090,7 +1137,7 @@ function ResultGroup({
             aria-expanded={open}
             onClick={toggle}
             className={cn(
-              'flex h-8 w-full items-center justify-between gap-2 px-3 text-left hover:bg-paper',
+              'flex h-10 w-full items-center justify-between gap-2 px-5 text-left transition-colors duration-150 ne-motion hover:bg-[#f8f9fb]',
               open && 'border-b border-rule',
               FOCUS
             )}
@@ -1098,7 +1145,7 @@ function ResultGroup({
             {heading}
           </button>
         ) : (
-          <span className="flex h-8 items-center justify-between gap-2 border-b border-rule px-3">
+          <span className="flex h-10 items-center justify-between gap-2 border-b border-rule px-5">
             {heading}
           </span>
         )}

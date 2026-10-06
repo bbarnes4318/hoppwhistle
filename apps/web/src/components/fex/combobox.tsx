@@ -42,6 +42,8 @@ export interface ComboboxProps {
   loading?: boolean;
   minChars?: number;
   className?: string;
+  /** Classes for the input itself (the health search is taller than a field). */
+  inputClassName?: string;
   /** A keyboard shortcut that focuses the box, shown in it while it is empty. */
   shortcut?: string;
 }
@@ -59,6 +61,7 @@ export function Combobox({
   loading = false,
   minChars = 1,
   className,
+  inputClassName,
   shortcut,
 }: ComboboxProps): JSX.Element {
   const [open, setOpen] = React.useState(false);
@@ -139,7 +142,7 @@ export function Combobox({
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
           aria-keyshortcuts={shortcut}
-          className={cn(CONTROL, 'pl-9', shortcut && 'pr-14')}
+          className={cn(CONTROL, 'pl-9', shortcut && 'pr-14', inputClassName)}
         />
         {shortcut && !query ? (
           <kbd
