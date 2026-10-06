@@ -409,6 +409,22 @@ describe('QuoteWorkspace', () => {
     expect(within(row).getByRole('button', { name: 'Selected' })).toBeTruthy();
   });
 
+  it('has a Get quotes button that names what is missing, then quotes', async () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Get quotes' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Needs state to quote.');
+    expect(document.activeElement?.id).toMatch(/-state$/);
+    expect(quotesPosted()).toHaveLength(0);
+  });
+
+  it('re-runs the quote from Get quotes once the applicant is complete', async () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    const before = quotesPosted().length;
+    fireEvent.click(screen.getByRole('button', { name: 'Get quotes' }));
+    await waitFor(() => expect(quotesPosted().length).toBe(before + 1));
+  });
+
   it('asks for the minimum before quoting anything', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft()} />);
     expect(

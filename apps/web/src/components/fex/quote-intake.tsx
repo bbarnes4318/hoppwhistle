@@ -31,6 +31,7 @@ import type { PaymentMode } from '@hopwhistle/fex-engine/types';
 import { Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import { fexApi, type FexDrugHit } from '@/lib/fex/api';
 import { searchConditions } from '@/lib/fex/condition-search';
@@ -68,6 +69,8 @@ export interface ConditionMeta {
 
 export interface QuoteIntakeProps {
   idPrefix: string;
+  /** Get quotes: run the quote now and bring the results into view. */
+  onGetQuotes?: () => void;
   /** Start over: clears every answer back to the agency defaults. */
   onReset?: () => void;
   draft: QuoteDraft;
@@ -88,14 +91,7 @@ const STATE_NAME = new Map<string, string>([
 ]);
 
 /** The conditions agents hear most, shown as one-tap chips ahead of the rest. */
-const FEATURED_CONDITIONS: readonly string[] = [
-  'DIABETES',
-  'DIABETES_INSULIN',
-  'COPD',
-  'CHF',
-  'HEART_ATTACK',
-  'STROKE',
-];
+const FEATURED_CONDITIONS: readonly string[] = ['DIABETES', 'DIABETES_INSULIN', 'COPD', 'CHF'];
 
 /** How agents say the longest common conditions, on their chips. */
 const CHIP_NAME: Record<string, string> = { CHF: 'CHF', HEART_ATTACK: 'Heart attack' };
@@ -144,6 +140,7 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
       <CoverageSection {...props} />
       <HealthSection {...props} />
       <MedicationsSection {...props} />
+      <GetQuotesBar {...props} />
     </div>
   );
 }
@@ -168,7 +165,7 @@ function Section({
   return (
     <section
       aria-labelledby={id}
-      className="rounded-card border border-rule bg-surface px-4 pb-4 pt-3 shadow-card"
+      className="rounded-card border border-rule bg-surface px-4 pb-3.5 pt-3 shadow-card"
     >
       <div className="mb-3 flex min-h-[28px] items-center gap-2.5">
         <span
@@ -193,6 +190,57 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * The one button the form ends with. Quotes also run on every edit, but an
+ * agent should never have to know that: this is where they look for "go".
+ * With something missing it says what and puts the cursor there.
+ */
+function GetQuotesBar({ idPrefix, draft, onGetQuotes }: QuoteIntakeProps): JSX.Element {
+  const missing = missingForQuote(draft);
+  const [tried, setTried] = React.useState(false);
+  React.useEffect(() => {
+    if (!missing) setTried(false);
+  }, [missing]);
+
+  const focusMissing = (field: string) => {
+    const root = document.getElementById(`${idPrefix}-intake`) ?? document;
+    const target =
+      field === 'sex'
+        ? root.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Sex"] [role="radio"]')
+        : field === 'face'
+          ? root.querySelector<HTMLElement>(
+              `[aria-labelledby="${idPrefix}-face-label"] [role="radio"]`
+            )
+          : document.getElementById(`${idPrefix}-${field}`);
+    target?.scrollIntoView?.({ block: 'center' });
+    target?.focus();
+  };
+
+  return (
+    <div className="sticky bottom-0 z-20 bg-paper pb-1 pt-1">
+      <Button
+        type="button"
+        onClick={() => {
+          if (missing) {
+            setTried(true);
+            focusMissing(missing);
+            return;
+          }
+          onGetQuotes?.();
+        }}
+        className="h-10 w-full text-[15px] font-semibold shadow-raised"
+      >
+        Get quotes
+      </Button>
+      {tried && missing ? (
+        <p role="alert" className="mt-1.5 text-center text-[12.5px] font-medium text-ringing-ink">
+          {MISSING_TEXT[missing] ?? 'Needs more answers'} to quote.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -767,13 +815,18 @@ function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakePro
               <button
                 type="button"
                 aria-expanded={showAllQuick}
+                aria-label={
+                  showAllQuick
+                    ? 'Fewer knockout questions'
+                    : `${hiddenCount} more knockout questions`
+                }
                 onClick={() => setShowAllQuick(v => !v)}
                 className={cn(
                   'inline-flex h-7 items-center rounded-[6px] px-1.5 text-[12.5px] font-medium text-brand-ink hover:underline',
                   FOCUS
                 )}
               >
-                {showAllQuick ? 'Fewer' : `${hiddenCount} more knockout questions`}
+                {showAllQuick ? 'Fewer' : `${hiddenCount} more`}
               </button>
             ) : null}
           </div>
