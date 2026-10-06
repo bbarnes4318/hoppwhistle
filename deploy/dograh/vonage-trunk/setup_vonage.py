@@ -376,6 +376,7 @@ def main() -> int:
              "--numbers", *numbers, "--apply"]) != 0:
         print("Could not load the Vonage numbers onto the Vonage configuration. Send this output to Claude.")
         return 1
+    sh(["docker", "cp", f"{API_CONTAINER}:/tmp/vonage-pool-backup.json", "/root/vonage-pool-backup.json"], check=False)
 
     with open(OVERRIDE, encoding="utf-8") as handle:
         original = handle.read()
@@ -433,6 +434,8 @@ def main() -> int:
         return roll_back("Dograh did not come up with caller-ID routing.")
 
     header("7. Which campaign runs on Vonage?")
+    # The restart recreated the container, and with it its /tmp.
+    sh(["docker", "cp", helper, f"{API_CONTAINER}:/tmp/vonage_config.py"])
     print(sh(["docker", "exec", API_CONTAINER, "python", "/tmp/vonage_config.py", "list-campaigns"]))
     campaign = ask("Campaign id to run on Vonage (blank to do it later)", "")
     if campaign:
