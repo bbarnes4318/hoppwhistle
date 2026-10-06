@@ -11,7 +11,9 @@ those numbers and go out slowly. This script:
   * optionally sets a campaign's ``rate_limit_per_second``,
     ``orchestrator_metadata.max_concurrency`` and turns
     ``orchestrator_metadata.state_cid_policy`` off (a same-state policy would
-    strand calls to states the few numbers do not cover).
+    strand calls to states the few numbers do not cover);
+  * with ``--state-cid-off``, turns ``state_cid_policy`` off on every campaign
+    that uses the configuration, so no campaign does same-state caller ID.
 
 Everything it changes is written to a backup JSON (also printed), and
 ``--restore`` puts it all back.
@@ -94,6 +96,7 @@ async def apply_pool(args) -> int:
         "activated_ids": [],
         "inserted_ids": [],
         "campaign": None,
+        "state_cid_campaigns": [],
     }
     try:
         active = await conn.fetch(
@@ -128,6 +131,23 @@ async def apply_pool(args) -> int:
                 plan.append((e164, "insert", None))
         for e164, action, _ in plan:
             print(f"  {e164}: {action}")
+
+        state_cid_rows = []
+        if args.state_cid_off:
+            rows = await conn.fetch(
+                "select id, orchestrator_metadata from campaigns "
+                "where organization_id=$1 and telephony_configuration_id=$2 order by id",
+                args.org_id,
+                args.tcid,
+            )
+            state_cid_rows = [
+                r for r in rows
+                if as_dict(r["orchestrator_metadata"]).get("state_cid_policy") not in (None, "", "off")
+            ]
+            print(f"Same-state caller ID: {len(state_cid_rows)} campaign(s) would be turned off"
+                  + (": " + ", ".join(
+                      f"{r['id']} ({as_dict(r['orchestrator_metadata']).get('state_cid_policy')})"
+                      for r in state_cid_rows) if state_cid_rows else ""))
 
         campaign = None
         if args.campaign_id is not None:
@@ -179,6 +199,13 @@ async def apply_pool(args) -> int:
                         json.dumps({"pool": args.pool_tag, "npa": e164[2:5]}), now,
                     )
                     backup["inserted_ids"].append(new_id)
+            for r in state_cid_rows:
+                meta = as_dict(r["orchestrator_metadata"])
+                backup["state_cid_campaigns"].append({"id": r["id"], "orchestrator_metadata": meta})
+                await conn.execute(
+                    "update campaigns set orchestrator_metadata=$2::json where id=$1",
+                    r["id"], json.dumps({**meta, "state_cid_policy": "off"}),
+                )
             if campaign:
                 meta = as_dict(campaign["orchestrator_metadata"])
                 backup["campaign"] = {
@@ -246,8 +273,10 @@ async def restore(args) -> int:
     reactivate = backup.get("deactivated_ids", [])
     turn_off = backup.get("activated_ids", []) + backup.get("inserted_ids", [])
     campaign = backup.get("campaign")
-    print(f"Restore: reactivate {len(reactivate)} caller IDs, deactivate {len(turn_off)} Anveo ones"
-          + (f", put campaign {campaign['id']} back" if campaign else ""))
+    state_cid = backup.get("state_cid_campaigns") or []
+    print(f"Restore: reactivate {len(reactivate)} caller IDs, deactivate {len(turn_off)} pool ones"
+          + (f", put campaign {campaign['id']} back" if campaign else "")
+          + (f", restore same-state caller ID on {len(state_cid)} campaign(s)" if state_cid else ""))
     if not args.apply:
         print("Dry run. Nothing changed. Re-run with --apply.")
         return 0
@@ -264,6 +293,11 @@ async def restore(args) -> int:
                 await conn.execute(
                     "update telephony_phone_numbers set is_active=false, updated_at=$2 where id = any($1::int[])",
                     turn_off, now,
+                )
+            for c in state_cid:
+                await conn.execute(
+                    "update campaigns set orchestrator_metadata=$2::json where id=$1",
+                    c["id"], json.dumps(c["orchestrator_metadata"]),
                 )
             if campaign:
                 await conn.execute(
@@ -290,6 +324,8 @@ def main() -> int:
     p.add_argument("--pool-tag", default="anveo", help="extra_metadata.pool for inserted numbers")
     p.add_argument("--label", default="Anveo CID", help="label for inserted numbers")
     p.add_argument("--list-configs", action="store_true", help="list telephony configurations and exit")
+    p.add_argument("--state-cid-off", action="store_true",
+                   help="turn same-state caller ID off on every campaign using this configuration")
     p.add_argument("--apply", action="store_true")
     args = p.parse_args()
     if args.list_configs:

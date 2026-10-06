@@ -12,8 +12,10 @@ printed), then walks the steps in deploy/dograh/vonage-trunk/README.md:
   2. writes the Vonage settings into /opt/hopwhistle/.env (backup kept);
   3. adds the `vonage` trunk to Dograh's Asterisk and opens the firewall to Vonage;
   4. places one test call to your phone, and stops unless you say it rang;
-  5. makes the Vonage numbers Dograh's caller IDs (backup kept, reversible);
-  6. points Dograh's outbound calls at Vonage and restarts the Dograh API.
+  5. makes the Vonage numbers Dograh's only caller IDs and turns same-state
+     caller ID off on every campaign (backup kept, reversible);
+  6. points Dograh's outbound calls at Vonage, with same-state caller ID off,
+     and restarts the Dograh API.
 
 Every step that changes Dograh asks first. Nothing in Hopwhistle is restarted:
 the .env values reach Hopwhistle's own FreeSWITCH/API on the next deploy.
@@ -51,7 +53,7 @@ ENV_KEYS = (
 # Characters that break a .env value, a pjsip.conf line or a shell.
 _BAD_CHARS = re.compile(r"[\s'\"$#;\\`]")
 
-_ENV_LINE = re.compile(r"^(\s*)(-\s*)?(DOGRAH_ARI_[A-Z_]+)\s*([:=])")
+_ENV_LINE = re.compile(r"^(\s*)(-\s*)?(DOGRAH_ARI_[A-Z_]+|DOGRAH_STATE_CID_POLICY)\s*([:=])")
 
 
 # ── pure helpers (tested in deploy/dograh/tests/test_vonage_setup.py) ─────────
@@ -98,6 +100,8 @@ def set_ari_env(text: str) -> Tuple[str, int]:
     DOGRAH_ARI_DIAL_PREFIX (Anveo only) and any old DOGRAH_ARI_DIAL_FORMAT,
     adds ``DOGRAH_ARI_DIAL_FORMAT=nanp11`` beside each trunk line, and keeps
     transfers on FracTEL unless the file already chooses a transfer trunk.
+    A DOGRAH_STATE_CID_POLICY default is set to ``off``: the Vonage numbers
+    are used as they are, never matched to the destination's state.
     Returns the new text and how many trunk lines were changed.
     """
     lines = text.splitlines()
@@ -112,14 +116,19 @@ def set_ari_env(text: str) -> Tuple[str, int]:
             out.append(line)
             continue
         indent, dash, key, _ = m.groups()
+
+        def entry(k: str, v: str) -> str:
+            return f"{indent}- {k}={v}" if dash else f"{indent}{k}: {v}"
+
         if key in ("DOGRAH_ARI_DIAL_PREFIX", "DOGRAH_ARI_DIAL_FORMAT"):
+            continue
+        if key == "DOGRAH_STATE_CID_POLICY":
+            # Quoted in map style: a bare `off` is a boolean to YAML 1.1 readers.
+            out.append(entry(key, "off" if dash else '"off"'))
             continue
         if key != "DOGRAH_ARI_TRUNK":
             out.append(line)
             continue
-
-        def entry(k: str, v: str) -> str:
-            return f"{indent}- {k}={v}" if dash else f"{indent}{k}: {v}"
 
         out.append(entry("DOGRAH_ARI_TRUNK", "vonage"))
         out.append(entry("DOGRAH_ARI_DIAL_FORMAT", "nanp11"))
@@ -244,7 +253,7 @@ def main() -> int:
               "  docker logs --since 3m dograh-asterisk 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]' | tail -40")
         return 1
 
-    header("5. Dograh caller IDs -> Vonage numbers")
+    header("5. Dograh caller IDs -> Vonage numbers, same-state matching off")
     pool_script = os.path.join(REPO, "deploy", "dograh", "anveo-trunk", "set_caller_id_pool.py")
     sh(["docker", "cp", pool_script, f"{API_CONTAINER}:/tmp/set_caller_id_pool.py"])
     print(sh(["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--list-configs"]))
@@ -254,17 +263,7 @@ def main() -> int:
         return 1
     pool = ["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--tcid", tcid,
             "--pool-tag", "vonage", "--label", "Vonage CID", "--backup", "/tmp/vonage-pool-backup.json",
-            "--numbers", *numbers]
-    if len(numbers) < 10:
-        print(f"Only {len(numbers)} Vonage number(s): a campaign with same-state caller ID set to 'strict'\n"
-              "would fail calls to every other state. Give a campaign id to turn that off for it and pace\n"
-              "it at 1 call/s, 3 at once (blank to skip).")
-        campaign = ask("Campaign id", "")
-        if campaign:
-            if not campaign.isdigit():
-                print("Not a number.")
-                return 1
-            pool += ["--campaign-id", campaign]
+            "--state-cid-off", "--numbers", *numbers]
     step(pool)
     if not yes("Apply this?"):
         print("Stopped. The trunk is installed; Dograh still dials its old carrier.")
@@ -294,7 +293,7 @@ def main() -> int:
     if not changed:
         print(f"No DOGRAH_ARI_TRUNK setting in {OVERRIDE}. Add, under each of {', '.join(sorted(mounts))}:\n"
               "    environment:\n      DOGRAH_ARI_TRUNK: vonage\n      DOGRAH_ARI_DIAL_FORMAT: nanp11\n"
-              "      DOGRAH_ARI_TRANSFER_TRUNK: fractel\n"
+              "      DOGRAH_ARI_TRANSFER_TRUNK: fractel\n      DOGRAH_STATE_CID_POLICY: \"off\"\n"
               f"then: cd {DOGRAH_DIR} && docker compose up -d --no-deps {' '.join(sorted(mounts))}")
         return 1
     override_backup = f"{OVERRIDE}.bak-vonage.{time.strftime('%Y%m%d%H%M%S')}"
@@ -319,7 +318,13 @@ def main() -> int:
     time.sleep(5)
     trunk = sh(["docker", "exec", API_CONTAINER, "printenv", "DOGRAH_ARI_TRUNK"], check=False).strip()
     patched = V3_MARKER in sh(["docker", "exec", API_CONTAINER, "cat", PROVIDER_PATH], check=False)
-    print(f"DOGRAH_ARI_TRUNK={trunk or '(unset)'}  provider patch V3: {'yes' if patched else 'NO'}")
+    policy = sh(["docker", "exec", API_CONTAINER, "printenv", "DOGRAH_STATE_CID_POLICY"], check=False).strip()
+    print(f"DOGRAH_ARI_TRUNK={trunk or '(unset)'}  provider patch V3: {'yes' if patched else 'NO'}  "
+          f"same-state caller ID: {policy or 'off (default)'}")
+    if policy not in ("", "off"):
+        print(f"DOGRAH_STATE_CID_POLICY is still {policy!r}, set somewhere other than {OVERRIDE}\n"
+              f"(check {DOGRAH_DIR}/.env and docker-compose.yaml). Change it to off and restart the API.")
+        return 1
     if trunk != "vonage" or not patched:
         print("Dograh did not come up on Vonage; send this output to Claude.")
         return 1
