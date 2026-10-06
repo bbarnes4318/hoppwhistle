@@ -69,6 +69,23 @@ def fs_vonage_settings(fs_container: str) -> Dict[str, str]:
     return env
 
 
+def env_file_vonage_settings(text: str) -> Dict[str, str]:
+    """VONAGE_SIP_* from a .env file's text (``KEY=value``, optional quotes)."""
+    env = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        key, sep, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not sep or not key.startswith("VONAGE_SIP_"):
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        env[key] = value
+    return env
+
+
 def credentials_from(env: Dict[str, str]) -> Optional[Tuple[str, str]]:
     """Both or neither, like FreeSWITCH's vonage-gateway.sh."""
     user, password = env.get("VONAGE_SIP_USERNAME", ""), env.get("VONAGE_SIP_PASSWORD", "")
@@ -189,6 +206,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--caller-id", metavar="NUMBER", help="caller ID for --test-call (a number on your Vonage account)")
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
     parser.add_argument("--fs-container", default=DEFAULT_FS_CONTAINER)
+    parser.add_argument("--env-file", help="read VONAGE_SIP_* from this .env instead of the FreeSWITCH container")
     args = parser.parse_args(argv)
 
     running = run(["docker", "inspect", "-f", "{{.State.Running}}", args.container], check=False)
@@ -224,7 +242,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     blocks: Dict[str, Optional[str]] = {"pjsip.conf": None, "extensions.conf": None}
     if not args.rollback:
-        env = fs_vonage_settings(args.fs_container)
+        if args.env_file:
+            with open(args.env_file, encoding="utf-8") as handle:
+                env = env_file_vonage_settings(handle.read())
+        else:
+            env = fs_vonage_settings(args.fs_container)
         proxy = (args.proxy or env.get("VONAGE_SIP_PROXY", "") or DEFAULT_PROXY).strip().lower()
         proxy = re.sub(r"^sips?:", "", proxy)
         if not valid_host(proxy):
@@ -237,7 +259,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             credentials = credentials_from(env)
         except ValueError as exc:
-            print(f"REFUSED: {exc} (in the FreeSWITCH container's environment).")
+            print(f"REFUSED: {exc} (in {args.env_file or 'the FreeSWITCH container environment'}).")
             return 1
         print(f"Vonage SIP server: {proxy}  realm: {realm or '(none)'}  "
               f"auth: {'username/password' if credentials else 'source IP only'}")
