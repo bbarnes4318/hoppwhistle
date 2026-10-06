@@ -70,12 +70,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * for a platform admin who has never had an extension.
    *
    * Two conditions, and both are needed. The role, because only an agent takes
-   * calls. And an agency, because a platform operator in the cross-agency view
-   * has no tenant for an extension to belong to -- entering one reloads the
-   * page, so the phone comes up then.
+   * calls -- and a MANAGER, whose softphone is what a listen-in rings (it is
+   * never routed a call: routing only rings AGENTs). And an agency, because a
+   * platform operator in the cross-agency view has no tenant for an extension
+   * to belong to -- entering one reloads the page, so the phone comes up then.
    */
   const canTakeCalls =
-    !authLoading && !platform.loading && userRoles.includes('AGENT') && !platform.needsAgency;
+    !authLoading &&
+    !platform.loading &&
+    (userRoles.includes('AGENT') || userRoles.includes('MANAGER')) &&
+    !platform.needsAgency;
 
   /*
    * A white-label agency's people belong on the agency's own host. Sessions are

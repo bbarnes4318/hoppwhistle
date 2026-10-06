@@ -487,6 +487,10 @@ enum RoleName {
   BUYER
   AGENT
   READONLY
+  /// An agency manager: supervises the agency's agents on the live floor and
+  /// may listen in on their calls (listen-only). Administers nobody and changes
+  /// no configuration. See ROLE_PERMISSIONS.MANAGER in middleware/rbac.ts.
+  MANAGER
 }
 
 model Role {

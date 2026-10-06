@@ -487,6 +487,11 @@ async function buildServer() {
   const { registerAgentRosterRoutes } = await import('./routes/agent-roster.js');
   await server.register(registerAgentRosterRoutes);
 
+  // Supervisor listen-in: an agency OWNER, ADMIN or MANAGER hears an agent's
+  // live call on their own softphone, listen-only. See routes/call-monitor.ts.
+  const { registerCallMonitorRoutes } = await import('./routes/call-monitor.js');
+  await server.register(registerCallMonitorRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

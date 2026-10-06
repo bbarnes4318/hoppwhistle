@@ -49,6 +49,7 @@ vi.mock('../middleware/auth.js', () => ({
 
 vi.mock('../lib/platform-context.js', () => ({
   requireAgencyPrincipal: vi.fn(() => Promise.resolve(undefined)),
+  requireFloorSupervisor: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 const resolveTenant = vi.hoisted(() => vi.fn(() => 'agency-a'));

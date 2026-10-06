@@ -847,16 +847,15 @@ describe('the white-label portal', () => {
       expect(screen.queryByRole('button', { name: 'Invite user' })).toBeNull();
 
       const { rolesOffered } = await import('@/components/users/invite-user-dialog');
-      expect(rolesOffered(['AGENT', 'ADMIN', 'ANALYST']).map(role => role.value)).toEqual([
-        'ADMIN',
-        'ANALYST',
-        'AGENT',
-      ]);
+      expect(
+        rolesOffered(['AGENT', 'MANAGER', 'ADMIN', 'ANALYST']).map(role => role.value)
+      ).toEqual(['ADMIN', 'ANALYST', 'AGENT', 'MANAGER']);
       // OWNER is never invitable: a second principal is arranged with NetEnroll.
       expect(rolesOffered().map(role => role.value)).toEqual([
         'ADMIN',
         'ANALYST',
         'AGENT',
+        'MANAGER',
         'BUYER',
         'PUBLISHER',
       ]);

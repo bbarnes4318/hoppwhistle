@@ -49,6 +49,11 @@ export const ALL_PERMISSIONS = [
   'calls:read',
   'calls:write',
   'calls:delete',
+  // Listen in on another agent's call while it is in progress (listen-only).
+  // Its own verb rather than part of `calls:read`: reading a CDR after the fact
+  // and hearing a live conversation are different things, and an AGENT holds
+  // the first for their own calls and must never hold the second.
+  'calls:monitor',
   // Recordings
   'recordings:read',
   'recordings:write',
@@ -107,6 +112,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'calls:read',
     'calls:write',
     'calls:delete',
+    'calls:monitor',
     'recordings:read',
     'recordings:write',
     'recordings:delete',
@@ -221,6 +227,30 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     // applications. `users:write` is absent: an agent administers nobody.
     'users:read',
   ],
+  /**
+   * An agency manager: supervises the call floor, administers nobody.
+   *
+   * Every entry is READ, plus the one thing the role exists for. A manager
+   * coaches agents -- watches the floor, hears a call while it happens, plays
+   * one back afterwards -- and that is all. Inviting people, changing
+   * campaigns, numbers, routing or money stays with ADMIN and OWNER, and
+   * `NEVER_FOR_MANAGER` below holds that against the database row as well.
+   */
+  MANAGER: [
+    // The agency's calls and their recordings: what a manager coaches from.
+    // Narrowed to the acting agency by the handlers, as for ADMIN.
+    'calls:read',
+    'recordings:read',
+    // Listen in on an agent's call in progress. Listen-only: the manager's
+    // audio is never sent to the agent or the customer (see
+    // routes/call-monitor.ts, which disables eavesdrop's DTMF barge/whisper).
+    'calls:monitor',
+    // The floor and production reports the manager runs the floor from.
+    'reports:read',
+    'campaigns:read',
+    // Agent names, for the floor and the call lists.
+    'users:read',
+  ],
 };
 
 /**
@@ -250,6 +280,8 @@ const NEVER_FOR_AGENT: readonly Permission[] = [
   'campaigns:write',
   'campaigns:delete',
   'calls:delete',
+  // Hearing a colleague's live call is supervision, not agent work.
+  'calls:monitor',
   'recordings:write',
   'recordings:delete',
   'flows:write',
@@ -262,6 +294,15 @@ const NEVER_FOR_AGENT: readonly Permission[] = [
   'payroll:admin',
   'settings:write',
 ];
+
+/**
+ * Capabilities no manager may hold, whatever a database row says: the AGENT
+ * floor less the one capability the role exists for. A manager supervises; it
+ * administers nobody and writes no configuration.
+ */
+const NEVER_FOR_MANAGER: readonly Permission[] = NEVER_FOR_AGENT.filter(
+  p => p !== 'calls:monitor'
+);
 
 /** The same list, as a set, for the default-deny filter below. */
 const KNOWN_PERMISSIONS: ReadonlySet<string> = new Set<string>(ALL_PERMISSIONS);
@@ -340,6 +381,9 @@ export function effectivePermissionsFor(
 
   if (roleName === 'AGENT') {
     for (const forbidden of NEVER_FOR_AGENT) granted.delete(forbidden);
+  }
+  if (roleName === 'MANAGER') {
+    for (const forbidden of NEVER_FOR_MANAGER) granted.delete(forbidden);
   }
 
   return Array.from(granted);

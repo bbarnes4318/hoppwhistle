@@ -34,3 +34,26 @@ export function inboundCallSid(request: InviteLike | null | undefined): string |
   const trimmed = value?.trim();
   return isSoftphoneCallSid(trimmed) ? trimmed : null;
 }
+
+/**
+ * Whether an INVITE is a supervisor listen-in leg rather than a call.
+ *
+ * The API rings a manager's softphone with `X-Hopwhistle-Monitor: <channel>`
+ * when they press Listen on the floor (routes/call-monitor.ts). Such a leg is
+ * answered by the softphone itself, with the microphone off, and is not a call
+ * the manager took: no screen pop, no disposition, no presence change.
+ */
+export function isMonitorInvite(request: InviteLike | null | undefined): boolean {
+  if (!request) return false;
+  let value: string | undefined;
+  if (typeof request.getHeader === 'function') {
+    value = request.getHeader('X-Hopwhistle-Monitor');
+  }
+  if (!value && request.headers) {
+    const key = Object.keys(request.headers).find(
+      name => name.toLowerCase() === 'x-hopwhistle-monitor'
+    );
+    value = key ? request.headers[key]?.[0]?.raw : undefined;
+  }
+  return Boolean(value?.trim());
+}

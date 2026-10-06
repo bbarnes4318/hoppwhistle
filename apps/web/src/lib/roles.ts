@@ -22,12 +22,22 @@
  *   2. PUBLISHER     - ahead of BUYER, matching the ladder `useAuth()` and
  *                      `requireBuyerScope()` already used.
  *   3. BUYER
- *   4. AGENT         - /dashboard, which renders AgentToday for them: their own
+ *   4. MANAGER       - /monitor, the live floor they supervise and listen in
+ *                      from. Ahead of AGENT: a manager who also takes calls
+ *                      starts the day on the floor.
+ *   5. AGENT         - /dashboard, which renders AgentToday for them: their own
  *                      production, narrowed server-side.
- *   5. everyone else (analyst, readonly, no roles yet) - /dashboard.
+ *   6. everyone else (analyst, readonly, no roles yet) - /dashboard.
  */
 
-export const ROLE_HOME_PRECEDENCE = ['OWNER', 'ADMIN', 'PUBLISHER', 'BUYER', 'AGENT'] as const;
+export const ROLE_HOME_PRECEDENCE = [
+  'OWNER',
+  'ADMIN',
+  'PUBLISHER',
+  'BUYER',
+  'MANAGER',
+  'AGENT',
+] as const;
 
 export function normalizeRoles(roles: string[] | null | undefined): string[] {
   return (roles ?? []).map(role => role.toUpperCase());
@@ -53,6 +63,7 @@ export function homePathForRoles(roles: string[] | null | undefined): string {
   if (normalized.includes('OWNER') || normalized.includes('ADMIN')) return '/dashboard';
   if (normalized.includes('PUBLISHER')) return '/publisher/dashboard';
   if (normalized.includes('BUYER')) return '/buyer/dashboard';
+  if (normalized.includes('MANAGER')) return '/monitor';
   if (normalized.includes('AGENT')) return '/dashboard';
 
   return '/dashboard';

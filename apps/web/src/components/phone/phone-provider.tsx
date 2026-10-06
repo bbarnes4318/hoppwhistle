@@ -22,7 +22,7 @@ import {
   type SessionDescriptionHandlerOptions,
 } from 'sip.js';
 
-import { inboundCallSid } from '@/lib/softphone-call-id';
+import { inboundCallSid, isMonitorInvite } from '@/lib/softphone-call-id';
 
 import { normalizeThirdPartyNumber, sendsAgentAudio } from './softphone/format';
 
@@ -191,6 +191,12 @@ export interface CallInfo {
   campaignId?: string;
   /** Numbers merged into this call by "Add call" + "Merge" (three-way calling). */
   conferenceWith?: string[];
+  /**
+   * A supervisor listen-in leg, not a call: the softphone answered it itself
+   * with the microphone off, and it gets no screen pop, no disposition and no
+   * presence change. See `isMonitorInvite`.
+   */
+  isMonitor?: boolean;
 }
 
 export interface PhoneContextType {
@@ -310,6 +316,15 @@ export function usePhone(): PhoneContextType {
     throw new Error('usePhone must be used within a PhoneProvider');
   }
   return context;
+}
+
+/**
+ * The phone, or null outside a PhoneProvider. For screens that offer a phone
+ * action when one is there -- the floor's Listen button -- and must still
+ * render where it is not.
+ */
+export function useOptionalPhone(): PhoneContextType | null {
+  return useContext(PhoneContext);
 }
 
 // ============================================================================
@@ -776,11 +791,60 @@ export function PhoneProvider({
   // Keep handleCallAnswered / handleCallEnded in refs so stateChange listeners
   // always call the latest versions (avoids stale closures).
   const handleCallAnsweredRef = useRef<() => void>(() => {});
+  /** `answerCall`, for the listen-in path, which is defined above it. */
+  const answerCallRef = useRef<() => void>(() => {});
   const handleCallEndedRef = useRef<() => void>(() => {});
   const handleHeldSessionEndedRef = useRef<(session: Session) => void>(() => {});
 
   const handleIncomingSipCall = useCallback(
     (invitation: Invitation) => {
+      /*
+       * A supervisor listen-in leg. Answered here, without ringing, with the
+       * microphone off -- the switch discards the listener's audio anyway
+       * (eavesdrop with DTMF disabled), so this is belt and braces.
+       *
+       * Never on top of a call: a manager who is on the phone already keeps
+       * that call, and the listen is refused rather than replacing it.
+       */
+      if (isMonitorInvite(invitation.request)) {
+        if (sessionRef.current) {
+          void invitation.reject({ statusCode: 486 }).catch(() => {});
+          return;
+        }
+        sessionRef.current = invitation;
+        const monitorCall: CallInfo = {
+          callId: `monitor_${Date.now()}`,
+          direction: 'inbound',
+          state: 'connecting',
+          phoneNumber: invitation.remoteIdentity.uri.user || '',
+          callerName: invitation.remoteIdentity.displayName || 'Listening in',
+          startTime: new Date(),
+          duration: 0,
+          isMuted: true,
+          isOnHold: false,
+          recordingEnabled: false,
+          isMonitor: true,
+        };
+        currentCallRef.current = monitorCall;
+        setCurrentCall(monitorCall);
+        setIsPhonePanelOpen(true);
+        invitation.stateChange.addListener(newState => {
+          if (newState === SessionState.Terminated) {
+            if (sessionRef.current === invitation) handleCallEndedRef.current();
+          } else if (newState === SessionState.Established) {
+            handleCallAnsweredRef.current();
+            syncAgentAudio(invitation, { isMuted: true, isOnHold: false });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as
+              | RTCPeerConnection
+              | undefined;
+            if (pc) wireRemoteAudio(pc);
+          }
+        });
+        answerCallRef.current();
+        return;
+      }
+
       sessionRef.current = invitation;
       const remoteIdentity = invitation.remoteIdentity;
       const callerNumber = remoteIdentity.uri.user || 'Unknown';
@@ -920,6 +984,10 @@ export function PhoneProvider({
         answerTime: new Date(),
       };
     });
+    stopRingtone();
+    startCallDurationTimer();
+    // Listening in is not taking a call: presence is left as it is.
+    if (currentCallRef.current?.isMonitor) return;
     setAgentStatusState('on-call');
     // Sync on-call status to Redis so routing service knows agent is busy
     void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
@@ -927,8 +995,6 @@ export function PhoneProvider({
       headers: getApiHeaders(),
       body: JSON.stringify({ status: 'on-call' }),
     }).catch(() => {});
-    stopRingtone();
-    startCallDurationTimer();
   }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
   /**
@@ -995,6 +1061,20 @@ export function PhoneProvider({
         if (prev) reportCallEnded(prev, 'sip_terminated');
         return heldCall ? { ...heldCall, isOnHold: false, state: 'active' } : prev;
       });
+      return;
+    }
+
+    /*
+     * A listen-in ended. Nothing was taken, so there is nothing to write up and
+     * no presence to restore: just put the phone back to idle.
+     */
+    if (currentCallRef.current?.isMonitor) {
+      setCurrentCall(null);
+      currentCallRef.current = null;
+      setIsConnecting(false);
+      stopRingtone();
+      stopCallDurationTimer();
+      sessionRef.current = null;
       return;
     }
 
@@ -1324,6 +1404,7 @@ export function PhoneProvider({
       console.warn('[Phone] answerCall called but no valid Invitation in Initial state');
     }
   }, [wireRemoteAudio, stopRingtone]);
+  answerCallRef.current = answerCall;
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {

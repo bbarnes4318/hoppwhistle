@@ -152,6 +152,55 @@ export async function requireAgencyPrincipal(
   }
 }
 
+export const FLOOR_SUPERVISOR_REQUIRED = {
+  code: 'FORBIDDEN',
+  message:
+    "This is a supervisor's view. Ask an administrator, a manager or the owner of this agency.",
+} as const;
+
+/** The agency roles that supervise the call floor and may listen in on it. */
+export const FLOOR_SUPERVISOR_ROLES = ['OWNER', 'ADMIN', 'MANAGER'] as const;
+
+/**
+ * Whether these roles supervise the call floor: the agency principal, or an
+ * agency MANAGER.
+ */
+export function isFloorSupervisor(roles: readonly string[] | undefined): boolean {
+  return (roles ?? []).some(role => (FLOOR_SUPERVISOR_ROLES as readonly string[]).includes(role));
+}
+
+/**
+ * Fastify preHandler: `requireAgencyPrincipal`, widened to an agency MANAGER.
+ *
+ * For the live floor and listen-in only. A manager supervises agents; it is
+ * deliberately NOT an agency principal, so every route gated on
+ * `requireAgencyPrincipal` -- money, invitations, configuration -- still
+ * refuses it. Same 401/403 and the same fall-through for a platform operator
+ * who has entered no agency.
+ */
+export async function requireFloorSupervisor(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  await Promise.resolve();
+
+  const principal = (request as MaybeAuthenticatedRequest).user;
+
+  if (!principal?.userId) {
+    void reply.code(401).send({
+      error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+    });
+    return;
+  }
+
+  if (principal.isPlatformAdmin === true && !principal.actingTenantId) return;
+
+  if (!isFloorSupervisor(principal.roles)) {
+    void reply.code(403).send({ error: FLOOR_SUPERVISOR_REQUIRED });
+    return;
+  }
+}
+
 /**
  * Fastify preHandler: refuse anyone who is not NetEnroll staff.
  *

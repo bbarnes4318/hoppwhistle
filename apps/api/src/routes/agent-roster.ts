@@ -48,7 +48,7 @@ import {
   readCellForwardNumber,
 } from '../lib/agent-cell-forward.js';
 import { normalizeLicensedStates } from '../lib/licensed-states.js';
-import { requireAgencyPrincipal } from '../lib/platform-context.js';
+import { requireAgencyPrincipal, requireFloorSupervisor } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { resolveTenant, getActingUserId } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
@@ -488,7 +488,9 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
    */
   fastify.get(
     '/api/v1/agent-roster/floor',
-    { preHandler: [authenticate, requireAgencyPrincipal] },
+    // A manager supervises the floor too: this is the screen they work from,
+    // and the one they listen in from (routes/call-monitor.ts).
+    { preHandler: [authenticate, requireFloorSupervisor] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
@@ -660,7 +662,8 @@ export async function registerAgentRosterRoutes(fastify: FastifyInstance): Promi
    */
   fastify.get<{ Params: { userId: string }; Querystring: { day?: string } }>(
     '/api/v1/agent-roster/:userId/activity',
-    { preHandler: [authenticate, requireAgencyPrincipal] },
+    // The floor's drawer, so the floor's supervisors -- a MANAGER included.
+    { preHandler: [authenticate, requireFloorSupervisor] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;

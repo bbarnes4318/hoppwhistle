@@ -223,6 +223,15 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     if (profile.userRoles.includes('BUYER')) {
       return !!(profile.buyerAccessToRecordings && recording.call?.buyerId === profile.buyerId);
     }
+    if (profile.userRoles.includes('MANAGER')) {
+      /*
+       * An agency manager coaches the floor: any call one of the agency's
+       * agents answered. Every caller has already narrowed the recording to
+       * the acting agency (`call: { tenantId }`), so this is the agency's
+       * agent calls and nothing else.
+       */
+      if (recording.call?.answeredByUserId) return true;
+    }
     if (profile.userRoles.includes('AGENT') && userId) {
       /*
        * The calls this agent answered -- the same rule as the call list and

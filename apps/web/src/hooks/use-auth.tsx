@@ -177,6 +177,16 @@ interface UseAuthReturn {
   isAdminOrOwner: boolean;
   isAgent: boolean;
   isAgentOnly: boolean;
+  /**
+   * An agency MANAGER who is not also its OWNER or ADMIN: supervises the call
+   * floor and listens in on agents' calls, administers nobody.
+   */
+  isManagerOnly: boolean;
+  /**
+   * May see the live floor and listen in on an agent's call: the agency's
+   * OWNER, ADMINs and MANAGERs. The API's `requireFloorSupervisor` decides.
+   */
+  isFloorSupervisor: boolean;
   isReadonlyOnly: boolean;
   hasFullAccess: boolean;
   /**
@@ -472,6 +482,7 @@ export function useAuth(): UseAuthReturn {
   const isPublisher = userRoles.includes('PUBLISHER');
   const isAgent = userRoles.includes('AGENT');
   const isReadonly = userRoles.includes('READONLY');
+  const isManager = userRoles.includes('MANAGER');
 
   const isAdminOrOwner = isAdmin || isOwner;
   const hasFullAccess = isAdminOrOwner;
@@ -485,6 +496,8 @@ export function useAuth(): UseAuthReturn {
   const isBuyerOnly = isBuyer && !hasFullAccess;
   const isPublisherOnly = isPublisher && !hasFullAccess;
   const isAgentOnly = isAgent && !hasFullAccess;
+  const isManagerOnly = isManager && !hasFullAccess;
+  const isFloorSupervisor = hasFullAccess || isManager;
   const isReadonlyOnly = isReadonly && !hasFullAccess;
   const isWhiteLabelAgent = user?.whiteLabel === true && isAgentOnly;
 
@@ -574,6 +587,8 @@ export function useAuth(): UseAuthReturn {
     isAdminOrOwner,
     isAgent,
     isAgentOnly,
+    isManagerOnly,
+    isFloorSupervisor,
     isReadonlyOnly,
     hasFullAccess,
     isPlatformAdmin,
