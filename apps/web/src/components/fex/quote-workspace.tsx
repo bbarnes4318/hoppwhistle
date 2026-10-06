@@ -471,7 +471,7 @@ export function QuoteWorkspace({
         <EmptyState
           icon={Calculator}
           headline="Enter state, sex, age and coverage to see every carrier."
-          body="Results update as you type. Add conditions and medications for each carrier's real answer, with the reason and the page it comes from."
+          body="Then press Get quotes. After that, results update as you type. Add conditions and medications for each carrier's real answer, with the reason and the page it comes from."
         />
         <ol className="grid gap-px border-t border-rule bg-rule sm:grid-cols-3">
           {[
@@ -951,6 +951,14 @@ export function QuoteWorkspace({
             needsIndication={
               new Map([...needsIndication.entries()].map(([id, n]) => [id, n.options]))
             }
+            onGetQuotes={() => {
+              quote.retry();
+              setEditing(false);
+              requestAnimationFrame(() => {
+                resultsRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
+                resultsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+              });
+            }}
             onReset={() => {
               dispatch({ type: 'replace', draft: emptyDraft(session?.settings?.agency) });
               setExpanded(null);
