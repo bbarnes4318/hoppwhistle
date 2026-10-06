@@ -28,7 +28,7 @@ import {
   type DetailField,
 } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { Check, ChevronDown, Info, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
 import { Panel } from '@/components/domain';
@@ -53,7 +53,9 @@ import {
   CheckRow,
   ChoiceGroup,
   Field,
+  FIELD_LABEL,
   FOCUS,
+  FromLeadTag,
   NativeSelect,
   shortLabel,
   TextInput,
@@ -134,8 +136,8 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
   return (
     // Not overflow-hidden: the health search's list drops out of the panel.
     <Panel>
-      <div className="flex h-9 items-center justify-between gap-2 rounded-t-card border-b border-rule bg-sunken px-3">
-        <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium" aria-live="polite">
+      <div className="flex h-11 items-center justify-between gap-2 border-b border-rule px-4">
+        <p className="flex min-w-0 items-center gap-2 text-[12px] font-medium" aria-live="polite">
           <span
             aria-hidden
             className={cn('h-1.5 w-1.5 shrink-0 rounded-full', missing ? 'bg-ink-3' : 'bg-live')}
@@ -149,7 +151,7 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
             type="button"
             onClick={props.onReset}
             className={cn(
-              'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-[12px] font-medium text-ink-2 hover:bg-surface hover:text-ink',
+              '-mr-2 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium text-ink-2 transition-colors duration-150 ne-motion hover:bg-sunken hover:text-ink',
               FOCUS
             )}
           >
@@ -184,9 +186,9 @@ function Section({
 }): JSX.Element {
   const id = React.useId();
   return (
-    <section aria-labelledby={id} className="px-3 pb-3 pt-2">
-      <div className="mb-1.5 flex min-h-[28px] items-center gap-1.5">
-        <h3 id={id} className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink">
+    <section aria-labelledby={id} className="px-4 pb-5 pt-4">
+      <div className="mb-3 flex min-h-[28px] items-center gap-1.5">
+        <h3 id={id} className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">
           {title}
         </h3>
         {done ? <Check className="h-3.5 w-3.5 text-live-ink" aria-label="Complete" /> : null}
@@ -235,7 +237,7 @@ function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.
     <Section title="Applicant" done={applicantDone(draft)}>
       {/* Two rows of three, the order an agent asks: where, who, how old;
           then tobacco, height and weight. */}
-      <div className="grid grid-cols-3 gap-x-2 gap-y-2">
+      <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
         <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
           <NativeSelect
             id={p('state')}
@@ -267,16 +269,9 @@ function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.
         </Field>
 
         <div className={cn('min-w-0', dobMode && 'col-span-3 row-start-2')}>
-          <label
-            htmlFor={dobMode ? p('dob') : p('age')}
-            className="mb-1 flex items-baseline text-[10.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-ink-2"
-          >
+          <label htmlFor={dobMode ? p('dob') : p('age')} className={FIELD_LABEL}>
             {dobMode ? 'Date of birth' : 'Age'}
-            {lead(draft.ageOrDob.mode) ? (
-              <span className="t-meta ml-1.5 font-normal normal-case tracking-normal text-ink-3">
-                From lead
-              </span>
-            ) : null}
+            {lead(draft.ageOrDob.mode) ? <FromLeadTag /> : null}
           </label>
           <div className="flex min-w-0">
             {dobMode ? (
@@ -324,7 +319,7 @@ function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.
               title={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
               aria-label={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
               className={cn(
-                '-ml-px h-9 shrink-0 rounded-r-control border border-rule-strong bg-sunken px-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-2 hover:bg-surface hover:text-ink',
+                '-ml-px h-[38px] shrink-0 rounded-r-control border border-rule-strong bg-sunken px-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-2 transition-colors duration-150 ne-motion hover:bg-surface hover:text-ink',
                 FOCUS
               )}
             >
@@ -508,25 +503,17 @@ function CoverageSection({
         </>
       }
     >
-      <div className="space-y-2">
+      <div className="space-y-3.5">
         {draft.coverage.mode === 'face' ? (
           <div>
-            <p
-              id={labelId}
-              className="mb-1 flex items-baseline text-[10.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-ink-2"
-            >
+            <p id={labelId} className={FIELD_LABEL}>
               Face amount
-              {draft.prefilled.has('face') ? (
-                <span className="t-meta ml-1.5 font-normal normal-case tracking-normal text-ink-3">
-                  From lead
-                </span>
-              ) : null}
+              {draft.prefilled.has('face') ? <FromLeadTag /> : null}
             </p>
             <ChoiceGroup<FaceChoice>
               labelledBy={labelId}
               tone="strong"
-              className="h-[34px]"
-              itemClassName="text-[12.5px]"
+              itemClassName="text-[13px]"
               options={options}
               value={null}
               isChecked={o => (o.value === 'custom' ? custom : !custom && Number(face) === o.value)}
@@ -541,7 +528,7 @@ function CoverageSection({
               }}
             />
             {custom ? (
-              <div className="relative mt-1.5">
+              <div className="relative mt-2">
                 <span
                   aria-hidden
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
@@ -591,11 +578,12 @@ function CoverageSection({
           </Field>
         )}
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1">
           <CheckRow
             id={p('activity')}
             checked={draft.activityCredit}
             onChange={checked => dispatch({ type: 'set', patch: { activityCredit: checked } })}
+            className="text-[12.5px] text-ink-2"
           >
             <span title="Transamerica activity credit">Exercises 3+ days/wk</span>
           </CheckRow>
@@ -604,6 +592,7 @@ function CoverageSection({
               id={p('medsupp')}
               checked={draft.aetnaMedSupp}
               onChange={checked => dispatch({ type: 'set', patch: { aetnaMedSupp: checked } })}
+              className="text-[12.5px] text-ink-2"
             >
               <span title="Has a qualifying Aetna/CVS Medicare Supplement">Aetna Med Supp</span>
             </CheckRow>
@@ -755,9 +744,10 @@ function HealthSection({
       hint="Last treated means the last surgery, procedure, hospital stay or treatment change. Each carrier's own questions decide the result."
       aside={<span className="t-meta text-ink-3">{summary || 'Optional'}</span>}
     >
-      <div className="space-y-2">
+      <div className="space-y-3.5">
         <Combobox
           id={healthSearchId(idPrefix)}
+          inputClassName="h-10 text-[14px]"
           label="Add a condition or medication"
           hideLabel
           query={query}
@@ -770,50 +760,55 @@ function HealthSection({
           emptyText="No condition or medication by that name"
         />
 
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Common knockout conditions">
-          {quick.map(code => {
-            const on = added.has(code);
-            return (
+        <div>
+          <p className={FIELD_LABEL} aria-hidden>
+            Common
+          </p>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-label="Common knockout conditions"
+          >
+            {quick.map(code => {
+              const on = added.has(code);
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    if (on) {
+                      const c = draft.conditions.find(x => x.code === code);
+                      if (c) dispatch({ type: 'removeCondition', key: c.key });
+                    } else dispatch({ type: 'addCondition', code });
+                  }}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1 rounded-[6px] px-2.5 text-[12.5px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
+                    on
+                      ? 'bg-ink text-surface'
+                      : 'bg-sunken text-ink-2 hover:bg-[#e3e7ec] hover:text-ink',
+                    FOCUS
+                  )}
+                >
+                  {on ? <Check className="-ml-0.5 h-3 w-3 shrink-0" aria-hidden /> : null}
+                  {chipLabel(code)}
+                </button>
+              );
+            })}
+            {hiddenCount > 0 || showAllQuick ? (
               <button
-                key={code}
                 type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  if (on) {
-                    const c = draft.conditions.find(x => x.code === code);
-                    if (c) dispatch({ type: 'removeCondition', key: c.key });
-                  } else dispatch({ type: 'addCondition', code });
-                }}
+                aria-expanded={showAllQuick}
+                onClick={() => setShowAllQuick(v => !v)}
                 className={cn(
-                  'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11.5px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
-                  on
-                    ? 'border-ink-2 bg-ink text-surface'
-                    : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
+                  'inline-flex h-7 items-center rounded-[6px] px-1.5 text-[12.5px] font-medium text-brand-ink hover:underline',
                   FOCUS
                 )}
               >
-                {on ? (
-                  <Check className="h-3 w-3 shrink-0" aria-hidden />
-                ) : (
-                  <Plus className="h-3 w-3 shrink-0" aria-hidden />
-                )}
-                {chipLabel(code)}
+                {showAllQuick ? 'Fewer' : `${hiddenCount} more knockout questions`}
               </button>
-            );
-          })}
-          {hiddenCount > 0 || showAllQuick ? (
-            <button
-              type="button"
-              aria-expanded={showAllQuick}
-              onClick={() => setShowAllQuick(v => !v)}
-              className={cn(
-                'inline-flex h-6 items-center rounded-full px-1.5 text-[11.5px] font-medium text-brand-ink hover:underline',
-                FOCUS
-              )}
-            >
-              {showAllQuick ? 'Fewer' : `${hiddenCount} more knockouts`}
-            </button>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
         {draft.conditions.length ? (

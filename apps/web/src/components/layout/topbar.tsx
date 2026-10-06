@@ -227,8 +227,9 @@ export function Topbar() {
             // A page with actions docked beside it gets the room back below
             // 1600px: the icon button below stands in for the box.
             '[[data-page-actions]:not(:empty)~&]:max-[1599px]:hidden',
-            // And beside a page's own tabs below 1280px, which need the room.
-            '[[data-page-nav]:not(:empty)~&]:max-[1279px]:hidden',
+            // And beside a page's own tabs below 1600px: the tabs lead the
+            // bar, and the icon (with Ctrl K) is search enough beside them.
+            '[[data-page-nav]:not(:empty)~&]:max-[1599px]:hidden',
             'w-[200px] text-left text-[13px] min-[1600px]:w-[260px] text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
           )}
@@ -242,10 +243,10 @@ export function Topbar() {
         </button>
 
         {/* Below sm the labelled button is replaced by an icon, and so it is
-            beside a page's docked actions below 1600px. */}
+            beside a page's docked actions or tabs below 1600px. */}
         <Tooltip
           content="Open command palette"
-          className="sm:hidden [[data-page-actions]:not(:empty)~&]:max-[1599px]:inline-flex [[data-page-nav]:not(:empty)~&]:max-[1279px]:inline-flex"
+          className="sm:hidden [[data-page-actions]:not(:empty)~&]:max-[1599px]:inline-flex [[data-page-nav]:not(:empty)~&]:max-[1599px]:inline-flex"
         >
           <button
             type="button"

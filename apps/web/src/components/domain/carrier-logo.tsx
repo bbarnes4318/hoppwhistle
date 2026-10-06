@@ -8,7 +8,7 @@
  * tinted surface.
  *
  * A carrier with no logo file:
- * - `md` / `lg` (the plate *is* the carrier's identity): its name set as a
+ * - `md` / `lg` / `row` (the plate *is* the carrier's identity): its name set as a
  *   wordmark, "Aetna" over "Continental Life", so a list of carriers keeps one
  *   rhythm and nothing looks like a broken image.
  * - `xs` / `sm` (inline, next to the carrier's name): nothing at all.
@@ -27,6 +27,13 @@ const SIZE = {
   sm: { box: 'h-9 w-[84px]', square: 'h-9 w-9' },
   md: { box: 'h-12 w-[128px]', square: 'h-12 w-12' },
   lg: { box: 'h-14 w-[168px]', square: 'h-14 w-14' },
+  /*
+   * The quoter's result row: the logo IS how an agent finds the carrier, so
+   * the plate is 120x50 and the mark may fill 110x40 of it. The files are
+   * already trimmed to their mark, so the plate adds only 5px of air: a wide
+   * wordmark runs the full width, a seal the full height.
+   */
+  row: { box: 'h-[50px] w-[120px]', square: 'h-[50px] w-[50px]' },
 } as const;
 
 type Size = keyof typeof SIZE;
@@ -67,11 +74,13 @@ export function CarrierLogo({
   const square = !fixedWidth && hasLogo && brand?.shape === 'square';
   const label = brand?.name ?? display;
   const [primary, secondary] = wordmarkParts(display);
+  const row = size === 'row';
 
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-control border border-rule bg-logo-plate',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden border border-rule bg-logo-plate',
+        row ? 'rounded-[6px]' : 'rounded-control',
         square ? s.square : s.box,
         className
       )}
@@ -88,8 +97,13 @@ export function CarrierLogo({
           decoding="async"
           onError={() => setFailed(true)}
           className={cn(
-            'max-h-full max-w-full object-contain',
-            brand!.shape === 'square' ? 'p-1' : inline ? 'px-1 py-0.5' : 'px-2.5 py-2'
+            row
+              ? // Fills the plate and scales up or down to it, never past 110x40.
+                'h-full w-full object-contain p-[5px]'
+              : cn(
+                  'max-h-full max-w-full object-contain',
+                  brand!.shape === 'square' ? 'p-1' : inline ? 'px-1 py-0.5' : 'px-2.5 py-2'
+                )
           )}
         />
       ) : (

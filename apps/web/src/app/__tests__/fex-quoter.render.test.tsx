@@ -400,20 +400,19 @@ describe('QuoteWorkspace', () => {
 describe('the Quote page', () => {
   const tabNames = () => screen.getAllByRole('tab').map(t => t.textContent);
 
-  it('gives an agent five tabs and no Insights or Settings', () => {
+  it('gives an agent four sections and no Insights or Settings', () => {
     auth.value = { hasFullAccess: false, isPlatformAdmin: false };
     render(<QuotePage />);
-    expect(tabNames()).toEqual(['Quote', 'History', 'Condition lookup', 'Drug lookup', 'Carriers']);
+    expect(tabNames()).toEqual(['Quote', 'History', 'Underwriting', 'Carriers']);
   });
 
-  it('gives an owner all seven', () => {
+  it('gives an owner Insights and Settings after them', () => {
     auth.value = { hasFullAccess: true, isPlatformAdmin: false };
     render(<QuotePage />);
     expect(tabNames()).toEqual([
       'Quote',
       'History',
-      'Condition lookup',
-      'Drug lookup',
+      'Underwriting',
       'Carriers',
       'Insights',
       'Settings',
@@ -424,6 +423,19 @@ describe('the Quote page', () => {
     window.history.replaceState(null, '', '/quote?tab=settings');
     render(<QuotePage />);
     expect(screen.getByRole('tab', { name: 'Quote' }).getAttribute('aria-selected')).toBe('true');
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('keeps each lookup at its own URL, under Underwriting', () => {
+    window.history.replaceState(null, '', '/quote?tab=drugs');
+    render(<QuotePage />);
+    expect(screen.getByRole('tab', { name: 'Underwriting' }).getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    const lookups = screen.getByRole('radiogroup', { name: 'Underwriting lookup' });
+    expect(
+      within(lookups).getByRole('radio', { name: 'Drug lookup' }).getAttribute('aria-checked')
+    ).toBe('true');
     window.history.replaceState(null, '', '/');
   });
 });

@@ -3,54 +3,44 @@
 /**
  * One carrier's answer -- as a row in the list, and as the selected-quote bar.
  *
- * ── What a row carries ───────────────────────────────────────────────────────
+ * ── What a closed row says ───────────────────────────────────────────────────
  *
- * Read left to right the way an agent decides, in fixed columns so a list of
- * twenty lines up: who (logo), what (plan, carrier, the benefit as one badge,
- * and any warning), what it costs -- the premium is the largest thing on the
- * line, with the face and the annual figure under it -- and "Use Quote".
- * Everything else is behind the row's toggle or the overflow menu.
+ * Four things, in the order an agent decides, and nothing that competes with
+ * them: who (the carrier's logo, large enough to know without reading), what
+ * (the plan, the carrier, and the benefit as one small badge), what it costs
+ * (the monthly premium, the face quietly under it), and "Use Quote".
  *
- * The columns come from the row's own width (a container query), not the
- * window's: the same row is a full page, a drawer over a call, a console tab
- * and History's drawer.
+ * Underwriting is said on the row only when it changes the decision: a
+ * referral, a medication whose use is not confirmed, or the answer that set
+ * the class ("COPD → Graded"). A carrier that took every answer at its best
+ * class says nothing at all -- silence is the normal case, so the rows that
+ * do speak are the ones worth reading. The reasons in full, the annual
+ * figure, the rate source, the other classes and the plan's limits are in the
+ * opened row, with copy, save and compare.
  *
- * Opened, a row explains itself: the carrier's reasons in the order they
- * apply, each with the page it is printed on; the sources those pages come
- * from; the other classes on offer; and the plan's published limits.
+ * ── Layout ───────────────────────────────────────────────────────────────────
+ *
+ * Fixed columns from the row's own width (a container query), so a list of
+ * twenty lines up wherever the row is: a full page, a drawer over a call, a
+ * console tab, History's drawer. The benefit stays under the name at every
+ * width: who and what are read as one block, then the price.
+ *
+ * The whole row opens and closes: the toggle's hit area is stretched over the
+ * row, and the compare box and Use Quote sit above it.
  */
 
-import type { QuoteLine } from '@hopwhistle/fex-engine/types';
-import {
-  AlertTriangle,
-  BookOpen,
-  Check,
-  ChevronDown,
-  Copy,
-  ExternalLink,
-  Info,
-  Layers,
-  MoreHorizontal,
-  Save,
-  ShieldCheck,
-  X,
-} from 'lucide-react';
+import type { QuoteLine, Reason } from '@hopwhistle/fex-engine/types';
+import { AlertTriangle, Check, ChevronDown, Copy, ExternalLink, Info, Save, X } from 'lucide-react';
 import * as React from 'react';
 
-import { CarrierLogo, StatusChip } from '@/components/domain';
+import { CarrierLogo } from '@/components/domain';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { MODE_SHORT, money, wholeDollars, type FexResult, type FexSelection } from '@/lib/fex/api';
 import type { OutcomeChange } from '@/lib/fex/outcome-diff';
 import { cn } from '@/lib/utils';
 
-import { benefitTone, benefitWord, dataTone, FOCUS, outcomeTone } from './parts';
+import { benefitShort, benefitTone, benefitWord, FOCUS, outcomeTone } from './parts';
 
 export interface ResultRowProps {
   result: FexResult;
@@ -68,19 +58,28 @@ export interface ResultRowProps {
   /** This row is the quote in use. */
   selected?: boolean;
   /**
-   * Marks the top of the list ("Best price", "Most coverage"): a label and the
-   * green edge. Only what the sort actually established.
+   * The top of the list ("Best price", "Most coverage"), only when the figures
+   * bear it out: the label above the name, the green edge, and the one solid
+   * Use Quote on the screen.
    */
   badge?: string;
-  /** A second, quieter label the data supports ("Best level"). */
+  /** A second label the data supports ("Best level"). */
   tag?: string;
   /** In the comparison; absent where there is no comparing (history). */
   compared?: boolean;
   onCompareToggle?: () => void;
   /** The comparison is full and this row is not in it. */
   compareFull?: boolean;
+  /** Something is being compared: every row shows its compare box. */
+  comparing?: boolean;
   /** This carrier's answer moved with the last edit. */
   change?: OutcomeChange;
+  /**
+   * What the applicant told us, when it can only be one thing (a single
+   * condition and no medication): the name a health answer is reported
+   * under ("COPD → Graded"). Otherwise the row says "Health answer".
+   */
+  healthSubject?: string | null;
 }
 
 function feeText(fee: NonNullable<FexResult['facts']>['policyFeeAnnual']): string {
@@ -99,7 +98,7 @@ function feeText(fee: NonNullable<FexResult['facts']>['policyFeeAnnual']): strin
     .join(' · ');
 }
 
-const BADGE_TONE = {
+const TAG_TONE = {
   live: 'bg-live-tint text-live-ink',
   ringing: 'bg-ringing-tint text-ringing-ink',
   dropped: 'bg-dropped-tint text-dropped-ink',
@@ -108,26 +107,55 @@ const BADGE_TONE = {
   neutral: 'bg-sunken text-ink-2',
 } as const;
 
-/**
- * The benefit as one badge -- LEVEL, GRADED, MODIFIED, GUARANTEED ISSUE --
- * with the carrier's class name after it when that says something more
- * ("LEVEL Preferred"). Green is Level and nothing else.
- */
-export function BenefitBadge({ line }: { line: QuoteLine }): JSX.Element {
-  const word = benefitWord(line.benefit);
-  const extra = line.classLabel.toLowerCase().includes(word.toLowerCase()) ? null : line.classLabel;
+/** The one kind of badge on a row: a benefit, or a decline. Small, tinted, no border. */
+function Tag({
+  tone,
+  title,
+  children,
+}: {
+  tone: keyof typeof TAG_TONE;
+  title?: string;
+  children: React.ReactNode;
+}): JSX.Element {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <span
-        className={cn(
-          'inline-flex h-5 shrink-0 items-center rounded-[4px] px-1.5 text-[10.5px] font-semibold uppercase leading-none tracking-[0.05em]',
-          BADGE_TONE[benefitTone(line.benefit)]
-        )}
-      >
-        {word}
-      </span>
+    <span
+      title={title}
+      className={cn(
+        'inline-flex h-[18px] shrink-0 items-center rounded-[4px] px-1.5 text-[10px] font-semibold uppercase leading-none tracking-[0.06em]',
+        TAG_TONE[tone]
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The benefit as one small badge -- LEVEL, GRADED, MODIFIED, ROP, GI -- with
+ * the carrier's class name after it, as plain text, when that says something
+ * more ("LEVEL  Preferred"). Green is Level and nothing else. A carrier that
+ * does not say what the benefit is gets its class name and no badge.
+ */
+export function BenefitBadge({
+  line,
+  className,
+}: {
+  line: QuoteLine;
+  className?: string;
+}): JSX.Element {
+  const word = benefitShort(line.benefit);
+  const long = benefitWord(line.benefit);
+  const extra =
+    long && line.classLabel.toLowerCase().includes(long.toLowerCase()) ? null : line.classLabel;
+  return (
+    <span className={cn('inline-flex min-w-0 items-center gap-2', className)}>
+      {word ? (
+        <Tag tone={benefitTone(line.benefit)} title={long !== word ? long : undefined}>
+          {word}
+        </Tag>
+      ) : null}
       {extra ? (
-        <span className="min-w-0 truncate text-[12px] text-ink-2" title={line.classLabel}>
+        <span className="min-w-0 truncate text-[12px] leading-4 text-ink-2" title={line.classLabel}>
           {extra}
         </span>
       ) : null}
@@ -135,17 +163,20 @@ export function BenefitBadge({ line }: { line: QuoteLine }): JSX.Element {
   );
 }
 
-/** "RATE VERIFY": the carrier's rate book is older than current, said plainly. */
-function RateFlag({ result }: { result: FexResult }): JSX.Element | null {
+/** The rate book is older than current: "RATE VERIFY", said under the price it qualifies. */
+function RateVerify({ result }: { result: FexResult }): JSX.Element {
   const facts = result.facts;
   const tone = facts?.ratesStatus.tone;
-  if (!facts || (tone !== 'warn' && tone !== 'mod')) return null;
+  if (!facts || (tone !== 'warn' && tone !== 'mod')) {
+    // The line is kept, empty: every price in the list then sits at one height.
+    return <span aria-hidden className="mt-[7px] block h-[10px]" />;
+  }
   const detail = facts.sourceDate
     ? `${facts.ratesStatus.label}. Carrier rate source dated ${facts.sourceDate}. Verify before submitting.`
     : `${facts.ratesStatus.label}. Verify the rate before submitting.`;
   return (
-    <Tooltip content={detail} side="top">
-      <span className="inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-[4px] border border-ringing px-1 text-[10.5px] font-semibold uppercase leading-none tracking-[0.05em] text-ringing-ink">
+    <Tooltip content={detail} side="top" align="end" className="relative z-[1] mt-[7px]">
+      <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-semibold uppercase leading-none tracking-[0.06em] text-ringing-ink">
         <AlertTriangle className="h-3 w-3" aria-hidden />
         Rate verify
         <span className="sr-only">: {detail}</span>
@@ -154,147 +185,120 @@ function RateFlag({ result }: { result: FexResult }): JSX.Element | null {
   );
 }
 
-function Flags({
-  result,
-  priceOnly,
-  change,
-}: {
-  result: FexResult;
-  priceOnly: boolean;
-  change?: OutcomeChange;
-}): JSX.Element {
-  return (
-    <>
-      {result.refer ? <StatusChip value="REFER" tone="ringing" size="sm" label="Refer" /> : null}
-      {priceOnly ? (
-        <StatusChip value="PRICE_ONLY" tone="neutral" size="sm" dot={false} label="Price only" />
-      ) : null}
-      <RateFlag result={result} />
-      {change ? (
-        <span
-          className={cn(
-            'whitespace-nowrap text-[11px] font-medium',
-            change.direction === 'worse'
-              ? 'text-dropped-ink'
-              : change.direction === 'better'
-                ? 'text-live-ink'
-                : 'text-ink-2'
-          )}
-        >
-          was {change.from}
-        </span>
-      ) : null}
-    </>
-  );
-}
-
 /**
- * The carrier's own first reasons, in a line or two, for a row wide enough to
- * carry them -- so "why" is read in the same glance as the price. Shown only
- * from the widest layout; every word is the engine's.
+ * The premium and what it buys. Three shapes, each said as what it is: a
+ * modal premium ("$71.64 /mo"), an annual one where the carrier publishes no
+ * monthly factor ("$1,025.50 /yr"), and a single premium paid once.
  */
-function WhyGlance({ result }: { result: FexResult }): JSX.Element {
-  let text: string | null = null;
-  if (!result.eligible)
-    text = null; // the decline reason is already on the row
-  else if (result.reasons.length)
-    text = result.reasons
-      .slice(0, 2)
-      .map(r => r.text)
-      .join(' · ');
-  else if (!result.uwLoaded) text = 'Health questions not loaded — priced only.';
-  else text = 'No health question, guide rule, medication or build limit triggered.';
+function Price({ line }: { line: QuoteLine }): JSX.Element {
+  const single = line.basis === 'SINGLE_PREMIUM_PER_1000';
+  const annualOnly = line.premium == null && line.annual != null;
+  const amount = line.premium ?? line.annual;
+  const unit = single ? 'single' : annualOnly ? '/yr' : `/${MODE_SHORT[line.mode]}`;
   return (
-    <span className="hidden min-w-0 cq-xl:block">
-      {text ? (
-        <span className="line-clamp-2 text-[12px] leading-4 text-ink-2" title={text}>
-          {text}
-        </span>
-      ) : null}
+    <span className="flex flex-col items-end text-right">
+      <span className="inline-flex items-baseline whitespace-nowrap leading-none tabular-nums">
+        {amount == null ? (
+          <span className="text-[17px] font-semibold text-ink-3">—</span>
+        ) : (
+          <>
+            <span className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+              {money(amount)}
+            </span>
+            <span className="ml-1 text-[11.5px] font-normal text-ink-3">{unit}</span>
+          </>
+        )}
+        {line.premiumNote ? (
+          <Tooltip content={line.premiumNote} side="top" align="end" className="relative z-[1]">
+            <Info className="ml-1 h-3 w-3 self-center text-ink-3" aria-label={line.premiumNote} />
+          </Tooltip>
+        ) : null}
+      </span>
+      <span className="mt-[7px] inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium leading-none tabular-nums text-ink-2">
+        {line.faceAdjusted ? (
+          <Tooltip content={line.faceAdjusted} side="top" align="end" className="relative z-[1]">
+            <Info className="h-3 w-3 text-ringing-ink" aria-label={line.faceAdjusted} />
+          </Tooltip>
+        ) : null}
+        {wholeDollars(line.face)}
+      </span>
     </span>
   );
 }
 
-/** The premium, large, with its mode, and the face and annual figure under it. */
-function Price({ line, face }: { line: QuoteLine; face: number }): JSX.Element {
-  if (line.premium == null) {
-    return (
-      <div className="text-right">
-        <p className="t-num text-base font-semibold text-ink">—</p>
-        <p className="t-meta text-ink-3">{line.premiumNote ?? 'Single premium'}</p>
-      </div>
-    );
-  }
-  const annual = line.annual;
-  return (
-    <div className="text-right">
-      <p className="whitespace-nowrap tabular-nums leading-none text-ink">
-        <span className="text-[20px] font-semibold tracking-[-0.01em] cq-md:text-[21px]">
-          {money(line.premium)}
-        </span>
-        <span className="ml-0.5 text-[11px] text-ink-3">/{MODE_SHORT[line.mode]}</span>
-      </p>
-      <p className="mt-1 inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] tabular-nums text-ink-3">
-        {line.faceAdjusted ? (
-          <Tooltip content={line.faceAdjusted} side="top" align="end">
-            <Info className="h-3 w-3 text-ringing-ink" aria-label={line.faceAdjusted} />
-          </Tooltip>
-        ) : null}
-        <span className="font-medium text-ink-2">{wholeDollars(face)}</span>
-        {annual != null && line.mode !== 'annual' ? (
-          <span className="hidden cq-sm:inline"> · {money(annual).replace(/\.\d\d$/, '')}/yr</span>
-        ) : null}
-      </p>
-    </div>
-  );
+// ─── What the row says about underwriting ────────────────────────────────────
+
+interface Note {
+  text: string;
+  tone: 'quiet' | 'warn';
 }
 
-function MoreMenu({
-  result,
-  line,
-  onUse,
-  onCopy,
-  onSave,
-}: {
-  result: FexResult;
-  line: QuoteLine;
-  onUse?: ResultRowProps['onUse'];
-  onCopy?: ResultRowProps['onCopy'];
-  onSave?: ResultRowProps['onSave'];
-}): JSX.Element | null {
-  if (!onCopy && !onSave && !onUse) return null;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8"
-          aria-label={`More for ${result.family} ${result.product}`}
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {onUse ? (
-          <DropdownMenuItem onSelect={() => onUse(result, line)}>
-            <Check className="mr-2 h-4 w-4" aria-hidden /> Use Quote
-          </DropdownMenuItem>
-        ) : null}
-        {onCopy ? (
-          <DropdownMenuItem onSelect={() => onCopy(result)}>
-            <Copy className="mr-2 h-4 w-4" aria-hidden /> Copy quote summary
-          </DropdownMenuItem>
-        ) : null}
-        {onSave ? (
-          <DropdownMenuItem onSelect={() => onSave(result)}>
-            <Save className="mr-2 h-4 w-4" aria-hidden /> Save quote
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/**
+ * The reason that set the class: the first one whose outcome is the class the
+ * best line was decided at, else the first that is not a decline (an
+ * eligible carrier may decline one of its other classes).
+ */
+function decisiveReason(result: FexResult): Reason | null {
+  const reasons = result.reasons.filter(r => r.outcome !== 'DECLINE');
+  if (!reasons.length) return null;
+  const decided = result.best?.uwClass ?? result.outcome;
+  return reasons.find(r => r.outcome === decided) ?? reasons[0];
 }
+
+/**
+ * What a reason was about, in a word or two. Only what the engine's own
+ * fields say: an Rx reason names its drug first ("Gabapentin — ..."), a build
+ * reason is the build. An application question is the applicant's condition
+ * only when there is exactly one thing it could be.
+ */
+function reasonSubject(
+  reason: Reason,
+  result: FexResult,
+  healthSubject: string | null | undefined
+): string {
+  switch (reason.kind) {
+    case 'rx': {
+      const name = reason.text.split(' — ')[0]?.trim();
+      return name && name.length <= 32 ? name : 'Medication';
+    }
+    case 'build':
+      return 'Build';
+    case 'age':
+      return 'Age';
+    default: {
+      if (healthSubject) return healthSubject;
+      const answers = result.reasons.filter(r => r.kind === 'rule' || r.kind === 'combo').length;
+      return answers > 1 ? `${answers} health answers` : 'Health answer';
+    }
+  }
+}
+
+/**
+ * The one thing about underwriting worth a closed row's space, or nothing.
+ * A referral and an unconfirmed medication come first: the agent can act on
+ * both before applying.
+ */
+function materialNote(result: FexResult, healthSubject: string | null | undefined): Note | null {
+  if (!result.eligible) return null; // a decline says its own reason
+  if (result.refer) return { text: 'Referral required', tone: 'warn' };
+  if (result.needsIndication.length) {
+    const [first, ...rest] = result.needsIndication;
+    return {
+      text: `${capitalize(first.name)} use unconfirmed${rest.length ? ` +${rest.length}` : ''}`,
+      tone: 'warn',
+    };
+  }
+  const reason = decisiveReason(result);
+  if (!reason) return null;
+  if (reason.kind === 'state' || reason.kind === 'routing')
+    return { text: reason.text, tone: 'quiet' };
+  const to = benefitWord(result.best?.benefit) || result.best?.classLabel || result.outcomeLabel;
+  return { text: `${reasonSubject(reason, result, healthSubject)} → ${to}`, tone: 'quiet' };
+}
+
+// ─── The row ─────────────────────────────────────────────────────────────────
 
 export function ResultRow({
   result,
@@ -312,26 +316,63 @@ export function ResultRow({
   compared = false,
   onCompareToggle,
   compareFull = false,
+  comparing = false,
   change,
+  healthSubject,
 }: ResultRowProps): JSX.Element {
   const best = result.best;
   const declined = !result.eligible;
   const detailId = `fex-detail-${result.productId}`;
-  const hasActions = !declined && best && (onUse || onCopy || onSave || onCompareToggle);
+  const recommended = Boolean(badge) && !declined;
+  const note = declined ? null : materialNote(result, healthSubject);
+  const canCompare = Boolean(onCompareToggle) && !declined && Boolean(best);
+  // Room for the compare box is kept on every row of a list that compares,
+  // so the logos stay in one column.
+  const compareSlot = Boolean(onCompareToggle);
 
   return (
     <li
       className={cn(
-        'cq group/row relative border-b border-rule transition-colors duration-150 ne-motion last:border-0',
-        expanded ? 'bg-sunken' : 'hover:bg-paper',
-        selected && !expanded && 'bg-live-tint hover:bg-live-tint',
-        // The top of the list: a 3px green edge, nothing louder.
-        badge && 'shadow-[inset_3px_0_0_var(--live)]'
+        'cq group/row relative border-b border-rule last:border-0',
+        recommended && !selected && 'bg-[#fbfdfc]',
+        selected && 'bg-brand-tint',
+        // The recommendation: a 3px green edge and its label, nothing louder.
+        recommended && 'shadow-[inset_3px_0_0_var(--live)]'
       )}
       data-product={result.productId}
       data-selected={selected ? '' : undefined}
+      data-recommended={recommended ? '' : undefined}
     >
-      <div className="flex items-center">
+      <div
+        className={cn(
+          'relative flex items-center transition-colors duration-150 ne-motion',
+          !selected && 'hover:bg-[#f8f9fb]',
+          compareSlot ? 'pl-3' : 'pl-4',
+          'pr-3'
+        )}
+      >
+        {compareSlot ? (
+          <span className="relative z-[1] mr-2 flex w-5 shrink-0 items-center justify-center">
+            {canCompare ? (
+              <input
+                type="checkbox"
+                checked={compared}
+                disabled={compareFull && !compared}
+                onChange={onCompareToggle}
+                aria-label={`Add ${result.family} ${result.product} to comparison`}
+                title={compareFull && !compared ? 'Compare up to 4' : 'Add to comparison (C)'}
+                className={cn(
+                  'h-4 w-4 cursor-pointer accent-[var(--brand-strong)] transition-opacity duration-150 ne-motion disabled:cursor-not-allowed',
+                  compared || comparing
+                    ? 'opacity-100'
+                    : 'opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100',
+                  FOCUS
+                )}
+              />
+            ) : null}
+          </span>
+        ) : null}
+
         <button
           type="button"
           aria-expanded={expanded}
@@ -339,70 +380,82 @@ export function ResultRow({
           onClick={onToggle}
           data-row-toggle=""
           className={cn(
-            'grid min-w-0 flex-1 items-center gap-x-3 py-2 pl-3 pr-2 text-left',
-            'grid-cols-[minmax(0,1fr)_auto] cq-md:grid-cols-[120px_minmax(0,1fr)_128px]',
-            // A very wide row spends its room on the reason, not on a gap.
-            'cq-xl:grid-cols-[120px_minmax(240px,1fr)_minmax(0,1.1fr)_128px]',
-            declined ? 'min-h-[52px]' : 'min-h-[64px]',
-            FOCUS,
-            'focus-visible:ring-inset focus-visible:ring-offset-0'
+            // The toggle's hit area covers the whole row (the chevron and the
+            // gaps included); the compare box and Use Quote sit above it.
+            'grid min-w-0 flex-1 cursor-pointer items-center gap-x-4 py-3 text-left',
+            "after:absolute after:inset-0 after:content-['']",
+            'focus-visible:outline-none focus-visible:after:shadow-[inset_0_0_0_2px_var(--brand-ink)]',
+            'grid-cols-[minmax(0,1fr)_auto]',
+            'cq-sm:grid-cols-[88px_minmax(0,1fr)_auto]',
+            'cq-md:grid-cols-[120px_minmax(0,1fr)_128px]'
           )}
         >
           <CarrierLogo
             names={[result.family, result.productId]}
-            size="md"
+            size="row"
             className={cn(
-              'hidden h-11 w-[120px] cq-md:inline-flex',
+              'hidden h-10 w-[88px] cq-sm:inline-flex cq-md:h-[50px] cq-md:w-[120px]',
               declined && 'opacity-50 grayscale'
             )}
           />
+
           <span className="min-w-0">
-            <span className="flex min-w-0 items-center gap-2">
-              {badge ? (
-                <span className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-live-ink">
-                  <ShieldCheck className="h-3 w-3" aria-hidden />
-                  {badge}
+            <span className="block min-w-0">
+              {badge || tag ? (
+                <span className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase leading-[14px] tracking-[0.08em]">
+                  {badge ? <span className="text-live-ink">{badge}</span> : null}
+                  {badge && tag ? (
+                    <span aria-hidden className="text-ink-3">
+                      ·
+                    </span>
+                  ) : null}
+                  {tag ? (
+                    <span className={badge ? 'text-live-ink' : 'text-ink-2'}>{tag}</span>
+                  ) : null}
                 </span>
               ) : null}
-              {tag ? (
-                <span className="shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">
-                  {tag}
-                </span>
-              ) : null}
+              <span
+                className={cn(
+                  'block truncate text-[15px] font-semibold leading-5',
+                  declined ? 'text-ink-2' : 'text-ink'
+                )}
+                title={result.product}
+              >
+                {result.product}
+              </span>
+              <span className="block truncate text-[12px] leading-4 text-ink-2">
+                {result.family}
+              </span>
             </span>
-            <span
-              className={cn(
-                'block truncate text-[14.5px] font-semibold leading-5',
-                declined ? 'text-ink-2' : 'text-ink'
-              )}
-              title={result.product}
-            >
-              {result.product}
-            </span>
-            <span className="block truncate text-[12px] leading-4 text-ink-2">{result.family}</span>
-            <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+
+            <span className="mt-1.5 flex min-w-0 items-center gap-2">
               {declined ? (
                 <>
-                  <span className="inline-flex h-5 shrink-0 items-center rounded-[4px] bg-dropped-tint px-1.5 text-[10.5px] font-semibold uppercase leading-none tracking-[0.05em] text-dropped-ink">
-                    {result.outcome === 'DECLINE' ? 'Decline' : 'Not available'}
-                  </span>
+                  <Tag tone={result.outcome === 'DECLINE' ? 'dropped' : 'neutral'}>
+                    {result.outcome === 'DECLINE' ? 'Declined' : 'Not available'}
+                  </Tag>
                   {result.ineligibleReason ? (
-                    <span className="min-w-0 text-[12px] leading-4 text-ink-2">
+                    <span
+                      className="min-w-0 truncate text-[12px] leading-4 text-ink-2"
+                      title={result.ineligibleReason}
+                    >
                       {result.ineligibleReason}
                     </span>
                   ) : null}
                 </>
               ) : best ? (
-                <BenefitBadge line={best} />
+                <>
+                  <BenefitBadge line={best} className="max-w-full" />
+                  <StatusNote note={note} priceOnly={priceOnly} change={change} />
+                </>
               ) : null}
-              <Flags result={result} priceOnly={priceOnly} change={change} />
             </span>
           </span>
 
-          <WhyGlance result={result} />
           {!declined && best ? (
-            <span className="block min-w-[104px]">
-              <Price line={best} face={best.face} />
+            <span className="flex flex-col items-end self-center">
+              <Price line={best} />
+              <RateVerify result={result} />
             </span>
           ) : (
             <span aria-hidden />
@@ -410,82 +463,114 @@ export function ResultRow({
           <span className="sr-only">{expanded ? 'Hide details' : 'Show details'}</span>
         </button>
 
-        {hasActions && best ? (
-          <div className="flex shrink-0 items-center gap-1 pr-2">
-            {onCompareToggle ? (
-              <label
-                className={cn(
-                  'hidden h-8 w-8 cursor-pointer items-center justify-center rounded-control hover:bg-sunken cq-sm:flex',
-                  compareFull && !compared && 'cursor-not-allowed opacity-40'
-                )}
-                title={compareFull && !compared ? 'Compare up to 4' : 'Compare (C)'}
-              >
-                <input
-                  type="checkbox"
-                  checked={compared}
-                  disabled={compareFull && !compared}
-                  onChange={onCompareToggle}
-                  aria-label={`Compare ${result.family} ${result.product}`}
-                  className={cn('h-4 w-4 cursor-pointer accent-[var(--brand-strong)]', FOCUS)}
-                />
-              </label>
-            ) : null}
-            {onUse ? (
-              <Button
-                size="sm"
-                disabled={busy}
-                variant={selected ? 'outline' : 'default'}
-                onClick={() => onUse(result, best)}
-                className={cn(
-                  'hidden h-8 w-[100px] px-2 text-[13px] cq-sm:inline-flex',
-                  selected && 'border-live text-live-ink hover:bg-live-tint hover:text-live-ink'
-                )}
-              >
-                {busy ? (
-                  'Saving…'
-                ) : selected ? (
-                  <>
-                    <Check className="mr-1 h-3.5 w-3.5" aria-hidden />
-                    Selected
-                  </>
-                ) : (
-                  'Use Quote'
-                )}
-              </Button>
-            ) : null}
-            <MoreMenu result={result} line={best} onUse={onUse} onCopy={onCopy} onSave={onSave} />
+        {onUse && !declined && best ? (
+          <div className="relative z-[1] ml-4 hidden shrink-0 cq-sm:block">
+            <Button
+              size="sm"
+              disabled={busy}
+              variant={recommended && !selected ? 'default' : 'outline'}
+              onClick={() => onUse(result, best)}
+              className={cn(
+                'h-[34px] w-[96px] px-2 text-[13px] font-semibold',
+                selected
+                  ? 'border-live text-live-ink shadow-none hover:bg-live-tint hover:text-live-ink'
+                  : !recommended &&
+                      'border-rule bg-surface text-brand-ink shadow-none hover:border-brand-ink hover:bg-brand-tint hover:text-brand-ink'
+              )}
+            >
+              {busy ? (
+                'Saving…'
+              ) : selected ? (
+                <>
+                  <Check className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Selected
+                </>
+              ) : (
+                'Use Quote'
+              )}
+            </Button>
           </div>
         ) : null}
         <ChevronDown
           aria-hidden
           className={cn(
-            'mr-2 hidden h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none cq-sm:block',
+            'ml-3 h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none',
             expanded && 'rotate-180'
           )}
         />
       </div>
 
       {expanded ? (
-        <ResultDetail id={detailId} result={result} onUse={onUse} busy={busy} isStaff={isStaff} />
+        <ResultDetail
+          id={detailId}
+          result={result}
+          onUse={onUse}
+          onCopy={onCopy}
+          onSave={onSave}
+          busy={busy}
+          isStaff={isStaff}
+          selected={selected}
+          compared={compared}
+          onCompareToggle={canCompare ? onCompareToggle : undefined}
+          compareFull={compareFull}
+          indent={compareSlot ? 'compare' : 'plain'}
+        />
       ) : null}
     </li>
   );
 }
 
-function DetailHeading({
-  icon: Icon,
-  children,
+/**
+ * After the benefit: the one underwriting fact worth the space, then "Price
+ * only" and what the last edit changed. Nothing when there is nothing to say.
+ */
+function StatusNote({
+  note,
+  priceOnly,
+  change,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}): JSX.Element {
+  note: Note | null;
+  priceOnly: boolean;
+  change?: OutcomeChange;
+}): JSX.Element | null {
+  if (!note && !priceOnly && !change) return null;
   return (
-    <h4 className="t-label mb-1.5 flex items-center gap-1.5 text-ink-2">
-      <Icon className="h-3.5 w-3.5" aria-hidden />
-      {children}
-    </h4>
+    <span className="flex min-w-0 max-w-full items-center gap-2 text-[12px] leading-4">
+      <span aria-hidden className="text-ink-3">
+        ·
+      </span>
+      {note ? (
+        <span
+          className={cn(
+            'inline-flex min-w-0 items-center gap-1',
+            note.tone === 'warn' ? 'font-medium text-ringing-ink' : 'text-ink-2'
+          )}
+          title={note.text}
+        >
+          {note.tone === 'warn' ? <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden /> : null}
+          <span className="truncate">{note.text}</span>
+        </span>
+      ) : null}
+      {priceOnly ? <span className="shrink-0 text-ink-3">Price only</span> : null}
+      {change ? (
+        <span
+          className={cn(
+            'shrink-0 whitespace-nowrap font-medium',
+            change.direction === 'worse'
+              ? 'text-dropped-ink'
+              : change.direction === 'better'
+                ? 'text-live-ink'
+                : 'text-ink-2'
+          )}
+        >
+          was {change.from}
+        </span>
+      ) : null}
+    </span>
   );
 }
+
+// ─── The opened row ──────────────────────────────────────────────────────────
 
 const SOURCE_NAME: Record<string, string> = {
   application: 'Application',
@@ -516,210 +601,333 @@ function sourcesOf(result: FexResult) {
   return sources;
 }
 
+function DetailHeading({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <h4 className="mb-2 text-[10.5px] font-semibold uppercase leading-4 tracking-[0.08em] text-ink-3">
+      {children}
+    </h4>
+  );
+}
+
+const OUTCOME_INK = {
+  live: 'text-live-ink',
+  ringing: 'text-ringing-ink',
+  dropped: 'text-dropped-ink',
+  blocked: 'text-blocked-ink',
+  money: 'text-money-ink',
+  neutral: 'text-ink-2',
+} as const;
+
 function ResultDetail({
   id,
   result,
   onUse,
+  onCopy,
+  onSave,
   busy,
   isStaff,
+  selected,
+  compared,
+  onCompareToggle,
+  compareFull,
+  indent,
 }: {
   id: string;
   result: FexResult;
   onUse?: ResultRowProps['onUse'];
+  onCopy?: ResultRowProps['onCopy'];
+  onSave?: ResultRowProps['onSave'];
   busy: boolean;
   isStaff: boolean;
+  selected: boolean;
+  compared: boolean;
+  onCompareToggle?: () => void;
+  compareFull: boolean;
+  /** Line the detail up under the name: past the compare box, or not. */
+  indent: 'compare' | 'plain';
 }): JSX.Element {
   const facts = result.facts;
+  const best = result.best;
   const sources = sourcesOf(result);
+  const rateWarn = facts?.ratesStatus.tone === 'warn' || facts?.ratesStatus.tone === 'mod';
+  const hasActions =
+    Boolean(best) && result.eligible && (onUse || onCopy || onSave || onCompareToggle);
+
   return (
     <div
       id={id}
-      className="grid gap-x-6 gap-y-4 border-t border-rule px-3 pb-4 pt-3 animate-in fade-in-0 duration-150 motion-reduce:animate-none cq-md:grid-cols-2 cq-md:pl-[144px]"
+      className={cn(
+        'border-t border-rule bg-[#f9fafb] px-4 pb-5 pt-4 animate-in fade-in-0 duration-150 motion-reduce:animate-none',
+        indent === 'compare' ? 'cq-md:pl-[176px]' : 'cq-md:pl-[152px]'
+      )}
     >
-      <section aria-label="Why this result" className="min-w-0">
-        <DetailHeading icon={ShieldCheck}>Why this result</DetailHeading>
-        {!result.uwLoaded ? (
-          <p className="mb-2 rounded-control bg-surface px-2.5 py-1.5 text-[13px] text-ink-2">
-            This carrier&apos;s health questions are not loaded yet; the best class is shown for
-            price only.
-          </p>
-        ) : null}
-        {result.reasons.length ? (
-          <ol className="space-y-1.5">
-            {result.reasons.map((reason, i) => {
-              const tone = outcomeTone(reason.outcome);
-              return (
-                <li key={i} className="flex items-start gap-2 text-[13px] leading-5 text-ink">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full',
-                      reason.outcome === 'DECLINE'
-                        ? 'bg-dropped text-surface'
-                        : tone === 'ringing'
-                          ? 'bg-ringing text-surface'
-                          : 'bg-live text-surface'
-                    )}
-                  >
-                    {reason.outcome === 'DECLINE' ? (
-                      <X className="h-2.5 w-2.5" strokeWidth={3} />
-                    ) : (
-                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    {reason.text}
-                    <span className="ml-1.5 inline-flex flex-wrap items-center gap-1.5 align-middle">
-                      <StatusChip
-                        value={reason.outcome}
-                        tone={tone}
-                        size="sm"
-                        dot={false}
-                        label={
-                          reason.outcome === 'DECLINE'
+      {hasActions && best ? (
+        <div className="-ml-2 mb-4 flex flex-wrap items-center gap-1">
+          {onUse ? (
+            // The row's own Use Quote is hidden below 560px; here it is always.
+            <Button
+              size="sm"
+              disabled={busy}
+              variant={selected ? 'outline' : 'default'}
+              onClick={() => onUse(result, best)}
+              className="ml-2 mr-1 h-8 cq-sm:hidden"
+            >
+              {selected ? 'Selected' : 'Use Quote'}
+            </Button>
+          ) : null}
+          {onCopy ? (
+            <DetailAction icon={Copy} onClick={() => onCopy(result)}>
+              Copy summary
+            </DetailAction>
+          ) : null}
+          {onSave ? (
+            <DetailAction icon={Save} onClick={() => onSave(result)}>
+              Save quote
+            </DetailAction>
+          ) : null}
+          {onCompareToggle ? (
+            <label
+              className={cn(
+                'inline-flex h-8 cursor-pointer items-center gap-2 rounded-control px-2 text-[12.5px] font-medium text-ink-2 hover:bg-sunken hover:text-ink',
+                compareFull && !compared && 'cursor-not-allowed opacity-50'
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={compared}
+                disabled={compareFull && !compared}
+                onChange={onCompareToggle}
+                className={cn('h-3.5 w-3.5 cursor-pointer accent-[var(--brand-strong)]', FOCUS)}
+              />
+              {compareFull && !compared ? 'Compare (4 max)' : 'Compare'}
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid gap-x-10 gap-y-6 cq-md:grid-cols-2 cq-xl:grid-cols-3">
+        <section aria-label="Why this result" className="min-w-0">
+          <DetailHeading>Why this result</DetailHeading>
+          {!result.uwLoaded ? (
+            <p className="mb-2 text-[13px] leading-5 text-ink-2">
+              This carrier&apos;s health questions are not loaded yet; the best class is shown for
+              price only.
+            </p>
+          ) : null}
+          {result.reasons.length ? (
+            <ol className="space-y-2">
+              {result.reasons.map((reason, i) => {
+                const tone = outcomeTone(reason.outcome);
+                return (
+                  <li key={i} className="flex items-start gap-2 text-[13px] leading-5 text-ink">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-surface',
+                        reason.outcome === 'DECLINE'
+                          ? 'bg-dropped'
+                          : tone === 'ringing'
+                            ? 'bg-ringing'
+                            : 'bg-live'
+                      )}
+                    >
+                      {reason.outcome === 'DECLINE' ? (
+                        <X className="h-2.5 w-2.5" strokeWidth={3} />
+                      ) : (
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      {reason.text}
+                      <span className="ml-1.5 inline-flex flex-wrap items-baseline gap-1.5 whitespace-nowrap align-baseline">
+                        <span
+                          className={cn(
+                            'text-[10.5px] font-semibold uppercase tracking-[0.06em]',
+                            OUTCOME_INK[tone]
+                          )}
+                        >
+                          {reason.outcome === 'DECLINE'
                             ? 'Decline'
                             : reason.outcome === 'REFER'
                               ? 'Refer'
-                              : undefined
-                        }
-                      />
-                      {reason.page != null ? (
-                        reason.url ? (
-                          <a
-                            href={reason.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              't-meta inline-flex items-center gap-0.5 text-brand-ink hover:underline',
-                              FOCUS
-                            )}
-                          >
-                            p. {reason.page}
-                            <ExternalLink className="h-3 w-3" aria-hidden />
-                            <span className="sr-only"> (opens the carrier document)</span>
-                          </a>
-                        ) : (
-                          <span className="t-meta text-ink-3">p. {reason.page}</span>
-                        )
+                              : reason.outcome.replace(/_/g, ' ')}
+                        </span>
+                        {reason.page != null ? (
+                          reason.url ? (
+                            <a
+                              href={reason.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                'inline-flex items-center gap-0.5 text-[12px] text-brand-ink hover:underline',
+                                FOCUS
+                              )}
+                            >
+                              p. {reason.page}
+                              <ExternalLink className="h-3 w-3" aria-hidden />
+                              <span className="sr-only"> (opens the carrier document)</span>
+                            </a>
+                          ) : (
+                            <span className="text-[12px] text-ink-3">p. {reason.page}</span>
+                          )
+                        ) : null}
+                      </span>
+                      {isStaff && reason.note ? (
+                        <span className="mt-0.5 block text-[12px] text-ink-3">
+                          Source note: {reason.note}
+                        </span>
                       ) : null}
                     </span>
-                    {isStaff && reason.note ? (
-                      <span className="t-meta mt-0.5 block text-ink-3">
-                        Source note: {reason.note}
-                      </span>
-                    ) : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        ) : result.eligible && result.uwLoaded ? (
-          <p className="flex items-start gap-2 text-[13px] text-ink">
-            <Check className="mt-0.5 h-4 w-4 shrink-0 text-live-ink" aria-hidden />
-            No health question, guide rule, medication or build limit triggered — best class.
-          </p>
-        ) : null}
-        {result.assumptions.length ? (
-          <div className="mt-2.5">
-            <h5 className="t-label mb-1 text-ink-3">Assumed</h5>
-            <ul className="list-disc space-y-0.5 pl-4 text-[13px] text-ink-2">
-              {result.assumptions.map(a => (
-                <li key={a}>{a}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {sources.length ? (
-          <div className="mt-3">
-            <DetailHeading icon={BookOpen}>Underwriting sources</DetailHeading>
-            <ul className="space-y-0.5 text-[12.5px]">
-              {sources.map(source => (
-                <li
-                  key={`${source.name}-${source.ref}-${source.page}`}
-                  className="flex items-baseline gap-2"
-                >
-                  <span className="text-ink">
-                    {source.name}
-                    {source.ref ? <span className="text-ink-2"> · {source.ref}</span> : null}
-                  </span>
-                  {source.page ? (
-                    source.url ? (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={cn('tabular-nums text-brand-ink hover:underline', FOCUS)}
-                      >
-                        Page {source.page}
-                      </a>
-                    ) : (
-                      <span className="tabular-nums text-ink-3">Page {source.page}</span>
-                    )
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
-
-      <div className="min-w-0 space-y-4">
-        <section aria-label="Other options">
-          <DetailHeading icon={Layers}>Other available options</DetailHeading>
-          {result.others.length ? (
-            <table className="w-full text-[13px]">
-              <thead className="sr-only">
-                <tr>
-                  <th>Class</th>
-                  <th>Face</th>
-                  <th>Premium</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.others.map(line => (
-                  <tr
-                    key={`${line.classCode}-${line.payPeriod ?? ''}`}
-                    className="border-b border-rule last:border-0"
-                  >
-                    <td className="py-1.5 pr-2">
-                      <BenefitBadge line={line} />
-                    </td>
-                    <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-ink-2">
-                      {wholeDollars(line.face)}
-                    </td>
-                    <td className="whitespace-nowrap py-1.5 pr-2 text-right font-semibold tabular-nums text-ink">
-                      {line.premium == null ? '—' : money(line.premium)}
-                      <span className="text-[11px] font-normal text-ink-3">
-                        /{MODE_SHORT[line.mode]}
-                      </span>
-                    </td>
-                    <td className="py-1.5 text-right">
-                      {onUse ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2.5 text-[12px]"
-                          disabled={busy}
-                          onClick={() => onUse(result, line)}
-                        >
-                          Use
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : result.eligible && result.uwLoaded ? (
+            <p className="flex items-start gap-2 text-[13px] leading-5 text-ink-2">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-live-ink" aria-hidden />
+              No health question, guide rule, medication or build limit triggered — best class.
+            </p>
+          ) : null}
+          {result.assumptions.length ? (
+            <div className="mt-3">
+              <h5 className="mb-1 text-[12px] font-medium text-ink-2">Assumed</h5>
+              <ul className="list-disc space-y-0.5 pl-4 text-[12.5px] leading-5 text-ink-2">
+                {result.assumptions.map(a => (
+                  <li key={a}>{a}</li>
                 ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="text-[13px] text-ink-2">No other class for this applicant.</p>
-          )}
+              </ul>
+            </div>
+          ) : null}
+          {sources.length ? (
+            <div className="mt-4">
+              <DetailHeading>Underwriting sources</DetailHeading>
+              <ul className="space-y-1 text-[12.5px] leading-5">
+                {sources.map(source => (
+                  <li
+                    key={`${source.name}-${source.ref}-${source.page}`}
+                    className="flex items-baseline gap-2"
+                  >
+                    <span className="text-ink">
+                      {source.name}
+                      {source.ref ? <span className="text-ink-2"> · {source.ref}</span> : null}
+                    </span>
+                    {source.page ? (
+                      source.url ? (
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn('tabular-nums text-brand-ink hover:underline', FOCUS)}
+                        >
+                          Page {source.page}
+                        </a>
+                      ) : (
+                        <span className="tabular-nums text-ink-3">Page {source.page}</span>
+                      )
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
 
-        <section aria-label="Plan facts">
-          <DetailHeading icon={BookOpen}>Plan facts</DetailHeading>
+        <section aria-label="Pricing" className="min-w-0">
+          <DetailHeading>Pricing</DetailHeading>
+          {best ? (
+            <dl className="grid gap-y-1.5 text-[12.5px] leading-5">
+              <Fact label="Premium">
+                <span className="font-semibold tabular-nums">
+                  {best.premium != null ? money(best.premium) : '—'}
+                </span>
+                <span className="text-ink-2"> {best.modeLabel.toLowerCase()}</span>
+                {best.premiumNote ? (
+                  <span className="block text-[12px] text-ink-3">{best.premiumNote}</span>
+                ) : null}
+              </Fact>
+              <Fact label="Annual">
+                <span className="tabular-nums">
+                  {best.annual != null ? money(best.annual) : '—'}
+                </span>
+              </Fact>
+              <Fact label="Face">
+                <span className="tabular-nums">{wholeDollars(best.face)}</span>
+                {best.faceAdjusted ? (
+                  <span className="block text-[12px] text-ringing-ink">{best.faceAdjusted}</span>
+                ) : null}
+              </Fact>
+              {facts ? (
+                <Fact label="Rate source">
+                  <span className={cn(rateWarn ? 'font-medium text-ringing-ink' : 'text-ink')}>
+                    {facts.ratesStatus.label}
+                  </span>
+                  {facts.sourceDate ? (
+                    <span className="tabular-nums text-ink-3"> · {facts.sourceDate}</span>
+                  ) : null}
+                </Fact>
+              ) : null}
+            </dl>
+          ) : (
+            <p className="text-[13px] text-ink-2">Not priced for this applicant.</p>
+          )}
+
+          <div className="mt-4">
+            <DetailHeading>Other classes</DetailHeading>
+            {result.others.length ? (
+              <table className="w-full text-[12.5px]">
+                <thead className="sr-only">
+                  <tr>
+                    <th>Class</th>
+                    <th>Face</th>
+                    <th>Premium</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.others.map(line => (
+                    <tr
+                      key={`${line.classCode}-${line.payPeriod ?? ''}`}
+                      className="border-b border-rule last:border-0"
+                    >
+                      <td className="max-w-0 py-1.5 pr-2">
+                        <BenefitBadge line={line} className="max-w-full" />
+                      </td>
+                      <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">
+                        {wholeDollars(line.face)}
+                      </td>
+                      <td className="whitespace-nowrap py-1.5 pr-2 text-right font-semibold tabular-nums text-ink">
+                        {line.premium == null ? '—' : money(line.premium)}
+                        <span className="text-[11px] font-normal text-ink-3">
+                          /{MODE_SHORT[line.mode]}
+                        </span>
+                      </td>
+                      <td className="w-px py-1.5 text-right">
+                        {onUse ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-[12px] text-brand-ink shadow-none hover:bg-brand-tint hover:text-brand-ink"
+                            disabled={busy}
+                            onClick={() => onUse(result, line)}
+                          >
+                            Use
+                          </Button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-[12.5px] text-ink-2">No other class for this applicant.</p>
+            )}
+          </div>
+        </section>
+
+        <section aria-label="Plan facts" className="min-w-0 cq-md:col-span-2 cq-xl:col-span-1">
+          <DetailHeading>Published limits</DetailHeading>
           {facts ? (
-            <dl className="grid gap-y-1 text-[12.5px]">
+            <dl className="grid gap-y-1.5 text-[12.5px] leading-5">
               <Fact label="Issue ages">{facts.issueAges.join('; ')}</Fact>
               <Fact label="Face limits">
                 {facts.faceLimits
@@ -733,17 +941,6 @@ function ResultDetail({
                   : 'Not published'}
               </Fact>
               <Fact label="Age basis">{facts.ageBasis}</Fact>
-              <Fact label="Rates">
-                <StatusChip
-                  value="RATES"
-                  tone={dataTone(facts.ratesStatus.tone)}
-                  size="sm"
-                  label={facts.ratesStatus.label}
-                />
-                {facts.sourceDate ? (
-                  <span className="t-meta ml-1.5 text-ink-3">{facts.sourceDate}</span>
-                ) : null}
-              </Fact>
               {facts.stateUnavailable.length ? (
                 <Fact label="Not sold in">{facts.stateUnavailable.join(', ')}</Fact>
               ) : null}
@@ -752,9 +949,9 @@ function ResultDetail({
             <p className="text-[13px] text-ink-2">Not published.</p>
           )}
           {facts?.alerts.length ? (
-            <div className="mt-2">
-              <h5 className="t-label mb-1 text-ink-3">Carrier notes</h5>
-              <ul className="list-disc space-y-0.5 pl-4 text-[12.5px] text-ink-2">
+            <div className="mt-4">
+              <DetailHeading>Carrier notes</DetailHeading>
+              <ul className="list-disc space-y-1 pl-4 text-[12.5px] leading-5 text-ink-2">
                 {facts.alerts.map(a => (
                   <li key={a}>{a}</li>
                 ))}
@@ -762,8 +959,8 @@ function ResultDetail({
             </div>
           ) : null}
           {isStaff && facts?.staff ? (
-            <details className="mt-2 rounded-control border border-rule p-2">
-              <summary className={cn('t-label cursor-pointer text-ink-2', FOCUS)}>
+            <details className="mt-3 rounded-control border border-rule bg-surface p-2">
+              <summary className={cn('cursor-pointer text-[12px] font-medium text-ink-2', FOCUS)}>
                 Source notes
               </summary>
               <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-ink-2">
@@ -786,9 +983,33 @@ function ResultDetail({
   );
 }
 
+function DetailAction({
+  icon: Icon,
+  onClick,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium text-ink-2 transition-colors duration-150 ne-motion hover:bg-sunken hover:text-ink',
+        FOCUS
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden />
+      {children}
+    </button>
+  );
+}
+
 function Fact({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="grid grid-cols-[100px_1fr] gap-2">
+    <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-3">
       <dt className="text-ink-3">{label}</dt>
       <dd className="min-w-0 break-words text-ink">{children}</dd>
     </div>
@@ -813,11 +1034,11 @@ export function SelectedQuoteBar({
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-live bg-surface px-3 py-2 shadow-raised"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-rule bg-surface py-2 pl-3 pr-2 shadow-[inset_3px_0_0_var(--live),var(--shadow-raised)]"
     >
       <CarrierLogo names={[selection.carrier, selection.productId]} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-live-ink">
+        <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-live-ink">
           <Check className="h-3 w-3" aria-hidden />
           Selected
         </p>
