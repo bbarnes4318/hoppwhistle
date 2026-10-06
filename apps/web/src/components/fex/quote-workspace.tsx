@@ -956,7 +956,7 @@ export function QuoteWorkspace({
               setEditing(false);
               requestAnimationFrame(() => {
                 resultsRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
-                resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                resultsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
               });
             }}
             onReset={() => {
