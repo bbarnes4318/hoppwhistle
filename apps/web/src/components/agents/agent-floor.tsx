@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Loader2, Play, Users } from 'lucide-react';
+import { ExternalLink, Headphones, Loader2, Play, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -16,8 +16,10 @@ import {
 import { isZeroFigure } from '@/components/domain/figures';
 import type { StatusTone } from '@/components/domain/status-chip';
 import { PageHeader } from '@/components/layout/page-header';
+import { useOptionalPhone } from '@/components/phone/phone-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/hooks/use-auth';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { AGENT_LIVE_STATUS_LABEL, agentLiveStatus } from '@/lib/agent-status';
@@ -203,6 +205,7 @@ export function AgentFloor(): JSX.Element {
   const [openId, setOpenId] = useState<string | null>(null);
   const platform = usePlatformContext();
   const now = useNow();
+  const listenIn = useListenIn();
 
   const load = useCallback(async () => {
     const response = await apiClient.get<Envelope<Floor>>('/api/v1/agent-roster/floor');
@@ -282,6 +285,7 @@ export function AgentFloor(): JSX.Element {
       <PageHeader description="Who is ready, who is on a call, and how each agent's day is going." />
 
       {error ? <Notice tone="error" title={error} /> : null}
+      {listenIn.error ? <Notice tone="error" title={listenIn.error} /> : null}
 
       {floor && agents.length === 0 ? (
         <EmptyState
@@ -316,6 +320,7 @@ export function AgentFloor(): JSX.Element {
                 secondsInStatus={secondsInStatus(agent)}
                 callSeconds={agent.currentCall ? agent.currentCall.seconds + drift : null}
                 onOpen={() => setOpenId(agent.id)}
+                listen={listenIn.available ? listenIn : null}
               />
             ))}
           </div>
@@ -332,6 +337,54 @@ export function AgentFloor(): JSX.Element {
   );
 }
 
+/* ── Listening in ─────────────────────────────────────────────────────────── */
+
+interface ListenIn {
+  /**
+   * Whether this viewer can listen in from here: they supervise the floor
+   * (OWNER, ADMIN or MANAGER) and their own softphone is registered, since the
+   * listen rings it.
+   */
+  available: boolean;
+  /** The agent a listen is being started for, while the request is out. */
+  startingFor: string | null;
+  /** Whether this browser's phone is on a listen right now. */
+  listening: boolean;
+  error: string | null;
+  start: (agent: FloorAgent) => void;
+}
+
+/**
+ * Listen in on an agent's live call, listen-only.
+ *
+ * The API rings this browser's own softphone with a leg that hears the agent
+ * and the customer; the softphone answers it by itself with the microphone off
+ * (`isMonitor` in phone-provider). Hanging up the phone ends the listen and
+ * leaves the call alone.
+ */
+function useListenIn(): ListenIn {
+  const { isFloorSupervisor } = useAuth();
+  const phone = useOptionalPhone();
+  const [startingFor, setStartingFor] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const listening = phone?.currentCall?.isMonitor === true;
+  const available = isFloorSupervisor && phone?.phoneStatus === 'registered';
+
+  const start = useCallback((agent: FloorAgent) => {
+    setError(null);
+    setStartingFor(agent.id);
+    void apiClient
+      .post<Envelope<{ legUuid: string }>>(`/api/v1/call-monitor/agents/${agent.id}/listen`, {})
+      .then(response => {
+        if (response.error) setError(response.error.message);
+      })
+      .finally(() => setStartingFor(null));
+  }, []);
+
+  return { available, startingFor, listening, error, start };
+}
+
 /* ── A card ───────────────────────────────────────────────────────────────── */
 
 function AgentCard({
@@ -339,19 +392,33 @@ function AgentCard({
   secondsInStatus,
   callSeconds,
   onOpen,
+  listen,
 }: {
   agent: FloorAgent;
   secondsInStatus: number | null;
   callSeconds: number | null;
   onOpen: () => void;
+  /** Null when this viewer cannot listen in from here. */
+  listen: ListenIn | null;
 }): JSX.Element {
   const status = floorStatusOf(agent);
   const call = agent.currentCall;
+  const busy = listen?.startingFor === agent.id;
 
   return (
-    <button
-      type="button"
+    // A div acting as the button, so the card can hold a real Listen button:
+    // a <button> may not contain another.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={event => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       data-agent-card={agent.id}
       data-floor-status={status}
       className={cn(
@@ -401,6 +468,33 @@ function AgentCard({
           ) : (
             'On a call'
           )}
+          {listen ? (
+            <div className="mt-2 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-listen-agent={agent.id}
+                disabled={busy || listen.listening || listen.startingFor !== null}
+                title={
+                  listen.listening
+                    ? 'Hang up your current listen first'
+                    : 'Hear this call on your softphone. Listen-only: nobody hears you.'
+                }
+                onClick={event => {
+                  event.stopPropagation();
+                  listen.start(agent);
+                }}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Headphones className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Listen
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -410,7 +504,7 @@ function AgentCard({
         <CardFigure label="Apps" value={count(agent.today.applications)} />
         <CardFigure label="Close" value={pct(agent.today.closingPct, 0)} />
       </dl>
-    </button>
+    </div>
   );
 }
 

@@ -32,7 +32,15 @@ import { useAuth } from './use-auth';
  * Kept in step with `RoleName` in apps/api/prisma/schema.prisma. AGENT's
  * absence here was not cosmetic: it is the role the call centre exists for.
  */
-export type RoleName = 'OWNER' | 'ADMIN' | 'AGENT' | 'ANALYST' | 'PUBLISHER' | 'BUYER' | 'READONLY';
+export type RoleName =
+  | 'OWNER'
+  | 'ADMIN'
+  | 'AGENT'
+  | 'MANAGER'
+  | 'ANALYST'
+  | 'PUBLISHER'
+  | 'BUYER'
+  | 'READONLY';
 
 interface UserProfile {
   id: string;

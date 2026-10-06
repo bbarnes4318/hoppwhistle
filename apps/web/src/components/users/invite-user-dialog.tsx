@@ -65,6 +65,11 @@ const AVAILABLE_ROLES = [
   { value: 'ADMIN', label: 'Admin', description: 'Full system access' },
   { value: 'ANALYST', label: 'Analyst', description: 'View-only access to reports' },
   { value: 'AGENT', label: 'Agent', description: 'Call center agent access' },
+  {
+    value: 'MANAGER',
+    label: 'Manager',
+    description: "Supervises the live floor and can listen in on agents' calls",
+  },
   { value: 'BUYER', label: 'Buyer (External)', description: 'External buyer portal access' },
   {
     value: 'PUBLISHER',

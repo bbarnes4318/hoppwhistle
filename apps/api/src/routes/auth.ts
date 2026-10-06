@@ -88,7 +88,7 @@ interface UserRole {
  * The roles an agency OWNER or ADMIN may invite into their own agency. OWNER is
  * deliberately absent; see the activation-grants route.
  */
-const INVITABLE_ROLES = ['AGENT', 'ADMIN', 'ANALYST', 'BUYER', 'PUBLISHER'] as const;
+const INVITABLE_ROLES = ['AGENT', 'MANAGER', 'ADMIN', 'ANALYST', 'BUYER', 'PUBLISHER'] as const;
 type InvitableRole = (typeof INVITABLE_ROLES)[number];
 
 /**
@@ -657,7 +657,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
 
       /*
-       * Who an agency may invite: its own staff (AGENT, ADMIN, ANALYST) and the
+       * Who an agency may invite: its own staff (AGENT, MANAGER, ADMIN, ANALYST) and the
        * portal logins of its own buyers and publishers. This is the ONE way an
        * agency adds a person; the old temporary-password route
        * (`POST /api/v1/users/invite`) is gone.

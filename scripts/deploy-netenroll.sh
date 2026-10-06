@@ -135,6 +135,8 @@ REQUIRED_MIGRATIONS="
 20261012000000_fex_quote_engine
 20261013000000_shared_routing_groups
 20261014000000_shared_routing_agent_members
+20261015000000_manager_role_value
+20261015000001_manager_role_row
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -417,6 +419,16 @@ migration_applied() {
               JOIN pg_type ty ON ty.oid = e.enumtypid
               WHERE ty.typname = 'BillingNotificationKind'
                 AND e.enumlabel = 'SETTLEMENT_PAYABLE_EXTERNALLY'), false)" ;;
+    *_manager_role_value)
+      # The MANAGER member of RoleName, alone: the roles row that uses it is
+      # the next migration, for the same reason as MELIO below.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type t ON t.oid = e.enumtypid
+              WHERE t.typname = 'RoleName'
+                AND e.enumlabel = 'MANAGER'), false)" ;;
+    *_manager_role_row)
+      # The roles row an invitation attaches to a new manager.
+      echo "SELECT EXISTS (SELECT 1 FROM roles WHERE name = 'MANAGER')" ;;
     *_payment_provider_melio_value)
       # One statement, one effect. It is its own migration because PostgreSQL
       # refuses to USE a new enum value in the transaction that added it, and

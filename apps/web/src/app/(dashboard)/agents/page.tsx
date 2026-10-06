@@ -11,7 +11,7 @@ import { TeamMembersView } from '@/components/users/team-members-view';
  * publisher logins are issued from Buyers and Publishers, on the buyer's or
  * publisher's own Portal access.
  */
-const ROSTER_INVITE_ROLES = ['AGENT', 'ADMIN', 'ANALYST'] as const;
+const ROSTER_INVITE_ROLES = ['AGENT', 'MANAGER', 'ADMIN', 'ANALYST'] as const;
 
 /**
  * Agents: how the floor is doing, and who can take a call.

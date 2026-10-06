@@ -432,6 +432,107 @@ export class FreeSwitchService {
     return { conferenceName };
   }
 
+  // ============================================================================
+  // Supervisor listen-in
+  // ============================================================================
+
+  /**
+   * The answered call an agent's softphone is on right now, as the UUID of
+   * their own leg, or null when they are on none.
+   *
+   * Found on the switch rather than through the `calls` table, because an
+   * inbound call has no row until its CDR lands after hangup -- the one moment
+   * nobody wants to listen to it. The match is the agent busy check in
+   * `inbound_route.lua` (`agent_channel_count`), which is what decides the same
+   * question when routing.
+   */
+  async findAgentLiveLeg(extension: string): Promise<string | null> {
+    const [channels, registrations] = await Promise.all([
+      this.listChannels(),
+      this.listRegistrations(),
+    ]);
+    return pickAgentLiveLeg(channels, extension, registrations);
+  }
+
+  /**
+   * Ring `listenerExtension` and, when it answers, let it hear `targetUuid`'s
+   * call: both the agent and the customer, listen-only.
+   *
+   * `eavesdrop_enable_dtmf=false` is what makes it listen-only. Left on, the
+   * listener could press 2 or 3 to whisper to the agent or barge in on the
+   * customer -- a different feature with different consent questions, and not
+   * the one asked for.
+   *
+   * The leg carries `X-Hopwhistle-Monitor`, which the web softphone reads to
+   * auto-answer it, mute the microphone, and keep it out of screen pop and
+   * disposition: it is not a call the manager took.
+   *
+   * Returns the new leg's UUID. `bgapi` so the API does not hold a request open
+   * while a phone rings; the caller has already established that the listener
+   * is registered and the target is live.
+   */
+  async startListenIn(options: {
+    listenerExtension: string;
+    targetUuid: string;
+    agentExtension: string;
+    agentName: string;
+  }): Promise<string> {
+    const { listenerExtension, targetUuid, agentExtension, agentName } = options;
+    if (!SAFE_TOKEN.test(listenerExtension) || !SAFE_TOKEN.test(agentExtension)) {
+      throw new Error('Refusing to originate to an extension that is not a plain token');
+    }
+    if (!UUID_PATTERN.test(targetUuid)) {
+      throw new Error('Refusing to eavesdrop on a channel id that is not a UUID');
+    }
+
+    const registrations = await this.listRegistrations();
+    const domain = registrations.find(r => r.extension === listenerExtension)?.domain;
+    if (!domain) throw new ListenInError('LISTENER_NOT_REGISTERED');
+
+    let dialString = '';
+    try {
+      dialString = await this.executeApi(
+        'sofia_contact',
+        `internal/${listenerExtension}@${domain}`
+      );
+    } catch {
+      dialString = '';
+    }
+    if (!dialString || dialString.startsWith('error')) {
+      dialString = `user/${listenerExtension}@${domain}`;
+    }
+
+    const legUuid = (await this.executeApi('create_uuid', '')).trim();
+    if (!UUID_PATTERN.test(legUuid)) throw new Error('FreeSWITCH did not return a UUID');
+
+    const vars = [
+      `origination_uuid=${legUuid}`,
+      `origination_caller_id_name='${displayName(`Listening: ${agentName}`)}'`,
+      `origination_caller_id_number=${agentExtension}`,
+      `sip_h_X-Hopwhistle-Monitor=${targetUuid}`,
+      'eavesdrop_enable_dtmf=false',
+      'originate_timeout=30',
+      "absolute_codec_string='PCMU,PCMA'",
+    ].join(',');
+
+    await this.executeApi('bgapi', `originate {${vars}}${dialString} &eavesdrop(${targetUuid})`);
+    return legUuid;
+  }
+
+  /** Every registration on the internal profile: extension, domain and contact. */
+  private async listRegistrations(): Promise<SipRegistration[]> {
+    try {
+      const body = await this.executeApi('sofia', `status profile ${INTERNAL_PROFILE} reg`);
+      return parseRegistrations(body);
+    } catch (err) {
+      logger.warn({
+        msg: 'Listen-in: could not read the registration table',
+        error: (err as Error).message,
+      });
+      return [];
+    }
+  }
+
   private async listChannels(): Promise<FsChannel[]> {
     const jsonOutput = await this.executeApi('show', 'channels as json');
     try {
@@ -472,7 +573,122 @@ const CONFERENCE_PROFILE = 'hopwhistle-3way';
 const MERGE_JOIN_TIMEOUT_MS = 5000;
 const MERGE_POLL_INTERVAL_MS = 150;
 
-type FsChannel = Record<string, string | undefined>;
+export type FsChannel = Record<string, string | undefined>;
+
+/** The sofia profile softphones register to. */
+const INTERNAL_PROFILE = process.env.FREESWITCH_INTERNAL_PROFILE || 'internal';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SAFE_TOKEN = /^[A-Za-z0-9_.-]+$/;
+
+/** Channel states a hanging-up leg passes through; mirrors CHANNEL_TEARDOWN_STATES. */
+const TEARDOWN_STATES = new Set(['CS_HANGUP', 'CS_REPORTING', 'CS_DESTROY']);
+
+/**
+ * A caller-ID display name safe to put inside single quotes in an originate
+ * string: no quotes, braces, commas or anything else FreeSWITCH would parse.
+ */
+function displayName(value: string): string {
+  return (
+    value
+      .replace(/[^A-Za-z0-9 .:_-]/g, '')
+      .slice(0, 60)
+      .trim() || 'Listening'
+  );
+}
+
+export interface SipRegistration {
+  extension: string;
+  domain: string | null;
+  /** `user@host[:port]` from the Contact URI, as it appears in channel names. */
+  contactUserHost: string | null;
+}
+
+/**
+ * The registrations in a `sofia status profile <p> reg` dump, one per block.
+ * Each block opens with `Call-ID:`; `User:` names the extension and domain and
+ * `Contact:` the URI FreeSWITCH dials, whose `user@host` is what an outbound
+ * leg to that softphone is named after.
+ */
+export function parseRegistrations(body: string): SipRegistration[] {
+  const out: SipRegistration[] = [];
+  let current: SipRegistration | null = null;
+
+  for (const line of body.split('\n')) {
+    if (/^\s*Call-ID:/.test(line)) {
+      if (current?.extension) out.push(current);
+      current = { extension: '', domain: null, contactUserHost: null };
+      continue;
+    }
+    if (!current) continue;
+    const user = /^\s*User:\s*(\S+)/.exec(line);
+    if (user) {
+      const [ext, domain] = user[1].split('@');
+      current.extension = ext.trim();
+      current.domain = domain?.trim() || null;
+      continue;
+    }
+    const contact = /^\s*Contact:.*?sips?:([^;>\s]+)/.exec(line);
+    if (contact) current.contactUserHost = contact[1];
+  }
+  if (current?.extension) out.push(current);
+  return out;
+}
+
+/**
+ * The agent's own leg of the call they are on, from `show channels` rows.
+ *
+ * A channel is the agent's when it is named for their extension
+ * (`sofia/internal/1001@...`), named for one of their registered contacts (the
+ * leg FreeSWITCH originated to a WebRTC softphone carries the contact's random
+ * user part, not the extension), or is an inbound leg from the softphone whose
+ * caller-ID number is the extension. The same three tests as
+ * `agent_channel_count` in inbound_route.lua.
+ *
+ * Only an answered call counts -- ACTIVE first, then HELD -- and of those the
+ * newest, so an agent on two calls is listened to on the one they are talking
+ * on.
+ */
+export function pickAgentLiveLeg(
+  channels: FsChannel[],
+  extension: string,
+  registrations: SipRegistration[]
+): string | null {
+  const contactPrefixes = registrations
+    .filter(r => r.extension === extension && r.contactUserHost)
+    .map(r => `sofia/internal/${r.contactUserHost}`);
+  const extPrefix = `sofia/internal/${extension}@`;
+
+  const mine = channels.filter(c => {
+    if (!c.uuid || TEARDOWN_STATES.has(c.state ?? '')) return false;
+    if (c.callstate !== 'ACTIVE' && c.callstate !== 'HELD') return false;
+    // A leg that is itself somebody listening in is not a call to listen to.
+    if ((c.application ?? '') === 'eavesdrop') return false;
+    const name = c.name ?? '';
+    if (name.startsWith(extPrefix)) return true;
+    if (contactPrefixes.some(prefix => name.startsWith(prefix))) return true;
+    return (
+      name.startsWith('sofia/internal/') && c.direction === 'inbound' && c.cid_num === extension
+    );
+  });
+
+  mine.sort((a, b) => {
+    const rank = (c: FsChannel) => (c.callstate === 'ACTIVE' ? 0 : 1);
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    return Number(b.created_epoch ?? 0) - Number(a.created_epoch ?? 0);
+  });
+
+  return mine[0]?.uuid ?? null;
+}
+
+export type ListenInErrorCode = 'LISTENER_NOT_REGISTERED';
+
+export class ListenInError extends Error {
+  constructor(readonly code: ListenInErrorCode) {
+    super(code);
+    this.name = 'ListenInError';
+  }
+}
 
 export type MergeCallsErrorCode =
   | 'BAD_REQUEST'

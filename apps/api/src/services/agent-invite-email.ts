@@ -64,7 +64,14 @@ export interface AgentInvitation {
 }
 
 /** Every role an activation grant can be issued for. */
-export type InvitedRole = 'AGENT' | 'OWNER' | 'ADMIN' | 'ANALYST' | 'BUYER' | 'PUBLISHER';
+export type InvitedRole =
+  | 'AGENT'
+  | 'MANAGER'
+  | 'OWNER'
+  | 'ADMIN'
+  | 'ANALYST'
+  | 'BUYER'
+  | 'PUBLISHER';
 
 export interface InviteEmailResult {
   /** True only when a transport accepted the message. */
@@ -305,6 +312,24 @@ is missing for each of them.`;
         opening,
         nextStepText: 'Set a password when you open the link, and you can sign in from then on.',
         nextStepHtml: 'Set a password when you open the link, and you can sign in from then on.',
+      };
+    }
+    case 'MANAGER': {
+      const opening = agencyName
+        ? `You have been added as a manager for ${joining}.`
+        : 'You have been added as an agency manager.';
+      const next = `Once you are in, open Agents to see your floor live. To listen in on a
+call, keep this tab open (the phone in the bottom-right corner signs itself in)
+and press Listen beside the agent.`;
+      return {
+        subject: agencyName
+          ? `You have been added to ${agencyName} on ${product}`
+          : `Your ${product} manager invitation`,
+        title: agencyName ? `You have been added to ${agencyName}` : `Your ${product} invitation`,
+        opening,
+        nextStepText: next,
+        nextStepHtml:
+          'Once you are in, open <strong>Agents</strong> to see your floor live. To listen in on a call, keep this tab open (the phone in the bottom-right corner signs itself in) and press <strong>Listen</strong> beside the agent.',
       };
     }
     case 'AGENT':

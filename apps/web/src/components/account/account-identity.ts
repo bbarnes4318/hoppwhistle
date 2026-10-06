@@ -9,6 +9,7 @@ const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Owner',
   ADMIN: 'Administrator',
   AGENT: 'Agent',
+  MANAGER: 'Manager',
   BUYER: 'Buyer',
   PUBLISHER: 'Publisher',
   ANALYST: 'Analyst',
@@ -17,7 +18,16 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 /** The order roles are listed in: the most senior first. */
-const ROLE_ORDER = ['OWNER', 'ADMIN', 'AGENT', 'PUBLISHER', 'BUYER', 'ANALYST', 'SUPPORT'];
+const ROLE_ORDER = [
+  'OWNER',
+  'ADMIN',
+  'MANAGER',
+  'AGENT',
+  'PUBLISHER',
+  'BUYER',
+  'ANALYST',
+  'SUPPORT',
+];
 
 export function roleLabel(role: string): string {
   const key = role.toUpperCase();

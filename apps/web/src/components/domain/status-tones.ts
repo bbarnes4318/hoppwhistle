@@ -142,6 +142,7 @@ export const DEFAULT_TONE: Record<string, StatusTone> = {
   PUBLISHER: 'neutral',
   BUYER: 'neutral',
   AGENT: 'neutral',
+  MANAGER: 'neutral',
   READONLY: 'neutral',
   // transport + routing
   SIP: 'neutral',

@@ -792,6 +792,47 @@ export function agentNav(
   })).filter(group => group.items.length > 0);
 }
 
+/**
+ * Supervision: the live floor, where a manager watches every agent and listens
+ * in on a call in progress (`/monitor`, from `GET /api/v1/agent-roster/floor`
+ * and `POST /api/v1/call-monitor/agents/:id/listen`).
+ */
+export const SUPERVISION_GROUP: NavGroup = {
+  label: 'Supervision',
+  items: [
+    {
+      name: 'Live floor',
+      href: '/monitor',
+      icon: Headphones,
+      title: 'Every agent live, and listen in on a call in progress',
+    },
+  ],
+};
+
+/**
+ * An agency MANAGER: supervises the floor, administers nobody. The floor and
+ * their own account -- nothing about money, routing, campaigns or people
+ * management, which stay with the agency's OWNER and ADMINs.
+ */
+export const MANAGER_NAV: NavGroup[] = [
+  SUPERVISION_GROUP,
+  {
+    label: 'Account',
+    items: [{ name: 'Account', href: '/account', icon: UserCog, title: 'Your login and password' }],
+  },
+];
+
+/**
+ * A MANAGER's navigation. One who also takes calls keeps everything an agent
+ * has, with Supervision on top.
+ */
+export function managerNav(
+  options: { isAgent?: boolean; upgrades?: readonly string[]; whiteLabel?: boolean } = {}
+): NavGroup[] {
+  if (!options.isAgent) return MANAGER_NAV;
+  return [SUPERVISION_GROUP, ...agentNav(options.upgrades, { whiteLabel: options.whiteLabel })];
+}
+
 /** Every item a person can actually open: not pending, not locked. */
 /**
  * The B2B Sales CRM group: a white-label issuer's own pipeline and agreement
@@ -854,6 +895,8 @@ export interface NavViewer {
   isPublisherOnly: boolean;
   isBuyerOnly: boolean;
   isAgentOnly: boolean;
+  /** An agency MANAGER who is not its OWNER or ADMIN. See `managerNav`. */
+  isManagerOnly?: boolean;
   isReadonlyOnly: boolean;
   canViewRecordings: boolean;
   /** The upgrades turned on for this agency. See `whiteLabelOwnerNav` and `agentNav`. */
@@ -994,6 +1037,13 @@ function baseNavFor(viewer: NavViewer): NavGroup[] {
   }
   if (viewer.isPublisherOnly) return publisherNav(viewer.canViewRecordings);
   if (viewer.isBuyerOnly) return buyerNav(viewer.canViewRecordings);
+  if (viewer.isManagerOnly) {
+    return managerNav({
+      isAgent: viewer.isAgentOnly,
+      upgrades: viewer.upgrades,
+      whiteLabel: viewer.isWhiteLabelAgent,
+    });
+  }
   if (viewer.isAgentOnly) {
     return agentNav(viewer.upgrades, { whiteLabel: viewer.isWhiteLabelAgent });
   }
