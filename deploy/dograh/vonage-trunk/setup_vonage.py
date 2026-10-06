@@ -228,7 +228,8 @@ def main() -> int:
     if public_ip:
         values["VONAGE_NUMBER_ROUTING_MODE"] = "sip"
         values["VONAGE_SIP_URI"] = f"sip:{public_ip}:5080"
-    backup = f"{ENV_FILE}.bak.{time.strftime('%Y%m%d%H%M%S')}"
+    # Outside the checkout: a stray file there makes the deploy refuse a dirty tree.
+    backup = f"/root/hopwhistle.env.bak.{time.strftime('%Y%m%d%H%M%S')}"
     shutil.copy2(ENV_FILE, backup)
     with open(ENV_FILE, "w", encoding="utf-8") as handle:
         handle.write(update_env(current, values))
