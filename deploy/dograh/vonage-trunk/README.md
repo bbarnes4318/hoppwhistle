@@ -1,137 +1,77 @@
-# Dograh AI outbound calls over Vonage
+# Dograh AI outbound calls over Vonage, beside FracTEL
 
 Dograh places AI calls from its own Asterisk (`dograh-asterisk`) through ARI. They
 never pass through Hopwhistle's FreeSWITCH, so switching Vonage on for the
 **Dograh AI Auto Dialer** waterfall in Settings → Carrier Routing does **not**
-move them. (That waterfall serves the FreeSWITCH `vapi` profile on 5070, which
-the host firewall closes.) Dograh calls change carrier only when Asterisk dials a
-different trunk. This kit adds that trunk:
+move them. This kit sends a call over Vonage when its caller ID is one of your
+Vonage numbers. Every other call goes out exactly as before:
 
 ```
-Dograh ─ARI─► dograh-asterisk ─PJSIP/1XXXXXXXXXX@vonage─► sip.nexmo.com ─► PSTN
+caller ID is a Vonage number → PJSIP/1XXXXXXXXXX@vonage → sip.nexmo.com
+any other caller ID          → unchanged (ARI_PJSIP_DEFAULT_TRUNK, e.g. fractel)
 ```
 
-| Piece | What it does |
-| --- | --- |
-| `install_vonage_trunk.py` | Adds a `vonage` PJSIP trunk to `dograh-asterisk`. It uses the SIP server and credentials from the FreeSWITCH container (`VONAGE_SIP_*`, written by `scripts/vonage-setup.ps1`). |
-| `../ari-trunk` (V3) | `DOGRAH_ARI_TRUNK=vonage` sends Dograh's outbound calls to that trunk. `DOGRAH_ARI_DIAL_FORMAT=nanp11` dials `1XXXXXXXXXX`, because Vonage refuses a `+`. |
-| `../anveo-trunk/set_caller_id_pool.py` | Leaves only your Vonage numbers active as Dograh caller IDs. Vonage rejects any caller ID that isn't on the account. |
-| `scripts/install-persistent-sip-firewall.sh` | Lets Vonage reach FreeSWITCH on 5080 (inbound DIDs) and Asterisk on 5062 (the callee's BYE). |
+Each Dograh campaign uses one telephony configuration, and each configuration
+has its own caller-ID pool. A separate **Vonage** configuration holds only the
+Vonage numbers. A campaign on it dials over Vonage, while campaigns on the
+FracTEL configuration keep their numbers and carrier, at the same time.
 
 ## One command
 
-On the server as root (the Hetzner Cloud web console works, no SSH key needed):
+On the server as root:
 
 ```bash
-cd /opt/hopwhistle && git pull && python3 deploy/dograh/vonage-trunk/setup_vonage.py
+cd /opt/hopwhistle && git pull origin main && python3 deploy/dograh/vonage-trunk/setup_vonage.py
 ```
 
-`setup_vonage.py` asks for the Vonage API key and secret, checks them against
-Vonage, and runs every step below. It stops, with Dograh untouched, if the test
-call fails. It installs the ARI provider patch itself when it isn't mounted yet.
-The caller IDs and the carrier then switch together, on one confirmation. If
-Dograh doesn't come back up on Vonage, both are rolled back automatically. The rest of this
-page is the same thing step by step.
+It asks for the Vonage API key and secret, then:
 
-## Before you start
+1. Checks the key and secret against Vonage and lists the account's US numbers.
+2. Writes the `VONAGE_*` settings into `/opt/hopwhistle/.env`. The backup goes in `/root`.
+3. Adds the `vonage` trunk to Dograh's Asterisk and lets Vonage through the firewall.
+4. Places a test call to your phone. Answer it and you hear yourself echoed back.
+5. Prepares Dograh without touching running campaigns:
+   - patches its ARI provider with `../ari-trunk/apply_caller_trunk_patch.py` and mounts it;
+   - sets `DOGRAH_ARI_CALLER_TRUNKS` in the compose override;
+   - creates the **Vonage** telephony configuration as a copy of the FracTEL one, holding only the Vonage numbers.
+6. Restarts the Dograh API (after asking). This drops AI calls in progress, so pause campaigns first. If Dograh doesn't come back with the routing in place, the override is put back and it restarts again.
+7. Moves the campaign you pick onto the Vonage configuration, with same-state caller ID off for it.
 
-- **Vonage settings on the host.** Run `scripts/vonage-setup.ps1` from your PC,
-  or put the `VONAGE_*` lines in `/opt/hopwhistle/.env` and redeploy FreeSWITCH.
-  `docker exec hopwhistle-freeswitch-dev printenv | grep VONAGE_SIP_` should list
-  them.
-- **Outbound auth at Vonage.** Use one of these:
-  - authorise this host's public IP for SIP in the Vonage dashboard; or
-  - set both `VONAGE_SIP_USERNAME` (API key) and `VONAGE_SIP_PASSWORD` (API
-    secret). The setup script's default option does this.
-- **Vonage numbers for caller ID.** You need at least one number you own on the
-  Vonage account. Dograh's state-matched caller ID can only pick from these, so
-  the more states they cover, the better.
+It's safe to run again, for example after you buy more Vonage numbers. It picks
+them up and updates the routing.
 
-## Run it (on the server, as root)
+Each AI call holds one caller ID until it hangs up. A Vonage campaign therefore
+runs at most as many calls at once as you have Vonage numbers.
 
-```bash
-cd /opt/hopwhistle && git pull
-```
+## Pieces
 
-**1. Trunk and one test call to your own cell.** Nothing in Dograh changes yet.
-
-```bash
-python3 deploy/dograh/vonage-trunk/install_vonage_trunk.py            # dry run: shows server and auth mode
-python3 deploy/dograh/vonage-trunk/install_vonage_trunk.py --apply
-python3 deploy/dograh/vonage-trunk/install_vonage_trunk.py --test-call YOURCELL --caller-id YOUR_VONAGE_NUMBER
-sudo bash scripts/install-persistent-sip-firewall.sh
-```
-
-Your phone should ring from the Vonage number; answer and speak, and you should hear
-yourself echoed back. If it
-doesn't, run:
-`docker logs --since 2m dograh-asterisk 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]'`.
-
-- `401`/`407` that keeps repeating means bad credentials.
-- `403` means the IP isn't authorised or the caller ID isn't on the account.
-- `404`/`484` means a number-format problem.
-
-**2. Caller IDs.** Find the ARI telephony configuration your campaigns use, then
-make your Vonage numbers its only active caller IDs. Start with a dry run.
-`--restore` reverses it.
-
-```bash
-docker cp deploy/dograh/anveo-trunk/set_caller_id_pool.py dograh-api-1:/tmp/
-docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --list-configs
-docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --tcid 1 \
-  --pool-tag vonage --label "Vonage CID" --backup /tmp/vonage-pool-backup.json \
-  --numbers +1XXXXXXXXXX +1XXXXXXXXXX
-# add --apply, then keep the backup:
-docker cp dograh-api-1:/tmp/vonage-pool-backup.json /root/vonage-pool-backup.json
-```
-
-Add `--campaign-id N` only if you also want that campaign slowed down. It drops
-to 1 call/s and 3 concurrent calls, and same-state caller ID is turned off. Do
-that when you have only a few Vonage numbers.
-
-**3. Point Dograh at Vonage.** Patch the ARI provider as described in
-`deploy/dograh/ari-trunk/README.md`. If it's already patched, re-run the patcher
-on the staged file and it upgrades to V3 in place. Then, under every Dograh API
-service in `/opt/dograh/docker-compose.override.yaml`:
-
-```yaml
-    environment:
-      DOGRAH_ARI_TRUNK: vonage
-      DOGRAH_ARI_DIAL_FORMAT: nanp11
-      DOGRAH_ARI_TRANSFER_TRUNK: fractel   # transfers stay off Vonage
-      # remove DOGRAH_ARI_DIAL_PREFIX if it is set (Anveo only)
-```
-
-```bash
-cd /opt/dograh && docker compose config >/dev/null && docker compose up -d --no-deps api
-docker exec dograh-api-1 grep -c HOPWHISTLE_ARI_DIAL_FORMAT_V3 /app/api/services/telephony/providers/ari/provider.py   # 1
-```
-
-Restart outside dialing hours if you can (see the restart caveat in
-`deploy/dograh/README.md`). Run one campaign call and watch it:
-`docker logs -f dograh-asterisk 2>&1 | grep -i vonage`.
-
-If transfers already use direct transfer (`Local/...@hopwhistle-transfer`),
-they are dialled as written and `DOGRAH_ARI_TRANSFER_TRUNK` doesn't matter.
+| File | Role |
+| --- | --- |
+| `setup_vonage.py` | The one command above. |
+| `install_vonage_trunk.py` | The `vonage` PJSIP trunk, test call (`--test-call`), `--status`, `--rollback`. |
+| `vonage_config.py` | Runs in `dograh-api-1`. Creates the Vonage configuration, moves numbers, and assigns or restores a campaign. |
+| `../ari-trunk/apply_caller_trunk_patch.py` | Per-call trunk from the caller ID (`DOGRAH_ARI_CALLER_TRUNKS`). |
+| `../anveo-trunk/set_caller_id_pool.py` | Loads the Vonage numbers into the Vonage configuration. |
 
 ## Rollback
 
 ```bash
-# Dograh back to FracTEL: set DOGRAH_ARI_TRUNK: fractel, remove DOGRAH_ARI_DIAL_FORMAT, then
+# A campaign back to FracTEL (its previous configuration and settings):
+docker exec dograh-api-1 python /tmp/vonage_config.py restore --backup /tmp/vonage-campaign-backup.json
+# Caller-ID routing off: remove DOGRAH_ARI_CALLER_TRUNKS (and the provider.py mount) from
+# /opt/dograh/docker-compose.override.yaml, then
 cd /opt/dograh && docker compose up -d --no-deps api
-# caller IDs back
-docker cp /root/vonage-pool-backup.json dograh-api-1:/tmp/vonage-pool-backup.json
-docker exec dograh-api-1 python /tmp/set_caller_id_pool.py --restore /tmp/vonage-pool-backup.json --apply
-# remove the trunk (optional)
-python3 deploy/dograh/vonage-trunk/install_vonage_trunk.py --rollback --apply
+# Remove the trunk (optional)
+python3 /opt/hopwhistle/deploy/dograh/vonage-trunk/install_vonage_trunk.py --rollback --apply
 ```
 
 ## Tested
 
-`deploy/dograh/tests/test_vonage_trunk.py` covers config generation, the
-both-or-neither credential rule, redaction and the test-call dial string.
-`deploy/dograh/tests/test_ari_trunk_patch.py` covers `DOGRAH_ARI_DIAL_FORMAT`.
-It applies only to outbound US numbers and never to transfers. A prefix takes
-precedence over it, and a V2 file is upgraded in place. None of this has been
-run against the live Asterisk or Vonage yet, which is why each step starts with
-a dry run or a test call.
+- `deploy/dograh/tests/test_caller_trunk_patch.py` runs the patch against a stand-in of the deployed `provider.py`. It checks that:
+  - Vonage callers go to `@vonage` as `1XXXXXXXXXX`;
+  - other callers and transfers are unchanged;
+  - a malformed setting changes nothing;
+  - the patch refuses other Dograh releases.
+- `deploy/dograh/tests/test_vonage_setup.py` covers the override edit (map and list styles, reruns, valid YAML) and the configuration copy.
+- `deploy/dograh/tests/test_vonage_trunk.py` covers the trunk.
+- The trunk and the echo test call have been confirmed on production. The caller-ID routing has not been run on production yet.
