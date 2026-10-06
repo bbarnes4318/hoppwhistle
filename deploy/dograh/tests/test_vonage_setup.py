@@ -79,6 +79,15 @@ def test_set_ari_env_list_style_keeps_existing_transfer_trunk_and_comments():
     assert "  # DOGRAH_ARI_TRUNK: fractel" in out
 
 
+def test_set_ari_env_turns_state_matching_off():
+    text = ("services:\n  api:\n    environment:\n      DOGRAH_ARI_TRUNK: fractel\n"
+            "      DOGRAH_STATE_CID_POLICY: strict\n")
+    out, n = set_ari_env(text)
+    assert n == 1 and "      DOGRAH_STATE_CID_POLICY: \"off\"\n" in out and "strict" not in out
+    listed, _ = set_ari_env("    environment:\n      - DOGRAH_ARI_TRUNK=x\n      - DOGRAH_STATE_CID_POLICY=prefer\n")
+    assert "      - DOGRAH_STATE_CID_POLICY=off\n" in listed
+
+
 def test_set_ari_env_without_trunk_changes_nothing():
     text = "services:\n  api:\n    image: x\n"
     assert set_ari_env(text) == (text, 0)
