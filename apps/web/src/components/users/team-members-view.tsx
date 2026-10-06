@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Loader2,
   MapPin,
+  Headphones,
   PhoneCall,
   Plus,
   RefreshCw,
@@ -130,6 +131,20 @@ interface User {
  */
 function isLicenseGated(user: User): boolean {
   return user.roles.some(role => role.toUpperCase() === 'AGENT');
+}
+
+/** An agency manager: supervises the live floor and listens in on calls. */
+function isManagerRole(user: User): boolean {
+  return user.roles.some(role => role.toUpperCase() === 'MANAGER');
+}
+
+/**
+ * Agency staff an owner may make a manager: not an owner or administrator
+ * (who already supervise), and not a buyer's or publisher's portal login.
+ */
+function canBeManager(user: User): boolean {
+  if (isPrincipalRole(user) || user.buyerId) return false;
+  return !user.roles.some(role => ['BUYER', 'PUBLISHER'].includes(role.toUpperCase()));
 }
 
 /** An owner or administrator, who may also take calls or stop taking them. */
@@ -401,6 +416,21 @@ export function TeamMembersView({
     setSavingId(user.id);
     try {
       const response = await apiClient.put(`/api/v1/users/${user.id}/takes-calls`, { takesCalls });
+      if (response.error) setError(response.error.message);
+      await load();
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  /*
+   * Manager: give an agent (or other staff) the MANAGER role, keeping theirs,
+   * so they get the Live floor and can listen in on calls. Or take it away.
+   */
+  async function setManager(user: User, manager: boolean): Promise<void> {
+    setSavingId(user.id);
+    try {
+      const response = await apiClient.put(`/api/v1/users/${user.id}/manager`, { manager });
       if (response.error) setError(response.error.message);
       await load();
     } finally {
@@ -732,6 +762,23 @@ export function TeamMembersView({
                               {isLicenseGated(user) ? 'Stop taking calls' : 'Takes calls'}
                             </Button>
                           ) : null}
+                          {hasFullAccess && canBeManager(user) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              data-manager-toggle={user.id}
+                              onClick={() => void setManager(user, !isManagerRole(user))}
+                              title={
+                                isManagerRole(user)
+                                  ? 'Take away manager access (they keep their other roles)'
+                                  : 'Make this person a manager: the Live floor, and listening in on agents\u2019 calls'
+                              }
+                            >
+                              <Headphones className="h-3.5 w-3.5" />
+                              {isManagerRole(user) ? 'Remove manager' : 'Make manager'}
+                            </Button>
+                          ) : null}
                           {isLicenseGated(user) ? (
                             <Button
                               variant="ghost"
@@ -747,7 +794,8 @@ export function TeamMembersView({
                               <MapPin className="h-3.5 w-3.5" />
                               License
                             </Button>
-                          ) : hasFullAccess && isPrincipalRole(user) ? null : (
+                          ) : hasFullAccess &&
+                            (isPrincipalRole(user) || canBeManager(user)) ? null : (
                             <span className="text-sm text-ink-3">—</span>
                           )}
                         </div>

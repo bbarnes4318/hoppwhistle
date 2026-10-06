@@ -6616,6 +6616,118 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  /*
+   * "Manager": give an existing user of this agency the MANAGER role, or take
+   * it away again -- the switch on Team Members, so an owner can promote an
+   * agent without re-inviting them.
+   *
+   * A manager supervises the live floor and listens in on agents' calls
+   * (routes/call-monitor.ts). Adding MANAGER keeps every role the person had:
+   * an agent who becomes a manager still takes calls until "Stop taking calls"
+   * or their availability switch says otherwise.
+   *
+   * Same limits as takes-calls: administrators and owners only, inside their
+   * own agency; never a buyer or publisher login; never removing somebody's
+   * only role.
+   */
+  fastify.put<{ Params: { userId: string }; Body: { manager?: unknown } }>(
+    '/api/v1/users/:userId/manager',
+    async (request, reply) => {
+      const tenantId = getActingTenantId(request);
+      if (!tenantId) return sendTenantRefusal(request, reply);
+
+      const manager = request.body?.manager;
+      if (typeof manager !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'manager must be true or false' },
+        });
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const editorProfile = await getUserProfile(request, prisma);
+      if (!editorProfile.isAdminOrOwner) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only an administrator or owner can change who is a manager',
+          },
+        });
+      }
+
+      const { userId } = request.params;
+      const target = await prisma.user.findFirst({
+        where: { id: userId, tenantId },
+        select: {
+          id: true,
+          buyerId: true,
+          publisherId: true,
+          roles: { select: { roleId: true, role: { select: { name: true } } } },
+        },
+      });
+      if (!target) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+
+      const roleNames = target.roles.map(r => r.role.name as string);
+      const isManager = roleNames.includes('MANAGER');
+
+      if (manager && !isManager) {
+        if (
+          target.buyerId ||
+          target.publisherId ||
+          roleNames.some(name => name === 'BUYER' || name === 'PUBLISHER')
+        ) {
+          return reply.code(400).send({
+            error: {
+              code: 'NOT_AGENCY_STAFF',
+              message: 'A buyer or publisher login cannot be made a manager',
+            },
+          });
+        }
+        const managerRole = await prisma.role.findUnique({ where: { name: 'MANAGER' } });
+        if (!managerRole) {
+          return reply.code(500).send({
+            error: { code: 'ROLE_MISSING', message: 'The MANAGER role is not set up' },
+          });
+        }
+        await prisma.userRole.create({ data: { userId: target.id, roleId: managerRole.id } });
+      }
+
+      if (!manager && isManager) {
+        if (roleNames.length === 1) {
+          return reply.code(400).send({
+            error: {
+              code: 'ONLY_ROLE',
+              message:
+                'This person is only a manager. Deactivate their account instead of removing their only role.',
+            },
+          });
+        }
+        const managerRoleId = target.roles.find(r => r.role.name === 'MANAGER')!.roleId;
+        await prisma.userRole.deleteMany({ where: { userId: target.id, roleId: managerRoleId } });
+      }
+
+      if (manager !== isManager) {
+        const { auditLog } = await import('../services/audit.js');
+        await auditLog({
+          tenantId,
+          userId: (request as AuthRequest).user?.userId,
+          action: manager ? 'user.manager.enabled' : 'user.manager.disabled',
+          entityType: 'User',
+          entityId: target.id,
+          changes: { manager, rolesBefore: roleNames },
+        });
+      }
+
+      const roles = manager
+        ? [...new Set([...roleNames, 'MANAGER'])]
+        : roleNames.filter(name => name !== 'MANAGER' || roleNames.length === 1);
+      return reply.send({
+        data: { id: target.id, manager, roles: roles.map(r => r.toLowerCase()) },
+      });
+    }
+  );
 }
 
 // Public API - Reporting
