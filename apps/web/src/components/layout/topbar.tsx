@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Bell, LogOut, Search, Settings, User } from 'lucide-react';
+import { AlertTriangle, Bell, Calculator, LogOut, Search, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
@@ -41,7 +41,15 @@ import { publishTopbarSlot, usePageTitleClaimed, useCurrentPageTitle } from './u
  * cmd-K would be two search experiences pretending to be one.
  */
 export function Topbar() {
-  const { user, isBuyerOnly, isPublisherOnly, isAgentOnly, isWhiteLabelAgent } = useAuth();
+  const {
+    user,
+    isBuyerOnly,
+    isPublisherOnly,
+    isAgentOnly,
+    isWhiteLabelAgent,
+    hasFullAccess,
+    isPlatformAdmin,
+  } = useAuth();
   const { open, setOpen } = useCommandPalette();
 
   // A white-label owner's pages, and an agent's, are named as their own
@@ -313,6 +321,16 @@ export function Topbar() {
                 </Link>
               </DropdownMenuItem>
             )}
+            {/* The quoter's agency settings: principals only, as on the Quote
+                page itself. A full load, so the page opens on the tab. */}
+            {hasFullAccess || isPlatformAdmin ? (
+              <DropdownMenuItem asChild>
+                <a href="/quote?tab=settings" className="t-body">
+                  <Calculator aria-hidden className="mr-2 h-3.5 w-3.5" />
+                  Quote settings
+                </a>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="t-body">
               <LogOut aria-hidden className="mr-2 h-3.5 w-3.5" />

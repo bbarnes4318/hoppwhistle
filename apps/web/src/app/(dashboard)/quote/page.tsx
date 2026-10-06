@@ -15,7 +15,7 @@
  * a rule record or a prescription list.
  */
 
-import { BarChart3, Settings } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
@@ -74,20 +74,22 @@ export default function QuotePage(): JSX.Element {
   const docked = wide && nav !== null;
 
   /*
-   * Four workspace sections at full weight; the principal's Insights and
-   * Settings after a hairline, smaller and muted, so nothing in the bar
-   * competes with Quote.
+   * Four workspace sections at full weight; the principal's Insights after a
+   * hairline, smaller and muted, so nothing in the bar competes with Quote.
    */
+  // Quote settings live in the account menu, not the bar; its tab is still
+  // here (and still the principal's only) for that link and old bookmarks.
+  const barSections = sections.filter(s => s.key !== 'settings');
   const tabList = (
     <TabsList
       aria-label="Quote sections"
       className={cn(docked ? 'h-full gap-6 border-b-0' : 'gap-6')}
     >
-      {sections.map((s, i) => {
-        const Icon = s.key === 'insights' ? BarChart3 : s.key === 'settings' ? Settings : null;
+      {barSections.map((s, i) => {
+        const Icon = s.key === 'insights' ? BarChart3 : null;
         return (
           <React.Fragment key={s.key}>
-            {s.secondary && !sections[i - 1]?.secondary ? (
+            {s.secondary && !barSections[i - 1]?.secondary ? (
               <span aria-hidden className="h-4 w-px shrink-0 self-center bg-rule" />
             ) : null}
             <TabsTrigger

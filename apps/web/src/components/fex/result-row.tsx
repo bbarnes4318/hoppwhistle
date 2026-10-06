@@ -108,7 +108,7 @@ const TAG_TONE = {
 } as const;
 
 /** The one kind of badge on a row: a benefit, or a decline. Small, tinted, no border. */
-function Tag({
+export function Tag({
   tone,
   title,
   children,
@@ -164,7 +164,7 @@ export function BenefitBadge({
 }
 
 /** The rate book is older than current: "RATE VERIFY", said under the price it qualifies. */
-function RateVerify({ result }: { result: FexResult }): JSX.Element {
+export function RateVerify({ result }: { result: FexResult }): JSX.Element {
   const facts = result.facts;
   const tone = facts?.ratesStatus.tone;
   if (!facts || (tone !== 'warn' && tone !== 'mod')) {
@@ -190,7 +190,14 @@ function RateVerify({ result }: { result: FexResult }): JSX.Element {
  * modal premium ("$71.64 /mo"), an annual one where the carrier publishes no
  * monthly factor ("$1,025.50 /yr"), and a single premium paid once.
  */
-function Price({ line }: { line: QuoteLine }): JSX.Element {
+export function Price({
+  line,
+  size = 17,
+}: {
+  line: QuoteLine;
+  /** The figure's size: 17px on a row or the top pick, 16px on a quiet card. */
+  size?: 16 | 17;
+}): JSX.Element {
   const single = line.basis === 'SINGLE_PREMIUM_PER_1000';
   const annualOnly = line.premium == null && line.annual != null;
   const amount = line.premium ?? line.annual;
@@ -199,10 +206,19 @@ function Price({ line }: { line: QuoteLine }): JSX.Element {
     <span className="flex flex-col items-end text-right">
       <span className="inline-flex items-baseline whitespace-nowrap leading-none tabular-nums">
         {amount == null ? (
-          <span className="text-[17px] font-semibold text-ink-3">—</span>
+          <span
+            className={cn(size === 16 ? 'text-[16px]' : 'text-[17px]', 'font-semibold text-ink-3')}
+          >
+            —
+          </span>
         ) : (
           <>
-            <span className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+            <span
+              className={cn(
+                size === 16 ? 'text-[16px]' : 'text-[17px]',
+                'font-semibold tracking-[-0.01em] text-ink'
+              )}
+            >
               {money(amount)}
             </span>
             <span className="ml-1 text-[11.5px] font-normal text-ink-3">{unit}</span>
@@ -228,7 +244,7 @@ function Price({ line }: { line: QuoteLine }): JSX.Element {
 
 // ─── What the row says about underwriting ────────────────────────────────────
 
-interface Note {
+export interface Note {
   text: string;
   tone: 'quiet' | 'warn';
 }
@@ -280,7 +296,10 @@ function reasonSubject(
  * A referral and an unconfirmed medication come first: the agent can act on
  * both before applying.
  */
-function materialNote(result: FexResult, healthSubject: string | null | undefined): Note | null {
+export function materialNote(
+  result: FexResult,
+  healthSubject: string | null | undefined
+): Note | null {
   if (!result.eligible) return null; // a decline says its own reason
   if (result.refer) return { text: 'Referral required', tone: 'warn' };
   if (result.needsIndication.length) {
@@ -524,21 +543,26 @@ export function ResultRow({
  * After the benefit: the one underwriting fact worth the space, then "Price
  * only" and what the last edit changed. Nothing when there is nothing to say.
  */
-function StatusNote({
+export function StatusNote({
   note,
   priceOnly,
   change,
+  separator = true,
 }: {
   note: Note | null;
   priceOnly: boolean;
   change?: OutcomeChange;
+  /** A "·" before it, when it follows the benefit on the same line. */
+  separator?: boolean;
 }): JSX.Element | null {
   if (!note && !priceOnly && !change) return null;
   return (
     <span className="flex min-w-0 max-w-full items-center gap-2 text-[12px] leading-4">
-      <span aria-hidden className="text-ink-3">
-        ·
-      </span>
+      {separator ? (
+        <span aria-hidden className="text-ink-3">
+          ·
+        </span>
+      ) : null}
       {note ? (
         <span
           className={cn(
@@ -618,7 +642,7 @@ const OUTCOME_INK = {
   neutral: 'text-ink-2',
 } as const;
 
-function ResultDetail({
+export function ResultDetail({
   id,
   result,
   onUse,
@@ -644,7 +668,7 @@ function ResultDetail({
   onCompareToggle?: () => void;
   compareFull: boolean;
   /** Line the detail up under the name: past the compare box, or not. */
-  indent: 'compare' | 'plain';
+  indent: 'compare' | 'plain' | 'none';
 }): JSX.Element {
   const facts = result.facts;
   const best = result.best;
@@ -658,7 +682,11 @@ function ResultDetail({
       id={id}
       className={cn(
         'border-t border-rule bg-[#f9fafb] px-4 pb-5 pt-4 animate-in fade-in-0 duration-150 motion-reduce:animate-none',
-        indent === 'compare' ? 'cq-md:pl-[176px]' : 'cq-md:pl-[152px]'
+        indent === 'compare'
+          ? 'cq-md:pl-[176px]'
+          : indent === 'plain'
+            ? 'cq-md:pl-[152px]'
+            : 'rounded-b-[inherit] cq-md:px-5'
       )}
     >
       {hasActions && best ? (
