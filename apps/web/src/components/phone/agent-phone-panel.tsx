@@ -2,8 +2,10 @@
 
 import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { PreQuoteCard } from '@/components/fex/pre-quote-card';
+import { useMediaQuery, useTopbarSlots } from '@/components/layout/topbar-slots';
 import { useCustomerIntake } from '@/contexts/customer-intake-context';
 import { useQuoteSession } from '@/contexts/quote-session-context';
 import { fexApi } from '@/lib/fex/api';
@@ -133,6 +135,15 @@ export function AgentPhonePanel(): JSX.Element | null {
 
   // The quoter for this call: the Quote button, Q, and the pre-quote card.
   const quoteSession = useQuoteSession();
+
+  /*
+   * Where the closed phone shows its status. From md up the topbar offers a
+   * slot and the launcher sits there, compact, so it never covers a page's
+   * content -- it used to float over the bottom of the quoter's carrier list.
+   * Below md (and with no topbar, e.g. the console) it floats as before.
+   */
+  const { presence: presenceSlot } = useTopbarSlots();
+  const dockable = useMediaQuery('(min-width: 768px)');
 
   const [minimized, setMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<IdleTab>('dialpad');
@@ -327,7 +338,8 @@ export function AgentPhonePanel(): JSX.Element | null {
      * the softphone on screen at all times, and it used to show a green
      * "Available" whether or not the phone had ever registered.
      */
-    return (
+    const docked = dockable && presenceSlot !== null;
+    const launcher = (
       <SoftphoneLauncher
         state={state}
         statusLabel={AGENT_STATUS_LABEL[agentStatus]}
@@ -336,8 +348,10 @@ export function AgentPhonePanel(): JSX.Element | null {
         failed={phoneStatus === 'failed'}
         onOpen={openPhonePanel}
         onReconnect={reconnectPhone}
+        placement={docked ? 'docked' : 'floating'}
       />
     );
+    return docked ? createPortal(launcher, presenceSlot) : launcher;
   }
 
   // ============================================================================

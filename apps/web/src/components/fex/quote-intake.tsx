@@ -3,9 +3,17 @@
 /**
  * The quoter's left column: who, how much, and their health.
  *
- * Four panels, in the order an agent asks: the applicant, the coverage, the
- * health history (knockout questions first), and medications. Every edit
- * re-quotes; nothing here waits for a button.
+ * Three sections, in the order an agent asks: the applicant, the coverage, and
+ * the health history with its medications. Every edit re-quotes; nothing here
+ * waits for a button.
+ *
+ * ── Dense on purpose ─────────────────────────────────────────────────────────
+ *
+ * This column is used DURING a call. The applicant is two rows of three, the
+ * face amount is one row of presets, and a condition or medication is one
+ * line once its questions are answered -- open only while they are being
+ * answered. One search box adds either a condition or a medication, so the
+ * agent never has to decide which box the prospect's answer belongs in.
  */
 
 import {
@@ -20,10 +28,10 @@ import {
   type DetailField,
 } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { Check, Info, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronDown, Info, Plus, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
-import { Panel, Segmented, SegmentedItem } from '@/components/domain';
+import { Panel } from '@/components/domain';
 import { Tooltip } from '@/components/ui/tooltip';
 import { fexApi, type FexDrugHit } from '@/lib/fex/api';
 import { searchConditions } from '@/lib/fex/condition-search';
@@ -32,16 +40,18 @@ import {
   missingForQuote,
   type DraftAction,
   type DraftCondition,
+  type DraftMed,
   type QuoteDraft,
 } from '@/lib/fex/draft';
 import { US_STATES } from '@/lib/us-states';
 import { cn } from '@/lib/utils';
 
-import { Combobox } from './combobox';
+import { Combobox, type ComboOption } from './combobox';
 import {
   bucketFrom,
   bucketValue,
   CheckRow,
+  ChoiceGroup,
   Field,
   FOCUS,
   NativeSelect,
@@ -68,6 +78,9 @@ export interface QuoteIntakeProps {
   needsIndication: Map<string, string[]>;
 }
 
+/** The id of the one health search box, for the workspace's Alt+H / Alt+M. */
+export const healthSearchId = (idPrefix: string): string => `${idPrefix}-health`;
+
 const STATE_NAME = new Map<string, string>([
   ...US_STATES.map(s => [s.value, s.label] as [string, string]),
   ['DC', 'District of Columbia'],
@@ -93,51 +106,50 @@ const coverageDone = (d: QuoteDraft) => {
   const n = Number((d.coverage.mode === 'face' ? d.coverage.face : d.coverage.budget) || NaN);
   return d.coverage.mode === 'face' ? n >= 1000 && n <= 500000 : n >= 5 && n <= 2000;
 };
-const healthSummary = (d: QuoteDraft) =>
-  d.conditions.length
-    ? `${d.conditions.length} condition${d.conditions.length === 1 ? '' : 's'}`
-    : 'None entered';
-const medsSummary = (d: QuoteDraft) =>
-  d.meds.length ? `${d.meds.length} medication${d.meds.length === 1 ? '' : 's'}` : 'None entered';
 
-/**
- * One card, four numbered steps. The two that must be answered before a quote
- * runs show a check when done; health and medications are optional and say
- * what has been entered.
- */
+const MISSING_TEXT: Record<string, string> = {
+  state: 'Needs state',
+  sex: 'Needs sex',
+  age: 'Needs age (18–100)',
+  dob: 'Needs date of birth',
+  face: 'Needs a face amount',
+  budget: 'Needs a monthly budget',
+};
+
+/** A bucket's label, said briefly: "1–2 years ago" → "1–2 yrs". */
+function briefBucket(label: string): string {
+  return label
+    .replace(/ ago$/, '')
+    .replace(/years?/, 'yrs')
+    .replace(/months?/, 'mo')
+    .replace('Within 30 days', '<30 days');
+}
+
+function labelFor(buckets: ReadonlyArray<readonly [string, unknown]>, months: unknown) {
+  return buckets.find(([, m]) => m === months)?.[0];
+}
+
 export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
-  const required = [applicantDone(props.draft), coverageDone(props.draft)];
-  const done = required.filter(Boolean).length;
+  const missing = missingForQuote(props.draft);
   return (
-    <Panel className="overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <h2 className="whitespace-nowrap text-[15px] font-semibold text-ink">Quote details</h2>
-          <div className="flex items-center gap-2">
-            <span
-              className="h-1.5 w-14 overflow-hidden rounded-full bg-sunken"
-              role="progressbar"
-              aria-label="Required answers"
-              aria-valuemin={0}
-              aria-valuemax={2}
-              aria-valuenow={done}
-            >
-              <span
-                className="block h-full rounded-full bg-brand transition-[width] duration-300 ne-motion"
-                style={{ width: `${(done / 2) * 100}%` }}
-              />
-            </span>
-            <span className="t-meta whitespace-nowrap text-ink-3">
-              {done === 2 ? 'Quoting live' : `${done} of 2 required`}
-            </span>
-          </div>
-        </div>
+    // Not overflow-hidden: the health search's list drops out of the panel.
+    <Panel>
+      <div className="flex h-9 items-center justify-between gap-2 rounded-t-card border-b border-rule bg-sunken px-3">
+        <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium" aria-live="polite">
+          <span
+            aria-hidden
+            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', missing ? 'bg-ink-3' : 'bg-live')}
+          />
+          <span className={cn('truncate', missing ? 'text-ink-2' : 'text-live-ink')}>
+            {missing ? (MISSING_TEXT[missing] ?? 'Needs more answers') : 'Quoting live'}
+          </span>
+        </p>
         {props.onReset ? (
           <button
             type="button"
             onClick={props.onReset}
             className={cn(
-              't-meta inline-flex shrink-0 items-center gap-1 rounded-control px-2 py-1 text-ink-2 hover:bg-sunken hover:text-ink',
+              'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-[12px] font-medium text-ink-2 hover:bg-surface hover:text-ink',
               FOCUS
             )}
           >
@@ -147,61 +159,43 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
         ) : null}
       </div>
       <div className="divide-y divide-rule">
-        <ApplicantPanel {...props} />
-        <CoveragePanel {...props} />
-        <HealthPanel {...props} />
-        <MedicationsPanel {...props} />
+        <ApplicantSection {...props} />
+        <CoverageSection {...props} />
+        <HealthSection {...props} />
       </div>
     </Panel>
   );
 }
 
-function Step({
-  n,
+function Section({
   title,
   done,
-  optional,
-  summary,
   hint,
   aside,
   children,
 }: {
-  n: number;
   title: string;
   done?: boolean;
-  optional?: boolean;
-  summary?: string;
   /** One line of guidance, behind the title's info mark. */
   hint?: string;
-  /** A control that belongs to the whole step, at the right of its title. */
+  /** A control or summary that belongs to the whole section, right of its title. */
   aside?: React.ReactNode;
   children: React.ReactNode;
 }): JSX.Element {
   const id = React.useId();
   return (
-    <section aria-labelledby={id} className="px-4 py-2">
-      <div className="mb-1 flex min-h-[24px] items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors duration-200 ne-motion',
-            done ? 'bg-brand text-surface' : 'bg-sunken text-ink-2'
-          )}
-        >
-          {done ? <Check className="h-3 w-3" /> : n}
-        </span>
-        <h3 id={id} className="text-[13px] font-semibold text-ink">
+    <section aria-labelledby={id} className="px-3 pb-3 pt-2">
+      <div className="mb-1.5 flex min-h-[28px] items-center gap-1.5">
+        <h3 id={id} className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink">
           {title}
         </h3>
+        {done ? <Check className="h-3.5 w-3.5 text-live-ink" aria-label="Complete" /> : null}
         {hint ? (
           <Tooltip content={hint} side="top">
             <Info className="h-3.5 w-3.5 text-ink-3" aria-label={hint} />
           </Tooltip>
         ) : null}
-        <span className="ml-auto flex shrink-0 items-center">
-          {aside ??
-            (optional ? <span className="t-meta text-ink-3">{summary ?? 'Optional'}</span> : null)}
-        </span>
+        {aside ? <div className="ml-auto flex shrink-0 items-center gap-1.5">{aside}</div> : null}
       </div>
       {children}
     </section>
@@ -210,20 +204,43 @@ function Step({
 
 // ─── Applicant ───────────────────────────────────────────────────────────────
 
-function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.Element {
+function ApplicantSection({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.Element {
   const p = (s: string) => `${idPrefix}-${s}`;
   const lead = (f: Parameters<QuoteDraft['prefilled']['has']>[0]) => draft.prefilled.has(f);
-  const dobAge = draft.ageOrDob.mode === 'dob' ? ageFromDob(draft.ageOrDob.dob) : null;
+  const dobMode = draft.ageOrDob.mode === 'dob';
+  const dobAge = dobMode ? ageFromDob((draft.ageOrDob as { dob: string }).dob) : null;
+
+  const switchAgeMode = () =>
+    dispatch({
+      type: 'set',
+      patch: {
+        ageOrDob:
+          draft.ageOrDob.mode === 'age'
+            ? { mode: 'dob', dob: '' }
+            : { mode: 'age', age: dobAge !== null ? String(dobAge) : '' },
+      },
+      fields: ['age', 'dob'],
+    });
+
+  const unit = (text: string) => (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-3"
+    >
+      {text}
+    </span>
+  );
 
   return (
-    <Step n={1} title="Applicant" done={applicantDone(draft)}>
-      {/* Three across, the order an agent asks: where, who, how old; then the
-          tobacco, height and weight questions. */}
-      <div className="grid grid-flow-row-dense grid-cols-3 gap-x-2.5 gap-y-2">
+    <Section title="Applicant" done={applicantDone(draft)}>
+      {/* Two rows of three, the order an agent asks: where, who, how old;
+          then tobacco, height and weight. */}
+      <div className="grid grid-cols-3 gap-x-2 gap-y-2">
         <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
           <NativeSelect
             id={p('state')}
             value={draft.state}
+            className="px-2 pr-6"
             onChange={e =>
               dispatch({ type: 'set', patch: { state: e.target.value }, fields: ['state'] })
             }
@@ -238,128 +255,94 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
         </Field>
 
         <Field label="Sex" fromLead={lead('sex')}>
-          <Segmented role="radiogroup" aria-label="Sex" className="w-full">
-            {(
-              [
-                ['F', 'Female'],
-                ['M', 'Male'],
-              ] as const
-            ).map(([value, label]) => (
-              <SegmentedItem
-                key={value}
-                role="radio"
-                aria-checked={draft.sex === value}
-                active={draft.sex === value}
-                className="flex-1 px-1 text-[13px]"
-                onClick={() => dispatch({ type: 'set', patch: { sex: value }, fields: ['sex'] })}
-              >
-                {label}
-              </SegmentedItem>
-            ))}
-          </Segmented>
+          <ChoiceGroup
+            label="Sex"
+            options={[
+              { value: 'F' as const, label: 'Female' },
+              { value: 'M' as const, label: 'Male' },
+            ]}
+            value={draft.sex || null}
+            onChange={sex => dispatch({ type: 'set', patch: { sex }, fields: ['sex'] })}
+          />
         </Field>
 
-        <div className={cn('min-w-0', draft.ageOrDob.mode === 'dob' && 'col-span-3')}>
-          <div className="mb-1 flex items-center justify-between gap-1">
-            <label
-              htmlFor={draft.ageOrDob.mode === 'age' ? p('age') : p('dob')}
-              className="t-label flex items-baseline text-ink-2"
-            >
-              {draft.ageOrDob.mode === 'age' ? 'Age' : 'Date of birth'}
-              {lead(draft.ageOrDob.mode) ? (
-                <span className="t-meta ml-1.5 font-normal text-ink-3">From lead</span>
-              ) : null}
-            </label>
-            <button
-              type="button"
-              className={cn(
-                't-meta whitespace-nowrap rounded-control text-brand-ink hover:underline',
-                FOCUS
-              )}
-              onClick={() =>
-                dispatch({
-                  type: 'set',
-                  patch: {
-                    ageOrDob:
-                      draft.ageOrDob.mode === 'age'
-                        ? { mode: 'dob', dob: '' }
-                        : {
-                            mode: 'age',
-                            age: dobAge !== null ? String(dobAge) : '',
-                          },
-                  },
-                  fields: ['age', 'dob'],
-                })
-              }
-            >
-              {draft.ageOrDob.mode === 'age' ? 'Use DOB' : 'Use age'}
-            </button>
-          </div>
-          {draft.ageOrDob.mode === 'age' ? (
-            <TextInput
-              id={p('age')}
-              inputMode="numeric"
-              maxLength={3}
-              placeholder="65"
-              value={draft.ageOrDob.age}
-              onChange={e =>
-                dispatch({
-                  type: 'set',
-                  patch: { ageOrDob: { mode: 'age', age: digitsOnly(e.target.value) } },
-                  fields: ['age'],
-                })
-              }
-            />
-          ) : (
-            <div className="relative">
+        <div className={cn('min-w-0', dobMode && 'col-span-3 row-start-2')}>
+          <label
+            htmlFor={dobMode ? p('dob') : p('age')}
+            className="mb-1 flex items-baseline text-[10.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-ink-2"
+          >
+            {dobMode ? 'Date of birth' : 'Age'}
+            {lead(draft.ageOrDob.mode) ? (
+              <span className="t-meta ml-1.5 font-normal normal-case tracking-normal text-ink-3">
+                From lead
+              </span>
+            ) : null}
+          </label>
+          <div className="flex min-w-0">
+            {dobMode ? (
+              <div className="relative min-w-0 flex-1">
+                <TextInput
+                  id={p('dob')}
+                  type="date"
+                  value={(draft.ageOrDob as { dob: string }).dob}
+                  className="rounded-r-none"
+                  onChange={e =>
+                    dispatch({
+                      type: 'set',
+                      patch: { ageOrDob: { mode: 'dob', dob: e.target.value } },
+                      fields: ['dob'],
+                    })
+                  }
+                />
+                <span
+                  className="t-meta pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 tabular-nums text-ink-2"
+                  aria-live="polite"
+                >
+                  {dobAge !== null ? `Age ${dobAge}` : ''}
+                </span>
+              </div>
+            ) : (
               <TextInput
-                id={p('dob')}
-                type="date"
-                value={draft.ageOrDob.dob}
+                id={p('age')}
+                inputMode="numeric"
+                maxLength={3}
+                placeholder="65"
+                value={(draft.ageOrDob as { age: string }).age}
+                className="min-w-0 flex-1 rounded-r-none px-2"
                 onChange={e =>
                   dispatch({
                     type: 'set',
-                    patch: { ageOrDob: { mode: 'dob', dob: e.target.value } },
-                    fields: ['dob'],
+                    patch: { ageOrDob: { mode: 'age', age: digitsOnly(e.target.value) } },
+                    fields: ['age'],
                   })
                 }
               />
-              <span
-                className="t-meta pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 tabular-nums text-ink-2"
-                aria-live="polite"
-              >
-                {dobAge !== null ? `Age ${dobAge}` : ''}
-              </span>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              onClick={switchAgeMode}
+              title={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
+              aria-label={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
+              className={cn(
+                '-ml-px h-9 shrink-0 rounded-r-control border border-rule-strong bg-sunken px-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-2 hover:bg-surface hover:text-ink',
+                FOCUS
+              )}
+            >
+              {dobMode ? 'Age' : 'DOB'}
+            </button>
+          </div>
         </div>
 
         <Field label="Tobacco" fromLead={lead('tobacco')}>
-          <Segmented
-            role="radiogroup"
-            aria-label="Tobacco or nicotine in the last 12 months"
-            className="w-full"
-          >
-            {(
-              [
-                [false, 'No'],
-                [true, 'Yes'],
-              ] as const
-            ).map(([value, label]) => (
-              <SegmentedItem
-                key={label}
-                role="radio"
-                aria-checked={draft.tobacco === value}
-                active={draft.tobacco === value}
-                className="flex-1 px-1 text-[13px]"
-                onClick={() =>
-                  dispatch({ type: 'set', patch: { tobacco: value }, fields: ['tobacco'] })
-                }
-              >
-                {label}
-              </SegmentedItem>
-            ))}
-          </Segmented>
+          <ChoiceGroup
+            label="Tobacco or nicotine in the last 12 months"
+            options={[
+              { value: false, label: 'No', key: 'no' },
+              { value: true, label: 'Yes', key: 'yes' },
+            ]}
+            value={draft.tobacco}
+            onChange={tobacco => dispatch({ type: 'set', patch: { tobacco }, fields: ['tobacco'] })}
+          />
         </Field>
 
         <Field label="Height" htmlFor={p('ft')} fromLead={lead('height')}>
@@ -381,12 +364,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                 }
                 className="px-2 pr-5"
               />
-              <span
-                aria-hidden
-                className="t-meta pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-3"
-              >
-                ft
-              </span>
+              {unit('ft')}
             </div>
             <div className="relative">
               <TextInput
@@ -404,12 +382,7 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                 }
                 className="px-2 pr-5"
               />
-              <span
-                aria-hidden
-                className="t-meta pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-3"
-              >
-                in
-              </span>
+              {unit('in')}
             </div>
           </div>
         </Field>
@@ -429,24 +402,29 @@ function ApplicantPanel({ idPrefix, draft, dispatch }: QuoteIntakeProps): JSX.El
                   fields: ['weight'],
                 })
               }
-              className="pr-8"
+              className="px-2 pr-6"
             />
-            <span
-              aria-hidden
-              className="t-meta pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
-            >
-              lb
-            </span>
+            {unit('lb')}
           </div>
         </Field>
       </div>
-    </Step>
+    </Section>
   );
 }
 
 // ─── Coverage ────────────────────────────────────────────────────────────────
 
-function CoveragePanel({
+const PAYMENT_SHORT: Record<string, string> = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  semiannual: 'Semi-annual',
+  annual: 'Annual',
+};
+
+const faceText = (amount: number) =>
+  amount % 1000 === 0 ? `${amount / 1000}k` : `${(amount / 1000).toFixed(1)}k`;
+
+function CoverageSection({
   idPrefix,
   draft,
   dispatch,
@@ -454,160 +432,166 @@ function CoveragePanel({
 }: QuoteIntakeProps): JSX.Element {
   const p = (s: string) => `${idPrefix}-${s}`;
   const face = draft.coverage.mode === 'face' ? draft.coverage.face : '';
-  const customFace = face && !FACE_PRESETS.includes(Number(face)) ? face : '';
+  const offList = Boolean(face) && !FACE_PRESETS.includes(Number(face));
+  const [customOpen, setCustomOpen] = React.useState(offList);
+  const custom = customOpen || offList;
+  const customRef = React.useRef<HTMLInputElement>(null);
+  const labelId = p('face-label');
+
+  type FaceChoice = number | 'custom';
+  const options = [
+    ...FACE_PRESETS.map(amount => ({
+      value: amount as FaceChoice,
+      label: faceText(amount),
+      ariaLabel: `$${amount.toLocaleString('en-US')}`,
+    })),
+    { value: 'custom' as FaceChoice, label: 'Custom', ariaLabel: 'Custom amount' },
+  ];
+
+  const setFace = (value: string) =>
+    dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: value } }, fields: ['face'] });
+
+  const paymentLabel =
+    PAYMENT_MODES.find(([value]) => value === draft.paymentMode)?.[1] ?? 'Payment mode';
 
   return (
-    <Step
-      n={2}
+    <Section
       title="Coverage"
       done={coverageDone(draft)}
       aside={
-        <Segmented role="radiogroup" aria-label="Quote by" className="h-7">
-          <SegmentedItem
-            role="radio"
-            aria-checked={draft.coverage.mode === 'face'}
-            active={draft.coverage.mode === 'face'}
-            className="h-6 px-2.5 text-xs"
-            onClick={() =>
-              draft.coverage.mode !== 'face' &&
-              dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: '10000' } } })
+        <>
+          <ChoiceGroup
+            label="Quote by"
+            className="h-7 w-[132px] p-[2px]"
+            itemClassName="text-[12px]"
+            options={[
+              { value: 'face' as const, label: 'Face' },
+              { value: 'budget' as const, label: 'Budget' },
+            ]}
+            value={draft.coverage.mode}
+            onChange={mode => {
+              if (mode === draft.coverage.mode) return;
+              if (mode === 'face') {
+                dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: '10000' } } });
+                setCustomOpen(false);
+              } else
+                dispatch({
+                  type: 'set',
+                  patch: { coverage: { mode: 'budget', budget: '' } },
+                  fields: ['face'],
+                });
+            }}
+          />
+          {/* Payment mode matters, but less than the amount: a quiet select
+              in the header, not a field in the grid. */}
+          <label htmlFor={p('mode')} className="sr-only">
+            Payment mode
+          </label>
+          <select
+            id={p('mode')}
+            value={draft.paymentMode}
+            title={paymentLabel}
+            onChange={e =>
+              dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
             }
+            className={cn(
+              'h-7 cursor-pointer rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12px] font-medium text-ink-2 hover:border-rule-strong hover:bg-surface hover:text-ink',
+              FOCUS
+            )}
           >
-            Face amount
-          </SegmentedItem>
-          <SegmentedItem
-            role="radio"
-            aria-checked={draft.coverage.mode === 'budget'}
-            active={draft.coverage.mode === 'budget'}
-            className="h-6 px-2.5 text-xs"
-            onClick={() =>
-              draft.coverage.mode !== 'budget' &&
-              dispatch({
-                type: 'set',
-                patch: { coverage: { mode: 'budget', budget: '' } },
-                fields: ['face'],
-              })
-            }
-          >
-            Monthly budget
-          </SegmentedItem>
-        </Segmented>
+            {PAYMENT_MODES.map(([value, label]) => (
+              <option key={value} value={value} title={label}>
+                {PAYMENT_SHORT[value] ?? label}
+              </option>
+            ))}
+          </select>
+        </>
       }
     >
-      <div className="space-y-2.5">
+      <div className="space-y-2">
         {draft.coverage.mode === 'face' ? (
           <div>
-            <p className="sr-only" id={p('face-label')}>
+            <p
+              id={labelId}
+              className="mb-1 flex items-baseline text-[10.5px] font-semibold uppercase leading-[14px] tracking-[0.06em] text-ink-2"
+            >
               Face amount
+              {draft.prefilled.has('face') ? (
+                <span className="t-meta ml-1.5 font-normal normal-case tracking-normal text-ink-3">
+                  From lead
+                </span>
+              ) : null}
             </p>
-            {draft.prefilled.has('face') ? (
-              <p className="t-meta mb-1 text-ink-3">Face amount from lead</p>
-            ) : null}
-            <div className="grid grid-cols-6 gap-1" role="group" aria-labelledby={p('face-label')}>
-              {FACE_PRESETS.map(amount => {
-                const on = Number(face) === amount;
-                return (
-                  <button
-                    key={amount}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() =>
-                      dispatch({
-                        type: 'set',
-                        patch: { coverage: { mode: 'face', face: String(amount) } },
-                        fields: ['face'],
-                      })
-                    }
-                    className={cn(
-                      'h-8 rounded-control border px-1 text-[13px] font-medium tabular-nums transition-colors duration-150 ne-motion',
-                      on
-                        ? 'border-brand-ink bg-brand-tint text-brand-ink'
-                        : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
-                      FOCUS
-                    )}
-                  >
-                    ${amount / 1000}k
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-x-3">
-          {draft.coverage.mode === 'face' ? (
-            <div className="relative self-end">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3"
-              >
-                $
-              </span>
-              <TextInput
-                inputMode="numeric"
-                aria-label="Custom face amount"
-                placeholder="Other amount"
-                value={customFace ? Number(customFace).toLocaleString('en-US') : ''}
-                onChange={e => {
-                  const v = digitsOnly(e.target.value).slice(0, 6);
-                  dispatch({
-                    type: 'set',
-                    patch: { coverage: { mode: 'face', face: v || '' } },
-                    fields: ['face'],
-                  });
-                }}
-                className="pl-6"
-              />
-            </div>
-          ) : (
-            <Field label="Monthly budget" htmlFor={p('budget')}>
-              <div className="relative">
+            <ChoiceGroup<FaceChoice>
+              labelledBy={labelId}
+              tone="strong"
+              className="h-[34px]"
+              itemClassName="text-[12.5px]"
+              options={options}
+              value={null}
+              isChecked={o => (o.value === 'custom' ? custom : !custom && Number(face) === o.value)}
+              onChange={(value, via) => {
+                if (value === 'custom') {
+                  setCustomOpen(true);
+                  if (via === 'click') requestAnimationFrame(() => customRef.current?.focus());
+                  return;
+                }
+                setCustomOpen(false);
+                setFace(String(value));
+              }}
+            />
+            {custom ? (
+              <div className="relative mt-1.5">
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3"
+                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
                 >
                   $
                 </span>
                 <TextInput
-                  id={p('budget')}
-                  inputMode="decimal"
-                  placeholder="50"
-                  value={draft.coverage.budget}
-                  onChange={e =>
-                    dispatch({
-                      type: 'set',
-                      patch: {
-                        coverage: {
-                          mode: 'budget',
-                          budget: e.target.value.replace(/[^0-9.]/g, '').slice(0, 7),
-                        },
-                      },
-                    })
-                  }
+                  ref={customRef}
+                  inputMode="numeric"
+                  aria-label="Custom face amount"
+                  placeholder="Any amount, e.g. 12,500"
+                  value={offList ? Number(face).toLocaleString('en-US') : ''}
+                  onChange={e => setFace(digitsOnly(e.target.value).slice(0, 6))}
                   className="pl-6"
                 />
               </div>
-            </Field>
-          )}
-
-          <Field label="Payment" htmlFor={p('mode')}>
-            <NativeSelect
-              id={p('mode')}
-              value={draft.paymentMode}
-              onChange={e =>
-                dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
-              }
-            >
-              {PAYMENT_MODES.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </NativeSelect>
+            ) : null}
+          </div>
+        ) : (
+          <Field label="Monthly budget" htmlFor={p('budget')}>
+            <div className="relative">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
+              >
+                $
+              </span>
+              <TextInput
+                id={p('budget')}
+                inputMode="decimal"
+                placeholder="50"
+                value={draft.coverage.budget}
+                onChange={e =>
+                  dispatch({
+                    type: 'set',
+                    patch: {
+                      coverage: {
+                        mode: 'budget',
+                        budget: e.target.value.replace(/[^0-9.]/g, '').slice(0, 7),
+                      },
+                    },
+                  })
+                }
+                className="pl-6"
+              />
+            </div>
           </Field>
-        </div>
+        )}
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px]">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
           <CheckRow
             id={p('activity')}
             checked={draft.activityCredit}
@@ -626,49 +610,164 @@ function CoveragePanel({
           ) : null}
         </div>
       </div>
-    </Step>
+    </Section>
   );
 }
 
-// ─── Health history ──────────────────────────────────────────────────────────
+// ─── Health: conditions and medications ──────────────────────────────────────
 
-function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps): JSX.Element {
+/**
+ * The brand or alias a search hit matched on, when it isn't the generic name,
+ * so typing "E" shows "Eliquis · apixaban" rather than an unexplained apixaban.
+ */
+function matchedBrand(hit: FexDrugHit): string | undefined {
+  const matched = hit.matched;
+  if (!matched || matched === hit.generic.toLowerCase()) return undefined;
+  return hit.brands.find(b => b.toLowerCase() === matched) ?? matched;
+}
+
+/** Drug search, debounced, as the medication lookup has always done it. */
+function useDrugSearch(query: string): { hits: FexDrugHit[]; searching: boolean } {
+  const [hits, setHits] = React.useState<FexDrugHit[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  React.useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setHits([]);
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void fexApi.searchDrugs(q, 12, controller.signal).then(result => {
+        if (controller.signal.aborted) return;
+        setHits(result.ok ? result.data : []);
+        setSearching(false);
+      });
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+  return { hits, searching };
+}
+
+function HealthSection({
+  idPrefix,
+  draft,
+  dispatch,
+  conditions,
+  needsIndication,
+}: QuoteIntakeProps): JSX.Element {
   const [query, setQuery] = React.useState('');
   const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
   const added = new Set(draft.conditions.map(c => c.code));
-  const matches = React.useMemo(
-    () => searchConditions(conditions, query, 12).filter(c => !added.has(c.code)),
+  const conditionMatches = React.useMemo(
+    () => searchConditions(conditions, query, 8).filter(c => !added.has(c.code)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [conditions, query, draft.conditions]
   );
+  const { hits, searching } = useDrugSearch(query);
+  const addedDrugs = new Set(draft.meds.map(m => m.drugId));
+
+  // One list, two groups: the conditions dictionary and the drug search, both
+  // the same sources the lookups use.
+  const options: ComboOption[] = [
+    ...conditionMatches.map(c => ({
+      id: `c:${c.code}`,
+      label: c.label,
+      meta: c.category,
+      group: 'Conditions',
+    })),
+    ...hits
+      .filter(h => !addedDrugs.has(h.id))
+      .slice(0, 8)
+      .map(h => ({
+        id: `d:${h.id}`,
+        group: 'Medications',
+        label: matchedBrand(h) ? (
+          <>
+            <span className="capitalize">{matchedBrand(h)}</span>
+            <span className="text-ink-2"> · {h.generic}</span>
+          </>
+        ) : (
+          <>
+            <span className="capitalize">{h.generic}</span>
+            {h.brands.length ? (
+              <span className="text-ink-2"> · {h.brands.slice(0, 2).join(', ')}</span>
+            ) : null}
+          </>
+        ),
+        meta: h.drugClass ?? undefined,
+      })),
+  ];
+
+  const pick = (id: string) => {
+    if (id.startsWith('c:')) {
+      dispatch({ type: 'addCondition', code: id.slice(2) });
+      return;
+    }
+    const hit = hits.find(h => h.id === id.slice(2));
+    if (!hit) return;
+    dispatch({
+      type: 'addMed',
+      med: {
+        drugId: hit.id,
+        name: hit.brands[0] ? `${hit.generic} (${hit.brands[0]})` : hit.generic,
+        indications: hit.indications,
+        multiUse: hit.multiUse,
+      },
+    });
+  };
+
   const [showAllQuick, setShowAllQuick] = React.useState(false);
   const allQuick = QUICK_CONDITIONS.filter(code => byCode.has(code));
   // The ones agents hear most first; the rest of the knockout list one tap away.
   const featured = FEATURED_CONDITIONS.filter(code => allQuick.includes(code));
   const rest = allQuick.filter(code => !featured.includes(code));
-  const quick = showAllQuick
-    ? [...featured, ...rest]
-    : [...featured, ...rest.filter(code => added.has(code))];
-  const hiddenCount = showAllQuick ? 0 : rest.filter(code => !added.has(code)).length;
+  const quick = showAllQuick ? [...featured, ...rest] : featured;
+  const hiddenCount = showAllQuick ? 0 : rest.length;
+  // A chip's short name, unless two chips would read the same ("Diabetes"
+  // twice): then both say it in full.
+  const chipLabel = (code: string) => {
+    const label = byCode.get(code)!.label;
+    const short = shortLabel(label);
+    const clash = quick.some(
+      other => other !== code && shortLabel(byCode.get(other)!.label) === short
+    );
+    return clash ? label : short;
+  };
+
+  const summary = [
+    draft.conditions.length
+      ? `${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}`
+      : null,
+    draft.meds.length ? `${draft.meds.length} med${draft.meds.length === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <Step
-      n={3}
-      title="Health history"
-      optional
-      summary={healthSummary(draft)}
+    <Section
+      title="Health"
       hint="Last treated means the last surgery, procedure, hospital stay or treatment change. Each carrier's own questions decide the result."
+      aside={<span className="t-meta text-ink-3">{summary || 'Optional'}</span>}
     >
       <div className="space-y-2">
         <Combobox
-          id={`${idPrefix}-condition`}
-          label="Add a condition"
+          id={healthSearchId(idPrefix)}
+          label="Add a condition or medication"
+          hideLabel
           query={query}
           onQueryChange={setQuery}
-          placeholder="Search conditions: diabetes, stent, COPD…"
-          options={matches.map(c => ({ id: c.code, label: c.label, meta: c.category }))}
-          onPick={code => dispatch({ type: 'addCondition', code })}
-          emptyText="No condition by that name"
+          placeholder="Search condition or medication…"
+          options={options}
+          onPick={pick}
+          loading={searching}
+          shortcut="Alt+H"
+          emptyText="No condition or medication by that name"
         />
 
         <div className="flex flex-wrap gap-1" role="group" aria-label="Common knockout conditions">
@@ -686,19 +785,19 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
                   } else dispatch({ type: 'addCondition', code });
                 }}
                 className={cn(
-                  'inline-flex min-h-[26px] items-center gap-1 rounded-[13px] border px-2 py-0.5 text-left text-xs font-medium leading-snug transition-colors duration-150 ne-motion',
+                  'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11.5px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
                   on
-                    ? 'border-dropped bg-dropped-tint text-dropped-ink'
-                    : 'border-rule-strong bg-surface text-ink-2 hover:bg-sunken hover:text-ink',
+                    ? 'border-ink-2 bg-ink text-surface'
+                    : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
                   FOCUS
                 )}
               >
                 {on ? (
-                  <X className="h-3 w-3 shrink-0" aria-hidden />
+                  <Check className="h-3 w-3 shrink-0" aria-hidden />
                 ) : (
                   <Plus className="h-3 w-3 shrink-0" aria-hidden />
                 )}
-                {shortLabel(byCode.get(code)!.label)}
+                {chipLabel(code)}
               </button>
             );
           })}
@@ -708,34 +807,179 @@ function HealthPanel({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps
               aria-expanded={showAllQuick}
               onClick={() => setShowAllQuick(v => !v)}
               className={cn(
-                'inline-flex min-h-[26px] items-center rounded-[13px] px-2 py-0.5 text-xs font-medium text-brand-ink hover:underline',
+                'inline-flex h-6 items-center rounded-full px-1.5 text-[11.5px] font-medium text-brand-ink hover:underline',
                 FOCUS
               )}
             >
-              {showAllQuick ? 'Fewer' : `${hiddenCount} more`}
+              {showAllQuick ? 'Fewer' : `${hiddenCount} more knockouts`}
             </button>
           ) : null}
         </div>
 
         {draft.conditions.length ? (
-          <ul className="space-y-2">
-            {draft.conditions.map(c => (
-              <ConditionCard
-                key={c.key}
-                idPrefix={idPrefix}
-                condition={c}
-                label={byCode.get(c.code)?.label ?? c.code}
-                dispatch={dispatch}
-              />
-            ))}
-          </ul>
+          <div>
+            <h4 className="t-label mb-0.5 text-ink-3">Conditions</h4>
+            <ul className="divide-y divide-rule rounded-control border border-rule">
+              {draft.conditions.map(c => (
+                <ConditionRow
+                  key={c.key}
+                  idPrefix={idPrefix}
+                  condition={c}
+                  label={byCode.get(c.code)?.label ?? c.code}
+                  dispatch={dispatch}
+                />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {draft.meds.length ? (
+          <div>
+            <h4 className="t-label mb-0.5 text-ink-3">Medications</h4>
+            <ul className="divide-y divide-rule rounded-control border border-rule">
+              {draft.meds.map(med => (
+                <MedicationRow
+                  key={med.key}
+                  idPrefix={idPrefix}
+                  med={med}
+                  asked={needsIndication.get(med.drugId)}
+                  conditionLabel={code => byCode.get(code)?.label ?? code}
+                  dispatch={dispatch}
+                />
+              ))}
+            </ul>
+          </div>
         ) : null}
       </div>
-    </Step>
+    </Section>
   );
 }
 
-function ConditionCard({
+/** One answered-or-not line: what it is, what was said, and a remove. */
+function CompactRow({
+  id,
+  open,
+  onToggle,
+  title,
+  capitalize = false,
+  facts,
+  attention,
+  removeLabel,
+  onRemove,
+  onBlurOut,
+  children,
+}: {
+  id: string;
+  open: boolean;
+  onToggle: () => void;
+  title: React.ReactNode;
+  /** Drug names arrive lower-case; condition labels are already set. */
+  capitalize?: boolean;
+  facts: string[];
+  /** Still has a question that changes the quote. */
+  attention?: string;
+  removeLabel: string;
+  onRemove: () => void;
+  /** Focus left the row (to collapse it once answered). */
+  onBlurOut?: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  const ref = React.useRef<HTMLLIElement>(null);
+  return (
+    <li
+      ref={ref}
+      className={cn('min-w-0', open && 'bg-sunken/50')}
+      onBlur={e => {
+        if (onBlurOut && !ref.current?.contains(e.relatedTarget as Node | null)) onBlurOut();
+      }}
+    >
+      <div className="flex min-h-[32px] items-center gap-1 pl-2 pr-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={onToggle}
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 text-left',
+            FOCUS
+          )}
+        >
+          {attention ? (
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ringing" />
+          ) : (
+            <Check className="h-3 w-3 shrink-0 text-live-ink" aria-hidden />
+          )}
+          <span className="min-w-0 truncate text-[13px]">
+            <span className={cn('font-medium text-ink', capitalize && 'capitalize')}>{title}</span>
+            {facts.length ? <span className="text-ink-3"> · {facts.join(' · ')}</span> : null}
+            {attention ? <span className="text-ringing-ink"> · {attention}</span> : null}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              'ml-auto h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none',
+              open && 'rotate-180'
+            )}
+          />
+        </button>
+        <button
+          type="button"
+          aria-label={removeLabel}
+          onClick={onRemove}
+          className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] text-ink-3 hover:bg-surface hover:text-dropped-ink',
+            FOCUS
+          )}
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      {open ? (
+        <div id={id} className="px-2 pb-2">
+          {children}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function conditionFacts(condition: DraftCondition, fields: readonly DetailField[]): string[] {
+  const facts: string[] = [];
+  const dx = labelFor(DIAGNOSED_BUCKETS, condition.diagnosedMonthsAgo);
+  if (condition.diagnosedMonthsAgo !== undefined && dx) facts.push(`Dx ${briefBucket(dx)}`);
+  if (condition.treatedMonthsAgo === 0) facts.push('Treated now');
+  else if (condition.treatedMonthsAgo === null) facts.push('Never treated');
+  else if (condition.treatedMonthsAgo !== undefined) {
+    const tx = labelFor(TREATED_BUCKETS, condition.treatedMonthsAgo);
+    if (tx) facts.push(`Tx ${briefBucket(tx)}`);
+  }
+  for (const field of fields) {
+    const value = condition.detail[field.key];
+    if (value === undefined || value === '') continue;
+    const name = field.label.replace(/\?$/, '');
+    if (field.type === 'yesno') facts.push(`${name}: ${value ? 'yes' : 'no'}`);
+    else if (field.type === 'select')
+      facts.push(field.options.find(([v]) => v === value)?.[1] ?? String(value));
+    else if (field.type === 'number') facts.push(`${name} ${value}`);
+    else {
+      const b = labelFor(DIAGNOSED_BUCKETS, value);
+      if (b) facts.push(`${name} ${briefBucket(b)}`);
+    }
+  }
+  if (condition.onMeds) facts.push('On meds');
+  return facts;
+}
+
+/** Every question the condition asks has an answer ("Not sure" counts once picked). */
+function conditionAnswered(condition: DraftCondition, fields: readonly DetailField[]): boolean {
+  return (
+    condition.diagnosedMonthsAgo !== undefined &&
+    condition.treatedMonthsAgo !== undefined &&
+    fields.every(f => condition.detail[f.key] !== undefined)
+  );
+}
+
+function ConditionRow({
   idPrefix,
   condition,
   label,
@@ -750,28 +994,29 @@ function ConditionCard({
   const update = (patch: Partial<DraftCondition>) =>
     dispatch({ type: 'updateCondition', key: condition.key, patch });
   const fields = CONDITION_DETAIL_FIELDS[condition.code] ?? [];
+  const answered = conditionAnswered(condition, fields);
+  // Open while its questions are being answered; one line once they are and
+  // the agent has moved on.
+  const [open, setOpen] = React.useState(!answered);
 
   return (
-    <li className="rounded-card border border-rule bg-sunken/60 px-3 py-2">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[13px] font-medium text-ink">{label}</p>
-        <button
-          type="button"
-          aria-label={`Remove ${label}`}
-          onClick={() => dispatch({ type: 'removeCondition', key: condition.key })}
-          className={cn(
-            '-mr-1 -mt-0.5 rounded-control p-1 text-ink-3 hover:bg-surface hover:text-ink',
-            FOCUS
-          )}
-        >
-          <X className="h-4 w-4" aria-hidden />
-        </button>
-      </div>
-      <div className="mt-1.5 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
-        <Field label="Diagnosed / happened" htmlFor={p('dx')}>
+    <CompactRow
+      id={p('detail')}
+      open={open}
+      onToggle={() => setOpen(o => !o)}
+      title={label}
+      facts={conditionFacts(condition, fields)}
+      attention={answered ? undefined : 'details'}
+      removeLabel={`Remove ${label}`}
+      onRemove={() => dispatch({ type: 'removeCondition', key: condition.key })}
+      onBlurOut={answered ? () => setOpen(false) : undefined}
+    >
+      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+        <Field label="Diagnosed" htmlFor={p('dx')}>
           <NativeSelect
             id={p('dx')}
             value={bucketValue(condition.diagnosedMonthsAgo)}
+            className="h-8 px-2 pr-6 text-[13px]"
             onChange={e => update({ diagnosedMonthsAgo: bucketFrom(e.target.value) ?? undefined })}
           >
             {DIAGNOSED_BUCKETS.map(([text, months]) => (
@@ -785,6 +1030,7 @@ function ConditionCard({
           <NativeSelect
             id={p('tx')}
             value={bucketValue(condition.treatedMonthsAgo)}
+            className="h-8 px-2 pr-6 text-[13px]"
             onChange={e => update({ treatedMonthsAgo: bucketFrom(e.target.value) })}
           >
             {TREATED_BUCKETS.map(([text, months]) => (
@@ -804,15 +1050,27 @@ function ConditionCard({
           />
         ))}
       </div>
-      <CheckRow
-        id={p('meds')}
-        checked={condition.onMeds}
-        onChange={onMeds => update({ onMeds })}
-        className="mt-2"
-      >
-        On maintenance medication
-      </CheckRow>
-    </li>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <CheckRow
+          id={p('meds')}
+          checked={condition.onMeds}
+          onChange={onMeds => update({ onMeds })}
+          className="text-[12.5px]"
+        >
+          On maintenance medication
+        </CheckRow>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className={cn(
+            'h-7 rounded-control px-2 text-[12px] font-medium text-brand-ink hover:bg-surface',
+            FOCUS
+          )}
+        >
+          Done
+        </button>
+      </div>
+    </CompactRow>
   );
 }
 
@@ -833,10 +1091,11 @@ function DetailInput({
 
   if (field.type === 'select') {
     return (
-      <Field label={field.label} htmlFor={id}>
+      <Field label={field.label} htmlFor={id} className="col-span-2">
         <NativeSelect
           id={id}
           value={String(value ?? '')}
+          className="h-8 px-2 pr-6 text-[13px]"
           onChange={e => set(e.target.value || undefined)}
         >
           {field.options.map(([v, text]) => (
@@ -851,26 +1110,18 @@ function DetailInput({
   if (field.type === 'yesno') {
     return (
       <Field label={field.label}>
-        <Segmented role="radiogroup" aria-label={field.label} className="w-full">
-          {(
-            [
-              [undefined, 'Not sure'],
-              [false, 'No'],
-              [true, 'Yes'],
-            ] as const
-          ).map(([v, text]) => (
-            <SegmentedItem
-              key={text}
-              role="radio"
-              aria-checked={value === v}
-              active={value === v}
-              className="flex-1 px-2"
-              onClick={() => set(v)}
-            >
-              {text}
-            </SegmentedItem>
-          ))}
-        </Segmented>
+        <ChoiceGroup
+          label={field.label}
+          className="h-8"
+          itemClassName="text-[12px]"
+          options={[
+            { value: 'unsure', label: 'Unsure', key: 'unsure' },
+            { value: 'no', label: 'No', key: 'no' },
+            { value: 'yes', label: 'Yes', key: 'yes' },
+          ]}
+          value={value === true ? 'yes' : value === false ? 'no' : 'unsure'}
+          onChange={v => set(v === 'yes' ? true : v === 'no' ? false : undefined)}
+        />
       </Field>
     );
   }
@@ -881,6 +1132,7 @@ function DetailInput({
           id={id}
           inputMode="numeric"
           maxLength={4}
+          className="h-8 px-2"
           value={value === undefined ? '' : String(value)}
           onChange={e => {
             const v = digitsOnly(e.target.value);
@@ -895,6 +1147,7 @@ function DetailInput({
       <NativeSelect
         id={id}
         value={bucketValue(typeof value === 'number' ? value : undefined)}
+        className="h-8 px-2 pr-6 text-[13px]"
         onChange={e => set(bucketFrom(e.target.value) ?? undefined)}
       >
         {DIAGNOSED_BUCKETS.map(([text, months]) => (
@@ -907,184 +1160,105 @@ function DetailInput({
   );
 }
 
-// ─── Medications ─────────────────────────────────────────────────────────────
-
-/**
- * The brand or alias a search hit matched on, when it isn't the generic name,
- * so typing "E" shows "Eliquis · apixaban" rather than an unexplained apixaban.
- */
-function matchedBrand(hit: FexDrugHit): string | undefined {
-  const matched = hit.matched;
-  if (!matched || matched === hit.generic.toLowerCase()) return undefined;
-  return hit.brands.find(b => b.toLowerCase() === matched) ?? matched;
-}
-
-function MedicationsPanel({
+function MedicationRow({
   idPrefix,
-  draft,
+  med,
+  asked,
+  conditionLabel,
   dispatch,
-  conditions,
-  needsIndication,
-}: QuoteIntakeProps): JSX.Element {
-  const [query, setQuery] = React.useState('');
-  const [hits, setHits] = React.useState<FexDrugHit[]>([]);
-  const [searching, setSearching] = React.useState(false);
-  const labelOf = React.useMemo(
-    () => new Map(conditions.map(c => [c.code, c.label])),
-    [conditions]
+}: {
+  idPrefix: string;
+  med: DraftMed;
+  /** The use options the last quote asked about, when it did. */
+  asked: string[] | undefined;
+  conditionLabel: (code: string) => string;
+  dispatch: React.Dispatch<DraftAction>;
+}): JSX.Element {
+  const p = (s: string) => `${idPrefix}-${med.key}-${s}`;
+  const options = med.indications?.length
+    ? med.indications
+    : (asked ?? []).map(code => ({ code, label: conditionLabel(code) }));
+  const askUse = (med.multiUse || Boolean(asked)) && options.length > 0;
+  const needsUse = askUse && !med.indication;
+  // Open while its use is unanswered; otherwise one line, opened on request.
+  const [openOverride, setOpenOverride] = React.useState<boolean | null>(null);
+  const open = openOverride ?? needsUse;
+
+  const taken =
+    med.lastTakenMonthsAgo && med.lastTakenMonthsAgo > 0
+      ? labelFor(MED_LAST_TAKEN_BUCKETS, med.lastTakenMonthsAgo)
+      : undefined;
+  const use = med.indication
+    ? (options.find(o => o.code === med.indication)?.label ?? conditionLabel(med.indication))
+    : undefined;
+  const facts = [use ? shortLabel(use) : null, taken ?? null].filter((f): f is string =>
+    Boolean(f)
   );
 
-  React.useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setHits([]);
-      return;
-    }
-    const controller = new AbortController();
-    setSearching(true);
-    const timer = setTimeout(() => {
-      void fexApi.searchDrugs(q, 20, controller.signal).then(result => {
-        if (controller.signal.aborted) return;
-        setHits(result.ok ? result.data : []);
-        setSearching(false);
-      });
-    }, 150);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query]);
-
-  const added = new Set(draft.meds.map(m => m.drugId));
-  const options = hits
-    .filter(h => !added.has(h.id))
-    .map(h => ({
-      id: h.id,
-      label: matchedBrand(h) ? (
-        <>
-          <span className="capitalize">{matchedBrand(h)}</span>
-          <span className="text-ink-2"> · {h.generic}</span>
-        </>
-      ) : (
-        <>
-          <span className="capitalize">{h.generic}</span>
-          {h.brands.length ? <span className="text-ink-2"> · {h.brands.join(', ')}</span> : null}
-        </>
-      ),
-      meta: h.drugClass ?? undefined,
-    }));
-
   return (
-    <Step n={4} title="Medications" optional summary={medsSummary(draft)}>
-      <div className="space-y-2">
-        <Combobox
-          id={`${idPrefix}-drug`}
-          label="Add a medication"
-          query={query}
-          onQueryChange={setQuery}
-          placeholder="Brand or generic: Eliquis, metformin…"
-          options={options}
-          minChars={1}
-          loading={searching}
-          emptyText="No medication by that name"
-          onPick={id => {
-            const hit = hits.find(h => h.id === id);
-            if (!hit) return;
-            dispatch({
-              type: 'addMed',
-              med: {
-                drugId: hit.id,
-                name: hit.brands[0] ? `${hit.generic} (${hit.brands[0]})` : hit.generic,
-                indications: hit.indications,
-                multiUse: hit.multiUse,
-              },
-            });
-          }}
-        />
-        {draft.meds.length ? (
-          <ul className="space-y-2">
-            {draft.meds.map(med => {
-              const p = (s: string) => `${idPrefix}-${med.key}-${s}`;
-              const asked = needsIndication.get(med.drugId);
-              const options = med.indications?.length
-                ? med.indications
-                : (asked ?? []).map(code => ({ code, label: labelOf.get(code) ?? code }));
-              const askUse = (med.multiUse || Boolean(asked)) && options.length > 0;
-              return (
-                <li
-                  key={med.key}
-                  className="rounded-card border border-rule bg-sunken/60 px-3 py-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-[13px] font-medium capitalize text-ink">{med.name}</p>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${med.name}`}
-                      onClick={() => dispatch({ type: 'removeMed', key: med.key })}
-                      className={cn(
-                        '-mr-1 -mt-0.5 rounded-control p-1 text-ink-3 hover:bg-surface hover:text-ink',
-                        FOCUS
-                      )}
-                    >
-                      <X className="h-4 w-4" aria-hidden />
-                    </button>
-                  </div>
-                  <div className="mt-1.5 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
-                    <Field label="Still taking?" htmlFor={p('taken')}>
-                      <NativeSelect
-                        id={p('taken')}
-                        value={bucketValue(med.lastTakenMonthsAgo ?? 0)}
-                        onChange={e =>
-                          dispatch({
-                            type: 'updateMed',
-                            key: med.key,
-                            patch: { lastTakenMonthsAgo: bucketFrom(e.target.value) ?? 0 },
-                          })
-                        }
-                      >
-                        {MED_LAST_TAKEN_BUCKETS.map(([text, months]) => (
-                          <option key={text} value={bucketValue(months)}>
-                            {text}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-                    {askUse ? (
-                      <Field label="What is it prescribed for?" htmlFor={p('use')}>
-                        <NativeSelect
-                          id={p('use')}
-                          value={med.indication ?? ''}
-                          aria-invalid={!med.indication}
-                          onChange={e =>
-                            dispatch({
-                              type: 'updateMed',
-                              key: med.key,
-                              patch: { indication: e.target.value || undefined },
-                            })
-                          }
-                          className={cn(!med.indication && 'border-ringing')}
-                        >
-                          <option value="">Choose a use…</option>
-                          {options.map(o => (
-                            <option key={o.code} value={o.code}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </NativeSelect>
-                        {!med.indication ? (
-                          <p className="t-meta mt-1 text-ringing-ink">
-                            Until answered, each carrier applies the strictest listed use.
-                          </p>
-                        ) : null}
-                      </Field>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+    <CompactRow
+      id={p('detail')}
+      open={open}
+      onToggle={() => setOpenOverride(!open)}
+      title={med.name}
+      capitalize
+      facts={facts}
+      attention={needsUse ? 'what is it for?' : undefined}
+      removeLabel={`Remove ${med.name}`}
+      onRemove={() => dispatch({ type: 'removeMed', key: med.key })}
+      onBlurOut={needsUse ? undefined : () => setOpenOverride(null)}
+    >
+      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+        <Field label="Still taking?" htmlFor={p('taken')}>
+          <NativeSelect
+            id={p('taken')}
+            value={bucketValue(med.lastTakenMonthsAgo ?? 0)}
+            className="h-8 px-2 pr-6 text-[13px]"
+            onChange={e =>
+              dispatch({
+                type: 'updateMed',
+                key: med.key,
+                patch: { lastTakenMonthsAgo: bucketFrom(e.target.value) ?? 0 },
+              })
+            }
+          >
+            {MED_LAST_TAKEN_BUCKETS.map(([text, months]) => (
+              <option key={text} value={bucketValue(months)}>
+                {text}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        {askUse ? (
+          <Field label="Prescribed for" htmlFor={p('use')}>
+            <NativeSelect
+              id={p('use')}
+              value={med.indication ?? ''}
+              aria-invalid={!med.indication}
+              onChange={e =>
+                dispatch({
+                  type: 'updateMed',
+                  key: med.key,
+                  patch: { indication: e.target.value || undefined },
+                })
+              }
+              className={cn('h-8 px-2 pr-6 text-[13px]', !med.indication && 'border-ringing')}
+            >
+              <option value="">Choose a use…</option>
+              {options.map(o => (
+                <option key={o.code} value={o.code}>
+                  {o.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
         ) : null}
       </div>
-    </Step>
+      {needsUse ? (
+        <p className="t-meta mt-1 text-ringing-ink">
+          Until answered, each carrier applies the strictest listed use.
+        </p>
+      ) : null}
+    </CompactRow>
   );
 }

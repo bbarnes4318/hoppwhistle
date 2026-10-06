@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock } from 'lucide-react';
+import { AlertTriangle, Lock, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
@@ -98,7 +98,17 @@ function isItemActive(pathname: string | null, href: string): boolean {
  * It has to read as deliberate. The grey "Soon" chip `pending` uses says "not
  * built"; this says "not on your plan", in the brand colour, with a lock.
  */
-function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
+function LockedNavItem({
+  item,
+  drawer,
+  collapsed = false,
+  hint,
+}: {
+  item: NavItem;
+  drawer: boolean;
+  collapsed?: boolean;
+  hint?: RailHintHandlers;
+}) {
   // A white-labelled agency's people do not know NetEnroll by name.
   const { brand } = useBrand();
   const { isChild, parentBrandName } = useAuth();
@@ -148,10 +158,14 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
           aria-disabled="true"
           aria-haspopup="dialog"
           aria-label={`${item.name} — upgrade required`}
+          onFocus={hint?.show(`${item.name} — upgrade`)}
+          onBlur={hint?.hide}
           onPointerEnter={onPointerEnter}
           onPointerLeave={onPointerLeave}
           className={cn(
-            'group flex h-10 w-full items-center gap-3 rounded-lg pl-3 pr-1.5 text-left text-[13px] font-medium text-ink-3',
+            collapsed
+              ? 'group relative flex h-10 w-10 items-center justify-center rounded-control text-ink-3'
+              : 'group flex h-10 w-full items-center gap-3 rounded-lg pl-3 pr-1.5 text-left text-[13px] font-medium text-ink-3',
             // The label-to-pill gap is the flex gap; `ml-auto` only pushes.
             '[@media(pointer:coarse)]:h-11',
             'transition-colors duration-150 ease-out ne-motion hover:bg-sunken',
@@ -160,13 +174,24 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
           )}
         >
           <Icon className="h-[18px] w-[18px] shrink-0 opacity-60" />
+          {collapsed ? (
+            <Lock
+              className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 text-brand-ink"
+              aria-hidden="true"
+            />
+          ) : null}
           {/*
             Two tight lines rather than an ellipsis for the longest names --
             "VOIP Carrier Routing" and "Onboard an Agency" do not fit beside the
             pill in a 248px rail, and 2 x 1.2 x 14px still sits inside the h-9
             row, so the item keeps a normal item's height.
           */}
-          <span className="line-clamp-2 min-w-0 break-words leading-[1.2] opacity-80">
+          <span
+            className={cn(
+              'line-clamp-2 min-w-0 break-words leading-[1.2] opacity-80',
+              collapsed && 'sr-only'
+            )}
+          >
             {item.name}
           </span>
           {/*
@@ -174,7 +199,12 @@ function LockedNavItem({ item, drawer }: { item: NavItem; drawer: boolean }) {
             rail is 248px, and a lock of its own cost the label the room it
             needed -- "Publishers" read "Publish…".
           */}
-          <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-brand-tint px-1.5 py-0.5 text-[11px] font-semibold leading-none text-brand-ink">
+          <span
+            className={cn(
+              'ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-brand-tint px-1.5 py-0.5 text-[11px] font-semibold leading-none text-brand-ink',
+              collapsed && 'hidden'
+            )}
+          >
             <Lock className="h-2.5 w-2.5" aria-hidden="true" />
             Upgrade
           </span>
@@ -222,25 +252,38 @@ function NavLink({
   item,
   active,
   drawer = false,
+  collapsed = false,
+  hint,
 }: {
   item: NavItem;
   active: boolean;
   drawer?: boolean;
+  /** The 56px rail: the icon alone, its name in a hint and to screen readers. */
+  collapsed?: boolean;
+  hint?: RailHintHandlers;
 }) {
   const Icon = item.icon;
 
-  if (item.locked) return <LockedNavItem item={item} drawer={drawer} />;
+  if (item.locked)
+    return <LockedNavItem item={item} drawer={drawer} collapsed={collapsed} hint={hint} />;
 
   if (item.pending) {
     return (
       <span
-        className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-ink-3"
+        className={cn(
+          'flex h-10 items-center rounded-lg text-[13px] font-medium text-ink-3',
+          collapsed ? 'w-10 justify-center' : 'gap-3 px-3'
+        )}
         title={`${item.name} — not built yet`}
         aria-disabled="true"
       >
         <Icon className="h-[18px] w-[18px] shrink-0 opacity-60" />
-        <span className="truncate">{item.name}</span>
-        <span className="ml-auto t-meta shrink-0 rounded-full bg-sunken px-2 text-ink-3">Soon</span>
+        <span className={collapsed ? 'sr-only' : 'truncate'}>{item.name}</span>
+        {collapsed ? null : (
+          <span className="ml-auto t-meta shrink-0 rounded-full bg-sunken px-2 text-ink-3">
+            Soon
+          </span>
+        )}
       </span>
     );
   }
@@ -248,16 +291,24 @@ function NavLink({
   return (
     <Link
       href={item.href}
-      title={item.title}
+      title={collapsed ? undefined : item.title}
+      aria-label={collapsed ? item.name : undefined}
       aria-current={active ? 'page' : undefined}
+      onPointerEnter={collapsed ? hint?.show(item.name) : undefined}
+      onPointerLeave={collapsed ? hint?.hide : undefined}
+      onFocus={collapsed ? hint?.show(item.name) : undefined}
+      onBlur={collapsed ? hint?.hide : undefined}
       className={cn(
-        'group relative flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] transition-colors duration-150 ease-out ne-motion',
+        'group relative flex h-10 items-center rounded-lg text-[13px] transition-colors duration-150 ease-out ne-motion',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        '[@media(pointer:coarse)]:h-11',
+        collapsed ? 'w-10 justify-center' : 'gap-3 px-3 [@media(pointer:coarse)]:h-11',
         active
           ? // A lifted surface with an inset hairline and a 3px accent bar, not a
             // saturated block: the item is marked, the rail is not repainted.
-            'bg-brand-tint font-semibold text-ink shadow-[inset_0_0_0_1px_var(--rule-strong)] before:absolute before:-left-3 before:bottom-2 before:top-2 before:w-[3px] before:rounded-r-full before:bg-brand'
+            cn(
+              'bg-brand-tint font-semibold text-ink shadow-[inset_0_0_0_1px_var(--rule-strong)] before:absolute before:bottom-2 before:top-2 before:w-[3px] before:rounded-r-full before:bg-brand',
+              collapsed ? 'before:-left-2' : 'before:-left-3'
+            )
           : 'font-medium text-ink-2 hover:bg-sunken hover:text-ink'
       )}
     >
@@ -267,9 +318,35 @@ function NavLink({
           active ? 'text-brand' : 'text-ink-3 group-hover:text-ink-2'
         )}
       />
-      <span className="truncate">{item.name}</span>
+      {collapsed ? null : <span className="truncate">{item.name}</span>}
     </Link>
   );
+}
+
+/**
+ * The collapsed rail's labels. The nav column scrolls, which clips anything
+ * drawn outside it, so the name is painted once, `fixed`, beside the item the
+ * pointer or focus is on. It is decoration: every item already carries its
+ * name as its accessible label.
+ */
+interface RailHintHandlers {
+  show: (label: string) => (event: React.SyntheticEvent<HTMLElement>) => void;
+  hide: () => void;
+}
+
+function useRailHint(): [{ label: string; top: number } | null, RailHintHandlers] {
+  const [hint, setHint] = React.useState<{ label: string; top: number } | null>(null);
+  const handlers = React.useMemo<RailHintHandlers>(
+    () => ({
+      show: label => event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        setHint({ label, top: rect.top + rect.height / 2 });
+      },
+      hide: () => setHint(null),
+    }),
+    []
+  );
+  return [hint, handlers];
 }
 
 /**
@@ -433,16 +510,127 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   const activeHref = activeHrefFor(pathname, groups);
   const { brand, settled: brandSettled } = useBrand();
 
-  return (
+  /*
+   * ── A 56px rail, opened on request ─────────────────────────────────────────
+   *
+   * The work in this product is horizontal -- the quoter's form, its carrier
+   * list and the premium side by side -- and a 232px column of labels cost it
+   * a fifth of a laptop screen on every page. So the rail is icons, with each
+   * name in a hint, and it opens to its full width only when asked: OVER the
+   * page, so the page never reflows, and it closes on navigation, Escape or a
+   * click outside. The nav it draws is exactly `navFor`'s; nothing about who
+   * sees what changes here.
+   */
+  const [expanded, setExpanded] = React.useState(false);
+  const collapsed = !drawer && !expanded;
+  const [hint, hintHandlers] = useRailHint();
+  const railRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => setExpanded(false), [pathname]);
+  React.useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      // A locked item's card is portalled outside the rail.
+      if (target instanceof Element && target.closest('[data-radix-popper-content-wrapper]'))
+        return;
+      if (railRef.current && target && !railRef.current.contains(target)) setExpanded(false);
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [expanded]);
+  React.useEffect(() => {
+    if (!collapsed) hintHandlers.hide();
+  }, [collapsed, hintHandlers]);
+
+  const hasProblem = status === 'failed' || hasResolvedNoRole;
+
+  const brandRow = drawer ? null : (
+    /*
+     * The brand, at the topbar's height so the two bottom rules meet in one
+     * line. Collapsed it is the agency's square mark; open, its wordmark (an
+     * agency's straight on its navy). Nothing until the session says whose
+     * portal this is: drawing NetEnroll's and then swapping it for an
+     * agency's is the flash a white-labelled user must never see.
+     */
     <div
+      className={cn(
+        'flex shrink-0 items-center border-b border-rule',
+        collapsed
+          ? 'h-[52px] justify-center'
+          : // A theme whose rail carries its full lockup (wordmark and tagline)
+            // gets a taller row for it when the rail is open.
+            brand?.lockupOnDark
+            ? 'h-[116px] justify-center px-6'
+            : 'h-[52px] px-4'
+      )}
+      data-brand-row=""
+    >
+      {brand ? (
+        <Link
+          href="/dashboard"
+          className="flex items-center rounded-control"
+          aria-label={`${brand.name} home`}
+        >
+          {collapsed ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={brand.markSmall}
+              alt=""
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-[6px] object-contain"
+              draggable={false}
+              data-testid="brand-mark"
+            />
+          ) : (
+            <BrandLockup
+              brand={brand}
+              surface="dark"
+              location="sidebar"
+              className={brand.lockupOnDark ? undefined : 'w-[160px]'}
+            />
+          )}
+        </Link>
+      ) : brandSettled ? (
+        <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
+          {collapsed ? (
+            // NetEnroll has no square mark: its monogram, in the lockup's own
+            // two colours ("net" in ink, "Enroll" in the brand green).
+            <span
+              aria-hidden="true"
+              translate="no"
+              data-testid="logo-mark"
+              className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-rule bg-surface text-[15px] font-bold leading-none tracking-[-0.04em]"
+            >
+              <span className="text-ink">n</span>
+              <span className="text-brand-ink">E</span>
+            </span>
+          ) : (
+            <Logo width={112} />
+          )}
+        </Link>
+      ) : null}
+    </div>
+  );
+
+  const panel = (
+    <div
+      ref={drawer ? undefined : railRef}
       className={cn(
         'flex h-full min-h-0 flex-col bg-surface',
         drawer
           ? 'w-full'
           : cn(
-              'sticky top-0 shrink-0 border-r border-rule',
-              // A theme whose rail carries its full lockup gets the width for it.
-              brand?.lockupOnDark ? 'w-[264px]' : brand ? 'w-[236px]' : 'w-[232px]'
+              'absolute inset-y-0 left-0 z-40 border-r border-rule transition-[width] duration-150 ease-out ne-motion motion-reduce:transition-none',
+              expanded ? cn(brand?.lockupOnDark ? 'w-[264px]' : 'w-[232px]', 'shadow-pop') : 'w-14'
             )
       )}
       /*
@@ -452,102 +640,142 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
        * (mobile-nav.tsx), so the whole drawer is the same navy.
        */
       data-brand-nav={brand && !drawer ? '' : undefined}
+      data-rail={drawer ? undefined : expanded ? 'expanded' : 'collapsed'}
     >
-      {/* In the drawer the panel already has a header: NetEnroll's says
-          "Navigation", and an agency's carries its wordmark on the same navy
-          (mobile-nav.tsx). So the drawer draws no brand row of its own. */}
-      {drawer ? null : brand ? (
-        /*
-         * The agency's wordmark, straight on the navy: the rail is one
-         * continuous surface, logo and navigation alike. Left-aligned at px-6
-         * so the lettering lines up with the nav labels below it. The rule
-         * under it is the rail's own --rule, there to barely register. The
-         * block is taller than the topbar on purpose -- the navy column is its
-         * own surface, so its rule does not have to meet the topbar's.
-         */
-        <div
-          className={cn(
-            'flex shrink-0 items-center border-b border-rule',
-            // The full lockup is a stacked mark: centred in a taller row so the
-            // wordmark and tagline sit with even space around them.
-            brand.lockupOnDark ? 'h-[116px] justify-center px-6' : 'h-[76px] px-5'
-          )}
-          data-brand-row=""
-        >
-          <Link
-            href="/dashboard"
-            className="flex items-center rounded-control"
-            aria-label={`${brand.name} home`}
-          >
-            <BrandLockup brand={brand} surface="dark" location="sidebar" />
-          </Link>
-        </div>
-      ) : (
-        <div className="flex h-[76px] shrink-0 items-center border-b border-rule px-5">
-          {/* Nothing until the session says whose portal this is: drawing
-              NetEnroll's lockup and then swapping it for an agency's is the
-              flash a white-labelled user must never see. */}
-          {brandSettled ? (
-            <Link href="/dashboard" className="rounded-control" aria-label="NetEnroll home">
-              {/* The whole lockup, tagline included: at 128px the
-                  PAY-PER-APPLICATION line still reads. h-16 matches the topbar
-                  beside it (topbar.tsx), so the two bottom rules meet in a
-                  single line across the top of the page. Only the nav below
-                  scrolls; this block stays put. */}
-              <Logo width={128} />
-            </Link>
-          ) : null}
-        </div>
-      )}
+      {brandRow}
 
-      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto px-3 pb-4 pt-6">
-        <div>
+      <nav
+        aria-label="Main"
+        className={cn(
+          'custom-scrollbar flex-1 overflow-y-auto overflow-x-hidden pb-3',
+          collapsed ? 'px-2 pt-3' : drawer ? 'px-3 pb-4 pt-6' : 'px-3 pt-4'
+        )}
+      >
+        <div className={cn(collapsed && 'flex flex-col items-center')}>
           {status === 'resolving' ? <ResolvingNotice /> : null}
-          {status === 'failed' ? <UnreachableNotice /> : null}
-          {hasResolvedNoRole ? <NoRoleNotice /> : null}
-          {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
-          {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
+          {collapsed && hasProblem ? (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              aria-label={status === 'failed' ? 'Your menu could not load' : 'No role assigned'}
+              className="mb-2 flex h-10 w-10 items-center justify-center rounded-control text-ringing-ink hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <AlertTriangle className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+          ) : null}
+          {!collapsed && status === 'failed' ? <UnreachableNotice /> : null}
+          {!collapsed && hasResolvedNoRole ? <NoRoleNotice /> : null}
+          {!collapsed && isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
+          {!collapsed && isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
 
-          {groups.map((group, gi) => (
-            <React.Fragment key={group.label ?? `group-${gi}`}>
-              {/*
-                The line between what the agency has and what it could turn
-                on. Everything below it is locked, so the working menu reads as
-                complete on its own.
-              */}
-              {upgradeGroup !== null && group.label === upgradeGroup ? (
-                <div className="mt-7 border-t border-rule px-3 pt-4">
-                  <p className="text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
-                    Unlock more
-                  </p>
-                </div>
-              ) : null}
-              <div
-                className={cn(
-                  gi > 0 &&
-                    (upgradeGroup !== null && group.label === upgradeGroup ? 'mt-3' : 'mt-7')
-                )}
-              >
-                {group.label ? (
-                  <h2 className="flex items-center gap-1.5 px-3 pb-2 text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
-                    {group.label}
-                    {isLockedGroup(group) ? (
-                      <Lock className="h-3 w-3 opacity-70" aria-label="Upgrade required" />
-                    ) : null}
-                  </h2>
+          {groups.map((group, gi) => {
+            const startsUpgrades = upgradeGroup !== null && group.label === upgradeGroup;
+            return (
+              <React.Fragment key={group.label ?? `group-${gi}`}>
+                {/*
+                  The line between what the agency has and what it could turn
+                  on. Everything below it is locked, so the working menu reads
+                  as complete on its own.
+                */}
+                {startsUpgrades && !collapsed ? (
+                  <div className="mt-7 border-t border-rule px-3 pt-4">
+                    <p className="text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3">
+                      Unlock more
+                    </p>
+                  </div>
                 ) : null}
-                <ul className="space-y-1">
-                  {group.items.map(item => (
-                    <li key={`${item.name}-${item.href}`}>
-                      <NavLink item={item} active={item.href === activeHref} drawer={drawer} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </React.Fragment>
-          ))}
+                <div
+                  className={cn(
+                    collapsed
+                      ? // Collapsed, a group is a hairline above its icons.
+                        gi > 0 && 'mt-2 w-8 border-t border-rule pt-2'
+                      : gi > 0 && (startsUpgrades ? 'mt-3' : drawer ? 'mt-7' : 'mt-5'),
+                    collapsed && 'flex flex-col items-center'
+                  )}
+                >
+                  {group.label ? (
+                    <h2
+                      className={cn(
+                        collapsed
+                          ? 'sr-only'
+                          : 'flex items-center gap-1.5 px-3 pb-2 text-[10px] font-semibold uppercase leading-none tracking-[0.1em] text-ink-3'
+                      )}
+                    >
+                      {group.label}
+                      {isLockedGroup(group) ? (
+                        <Lock className="h-3 w-3 opacity-70" aria-label="Upgrade required" />
+                      ) : null}
+                    </h2>
+                  ) : null}
+                  <ul className={cn(collapsed ? 'flex flex-col items-center gap-1' : 'space-y-1')}>
+                    {group.items.map(item => (
+                      <li key={`${item.name}-${item.href}`}>
+                        <NavLink
+                          item={item}
+                          active={item.href === activeHref}
+                          drawer={drawer}
+                          collapsed={collapsed}
+                          hint={hintHandlers}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </React.Fragment>
+            );
+          })}
         </div>
       </nav>
+
+      {drawer ? null : (
+        <div
+          className={cn(
+            'flex shrink-0 border-t border-rule py-2',
+            collapsed ? 'justify-center' : 'px-3'
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => setExpanded(open => !open)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+            onPointerEnter={collapsed ? hintHandlers.show('Expand navigation') : undefined}
+            onPointerLeave={collapsed ? hintHandlers.hide : undefined}
+            onFocus={collapsed ? hintHandlers.show('Expand navigation') : undefined}
+            onBlur={collapsed ? hintHandlers.hide : undefined}
+            className={cn(
+              'flex h-9 items-center gap-2 rounded-control text-[13px] font-medium text-ink-3 transition-colors duration-150 hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              collapsed ? 'w-10 justify-center' : 'w-full px-3'
+            )}
+          >
+            {expanded ? (
+              <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />
+            ) : (
+              <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" />
+            )}
+            {expanded ? <span>Collapse</span> : null}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (drawer) return panel;
+
+  return (
+    // The rail's own 56px column. The panel inside it is positioned, so
+    // opening it lays it over the page rather than pushing the page over.
+    <div className="relative h-full w-14 shrink-0">
+      {panel}
+      {collapsed && hint ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed left-[62px] z-50 -translate-y-1/2 whitespace-nowrap rounded-[6px] bg-ink px-2 py-1 text-xs font-medium text-surface shadow-pop"
+          style={{ top: hint.top }}
+        >
+          {hint.label}
+        </div>
+      ) : null}
     </div>
   );
 }

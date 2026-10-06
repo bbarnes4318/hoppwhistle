@@ -28,8 +28,12 @@ export interface SoftphoneLauncherProps {
   failed?: boolean;
   onOpen: () => void;
   onReconnect?: () => void;
-  /** `inline` renders in flow, for /design-preview. */
-  placement?: 'floating' | 'inline';
+  /**
+   * `floating` sits over the page's bottom-right corner; `docked` is the
+   * compact form that sits in the topbar, clear of every page's content;
+   * `inline` renders in flow, for /design-preview.
+   */
+  placement?: 'floating' | 'docked' | 'inline';
 }
 
 export function SoftphoneLauncher({
@@ -79,6 +83,7 @@ export function SoftphoneLauncher({
             : 'bg-surface text-ink border-rule-strong';
 
   const handleClick = failed && onReconnect ? onReconnect : onOpen;
+  const docked = placement === 'docked';
 
   return (
     <>
@@ -95,9 +100,9 @@ export function SoftphoneLauncher({
           placement === 'floating'
             ? 'fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6 animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none'
             : 'relative',
-          'inline-flex h-12 items-center gap-2.5 rounded-full border pl-3 pr-4',
-          'text-sm font-semibold shadow-pop',
-          'hover:shadow-raised hover:brightness-[0.98]',
+          docked
+            ? 'inline-flex h-8 items-center gap-1.5 rounded-full border pl-1 pr-2.5 text-[13px] font-semibold hover:brightness-[0.98]'
+            : 'inline-flex h-12 items-center gap-2.5 rounded-full border pl-3 pr-4 text-sm font-semibold shadow-pop hover:shadow-raised hover:brightness-[0.98]',
           ground,
           PRESS,
           FOCUS_RING,
@@ -107,7 +112,8 @@ export function SoftphoneLauncher({
         {state === 'incoming' ? <span className="sp-ring" aria-hidden /> : null}
         <span
           className={cn(
-            'inline-flex h-8 w-8 items-center justify-center rounded-full',
+            'inline-flex items-center justify-center rounded-full',
+            docked ? 'h-6 w-6' : 'h-8 w-8',
             state === 'offline'
               ? 'bg-dropped text-white dark:text-paper'
               : state === 'incoming'
@@ -120,12 +126,19 @@ export function SoftphoneLauncher({
         >
           <Icon
             className={cn(
-              'h-4 w-4',
+              docked ? 'h-3.5 w-3.5' : 'h-4 w-4',
               state === 'connecting' && 'animate-spin motion-reduce:animate-none'
             )}
           />
         </span>
-        <span className="whitespace-nowrap">{label}</span>
+        <span
+          className={cn(
+            'whitespace-nowrap',
+            docked && 'max-w-[200px] truncate max-[1279px]:max-w-[112px]'
+          )}
+        >
+          {label}
+        </span>
         {onCall ? (
           <span className="t-num text-[13px] font-semibold tabular-nums">
             {formatCallTimer(callSeconds)}

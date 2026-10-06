@@ -356,9 +356,9 @@ describe('QuoteWorkspace', () => {
       />
     );
     // The first row is the best one, marked as such, with the carrier's logo.
-    const [use] = await screen.findAllByRole('button', { name: 'Use this quote' });
+    const [use] = await screen.findAllByRole('button', { name: 'Use Quote' });
     const row = use.closest('li')!;
-    expect(within(row).getByText('Lowest price')).toBeTruthy();
+    expect(within(row).getByText('Best price')).toBeTruthy();
     expect(row.querySelector('[data-carrier-logo="Mutual of Omaha"] img')).toBeTruthy();
     fireEvent.click(use);
 
@@ -379,7 +379,10 @@ describe('QuoteWorkspace', () => {
     expect(toasts.calls).toContainEqual(
       expect.objectContaining({ title: 'Quote saved — Mutual of Omaha Living Promise, $41.18/mo' })
     );
-    expect(await screen.findByText('Selected')).toBeTruthy();
+    // The selected-quote bar, and the row's own button turned to "Selected".
+    const bar = await screen.findByRole('status');
+    expect(within(bar).getByText('Selected')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Selected' })).toBeTruthy();
   });
 
   it('asks for the minimum before quoting anything', async () => {

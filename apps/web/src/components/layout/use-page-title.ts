@@ -9,6 +9,8 @@ import { useWhiteLabelView } from '@/hooks/use-white-label-view';
 import { AGENT_NAV, WHITE_LABEL_OWNER_NAV } from './nav-config';
 import { pageTitleFor } from './page-title';
 
+export { publishTopbarSlot, useMediaQuery, useTopbarSlots, type TopbarSlots } from './topbar-slots';
+
 /**
  * The current page's name, as the viewer's own sidebar names it: /dashboard is
  * "Today" to an agent and to a white-label owner, "Dashboard" to staff. The
@@ -82,52 +84,6 @@ export function usePageTitleClaimed(): boolean {
  * mounted (a page rendered on its own), every slot is null and the header
  * renders in place as it always did.
  */
-
-export interface TopbarSlots {
-  title: HTMLElement | null;
-  description: HTMLElement | null;
-  actions: HTMLElement | null;
-}
-
-let slots: TopbarSlots = { title: null, description: null, actions: null };
-const slotListeners = new Set<() => void>();
-
-function subscribeSlots(listener: () => void): () => void {
-  slotListeners.add(listener);
-  return () => slotListeners.delete(listener);
-}
-
-const NO_SLOTS: TopbarSlots = { title: null, description: null, actions: null };
-
-/** The topbar's ref callback for one slot. */
-export function publishTopbarSlot(name: keyof TopbarSlots, element: HTMLElement | null): void {
-  if (slots[name] === element) return;
-  slots = { ...slots, [name]: element };
-  slotListeners.forEach(listener => listener());
-}
-
-/** Where a page's header renders into the topbar; nulls when there is none. */
-export function useTopbarSlots(): TopbarSlots {
-  return React.useSyncExternalStore(
-    subscribeSlots,
-    () => slots,
-    () => NO_SLOTS
-  );
-}
-
-/** Whether `query` matches, re-read as the window changes. False on the server. */
-export function useMediaQuery(query: string): boolean {
-  return React.useSyncExternalStore(
-    listener => {
-      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
-      const list = window.matchMedia(query);
-      list.addEventListener?.('change', listener);
-      return () => list.removeEventListener?.('change', listener);
-    },
-    () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(query).matches,
-    () => false
-  );
-}
 
 /**
  * The widths at which a page's header docks into the topbar. The description

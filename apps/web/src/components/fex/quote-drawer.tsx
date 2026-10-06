@@ -89,7 +89,7 @@ export function QuoteDrawer(): JSX.Element | null {
     >
       <div className="flex h-full flex-col">
         <CallStrip className="shrink-0" />
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {callId && readyFor === callId && initial ? (
             <QuoteWorkspace
               key={callId}

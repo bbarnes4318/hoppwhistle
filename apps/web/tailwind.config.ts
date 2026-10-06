@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import plugin from 'tailwindcss/plugin';
 
 /**
  * The NetEnroll agency portal: a bright, calm workspace — cool grey canvas,
@@ -233,7 +234,24 @@ const config: Config = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate'), require('@tailwindcss/typography')],
+  plugins: [
+    require('tailwindcss-animate'),
+    require('@tailwindcss/typography'),
+    /*
+     * Container queries, for components that live in more than one place at
+     * different widths -- the quoter is a full page, a drawer over a call, a
+     * tab in the console and a row in History. `cq` makes an element a
+     * container; `cq-sm:` ... `cq-xl:` apply at its width, not the window's.
+     */
+    plugin(({ addUtilities, addVariant }) => {
+      addUtilities({ '.cq': { 'container-type': 'inline-size' } });
+      addVariant('cq-sm', '@container (min-width: 560px)');
+      addVariant('cq-md', '@container (min-width: 720px)');
+      addVariant('cq-lg', '@container (min-width: 900px)');
+      addVariant('cq-xl', '@container (min-width: 1180px)');
+      addVariant('cq-max-lg', '@container (max-width: 899.98px)');
+    }),
+  ],
 };
 
 export default config;
