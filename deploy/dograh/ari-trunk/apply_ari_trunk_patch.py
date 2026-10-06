@@ -21,8 +21,13 @@ any channel technology through:
     unchanged). Anveo Direct picks the trunk from a tech prefix in front of
     the number, so with ``012345`` a call to +15551234567 dials
     ``PJSIP/01234515551234567@<trunk>``. Transfers never get the prefix.
+  * outbound number format: ``DOGRAH_ARI_DIAL_FORMAT`` (default ``e164``, i.e.
+    unchanged). Vonage refuses a ``+`` in the dialled number, so with
+    ``nanp11`` a call to +15551234567 dials ``PJSIP/15551234567@<trunk>``
+    (``nanp10`` drops the 1 as well). A prefix, when set, wins. Transfers are
+    never reformatted.
 
-A file already carrying the first version of this patch is upgraded in place.
+A file already carrying an earlier version of this patch is upgraded in place.
 
 Dry run by default. ``--apply`` writes a ``.bak-ari-trunk`` backup first. Running
 it again reports ``already_patched``. It refuses (exit 2) if the file does not
@@ -43,6 +48,7 @@ from dataclasses import dataclass
 
 MARKER = "HOPWHISTLE_ARI_TRUNK_V1"
 MARKER_V2 = "HOPWHISTLE_ARI_DIAL_PREFIX_V2"
+MARKER_V3 = "HOPWHISTLE_ARI_DIAL_FORMAT_V3"
 
 HELPER = f'''
 
@@ -83,6 +89,26 @@ def _hw_dial_number(number: str) -> str:
 V2_REPLACEMENT = (
     'f"PJSIP/{to_number}@{_hw_ari_trunk()}"',
     'f"PJSIP/{_hw_dial_number(to_number)}@{_hw_ari_trunk()}"',
+)
+
+HELPER_V3 = f'''
+
+# {MARKER_V3}: outbound number format (Vonage wants 1XXXXXXXXXX, no "+").
+def _hw_outbound_number(number: str) -> str:
+    if _hw_re.sub(r"\\D", "", _hw_os.environ.get("DOGRAH_ARI_DIAL_PREFIX", "")):
+        return _hw_dial_number(number)
+    fmt = _hw_os.environ.get("DOGRAH_ARI_DIAL_FORMAT", "e164").strip().lower()
+    if fmt not in ("nanp11", "nanp10"):
+        return number
+    if not _hw_re.fullmatch(r"\\+?1?\\d{{10}}", number.strip()):
+        return number  # not a bare NANP number: leave it alone
+    digits = _hw_re.sub(r"\\D", "", number)[-10:]
+    return digits if fmt == "nanp10" else f"1{{digits}}"
+'''
+
+V3_REPLACEMENT = (
+    'f"PJSIP/{_hw_dial_number(to_number)}@{_hw_ari_trunk()}"',
+    'f"PJSIP/{_hw_outbound_number(to_number)}@{_hw_ari_trunk()}"',
 )
 
 # (old, new) pairs. Each `old` must occur exactly once.
@@ -138,18 +164,25 @@ def patch_v1(source: str) -> str:
     return _insert_before_first_def(source, HELPER)
 
 
-def patch_source(source: str) -> str:
-    source = patch_v1(source)
-    if MARKER_V2 in source:
+def _upgrade(source: str, marker: str, replacement, helper: str) -> str:
+    if marker in source:
         return source
-    old, new = V2_REPLACEMENT
+    old, new = replacement
     count = source.count(old)
     if count != 1:
         raise PatchError(f"expected exactly one occurrence of {old!r}, found {count}")
     source = source.replace(old, new)
-    # V1's helper imports _hw_os/_hw_re before its first def, so V2's helper,
-    # inserted before that def, can use them.
-    return _insert_before_first_def(source, HELPER_V2)
+    # V1's helper imports _hw_os/_hw_re before its first def, so later
+    # helpers, inserted before that def, can use them.
+    return _insert_before_first_def(source, helper)
+
+
+def patch_v2(source: str) -> str:
+    return _upgrade(patch_v1(source), MARKER_V2, V2_REPLACEMENT, HELPER_V2)
+
+
+def patch_source(source: str) -> str:
+    return _upgrade(patch_v2(source), MARKER_V3, V3_REPLACEMENT, HELPER_V3)
 
 
 def patch_file(path: str, apply: bool) -> Result:
@@ -161,8 +194,10 @@ def patch_file(path: str, apply: bool) -> Result:
     if changed and apply:
         # Keep the very first backup: it is the unpatched original.
         backup = path + ".bak-ari-trunk"
-        if os.path.exists(backup):
-            backup = path + ".bak-ari-trunk-v2"
+        for suffix in ("-v2", "-v3"):
+            if not os.path.exists(backup):
+                break
+            backup = path + ".bak-ari-trunk" + suffix
         shutil.copy2(path, backup)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(patched)
