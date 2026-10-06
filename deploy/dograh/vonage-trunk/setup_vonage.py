@@ -12,10 +12,11 @@ printed), then walks the steps in deploy/dograh/vonage-trunk/README.md:
   2. writes the Vonage settings into /opt/hopwhistle/.env (backup kept);
   3. adds the `vonage` trunk to Dograh's Asterisk and opens the firewall to Vonage;
   4. places one test call to your phone, and stops unless you say it rang;
-  5. makes the Vonage numbers Dograh's only caller IDs and turns same-state
-     caller ID off on every campaign (backup kept, reversible);
-  6. points Dograh's outbound calls at Vonage, with same-state caller ID off,
-     and restarts the Dograh API.
+  5. prepares Dograh: patches and mounts its ARI provider so it can dial the
+     `vonage` trunk, and edits its compose override (backup kept);
+  6. on one confirmation, makes the Vonage numbers Dograh's only caller IDs
+     (same-state matching off) and restarts the Dograh API on Vonage. If Dograh
+     doesn't come up on Vonage, both are rolled back automatically.
 
 Every step that changes Dograh asks first. Nothing in Hopwhistle is restarted:
 the .env values reach Hopwhistle's own FreeSWITCH/API on the next deploy.
@@ -44,6 +45,9 @@ OVERRIDE = os.path.join(DOGRAH_DIR, "docker-compose.override.yaml")
 API_CONTAINER = "dograh-api-1"
 PROVIDER_PATH = "/app/api/services/telephony/providers/ari/provider.py"
 V3_MARKER = "HOPWHISTLE_ARI_DIAL_FORMAT_V3"
+API_SERVICE = "api"
+PATCH_DIR = "/opt/dograh-patches/ari-trunk"
+STAGED_PROVIDER = os.path.join(PATCH_DIR, "provider.py")
 
 ENV_KEYS = (
     "VONAGE_API_KEY", "VONAGE_API_SECRET", "VONAGE_NUMBER_ROUTING_MODE", "VONAGE_SIP_URI",
@@ -146,6 +150,86 @@ def services_mounting_provider(config: dict) -> Dict[str, str]:
             if isinstance(vol, dict) and vol.get("target") == PROVIDER_PATH and vol.get("source"):
                 found[name] = vol["source"]
     return found
+
+
+def api_image_services(config: dict) -> List[str]:
+    """The ``api`` service and every other service built from its image."""
+    svcs = config.get("services") or {}
+    api = svcs.get(API_SERVICE)
+    if not api:
+        return []
+    image = api.get("image")
+    return sorted(n for n, s in svcs.items() if n == API_SERVICE or (image and s.get("image") == image))
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _content(line: str) -> bool:
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith("#")
+
+
+def add_mount_and_trunk(text: str, service: str, volume: str) -> Optional[str]:
+    """Add ``volume`` and a DOGRAH_ARI_TRUNK entry to ``service`` in a compose override.
+
+    Line-based, keeping the file's own indentation and list/map style. The
+    trunk is written as ``fractel`` here; set_ari_env then points it at Vonage.
+    Returns None for shapes it will not guess at (inline ``[...]`` / ``{...}``
+    lists, no ``services:`` key), so the caller can stop without writing.
+    """
+    lines = text.split("\n")
+    top = next((i for i, l in enumerate(lines) if re.match(r"^services:\s*(#.*)?$", l)), None)
+    if top is None:
+        return None
+    end = next((i for i in range(top + 1, len(lines)) if _content(lines[i]) and _indent(lines[i]) == 0), len(lines))
+    first = next((i for i in range(top + 1, end) if _content(lines[i])), None)
+    ci = _indent(lines[first]) if first is not None else 2
+    pad = " " * ci
+    head = next((i for i in range(top + 1, end)
+                 if re.match(rf"^{pad}{re.escape(service)}:\s*(#.*)?$", lines[i])), None)
+    if head is None:
+        block = [f"{pad}{service}:", f"{pad}  volumes:", f"{pad}    - {volume}",
+                 f"{pad}  environment:", f"{pad}    DOGRAH_ARI_TRUNK: fractel"]
+        return "\n".join(lines[:top + 1] + block + lines[top + 1:])
+
+    def bounds():
+        stop = next((i for i in range(head + 1, len(lines)) if _content(lines[i]) and _indent(lines[i]) <= ci),
+                    len(lines))
+        body = [i for i in range(head + 1, stop) if _content(lines[i])]
+        ki = _indent(lines[body[0]]) if body else ci + 2
+        return body, ki
+
+    def add(key: str, entry_for, present) -> bool:
+        body, ki = bounds()
+        if any(present(lines[i]) for i in body):
+            return True
+        keyline = next((i for i in body if _indent(lines[i]) == ki and lines[i].strip().startswith(f"{key}:")), None)
+        if keyline is None:
+            at = (body[-1] + 1) if body else head + 1
+            lines[at:at] = [f"{' ' * ki}{key}:", entry_for(ki + 2, False)]
+            return True
+        if not re.match(rf"^\s*{key}:\s*(#.*)?$", lines[keyline]):
+            return False  # inline value
+        nxt = next((i for i in body if i > keyline), None)
+        if nxt is not None and _indent(lines[nxt]) > ki:
+            item_indent, dashed = _indent(lines[nxt]), lines[nxt].lstrip().startswith("-")
+        elif nxt is not None and _indent(lines[nxt]) == ki and lines[nxt].lstrip().startswith("-"):
+            item_indent, dashed = ki, True
+        else:
+            item_indent, dashed = ki + 2, None
+        lines.insert(keyline + 1, entry_for(item_indent, dashed))
+        return True
+
+    if not add("volumes", lambda ind, _d: f"{' ' * ind}- {volume}",
+               lambda l: volume.split(":")[0] in l):
+        return None
+    if not add("environment",
+               lambda ind, d: f"{' ' * ind}- DOGRAH_ARI_TRUNK=fractel" if d else f"{' ' * ind}DOGRAH_ARI_TRUNK: fractel",
+               lambda l: bool(_ENV_LINE.match(l)) and "DOGRAH_ARI_TRUNK" in l and "TRANSFER" not in l):
+        return None
+    return "\n".join(lines)
 
 
 # ── side effects ──────────────────────────────────────────────────────────────
@@ -254,81 +338,116 @@ def main() -> int:
               "  docker logs --since 3m dograh-asterisk 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]' | tail -40")
         return 1
 
-    header("5. Dograh caller IDs -> Vonage numbers, same-state matching off")
-    pool_script = os.path.join(REPO, "deploy", "dograh", "anveo-trunk", "set_caller_id_pool.py")
-    sh(["docker", "cp", pool_script, f"{API_CONTAINER}:/tmp/set_caller_id_pool.py"])
-    print(sh(["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--list-configs"]))
-    tcid = ask("Telephony configuration id your campaigns use", "1")
-    if not tcid.isdigit():
-        print("Not a number.")
-        return 1
-    pool = ["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--tcid", tcid,
-            "--pool-tag", "vonage", "--label", "Vonage CID", "--backup", "/tmp/vonage-pool-backup.json",
-            "--state-cid-off", "--numbers", *numbers]
-    step(pool)
-    if not yes("Apply this?"):
-        print("Stopped. The trunk is installed; Dograh still dials its old carrier.")
-        return 0
-    if step(pool + ["--apply"]) != 0:
-        return 1
-    sh(["docker", "cp", f"{API_CONTAINER}:/tmp/vonage-pool-backup.json", "/root/vonage-pool-backup.json"])
-    print("Backup: /root/vonage-pool-backup.json")
-
-    header("6. Point Dograh at Vonage")
+    header("5. Prepare Dograh (takes effect only at the restart in step 6)")
     config = json.loads(sh(["docker", "compose", "config", "--format", "json"], cwd=DOGRAH_DIR))
-    mounts = services_mounting_provider(config)
-    if not mounts:
-        print("Dograh's ARI provider patch isn't mounted yet, so Dograh can't switch trunks. Do the\n"
-              "'Apply' section of deploy/dograh/ari-trunk/README.md, then run this script again\n"
-              "(steps 1-5 are safe to repeat).")
+    services = api_image_services(config)
+    if not services:
+        print(f"No '{API_SERVICE}' service in {DOGRAH_DIR}'s compose config; nothing was changed.")
         return 1
+    mounts = services_mounting_provider(config)
     patcher = os.path.join(REPO, "deploy", "dograh", "ari-trunk", "apply_ari_trunk_patch.py")
-    for source in sorted(set(mounts.values())):
+    if mounts:
+        sources = sorted(set(mounts.values()))
+    else:
+        # Stage a fresh copy of the container's own provider.py, patch it, and
+        # mount it over the original (deploy/dograh/ari-trunk/README.md).
+        os.makedirs(PATCH_DIR, exist_ok=True)
+        if os.path.exists(STAGED_PROVIDER):
+            shutil.copy2(STAGED_PROVIDER, f"{STAGED_PROVIDER}.prev.{time.strftime('%Y%m%d%H%M%S')}")
+        sh(["docker", "cp", f"{API_CONTAINER}:{PROVIDER_PATH}", STAGED_PROVIDER])
+        sources = [STAGED_PROVIDER]
+    for source in sources:
         if step([sys.executable, patcher, "--provider-file", source, "--apply"]) != 0:
             print("The provider patch refused; nothing in Dograh was changed.")
             return 1
 
     with open(OVERRIDE, encoding="utf-8") as handle:
         original = handle.read()
-    updated, changed = set_ari_env(original)
-    if not changed:
-        print(f"No DOGRAH_ARI_TRUNK setting in {OVERRIDE}. Add, under each of {', '.join(sorted(mounts))}:\n"
+    updated: Optional[str] = original
+    for service in services:
+        if service not in mounts:
+            updated = add_mount_and_trunk(updated, service, f"{STAGED_PROVIDER}:{PROVIDER_PATH}:ro")
+            if updated is None:
+                break
+    if updated is not None:
+        updated, changed = set_ari_env(updated)
+    if updated is None or not changed:
+        print(f"Could not edit {OVERRIDE} safely (an inline volumes/environment list?). Nothing was\n"
+              f"changed in Dograh. Under each of {', '.join(services)} it needs:\n"
+              f"    volumes:\n      - {STAGED_PROVIDER}:{PROVIDER_PATH}:ro\n"
               "    environment:\n      DOGRAH_ARI_TRUNK: vonage\n      DOGRAH_ARI_DIAL_FORMAT: nanp11\n"
-              "      DOGRAH_ARI_TRANSFER_TRUNK: fractel\n      DOGRAH_STATE_CID_POLICY: \"off\"\n"
-              f"then: cd {DOGRAH_DIR} && docker compose up -d --no-deps {' '.join(sorted(mounts))}")
+              "      DOGRAH_ARI_TRANSFER_TRUNK: fractel\n      DOGRAH_STATE_CID_POLICY: \"off\"")
         return 1
     override_backup = f"{OVERRIDE}.bak-vonage.{time.strftime('%Y%m%d%H%M%S')}"
     shutil.copy2(OVERRIDE, override_backup)
     with open(OVERRIDE, "w", encoding="utf-8") as handle:
         handle.write(updated)
-    check = subprocess.run(["docker", "compose", "config", "-q"], cwd=DOGRAH_DIR, capture_output=True, text=True)
-    if check.returncode != 0:
+    check = subprocess.run(["docker", "compose", "config", "--format", "json"], cwd=DOGRAH_DIR,
+                           capture_output=True, text=True)
+    missing = services
+    if check.returncode == 0:
+        mounted = services_mounting_provider(json.loads(check.stdout))
+        missing = [svc for svc in services if svc not in mounted]
+    if check.returncode != 0 or missing:
         shutil.copy2(override_backup, OVERRIDE)
-        print(f"The edited override did not validate, so it was put back:\n{check.stderr}")
+        print(f"The edited override did not check out ({check.stderr.strip() or 'mount missing on ' + ', '.join(missing)}),\n"
+              "so it was put back. Nothing in Dograh was changed. Send this output to Claude.")
         return 1
-    print(f"Updated {OVERRIDE} (backup: {override_backup}).")
+    print(f"Updated {OVERRIDE} (backup: {override_backup}). Not live until the restart.")
 
-    print("\nRestarting the Dograh API drops AI calls in progress and can strand concurrency slots\n"
-          "(see deploy/dograh/README.md). Best done outside dialing hours.")
-    services = sorted(mounts)
-    if not yes(f"Restart {', '.join(services)} now?"):
-        print(f"Not restarted. When ready: cd {DOGRAH_DIR} && docker compose up -d --no-deps {' '.join(services)}")
-        return 0
-    if step(["docker", "compose", "up", "-d", "--no-deps", *services], cwd=DOGRAH_DIR) != 0:
+    pool_script = os.path.join(REPO, "deploy", "dograh", "anveo-trunk", "set_caller_id_pool.py")
+    sh(["docker", "cp", pool_script, f"{API_CONTAINER}:/tmp/set_caller_id_pool.py"])
+    print(sh(["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--list-configs"]))
+    tcid = ask("Telephony configuration id your campaigns use", "1")
+    if not tcid.isdigit():
+        shutil.copy2(override_backup, OVERRIDE)
+        print("Not a number. The override was put back; nothing in Dograh was changed.")
         return 1
-    time.sleep(5)
+    pool = ["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py", "--tcid", tcid,
+            "--pool-tag", "vonage", "--label", "Vonage CID", "--backup", "/tmp/vonage-pool-backup.json",
+            "--state-cid-off", "--numbers", *numbers]
+    step(pool)
+
+    header("6. Switch Dograh to Vonage")
+    print("This applies the caller IDs above and restarts "
+          f"{', '.join(services)}. The restart drops AI calls in\n"
+          "progress and can strand concurrency slots (deploy/dograh/README.md): pause running\n"
+          "campaigns first if you can.")
+    if not yes("Switch now?"):
+        shutil.copy2(override_backup, OVERRIDE)
+        print("Not switched. The override was put back; Dograh is unchanged. Run this again when ready.")
+        return 0
+    if step(pool + ["--apply"]) != 0:
+        shutil.copy2(override_backup, OVERRIDE)
+        print("Caller IDs did not apply; the override was put back and Dograh is unchanged.")
+        return 1
+    sh(["docker", "cp", f"{API_CONTAINER}:/tmp/vonage-pool-backup.json", "/root/vonage-pool-backup.json"])
+    print("Caller-ID backup: /root/vonage-pool-backup.json")
+
+    def roll_back(reason: str) -> int:
+        print(f"\n{reason} Rolling back to the previous carrier and caller IDs...")
+        shutil.copy2(override_backup, OVERRIDE)
+        step(["docker", "compose", "up", "-d", "--no-deps", *services], cwd=DOGRAH_DIR)
+        time.sleep(5)
+        step(["docker", "exec", API_CONTAINER, "python", "/tmp/set_caller_id_pool.py",
+              "--restore", "/tmp/vonage-pool-backup.json", "--apply"])
+        print("Rolled back. Send this output to Claude.")
+        return 1
+
+    if step(["docker", "compose", "up", "-d", "--no-deps", *services], cwd=DOGRAH_DIR) != 0:
+        return roll_back("The restart failed.")
+    time.sleep(8)
     trunk = sh(["docker", "exec", API_CONTAINER, "printenv", "DOGRAH_ARI_TRUNK"], check=False).strip()
     patched = V3_MARKER in sh(["docker", "exec", API_CONTAINER, "cat", PROVIDER_PATH], check=False)
     policy = sh(["docker", "exec", API_CONTAINER, "printenv", "DOGRAH_STATE_CID_POLICY"], check=False).strip()
     print(f"DOGRAH_ARI_TRUNK={trunk or '(unset)'}  provider patch V3: {'yes' if patched else 'NO'}  "
           f"same-state caller ID: {policy or 'off (default)'}")
-    if policy not in ("", "off"):
-        print(f"DOGRAH_STATE_CID_POLICY is still {policy!r}, set somewhere other than {OVERRIDE}\n"
-              f"(check {DOGRAH_DIR}/.env and docker-compose.yaml). Change it to off and restart the API.")
-        return 1
     if trunk != "vonage" or not patched:
-        print("Dograh did not come up on Vonage; send this output to Claude.")
-        return 1
+        return roll_back("Dograh did not come up on Vonage.")
+    if policy not in ("", "off"):
+        print(f"WARNING: DOGRAH_STATE_CID_POLICY is {policy!r}, set somewhere other than {OVERRIDE}\n"
+              f"(check {DOGRAH_DIR}/.env and docker-compose.yaml). Calls go over Vonage, but change it to\n"
+              "off and restart the API, or calls to states without a Vonage number will fail.")
 
     header("Done")
     print("Dograh's AI calls now go out over Vonage. Start a campaign call and watch:\n"
