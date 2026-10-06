@@ -27,6 +27,18 @@ CallerIdPool "Dograh State Caller IDs") via
 | `tests/test_state_caller_id.py`       | Pure-python tests (also runnable in the container).                                                                                                                                                  |
 | `tests/test_export_recordings.py`     | Pure-python tests for the export's date window, discovery and location handling.                                                                                                                     |
 
+## Results pages slow or not loading
+
+An agent's runs, a campaign's calls or Agent Runs taking minutes or timing out:
+
+```bash
+cd /opt/hopwhistle && git pull
+./fix-dograh-runs-page.sh
+```
+
+Indexes go in live. The query patch asks before restarting the API. Details:
+[`runs-page-speedup/README.md`](runs-page-speedup/README.md).
+
 ## Is the server keeping up? (load check)
 
 On the box, any time calls are running:
