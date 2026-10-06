@@ -60,7 +60,8 @@ python3 deploy/dograh/vonage-trunk/install_vonage_trunk.py --test-call YOURCELL 
 sudo bash scripts/install-persistent-sip-firewall.sh
 ```
 
-Your phone should ring from the Vonage number and play a short recording. If it
+Your phone should ring from the Vonage number; answer and speak, and you should hear
+yourself echoed back. If it
 doesn't, run:
 `docker logs --since 2m dograh-asterisk 2>&1 | grep -iE 'vonage|40[0-9]|50[0-9]'`.
 
