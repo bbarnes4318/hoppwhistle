@@ -390,7 +390,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         page then scrolled the whole document, which slid the full-height rail
         up and left a blank strip under it.
       */}
-      <div className="relative flex h-screen overflow-hidden bg-paper text-ink">
+      <div className="relative flex h-screen overflow-hidden bg-paper text-ink supports-[height:100dvh]:h-dvh">
         {/*
           The whole document is light, so the shell needs no theme scope of its
           own: the sidebar, the topbar and every page under <main> read the
@@ -398,12 +398,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           itself in <ThemeScope theme="dark"> when it is built, and nothing
           outside that subtree is affected.
         */}
-        {/* The rail is 208px wide and does not shrink, so below md it is
-            replaced by MobileNav's drawer in the topbar. */}
+        {/* The rail is 56px of icons (it opens over the page on request), so
+            below md it is replaced by MobileNav's drawer in the topbar. */}
         <div className="hidden h-full shrink-0 md:flex">
           <Sidebar />
         </div>
-        <div className="flex flex-1 flex-col h-screen overflow-hidden">
+        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
           <div className="shrink-0">
             <Topbar />
           </div>

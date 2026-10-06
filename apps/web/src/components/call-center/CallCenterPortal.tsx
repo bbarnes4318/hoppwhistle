@@ -2013,7 +2013,7 @@ export function CallCenterPortal(): JSX.Element {
                 )}
 
                 {activeCallView === 'quote' && (
-                  <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-y-auto">
                     <QuoteWorkspace
                       key={quoteCallId ?? 'no-call'}
                       variant="embedded"

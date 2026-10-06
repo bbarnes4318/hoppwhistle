@@ -23,6 +23,8 @@ export interface ComboOption {
   label: React.ReactNode;
   /** Shown at the right: a category, a drug class. */
   meta?: React.ReactNode;
+  /** A heading the option sits under ("Conditions", "Medications"). */
+  group?: string;
 }
 
 export interface ComboboxProps {
@@ -40,6 +42,8 @@ export interface ComboboxProps {
   loading?: boolean;
   minChars?: number;
   className?: string;
+  /** A keyboard shortcut that focuses the box, shown in it while it is empty. */
+  shortcut?: string;
 }
 
 export function Combobox({
@@ -55,6 +59,7 @@ export function Combobox({
   loading = false,
   minChars = 1,
   className,
+  shortcut,
 }: ComboboxProps): JSX.Element {
   const [open, setOpen] = React.useState(false);
   const [active, setActive] = React.useState(0);
@@ -107,7 +112,7 @@ export function Combobox({
 
   return (
     <div className={cn('relative', className)}>
-      <label htmlFor={id} className={cn('t-label mb-1.5 block text-ink-2', hideLabel && 'sr-only')}>
+      <label htmlFor={id} className={cn('t-label mb-1 block text-ink-2', hideLabel && 'sr-only')}>
         {label}
       </label>
       <div className="relative">
@@ -133,8 +138,17 @@ export function Combobox({
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          className={cn(CONTROL, 'pl-9')}
+          aria-keyshortcuts={shortcut}
+          className={cn(CONTROL, 'pl-9', shortcut && 'pr-14')}
         />
+        {shortcut && !query ? (
+          <kbd
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-[4px] border border-rule bg-sunken px-1 font-sans text-[10.5px] font-medium text-ink-3"
+          >
+            {shortcut.replace('Alt+', 'Alt ')}
+          </kbd>
+        ) : null}
       </div>
       <ul
         id={listId}
@@ -147,28 +161,42 @@ export function Combobox({
         )}
       >
         {options.map((option, index) => (
-          <li
-            key={option.id}
-            id={`${id}-opt-${index}`}
-            role="option"
-            aria-selected={index === active}
-            // mousedown, not click: the input's blur would close the list first.
-            onMouseDown={e => {
-              e.preventDefault();
-              pick(option.id);
-            }}
-            onMouseEnter={() => setActive(index)}
-            className={cn(
-              'flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm text-ink',
-              index === active && 'bg-brand-tint'
-            )}
-          >
-            <span className="min-w-0 truncate">{option.label}</span>
-            {option.meta ? (
-              <span className="t-meta shrink-0 truncate text-ink-3">{option.meta}</span>
+          <React.Fragment key={option.id}>
+            {option.group && option.group !== options[index - 1]?.group ? (
+              <li
+                role="presentation"
+                className="t-label border-t border-rule px-3 pb-1 pt-2 text-ink-3 first:border-t-0"
+              >
+                {option.group}
+              </li>
             ) : null}
-          </li>
+            <li
+              id={`${id}-opt-${index}`}
+              role="option"
+              aria-selected={index === active}
+              // mousedown, not click: the input's blur would close the list first.
+              onMouseDown={e => {
+                e.preventDefault();
+                pick(option.id);
+              }}
+              onMouseEnter={() => setActive(index)}
+              className={cn(
+                'flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-sm text-ink',
+                index === active && 'bg-brand-tint'
+              )}
+            >
+              <span className="min-w-0 truncate">{option.label}</span>
+              {option.meta ? (
+                <span className="t-meta shrink-0 truncate text-ink-3">{option.meta}</span>
+              ) : null}
+            </li>
+          </React.Fragment>
         ))}
+        {loading && options.length > 0 ? (
+          <li role="presentation" className="t-meta px-3 py-1.5 text-ink-3">
+            Searching…
+          </li>
+        ) : null}
         {options.length === 0 ? (
           <li role="presentation" className="t-meta px-3 py-2 text-ink-3">
             {loading ? 'Searching…' : emptyText}

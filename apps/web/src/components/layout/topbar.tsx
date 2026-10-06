@@ -98,6 +98,11 @@ export function Topbar() {
     (el: HTMLElement | null) => publishTopbarSlot('actions', el),
     []
   );
+  const navSlot = React.useCallback((el: HTMLElement | null) => publishTopbarSlot('nav', el), []);
+  const presenceSlot = React.useCallback(
+    (el: HTMLElement | null) => publishTopbarSlot('presence', el),
+    []
+  );
 
   const initials =
     [user?.firstName, user?.lastName]
@@ -112,7 +117,7 @@ export function Topbar() {
       <button
         type="button"
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
           'bg-brand-tint t-meta font-semibold text-brand-ink',
           'ring-1 ring-inset ring-rule transition-colors duration-150 hover:ring-rule-strong',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -126,19 +131,35 @@ export function Topbar() {
 
   return (
     <>
-      <header className="flex h-[76px] shrink-0 items-center gap-2 border-b border-rule bg-surface px-4 sm:gap-3 sm:px-6 min-[1440px]:px-8">
+      {/*
+        One compact row, 52px: the page's name (or its own tabs), then search,
+        the phone's status, notifications and the account. Vertical room is
+        the scarcest thing on a laptop, and this bar is on every page.
+      */}
+      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-rule bg-surface px-3 sm:gap-2.5 sm:px-4 min-[1440px]:px-5">
         <MobileNav />
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
-          <h1 className="t-title flex min-w-0 items-center text-ink" data-page-title="">
+        {/* A page with its own tabs docked beside it (see `nav` below) keeps
+            its heading for screen readers and hides it from view: the active
+            tab already names the page. */}
+        <div className="flex min-w-0 flex-1 flex-col justify-center [&:has(+[data-page-nav]:not(:empty))]:sr-only">
+          <h1
+            className="flex min-w-0 items-center text-[18px] font-semibold leading-6 tracking-[-0.01em] text-ink"
+            data-page-title=""
+          >
             <span ref={titleSlot} className="min-w-0 truncate empty:hidden" />
             {titleClaimed ? null : <span className="min-w-0 truncate">{title}</span>}
           </h1>
           <div
             ref={descriptionSlot}
             data-page-description=""
-            className="hidden min-w-0 truncate text-[13px] leading-5 text-ink-3 empty:hidden md:block [&>*]:block [&>*]:truncate [&>*:not(:last-child)]:hidden"
+            className="hidden min-w-0 truncate text-[12px] leading-4 text-ink-3 empty:hidden md:block [&>*]:block [&>*]:truncate [&>*:not(:last-child)]:hidden"
           />
         </div>
+        <div
+          ref={navSlot}
+          data-page-nav=""
+          className="hidden min-w-0 flex-1 self-stretch empty:hidden lg:flex"
+        />
 
         {/* The page's own actions: a period switch, an export, "New ...".
             Docked from lg, where the search has folded to its icon; below that
@@ -202,11 +223,13 @@ export function Topbar() {
           type="button"
           onClick={() => setOpen(true)}
           className={cn(
-            'hidden h-9 items-center gap-2 rounded-lg border border-rule bg-paper px-3 shadow-[inset_0_1px_0_rgba(16,24,40,0.02)] sm:flex [&>svg]:h-4 [&>svg]:w-4',
+            'hidden h-8 items-center gap-2 rounded-control border border-rule bg-paper px-2.5 shadow-[inset_0_1px_0_rgba(16,24,40,0.02)] sm:flex [&>svg]:h-4 [&>svg]:w-4',
             // A page with actions docked beside it gets the room back below
             // 1600px: the icon button below stands in for the box.
             '[[data-page-actions]:not(:empty)~&]:max-[1599px]:hidden',
-            'w-[220px] text-left t-body min-[1600px]:w-[280px] text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
+            // And beside a page's own tabs below 1280px, which need the room.
+            '[[data-page-nav]:not(:empty)~&]:max-[1279px]:hidden',
+            'w-[200px] text-left text-[13px] min-[1600px]:w-[260px] text-ink-3 transition-colors duration-150 hover:border-rule-strong hover:bg-surface hover:text-ink-2',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
           )}
           aria-label="Open command palette"
@@ -222,7 +245,7 @@ export function Topbar() {
             beside a page's docked actions below 1600px. */}
         <Tooltip
           content="Open command palette"
-          className="sm:hidden [[data-page-actions]:not(:empty)~&]:max-[1599px]:inline-flex"
+          className="sm:hidden [[data-page-actions]:not(:empty)~&]:max-[1599px]:inline-flex [[data-page-nav]:not(:empty)~&]:max-[1279px]:inline-flex"
         >
           <button
             type="button"
@@ -233,6 +256,14 @@ export function Topbar() {
             <Search aria-hidden className="h-4 w-4" />
           </button>
         </Tooltip>
+
+        {/* The softphone's status, docked here so it never floats over a
+            page's content. Filled by AgentPhonePanel from md up. */}
+        <div
+          ref={presenceSlot}
+          data-presence=""
+          className="hidden shrink-0 items-center empty:hidden md:flex"
+        />
 
         <Tooltip content="Notifications">
           <button
