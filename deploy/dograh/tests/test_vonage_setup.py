@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.join(HERE, "..", "vonage-trunk"))
 from install_vonage_trunk import env_file_vonage_settings  # noqa: E402
 from setup_vonage import (  # noqa: E402
     PROVIDER_PATH,
+    add_mount_and_trunk,
+    api_image_services,
     env_value,
     services_mounting_provider,
     set_ari_env,
@@ -100,6 +102,83 @@ def test_services_mounting_provider():
         "redis": {},
     }}
     assert services_mounting_provider(config) == {"api": "/opt/p/provider.py"}
+
+
+VOL = "/opt/dograh-patches/ari-trunk/provider.py:" + PROVIDER_PATH + ":ro"
+
+
+def _vonage(text, service="api"):
+    out = add_mount_and_trunk(text, service, VOL)
+    assert out is not None
+    return set_ari_env(out)
+
+
+def test_mount_added_to_existing_volumes_and_environment_map():
+    text = ("services:\n"
+            "  api:\n"
+            "    volumes:\n"
+            "      - /opt/dograh-patches/campaign_call_dispatcher.py:/app/x.py:ro\n"
+            "    environment:\n"
+            "      DOGRAH_STATE_CID_POLICY: strict\n"
+            "  redis:\n"
+            "    image: redis\n")
+    out, n = _vonage(text)
+    assert n == 1
+    assert out == ("services:\n"
+                   "  api:\n"
+                   "    volumes:\n"
+                   f"      - {VOL}\n"
+                   "      - /opt/dograh-patches/campaign_call_dispatcher.py:/app/x.py:ro\n"
+                   "    environment:\n"
+                   "      DOGRAH_ARI_TRUNK: vonage\n"
+                   "      DOGRAH_ARI_DIAL_FORMAT: nanp11\n"
+                   "      DOGRAH_ARI_TRANSFER_TRUNK: fractel\n"
+                   "      DOGRAH_STATE_CID_POLICY: \"off\"\n"
+                   "  redis:\n"
+                   "    image: redis\n")
+    # Running again changes nothing more.
+    again = add_mount_and_trunk(out, "api", VOL)
+    assert set_ari_env(again)[0] == out
+
+
+def test_mount_added_with_list_environment_and_dash_at_key_indent():
+    text = ("services:\n"
+            "  api:\n"
+            "    image: dograh/api\n"
+            "    volumes:\n"
+            "    - /a:/b\n"
+            "    environment:\n"
+            "      - FOO=1\n")
+    out, n = _vonage(text)
+    assert n == 1
+    assert f"    volumes:\n    - {VOL}\n    - /a:/b\n" in out
+    assert "    environment:\n      - DOGRAH_ARI_TRUNK=vonage\n      - DOGRAH_ARI_DIAL_FORMAT=nanp11\n" in out
+    assert "      - FOO=1" in out
+
+
+def test_missing_keys_and_missing_service_are_created():
+    text = "services:\n  api:\n    restart: always\n  worker:\n    restart: always\nvolumes:\n  data: {}\n"
+    out = add_mount_and_trunk(text, "api", VOL)
+    out = add_mount_and_trunk(out, "campaign", VOL)
+    out, n = set_ari_env(out)
+    assert n == 2
+    assert ("  api:\n    restart: always\n    volumes:\n"
+            f"      - {VOL}\n    environment:\n      DOGRAH_ARI_TRUNK: vonage\n") in out
+    assert out.startswith(f"services:\n  campaign:\n    volumes:\n      - {VOL}\n")
+    assert out.endswith("volumes:\n  data: {}\n")  # top-level volumes untouched
+
+
+def test_inline_lists_are_refused():
+    assert add_mount_and_trunk("services:\n  api:\n    volumes: [\"/a:/b\"]\n", "api", VOL) is None
+    assert add_mount_and_trunk("services:\n  api:\n    environment: {A: 1}\n", "api", VOL) is None
+    assert add_mount_and_trunk("version: '3'\n", "api", VOL) is None
+
+
+def test_api_image_services():
+    config = {"services": {"api": {"image": "dograh/api:1"}, "worker": {"image": "dograh/api:1"},
+                           "ui": {"image": "dograh/ui:1"}}}
+    assert api_image_services(config) == ["api", "worker"]
+    assert api_image_services({"services": {"ui": {}}}) == []
 
 
 if __name__ == "__main__":

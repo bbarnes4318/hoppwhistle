@@ -27,8 +27,10 @@ cd /opt/hopwhistle && git pull && python3 deploy/dograh/vonage-trunk/setup_vonag
 ```
 
 `setup_vonage.py` asks for the Vonage API key and secret, checks them against
-Vonage, and runs every step below, asking before each change to Dograh. It
-stops, with Dograh untouched, if the test call doesn't ring. The rest of this
+Vonage, and runs every step below. It stops, with Dograh untouched, if the test
+call fails. It installs the ARI provider patch itself when it isn't mounted yet.
+The caller IDs and the carrier then switch together, on one confirmation. If
+Dograh doesn't come back up on Vonage, both are rolled back automatically. The rest of this
 page is the same thing step by step.
 
 ## Before you start
