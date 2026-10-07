@@ -199,7 +199,7 @@ export function resetQuoteSession(): void {
  * `children`, when given (tests), render as they are.
  */
 export function QuoteSessionProvider({ children }: { children?: React.ReactNode }): JSX.Element {
-  const { currentCall, phoneStatus } = usePhone();
+  const { currentCall, phoneStatus, hasHeldCalls } = usePhone();
   const pathname = usePathname();
   const session = useQuoteSession();
   const settings = session?.settings ?? null;
@@ -236,6 +236,9 @@ export function QuoteSessionProvider({ children }: { children?: React.ReactNode 
     if (!callId || !connected || !settings) return;
     if (autoOpened.current.has(callId)) return;
     autoOpened.current.add(callId);
+    // A third party being added to a call is not a new customer: the quoter
+    // stays on the customer the agent is quoting.
+    if (hasHeldCalls) return;
     const setting = {
       agencySetting: settings.agency.autoOpenOnCall,
       mySetting: settings.me.autoOpenOnCall,
@@ -253,6 +256,8 @@ export function QuoteSessionProvider({ children }: { children?: React.ReactNode 
         actions.openFor({ callId });
       }
     });
+    // hasHeldCalls is read when a call connects, not watched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callId, connected, settings, phone]);
 
   // Forget a call 30 minutes after it ends (its disposition usually clears it sooner).

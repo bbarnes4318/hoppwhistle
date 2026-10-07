@@ -82,9 +82,18 @@ export function GlobalDispositionModal() {
       !isOnCallCenter &&
       !handledCallIdsRef.current.has(pendingDispositionCall.callId)
     ) {
+      /*
+       * Close the quoter first. It is a modal drawer, and while it is open
+       * nothing outside it -- this wrap-up included -- can be clicked or typed
+       * into, which left agents stuck on a disposition they could not answer.
+       * Closing it keeps the quote: the draft and the selected plan stay in
+       * the session and still prefill the application below.
+       */
+      // Only when open: closing emits, and this effect re-runs on every emit.
+      if (quoteSession?.drawerCallId) quoteSession.closeDrawer();
       setOpen(true);
     }
-  }, [pendingDispositionCall, pathname]);
+  }, [pendingDispositionCall, pathname, quoteSession]);
 
   const handleSave = useCallback(async () => {
     if (!selectedDisposition || !pendingDispositionCall) return;
