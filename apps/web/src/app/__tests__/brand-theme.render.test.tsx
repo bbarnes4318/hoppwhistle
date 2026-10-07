@@ -78,11 +78,11 @@ function iconHrefs(): string[] {
 }
 
 /**
- * The rail is 56px of icons until it is opened; the wordmark is drawn in the
- * open rail. Collapsed it carries the brand's square mark.
+ * The sidebar opens full width, with the wordmark; a user may collapse it to
+ * the 56px rail, which carries the brand's square mark instead.
  */
-async function expandRail(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Expand navigation' }));
+async function collapseRail(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Collapse navigation' }));
 }
 
 async function mountShell(): Promise<() => void> {
@@ -146,12 +146,6 @@ describe('the agency brand theme in the authenticated shell', () => {
     it('renders the Life Leads Plus logo and no NetEnroll logo', async () => {
       await mountShell();
 
-      // Collapsed, the rail carries the agency's square mark.
-      const mark = await screen.findByTestId('brand-mark');
-      expect(mark.getAttribute('src')).toBe('/brands/life-leads-plus/mark-128.png');
-      expect(document.querySelector('[data-testid="logo-mark"]')).toBeNull();
-
-      await expandRail();
       const logo = await screen.findByTestId('brand-logo');
       // The transparent wordmark reversed out for the navy, straight on the
       // rail: never the old white-canvas lockup, never on a plate.
@@ -164,21 +158,39 @@ describe('the agency brand theme in the authenticated shell', () => {
       expect(document.querySelector('img[src="/netenroll-logo.png"]')).toBeNull();
       expect(screen.queryByLabelText('NetEnroll home')).toBeNull();
       expect(screen.getByLabelText('Life Leads Plus home')).toBeTruthy();
+
+      // Collapsed, the rail carries the agency's square mark.
+      await collapseRail();
+      const mark = await screen.findByTestId('brand-mark');
+      expect(mark.getAttribute('src')).toBe('/brands/life-leads-plus/mark-128.png');
+      expect(document.querySelector('[data-testid="logo-mark"]')).toBeNull();
     });
 
-    it('keeps the rail at 56px until it is opened', async () => {
+    it('opens as the full 232px sidebar, and collapses to the 56px rail on request', async () => {
+      await mountShell();
+      await screen.findByTestId('brand-logo');
+      const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
+      expect(rail?.className).toContain('w-[232px]');
+      // Not laid over the page: the column takes its width in the shell.
+      expect(rail?.className).not.toContain('absolute');
+      await collapseRail();
+      await screen.findByTestId('brand-mark');
+      expect(rail?.className).toContain('w-14');
+      expect(localStorage.getItem('ne:sidebar')).toBe('collapsed');
+    });
+
+    it('remembers a collapsed rail', async () => {
+      localStorage.setItem('ne:sidebar', 'collapsed');
       await mountShell();
       await screen.findByTestId('brand-mark');
-      const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
-      expect(rail?.className).toContain('w-14');
-      await expandRail();
+      fireEvent.click(await screen.findByRole('button', { name: 'Expand navigation' }));
       await screen.findByTestId('brand-logo');
-      expect(rail?.className).toContain('w-[232px]');
+      expect(localStorage.getItem('ne:sidebar')).toBe('expanded');
     });
 
     it('draws the navigation rail in the brand navy', async () => {
       await mountShell();
-      await screen.findByTestId('brand-mark');
+      await screen.findByTestId('brand-logo');
       const rail = screen.getByRole('navigation', { name: 'Main' }).parentElement;
       expect(rail?.hasAttribute('data-brand-nav')).toBe(true);
     });
@@ -200,12 +212,12 @@ describe('the agency brand theme in the authenticated shell', () => {
 
     it('never names NetEnroll anywhere in the shell', async () => {
       await mountShell();
-      await screen.findByTestId('brand-mark');
-      // Collapsed and open alike.
-      for (const open of [false, true]) {
-        if (open) {
-          await expandRail();
-          await screen.findByTestId('brand-logo');
+      await screen.findByTestId('brand-logo');
+      // Open and collapsed alike.
+      for (const collapsed of [false, true]) {
+        if (collapsed) {
+          await collapseRail();
+          await screen.findByTestId('brand-mark');
         }
         expect(document.body.textContent ?? '').not.toMatch(/net\s*enroll/i);
         for (const img of document.querySelectorAll('img')) {
@@ -218,12 +230,12 @@ describe('the agency brand theme in the authenticated shell', () => {
       meLatencyMs = 150;
       await mountShell();
 
-      // Before /api/auth/me answers: neither mark.
-      expect(document.querySelector('[data-testid="logo-mark"]')).toBeNull();
-      expect(document.querySelector('[data-testid="brand-mark"]')).toBeNull();
+      // Before /api/auth/me answers: neither logo.
+      expect(document.querySelector('[data-testid="logo"]')).toBeNull();
+      expect(document.querySelector('[data-testid="brand-logo"]')).toBeNull();
 
       // After: the agency's, and still never NetEnroll's.
-      await screen.findByTestId('brand-mark');
+      await screen.findByTestId('brand-logo');
       expect(document.querySelector('[data-testid="logo-mark"]')).toBeNull();
       expect(document.querySelector('[data-testid="logo"]')).toBeNull();
     });
@@ -231,7 +243,6 @@ describe('the agency brand theme in the authenticated shell', () => {
     it('uses the theme name when the server sends no brand name', async () => {
       brand = { theme: 'life-leads-plus', name: null };
       await mountShell();
-      await expandRail();
       expect((await screen.findByTestId('brand-logo')).getAttribute('alt')).toBe('Life Leads Plus');
     });
 
@@ -253,9 +264,8 @@ describe('the agency brand theme in the authenticated shell', () => {
       brand = { theme: 'powerhouse-insurance', name: 'Powerhouse Insurance' };
     });
 
-    it('carries the full logo, tagline included, in a wider rail when open', async () => {
+    it('carries the full logo, tagline included, in a wider sidebar', async () => {
       await mountShell();
-      await expandRail();
       const logo = await screen.findByTestId('brand-logo');
       expect(logo.getAttribute('src')).toBe('/brands/powerhouse-insurance/logo.png');
       expect(logo.getAttribute('alt')).toBe('Powerhouse Insurance');
@@ -270,20 +280,20 @@ describe('the agency brand theme in the authenticated shell', () => {
     it('renders the NetEnroll logo, and no brand logo', async () => {
       await mountShell();
       expect(document.querySelector('[data-brand-nav]')).toBeNull();
-      await screen.findByTestId('logo-mark');
-      expect(document.querySelector('[data-testid="brand-mark"]')).toBeNull();
-
-      await expandRail();
       const logo = await screen.findByTestId('logo');
       expect(logo.querySelector('img')?.getAttribute('src')).toBe('/netenroll-logo.png');
       expect(document.querySelector('[data-testid="brand-logo"]')).toBeNull();
+
+      await collapseRail();
+      await screen.findByTestId('logo-mark');
+      expect(document.querySelector('[data-testid="brand-mark"]')).toBeNull();
     });
 
     it('leaves <html>, the icons and the title as NetEnroll', async () => {
       // A stale attribute from an earlier session must be cleared, not kept.
       document.documentElement.setAttribute('data-brand', 'life-leads-plus');
       await mountShell();
-      await screen.findByTestId('logo-mark');
+      await screen.findByTestId('logo');
 
       await waitFor(() => expect(document.documentElement.hasAttribute('data-brand')).toBe(false));
       expect(iconHrefs()).toEqual(['/favicon-32.png', '/icon-512.png', '/apple-touch-icon.png']);
@@ -294,8 +304,8 @@ describe('the agency brand theme in the authenticated shell', () => {
       brand = { theme: 'someone-else', name: 'Someone Else' };
       await mountShell();
 
-      await screen.findByTestId('logo-mark');
-      expect(document.querySelector('[data-testid="brand-mark"]')).toBeNull();
+      await screen.findByTestId('logo');
+      expect(document.querySelector('[data-testid="brand-logo"]')).toBeNull();
       expect(document.documentElement.hasAttribute('data-brand')).toBe(false);
     });
   });

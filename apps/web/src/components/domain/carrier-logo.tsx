@@ -8,7 +8,7 @@
  * tinted surface.
  *
  * A carrier with no logo file:
- * - `md` / `lg` / `row` (the plate *is* the carrier's identity): its name set as a
+ * - `md` / `lg` / `row` / `quote*` (the plate *is* the carrier's identity): its name set as a
  *   wordmark, "Aetna" over "Continental Life", so a list of carriers keeps one
  *   rhythm and nothing looks like a broken image.
  * - `xs` / `sm` (inline, next to the carrier's name): nothing at all.
@@ -34,7 +34,24 @@ const SIZE = {
    * wordmark runs the full width, a seal the full height.
    */
   row: { box: 'h-[50px] w-[120px]', square: 'h-[50px] w-[50px]' },
+  /*
+   * The quoter's result cards, largest first: the recommended carrier, the
+   * two runner-up picks, and every other carrier in the list. Same plate as
+   * `row`, more of it, so a wordmark is read at a glance rather than found.
+   */
+  quoteHero: { box: 'h-[76px] w-[190px]', square: 'h-[76px] w-[76px]' },
+  quotePick: { box: 'h-[62px] w-[160px]', square: 'h-[62px] w-[62px]' },
+  quoteRow: { box: 'h-[56px] w-[150px]', square: 'h-[56px] w-[56px]' },
 } as const;
+
+/** The plate sizes that fill edge to edge, with the mark scaled to the plate. */
+const FILL_SIZES: ReadonlySet<Size> = new Set(['row', 'quoteHero', 'quotePick', 'quoteRow']);
+const PLATE_PADDING: Partial<Record<Size, string>> = {
+  row: 'p-[5px]',
+  quoteHero: 'px-3 py-2.5',
+  quotePick: 'px-2.5 py-2',
+  quoteRow: 'px-2.5 py-[7px]',
+};
 
 type Size = keyof typeof SIZE;
 
@@ -74,13 +91,18 @@ export function CarrierLogo({
   const square = !fixedWidth && hasLogo && brand?.shape === 'square';
   const label = brand?.name ?? display;
   const [primary, secondary] = wordmarkParts(display);
-  const row = size === 'row';
+  const row = FILL_SIZES.has(size);
+  const quote = row && size !== 'row';
 
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center justify-center overflow-hidden border border-rule bg-logo-plate',
-        row ? 'rounded-[6px]' : 'rounded-control',
+        row
+          ? quote
+            ? 'rounded-[8px] shadow-[0_1px_2px_rgba(15,23,42,0.06)]'
+            : 'rounded-[6px]'
+          : 'rounded-control',
         square ? s.square : s.box,
         className
       )}
@@ -98,8 +120,8 @@ export function CarrierLogo({
           onError={() => setFailed(true)}
           className={cn(
             row
-              ? // Fills the plate and scales up or down to it, never past 110x40.
-                'h-full w-full object-contain p-[5px]'
+              ? // Fills the plate and scales up or down to it, never cropped.
+                cn('h-full w-full object-contain', PLATE_PADDING[size])
               : cn(
                   'max-h-full max-w-full object-contain',
                   brand!.shape === 'square' ? 'p-1' : inline ? 'px-1 py-0.5' : 'px-2.5 py-2'
@@ -111,7 +133,15 @@ export function CarrierLogo({
           <span
             className={cn(
               'line-clamp-2 max-w-full font-bold leading-[1.1] tracking-tight text-logo-plate-ink',
-              primary.length > 14 ? 'text-[13px]' : size === 'lg' ? 'text-[17px]' : 'text-[15px]'
+              size === 'quoteHero'
+                ? primary.length > 14
+                  ? 'text-[16px]'
+                  : 'text-[20px]'
+                : primary.length > 14
+                  ? 'text-[13px]'
+                  : size === 'lg' || quote
+                    ? 'text-[17px]'
+                    : 'text-[15px]'
             )}
           >
             {primary}
