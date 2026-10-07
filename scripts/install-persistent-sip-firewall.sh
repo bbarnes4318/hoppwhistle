@@ -65,6 +65,16 @@ VONAGE_SIP_SOURCES=(
   168.100.64.0/18
 )
 
+# Telnyx SIP signaling (sip.telnyx.com, US primary and secondary). Telnyx
+# delivers inbound calls on an IP connection from these. Re-check against
+# https://developers.telnyx.com/docs/voice/sip-trunking/network-configuration/ip-whitelisting
+# before relying on Telnyx inbound; a missing address shows up as dropped
+# Telnyx INVITEs. Media is unfiltered, as for Anveo.
+TELNYX_SIP_SOURCES=(
+  192.76.120.10
+  64.16.250.10
+)
+
 # ---------------------------------------------------------------------------
 # Docker-published Hopwhistle telephony ports (IPv4)
 # ---------------------------------------------------------------------------
@@ -87,7 +97,7 @@ for ip in "${CARRIER_IPS[@]}"; do
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$ip/32" -p tcp --dport 5080 -j RETURN
 done
 
-for src in "${ANVEO_SIP_SOURCES[@]}" "${TWILIO_SIP_SOURCES[@]}" "${VONAGE_SIP_SOURCES[@]}"; do
+for src in "${ANVEO_SIP_SOURCES[@]}" "${TWILIO_SIP_SOURCES[@]}" "${VONAGE_SIP_SOURCES[@]}" "${TELNYX_SIP_SOURCES[@]}"; do
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p udp --dport 5080 -j RETURN
   iptables -w -A "$DOCKER_CHAIN" -i "$WAN_IF" -s "$src" -p tcp --dport 5080 -j RETURN
 done
