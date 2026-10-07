@@ -140,11 +140,20 @@ describe('stage transition policy', () => {
 });
 
 describe('template sets and seals', () => {
-  it('ships Life Leads Plus with no contract text, so it is not configured', () => {
+  it('ships Life Leads Plus with its own contract text, so it is configured', () => {
     const state = templateSetFor({
       scope: 'TENANT',
       templateSetKey: 'life-leads-plus',
       brandTheme: 'life-leads-plus',
+    });
+    expect(state.configured).toBe(true);
+  });
+
+  it('ships Powerhouse Insurance with no contract text, so it is not configured', () => {
+    const state = templateSetFor({
+      scope: 'TENANT',
+      templateSetKey: 'powerhouse-insurance',
+      brandTheme: 'powerhouse-insurance',
     });
     expect(state.configured).toBe(false);
     if (!state.configured) expect(state.reason).toBe('Contract templates not configured');
@@ -472,10 +481,11 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
       expect(data.access).toEqual({ level: 'MANAGER', via: 'OWNER' });
       expect(data.suite.brandTheme).toBe('life-leads-plus');
       expect(data.suite.legalName).not.toContain('NetEnroll');
-      // No legal entity is assumed from the brand, and no contract text exists.
+      // Its own contract text is installed, but no legal entity is assumed from
+      // the brand: it cannot send until its owner says who that is.
       expect(data.suite.missingSetting).toBe("Life Leads Plus's legal contracting entity");
-      expect(data.suite.templatesConfigured).toBe(false);
-      expect(data.suite.templatesMessage).toBe('Contract templates not configured');
+      expect(data.suite.templatesConfigured).toBe(true);
+      expect(data.suite.templatesMessage).toBeNull();
       expect(data.can.sendAgreements).toBe(false);
     });
 
@@ -803,8 +813,34 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
   // Agreements: NetEnroll unchanged, Life Leads Plus its own
   // ════════════════════════════════════════════════════════════════════════
   describe('agreements', () => {
-    it('refuses LLP previews and sends until approved templates are installed', async () => {
+    it('previews Life Leads Plus’s own MSA, CPA and CPL, in its name and brand', async () => {
       await configureSuiteSettingsOnly();
+      const prospect = await createProspect('llpOwner');
+      const preview = await call(
+        'llpOwner',
+        'POST',
+        '/api/v1/sales/agreements/preview',
+        agreementBody({ salesProspectId: prospect.id })
+      );
+      expect(preview.statusCode, preview.body).toBe(200);
+      const documents = preview.json().data.documents as Array<{ html: string }>;
+      expect(documents.length).toBeGreaterThan(0);
+      for (const doc of documents) {
+        expect(visibleText(doc.html)).not.toMatch(/NetEnroll|PVN/i);
+        expect(doc.html).toContain('Life Leads Plus LLC');
+        expect(doc.html).toContain('#0081F1');
+      }
+    });
+
+    it('refuses previews and sends from a suite with no template set', async () => {
+      await configureSuiteSettingsOnly();
+      const suite = await prisma.agreementSuite.findFirstOrThrow({
+        where: { workspace: { tenantId: ids.llp } },
+      });
+      const unset = await call('operator', 'PUT', `/api/v1/platform/agreement-suites/${suite.id}`, {
+        templateSetKey: null,
+      });
+      expect(unset.statusCode, unset.body).toBe(200);
       const prospect = await createProspect('llpOwner');
       for (const url of ['/api/v1/sales/agreements/preview', '/api/v1/sales/agreements']) {
         const response = await call(

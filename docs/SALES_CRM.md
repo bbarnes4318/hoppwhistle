@@ -132,12 +132,17 @@ a white-label suite (refused at the API, and refused again by the engine if a ro
 names it). A template version is code and immutable: a new text is a new version
 string, and registering a duplicate version throws.
 
-**Life Leads Plus has no approved contract text in this repository.** Its set,
-`life-leads-plus`, is registered with no documents, so its suite shows *Contract
-templates not configured* and every preview and send answers
-`409 TEMPLATES_NOT_CONFIGURED`. To install approved text, follow the steps at the
-top of `template-sets.ts` (new modules under `templates/life-leads-plus/`, new
-version strings, a verbatim-text test). Nothing else needs to change.
+**Life Leads Plus** sends the `life-leads-plus` set: NetEnroll's MSA, CPA and
+CPL word for word, with the suite's legal entity (and d/b/a) as the contracting
+party in NetEnroll's place, the Portal defined as `agents.lifeleadsplus.com`, and
+Life Leads Plus's logo and blue palette (`templates/white-label/`, versions
+`LLP-MSA-2026-10-07.1`, `LLP-CPA-2026-10-07.1`, `LLP-CPL-2026-10-07.1`).
+Governing law (Florida, St. Johns County), Melio as the payment processor, and
+every other term are NetEnroll's, unchanged. `white-label-templates.test.ts`
+pins the text to NetEnroll's with only the names swapped. Another brand gets
+the same agreements by pointing its set's `documents` at
+`whiteLabelDocumentSpecs` with its own version prefix and portal host;
+`powerhouse-insurance` has none yet and answers `409 TEMPLATES_NOT_CONFIGURED`.
 
 ### Seals
 
@@ -224,8 +229,8 @@ After deploying, for Life Leads Plus:
 
 1. The owner opens **Sales CRM → Settings** and enters the legal contracting
    entity, notice address and email, signatory and copy addresses.
-2. Approved MSA/CPA/CPL text is installed in code (see *Template sets*) and
-   deployed. Until then the CRM works and sending is refused.
+2. Nothing else: its MSA/CPA/CPL are installed (see *Template sets*), and
+   it can send as soon as step 1 is saved.
 3. Optional: a seal of its own — generate a p12 as in `docs/AGREEMENTS.md` with
    the issuer's own subject, add `AGREEMENT_SEAL_LIFE_LEADS_PLUS_P12_BASE64` and
    `AGREEMENT_SEAL_LIFE_LEADS_PLUS_P12_PASSPHRASE` to the environment, then
