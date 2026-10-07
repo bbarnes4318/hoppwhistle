@@ -19,21 +19,18 @@
  * edit under the old one. `agreement-suites.test.ts` refuses two sets sharing a
  * version string.
  *
+ * ── White-label sets ─────────────────────────────────────────────────────────
+ *
+ * `life-leads-plus` sends NetEnroll's MSA, CPA and CPL with Life Leads Plus
+ * named as the contracting party (templates/white-label/), on its own
+ * `LLP-` version strings, in its brand.
+ *
  * ── A set with no text ───────────────────────────────────────────────────────
  *
- * `life-leads-plus` and `powerhouse-insurance` are registered with
- * `documents: null`, and the same applies to each. No approved Life
- * Leads Plus contract text exists in this repository, and NetEnroll's is not
- * Life Leads Plus's to send. Its suite therefore reads "Contract templates not
- * configured" and every preview and send is refused. To install approved text:
- *
- *   1. Add templates/life-leads-plus/{msa,cpa,cpl}.ts, each exporting a title,
- *      a NEW version string (e.g. `LLP-MSA-2026-11-01.1`) and a `render`
- *      written with the layout.ts helpers, passing `opts.brand` to
- *      `documentHtml` and `opts.issuerPartyLabel` to `signatureBlock` (all
- *      five signature markers must appear exactly once).
- *   2. Point `documents` below at them.
- *   3. Add a verbatim-text test for them beside agreement-templates.test.ts.
+ * `powerhouse-insurance` is registered with `documents: null`: its suite reads
+ * "Contract templates not configured" and every preview and send is refused.
+ * To give it the white-label agreements, point `documents` at
+ * `whiteLabelDocumentSpecs` with its own version prefix and portal host.
  *
  * Which set a suite uses (`AgreementSuite.templateSetKey`) is set by platform
  * admins only, and audited. A set names the scope -- and for a tenant set, the
@@ -45,6 +42,7 @@ import type { AgreementDocumentKind } from '@prisma/client';
 
 import { DOCUMENT_SPECS, type DocumentSpec } from './documents.js';
 import type { IssuerScope } from './issuer.js';
+import { whiteLabelDocumentSpecs } from './templates/white-label/index.js';
 
 export interface TemplateSet {
   key: string;
@@ -113,9 +111,11 @@ registerTemplateSet({
   label: 'Life Leads Plus — MSA, CPA, CPL',
   scope: 'TENANT',
   brandTheme: 'life-leads-plus',
-  documents: null,
-  installNote:
-    'Approved Life Leads Plus MSA, CPA and CPL text has not been installed. See apps/api/src/services/agreements/template-sets.ts.',
+  // NetEnroll's agreements in Life Leads Plus's name, portal and colours.
+  documents: whiteLabelDocumentSpecs({
+    versionPrefix: 'LLP',
+    portalHost: 'agents.lifeleadsplus.com',
+  }),
 });
 
 registerTemplateSet({
