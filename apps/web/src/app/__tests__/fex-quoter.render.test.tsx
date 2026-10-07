@@ -484,7 +484,7 @@ describe('the Quote page', () => {
   });
 });
 
-// ─── The softphone ───────────────────────────────────────────────────────────
+// ─── The softphone ─────────────────────────────────────────────────────────────
 
 const CALL = {
   callId: 'sip-call-1',
@@ -710,6 +710,86 @@ describe('the disposition after a quoted call', () => {
   });
 });
 
+describe('the call bar on the quoter', () => {
+  beforeEach(() => {
+    settings = { ...settings, agency: { ...settings.agency, autoOpenOnCall: false } };
+  });
+
+  async function openQuoter() {
+    render(
+      <Shell>
+        <AgentPhonePanel />
+      </Shell>
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Quote' }));
+    await waitFor(() => expect(drawerOpen()).not.toBeNull());
+    return within(within(drawerOpen()!).getByRole('region', { name: 'Live call' }));
+  }
+
+  it('adds a third party from inside the quoter', async () => {
+    const addThirdParty = vi.fn();
+    livePhone({ addThirdParty });
+    const bar = await openQuoter();
+
+    fireEvent.click(bar.getByRole('button', { name: 'Add caller' }));
+    const input = bar.getByLabelText('Phone number to add');
+    fireEvent.change(input, { target: { value: '123' } });
+    fireEvent.click(bar.getByRole('button', { name: 'Call' }));
+    expect(addThirdParty).not.toHaveBeenCalled();
+    expect(bar.getByText('Enter a 10-digit US phone number.')).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: '(615) 555-0199' } });
+    fireEvent.click(bar.getByRole('button', { name: 'Call' }));
+    expect(addThirdParty).toHaveBeenCalledWith('6155550199');
+  });
+
+  it('offers Merge calls once a third party is being added', async () => {
+    const mergeCalls = vi.fn();
+    livePhone({ hasHeldCalls: true, mergeCalls });
+    const bar = await openQuoter();
+
+    expect(bar.queryByRole('button', { name: 'Add caller' })).toBeNull();
+    fireEvent.click(bar.getByRole('button', { name: 'Merge calls' }));
+    expect(mergeCalls).toHaveBeenCalled();
+  });
+});
+
+describe('the disposition over an open quoter', () => {
+  it('closes the quoter so the wrap-up can be answered', async () => {
+    settings = { ...settings, agency: { ...settings.agency, autoOpenOnCall: false } };
+    livePhone();
+    const view = render(
+      <Shell>
+        <AgentPhonePanel />
+        <GlobalDispositionModal />
+      </Shell>
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Quote' }));
+    await waitFor(() => expect(drawerOpen()).not.toBeNull());
+
+    livePhone({
+      currentCall: null,
+      pendingDispositionCall: {
+        callId: CALL.callId,
+        direction: 'inbound',
+        phoneNumber: CALL.phoneNumber,
+        callerName: CALL.callerName,
+        duration: 60,
+        endTime: new Date(),
+      },
+    });
+    view.rerender(
+      <Shell>
+        <AgentPhonePanel />
+        <GlobalDispositionModal />
+      </Shell>
+    );
+
+    await waitFor(() => expect(drawerOpen()).toBeNull());
+    expect(await screen.findByRole('radio', { name: /Application submitted/i })).toBeTruthy();
+  });
+});
+
 describe('ApplicationLogForm from a quote', () => {
   it('"Not this one" clears the quote and keeps the names', async () => {
     const onChange = vi.fn<[ApplicationLogPayload | null], void>();
@@ -778,7 +858,7 @@ describe('ApplicationLogForm from a quote', () => {
   });
 });
 
-// ─── The console ─────────────────────────────────────────────────────────────
+// ─── The console ──────────────────────────────────────────────────────────────
 
 describe('the call-center console', () => {
   it('has a Quote tab beside the others', () => {
