@@ -398,8 +398,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           itself in <ThemeScope theme="dark"> when it is built, and nothing
           outside that subtree is affected.
         */}
-        {/* The rail is 56px of icons (it opens over the page on request), so
-            below md it is replaced by MobileNav's drawer in the topbar. */}
+        {/* The full labelled sidebar (232px, 264px for a lockup theme) takes
+            real width here and the page flexes beside it; a user may collapse
+            it to the 56px rail. Below md it is replaced by MobileNav's drawer
+            in the topbar. */}
         <div className="hidden h-full shrink-0 md:flex">
           <Sidebar />
         </div>

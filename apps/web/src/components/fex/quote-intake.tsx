@@ -28,7 +28,7 @@ import {
   type DetailField,
 } from '@hopwhistle/fex-engine/catalog';
 import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -135,11 +135,21 @@ export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
   return (
     // Four cards, one per question an agent asks, in the order they ask it.
     // Not overflow-hidden: the searches' lists drop out of their cards.
-    <div className="space-y-2.5">
-      <ApplicantSection {...props} />
-      <CoverageSection {...props} />
-      <HealthSection {...props} />
-      <MedicationsSection {...props} />
+    //
+    // From the two-column width the cards scroll in their own body and Get
+    // quotes is the column's footer, outside that body: it can never sit on
+    // top of a selected condition or medication. Narrower, the page scrolls
+    // and the button simply follows the last card.
+    <div className="flex min-w-0 flex-col cq-lg:h-full cq-lg:min-h-0">
+      <div
+        data-intake-body=""
+        className="min-w-0 space-y-3 cq-lg:min-h-0 cq-lg:flex-1 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pb-3 cq-lg:pr-1"
+      >
+        <ApplicantSection {...props} />
+        <CoverageSection {...props} />
+        <HealthSection {...props} />
+        <MedicationsSection {...props} />
+      </div>
       <GetQuotesBar {...props} />
     </div>
   );
@@ -165,19 +175,19 @@ function Section({
   return (
     <section
       aria-labelledby={id}
-      className="rounded-card border border-rule bg-surface px-4 pb-3.5 pt-3 shadow-card"
+      className="min-w-0 rounded-[12px] border border-rule bg-surface shadow-card"
     >
-      <div className="mb-3 flex min-h-[28px] items-center gap-2.5">
+      <div className="flex min-h-[46px] items-center gap-2.5 border-b border-rule px-4 py-2">
         <span
           aria-hidden
           className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold',
-            done ? 'bg-live-tint text-live-ink' : 'bg-sunken text-ink-2'
+            'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold',
+            done ? 'bg-live text-white' : 'bg-brand-tint text-brand-ink'
           )}
         >
-          {done ? <Check className="h-3.5 w-3.5" /> : n}
+          {done ? <Check className="h-3 w-3" strokeWidth={3} /> : n}
         </span>
-        <h3 id={id} className="text-[14px] font-semibold text-ink">
+        <h3 id={id} className="text-[14.5px] font-semibold tracking-[-0.005em] text-ink">
           {title}
         </h3>
         {done ? <span className="sr-only">Complete</span> : null}
@@ -188,7 +198,7 @@ function Section({
         ) : null}
         {aside ? <div className="ml-auto flex shrink-0 items-center gap-1.5">{aside}</div> : null}
       </div>
-      {children}
+      <div className="px-4 pb-4 pt-3.5">{children}</div>
     </section>
   );
 }
@@ -220,7 +230,7 @@ function GetQuotesBar({ idPrefix, draft, onGetQuotes }: QuoteIntakeProps): JSX.E
   };
 
   return (
-    <div className="sticky bottom-0 z-20 bg-paper pb-1 pt-1">
+    <div className="shrink-0 border-t border-rule pt-3 cq-lg:mr-1">
       <Button
         type="button"
         onClick={() => {
@@ -231,9 +241,10 @@ function GetQuotesBar({ idPrefix, draft, onGetQuotes }: QuoteIntakeProps): JSX.E
           }
           onGetQuotes?.();
         }}
-        className="h-10 w-full text-[15px] font-semibold shadow-raised"
+        className="h-12 w-full rounded-[10px] text-[15.5px] font-semibold tracking-[-0.005em] shadow-raised"
       >
         Get quotes
+        {missing ? null : <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
       </Button>
       {tried && missing ? (
         <p role="alert" className="mt-1.5 text-center text-[12.5px] font-medium text-ringing-ink">
@@ -531,7 +542,7 @@ function CoverageSection({
         <>
           <ChoiceGroup
             label="Quote by"
-            className="h-7 w-[132px] p-[2px]"
+            className="h-8 w-[148px] p-[2px]"
             itemClassName="text-[12px]"
             options={[
               { value: 'face' as const, label: 'Face' },
@@ -551,29 +562,6 @@ function CoverageSection({
                 });
             }}
           />
-          {/* Payment mode matters, but less than the amount: a quiet select
-              in the header, not a field in the grid. */}
-          <label htmlFor={p('mode')} className="sr-only">
-            Payment mode
-          </label>
-          <select
-            id={p('mode')}
-            value={draft.paymentMode}
-            title={paymentLabel}
-            onChange={e =>
-              dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
-            }
-            className={cn(
-              'h-7 cursor-pointer rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12px] font-medium text-ink-2 hover:border-rule-strong hover:bg-surface hover:text-ink',
-              FOCUS
-            )}
-          >
-            {PAYMENT_MODES.map(([value, label]) => (
-              <option key={value} value={value} title={label}>
-                {PAYMENT_SHORT[value] ?? label}
-              </option>
-            ))}
-          </select>
         </>
       }
     >
@@ -652,6 +640,37 @@ function CoverageSection({
           </Field>
         )}
 
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor={p('mode')} className="text-[12px] font-medium text-ink-2">
+            Payment mode
+          </label>
+          <span className="relative inline-flex items-center">
+            {/* Payment mode matters, but less than the amount: a compact select
+              on its own line, not a field in the grid. */}
+            <select
+              id={p('mode')}
+              value={draft.paymentMode}
+              title={paymentLabel}
+              onChange={e =>
+                dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
+              }
+              className={cn(
+                'h-8 cursor-pointer appearance-none rounded-control border border-rule-strong bg-surface pl-2.5 pr-7 text-[13px] font-medium text-ink hover:border-ink-3',
+                FOCUS
+              )}
+            >
+              {PAYMENT_MODES.map(([value, label]) => (
+                <option key={value} value={value} title={label}>
+                  {PAYMENT_SHORT[value] ?? label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-ink-3"
+              aria-hidden
+            />
+          </span>
+        </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1">
           <CheckRow
             id={p('activity')}
@@ -799,10 +818,10 @@ function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakePro
                     } else dispatch({ type: 'addCondition', code });
                   }}
                   className={cn(
-                    'inline-flex h-7 items-center gap-1 rounded-[6px] px-2.5 text-[12.5px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
+                    'inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[13px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
                     on
-                      ? 'bg-ink text-surface'
-                      : 'bg-sunken text-ink-2 hover:bg-[#e3e7ec] hover:text-ink',
+                      ? 'border-ink bg-ink text-surface'
+                      : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
                     FOCUS
                   )}
                 >
@@ -822,7 +841,7 @@ function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakePro
                 }
                 onClick={() => setShowAllQuick(v => !v)}
                 className={cn(
-                  'inline-flex h-7 items-center rounded-[6px] px-1.5 text-[12.5px] font-medium text-brand-ink hover:underline',
+                  'inline-flex h-8 items-center rounded-full px-2 text-[13px] font-semibold text-brand-ink hover:underline',
                   FOCUS
                 )}
               >
@@ -835,7 +854,7 @@ function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakePro
         {draft.conditions.length ? (
           <div>
             <p className={FIELD_LABEL}>Selected conditions</p>
-            <ul className="divide-y divide-rule rounded-control border border-rule">
+            <ul className="divide-y divide-rule overflow-hidden rounded-[10px] border border-rule-strong bg-surface">
               {draft.conditions.map(c => (
                 <ConditionRow
                   key={c.key}
@@ -942,7 +961,7 @@ function MedicationsSection({
         {draft.meds.length ? (
           <div>
             <p className={FIELD_LABEL}>Selected medications</p>
-            <ul className="divide-y divide-rule rounded-control border border-rule">
+            <ul className="divide-y divide-rule overflow-hidden rounded-[10px] border border-rule-strong bg-surface">
               {draft.meds.map(med => (
                 <MedicationRow
                   key={med.key}
@@ -994,30 +1013,30 @@ function CompactRow({
   return (
     <li
       ref={ref}
-      className={cn('min-w-0', open && 'bg-sunken/50')}
+      className={cn('min-w-0', open && 'bg-paper')}
       onBlur={e => {
         if (onBlurOut && !ref.current?.contains(e.relatedTarget as Node | null)) onBlurOut();
       }}
     >
-      <div className="flex min-h-[32px] items-center gap-1 pl-2 pr-1">
+      <div className="flex min-h-[40px] items-center gap-1 pl-3 pr-1.5">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={id}
           onClick={onToggle}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 text-left',
+            'flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1.5 text-left',
             FOCUS
           )}
         >
           {attention ? (
             <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ringing" />
           ) : (
-            <Check className="h-3 w-3 shrink-0 text-live-ink" aria-hidden />
+            <Check className="h-3.5 w-3.5 shrink-0 text-live-ink" aria-hidden />
           )}
-          <span className="min-w-0 truncate text-[13px]">
+          <span className="min-w-0 truncate text-[13.5px]">
             <span className={cn('font-medium text-ink', capitalize && 'capitalize')}>{title}</span>
-            {facts.length ? <span className="text-ink-3"> · {facts.join(' · ')}</span> : null}
+            {facts.length ? <span className="text-ink-2"> · {facts.join(' · ')}</span> : null}
             {attention ? <span className="text-ringing-ink"> · {attention}</span> : null}
           </span>
           <ChevronDown
@@ -1041,7 +1060,7 @@ function CompactRow({
         </button>
       </div>
       {open ? (
-        <div id={id} className="px-2 pb-2">
+        <div id={id} className="border-t border-rule bg-paper px-3 pb-3 pt-2.5">
           {children}
         </div>
       ) : null}

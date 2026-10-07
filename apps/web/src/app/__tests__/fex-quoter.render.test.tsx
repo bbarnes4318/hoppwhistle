@@ -428,7 +428,7 @@ describe('QuoteWorkspace', () => {
   it('asks for the minimum before quoting anything', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft()} />);
     expect(
-      await screen.findByText('Enter state, sex, age and coverage to see every carrier.')
+      await screen.findByText(/^Enter state, sex, age and coverage, then press Get quotes/)
     ).toBeTruthy();
     await new Promise(r => setTimeout(r, 350));
     expect(quotesPosted()).toHaveLength(0);

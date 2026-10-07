@@ -21,6 +21,8 @@ import {
   type NavItem,
 } from './nav-config';
 
+const RAIL_STORAGE_KEY = 'ne:sidebar';
+
 /**
  * Sidebar.
  *
@@ -511,41 +513,36 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   const { brand, settled: brandSettled } = useBrand();
 
   /*
-   * ── A 56px rail, opened on request ─────────────────────────────────────────
+   * ── A full, labelled column; the rail only on request ────────────────────
    *
-   * The work in this product is horizontal -- the quoter's form, its carrier
-   * list and the premium side by side -- and a 232px column of labels cost it
-   * a fifth of a laptop screen on every page. So the rail is icons, with each
-   * name in a hint, and it opens to its full width only when asked: OVER the
-   * page, so the page never reflows, and it closes on navigation, Escape or a
-   * click outside. The nav it draws is exactly `navFor`'s; nothing about who
-   * sees what changes here.
+   * Desktop opens on the full sidebar: the brand, every group and every name,
+   * in a column of its own that the page flexes beside (never over it). The
+   * 56px icon rail is still there for a user who wants the width back, but
+   * only after they ask for it, and the choice is remembered per browser. The
+   * nav it draws is exactly `navFor`'s; nothing about who sees what changes.
    */
-  const [expanded, setExpanded] = React.useState(false);
+  const [expanded, setExpandedState] = React.useState(true);
+  React.useEffect(() => {
+    try {
+      if (window.localStorage.getItem(RAIL_STORAGE_KEY) === 'collapsed') setExpandedState(false);
+    } catch {
+      // Storage blocked: the full sidebar is the default anyway.
+    }
+  }, []);
+  const setExpanded = React.useCallback((update: (open: boolean) => boolean) => {
+    setExpandedState(open => {
+      const next = update(open);
+      try {
+        window.localStorage.setItem(RAIL_STORAGE_KEY, next ? 'expanded' : 'collapsed');
+      } catch {
+        // A preference only; nothing breaks without it.
+      }
+      return next;
+    });
+  }, []);
   const collapsed = !drawer && !expanded;
   const [hint, hintHandlers] = useRailHint();
-  const railRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => setExpanded(false), [pathname]);
-  React.useEffect(() => {
-    if (!expanded) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setExpanded(false);
-    };
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      // A locked item's card is portalled outside the rail.
-      if (target instanceof Element && target.closest('[data-radix-popper-content-wrapper]'))
-        return;
-      if (railRef.current && target && !railRef.current.contains(target)) setExpanded(false);
-    };
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPointer);
-    };
-  }, [expanded]);
   React.useEffect(() => {
     if (!collapsed) hintHandlers.hide();
   }, [collapsed, hintHandlers]);
@@ -623,14 +620,13 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
 
   const panel = (
     <div
-      ref={drawer ? undefined : railRef}
       className={cn(
         'flex h-full min-h-0 flex-col bg-surface',
         drawer
           ? 'w-full'
           : cn(
-              'absolute inset-y-0 left-0 z-40 border-r border-rule transition-[width] duration-150 ease-out ne-motion motion-reduce:transition-none',
-              expanded ? cn(brand?.lockupOnDark ? 'w-[264px]' : 'w-[232px]', 'shadow-pop') : 'w-14'
+              'border-r border-rule transition-[width] duration-150 ease-out ne-motion motion-reduce:transition-none',
+              expanded ? (brand?.lockupOnDark ? 'w-[264px]' : 'w-[232px]') : 'w-14'
             )
       )}
       /*
@@ -656,7 +652,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           {collapsed && hasProblem ? (
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => setExpanded(() => true)}
               aria-label={status === 'failed' ? 'Your menu could not load' : 'No role assigned'}
               className="mb-2 flex h-10 w-10 items-center justify-center rounded-control text-ringing-ink hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
@@ -763,9 +759,9 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
   if (drawer) return panel;
 
   return (
-    // The rail's own 56px column. The panel inside it is positioned, so
-    // opening it lays it over the page rather than pushing the page over.
-    <div className="relative h-full w-14 shrink-0">
+    // The sidebar takes real width in the shell's row: the page flexes
+    // beside it, whether it is the full column or the rail.
+    <div className="relative h-full shrink-0">
       {panel}
       {collapsed && hint ? (
         <div

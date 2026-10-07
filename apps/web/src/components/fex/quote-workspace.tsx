@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import { EmptyState, Notice, Panel } from '@/components/domain';
+import { Notice, Panel } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -467,25 +467,33 @@ export function QuoteWorkspace({
   let body: React.ReactNode;
   if (!ready) {
     body = (
-      <Panel className="overflow-hidden">
-        <EmptyState
-          icon={Calculator}
-          headline="Enter state, sex, age and coverage to see every carrier."
-          body="Then press Get quotes. After that, results update as you type. Add conditions and medications for each carrier's real answer, with the reason and the page it comes from."
-        />
+      <Panel className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-[14px]">
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-10 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-[14px] border border-rule bg-brand-tint text-brand-ink shadow-card">
+            <Calculator className="h-6 w-6" aria-hidden />
+          </span>
+          <h2 className="mt-5 text-[20px] font-bold tracking-[-0.015em] text-ink">
+            Quote every carrier at once
+          </h2>
+          <p className="mt-2 max-w-[460px] text-[14px] leading-[22px] text-ink-2">
+            Enter state, sex, age and coverage, then press Get quotes. After that, results update as
+            you type. Add conditions and medications for each carrier&apos;s real answer, with the
+            reason and the page it comes from.
+          </p>
+        </div>
         <ol className="grid gap-px border-t border-rule bg-rule sm:grid-cols-3">
           {[
             ['1', 'Who', 'State, sex, age or date of birth, tobacco'],
             ['2', 'How much', 'A face amount, or a monthly budget'],
             ['3', 'Health', 'Conditions and medications, if any'],
           ].map(([n, title, text]) => (
-            <li key={n} className="flex gap-3 bg-surface p-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sunken text-[12px] font-semibold text-ink-2">
+            <li key={n} className="flex gap-3 bg-surface px-5 py-4">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[12.5px] font-bold text-brand-ink">
                 {n}
               </span>
               <span>
-                <span className="block text-[13px] font-semibold text-ink">{title}</span>
-                <span className="t-meta text-ink-2">{text}</span>
+                <span className="block text-[14px] font-semibold text-ink">{title}</span>
+                <span className="mt-0.5 block text-[12.5px] leading-[18px] text-ink-2">{text}</span>
               </span>
             </li>
           ))}
@@ -603,33 +611,36 @@ export function QuoteWorkspace({
           </div>
         ) : null}
 
-        {/* The recommendation header: the answer in a sentence, the two
-            prices that matter beside it, the sort and filters at the right.
-            Pinned while the cards scroll beneath. */}
-        <section aria-label="Summary" className="sticky top-0 z-10 bg-paper pb-2.5 pt-0.5">
-          <div className="rounded-[14px] border border-rule bg-surface px-5 py-3 shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-              <h2 className="text-[20px] font-semibold leading-7 tracking-[-0.01em] text-ink">
-                {groups.qualifies.length} carrier{groups.qualifies.length === 1 ? '' : 's'} qualify
-                <span className="ml-2 text-[13px] font-normal tracking-normal text-ink-3">
+        {/* The recommendation header: the answer as a headline, the prices
+            that matter as compact stats under it, the sort and filters at
+            the right. Pinned while the cards scroll beneath. */}
+        <section aria-label="Summary" className="sticky top-0 z-10 bg-paper pb-3">
+          <div className="rounded-[14px] border border-rule bg-surface shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 px-5 pb-3 pt-3">
+              <h2 className="flex min-w-0 items-baseline gap-2 text-[22px] font-bold leading-8 tracking-[-0.015em] text-ink">
+                <span>
+                  <span className="tabular-nums">{groups.qualifies.length}</span> carrier
+                  {groups.qualifies.length === 1 ? '' : 's'} qualify
+                </span>
+                <span className="whitespace-nowrap text-[13px] font-medium tracking-normal text-ink-3">
                   of {results.length} quoted
                 </span>
-              </h2>
-              <div
-                role="toolbar"
-                aria-label="Sort and filter results"
-                className="flex items-center gap-0.5"
-              >
                 {quote.stale ? (
-                  <span className="mr-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
+                  <span className="inline-flex items-center gap-1 self-center text-[12px] font-medium tracking-normal text-ink-3">
                     <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
                     <span className="sr-only cq-lg:not-sr-only">Updating</span>
                   </span>
                 ) : null}
-                <label htmlFor={`${idPrefix}-sort`} className="pl-1 text-[12.5px] text-ink-3">
-                  Sort
-                </label>
+              </h2>
+              <div
+                role="toolbar"
+                aria-label="Sort and filter results"
+                className="flex flex-wrap items-center gap-2"
+              >
                 <span className="relative inline-flex items-center">
+                  <label htmlFor={`${idPrefix}-sort`} className="sr-only">
+                    Sort by
+                  </label>
                   <select
                     id={`${idPrefix}-sort`}
                     value={effectiveSort}
@@ -640,7 +651,7 @@ export function QuoteWorkspace({
                       setSort(next === natural ? null : next);
                     }}
                     className={cn(
-                      'h-8 cursor-pointer appearance-none rounded-control border border-transparent bg-transparent pl-1.5 pr-6 text-[12.5px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-rule-strong hover:bg-surface',
+                      'h-9 cursor-pointer appearance-none rounded-control border border-rule-strong bg-surface pl-3 pr-8 text-[13px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-ink-3',
                       FOCUS
                     )}
                   >
@@ -648,7 +659,7 @@ export function QuoteWorkspace({
                     <option value="face">Most coverage</option>
                   </select>
                   <ChevronDown
-                    className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-ink-3"
+                    className="pointer-events-none absolute right-2.5 h-4 w-4 text-ink-3"
                     aria-hidden
                   />
                 </span>
@@ -657,8 +668,10 @@ export function QuoteWorkspace({
                   aria-pressed={levelOnly}
                   onClick={() => setLevelOnly(v => !v)}
                   className={cn(
-                    'inline-flex h-8 items-center gap-2 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
-                    levelOnly ? 'text-ink' : 'text-ink-2 hover:text-ink',
+                    'inline-flex h-9 items-center gap-2 rounded-control border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion',
+                    levelOnly
+                      ? 'border-brand-ink bg-brand-tint text-brand-ink'
+                      : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
                     FOCUS
                   )}
                 >
@@ -678,13 +691,17 @@ export function QuoteWorkspace({
                     <button
                       type="button"
                       className={cn(
-                        'inline-flex h-8 items-center gap-1.5 rounded-control px-2 text-[12.5px] font-medium transition-colors duration-150 ne-motion hover:bg-sunken',
-                        filterCount ? 'text-ink' : 'text-ink-2 hover:text-ink',
+                        'inline-flex h-9 items-center gap-1.5 rounded-control border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion',
+                        filterCount
+                          ? 'border-ink-2 bg-surface text-ink'
+                          : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
                         FOCUS
                       )}
                     >
-                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                      <span className="sr-only cq-md:not-sr-only">Filters</span>
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                      <span className="sr-only [@container(min-width:760px)]:not-sr-only">
+                        Filters
+                      </span>
                       {filterCount ? (
                         <span className="rounded-full bg-ink px-1.5 text-[10.5px] font-semibold leading-4 text-surface">
                           {filterCount}
@@ -717,53 +734,60 @@ export function QuoteWorkspace({
                 </Popover>
               </div>
             </div>
-            <p className="mt-1 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px] text-ink-2">
-              <span>
-                Best price{' '}
-                <span className="text-[15px] font-semibold tabular-nums text-ink">
+            <div className="flex flex-wrap items-center gap-y-2 border-t border-rule px-2 py-2">
+              <dl className="flex flex-wrap items-stretch gap-y-2">
+                <SummaryStat label="Best price">
                   {lowestAny === null ? '—' : money(lowestAny)}
-                </span>
-                {lowestAny === null ? null : <span className="text-ink-3">/{mode}</span>}
-              </span>
-              <span>
-                Best level{' '}
-                <span className="text-[15px] font-semibold tabular-nums text-ink">
+                  {lowestAny === null ? null : (
+                    <span className="ml-0.5 text-[12px] font-medium text-ink-3">/{mode}</span>
+                  )}
+                </SummaryStat>
+                <SummaryStat label="Best level">
                   {lowestLevel === null ? '—' : money(lowestLevel)}
-                </span>
-                {lowestLevel === null ? null : <span className="text-ink-3">/{mode}</span>}
-              </span>
-              {groups.declined.length ? (
-                <button
-                  type="button"
-                  onClick={showDeclinedList}
-                  className={cn(
-                    'inline-flex items-center gap-0.5 rounded-[4px] text-ink-2 underline-offset-2 hover:text-ink hover:underline',
-                    FOCUS
+                  {lowestLevel === null ? null : (
+                    <span className="ml-0.5 text-[12px] font-medium text-ink-3">/{mode}</span>
                   )}
-                >
-                  {groups.declined.length} declined
-                  <ChevronRight className="h-3.5 w-3.5 self-center" aria-hidden />
-                </button>
-              ) : (
-                <span className="text-ink-3">None declined</span>
-              )}
-              {needsIndication.size ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-[4px] font-semibold text-ringing-ink hover:underline',
-                    FOCUS
+                </SummaryStat>
+                <SummaryStat label="Declined">
+                  {groups.declined.length ? (
+                    <button
+                      type="button"
+                      onClick={showDeclinedList}
+                      className={cn(
+                        'inline-flex items-center gap-0.5 rounded-[4px] text-dropped-ink underline-offset-2 hover:underline',
+                        FOCUS
+                      )}
+                    >
+                      {groups.declined.length}
+                      <span className="text-[12px] font-medium">view</span>
+                      <ChevronRight className="h-3.5 w-3.5 self-center" aria-hidden />
+                    </button>
+                  ) : (
+                    <span className="text-ink-3">None</span>
                   )}
-                >
-                  <HelpCircle className="h-3.5 w-3.5 self-center" aria-hidden />
-                  {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
-                </button>
+                </SummaryStat>
+              </dl>
+              {needsIndication.size || changes.length ? (
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3">
+                  {needsIndication.size ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      }
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-[4px] text-[12.5px] font-semibold text-ringing-ink hover:underline',
+                        FOCUS
+                      )}
+                    >
+                      <HelpCircle className="h-3.5 w-3.5 self-center" aria-hidden />
+                      {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
+                    </button>
+                  ) : null}
+                  {changes.length ? <ChangesNote changes={changes} /> : null}
+                </div>
               ) : null}
-              {changes.length ? <ChangesNote changes={changes} /> : null}
-            </p>
+            </div>
           </div>
         </section>
 
@@ -774,7 +798,7 @@ export function QuoteWorkspace({
           Qualifies, {groups.qualifies.length}
         </h3>
         {groups.qualifies.length ? (
-          <div aria-labelledby={qualifiesHeading} role="group" className="space-y-2.5">
+          <div aria-labelledby={qualifiesHeading} role="group" className="space-y-3">
             <ul>
               <ResultCard
                 variant="hero"
@@ -790,7 +814,7 @@ export function QuoteWorkspace({
               />
             </ul>
             {groups.qualifies.length > 1 ? (
-              <ul className="grid items-start gap-2.5 cq-md:grid-cols-2">
+              <ul className="grid items-start gap-3 [@container(min-width:620px)]:grid-cols-2">
                 {groups.qualifies.slice(1, 3).map((r, i) => (
                   <ResultCard
                     key={r.productId}
@@ -802,12 +826,13 @@ export function QuoteWorkspace({
               </ul>
             ) : null}
             {groups.qualifies.length > 3 ? (
-              <section aria-label="Other qualifying carriers" className="pt-1">
-                <h3 className="mb-2 px-1 text-[12.5px] font-semibold text-ink-2">
+              <section aria-label="Other qualifying carriers" className="pt-2">
+                <h3 className="mb-2.5 flex items-center gap-2 px-1 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-2">
                   Other qualifying carriers
-                  <span className="ml-1.5 font-normal tabular-nums text-ink-3">
+                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[11.5px] font-semibold tabular-nums tracking-normal text-ink-2">
                     {groups.qualifies.length - 3}
                   </span>
+                  <span aria-hidden className="h-px flex-1 bg-rule" />
                 </h3>
                 <ul className="space-y-2">
                   {groups.qualifies.slice(3).map(r => (
@@ -928,8 +953,8 @@ export function QuoteWorkspace({
           // From 900px wide (the container, not the window) the workspace fills
           // its parent and never scrolls as a whole: the form and the results
           // each scroll on their own, so both stay on one laptop screen.
-          'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-3',
-          'cq-lg:grid-cols-[minmax(330px,352px)_minmax(0,1fr)] cq-xl:grid-cols-[minmax(368px,392px)_minmax(0,1fr)]'
+          'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-4',
+          'cq-lg:grid-cols-[minmax(360px,392px)_minmax(0,1fr)] cq-xl:grid-cols-[412px_minmax(0,1fr)]'
         )}
       >
         {narrowBar}
@@ -938,7 +963,9 @@ export function QuoteWorkspace({
           id={`${idPrefix}-intake`}
           aria-label="Applicant and health"
           className={cn(
-            'mb-3 min-w-0 cq-lg:mb-0 cq-lg:block cq-lg:min-h-0 cq-lg:overflow-y-auto cq-lg:overscroll-contain cq-lg:pb-3 cq-lg:pr-0.5',
+            // The intake scrolls its own cards (down only: a sideways bar under
+            // the inputs is never wanted) above a fixed Get quotes footer.
+            'mb-3 min-w-0 cq-lg:mb-0 cq-lg:block cq-lg:min-h-0 cq-lg:overflow-hidden cq-lg:pb-3',
             !editing && 'hidden'
           )}
         >
@@ -974,7 +1001,7 @@ export function QuoteWorkspace({
           ref={resultsRef}
           aria-label="Results"
           aria-live="polite"
-          className="cq flex min-w-0 scroll-mt-2 flex-col cq-lg:min-h-0 cq-lg:overflow-y-auto cq-lg:overscroll-contain cq-lg:pr-0.5"
+          className="cq flex min-w-0 scroll-mt-2 flex-col cq-lg:min-h-0 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pr-1"
         >
           <div className="flex-1">{body}</div>
           {selection || compare.length ? (
@@ -1007,6 +1034,20 @@ export function QuoteWorkspace({
         busyId={busy}
         onUse={(r, line) => void use(r, line)}
       />
+    </div>
+  );
+}
+
+/** One figure in the results header: a small label over the value. */
+function SummaryStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-[112px] border-r border-rule px-3 py-0.5 last:border-r-0">
+      <dt className="text-[10.5px] font-semibold uppercase leading-4 tracking-[0.08em] text-ink-3">
+        {label}
+      </dt>
+      <dd className="mt-0.5 flex items-baseline text-[17px] font-semibold leading-6 tabular-nums text-ink">
+        {children}
+      </dd>
     </div>
   );
 }

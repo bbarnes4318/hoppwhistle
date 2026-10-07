@@ -190,38 +190,60 @@ export function RateVerify({ result }: { result: FexResult }): JSX.Element {
  * modal premium ("$71.64 /mo"), an annual one where the carrier publishes no
  * monthly factor ("$1,025.50 /yr"), and a single premium paid once.
  */
+const PRICE_SIZE = {
+  16: 'text-[16px]',
+  17: 'text-[17px]',
+  18: 'text-[18px]',
+  20: 'text-[20px]',
+  26: 'text-[26px]',
+} as const;
+
 export function Price({
   line,
   size = 17,
+  align = 'end',
 }: {
   line: QuoteLine;
-  /** The figure's size: 17px on a row or the top pick, 16px on a quiet card. */
-  size?: 16 | 17;
+  /** Which edge the figure and the face under it share: the right, or the left on a pick card. */
+  align?: 'start' | 'end';
+  /**
+   * The figure's size: 17px on a row, 16px on a quiet card; the result cards
+   * set theirs larger (26px on the recommendation, 20px on the picks).
+   */
+  size?: 16 | 17 | 18 | 20 | 26;
 }): JSX.Element {
   const single = line.basis === 'SINGLE_PREMIUM_PER_1000';
   const annualOnly = line.premium == null && line.annual != null;
   const amount = line.premium ?? line.annual;
   const unit = single ? 'single' : annualOnly ? '/yr' : `/${MODE_SHORT[line.mode]}`;
+  const figure = PRICE_SIZE[size];
+  const big = size >= 20;
   return (
-    <span className="flex flex-col items-end text-right">
+    <span
+      className={cn(
+        'flex flex-col',
+        align === 'start' ? 'items-start text-left' : 'items-end text-right'
+      )}
+    >
       <span className="inline-flex items-baseline whitespace-nowrap leading-none tabular-nums">
         {amount == null ? (
-          <span
-            className={cn(size === 16 ? 'text-[16px]' : 'text-[17px]', 'font-semibold text-ink-3')}
-          >
-            —
-          </span>
+          <span className={cn(figure, 'font-semibold text-ink-3')}>—</span>
         ) : (
           <>
             <span
               className={cn(
-                size === 16 ? 'text-[16px]' : 'text-[17px]',
-                'font-semibold tracking-[-0.01em] text-ink'
+                figure,
+                big ? 'font-bold tracking-[-0.02em]' : 'font-semibold tracking-[-0.01em]',
+                'text-ink'
               )}
             >
               {money(amount)}
             </span>
-            <span className="ml-1 text-[11.5px] font-normal text-ink-3">{unit}</span>
+            <span
+              className={cn('ml-1 font-normal text-ink-3', big ? 'text-[13px]' : 'text-[11.5px]')}
+            >
+              {unit}
+            </span>
           </>
         )}
         {line.premiumNote ? (
@@ -230,7 +252,12 @@ export function Price({
           </Tooltip>
         ) : null}
       </span>
-      <span className="mt-[7px] inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium leading-none tabular-nums text-ink-2">
+      <span
+        className={cn(
+          'mt-[7px] inline-flex items-center gap-1 whitespace-nowrap font-medium leading-none tabular-nums text-ink-2',
+          big ? 'text-[12.5px]' : 'text-[11.5px]'
+        )}
+      >
         {line.faceAdjusted ? (
           <Tooltip content={line.faceAdjusted} side="top" align="end" className="relative z-[1]">
             <Info className="h-3 w-3 text-ringing-ink" aria-label={line.faceAdjusted} />

@@ -6,12 +6,13 @@
  *
  * Three weights, so the list has a shape an agent reads in one glance:
  *
- *   hero  -- the first result: a large card with a 150px logo plate, the
- *            recommendation spelled out, and the only solid Use Quote.
- *   pick  -- the next two, side by side: the runners-up, a logo plate, the
- *            plan, the benefit, the price and a quiet outlined Use Quote.
- *   quiet -- everything else: one calm line of its own card, logo, plan,
- *            benefit, price, and "Use quote" as a text action.
+ *   hero  -- the first result: a large card under a "Recommended" band, a
+ *            190x76 logo plate, the plan at headline size, the price large
+ *            at the right, and the only solid Use Quote.
+ *   pick  -- the next two, side by side: the runners-up, a 160x62 logo
+ *            plate, the plan, the benefit, the price and an outlined Use Quote.
+ *   quiet -- everything else: one compact card each, a 150x56 logo plate,
+ *            plan, benefit, price, and an outlined Use Quote.
  *
  * Every card has the same four zones -- carrier brand, product and benefit,
  * price, action -- and opens in place to the same detail the rows had: the
@@ -19,7 +20,7 @@
  */
 
 import type { QuoteLine } from '@hopwhistle/fex-engine/types';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Star } from 'lucide-react';
 import * as React from 'react';
 
 import { CarrierLogo } from '@/components/domain';
@@ -89,7 +90,6 @@ export function ResultCard({
   const canCompare = Boolean(onCompareToggle) && !declined && Boolean(best);
   const hero = variant === 'hero';
   const pick = variant === 'pick';
-  const quiet = variant === 'quiet';
 
   const compareBox = canCompare ? (
     <label
@@ -114,94 +114,81 @@ export function ResultCard({
     </label>
   ) : null;
 
+  // The card's labels as pills: the recommendation's in the live green, the
+  // runners-up's rank in ink, everything else ("Best level") in the brand.
   const label = labels.length ? (
-    <span
-      className={cn(
-        'flex items-center gap-1.5 text-[10.5px] font-semibold uppercase leading-4 tracking-[0.08em]',
-        hero ? 'text-live-ink' : 'text-ink-2'
-      )}
-    >
-      {labels.map((text, i) => (
-        <React.Fragment key={text}>
-          {i > 0 ? (
-            <span aria-hidden className="text-ink-3">
-              ·
-            </span>
-          ) : null}
-          <span>{text}</span>
-        </React.Fragment>
-      ))}
+    <span className="flex flex-wrap items-center gap-1.5">
+      {labels.map(text => {
+        const rank = /^#\d+$/.test(text);
+        const recommended = text === 'Recommended';
+        return (
+          <span
+            key={text}
+            className={cn(
+              'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold uppercase leading-none tracking-[0.06em]',
+              recommended
+                ? 'bg-live text-white'
+                : rank
+                  ? 'bg-ink text-surface'
+                  : hero
+                    ? 'bg-live-tint text-live-ink'
+                    : 'bg-brand-tint text-brand-ink'
+            )}
+          >
+            {recommended ? <Star className="h-3 w-3 fill-current" aria-hidden /> : null}
+            {text}
+          </span>
+        );
+      })}
     </span>
   ) : null;
 
   const action =
     onUse && !declined && best ? (
-      quiet ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onUse(result, best)}
-          className={cn(
-            'relative z-[1] inline-flex h-8 shrink-0 items-center gap-1 rounded-control px-2.5 text-[13px] font-semibold transition-colors duration-150 ne-motion disabled:opacity-60',
-            selected
-              ? 'text-live-ink'
-              : 'text-brand-ink hover:bg-brand-tint group-hover/card:bg-brand-tint',
-            FOCUS
-          )}
-        >
-          {busy ? (
-            'Saving…'
-          ) : selected ? (
-            <>
-              <Check className="h-3.5 w-3.5" aria-hidden />
-              Selected
-            </>
-          ) : (
-            'Use Quote'
-          )}
-        </button>
-      ) : (
-        <Button
-          size="sm"
-          disabled={busy}
-          variant={hero && !selected ? 'default' : 'outline'}
-          onClick={() => onUse(result, best)}
-          className={cn(
-            'relative z-[1] shrink-0 font-semibold',
-            hero ? 'h-10 w-[124px] text-[14px]' : 'h-[34px] w-[104px] text-[13px]',
-            selected
-              ? 'border-live text-live-ink shadow-none hover:bg-live-tint hover:text-live-ink'
-              : !hero &&
-                  'border-rule bg-surface text-brand-ink shadow-none hover:border-brand-ink hover:bg-brand-tint hover:text-brand-ink'
-          )}
-        >
-          {busy ? (
-            'Saving…'
-          ) : selected ? (
-            <>
-              <Check className="mr-1 h-3.5 w-3.5" aria-hidden />
-              Selected
-            </>
-          ) : (
-            'Use Quote'
-          )}
-        </Button>
-      )
+      <Button
+        size="sm"
+        disabled={busy}
+        variant={hero && !selected ? 'default' : 'outline'}
+        onClick={() => onUse(result, best)}
+        className={cn(
+          'relative z-[1] shrink-0 font-semibold',
+          hero
+            ? 'h-11 w-[148px] rounded-[10px] text-[15px] shadow-raised'
+            : pick
+              ? 'h-10 w-[120px] text-[14px]'
+              : 'h-9 w-[112px] text-[13.5px]',
+          selected
+            ? 'border-live text-live-ink shadow-none hover:bg-live-tint hover:text-live-ink'
+            : !hero &&
+                'border-brand-ink bg-surface text-brand-ink shadow-none hover:bg-brand-tint hover:text-brand-ink'
+        )}
+      >
+        {busy ? (
+          'Saving…'
+        ) : selected ? (
+          <>
+            <Check className="mr-1 h-4 w-4" aria-hidden />
+            Selected
+          </>
+        ) : (
+          'Use Quote'
+        )}
+      </Button>
     ) : null;
 
   const benefit = declined ? (
     <span className="flex min-w-0 items-center gap-2">
-      <span className="inline-flex h-[18px] shrink-0 items-center rounded-[4px] bg-dropped-tint px-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-dropped-ink">
+      <span className="inline-flex h-[20px] shrink-0 items-center rounded-[4px] bg-dropped-tint px-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-dropped-ink">
         {result.outcome === 'DECLINE' ? 'Declined' : 'Not available'}
       </span>
       {result.ineligibleReason ? (
-        <span className="min-w-0 truncate text-[12px] text-ink-2" title={result.ineligibleReason}>
+        <span className="min-w-0 truncate text-[12.5px] text-ink-2" title={result.ineligibleReason}>
           {result.ineligibleReason}
         </span>
       ) : null}
     </span>
   ) : best ? (
-    <span className="flex min-w-0 items-center gap-2">
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <BenefitBadge line={best} className="max-w-full" />
       <StatusNote note={note} priceOnly={priceOnly} change={change} />
     </span>
@@ -228,110 +215,136 @@ export function ResultCard({
   );
 
   const chevron = (
-    <ChevronDown
+    <span
       aria-hidden
-      className={cn(
-        'h-4 w-4 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none',
-        expanded && 'rotate-180'
-      )}
-    />
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-3 transition-colors duration-150 ne-motion group-hover/card:bg-sunken group-hover/card:text-ink-2"
+    >
+      <ChevronDown
+        className={cn(
+          'h-4 w-4 transition-transform duration-150 ne-motion motion-reduce:transition-none',
+          expanded && 'rotate-180'
+        )}
+      />
+    </span>
   );
 
-  const logo = (size: string) => (
+  const logo = (size: 'quoteHero' | 'quotePick' | 'quoteRow', cls: string) => (
     <CarrierLogo
       names={[result.family, result.productId]}
-      size="row"
-      className={cn(size, declined && 'opacity-50 grayscale')}
+      size={size}
+      className={cn(cls, declined && 'opacity-50 grayscale')}
     />
   );
 
   const name = (cls: string) => (
-    <span className={cn('block truncate font-semibold text-ink', cls)} title={result.product}>
+    <span className={cn('block truncate text-ink', cls)} title={result.product}>
       {result.product}
     </span>
   );
 
+  const family = (cls: string) => (
+    <span className={cn('block truncate font-medium text-ink-2', cls)}>{result.family}</span>
+  );
+
+  const price = (size: 18 | 20 | 26, align: 'start' | 'end' = 'end') =>
+    !declined && best ? (
+      <span
+        className={cn('flex shrink-0 flex-col', align === 'start' ? 'items-start' : 'items-end')}
+      >
+        <Price line={best} size={size} align={align} />
+        <RateVerify result={result} />
+      </span>
+    ) : null;
+
   let body: React.ReactNode;
   if (hero) {
     body = (
-      <div className="px-5 pb-3.5 pt-3">
-        <div className="mb-2 flex min-h-[24px] items-center justify-between gap-3">
+      <>
+        {/* The band that says why this one is first. */}
+        <div className="flex min-h-[44px] items-center justify-between gap-3 rounded-t-[15px] border-b border-rule bg-live-tint px-5 py-2">
           {label ?? <span />}
           <span className="flex items-center gap-2">
             {compareBox}
             {chevron}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 cq-md:flex-nowrap">
-          {logo('hidden h-[64px] w-[150px] [@container(min-width:520px)]:inline-flex')}
+        <div className="flex items-center gap-x-6 px-5 pb-3.5 pt-4">
+          {logo('quoteHero', 'hidden [@container(min-width:520px)]:inline-flex')}
           <div className="min-w-0 flex-1">
-            {name('text-[18px] leading-6')}
-            <span className="mt-0.5 block truncate text-[13px] text-ink-2">{result.family}</span>
-            <span className="mt-2.5 block">{benefit}</span>
+            {name('text-[20px] font-bold leading-7 tracking-[-0.015em]')}
+            {family('mt-0.5 text-[13.5px]')}
+            <span className="mt-2.5 block">
+              {declined ? (
+                benefit
+              ) : best ? (
+                <BenefitBadge line={best} className="max-w-full" />
+              ) : null}
+            </span>
           </div>
-          {!declined && best ? (
-            <div className="flex shrink-0 flex-col items-end">
-              <Price line={best} size={17} />
-              <RateVerify result={result} />
-            </div>
-          ) : null}
+          {price(26)}
+        </div>
+        {/* What the agent says next: the one thing to know, and the action. */}
+        <div
+          className={cn(
+            'flex min-h-[60px] items-center justify-between gap-4 border-t border-rule bg-paper px-5 py-2.5',
+            !expanded && 'rounded-b-[15px]'
+          )}
+        >
+          <span className="min-w-0 flex-1">
+            {declined ? null : note || priceOnly || change ? (
+              <StatusNote note={note} priceOnly={priceOnly} change={change} separator={false} />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-live-ink">
+                <Check className="h-3.5 w-3.5" aria-hidden />
+                Qualifies as answered
+              </span>
+            )}
+          </span>
           {action}
         </div>
-      </div>
+      </>
     );
   } else if (pick) {
     body = (
-      <div className="px-4 pb-3 pt-3">
-        <div className="flex min-w-0 items-start gap-4">
-          {logo('hidden h-[50px] w-[130px] [@container(min-width:340px)]:inline-flex')}
-          <div className="min-w-0 flex-1">
-            <span className="flex items-center justify-between gap-2">
-              {label ?? <span />}
-              <span className="-mr-1 -mt-0.5 flex items-center gap-1">
-                {compareBox}
-                {chevron}
-              </span>
-            </span>
-            {name('text-[15px] leading-5')}
-            <span className="block truncate text-[12px] leading-4 text-ink-2">{result.family}</span>
-          </div>
+      <div className="px-4 pb-4 pt-3.5">
+        <div className="flex items-start justify-between gap-2">
+          {logo('quotePick', '')}
+          <span className="-mr-1 -mt-0.5 flex items-center gap-1">
+            {compareBox}
+            {chevron}
+          </span>
         </div>
-        <div className="mt-3 flex min-w-0 items-center justify-between gap-3">
-          <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-            {declined ? benefit : best ? <BenefitBadge line={best} className="max-w-full" /> : null}
+        <div className="mt-3 min-w-0">
+          {label ? <span className="mb-1.5 block">{label}</span> : null}
+          {name('text-[16px] font-semibold leading-6 tracking-[-0.01em]')}
+          {family('text-[12.5px] leading-5')}
+        </div>
+        <div className="mt-2.5 min-w-0">
+          {declined ? benefit : best ? <BenefitBadge line={best} className="max-w-full" /> : null}
+          <span className="mt-1.5 block empty:hidden">
             <StatusNote note={note} priceOnly={priceOnly} change={change} separator={false} />
           </span>
-          <span className="flex shrink-0 items-center gap-3.5">
-            {!declined && best ? (
-              <span className="flex flex-col items-end">
-                <Price line={best} size={16} />
-                <RateVerify result={result} />
-              </span>
-            ) : null}
-            {action}
-          </span>
+        </div>
+        <div className="mt-3 flex min-w-0 items-end justify-between gap-3 border-t border-rule pt-3">
+          {price(20, 'start') ?? <span />}
+          {action}
         </div>
       </div>
     );
   } else {
     body = (
-      <div className="flex items-center gap-4 py-2 pl-4 pr-3">
-        {logo('hidden h-[46px] w-[130px] [@container(min-width:480px)]:inline-flex')}
+      <div className="flex items-center gap-4 py-2.5 pl-3 pr-3">
+        {logo('quoteRow', 'hidden [@container(min-width:520px)]:inline-flex')}
         <div className="min-w-0 flex-1">
-          <span className="flex items-baseline gap-2">
-            {name('min-w-0 text-[15px] leading-5')}
+          <span className="flex min-w-0 items-center gap-2">
+            {name('min-w-0 text-[15px] font-semibold leading-5')}
             {label ? <span className="shrink-0">{label}</span> : null}
           </span>
-          <span className="block truncate text-[12px] leading-4 text-ink-2">{result.family}</span>
-          <span className="mt-1.5 block">{benefit}</span>
+          {family('text-[12.5px] leading-5')}
+          <span className="mt-1 block">{benefit}</span>
         </div>
-        {!declined && best ? (
-          <span className="flex shrink-0 flex-col items-end">
-            <Price line={best} size={16} />
-            <RateVerify result={result} />
-          </span>
-        ) : null}
-        <span className="flex shrink-0 items-center gap-1">
+        {price(18)}
+        <span className="flex shrink-0 items-center gap-1.5">
           {action}
           {compareBox}
           {chevron}
@@ -345,9 +358,10 @@ export function ResultCard({
       className={cn(
         'cq group/card relative overflow-visible border bg-surface transition-[box-shadow,border-color] duration-150 ne-motion',
         hero
-          ? 'rounded-[14px] border-rule shadow-raised [box-shadow:inset_4px_0_0_var(--live),var(--shadow-raised)]'
-          : 'rounded-card border-rule shadow-card hover:border-rule-strong',
-        pick && 'h-fit',
+          ? 'rounded-[16px] border-live shadow-raised'
+          : pick
+            ? 'rounded-[14px] border-rule-strong shadow-card hover:shadow-raised'
+            : 'rounded-[12px] border-rule shadow-card hover:border-rule-strong hover:shadow-raised',
         selected && 'border-live bg-[#fbfdfc]'
       )}
       data-product={result.productId}
