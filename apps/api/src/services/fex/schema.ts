@@ -18,7 +18,17 @@ import { z } from 'zod';
 import type { FexEngine } from './bundle.js';
 
 export const PAYMENT_MODE_VALUES = ['monthly', 'quarterly', 'semiannual', 'annual'] as const;
-export const QUOTE_SOURCES = ['PAGE', 'SOFTPHONE', 'CALL_CENTER'] as const;
+/**
+ * Where a saved quote was run from, for reporting ("how many quotes do agents
+ * run straight from the CRM?"):
+ *
+ *   PAGE         the standalone Quote page, for anyone
+ *   SOFTPHONE    the drawer over a live call
+ *   CALL_CENTER  the call-center console's Quote tab
+ *   CRM          a customer's own quote workspace (`/insurance-leads/:id/quote`)
+ */
+export const QUOTE_SOURCES = ['PAGE', 'SOFTPHONE', 'CALL_CENTER', 'CRM'] as const;
+export type QuoteSource = (typeof QUOTE_SOURCES)[number];
 
 const DETAIL_KEYS = [
   'cancer_type',

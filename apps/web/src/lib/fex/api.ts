@@ -20,7 +20,30 @@ import type {
 import { apiClient, payload, type ApiResponse, type Envelope } from '@/lib/api';
 
 export type Tone = 'good' | 'warn' | 'mod' | 'bad' | 'neutral';
-export type QuoteSource = 'PAGE' | 'SOFTPHONE' | 'CALL_CENTER';
+
+/**
+ * Where a saved quote was run from -- mirrors `QUOTE_SOURCES` in
+ * `apps/api/src/services/fex/schema.ts`. Every home of the quoter passes one
+ * of these, never a string of its own.
+ */
+export const QUOTE_SOURCE = {
+  /** The standalone Quote page: anyone, CRM customer or not. */
+  PAGE: 'PAGE',
+  /** The drawer over a live call. */
+  SOFTPHONE: 'SOFTPHONE',
+  /** The call-center console's Quote tab. */
+  CALL_CENTER: 'CALL_CENTER',
+  /** A CRM customer's own quote workspace; the server files it on the customer. */
+  CRM: 'CRM',
+} as const;
+export type QuoteSource = (typeof QUOTE_SOURCE)[keyof typeof QUOTE_SOURCE];
+
+export const QUOTE_SOURCE_LABEL: Record<QuoteSource, string> = {
+  PAGE: 'Quote page',
+  SOFTPHONE: 'Live call',
+  CALL_CENTER: 'Call center',
+  CRM: 'Customer record',
+};
 
 /** The applicant as the API takes it: the engine's, minus the quote date. */
 export type FexApplicant = Omit<Applicant, 'quoteDate'> & { mode: PaymentMode };
@@ -225,6 +248,14 @@ export interface FexQuoteSummary {
 export interface FexQuoteDetail extends FexQuoteSummary {
   applicant: FexApplicant & { quoteDate: string };
   results: FexResult[];
+  /** The application fields for the plan that was used, from the results as saved. */
+  selectedApplication?: FexApplicationHint | null;
+}
+
+export interface FexCustomerQuotes {
+  quotes: FexQuoteSummary[];
+  total: number;
+  nextCursor: string | null;
 }
 
 export interface FexInsights {
@@ -340,6 +371,33 @@ export const fexApi = {
     return result.ok ? { ...result, nextCursor: response.data?.nextCursor ?? null } : result;
   },
 
+  /** One CRM customer's quotes, newest first; the server checks the customer is mine. */
+  async customerQuotes(
+    leadId: string,
+    params: { cursor?: string; limit?: number } = {}
+  ): Promise<FexResultOf<FexCustomerQuotes>> {
+    const query = new URLSearchParams();
+    if (params.cursor) query.set('cursor', params.cursor);
+    if (params.limit) query.set('limit', String(params.limit));
+    const response = await apiClient.get<
+      Envelope<FexQuoteSummary[]> & { total?: number; nextCursor?: string | null }
+    >(
+      `/api/v1/insurance-leads/${encodeURIComponent(leadId)}/quotes${
+        query.size ? `?${query.toString()}` : ''
+      }`
+    );
+    const result = unwrap(response);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      data: {
+        quotes: result.data,
+        total: response.data?.total ?? result.data.length,
+        nextCursor: response.data?.nextCursor ?? null,
+      },
+    };
+  },
+
   async read(id: string): Promise<FexResultOf<FexQuoteDetail>> {
     return unwrap(
       await apiClient.get<Envelope<FexQuoteDetail>>(`/api/v1/fex/quotes/${encodeURIComponent(id)}`)
@@ -402,6 +460,14 @@ export function money(value: number | null | undefined): string {
 export function wholeDollars(value: number | null | undefined): string {
   return value == null || !Number.isFinite(value) ? '—' : usd0.format(value);
 }
+
+/** Payments a year, per mode: a modal premium times this is the annual premium. */
+export const PAYMENTS_PER_YEAR: Record<PaymentMode, number> = {
+  monthly: 12,
+  quarterly: 4,
+  semiannual: 2,
+  annual: 1,
+};
 
 export const MODE_SHORT: Record<PaymentMode, string> = {
   monthly: 'mo',

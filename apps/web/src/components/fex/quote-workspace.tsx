@@ -3,10 +3,16 @@
 /**
  * The quoter: intake on the left, every carrier's answer on the right.
  *
- * One component, three homes -- the Quote page, the drawer over a live call,
- * and the call-center console's Quote tab. On a call, the draft and the quote
- * the agent used live in the QuoteSession under the call id, so closing the
- * drawer or switching tabs loses nothing.
+ * One component, four homes -- the Quote page, the drawer over a live call,
+ * the call-center console's Quote tab, and a CRM customer's own quote
+ * workspace. On a call, the draft and the quote the agent used live in the
+ * QuoteSession under the call id; for a customer, under the customer
+ * (`sessionKey`), so closing the drawer, switching tabs or stepping back to
+ * the customer record loses nothing.
+ *
+ * The workspace knows nothing about who it is quoting beyond the ids it is
+ * handed: `insuranceLeadId` is optional everywhere, and the server decides
+ * whether a saved quote may be filed on that customer.
  *
  * ── Layout follows the space it is given ─────────────────────────────────────
  *
@@ -77,11 +83,27 @@ export interface QuoteWorkspaceProps {
   callId?: string | null;
   insuranceLeadId?: string | null;
   prospectName?: string | null;
+  /**
+   * Where the draft and selection live in the QuoteSession, so they outlive
+   * this component. Defaults to the call id; a customer's workspace passes
+   * its own key. None: the workspace keeps them itself.
+   */
+  sessionKey?: string | null;
   onUseQuote?: (selection: FexSelection) => void;
   /** The selected-quote bar's primary action (the console: open the disposition). */
   onStartApplication?: () => void;
+  /** The selected-quote bar's primary action label ("Start application"). */
+  startLabel?: string;
   /** Shown in the selected-quote bar instead of a Start button. */
   selectedNote?: string;
+  /** Every edit to the draft, for a host that shows something about it. */
+  onDraftChange?: (draft: QuoteDraft) => void;
+  /** After a quote is saved, with or without a selection. */
+  onSaved?: (saved: { id: string; selection: FexSelection | null }) => void;
+  /** Where a saved quote can be found again, for its toast ("It is in History."). */
+  savedWhere?: string;
+  /** What "New quote" starts from. Default: an empty draft. A customer's: their record. */
+  resetDraft?: () => QuoteDraft;
 }
 
 type SortKey = 'price' | 'face';
@@ -133,23 +155,32 @@ export function QuoteWorkspace({
   callId,
   insuranceLeadId,
   prospectName,
+  sessionKey: sessionKeyProp,
   onUseQuote,
   onStartApplication,
+  startLabel,
   selectedNote,
+  onDraftChange,
+  onSaved,
+  savedWhere = 'It is in History.',
+  resetDraft,
 }: QuoteWorkspaceProps): JSX.Element {
   const session = useQuoteSession();
   const { isPlatformAdmin } = useAuth();
   const { catalog } = useFexCatalog();
   const idPrefix = React.useId().replace(/:/g, '');
 
-  const sessionKey = callId && session ? callId : null;
+  const sessionKey = session ? (sessionKeyProp ?? callId ?? null) : null;
   const [draft, dispatch] = React.useReducer(
     draftReducer,
     undefined,
     () => (sessionKey ? session?.getDraft(sessionKey) : undefined) ?? initialDraft
   );
+  const onDraftChangeRef = React.useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
   React.useEffect(() => {
     if (sessionKey) session?.setDraft(sessionKey, draft);
+    onDraftChangeRef.current?.(draft);
   }, [draft, sessionKey, session]);
 
   const quote = useFexQuote(draft);
@@ -278,10 +309,13 @@ export function QuoteWorkspace({
       return null;
     }
     if (!line || !saved.data.selected) {
-      toast({ title: 'Quote saved', description: 'It is in History.' });
+      onSaved?.({ id: saved.data.id, selection: null });
+      toast({ title: 'Quote saved', description: savedWhere });
       return null;
     }
-    return { fexQuoteId: saved.data.id, ...saved.data.selected };
+    const chosen = { fexQuoteId: saved.data.id, ...saved.data.selected };
+    onSaved?.({ id: saved.data.id, selection: chosen });
+    return chosen;
   }
 
   async function use(result: FexResult, line: QuoteLine): Promise<void> {
@@ -987,7 +1021,10 @@ export function QuoteWorkspace({
               });
             }}
             onReset={() => {
-              dispatch({ type: 'replace', draft: emptyDraft(session?.settings?.agency) });
+              dispatch({
+                type: 'replace',
+                draft: resetDraft?.() ?? emptyDraft(session?.settings?.agency),
+              });
               setExpanded(null);
               setCompare([]);
               previousOutcomes.current = null;
@@ -1017,6 +1054,7 @@ export function QuoteWorkspace({
                 <SelectedQuoteBar
                   selection={selection}
                   onStart={onStartApplication}
+                  startLabel={startLabel}
                   note={selectedNote}
                   onClear={() => setSelection(null)}
                 />

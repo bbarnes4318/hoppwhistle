@@ -14,11 +14,15 @@ import {
   Ban,
   MessageSquare,
   PhoneCall,
+  Calculator,
+  ExternalLink,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 import { usePhone } from '@/components/phone';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import type { InsuranceLeadDetail, UserSummary } from '@/lib/api/leads';
 import {
@@ -38,6 +42,13 @@ import { MarkApplicationPanel } from './mark-application-panel';
 interface LeadDetailBodyProps {
   lead: InsuranceLeadDetail;
   onRefresh: () => void;
+  /**
+   * The customer page shows the sales work -- quotes, applications, writing
+   * one -- in its own panels above the record, so the record leaves them out
+   * there. The CRM sheet keeps everything.
+   */
+  hideApplications?: boolean;
+  hideMarkApplication?: boolean;
 }
 
 interface LeadDetailSheetProps {
@@ -232,7 +243,12 @@ export function leadDisplayName(lead: InsuranceLeadDetail): string {
  * calls, and click-to-call. Rendered by the sheet on the CRM grid and by the
  * full customer page, so a field is written once.
  */
-export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
+export function LeadDetailBody({
+  lead,
+  onRefresh,
+  hideApplications = false,
+  hideMarkApplication = false,
+}: LeadDetailBodyProps) {
   const { makeCall } = usePhone();
   // Only the agency's principal hands a customer to someone else; the server refuses an agent.
   const { isOwner, isAdmin } = useAuth();
@@ -408,7 +424,7 @@ export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
         </div>
       )}
 
-      <MarkApplicationPanel lead={lead} onRecorded={onRefresh} />
+      {hideMarkApplication ? null : <MarkApplicationPanel lead={lead} onRecorded={onRefresh} />}
 
       {/* Contact Information */}
       <Section title="Contact Information" defaultOpen={true}>
@@ -961,48 +977,50 @@ export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
       )}
 
       {/* Applications: the business written for this customer */}
-      <Section title={`Applications (${lead.applications?.length ?? 0})`} defaultOpen={true}>
-        {!lead.applications || lead.applications.length === 0 ? (
-          <div className="text-xs italic text-ink-3">No applications for this customer yet</div>
-        ) : (
-          <ul className="divide-y divide-rule">
-            {lead.applications.map(app => (
-              <li
-                key={app.id}
-                className={`flex items-center justify-between gap-3 py-2 text-xs ${app.voidedAt ? 'line-through opacity-60' : ''}`}
-              >
-                <div className="min-w-0">
-                  <div className="font-medium text-ink">
-                    {app.carrier}
-                    {app.product ? ` · ${app.product}` : ''}
+      {hideApplications ? null : (
+        <Section title={`Applications (${lead.applications?.length ?? 0})`} defaultOpen={true}>
+          {!lead.applications || lead.applications.length === 0 ? (
+            <div className="text-xs italic text-ink-3">No applications for this customer yet</div>
+          ) : (
+            <ul className="divide-y divide-rule">
+              {lead.applications.map(app => (
+                <li
+                  key={app.id}
+                  className={`flex items-center justify-between gap-3 py-2 text-xs ${app.voidedAt ? 'line-through opacity-60' : ''}`}
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-ink">
+                      {app.carrier}
+                      {app.product ? ` · ${app.product}` : ''}
+                    </div>
+                    <div className="text-ink-3">
+                      {app.submittedAt
+                        ? new Date(app.submittedAt).toLocaleDateString()
+                        : 'Not submitted'}
+                      {app.carrierApplicationNumber ? ` · #${app.carrierApplicationNumber}` : ''}
+                      {app.faceAmount ? ` · $${app.faceAmount.toLocaleString()} face` : ''}
+                    </div>
                   </div>
-                  <div className="text-ink-3">
-                    {app.submittedAt
-                      ? new Date(app.submittedAt).toLocaleDateString()
-                      : 'Not submitted'}
-                    {app.carrierApplicationNumber ? ` · #${app.carrierApplicationNumber}` : ''}
-                    {app.faceAmount ? ` · $${app.faceAmount.toLocaleString()} face` : ''}
+                  <div className="flex shrink-0 items-center gap-3 tabular-nums text-ink-2">
+                    {app.annualizedPremium !== null && (
+                      <span>{`$${app.annualizedPremium.toLocaleString(undefined, { maximumFractionDigits: 2 })}/yr`}</span>
+                    )}
+                    {app.callId && (
+                      <Link
+                        href={`/calls?call=${encodeURIComponent(app.callId)}`}
+                        className="text-brand-ink hover:underline"
+                        title="Open the call"
+                      >
+                        Call
+                      </Link>
+                    )}
                   </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3 tabular-nums text-ink-2">
-                  {app.annualizedPremium !== null && (
-                    <span>{`$${app.annualizedPremium.toLocaleString(undefined, { maximumFractionDigits: 2 })}/yr`}</span>
-                  )}
-                  {app.callId && (
-                    <Link
-                      href={`/calls?call=${encodeURIComponent(app.callId)}`}
-                      className="text-brand-ink hover:underline"
-                      title="Open the call"
-                    >
-                      Call
-                    </Link>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
       {/* Calls with this customer's number */}
       <Section title={`Calls (${lead.calls?.length ?? 0})`} defaultOpen={true}>
@@ -1221,30 +1239,34 @@ export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
             ) : (
               lead.activities.map((act, actIdx) => {
                 const iconColor =
-                  act.type === 'NOTE'
-                    ? 'bg-ringing-tint text-ringing-ink'
-                    : act.type === 'CALL'
-                      ? 'bg-brand-tint text-brand-ink'
-                      : act.type === 'STATUS_CHANGE'
-                        ? 'bg-money-tint text-money-ink'
-                        : act.type === 'VALIDATION'
-                          ? 'bg-dropped-tint text-dropped-ink'
-                          : act.type === 'SUBMISSION'
-                            ? 'bg-live-tint text-live-ink'
-                            : 'bg-sunken text-ink-2';
+                  act.type === 'QUOTE'
+                    ? 'bg-brand-tint text-brand-ink'
+                    : act.type === 'NOTE'
+                      ? 'bg-ringing-tint text-ringing-ink'
+                      : act.type === 'CALL'
+                        ? 'bg-brand-tint text-brand-ink'
+                        : act.type === 'STATUS_CHANGE'
+                          ? 'bg-money-tint text-money-ink'
+                          : act.type === 'VALIDATION'
+                            ? 'bg-dropped-tint text-dropped-ink'
+                            : act.type === 'SUBMISSION'
+                              ? 'bg-live-tint text-live-ink'
+                              : 'bg-sunken text-ink-2';
 
                 const Icon =
-                  act.type === 'NOTE'
-                    ? MessageSquare
-                    : act.type === 'CALL'
-                      ? PhoneCall
-                      : act.type === 'STATUS_CHANGE'
-                        ? Activity
-                        : act.type === 'VALIDATION'
-                          ? AlertTriangle
-                          : act.type === 'TASK'
-                            ? CheckCircle2
-                            : Activity;
+                  act.type === 'QUOTE'
+                    ? Calculator
+                    : act.type === 'NOTE'
+                      ? MessageSquare
+                      : act.type === 'CALL'
+                        ? PhoneCall
+                        : act.type === 'STATUS_CHANGE'
+                          ? Activity
+                          : act.type === 'VALIDATION'
+                            ? AlertTriangle
+                            : act.type === 'TASK'
+                              ? CheckCircle2
+                              : Activity;
 
                 return (
                   <li key={act.id}>
@@ -1332,6 +1354,12 @@ export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
 }
 
 export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetailSheetProps) {
+  const router = useRouter();
+  const { makeCall } = usePhone();
+  const customerHref = lead ? `/insurance-leads/${encodeURIComponent(lead.id)}` : null;
+  // The quoter needs a full screen: Quote opens the customer's own quote
+  // workspace, bound to them, rather than squeezing it into this sheet.
+  const canQuote = lead?.vertical === 'FE';
   return (
     <>
       {/* Backdrop */}
@@ -1346,14 +1374,37 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               {lead ? leadDisplayName(lead) : '…'}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            {lead && (
-              <Link
-                href={`/insurance-leads/${encodeURIComponent(lead.id)}`}
-                className="rounded-md px-2 py-1 text-xs font-medium text-brand-ink hover:bg-sunken"
+          <div className="flex shrink-0 items-center gap-1.5">
+            {lead?.phone && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                disabled={lead.doNotCall}
+                title={lead.doNotCall ? 'This customer is on Do Not Call' : undefined}
+                onClick={() => void makeCall(lead.phone)}
               >
-                Open full record
-              </Link>
+                <PhoneCall aria-hidden className="h-3.5 w-3.5" />
+                Call
+              </Button>
+            )}
+            {lead && canQuote && customerHref && (
+              <Button
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => router.push(`${customerHref}/quote`)}
+              >
+                <Calculator aria-hidden className="h-3.5 w-3.5" />
+                Quote
+              </Button>
+            )}
+            {customerHref && (
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5" asChild>
+                <Link href={customerHref}>
+                  <ExternalLink aria-hidden className="h-3.5 w-3.5" />
+                  Open customer
+                </Link>
+              </Button>
             )}
             <button
               onClick={onClose}
