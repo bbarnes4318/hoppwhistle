@@ -137,6 +137,8 @@ REQUIRED_MIGRATIONS="
 20261014000000_shared_routing_agent_members
 20261015000000_manager_role_value
 20261015000001_manager_role_row
+20261016000000_insurance_activity_quote
+20261016000001_fex_quote_customer_fk
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -429,6 +431,18 @@ migration_applied() {
     *_manager_role_row)
       # The roles row an invitation attaches to a new manager.
       echo "SELECT EXISTS (SELECT 1 FROM roles WHERE name = 'MANAGER')" ;;
+    *_insurance_activity_quote)
+      # One statement: the QUOTE member of InsuranceActivityType, alone, for
+      # the same reason as MANAGER above.
+      echo "SELECT COALESCE((SELECT true FROM pg_enum e
+              JOIN pg_type t ON t.oid = e.enumtypid
+              WHERE t.typname = 'InsuranceActivityType'
+                AND e.enumlabel = 'QUOTE'), false)" ;;
+    *_fex_quote_customer_fk)
+      # Wrapped BEGIN..COMMIT; the foreign key is its last statement and stands
+      # for the orphan clean-up before it.
+      echo "SELECT EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'fex_quotes_insuranceLeadId_fkey')" ;;
     *_payment_provider_melio_value)
       # One statement, one effect. It is its own migration because PostgreSQL
       # refuses to USE a new enum value in the transaction that added it, and

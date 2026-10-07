@@ -216,6 +216,10 @@ let calls: Call[] = [];
 let lead: InsuranceLeadDetail = LEAD;
 let customerQuotes: FexQuoteSummary[] = [];
 
+/** A form control's value, without a cast the type checker and the linter disagree about. */
+const valueOf = (el: HTMLElement): string =>
+  el instanceof HTMLInputElement || el instanceof HTMLSelectElement ? el.value : '';
+
 const posted = (path: string) => calls.filter(c => c.method === 'POST' && c.path === path);
 
 beforeEach(() => {
@@ -474,9 +478,9 @@ describe("a customer's quote workspace", () => {
     );
     // Filled, and marked as from the record.
     const state = await screen.findByLabelText(/^State/);
-    expect((state as HTMLSelectElement).value).toBe('TN');
+    expect(valueOf(state)).toBe('TN');
     expect(state.closest('div')?.parentElement?.textContent).toMatch(/From lead/);
-    expect((screen.getByLabelText(/^Date of birth/)).value).toBe('1958-05-14');
+    expect(valueOf(screen.getByLabelText(/^Date of birth/))).toBe('1958-05-14');
     // The quote runs straight away: nothing was retyped.
     await waitFor(() => expect(posted('/api/v1/fex/quote').length).toBeGreaterThan(0));
     expect(posted('/api/v1/fex/quote')[0].body).toMatchObject({

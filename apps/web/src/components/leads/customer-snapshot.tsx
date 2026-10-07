@@ -80,12 +80,20 @@ export function CustomerSnapshot({ lead }: { lead: InsuranceLeadDetail }): JSX.E
 
   return (
     <Panel className="min-w-0 overflow-hidden" aria-label="Customer snapshot">
-      <dl className="grid grid-cols-2 divide-rule sm:grid-cols-4 xl:grid-cols-8 [&>div]:border-rule [&>div]:border-b xl:[&>div]:border-b-0 xl:[&>div:not(:first-child)]:border-l">
+      <dl
+        className={cn(
+          'grid grid-cols-2 sm:grid-cols-3 [&>div]:border-b [&>div]:border-rule xl:[&>div:not(:first-child)]:border-l xl:[&>div]:border-b-0',
+          // Age carries the date of birth, so it gets the room.
+          fe
+            ? 'md:grid-cols-4 xl:grid-cols-[1fr_1.5fr_1fr_1.15fr_1fr_1fr_1.1fr_0.9fr]'
+            : 'xl:grid-cols-[1fr_1.5fr_1fr_1fr_1.1fr_0.9fr]'
+        )}
+      >
         <Fact label="State" value={facts.state} />
         <Fact
           label="Age"
           value={facts.age !== null ? facts.age : null}
-          hint={dob ? `born ${lead.birthDate}` : null}
+          hint={dob ? lead.birthDate : null}
         />
         <Fact
           label="Sex"
@@ -97,9 +105,7 @@ export function CustomerSnapshot({ lead }: { lead: InsuranceLeadDetail }): JSX.E
             value={facts.tobacco === null ? null : facts.tobacco ? 'Tobacco' : 'Non-tobacco'}
           />
         ) : null}
-        {fe ? (
-          <Fact label="Coverage asked" value={face !== null ? wholeDollars(face) : null} />
-        ) : null}
+        {fe ? <Fact label="Coverage" value={face !== null ? wholeDollars(face) : null} /> : null}
         <Fact
           label="Stage"
           value={lead.leadStage ? (STAGE_LABEL[lead.leadStage] ?? lead.leadStage) : 'New'}

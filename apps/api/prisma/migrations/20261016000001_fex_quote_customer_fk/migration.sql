@@ -7,6 +7,8 @@
 -- keeps their quotes -- they are the agency's record of what was offered --
 -- and unlinks them.
 
+BEGIN;
+
 UPDATE "fex_quotes" q
 SET "insuranceLeadId" = NULL
 WHERE q."insuranceLeadId" IS NOT NULL
@@ -19,3 +21,5 @@ ALTER TABLE "fex_quotes"
   ADD CONSTRAINT "fex_quotes_insuranceLeadId_fkey"
   FOREIGN KEY ("insuranceLeadId") REFERENCES "insurance_leads"("id")
   ON DELETE SET NULL ON UPDATE CASCADE;
+
+COMMIT;
