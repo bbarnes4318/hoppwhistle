@@ -49,7 +49,8 @@ export interface InsuranceActivity {
     | 'VALIDATION'
     | 'SYSTEM'
     | 'TASK'
-    | 'COMPLIANCE';
+    | 'COMPLIANCE'
+    | 'QUOTE';
   title: string;
   description: string | null;
   metadata: Record<string, unknown> | null;
@@ -155,6 +156,8 @@ export interface InsuranceLeadApplication {
   createdAt: string;
   callId: string | null;
   voidedAt: string | null;
+  /** The saved quote it was written from, when the agent used the quoter. */
+  fexQuoteId?: string | null;
 }
 
 export interface InsuranceLeadCall {
@@ -262,7 +265,23 @@ export async function fetchInsuranceLeads(params: {
 
 export async function fetchInsuranceLead(id: string): Promise<InsuranceLeadDetail> {
   const res = await apiClient.get<InsuranceLeadDetail>(`/api/v1/insurance-leads/${id}`);
+  // A refusal (not found, not licensed) is the caller's to show, not a record.
+  if (res.error || !res.data) {
+    throw new Error(res.error?.message || 'This customer could not be found.');
+  }
   return res.data as unknown as InsuranceLeadDetail;
+}
+
+/**
+ * Write a few fields onto a customer and say so honestly: throws when the
+ * server refused, so a caller never reports a save that did not happen.
+ */
+export async function patchInsuranceLeadFields(
+  id: string,
+  fields: Record<string, unknown>
+): Promise<void> {
+  const res = await apiClient.patch<{ success: boolean }>(`/api/v1/insurance-leads/${id}`, fields);
+  if (res.error) throw new Error(res.error.message || 'The customer was not updated.');
 }
 
 export async function updateInsuranceLead(

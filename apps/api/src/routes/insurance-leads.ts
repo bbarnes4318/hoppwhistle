@@ -17,6 +17,7 @@ import {
   isAgentPerson,
   mayReachOwnedRow,
 } from '../lib/agent-scope.js';
+import { findReachableLead } from '../lib/lead-access.js';
 import {
   permits,
   resolveStateAuthority,
@@ -90,24 +91,14 @@ async function requireReachableLead(
   tenantId: string,
   leadId: string
 ): Promise<LeadGate> {
-  const { getPrismaClient } = await import('../lib/prisma.js');
-  const lead = await getPrismaClient().insuranceLead.findFirst({
-    where: { id: leadId, tenantId },
-    select: { id: true, assignedToId: true, state: true },
-  });
-
-  if (!lead || !mayReachOwnedRow(request, lead.assignedToId)) {
+  const access = await findReachableLead(request, tenantId, leadId);
+  if (access.ok) return { ok: true, leadId: access.lead.id };
+  if (access.reason === 'not_found') {
     void reply.code(404);
     return { ok: false, body: { error: { code: 'NOT_FOUND', message: 'Lead not found' } } };
   }
-
-  const authority = await resolveStateAuthority(request, tenantId);
-  if (!permitsLead(authority, lead)) {
-    void reply.code(403);
-    return { ok: false, body: { error: { ...STATE_NOT_LICENSED } } };
-  }
-
-  return { ok: true, leadId: lead.id };
+  void reply.code(403);
+  return { ok: false, body: { error: { ...STATE_NOT_LICENSED } } };
 }
 
 /**
@@ -1121,6 +1112,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
           insuranceLeadId: lead.id,
           fexQuoteId: input.fexQuoteId ?? null,
           writerIsPrincipal: isAgencyPrincipal(request),
+          verifiedLeadId: lead.id,
           carrier: input.carrier,
           product: input.product ?? null,
           planType: input.planType ?? null,
@@ -1152,6 +1144,28 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
           where: { id: attachedCallId },
           data: { disposition: 'APPLICATION_SUBMITTED' },
         });
+      }
+
+      // The quote it was written from, on the customer's timeline: the line
+      // that closes "quoted" -> "written".
+      const fexQuoteId = typeof application.fexQuoteId === 'string' ? application.fexQuoteId : null;
+      if (fexQuoteId) {
+        await prisma.insuranceActivity
+          .create({
+            data: {
+              tenantId,
+              insuranceLeadId: lead.id,
+              type: 'QUOTE',
+              title: 'Application written from quote',
+              description: [
+                [input.carrier, input.product].filter(Boolean).join(' '),
+                `$${input.faceAmount.toLocaleString('en-US')}`,
+              ].join(' · '),
+              createdById: userId,
+              metadata: { fexQuoteId, applicationId: application.id as string },
+            },
+          })
+          .catch(err => request.log.error(err, 'Failed to record the application on the customer'));
       }
 
       const { updateLead } = await import('../services/insurance-lead-service.js');

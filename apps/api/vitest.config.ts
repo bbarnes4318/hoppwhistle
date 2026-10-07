@@ -198,6 +198,10 @@ const DATABASE_BACKED = [
   // `insurance_leads`, `insurance_carrier_applications`, the platform admin
   // tables and both quoter tables to seed two agencies, staff and a preview.
   '**/src/__tests__/fex-quote.test.ts',
+  // Truncates `tenants`, `roles`, `users`, `insurance_leads`,
+  // `insurance_activities` and both quoter tables to seed two agencies whose
+  // agents quote CRM customers.
+  '**/src/__tests__/fex-customer-quotes.test.ts',
 ];
 
 export default defineConfig({

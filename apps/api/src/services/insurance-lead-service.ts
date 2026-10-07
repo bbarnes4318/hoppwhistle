@@ -769,6 +769,7 @@ export async function getLeadById(tenantId: string, id: string, assignedToId?: s
       createdAt: true,
       callId: true,
       voidedAt: true,
+      fexQuoteId: true,
     },
   });
 

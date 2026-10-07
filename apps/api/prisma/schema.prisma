@@ -3208,6 +3208,7 @@ model InsuranceLead {
   submissions InsuranceLeadSubmission[]
   activities  InsuranceActivity[]
   tasks       InsuranceTask[]
+  fexQuotes   FexQuote[]
 
   @@index([tenantId])
   @@index([tenantId, vertical])
@@ -3361,6 +3362,8 @@ enum InsuranceActivityType {
   SYSTEM
   TASK
   COMPLIANCE
+  /// A final expense quote saved for this customer (`routes/fex.ts`)
+  QUOTE
 }
 
 model InsuranceActivity {
@@ -3687,9 +3690,12 @@ model FexQuote {
   id              String  @id @default(uuid())
   tenantId        String
   createdById     String
-  /// PAGE | SOFTPHONE | CALL_CENTER
+  /// PAGE | SOFTPHONE | CALL_CENTER | CRM (`services/fex/schema.ts` QUOTE_SOURCES)
   source          String
   callId          String?
+  /// The CRM customer this quote was run for. Set only when the saver may
+  /// reach that customer (`lib/lead-access.ts`); a deleted customer leaves the
+  /// quote in place, unlinked.
   insuranceLeadId String?
   /// "v18" -- the bundle file the quote was made with
   engineVersion   String
@@ -3724,8 +3730,9 @@ model FexQuote {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy User   @relation("FexQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy     User           @relation("FexQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  insuranceLead InsuranceLead? @relation(fields: [insuranceLeadId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, createdAt])
   @@index([tenantId, createdById, createdAt])

@@ -456,9 +456,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
  * laptop screen. They keep their own clear of the softphone.
  */
 const EMBEDDED_APP_ROUTES = ['/voice-agents', '/quote'];
+/** A CRM customer's own quote workspace: the quoter again, one screen tall. */
+const CUSTOMER_QUOTE_ROUTE = /^\/insurance-leads\/[^/]+\/quote\/?$/;
 
 function isEmbeddedAppPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
+  if (CUSTOMER_QUOTE_ROUTE.test(pathname)) return true;
   return EMBEDDED_APP_ROUTES.some(route => pathname === route || pathname.startsWith(`${route}/`));
 }
 

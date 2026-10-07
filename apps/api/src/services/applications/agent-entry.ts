@@ -101,6 +101,13 @@ export interface AgentApplicationInput {
   fexQuoteId?: string | null;
   /** The writer sees the agency's book (OWNER/ADMIN), from `isAgencyPrincipal(request)`. */
   writerIsPrincipal?: boolean;
+  /**
+   * Set ONLY by a route that has already gated the writer onto this customer
+   * (`lib/lead-access.ts`): a quote saved for this same customer may then be
+   * linked even if a colleague ran it -- the customer is the writer's, and so
+   * is what was quoted for them.
+   */
+  verifiedLeadId?: string | null;
 
   carrier: string;
   product?: string | null;
@@ -129,16 +136,19 @@ async function reachableFexQuoteId(
   prisma: ReturnType<typeof getPrismaClient>,
   input: Pick<
     AgentApplicationInput,
-    'tenantId' | 'createdById' | 'fexQuoteId' | 'writerIsPrincipal'
+    'tenantId' | 'createdById' | 'fexQuoteId' | 'writerIsPrincipal' | 'verifiedLeadId'
   >
 ): Promise<string | null> {
   if (!input.fexQuoteId) return null;
   const quote = await prisma.fexQuote.findFirst({
     where: { id: input.fexQuoteId, tenantId: input.tenantId },
-    select: { id: true, createdById: true },
+    select: { id: true, createdById: true, insuranceLeadId: true },
   });
   if (!quote) return null;
-  return input.writerIsPrincipal || quote.createdById === input.createdById ? quote.id : null;
+  const sameCustomer = !!input.verifiedLeadId && quote.insuranceLeadId === input.verifiedLeadId;
+  return input.writerIsPrincipal || quote.createdById === input.createdById || sameCustomer
+    ? quote.id
+    : null;
 }
 
 /**

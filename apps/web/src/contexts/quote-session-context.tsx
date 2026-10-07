@@ -16,7 +16,8 @@
  *
  * When a call connects the drawer opens by itself, once per call, if all of:
  * the agent's own setting (or, unset, the agency's) is on; the agent is not on
- * /call-center (the console has its own Quote tab) or /quote; and the caller's
+ * /call-center (the console has its own Quote tab), /quote, or a customer's
+ * own quote workspace (/insurance-leads/:id/quote); and the caller's
  * CRM record is not an ACA or B2B one (no record at all still opens). Closing
  * it does not reopen it.
  */
@@ -75,6 +76,7 @@ export function shouldAutoOpen(input: {
   if (!on) return false;
   const path = input.pathname ?? '';
   if (path.startsWith('/call-center') || path.startsWith('/quote')) return false;
+  if (/^\/insurance-leads\/[^/]+\/quote/.test(path)) return false;
   const vertical = (input.vertical ?? '').toUpperCase();
   return vertical !== 'ACA' && vertical !== 'B2B';
 }
