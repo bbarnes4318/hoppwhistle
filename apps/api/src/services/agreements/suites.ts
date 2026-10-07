@@ -129,6 +129,23 @@ export async function ensureTenantWorkspace(
     }
   }
   let suite = await prisma.agreementSuite.findUnique({ where: { workspaceId: workspace.id } });
+  if (suite && !suite.templateSetKey) {
+    // A suite created before its brand had contract text (or before the tenant
+    // had its brand) names no set. Give it its brand's own set once one is
+    // installed, exactly as a suite created today starts with it. Never
+    // replaces a set a platform admin assigned, and never crosses brands:
+    // `templateSetFor` only accepts a set registered for this theme.
+    const theme = isBrandThemeKey(suite.brandTheme) ? suite.brandTheme : brandTheme;
+    if (
+      theme &&
+      templateSetFor({ scope: 'TENANT', templateSetKey: theme, brandTheme: theme }).configured
+    ) {
+      suite = await prisma.agreementSuite.update({
+        where: { id: suite.id },
+        data: { templateSetKey: theme, brandTheme: theme },
+      });
+    }
+  }
   if (!suite) {
     try {
       suite = await prisma.agreementSuite.create({

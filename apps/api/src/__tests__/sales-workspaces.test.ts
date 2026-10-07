@@ -832,19 +832,33 @@ describe.skipIf(!gate.available)('Sales workspaces', () => {
       }
     });
 
-    it('refuses previews and sends from a suite with no template set', async () => {
-      await configureSuiteSettingsOnly();
+    it('gives an existing Life Leads Plus suite with no template set its own', async () => {
+      await call('llpOwner', 'GET', '/api/v1/sales/context');
+      await prisma.agreementSuite.updateMany({
+        where: { workspace: { tenantId: ids.llp } },
+        data: { templateSetKey: null, brandTheme: null },
+      });
+      const response = await call('llpOwner', 'GET', '/api/v1/sales/context');
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data.suite.templatesConfigured).toBe(true);
       const suite = await prisma.agreementSuite.findFirstOrThrow({
         where: { workspace: { tenantId: ids.llp } },
       });
-      const unset = await call('operator', 'PUT', `/api/v1/platform/agreement-suites/${suite.id}`, {
-        templateSetKey: null,
+      expect(suite.templateSetKey).toBe('life-leads-plus');
+      expect(suite.brandTheme).toBe('life-leads-plus');
+    });
+
+    it('refuses previews and sends from a suite with no template set', async () => {
+      const settings = await call('wl2Owner', 'PUT', '/api/v1/sales/settings', {
+        legalEntityName: 'Other White Label LLC',
+        noticeAddress: '1 Issuer Way, Tampa, FL 33602',
+        noticeEmail: 'contracts@otherwl.test',
       });
-      expect(unset.statusCode, unset.body).toBe(200);
-      const prospect = await createProspect('llpOwner');
+      expect(settings.statusCode, settings.body).toBe(200);
+      const prospect = await createProspect('wl2Owner');
       for (const url of ['/api/v1/sales/agreements/preview', '/api/v1/sales/agreements']) {
         const response = await call(
-          'llpOwner',
+          'wl2Owner',
           'POST',
           url,
           agreementBody({ salesProspectId: prospect.id })
