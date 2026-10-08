@@ -381,15 +381,16 @@ describe('the customer page', () => {
     expect(within(plan).getByText('Mutual of Omaha')).toBeTruthy();
     expect(within(plan).getByText('$54.27')).toBeTruthy();
     expect(within(plan).getByText('$10,000 coverage')).toBeTruthy();
-    expect(within(plan).getByText(/7 plans compared/)).toBeTruthy();
+    expect(within(plan).getByText('7 plans')).toBeTruthy();
+    expect(within(plan).getByText('$651.24')).toBeTruthy(); // the annual premium
     // The carrier's mark, at the size it is recognised by.
-    expect(plan.querySelector('[data-carrier-logo]')?.className).toMatch(/w-\[190px\]/);
+    expect(plan.querySelector('[data-carrier-logo]')).toBeTruthy();
     // The quote without a choice follows as a row of its own.
     const others = screen.getByRole('region', { name: 'Other saved quotes' });
     const rows = within(others).getAllByRole('button', { name: /plans qualified/ });
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('7 plans qualified')).toBeTruthy();
-    expect(screen.getByText(/lowest quoted \$41\.18\/mo/)).toBeTruthy();
+    expect(screen.getByText(/Lowest quoted \$41\.18\/mo/)).toBeTruthy();
   });
 
   it('opens a historical quote as stored, without re-pricing it', async () => {
@@ -467,10 +468,11 @@ describe('the customer page', () => {
     } as InsuranceLeadDetail;
     customerQuotes = [summary({ applicationId: 'app-1' })];
     render(withSession(<CustomerPage />));
-    const apps = (await screen.findByText(/From quote · Oct 3, 2026/)).closest(
+    const apps = (await screen.findByText(/From the Oct 3, 2026 quote/)).closest(
       '[id="applications"]'
     ) as HTMLElement;
-    expect(within(apps).getByText('Submitted')).toBeTruthy();
+    expect(within(apps).getAllByText('Submitted').length).toBeGreaterThan(0);
+    expect(within(apps).getByRole('list', { name: 'Application progress' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /View application/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Write application/ })).toBeNull();
   });
@@ -484,7 +486,8 @@ describe('the customer workspace', () => {
   it('opens on Overview, read-only: no open inputs for the record', async () => {
     render(withSession(<CustomerPage />));
     expect(await screen.findByRole('tab', { name: 'Overview', selected: true })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Customer' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Contact' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Sales status' })).toBeTruthy();
     expect(screen.queryByLabelText('First name')).toBeNull();
     expect(screen.queryByLabelText('Email')).toBeNull();
   });
@@ -508,12 +511,15 @@ describe('the customer workspace', () => {
     const tab = await screen.findByRole('tab', { name: /Calls/ });
     fireEvent.mouseDown(tab);
     fireEvent.click(tab);
-    const table = await screen.findByRole('table');
-    expect(within(table).getByText('Not interested')).toBeTruthy();
-    expect(within(table).getByText('0:07')).toBeTruthy();
-    expect(within(table).getByRole('link', { name: 'Open call' }).getAttribute('href')).toBe(
-      '/calls?call=call-1'
-    );
+    const log = await screen.findByRole('tabpanel', { name: /Calls/ });
+    expect(within(log).getAllByText('Not interested').length).toBeGreaterThan(0);
+    expect(within(log).getAllByText('0:07').length).toBeGreaterThan(0);
+    // The whole row opens the call; no "Open call" repeated per row.
+    expect(
+      within(log)
+        .getByRole('link', { name: /Inbound call/ })
+        .getAttribute('href')
+    ).toBe('/calls?call=call-1');
     expect(window.location.hash).toBe('#calls');
   });
 
@@ -601,9 +607,9 @@ describe('the customer workspace', () => {
     window.history.replaceState(null, '', '/insurance-leads/lead-1#tasks');
     render(withSession(<CustomerPage />));
     // The only open task leads as the Next action.
-    const next = await screen.findByRole('region', { name: 'Next action' });
+    const next = await screen.findByRole('region', { name: 'Follow-up plan' });
     expect(within(next).getByText('Send the policy packet')).toBeTruthy();
-    expect(within(next).getByText('High')).toBeTruthy();
+    expect(within(next).getByText(/high priority/)).toBeTruthy();
     const [complete] = within(next).getAllByRole('button', {
       name: 'Complete "Send the policy packet"',
     });

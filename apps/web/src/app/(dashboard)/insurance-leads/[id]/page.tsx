@@ -1,10 +1,10 @@
 'use client';
 
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Notice, Panel } from '@/components/domain';
+import { Notice } from '@/components/domain';
 import {
   applicationFromQuote,
   CustomerApplicationDrawer,
@@ -20,17 +20,16 @@ import { CustomerApplicationCard } from '@/components/leads/customer/customer-ap
 import { CustomerCallsTable } from '@/components/leads/customer/customer-calls';
 import { CustomerDetails } from '@/components/leads/customer/customer-details';
 import { CustomerEditDrawer } from '@/components/leads/customer/customer-edit-drawer';
+import { CustomerFollowUp } from '@/components/leads/customer/customer-follow-up';
 import { CustomerHeader } from '@/components/leads/customer/customer-header';
-import { CustomerNextUp } from '@/components/leads/customer/customer-next-up';
-import { CustomerNotes } from '@/components/leads/customer/customer-notes';
-import { CustomerSummaryCard } from '@/components/leads/customer/customer-summary-card';
-import { AddTaskForm, NoOpenTasks, TaskList } from '@/components/leads/customer/customer-tasks';
+import { CustomerRail } from '@/components/leads/customer/customer-rail';
 import { assigneeLabel, openTasks } from '@/components/leads/customer/format';
 import type { LeadSectionId } from '@/components/leads/customer/lead-fields';
+import { deriveNextAction } from '@/components/leads/customer/next-action';
 import { useAssignableUsers, useLeadTasks } from '@/components/leads/customer/use-lead-record';
+import { Sheet } from '@/components/leads/customer/workspace';
 import { leadDisplayName } from '@/components/leads/lead-detail-sheet';
 import { usePhone } from '@/components/phone';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useQuoteSession } from '@/contexts/quote-session-context';
@@ -235,144 +234,137 @@ export default function CustomerPage() {
           ? null
           : 'application';
 
+  const next = deriveNextAction(lead, {
+    featured,
+    written,
+    neverQuoted: fe && !quotes.loading && !quotes.error && quotes.quotes.length === 0,
+  });
+  const scheduleFollowUp = () => edit('crm');
+  const addTask = () => {
+    changeTab('tasks');
+    setAddingTask(true);
+  };
+
   return (
-    <div className="page-canvas !gap-5">
-      <div className="space-y-4">
+    <div className="page-canvas">
+      <Sheet>
         <CustomerHeader
           lead={lead}
           name={name}
+          assignee={assignee}
+          next={next}
           onCall={() => void makeCall(lead.phone)}
           onQuote={fe ? startQuote : undefined}
           resumable={resumable}
           onApplication={writeApplication}
           written={written}
           preparing={preparing}
-          assignee={assignee}
           primary={primary}
+          onScheduleFollowUp={scheduleFollowUp}
+          onCompleteTask={taskId => void tasks.complete(taskId)}
+          completingTask={Boolean(next.task && tasks.pendingId === next.task.id)}
+          hideNextStep={
+            tab === 'overview' && (next.kind === 'application' || next.kind === 'quote')
+          }
         />
-      </div>
 
-      <Tabs value={tab} onValueChange={changeTab} className="min-w-0">
-        <TabsList aria-label={`${name}'s workspace`}>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="calls">
-            Calls <Count n={callCount} />
-          </TabsTrigger>
-          <TabsTrigger value="activity">
-            Activity <Count n={activityCount} />
-          </TabsTrigger>
-          <TabsTrigger value="tasks">
-            Notes &amp; tasks <Count n={openCount} tone={openCount ? 'brand' : 'muted'} />
-          </TabsTrigger>
-        </TabsList>
+        <Tabs value={tab} onValueChange={changeTab} className="min-w-0">
+          <TabsList
+            aria-label={`${name}'s workspace`}
+            className="gap-7 border-t border-rule bg-paper px-7"
+          >
+            <TabsTrigger value="overview" className="h-11">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="details" className="h-11">
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="calls" className="h-11">
+              Calls <Count n={callCount} />
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="h-11">
+              Activity <Count n={activityCount} />
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="h-11">
+              Notes &amp; tasks <Count n={openCount} tone={openCount ? 'brand' : 'muted'} />
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
-          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,380px)]">
-            <div className="min-w-0 space-y-4">
-              {fe ? (
-                <CustomerQuotesPanel
+          <TabsContent value="overview" className="mt-0 focus-visible:ring-inset">
+            <div className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_minmax(320px,368px)]">
+              <div className="min-w-0 pb-2">
+                {fe ? (
+                  <CustomerQuotesPanel
+                    lead={lead}
+                    quotes={quotes}
+                    resumable={resumable}
+                    preparing={preparing}
+                    onNewQuote={startQuote}
+                    onRequote={quoteId =>
+                      router.push(`${quoteHref}?requote=${encodeURIComponent(quoteId)}`)
+                    }
+                    onWriteFromQuote={quote => void writeFromQuote(quote)}
+                    onWriteApplication={quote => setApplication({ quote })}
+                    onViewApplication={() => showOnOverview('applications')}
+                  />
+                ) : null}
+                <CustomerApplicationCard
                   lead={lead}
-                  quotes={quotes}
-                  resumable={resumable}
-                  preparing={preparing}
-                  onNewQuote={startQuote}
-                  onRequote={quoteId =>
-                    router.push(`${quoteHref}?requote=${encodeURIComponent(quoteId)}`)
+                  quotes={quotes.quotes}
+                  divided={fe}
+                  // The selected plan already offers it; offer it here only when nothing does.
+                  onWriteApplication={
+                    written || (featured && !featured.applicationId)
+                      ? undefined
+                      : () => writeApplication()
                   }
-                  onWriteFromQuote={quote => void writeFromQuote(quote)}
-                  onWriteApplication={quote => setApplication({ quote })}
-                  onViewApplication={() => showOnOverview('applications')}
+                  writeFrom={
+                    featured && !written
+                      ? [featured.selectedCarrier, featured.selectedProduct]
+                          .filter(Boolean)
+                          .join(' — ')
+                      : null
+                  }
                 />
-              ) : null}
-              <CustomerApplicationCard
+              </div>
+              <CustomerRail
+                className="border-t border-rule xl:border-l xl:border-t-0"
                 lead={lead}
-                quotes={quotes.quotes}
-                // The selected plan already offers it; offer it here only when nothing does.
-                onWriteApplication={
-                  written || (featured && !featured.applicationId)
-                    ? undefined
-                    : () => writeApplication()
-                }
-                writeHint={
-                  featured && !featured.applicationId && !written
-                    ? `Write it from the selected ${featured.selectedCarrier} plan above.`
-                    : undefined
-                }
-              />
-            </div>
-            <div className="min-w-0 space-y-4">
-              <CustomerSummaryCard lead={lead} assignee={assignee} onEdit={edit} />
-              <CustomerNextUp
-                lead={lead}
+                assignee={assignee}
                 tasks={tasks}
                 onOpenTasks={() => changeTab('tasks')}
+                onAddTask={addTask}
                 onOpenCalls={() => changeTab('calls')}
+                onEdit={edit}
               />
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        <TabsContent value="details" className="mt-4">
-          <CustomerDetails lead={lead} assignee={assignee} canAssign={canAssign} onEdit={edit} />
-        </TabsContent>
+          <TabsContent value="details" className="mt-0 focus-visible:ring-inset">
+            <CustomerDetails lead={lead} assignee={assignee} canAssign={canAssign} onEdit={edit} />
+          </TabsContent>
 
-        <TabsContent value="calls" className="mt-4">
-          <CustomerCallsTable calls={lead.calls ?? []} />
-        </TabsContent>
+          <TabsContent value="calls" className="mt-0 focus-visible:ring-inset">
+            <CustomerCallsTable calls={lead.calls ?? []} />
+          </TabsContent>
 
-        <TabsContent value="activity" className="mt-4">
-          <CustomerActivityTimeline activities={lead.activities ?? []} />
-        </TabsContent>
+          <TabsContent value="activity" className="mt-0 focus-visible:ring-inset">
+            <CustomerActivityTimeline activities={lead.activities ?? []} />
+          </TabsContent>
 
-        <TabsContent value="tasks" className="mt-4">
-          <div className="grid items-start gap-4 xl:grid-cols-2">
-            <Panel className="min-w-0 overflow-hidden" aria-labelledby="tasks-title">
-              <div className="flex h-[53px] items-center justify-between gap-3 border-b border-rule px-5">
-                <h2
-                  id="tasks-title"
-                  className="flex items-baseline gap-2 text-[16px] font-semibold text-ink"
-                >
-                  Tasks
-                  {openCount ? (
-                    <span className="text-[13px] font-medium text-ink-3">
-                      {openCount} open
-                      {openTasks(lead).overdue ? ` · ${openTasks(lead).overdue} overdue` : ''}
-                    </span>
-                  ) : null}
-                </h2>
-                {openCount && !addingTask ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    onClick={() => setAddingTask(true)}
-                  >
-                    <Plus aria-hidden className="h-3.5 w-3.5" />
-                    Add task
-                  </Button>
-                ) : null}
-              </div>
-              {addingTask ? (
-                <div className="border-b border-rule bg-paper">
-                  <AddTaskForm tasks={tasks} autoFocus onClose={() => setAddingTask(false)} />
-                </div>
-              ) : null}
-              <TaskList
-                list={lead.tasks ?? []}
-                tasks={tasks}
-                featureNext
-                empty={
-                  addingTask ? null : (
-                    <NoOpenTasks className="px-5 py-5" onAdd={() => setAddingTask(true)} />
-                  )
-                }
-              />
-            </Panel>
-            <CustomerNotes lead={lead} onSaved={refresh} />
-          </div>
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="tasks" className="mt-0 focus-visible:ring-inset">
+            <CustomerFollowUp
+              lead={lead}
+              next={next}
+              tasks={tasks}
+              addingTask={addingTask}
+              onAddingTask={setAddingTask}
+              onScheduleFollowUp={scheduleFollowUp}
+              onSaved={refresh}
+            />
+          </TabsContent>
+        </Tabs>
+      </Sheet>
 
       <CustomerEditDrawer
         lead={lead}
@@ -403,8 +395,8 @@ function Count({ n, tone = 'muted' }: { n: number; tone?: 'muted' | 'brand' }) {
     <span
       className={
         tone === 'brand'
-          ? 'inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-tint px-1.5 text-[11.5px] font-semibold tabular-nums text-brand-ink'
-          : 'inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sunken px-1.5 text-[11.5px] font-semibold tabular-nums text-ink-2'
+          ? 'text-[12.5px] font-semibold tabular-nums text-brand-ink'
+          : 'text-[12.5px] font-medium tabular-nums text-ink-3'
       }
     >
       {n}

@@ -5,11 +5,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InsuranceActivity, InsuranceLeadDetail, InsuranceTask } from '@/lib/api/leads';
+import type { FexQuoteSummary } from '@/lib/fex/api';
 
 import { describeActivity } from '../customer/customer-activity';
 import { parseNotes } from '../customer/customer-notes';
 import { dispositionTone, dueLabel, openTasks, stageLabel, taskDueDate } from '../customer/format';
 import { buildLeadPatch, changedEdits, sectionsFor, toLocalInput } from '../customer/lead-fields';
+import { deriveNextAction } from '../customer/next-action';
 
 const lead = (patch: Partial<InsuranceLeadDetail> = {}): InsuranceLeadDetail =>
   ({
@@ -190,5 +192,36 @@ describe('describeActivity', () => {
         })
       ).detail
     ).toBe('Lead status changed from New to Closed lost.');
+  });
+});
+
+describe('deriveNextAction', () => {
+  const now = new Date(2026, 9, 8, 12);
+  const plan = { id: 'q', selectedCarrier: 'Trinity', applicationId: null } as FexQuoteSummary;
+  const opts = { featured: null, written: false, neverQuoted: false, now };
+
+  it('puts an overdue task first, then a passed follow-up', () => {
+    const late = task({ id: 'late', title: 'Send packet', dueAt: '2026-10-02T00:00:00.000Z' });
+    expect(
+      deriveNextAction(lead({ tasks: [late], nextFollowUpAt: '2026-10-07T15:00:00Z' }), opts)
+    ).toMatchObject({ kind: 'task', title: 'Send packet', overdue: true });
+    expect(deriveNextAction(lead({ nextFollowUpAt: '2026-10-07T15:00:00Z' }), opts)).toMatchObject({
+      kind: 'follow-up',
+      title: 'Follow-up is overdue',
+      overdue: true,
+    });
+  });
+
+  it('falls back to the sale: write the application, then quote', () => {
+    expect(deriveNextAction(lead(), { ...opts, featured: plan })).toMatchObject({
+      kind: 'application',
+      detail: 'From the Trinity plan',
+    });
+    expect(deriveNextAction(lead(), { ...opts, featured: plan, written: true }).kind).toBe('none');
+    expect(deriveNextAction(lead(), { ...opts, neverQuoted: true }).kind).toBe('quote');
+    expect(deriveNextAction(lead(), opts)).toMatchObject({
+      kind: 'none',
+      title: 'Nothing scheduled',
+    });
   });
 });
