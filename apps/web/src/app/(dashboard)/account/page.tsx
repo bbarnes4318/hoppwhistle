@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, MapPin, PhoneForwarded, ShieldCheck, UserRound } from 'lucide-react';
+import { FileText, Landmark, MapPin, PhoneForwarded, ShieldCheck, UserRound } from 'lucide-react';
 import * as React from 'react';
 
 import { roleLabels } from '@/components/account/account-identity';
@@ -12,6 +12,7 @@ import {
 import { ChangePasswordPanel } from '@/components/account/change-password-panel';
 import { LicensedStatesPanel } from '@/components/account/licensed-states-panel';
 import { PoliciesPanel } from '@/components/account/policies-panel';
+import { QuoteCarriersPanel } from '@/components/account/quote-carriers-panel';
 import { SessionsPanel } from '@/components/account/sessions-panel';
 import { CopyButton, SettingRow, SettingRows } from '@/components/account/setting-row';
 import {
@@ -41,7 +42,7 @@ import { useAuth } from '@/hooks/use-auth';
  * ── Layout ───────────────────────────────────────────────────────────────────
  *
  * An identity card across the top, then the settings in sections -- Profile,
- * State Licensing and Call Routing (agents only), Security (password and
+ * State Licensing, Call Routing and Quote Carriers (agents only), Security (password and
  * sessions), Legal & Compliance -- with a sticky table of
  * contents at the left from `lg`. Every section is an anchor, so
  * `/account#security` is a link someone can be sent.
@@ -57,6 +58,7 @@ export default function AccountPage(): JSX.Element {
         ? [
             { id: 'state-licensing', label: 'State Licensing', icon: MapPin },
             { id: 'call-routing', label: 'Call Routing', icon: PhoneForwarded },
+            { id: 'quote-carriers', label: 'Quote Carriers', icon: Landmark },
           ]
         : []),
       { id: 'security', label: 'Security', icon: ShieldCheck },
@@ -183,6 +185,14 @@ export default function AccountPage(): JSX.Element {
                 className="grid scroll-mt-6 gap-6"
               >
                 <CallRoutingPanel />
+              </section>
+
+              <section
+                id="quote-carriers"
+                aria-label="Quote Carriers"
+                className="grid scroll-mt-6 gap-6"
+              >
+                <QuoteCarriersPanel readOnly={isReadOnlyPreview} />
               </section>
             </>
           ) : null}

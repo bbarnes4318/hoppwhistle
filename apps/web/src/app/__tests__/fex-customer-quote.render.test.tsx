@@ -284,7 +284,7 @@ beforeEach(() => {
                 showPriceOnly: true,
                 autoOpenOnCall: false,
               },
-              me: { autoOpenOnCall: null },
+              me: { autoOpenOnCall: null, carriers: null },
               canEdit: false,
             },
           });

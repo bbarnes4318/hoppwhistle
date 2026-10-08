@@ -522,6 +522,61 @@ describe.skipIf(!gate.available)('FEX quote engine API', () => {
       });
       expect(get.json().data.me.autoOpenOnCall).toBe(false);
     });
+
+    it("an agent's carriers narrow their quotes, and nobody else's", async () => {
+      const mine = (payload: Record<string, unknown>) =>
+        app.inject({
+          method: 'PUT',
+          url: '/api/v1/fex/settings/me',
+          headers: as(a.tenantId, a.otherAgentId),
+          payload,
+        });
+
+      const everyone = await quote(as(a.tenantId, a.otherAgentId), BASE);
+      expect(everyone.json().data.carriers).toBeNull();
+      const families = [
+        ...new Set(everyone.json().data.results.map((r: any) => r.family as string)),
+      ] as string[];
+      expect(families.length).toBeGreaterThan(2);
+      const picked = families.slice(0, 2);
+
+      expect((await mine({ carriers: ['Not A Carrier'] })).statusCode).toBe(400);
+      expect((await mine({ carriers: [] })).statusCode).toBe(400);
+      expect((await mine({})).statusCode).toBe(400);
+
+      const put = await mine({ carriers: picked });
+      expect(put.statusCode).toBe(200);
+      expect(put.json().data.me.carriers).toEqual([...picked].sort((x, y) => x.localeCompare(y)));
+      // The other choice is untouched by a carriers-only write.
+      expect(put.json().data.me.autoOpenOnCall).toBeNull();
+
+      const narrowed = await quote(as(a.tenantId, a.otherAgentId), BASE);
+      const seen = new Set(narrowed.json().data.results.map((r: any) => r.family as string));
+      expect([...seen].sort()).toEqual([...picked].sort());
+      expect(narrowed.json().data.carriers.selected).toBe(2);
+
+      // A colleague's quotes are not narrowed by this agent's pick.
+      const colleague = await quote(as(a.tenantId, a.ownerId), BASE);
+      expect(colleague.json().data.carriers).toBeNull();
+
+      // Every carrier picked is stored as "every carrier".
+      const catalog = await app.inject({
+        method: 'GET',
+        url: '/api/v1/fex/catalog',
+        headers: as(a.tenantId, a.otherAgentId),
+      });
+      const all = [
+        ...new Set(
+          catalog
+            .json()
+            .data.products.filter((p: any) => p.quotable)
+            .map((p: any) => p.family as string)
+        ),
+      ];
+      const reset = await mine({ carriers: all });
+      expect(reset.json().data.me.carriers).toBeNull();
+      expect((await quote(as(a.tenantId, a.otherAgentId), BASE)).json().data.carriers).toBeNull();
+    });
   });
 
   // ── Read-only preview ──────────────────────────────────────────────────────

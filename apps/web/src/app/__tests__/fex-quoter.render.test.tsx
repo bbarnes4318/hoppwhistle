@@ -130,6 +130,8 @@ let calls: Call[] = [];
 let quoteResults: () => FexResult[] = () => [result()];
 /** When set, POST /fex/quote waits on it (to hold a quote "in flight"). */
 let holdQuote: Promise<void> | null = null;
+/** What the quote response says about the agent's own carrier pick. */
+let quoteCarriers: { selected: number; total: number } | null = null;
 let settings = {
   agency: {
     appointedOnly: false,
@@ -139,7 +141,7 @@ let settings = {
     showPriceOnly: true,
     autoOpenOnCall: true,
   },
-  me: { autoOpenOnCall: null as boolean | null },
+  me: { autoOpenOnCall: null as boolean | null, carriers: null as string[] | null },
   canEdit: false,
 };
 let customerVertical: string | null = 'FE';
@@ -156,8 +158,9 @@ beforeEach(() => {
   toasts.calls = [];
   quoteResults = () => [result()];
   holdQuote = null;
+  quoteCarriers = null;
   customerVertical = 'FE';
-  settings = { ...settings, me: { autoOpenOnCall: null } };
+  settings = { ...settings, me: { autoOpenOnCall: null, carriers: null } };
   auth.value = { hasFullAccess: false, isPlatformAdmin: false };
   nav.pathname = '/dashboard';
   resetFexCatalogCache();
@@ -201,6 +204,7 @@ beforeEach(() => {
                 needsIndication: 0,
               },
               licensed: null,
+              carriers: quoteCarriers,
               engineVersion: 'v18',
               quotedAt: new Date().toISOString(),
               quoteDate: '2026-10-05',
@@ -293,6 +297,18 @@ describe('QuoteWorkspace', () => {
     await new Promise(r => setTimeout(r, 400));
     expect(quotesPosted().length).toBe(before + 1);
     expect(quotesPosted().at(-1)!.body).toMatchObject({ applicant: { age: 70 } });
+  });
+
+  it("says when the results are the agent's own carriers, and links to change them", async () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    expect(screen.queryByRole('link', { name: /carriers$/ })).toBeNull();
+    cleanup();
+
+    quoteCarriers = { selected: 6, total: 19 };
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    const link = await screen.findByRole('link', { name: '6 of 19 carriers' });
+    expect(link.getAttribute('href')).toBe('/account#quote-carriers');
   });
 
   it('keeps the last results on screen, marked stale, while the next quote runs', async () => {
@@ -686,7 +702,7 @@ describe('opening the quoter when a call connects', () => {
   });
 
   it('does not open when the agent has turned it off', async () => {
-    settings = { ...settings, me: { autoOpenOnCall: false } };
+    settings = { ...settings, me: { autoOpenOnCall: false, carriers: null } };
     await connect();
     await new Promise(r => setTimeout(r, 100));
     expect(drawerOpen()).toBeNull();

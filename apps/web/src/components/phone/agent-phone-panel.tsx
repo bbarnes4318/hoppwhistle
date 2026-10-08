@@ -667,8 +667,11 @@ function PhoneSettings({
               value: fexSettings.me.autoOpenOnCall,
               agencyDefault: fexSettings.agency.autoOpenOnCall,
               onChange: value => {
-                quoteSession.setSettings({ ...fexSettings, me: { autoOpenOnCall: value } });
-                void fexApi.saveMySettings(value);
+                quoteSession.setSettings({
+                  ...fexSettings,
+                  me: { ...fexSettings.me, autoOpenOnCall: value },
+                });
+                void fexApi.saveMySettings({ autoOpenOnCall: value });
               },
             }
           : undefined

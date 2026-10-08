@@ -125,6 +125,8 @@ export interface FexQuoteResponse {
   };
   /** null when the person is not state-restricted. */
   licensed: boolean | null;
+  /** Set when this person quotes only the carriers they picked on Account. */
+  carriers?: { selected: number; total: number } | null;
   engineVersion: string;
   quotedAt: string;
   quoteDate: string;
@@ -288,9 +290,16 @@ export interface FexAgencySettings {
   autoOpenOnCall: boolean;
 }
 
+/** This person's own quoter choices. */
+export interface FexMySettings {
+  autoOpenOnCall: boolean | null;
+  /** The carrier families they quote; null is every carrier. */
+  carriers: string[] | null;
+}
+
 export interface FexSettings {
   agency: FexAgencySettings;
-  me: { autoOpenOnCall: boolean | null };
+  me: FexMySettings;
   canEdit: boolean;
 }
 
@@ -425,14 +434,12 @@ export const fexApi = {
     );
   },
 
+  /** Save either of my choices; whatever is left out stays as it was. */
   async saveMySettings(
-    autoOpenOnCall: boolean | null
-  ): Promise<FexResultOf<{ me: { autoOpenOnCall: boolean | null } }>> {
+    changes: Partial<FexMySettings>
+  ): Promise<FexResultOf<{ me: FexMySettings }>> {
     return unwrap(
-      await apiClient.put<Envelope<{ me: { autoOpenOnCall: boolean | null } }>>(
-        '/api/v1/fex/settings/me',
-        { autoOpenOnCall }
-      )
+      await apiClient.put<Envelope<{ me: FexMySettings }>>('/api/v1/fex/settings/me', changes)
     );
   },
 };
