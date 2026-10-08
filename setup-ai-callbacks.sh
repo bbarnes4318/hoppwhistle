@@ -51,10 +51,10 @@ set_env() {  # set_env KEY VALUE  (VALUE empty: remove KEY)
 }
 
 mark_numbers() {  # mark_numbers [--apply]  — from $NUMBERS, in the API container
-  docker cp "$NUMBERS" "$API_CONTAINER:/tmp/ai-callback-numbers.txt"
-  docker exec "$API_CONTAINER" node dist/cli/dograh-callback-numbers.js \
-    --file=/tmp/ai-callback-numbers.txt "$@"
-  docker exec "$API_CONTAINER" rm -f /tmp/ai-callback-numbers.txt
+  # Fed on stdin: a copied file keeps root's owner and 0600 mode, which the
+  # API container's non-root user cannot read.
+  docker exec -i "$API_CONTAINER" node dist/cli/dograh-callback-numbers.js \
+    --file=/dev/stdin "$@" < "$NUMBERS"
 }
 
 case "$MODE" in
