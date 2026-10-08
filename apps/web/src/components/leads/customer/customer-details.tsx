@@ -228,10 +228,7 @@ export function CustomerDetails({
       <div className="min-w-0 space-y-4">
         {pick('personal', 'company', 'contact', 'address').map(render)}
       </div>
-      <div className="min-w-0 space-y-4">
-        {pick('finalExpense', 'crm').map(render)}
-        {lead.vertical === 'FE' ? pick('compliance').map(render) : null}
-      </div>
+      <div className="min-w-0 space-y-4">{pick('finalExpense', 'crm').map(render)}</div>
       <div className="min-w-0 space-y-4 xl:col-span-2">
         {pick('carrierQuotes').map(render)}
         {captures.length ? (
