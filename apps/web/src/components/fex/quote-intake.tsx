@@ -1,71 +1,65 @@
 'use client';
 
 /**
- * The quoter's left column: who, how much, and their health.
+ * The quoter's left column: the quote's state, and one place to change it.
  *
- * Three sections, in the order an agent asks: the applicant, the coverage, and
- * the health history with its medications. Every edit re-quotes; nothing here
- * waits for a button.
+ * ── State, not a form ────────────────────────────────────────────────────────
  *
- * ── Dense on purpose ─────────────────────────────────────────────────────────
+ * Four sections, in the order an agent asks: Applicant, Coverage, Health,
+ * Medications. Each is always on screen as what it holds -- "AL · Male ·
+ * Age 65 · Non-tobacco", "$10,000 face · Monthly", "Diabetes — 2 details
+ * needed" -- with a mark that says complete, needs review, or required.
+ * Exactly ONE section is open as an editor at a time, in its own place in
+ * the stack. So the column never becomes a page to scroll through: on a
+ * laptop all four sections and the Get quotes button stay in view, and the
+ * open editor is the only thing with height.
  *
- * This column is used DURING a call. The applicant is two rows of three, the
- * face amount is one row of presets, and a condition or medication is one
- * line once its questions are answered -- open only while they are being
- * answered. One search box adds either a condition or a medication, so the
- * agent never has to decide which box the prospect's answer belongs in.
+ * ── Required work never appears out of sight ─────────────────────────────────
+ *
+ * Health and Medications are a list or ONE item, never both: adding Diabetes
+ * replaces the list with Diabetes's questions, right where the search was,
+ * cursor in the first. Done returns to the list with the cursor back in the
+ * search. Anything still unanswered is named in its section's summary and
+ * above Get quotes, and each mention opens that exact question.
+ *
+ * Every edit re-quotes; the results on the right follow as the agent types.
  */
 
-import {
-  CONDITION_DETAIL_FIELDS,
-  DIAGNOSED_BUCKETS,
-  FACE_PRESETS,
-  MED_LAST_TAKEN_BUCKETS,
-  PAYMENT_MODES,
-  QUICK_CONDITIONS,
-  STATES,
-  TREATED_BUCKETS,
-  type DetailField,
-} from '@hopwhistle/fex-engine/catalog';
-import type { PaymentMode } from '@hopwhistle/fex-engine/types';
-import { ArrowRight, Check, ChevronDown, Info, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Tooltip } from '@/components/ui/tooltip';
-import { fexApi, type FexDrugHit } from '@/lib/fex/api';
-import { searchConditions } from '@/lib/fex/condition-search';
+import { missingForQuote, type DraftAction, type QuoteDraft } from '@/lib/fex/draft';
 import {
-  ageFromDob,
-  missingForQuote,
-  type DraftAction,
-  type DraftCondition,
-  type DraftMed,
-  type QuoteDraft,
-} from '@/lib/fex/draft';
-import { US_STATES } from '@/lib/us-states';
+  applicantDone,
+  applicantSummary,
+  applicantUnasked,
+  attentionItems,
+  conditionComplete,
+  conditionFacts,
+  coverageDone,
+  coverageSummary,
+  detailsNeededText,
+  medConditionCodes,
+  medNeedsUse,
+  medShortName,
+  medTakenText,
+  MISSING_TEXT,
+  SECTION_TITLE,
+  sectionOfMissing,
+  type AttentionItem,
+  type IntakeSection as SectionKey,
+} from '@/lib/fex/intake-status';
 import { cn } from '@/lib/utils';
 
-import { Combobox, type ComboOption } from './combobox';
-import {
-  bucketFrom,
-  bucketValue,
-  CheckRow,
-  ChoiceGroup,
-  Field,
-  FIELD_LABEL,
-  FOCUS,
-  FromLeadTag,
-  NativeSelect,
-  shortLabel,
-  TextInput,
-} from './parts';
+import { ApplicantEditor } from './intake/applicant-editor';
+import { CoverageEditor } from './intake/coverage-editor';
+import { HealthManager, healthSearchId, type ConditionMeta } from './intake/health-manager';
+import { MedicationManager, medsSearchId } from './intake/medication-manager';
+import { IntakeSection, SummaryItem, SummaryText, type SectionStatus } from './intake/section';
+import { FOCUS, shortLabel } from './parts';
 
-export interface ConditionMeta {
-  code: string;
-  label: string;
-  category: string;
-}
+export { healthSearchId, medsSearchId, type ConditionMeta };
 
 export interface QuoteIntakeProps {
   idPrefix: string;
@@ -82,1308 +76,477 @@ export interface QuoteIntakeProps {
   needsIndication: Map<string, string[]>;
 }
 
-/** The id of the one health search box, for the workspace's Alt+H / Alt+M. */
-export const healthSearchId = (idPrefix: string): string => `${idPrefix}-health`;
-
-const STATE_NAME = new Map<string, string>([
-  ...US_STATES.map(s => [s.value, s.label] as [string, string]),
-  ['DC', 'District of Columbia'],
-]);
-
-/** The conditions agents hear most, shown as one-tap chips ahead of the rest. */
-const FEATURED_CONDITIONS: readonly string[] = ['DIABETES', 'DIABETES_INSULIN', 'COPD', 'CHF'];
-
-/** How agents say the longest common conditions, on their chips. */
-const CHIP_NAME: Record<string, string> = { CHF: 'CHF', HEART_ATTACK: 'Heart attack' };
-
-const digitsOnly = (v: string) => v.replace(/[^0-9]/g, '');
-
-const applicantDone = (d: QuoteDraft) => {
-  const m = missingForQuote(d);
-  return m !== 'state' && m !== 'sex' && m !== 'age' && m !== 'dob';
-};
-const coverageDone = (d: QuoteDraft) => {
-  const n = Number((d.coverage.mode === 'face' ? d.coverage.face : d.coverage.budget) || NaN);
-  return d.coverage.mode === 'face' ? n >= 1000 && n <= 500000 : n >= 5 && n <= 2000;
-};
-
-const MISSING_TEXT: Record<string, string> = {
-  state: 'Needs state',
-  sex: 'Needs sex',
-  age: 'Needs age (18–100)',
-  dob: 'Needs date of birth',
-  face: 'Needs a face amount',
-  budget: 'Needs a monthly budget',
-};
-
-/** A bucket's label, said briefly: "1–2 years ago" → "1–2 yrs". */
-function briefBucket(label: string): string {
-  return label
-    .replace(/ ago$/, '')
-    .replace(/years?/, 'yrs')
-    .replace(/months?/, 'mo')
-    .replace('Within 30 days', '<30 days');
+/** What the workspace may ask of the intake from outside it (Alt+H, Alt+M). */
+export interface QuoteIntakeHandle {
+  /** Open Health (or Medications) on its list and put the cursor in its search. */
+  focusSearch: (which: 'health' | 'meds') => void;
 }
 
-function labelFor(buckets: ReadonlyArray<readonly [string, unknown]>, months: unknown) {
-  return buckets.find(([, m]) => m === months)?.[0];
+const NEXT: Record<SectionKey, SectionKey | null> = {
+  applicant: 'coverage',
+  coverage: 'health',
+  health: 'meds',
+  meds: null,
+};
+
+/** Where a quote starts: the first section that still stops it, else Health. */
+function firstOpen(draft: QuoteDraft): SectionKey {
+  if (!applicantDone(draft) || applicantUnasked(draft).length) return 'applicant';
+  if (!coverageDone(draft)) return 'coverage';
+  return 'health';
 }
 
-const STEPS = ['Applicant', 'Coverage', 'Health', 'Medications'] as const;
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function QuoteIntake(props: QuoteIntakeProps): JSX.Element {
-  return (
-    // Four cards, one per question an agent asks, in the order they ask it.
-    // Not overflow-hidden: the searches' lists drop out of their cards.
-    //
-    // From the two-column width the cards scroll in their own body and Get
-    // quotes is the column's footer, outside that body: it can never sit on
-    // top of a selected condition or medication. Narrower, the page scrolls
-    // and the button simply follows the last card.
-    <div className="flex min-w-0 flex-col cq-lg:h-full cq-lg:min-h-0">
-      <div
-        data-intake-body=""
-        className="min-w-0 space-y-3 cq-lg:min-h-0 cq-lg:flex-1 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pb-3 cq-lg:pr-1"
-      >
-        <ApplicantSection {...props} />
-        <CoverageSection {...props} />
-        <HealthSection {...props} />
-        <MedicationsSection {...props} />
+/** How many item lines a closed Health or Medications section shows. */
+const SUMMARY_LINES = 3;
+
+export const QuoteIntake = React.forwardRef<QuoteIntakeHandle, QuoteIntakeProps>(
+  function QuoteIntake(props, ref) {
+    const { idPrefix, draft, dispatch, conditions, needsIndication, showAetnaMedSupp, onReset } =
+      props;
+    const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
+    const conditionLabel = React.useCallback(
+      (code: string) => byCode.get(code)?.label ?? code,
+      [byCode]
+    );
+
+    const [open, setOpen] = React.useState<SectionKey | null>(() => firstOpen(draft));
+    const [healthItem, setHealthItem] = React.useState<string | null>(null);
+    const [medItem, setMedItem] = React.useState<string | null>(null);
+
+    /*
+     * Focus follows the agent's move, after the editor it lands in has
+     * rendered: a selector, consumed by the effect below on the next commit.
+     */
+    const [focusWanted, setFocusWanted] = React.useState<{ selector: string } | null>(null);
+    React.useEffect(() => {
+      if (!focusWanted) return;
+      const target = document.querySelector<HTMLElement>(focusWanted.selector);
+      target?.scrollIntoView?.({ block: 'nearest' });
+      target?.focus();
+      setFocusWanted(null);
+    }, [focusWanted]);
+
+    const byId = (id: string) => `[id="${id}"]`;
+    const sectionSel = (s: SectionKey) => byId(`${idPrefix}-sec-${s}-body`);
+    const firstControl = (s: SectionKey) =>
+      `${sectionSel(s)} :is(input, select, [role="radio"][tabindex="0"], button):not([disabled])`;
+
+    /** Open a section (and one of its items); focus lands in it. */
+    const goTo = React.useCallback(
+      (section: SectionKey | null, itemKey: string | null = null) => {
+        setOpen(section);
+        setHealthItem(section === 'health' ? itemKey : null);
+        setMedItem(section === 'meds' ? itemKey : null);
+        // An item's editor focuses its own first question.
+        if (section && !itemKey) setFocusWanted({ selector: firstControl(section) });
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [idPrefix]
+    );
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        focusSearch: which => {
+          setOpen(which);
+          setHealthItem(null);
+          setMedItem(null);
+          setFocusWanted({
+            selector: byId(which === 'meds' ? medsSearchId(idPrefix) : healthSearchId(idPrefix)),
+          });
+        },
+      }),
+      [idPrefix]
+    );
+
+    const missing = missingForQuote(draft);
+    const attention = attentionItems(draft, needsIndication, conditionLabel);
+
+    // ── Section states ────────────────────────────────────────────────────
+    const unasked = applicantUnasked(draft);
+    const applicantStatus: SectionStatus = !applicantDone(draft)
+      ? 'required'
+      : unasked.length
+        ? 'attention'
+        : 'complete';
+    const coverageStatus: SectionStatus = coverageDone(draft) ? 'complete' : 'required';
+    const healthOpen = draft.conditions.filter(c => !conditionComplete(c)).length;
+    const healthStatus: SectionStatus = !draft.conditions.length
+      ? 'empty'
+      : healthOpen
+        ? 'attention'
+        : 'complete';
+    const medsOpen = draft.meds.filter(m =>
+      medNeedsUse(m, needsIndication.get(m.drugId), conditionLabel)
+    ).length;
+    const medsStatus: SectionStatus = !draft.meds.length
+      ? 'empty'
+      : medsOpen
+        ? 'attention'
+        : 'complete';
+
+    const nextOf = (s: SectionKey) => {
+      const next = NEXT[s];
+      return next
+        ? { label: `Next: ${SECTION_TITLE[next]}`, onClick: () => goTo(next) }
+        : { label: 'Done', onClick: () => goTo(null) };
+    };
+    const common = (s: SectionKey) => ({
+      id: `${idPrefix}-sec-${s}`,
+      title: SECTION_TITLE[s],
+      open: open === s,
+      onOpen: () => goTo(s),
+      onClose: () => goTo(null),
+    });
+
+    const missingHere = (s: SectionKey) =>
+      missing && sectionOfMissing(missing) === s
+        ? (MISSING_TEXT[missing] ?? 'Needs an answer')
+        : null;
+
+    return (
+      <div className="flex min-w-0 flex-col cq-lg:h-full cq-lg:min-h-0">
+        {/* One scroll region, and in the common case nothing to scroll: the
+            open editor is the only part of the stack with height. */}
+        <div
+          data-intake-body=""
+          className="min-w-0 cq-lg:min-h-0 cq-lg:flex-1 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pb-2.5 cq-lg:pr-1"
+        >
+          <div className="divide-y divide-rule rounded-[12px] border border-rule bg-surface shadow-card">
+            <IntakeSection
+              {...common('applicant')}
+              status={applicantStatus}
+              meta={
+                missingHere('applicant') ??
+                (unasked.length ? `Ask ${unasked.join(', ').toLowerCase()}` : null)
+              }
+              metaTone="attention"
+              summary={
+                <SummaryText tone={applicantSummary(draft).length ? 'ink' : 'quiet'}>
+                  {applicantSummary(draft).join(' · ') || 'Not entered yet'}
+                </SummaryText>
+              }
+              next={nextOf('applicant')}
+            >
+              <ApplicantEditor idPrefix={idPrefix} draft={draft} dispatch={dispatch} />
+            </IntakeSection>
+
+            <IntakeSection
+              {...common('coverage')}
+              status={coverageStatus}
+              meta={missingHere('coverage')}
+              metaTone="attention"
+              summary={<SummaryText>{coverageSummary(draft).join(' · ')}</SummaryText>}
+              next={nextOf('coverage')}
+            >
+              <CoverageEditor
+                idPrefix={idPrefix}
+                draft={draft}
+                dispatch={dispatch}
+                showAetnaMedSupp={showAetnaMedSupp}
+              />
+            </IntakeSection>
+
+            <IntakeSection
+              {...common('health')}
+              status={healthStatus}
+              meta={
+                healthOpen
+                  ? `${healthOpen} to review`
+                  : draft.conditions.length
+                    ? plural(draft.conditions.length, 'condition')
+                    : null
+              }
+              metaTone={healthOpen ? 'attention' : 'quiet'}
+              summary={
+                draft.conditions.length ? (
+                  <ItemSummary
+                    count={draft.conditions.length}
+                    items={draft.conditions.map(c => {
+                      const complete = conditionComplete(c);
+                      const meds = draft.meds
+                        .filter(m => medConditionCodes(m).includes(c.code))
+                        .map(m => medShortName(m.name));
+                      return {
+                        key: c.key,
+                        complete,
+                        title: shortLabel(conditionLabel(c.code)),
+                        detail: [...conditionFacts(c), ...meds].join(' · '),
+                        attention: complete ? undefined : detailsNeededText(c),
+                      };
+                    })}
+                    onItem={key => goTo('health', key)}
+                    onMore={() => goTo('health')}
+                  />
+                ) : (
+                  <SummaryText tone="quiet">No conditions</SummaryText>
+                )
+              }
+              next={healthItem ? undefined : nextOf('health')}
+            >
+              <HealthManager
+                idPrefix={idPrefix}
+                draft={draft}
+                dispatch={dispatch}
+                conditions={conditions}
+                item={healthItem}
+                onItem={setHealthItem}
+              />
+            </IntakeSection>
+
+            <IntakeSection
+              {...common('meds')}
+              status={medsStatus}
+              meta={
+                medsOpen
+                  ? `${medsOpen} to review`
+                  : draft.meds.length
+                    ? plural(draft.meds.length, 'medication')
+                    : null
+              }
+              metaTone={medsOpen ? 'attention' : 'quiet'}
+              summary={
+                draft.meds.length ? (
+                  <ItemSummary
+                    count={draft.meds.length}
+                    capitalize
+                    items={draft.meds.map(m => {
+                      const needs = medNeedsUse(m, needsIndication.get(m.drugId), conditionLabel);
+                      const uses = medConditionCodes(m).map(code =>
+                        shortLabel(conditionLabel(code))
+                      );
+                      const taken = medTakenText(m);
+                      return {
+                        key: m.key,
+                        complete: !needs,
+                        title: m.name,
+                        detail: [...uses.map(u => `for ${u}`), taken].filter(Boolean).join(' · '),
+                        attention: needs ? 'what is it for?' : undefined,
+                      };
+                    })}
+                    onItem={key => goTo('meds', key)}
+                    onMore={() => goTo('meds')}
+                  />
+                ) : (
+                  <SummaryText tone="quiet">No medications</SummaryText>
+                )
+              }
+              next={medItem ? undefined : nextOf('meds')}
+            >
+              <MedicationManager
+                idPrefix={idPrefix}
+                draft={draft}
+                dispatch={dispatch}
+                needsIndication={needsIndication}
+                conditionLabel={conditionLabel}
+                item={medItem}
+                onItem={setMedItem}
+              />
+            </IntakeSection>
+          </div>
+        </div>
+
+        <IntakeFooter
+          {...props}
+          missing={missing}
+          attention={attention}
+          onFix={item => {
+            goTo(item.section, item.itemKey ?? null);
+            if (item.section === 'applicant')
+              setFocusWanted({
+                selector: `${sectionSel('applicant')} [role="radiogroup"][aria-label^="Tobacco"] [role="radio"][tabindex="0"]`,
+              });
+          }}
+          onFixMissing={field => {
+            const section = sectionOfMissing(field);
+            setOpen(section);
+            setHealthItem(null);
+            setMedItem(null);
+            setFocusWanted({
+              selector:
+                field === 'sex'
+                  ? `${sectionSel(section)} [role="radiogroup"][aria-label="Sex"] [role="radio"]`
+                  : field === 'face'
+                    ? `${sectionSel(section)} [aria-labelledby="${idPrefix}-face-label"] [role="radio"]`
+                    : byId(`${idPrefix}-${field}`),
+            });
+          }}
+          onReset={
+            onReset
+              ? () => {
+                  onReset();
+                  setHealthItem(null);
+                  setMedItem(null);
+                  setOpen('applicant');
+                }
+              : undefined
+          }
+        />
       </div>
-      <GetQuotesBar {...props} />
+    );
+  }
+);
+
+/** A closed Health or Medications section: one line per item, each opening it. */
+function ItemSummary({
+  count,
+  items,
+  capitalize,
+  onItem,
+  onMore,
+}: {
+  count: number;
+  items: Array<{
+    key: string;
+    complete: boolean;
+    title: string;
+    detail: string;
+    attention?: string;
+  }>;
+  capitalize?: boolean;
+  onItem: (key: string) => void;
+  onMore: () => void;
+}): JSX.Element {
+  // What needs the agent first, so it is never the line cut off.
+  const ordered = [...items].sort((a, b) => Number(a.complete) - Number(b.complete));
+  const shown = ordered.slice(0, count > SUMMARY_LINES ? SUMMARY_LINES - 1 : SUMMARY_LINES);
+  const hidden = count - shown.length;
+  return (
+    <div className="space-y-0.5">
+      {shown.map(item => (
+        <SummaryItem
+          key={item.key}
+          status={item.complete ? 'complete' : 'attention'}
+          title={item.title}
+          detail={item.detail}
+          attention={item.attention}
+          capitalize={capitalize}
+          onClick={() => onItem(item.key)}
+        />
+      ))}
+      {hidden > 0 ? (
+        <button
+          type="button"
+          onClick={onMore}
+          className={cn(
+            'rounded-[4px] pl-5 text-[12.5px] font-medium text-brand-ink hover:underline',
+            FOCUS
+          )}
+        >
+          +{hidden} more
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function Section({
-  title,
-  done,
-  hint,
-  aside,
-  children,
-}: {
-  title: (typeof STEPS)[number];
-  done?: boolean;
-  /** One line of guidance, behind the title's info mark. */
-  hint?: string;
-  /** A control or summary that belongs to the whole section, right of its title. */
-  aside?: React.ReactNode;
-  children: React.ReactNode;
-}): JSX.Element {
-  const id = React.useId();
-  const n = STEPS.indexOf(title) + 1;
-  return (
-    <section
-      aria-labelledby={id}
-      className="min-w-0 rounded-[12px] border border-rule bg-surface shadow-card"
-    >
-      <div className="flex min-h-[46px] items-center gap-2.5 border-b border-rule px-4 py-2">
-        <span
-          aria-hidden
-          className={cn(
-            'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold',
-            done ? 'bg-live text-white' : 'bg-brand-tint text-brand-ink'
-          )}
-        >
-          {done ? <Check className="h-3 w-3" strokeWidth={3} /> : n}
-        </span>
-        <h3 id={id} className="text-[14.5px] font-semibold tracking-[-0.005em] text-ink">
-          {title}
-        </h3>
-        {done ? <span className="sr-only">Complete</span> : null}
-        {hint ? (
-          <Tooltip content={hint} side="top">
-            <Info className="h-3.5 w-3.5 text-ink-3" aria-label={hint} />
-          </Tooltip>
-        ) : null}
-        {aside ? <div className="ml-auto flex shrink-0 items-center gap-1.5">{aside}</div> : null}
-      </div>
-      <div className="px-4 pb-4 pt-3.5">{children}</div>
-    </section>
-  );
-}
-
 /**
- * The one button the form ends with. Quotes also run on every edit, but an
- * agent should never have to know that: this is where they look for "go".
- * With something missing it says what and puts the cursor there.
+ * The column's foot: what the quote is waiting on, and the one button.
+ * Quotes also run on every edit, but an agent should never have to know
+ * that: this is where they look for "go". With something required missing
+ * it says what and opens the question; with details unanswered it quotes,
+ * and says which answers the carriers are assuming.
  */
-function GetQuotesBar({ idPrefix, draft, onGetQuotes }: QuoteIntakeProps): JSX.Element {
-  const missing = missingForQuote(draft);
+function IntakeFooter({
+  draft,
+  missing,
+  attention,
+  onFix,
+  onFixMissing,
+  onGetQuotes,
+  onReset,
+}: QuoteIntakeProps & {
+  missing: string | null;
+  attention: AttentionItem[];
+  onFix: (item: AttentionItem) => void;
+  onFixMissing: (field: string) => void;
+}): JSX.Element {
   const [tried, setTried] = React.useState(false);
   React.useEffect(() => {
     if (!missing) setTried(false);
   }, [missing]);
 
-  const focusMissing = (field: string) => {
-    const root = document.getElementById(`${idPrefix}-intake`) ?? document;
-    const target =
-      field === 'sex'
-        ? root.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Sex"] [role="radio"]')
-        : field === 'face'
-          ? root.querySelector<HTMLElement>(
-              `[aria-labelledby="${idPrefix}-face-label"] [role="radio"]`
-            )
-          : document.getElementById(`${idPrefix}-${field}`);
-    target?.scrollIntoView?.({ block: 'center' });
-    target?.focus();
-  };
-
   return (
-    <div className="shrink-0 border-t border-rule pt-3 cq-lg:mr-1">
-      <Button
-        type="button"
-        onClick={() => {
-          if (missing) {
-            setTried(true);
-            focusMissing(missing);
-            return;
-          }
-          onGetQuotes?.();
-        }}
-        className="h-12 w-full rounded-[10px] text-[15.5px] font-semibold tracking-[-0.005em] shadow-raised"
-      >
-        Get quotes
-        {missing ? null : <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
-      </Button>
-      {tried && missing ? (
-        <p role="alert" className="mt-1.5 text-center text-[12.5px] font-medium text-ringing-ink">
-          {MISSING_TEXT[missing] ?? 'Needs more answers'} to quote.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-// ─── Applicant ───────────────────────────────────────────────────────────────
-
-function ApplicantSection({ idPrefix, draft, dispatch, onReset }: QuoteIntakeProps): JSX.Element {
-  const missing = missingForQuote(draft);
-  const p = (s: string) => `${idPrefix}-${s}`;
-  const lead = (f: Parameters<QuoteDraft['prefilled']['has']>[0]) => draft.prefilled.has(f);
-  const dobMode = draft.ageOrDob.mode === 'dob';
-  const dobAge = dobMode ? ageFromDob((draft.ageOrDob as { dob: string }).dob) : null;
-
-  const switchAgeMode = () =>
-    dispatch({
-      type: 'set',
-      patch: {
-        ageOrDob:
-          draft.ageOrDob.mode === 'age'
-            ? { mode: 'dob', dob: '' }
-            : { mode: 'age', age: dobAge !== null ? String(dobAge) : '' },
-      },
-      fields: ['age', 'dob'],
-    });
-
-  const unit = (text: string) => (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-3"
-    >
-      {text}
-    </span>
-  );
-
-  return (
-    <Section
-      title="Applicant"
-      done={applicantDone(draft)}
-      aside={
-        <>
-          <span
-            className={cn(
-              'flex items-center gap-1.5 text-[12px] font-medium',
-              missing ? 'text-ink-3' : 'text-live-ink'
-            )}
-            aria-live="polite"
-          >
-            <span
-              aria-hidden
-              className={cn('h-1.5 w-1.5 rounded-full', missing ? 'bg-ink-3' : 'bg-live')}
-            />
-            {missing ? (MISSING_TEXT[missing] ?? 'Needs more answers') : 'Quoting live'}
-          </span>
-          {onReset ? (
+    <div className="shrink-0 space-y-2 border-t border-rule pt-2.5 cq-lg:mr-1">
+      {missing ? (
+        <div className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ringing" />
+          {/* After a press of Get quotes, the same line is announced. */}
+          <p role={tried ? 'alert' : undefined} className="min-w-0 truncate">
             <button
               type="button"
-              onClick={onReset}
-              className={cn(
-                '-mr-1.5 inline-flex h-7 items-center gap-1 rounded-control px-1.5 text-[12px] font-medium text-ink-2 hover:bg-sunken hover:text-ink',
-                FOCUS
-              )}
+              onClick={() => onFixMissing(missing)}
+              className={cn('rounded-[4px] font-semibold text-ringing-ink hover:underline', FOCUS)}
             >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              New quote
-            </button>
-          ) : null}
-        </>
-      }
-    >
-      {/* Two rows of three, the order an agent asks: where, who, how old;
-          then tobacco, height and weight. */}
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
-        <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
-          <NativeSelect
-            id={p('state')}
-            value={draft.state}
-            className="px-2 pr-6"
-            onChange={e =>
-              dispatch({ type: 'set', patch: { state: e.target.value }, fields: ['state'] })
-            }
-          >
-            <option value="">—</option>
-            {STATES.map(code => (
-              <option key={code} value={code} title={STATE_NAME.get(code)}>
-                {code}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-
-        <Field label="Sex" fromLead={lead('sex')}>
-          <ChoiceGroup
-            label="Sex"
-            options={[
-              { value: 'F' as const, label: 'Female' },
-              { value: 'M' as const, label: 'Male' },
-            ]}
-            value={draft.sex || null}
-            onChange={sex => dispatch({ type: 'set', patch: { sex }, fields: ['sex'] })}
-          />
-        </Field>
-
-        <div className={cn('min-w-0', dobMode && 'col-span-3 row-start-2')}>
-          <label htmlFor={dobMode ? p('dob') : p('age')} className={FIELD_LABEL}>
-            {dobMode ? 'Date of birth' : 'Age'}
-            {lead(draft.ageOrDob.mode) ? <FromLeadTag /> : null}
-          </label>
-          <div className="flex min-w-0">
-            {dobMode ? (
-              <div className="relative min-w-0 flex-1">
-                <TextInput
-                  id={p('dob')}
-                  type="date"
-                  value={(draft.ageOrDob as { dob: string }).dob}
-                  className="rounded-r-none"
-                  onChange={e =>
-                    dispatch({
-                      type: 'set',
-                      patch: { ageOrDob: { mode: 'dob', dob: e.target.value } },
-                      fields: ['dob'],
-                    })
-                  }
-                />
-                <span
-                  className="t-meta pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 tabular-nums text-ink-2"
-                  aria-live="polite"
-                >
-                  {dobAge !== null ? `Age ${dobAge}` : ''}
-                </span>
-              </div>
-            ) : (
-              <TextInput
-                id={p('age')}
-                inputMode="numeric"
-                maxLength={3}
-                placeholder="65"
-                value={(draft.ageOrDob as { age: string }).age}
-                className="min-w-0 flex-1 rounded-r-none px-2"
-                onChange={e =>
-                  dispatch({
-                    type: 'set',
-                    patch: { ageOrDob: { mode: 'age', age: digitsOnly(e.target.value) } },
-                    fields: ['age'],
-                  })
-                }
-              />
-            )}
-            <button
-              type="button"
-              onClick={switchAgeMode}
-              title={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
-              aria-label={dobMode ? 'Enter an age instead' : 'Enter a date of birth instead'}
-              className={cn(
-                '-ml-px h-[38px] shrink-0 rounded-r-control border border-rule-strong bg-sunken px-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-ink-2 transition-colors duration-150 ne-motion hover:bg-surface hover:text-ink',
-                FOCUS
-              )}
-            >
-              {dobMode ? 'Age' : 'DOB'}
-            </button>
-          </div>
+              {MISSING_TEXT[missing] ?? 'Needs more answers'}
+            </button>{' '}
+            to quote.
+          </p>
         </div>
-
-        <Field label="Tobacco" fromLead={lead('tobacco')}>
-          <ChoiceGroup
-            label="Tobacco or nicotine in the last 12 months"
-            options={[
-              { value: false, label: 'No', key: 'no' },
-              { value: true, label: 'Yes', key: 'yes' },
-            ]}
-            value={draft.tobacco}
-            onChange={tobacco => dispatch({ type: 'set', patch: { tobacco }, fields: ['tobacco'] })}
-          />
-        </Field>
-
-        <Field label="Height" htmlFor={p('ft')} fromLead={lead('height')}>
-          <div className="grid grid-cols-2 gap-1">
-            <div className="relative">
-              <TextInput
-                id={p('ft')}
-                inputMode="numeric"
-                maxLength={1}
-                placeholder="5"
-                aria-label="Height, feet"
-                value={draft.heightFt}
-                onChange={e =>
-                  dispatch({
-                    type: 'set',
-                    patch: { heightFt: digitsOnly(e.target.value) },
-                    fields: ['height'],
-                  })
-                }
-                className="px-2 pr-5"
-              />
-              {unit('ft')}
-            </div>
-            <div className="relative">
-              <TextInput
-                inputMode="numeric"
-                maxLength={2}
-                placeholder="6"
-                aria-label="Height, inches"
-                value={draft.heightIn}
-                onChange={e =>
-                  dispatch({
-                    type: 'set',
-                    patch: { heightIn: digitsOnly(e.target.value) },
-                    fields: ['height'],
-                  })
-                }
-                className="px-2 pr-5"
-              />
-              {unit('in')}
-            </div>
-          </div>
-        </Field>
-
-        <Field label="Weight" htmlFor={p('weight')} fromLead={lead('weight')}>
-          <div className="relative">
-            <TextInput
-              id={p('weight')}
-              inputMode="numeric"
-              maxLength={3}
-              placeholder="180"
-              value={draft.weightLb}
-              onChange={e =>
-                dispatch({
-                  type: 'set',
-                  patch: { weightLb: digitsOnly(e.target.value) },
-                  fields: ['weight'],
-                })
-              }
-              className="px-2 pr-6"
-            />
-            {unit('lb')}
-          </div>
-        </Field>
-      </div>
-    </Section>
-  );
-}
-
-// ─── Coverage ────────────────────────────────────────────────────────────────
-
-const PAYMENT_SHORT: Record<string, string> = {
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  semiannual: 'Semi-annual',
-  annual: 'Annual',
-};
-
-const faceText = (amount: number) =>
-  amount % 1000 === 0 ? `${amount / 1000}k` : `${(amount / 1000).toFixed(1)}k`;
-
-function CoverageSection({
-  idPrefix,
-  draft,
-  dispatch,
-  showAetnaMedSupp,
-}: QuoteIntakeProps): JSX.Element {
-  const p = (s: string) => `${idPrefix}-${s}`;
-  const face = draft.coverage.mode === 'face' ? draft.coverage.face : '';
-  const offList = Boolean(face) && !FACE_PRESETS.includes(Number(face));
-  const [customOpen, setCustomOpen] = React.useState(offList);
-  const custom = customOpen || offList;
-  const customRef = React.useRef<HTMLInputElement>(null);
-  const labelId = p('face-label');
-
-  type FaceChoice = number | 'custom';
-  const options = [
-    ...FACE_PRESETS.map(amount => ({
-      value: amount as FaceChoice,
-      label: faceText(amount),
-      ariaLabel: `$${amount.toLocaleString('en-US')}`,
-    })),
-    { value: 'custom' as FaceChoice, label: 'Custom', ariaLabel: 'Custom amount' },
-  ];
-
-  const setFace = (value: string) =>
-    dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: value } }, fields: ['face'] });
-
-  const paymentLabel =
-    PAYMENT_MODES.find(([value]) => value === draft.paymentMode)?.[1] ?? 'Payment mode';
-
-  return (
-    <Section
-      title="Coverage"
-      done={coverageDone(draft)}
-      aside={
-        <>
-          <ChoiceGroup
-            label="Quote by"
-            className="h-8 w-[148px] p-[2px]"
-            itemClassName="text-[12px]"
-            options={[
-              { value: 'face' as const, label: 'Face' },
-              { value: 'budget' as const, label: 'Budget' },
-            ]}
-            value={draft.coverage.mode}
-            onChange={mode => {
-              if (mode === draft.coverage.mode) return;
-              if (mode === 'face') {
-                dispatch({ type: 'set', patch: { coverage: { mode: 'face', face: '10000' } } });
-                setCustomOpen(false);
-              } else
-                dispatch({
-                  type: 'set',
-                  patch: { coverage: { mode: 'budget', budget: '' } },
-                  fields: ['face'],
-                });
-            }}
-          />
-        </>
-      }
-    >
-      <div className="space-y-3.5">
-        {draft.coverage.mode === 'face' ? (
-          <div>
-            <p id={labelId} className={FIELD_LABEL}>
-              Face amount
-              {draft.prefilled.has('face') ? <FromLeadTag /> : null}
-            </p>
-            <ChoiceGroup<FaceChoice>
-              labelledBy={labelId}
-              tone="strong"
-              itemClassName="text-[13px]"
-              options={options}
-              value={null}
-              isChecked={o => (o.value === 'custom' ? custom : !custom && Number(face) === o.value)}
-              onChange={(value, via) => {
-                if (value === 'custom') {
-                  setCustomOpen(true);
-                  if (via === 'click') requestAnimationFrame(() => customRef.current?.focus());
-                  return;
-                }
-                setCustomOpen(false);
-                setFace(String(value));
-              }}
-            />
-            {custom ? (
-              <div className="relative mt-2">
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
-                >
-                  $
-                </span>
-                <TextInput
-                  ref={customRef}
-                  inputMode="numeric"
-                  aria-label="Custom face amount"
-                  placeholder="Any amount, e.g. 12,500"
-                  value={offList ? Number(face).toLocaleString('en-US') : ''}
-                  onChange={e => setFace(digitsOnly(e.target.value).slice(0, 6))}
-                  className="pl-6"
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <Field label="Monthly budget" htmlFor={p('budget')}>
-            <div className="relative">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink-3"
-              >
-                $
-              </span>
-              <TextInput
-                id={p('budget')}
-                inputMode="decimal"
-                placeholder="50"
-                value={draft.coverage.budget}
-                onChange={e =>
-                  dispatch({
-                    type: 'set',
-                    patch: {
-                      coverage: {
-                        mode: 'budget',
-                        budget: e.target.value.replace(/[^0-9.]/g, '').slice(0, 7),
-                      },
-                    },
-                  })
-                }
-                className="pl-6"
-              />
-            </div>
-          </Field>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor={p('mode')} className="text-[12px] font-medium text-ink-2">
-            Payment mode
-          </label>
-          <span className="relative inline-flex items-center">
-            {/* Payment mode matters, but less than the amount: a compact select
-              on its own line, not a field in the grid. */}
-            <select
-              id={p('mode')}
-              value={draft.paymentMode}
-              title={paymentLabel}
-              onChange={e =>
-                dispatch({ type: 'set', patch: { paymentMode: e.target.value as PaymentMode } })
-              }
-              className={cn(
-                'h-8 cursor-pointer appearance-none rounded-control border border-rule-strong bg-surface pl-2.5 pr-7 text-[13px] font-medium text-ink hover:border-ink-3',
-                FOCUS
-              )}
-            >
-              {PAYMENT_MODES.map(([value, label]) => (
-                <option key={value} value={value} title={label}>
-                  {PAYMENT_SHORT[value] ?? label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-ink-3"
-              aria-hidden
-            />
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1">
-          <CheckRow
-            id={p('activity')}
-            checked={draft.activityCredit}
-            onChange={checked => dispatch({ type: 'set', patch: { activityCredit: checked } })}
-            className="text-[12.5px] text-ink-2"
-          >
-            <span title="Transamerica activity credit">Exercises 3+ days/wk</span>
-          </CheckRow>
-          {showAetnaMedSupp ? (
-            <CheckRow
-              id={p('medsupp')}
-              checked={draft.aetnaMedSupp}
-              onChange={checked => dispatch({ type: 'set', patch: { aetnaMedSupp: checked } })}
-              className="text-[12.5px] text-ink-2"
-            >
-              <span title="Has a qualifying Aetna/CVS Medicare Supplement">Aetna Med Supp</span>
-            </CheckRow>
-          ) : null}
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-// ─── Health: conditions and medications ──────────────────────────────────────
-
-/**
- * The brand or alias a search hit matched on, when it isn't the generic name,
- * so typing "E" shows "Eliquis · apixaban" rather than an unexplained apixaban.
- */
-function matchedBrand(hit: FexDrugHit): string | undefined {
-  const matched = hit.matched;
-  if (!matched || matched === hit.generic.toLowerCase()) return undefined;
-  return hit.brands.find(b => b.toLowerCase() === matched) ?? matched;
-}
-
-/** Drug search, debounced, as the medication lookup has always done it. */
-function useDrugSearch(query: string): { hits: FexDrugHit[]; searching: boolean } {
-  const [hits, setHits] = React.useState<FexDrugHit[]>([]);
-  const [searching, setSearching] = React.useState(false);
-  React.useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setHits([]);
-      setSearching(false);
-      return;
-    }
-    const controller = new AbortController();
-    setSearching(true);
-    const timer = setTimeout(() => {
-      void fexApi.searchDrugs(q, 12, controller.signal).then(result => {
-        if (controller.signal.aborted) return;
-        setHits(result.ok ? result.data : []);
-        setSearching(false);
-      });
-    }, 150);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query]);
-  return { hits, searching };
-}
-
-function HealthSection({ idPrefix, draft, dispatch, conditions }: QuoteIntakeProps): JSX.Element {
-  const [query, setQuery] = React.useState('');
-  const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
-  const added = new Set(draft.conditions.map(c => c.code));
-  const conditionMatches = React.useMemo(
-    () => searchConditions(conditions, query, 10).filter(c => !added.has(c.code)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [conditions, query, draft.conditions]
-  );
-  const options: ComboOption[] = conditionMatches.map(c => ({
-    id: c.code,
-    label: c.label,
-    meta: c.category,
-  }));
-
-  const [showAllQuick, setShowAllQuick] = React.useState(false);
-  const allQuick = QUICK_CONDITIONS.filter(code => byCode.has(code));
-  // The ones agents hear most first; the rest of the knockout list one tap away.
-  const featured = FEATURED_CONDITIONS.filter(code => allQuick.includes(code));
-  // Chips say what agents say ("CHF"); the full name is their accessible one.
-  const rest = allQuick.filter(code => !featured.includes(code));
-  const quick = showAllQuick ? [...featured, ...rest] : featured;
-  const hiddenCount = showAllQuick ? 0 : rest.length;
-  // A chip's short name, unless two chips would read the same ("Diabetes"
-  // twice): then both say it in full.
-  const chipLabel = (code: string) => {
-    if (CHIP_NAME[code]) return CHIP_NAME[code];
-    const label = byCode.get(code)!.label;
-    const short = shortLabel(label);
-    const clash = quick.some(
-      other => other !== code && shortLabel(byCode.get(other)!.label) === short
-    );
-    return clash ? label : short;
-  };
-
-  return (
-    <Section
-      title="Health"
-      hint="Last treated means the last surgery, procedure, hospital stay or treatment change. Each carrier's own questions decide the result."
-      aside={
-        <span className="text-[12px] text-ink-3">
-          {draft.conditions.length
-            ? `${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}`
-            : 'None added'}
-        </span>
-      }
-    >
-      <div className="space-y-3">
-        <Combobox
-          id={healthSearchId(idPrefix)}
-          inputClassName="h-10 text-[14px]"
-          label="Add a condition"
-          hideLabel
-          query={query}
-          onQueryChange={setQuery}
-          placeholder="Search conditions…"
-          options={options}
-          onPick={code => dispatch({ type: 'addCondition', code })}
-          shortcut="Alt+H"
-          emptyText="No condition by that name"
-        />
-
-        <div>
-          <div
-            className="flex flex-wrap gap-1.5"
-            role="group"
-            aria-label="Common knockout conditions"
-          >
-            {quick.map(code => {
-              const on = added.has(code);
-              return (
+      ) : attention.length ? (
+        <div className="flex items-center gap-1.5 text-[12.5px] leading-[18px] text-ink-2">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-ringing-ink" aria-hidden />
+          <p className="min-w-0 truncate">
+            <span className="text-ink-2">Quoting on assumptions · </span>
+            {attention.slice(0, 3).map((item, i) => (
+              <React.Fragment key={`${item.section}-${item.itemKey}`}>
+                {i ? ', ' : null}
                 <button
-                  key={code}
                   type="button"
-                  aria-pressed={on}
-                  onClick={() => {
-                    if (on) {
-                      const c = draft.conditions.find(x => x.code === code);
-                      if (c) dispatch({ type: 'removeCondition', key: c.key });
-                    } else dispatch({ type: 'addCondition', code });
-                  }}
+                  onClick={() => onFix(item)}
+                  title={`${item.subject}: ${item.need}`}
                   className={cn(
-                    'inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[13px] font-medium leading-none transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
-                    on
-                      ? 'border-ink bg-ink text-surface'
-                      : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
+                    'rounded-[4px] font-semibold text-ringing-ink underline-offset-2 hover:underline',
+                    item.section === 'meds' && 'capitalize',
                     FOCUS
                   )}
                 >
-                  {on ? <Check className="-ml-0.5 h-3 w-3 shrink-0" aria-hidden /> : null}
-                  {chipLabel(code)}
+                  {shortLabel(item.subject)}
                 </button>
-              );
-            })}
-            {hiddenCount > 0 || showAllQuick ? (
-              <button
-                type="button"
-                aria-expanded={showAllQuick}
-                aria-label={
-                  showAllQuick
-                    ? 'Fewer knockout questions'
-                    : `${hiddenCount} more knockout questions`
-                }
-                onClick={() => setShowAllQuick(v => !v)}
-                className={cn(
-                  'inline-flex h-8 items-center rounded-full px-2 text-[13px] font-semibold text-brand-ink hover:underline',
-                  FOCUS
-                )}
-              >
-                {showAllQuick ? 'Fewer' : `${hiddenCount} more`}
-              </button>
-            ) : null}
-          </div>
+              </React.Fragment>
+            ))}
+            {attention.length > 3 ? ` +${attention.length - 3} more` : null}
+          </p>
         </div>
-
-        {draft.conditions.length ? (
-          <div>
-            <p className={FIELD_LABEL}>Selected conditions</p>
-            <ul className="divide-y divide-rule overflow-hidden rounded-[10px] border border-rule-strong bg-surface">
-              {draft.conditions.map(c => (
-                <ConditionRow
-                  key={c.key}
-                  idPrefix={idPrefix}
-                  condition={c}
-                  label={byCode.get(c.code)?.label ?? c.code}
-                  dispatch={dispatch}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    </Section>
-  );
-}
-
-/** The id of the medication search box, for the workspace's Alt+M. */
-export const medsSearchId = (idPrefix: string): string => `${idPrefix}-meds`;
-
-/**
- * Medications: their own search and their own list. Each medication shows
- * what it is taken for, and when a carrier needs that answered, the question
- * sits directly under the medication.
- */
-function MedicationsSection({
-  idPrefix,
-  draft,
-  dispatch,
-  conditions,
-  needsIndication,
-}: QuoteIntakeProps): JSX.Element {
-  const [query, setQuery] = React.useState('');
-  const byCode = React.useMemo(() => new Map(conditions.map(c => [c.code, c])), [conditions]);
-  const { hits, searching } = useDrugSearch(query);
-  const addedDrugs = new Set(draft.meds.map(m => m.drugId));
-  const options: ComboOption[] = hits
-    .filter(h => !addedDrugs.has(h.id))
-    .slice(0, 10)
-    .map(h => ({
-      id: h.id,
-      label: matchedBrand(h) ? (
-        <>
-          <span className="capitalize">{matchedBrand(h)}</span>
-          <span className="text-ink-2"> · {h.generic}</span>
-        </>
       ) : (
-        <>
-          <span className="capitalize">{h.generic}</span>
-          {h.brands.length ? (
-            <span className="text-ink-2"> · {h.brands.slice(0, 2).join(', ')}</span>
-          ) : null}
-        </>
-      ),
-      meta: h.drugClass ?? undefined,
-    }));
-
-  const pick = (id: string) => {
-    const hit = hits.find(h => h.id === id);
-    if (!hit) return;
-    dispatch({
-      type: 'addMed',
-      med: {
-        drugId: hit.id,
-        name: hit.brands[0] ? `${hit.generic} (${hit.brands[0]})` : hit.generic,
-        indications: hit.indications,
-        multiUse: hit.multiUse,
-      },
-    });
-  };
-
-  const unanswered = draft.meds.filter(m => needsIndication.has(m.drugId) && !m.indication).length;
-
-  return (
-    <Section
-      title="Medications"
-      aside={
-        <span
-          className={cn('text-[12px]', unanswered ? 'font-medium text-ringing-ink' : 'text-ink-3')}
-        >
-          {unanswered
-            ? `${unanswered} need${unanswered === 1 ? 's' : ''} a use`
-            : draft.meds.length
-              ? `${draft.meds.length} medication${draft.meds.length === 1 ? '' : 's'}`
-              : 'None added'}
-        </span>
-      }
-    >
-      <div className="space-y-3">
-        <Combobox
-          id={medsSearchId(idPrefix)}
-          inputClassName="h-10 text-[14px]"
-          label="Add a medication"
-          hideLabel
-          query={query}
-          onQueryChange={setQuery}
-          placeholder="Search medications, brand or generic…"
-          options={options}
-          onPick={pick}
-          loading={searching}
-          shortcut="Alt+M"
-          emptyText="No medication by that name"
-        />
-        {draft.meds.length ? (
-          <div>
-            <p className={FIELD_LABEL}>Selected medications</p>
-            <ul className="divide-y divide-rule overflow-hidden rounded-[10px] border border-rule-strong bg-surface">
-              {draft.meds.map(med => (
-                <MedicationRow
-                  key={med.key}
-                  idPrefix={idPrefix}
-                  med={med}
-                  asked={needsIndication.get(med.drugId)}
-                  conditionLabel={code => byCode.get(code)?.label ?? code}
-                  dispatch={dispatch}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    </Section>
-  );
-}
-
-/** One answered-or-not line: what it is, what was said, and a remove. */
-function CompactRow({
-  id,
-  open,
-  onToggle,
-  title,
-  capitalize = false,
-  facts,
-  attention,
-  removeLabel,
-  onRemove,
-  onBlurOut,
-  children,
-}: {
-  id: string;
-  open: boolean;
-  onToggle: () => void;
-  title: React.ReactNode;
-  /** Drug names arrive lower-case; condition labels are already set. */
-  capitalize?: boolean;
-  facts: string[];
-  /** Still has a question that changes the quote. */
-  attention?: string;
-  removeLabel: string;
-  onRemove: () => void;
-  /** Focus left the row (to collapse it once answered). */
-  onBlurOut?: () => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  const ref = React.useRef<HTMLLIElement>(null);
-  return (
-    <li
-      ref={ref}
-      className={cn('min-w-0', open && 'bg-paper')}
-      onBlur={e => {
-        if (onBlurOut && !ref.current?.contains(e.relatedTarget as Node | null)) onBlurOut();
-      }}
-    >
-      <div className="flex min-h-[40px] items-center gap-1 pl-3 pr-1.5">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={id}
-          onClick={onToggle}
-          className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1.5 text-left',
-            FOCUS
-          )}
-        >
-          {attention ? (
-            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ringing" />
-          ) : (
-            <Check className="h-3.5 w-3.5 shrink-0 text-live-ink" aria-hidden />
-          )}
-          <span className="min-w-0 truncate text-[13.5px]">
-            <span className={cn('font-medium text-ink', capitalize && 'capitalize')}>{title}</span>
-            {facts.length ? <span className="text-ink-2"> · {facts.join(' · ')}</span> : null}
-            {attention ? <span className="text-ringing-ink"> · {attention}</span> : null}
-          </span>
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              'ml-auto h-3.5 w-3.5 shrink-0 text-ink-3 transition-transform duration-150 ne-motion motion-reduce:transition-none',
-              open && 'rotate-180'
-            )}
-          />
-        </button>
-        <button
-          type="button"
-          aria-label={removeLabel}
-          onClick={onRemove}
-          className={cn(
-            'flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] text-ink-3 hover:bg-surface hover:text-dropped-ink',
-            FOCUS
-          )}
-        >
-          <X className="h-3.5 w-3.5" aria-hidden />
-        </button>
-      </div>
-      {open ? (
-        <div id={id} className="border-t border-rule bg-paper px-3 pb-3 pt-2.5">
-          {children}
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-function conditionFacts(condition: DraftCondition, fields: readonly DetailField[]): string[] {
-  const facts: string[] = [];
-  const dx = labelFor(DIAGNOSED_BUCKETS, condition.diagnosedMonthsAgo);
-  if (condition.diagnosedMonthsAgo !== undefined && dx) facts.push(`Dx ${briefBucket(dx)}`);
-  if (condition.treatedMonthsAgo === 0) facts.push('Treated now');
-  else if (condition.treatedMonthsAgo === null) facts.push('Never treated');
-  else if (condition.treatedMonthsAgo !== undefined) {
-    const tx = labelFor(TREATED_BUCKETS, condition.treatedMonthsAgo);
-    if (tx) facts.push(`Tx ${briefBucket(tx)}`);
-  }
-  for (const field of fields) {
-    const value = condition.detail[field.key];
-    if (value === undefined || value === '') continue;
-    const name = field.label.replace(/\?$/, '');
-    if (field.type === 'yesno') facts.push(`${name}: ${value ? 'yes' : 'no'}`);
-    else if (field.type === 'select')
-      facts.push(field.options.find(([v]) => v === value)?.[1] ?? String(value));
-    else if (field.type === 'number') facts.push(`${name} ${value}`);
-    else {
-      const b = labelFor(DIAGNOSED_BUCKETS, value);
-      if (b) facts.push(`${name} ${briefBucket(b)}`);
-    }
-  }
-  if (condition.onMeds) facts.push('On meds');
-  return facts;
-}
-
-/** Every question the condition asks has an answer ("Not sure" counts once picked). */
-function conditionAnswered(condition: DraftCondition, fields: readonly DetailField[]): boolean {
-  return (
-    condition.diagnosedMonthsAgo !== undefined &&
-    condition.treatedMonthsAgo !== undefined &&
-    fields.every(f => condition.detail[f.key] !== undefined)
-  );
-}
-
-function ConditionRow({
-  idPrefix,
-  condition,
-  label,
-  dispatch,
-}: {
-  idPrefix: string;
-  condition: DraftCondition;
-  label: string;
-  dispatch: React.Dispatch<DraftAction>;
-}): JSX.Element {
-  const p = (s: string) => `${idPrefix}-${condition.key}-${s}`;
-  const update = (patch: Partial<DraftCondition>) =>
-    dispatch({ type: 'updateCondition', key: condition.key, patch });
-  const fields = CONDITION_DETAIL_FIELDS[condition.code] ?? [];
-  const answered = conditionAnswered(condition, fields);
-  // Open while its questions are being answered; one line once they are and
-  // the agent has moved on.
-  const [open, setOpen] = React.useState(!answered);
-
-  return (
-    <CompactRow
-      id={p('detail')}
-      open={open}
-      onToggle={() => setOpen(o => !o)}
-      title={label}
-      facts={conditionFacts(condition, fields)}
-      attention={answered ? undefined : 'details'}
-      removeLabel={`Remove ${label}`}
-      onRemove={() => dispatch({ type: 'removeCondition', key: condition.key })}
-      onBlurOut={answered ? () => setOpen(false) : undefined}
-    >
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-        <Field label="Diagnosed" htmlFor={p('dx')}>
-          <NativeSelect
-            id={p('dx')}
-            value={bucketValue(condition.diagnosedMonthsAgo)}
-            className="h-8 px-2 pr-6 text-[13px]"
-            onChange={e => update({ diagnosedMonthsAgo: bucketFrom(e.target.value) ?? undefined })}
-          >
-            {DIAGNOSED_BUCKETS.map(([text, months]) => (
-              <option key={text} value={bucketValue(months)}>
-                {text}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field label="Last treated" htmlFor={p('tx')}>
-          <NativeSelect
-            id={p('tx')}
-            value={bucketValue(condition.treatedMonthsAgo)}
-            className="h-8 px-2 pr-6 text-[13px]"
-            onChange={e => update({ treatedMonthsAgo: bucketFrom(e.target.value) })}
-          >
-            {TREATED_BUCKETS.map(([text, months]) => (
-              <option key={text} value={bucketValue(months)}>
-                {text}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        {fields.map(field => (
-          <DetailInput
-            key={field.key}
-            id={p(field.key)}
-            field={field}
-            condition={condition}
-            update={update}
-          />
-        ))}
-      </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <CheckRow
-          id={p('meds')}
-          checked={condition.onMeds}
-          onChange={onMeds => update({ onMeds })}
-          className="text-[12.5px]"
-        >
-          On maintenance medication
-        </CheckRow>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className={cn(
-            'h-7 rounded-control px-2 text-[12px] font-medium text-brand-ink hover:bg-surface',
-            FOCUS
-          )}
-        >
-          Done
-        </button>
-      </div>
-    </CompactRow>
-  );
-}
-
-function DetailInput({
-  id,
-  field,
-  condition,
-  update,
-}: {
-  id: string;
-  field: DetailField;
-  condition: DraftCondition;
-  update: (patch: Partial<DraftCondition>) => void;
-}): JSX.Element {
-  const value = condition.detail[field.key];
-  const set = (v: string | number | boolean | undefined) =>
-    update({ detail: { ...condition.detail, [field.key]: v } });
-
-  if (field.type === 'select') {
-    return (
-      <Field label={field.label} htmlFor={id} className="col-span-2">
-        <NativeSelect
-          id={id}
-          value={String(value ?? '')}
-          className="h-8 px-2 pr-6 text-[13px]"
-          onChange={e => set(e.target.value || undefined)}
-        >
-          {field.options.map(([v, text]) => (
-            <option key={v} value={v}>
-              {text}
-            </option>
-          ))}
-        </NativeSelect>
-      </Field>
-    );
-  }
-  if (field.type === 'yesno') {
-    return (
-      <Field label={field.label}>
-        <ChoiceGroup
-          label={field.label}
-          className="h-8"
-          itemClassName="text-[12px]"
-          options={[
-            { value: 'unsure', label: 'Unsure', key: 'unsure' },
-            { value: 'no', label: 'No', key: 'no' },
-            { value: 'yes', label: 'Yes', key: 'yes' },
-          ]}
-          value={value === true ? 'yes' : value === false ? 'no' : 'unsure'}
-          onChange={v => set(v === 'yes' ? true : v === 'no' ? false : undefined)}
-        />
-      </Field>
-    );
-  }
-  if (field.type === 'number') {
-    return (
-      <Field label={field.label} htmlFor={id}>
-        <TextInput
-          id={id}
-          inputMode="numeric"
-          maxLength={4}
-          className="h-8 px-2"
-          value={value === undefined ? '' : String(value)}
-          onChange={e => {
-            const v = digitsOnly(e.target.value);
-            set(v ? Number(v) : undefined);
-          }}
-        />
-      </Field>
-    );
-  }
-  return (
-    <Field label={field.label} htmlFor={id}>
-      <NativeSelect
-        id={id}
-        value={bucketValue(typeof value === 'number' ? value : undefined)}
-        className="h-8 px-2 pr-6 text-[13px]"
-        onChange={e => set(bucketFrom(e.target.value) ?? undefined)}
-      >
-        {DIAGNOSED_BUCKETS.map(([text, months]) => (
-          <option key={text} value={bucketValue(months)}>
-            {text}
-          </option>
-        ))}
-      </NativeSelect>
-    </Field>
-  );
-}
-
-function MedicationRow({
-  idPrefix,
-  med,
-  asked,
-  conditionLabel,
-  dispatch,
-}: {
-  idPrefix: string;
-  med: DraftMed;
-  /** The use options the last quote asked about, when it did. */
-  asked: string[] | undefined;
-  conditionLabel: (code: string) => string;
-  dispatch: React.Dispatch<DraftAction>;
-}): JSX.Element {
-  const p = (s: string) => `${idPrefix}-${med.key}-${s}`;
-  const options = med.indications?.length
-    ? med.indications
-    : (asked ?? []).map(code => ({ code, label: conditionLabel(code) }));
-  const askUse = (med.multiUse || Boolean(asked)) && options.length > 0;
-  const needsUse = askUse && !med.indication;
-  // Open while its use is unanswered; otherwise one line, opened on request.
-  const [openOverride, setOpenOverride] = React.useState<boolean | null>(null);
-  const open = openOverride ?? needsUse;
-
-  const taken =
-    med.lastTakenMonthsAgo && med.lastTakenMonthsAgo > 0
-      ? labelFor(MED_LAST_TAKEN_BUCKETS, med.lastTakenMonthsAgo)
-      : undefined;
-  const use = med.indication
-    ? (options.find(o => o.code === med.indication)?.label ?? conditionLabel(med.indication))
-    : undefined;
-  const facts = [use ? shortLabel(use) : null, taken ?? null].filter((f): f is string =>
-    Boolean(f)
-  );
-
-  return (
-    <CompactRow
-      id={p('detail')}
-      open={open}
-      onToggle={() => setOpenOverride(!open)}
-      title={med.name}
-      capitalize
-      facts={facts}
-      attention={needsUse ? 'what is it for?' : undefined}
-      removeLabel={`Remove ${med.name}`}
-      onRemove={() => dispatch({ type: 'removeMed', key: med.key })}
-      onBlurOut={needsUse ? undefined : () => setOpenOverride(null)}
-    >
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-        <Field label="Still taking?" htmlFor={p('taken')}>
-          <NativeSelect
-            id={p('taken')}
-            value={bucketValue(med.lastTakenMonthsAgo ?? 0)}
-            className="h-8 px-2 pr-6 text-[13px]"
-            onChange={e =>
-              dispatch({
-                type: 'updateMed',
-                key: med.key,
-                patch: { lastTakenMonthsAgo: bucketFrom(e.target.value) ?? 0 },
-              })
-            }
-          >
-            {MED_LAST_TAKEN_BUCKETS.map(([text, months]) => (
-              <option key={text} value={bucketValue(months)}>
-                {text}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        {askUse ? (
-          <Field label="Prescribed for" htmlFor={p('use')}>
-            <NativeSelect
-              id={p('use')}
-              value={med.indication ?? ''}
-              aria-invalid={!med.indication}
-              onChange={e =>
-                dispatch({
-                  type: 'updateMed',
-                  key: med.key,
-                  patch: { indication: e.target.value || undefined },
-                })
-              }
-              className={cn('h-8 px-2 pr-6 text-[13px]', !med.indication && 'border-ringing')}
-            >
-              <option value="">Choose a use…</option>
-              {options.map(o => (
-                <option key={o.code} value={o.code}>
-                  {o.label}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
-        ) : null}
-      </div>
-      {needsUse ? (
-        <p className="t-meta mt-1 text-ringing-ink">
-          Until answered, each carrier applies the strictest listed use.
+        <p className="flex items-center gap-1.5 text-[12.5px] text-live-ink" aria-live="polite">
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-live" />
+          {draft.conditions.length || draft.meds.length
+            ? 'Every answer in · quoting live'
+            : 'Ready · quoting live as you edit'}
         </p>
-      ) : null}
-    </CompactRow>
+      )}
+
+      <div className="flex items-stretch gap-2">
+        {onReset ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onReset}
+            className="h-12 shrink-0 rounded-[10px] px-3 text-[13px] font-medium text-ink-2"
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            New quote
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          onClick={() => {
+            if (missing) {
+              setTried(true);
+              onFixMissing(missing);
+              return;
+            }
+            onGetQuotes?.();
+          }}
+          className="h-12 min-w-0 flex-1 rounded-[10px] text-[15.5px] font-semibold tracking-[-0.005em] shadow-raised"
+        >
+          Get quotes
+          {missing ? null : <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
+        </Button>
+      </div>
+    </div>
   );
 }

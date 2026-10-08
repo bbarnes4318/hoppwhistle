@@ -29,6 +29,11 @@ export interface DraftCondition {
   treatedMonthsAgo?: number | null;
   onMeds: boolean;
   detail: Record<string, string | number | boolean | undefined>;
+  /**
+   * The agent finished its questions (pressed Done), so "Not sure" answers are
+   * deliberate rather than unasked. Screen-only: never sent to the engine.
+   */
+  reviewed?: boolean;
 }
 
 export interface DraftMed {
@@ -43,6 +48,8 @@ export interface DraftMed {
   /** The use options offered for it, from the search hit. */
   indications?: Array<{ code: string; label: string }>;
   multiUse?: boolean;
+  /** The drug class from the search hit ("Biguanide"), for display only. */
+  drugClass?: string | null;
 }
 
 export interface QuoteDraft {
@@ -105,10 +112,11 @@ export function applyPrefill(
 
 export type DraftAction =
   | { type: 'set'; patch: Partial<Omit<QuoteDraft, 'prefilled'>>; fields?: QuoteDraftField[] }
-  | { type: 'addCondition'; code: string }
+  /** `key`: the caller's own, to open the new condition straight away. */
+  | { type: 'addCondition'; code: string; key?: string }
   | { type: 'updateCondition'; key: string; patch: Partial<Omit<DraftCondition, 'key'>> }
   | { type: 'removeCondition'; key: string }
-  | { type: 'addMed'; med: Omit<DraftMed, 'key'> }
+  | { type: 'addMed'; med: Omit<DraftMed, 'key'>; key?: string }
   | { type: 'updateMed'; key: string; patch: Partial<Omit<DraftMed, 'key'>> }
   | { type: 'removeMed'; key: string }
   /** Answer "what is it prescribed for?" for every med with this drug id. */
@@ -128,7 +136,7 @@ export function draftReducer(draft: QuoteDraft, action: DraftAction): QuoteDraft
         ...draft,
         conditions: [
           ...draft.conditions,
-          { key: newKey('c'), code: action.code, onMeds: false, detail: {} },
+          { key: action.key ?? newKey('c'), code: action.code, onMeds: false, detail: {} },
         ],
       };
     case 'updateCondition':
@@ -144,7 +152,10 @@ export function draftReducer(draft: QuoteDraft, action: DraftAction): QuoteDraft
       if (draft.meds.some(m => m.drugId === action.med.drugId)) return draft;
       return {
         ...draft,
-        meds: [...draft.meds, { lastTakenMonthsAgo: 0, ...action.med, key: newKey('m') }],
+        meds: [
+          ...draft.meds,
+          { lastTakenMonthsAgo: 0, ...action.med, key: action.key ?? newKey('m') },
+        ],
       };
     case 'updateMed':
       return {
