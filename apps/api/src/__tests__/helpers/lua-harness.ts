@@ -56,12 +56,16 @@ export interface InboundRouteScenario {
   contacts?: Record<string, string>;
   /** One outcome per `bridge` the script executes, in order. Missing = no answer. */
   bridges?: BridgeOutcome[];
+  /** Extra variables on the inbound channel, e.g. received SIP headers. */
+  channelVars?: Record<string, string>;
 }
 
 export interface InboundRouteRun {
   bridges: string[];
   cdrs: Array<Record<string, unknown>>;
   hangups: string[];
+  /** The route lookup URL the script fetched. */
+  lookupUrl: string;
   error: string | null;
 }
 
@@ -119,6 +123,7 @@ function prelude(scenario: InboundRouteScenario): string {
       destination_number: scenario.did ?? '18885550123',
       uuid: scenario.uuid ?? '6f1c2d3e-aaaa-4bbb-8ccc-123456789abc',
       domain_name: 'switch.test',
+      ...scenario.channelVars,
     },
   };
 
@@ -128,7 +133,7 @@ os.getenv = os.getenv or function() return nil end
 local cfg = ${toLua(config as unknown as LuaValue)}
 local vars = cfg.vars
 local answered, ready = false, true
-local events = { bridges = {}, curls = {}, hangups = {} }
+local events = { bridges = {}, curls = {}, hangups = {}, lookup = "" }
 
 session = {}
 function session:getVariable(name) return vars[name] end
@@ -144,6 +149,7 @@ function session:hangup(cause)
 end
 function session:execute(app, arg)
   if app == "curl" then
+    events.lookup = arg or ""
     vars.curl_response_code = cfg.lookupCode
     vars.curl_response_data = cfg.lookupBody
   elseif app == "answer" then
@@ -193,7 +199,8 @@ freeswitch = {
 function __collect()
   return table.concat(events.bridges, "${SEP_ITEM}") .. "${SEP_LIST}" ..
     table.concat(events.curls, "${SEP_ITEM}") .. "${SEP_LIST}" ..
-    table.concat(events.hangups, "${SEP_ITEM}")
+    table.concat(events.hangups, "${SEP_ITEM}") .. "${SEP_LIST}" ..
+    events.lookup
 end
 `;
 }
@@ -232,14 +239,14 @@ export function runInboundRoute(scenario: InboundRouteScenario): InboundRouteRun
   const raw = lua.lua_tojsstring(L, -1);
   lua.lua_pop(L, 1);
 
-  const [bridges = '', curls = '', hangups = ''] = raw.split(SEP_LIST);
+  const [bridges = '', curls = '', hangups = '', lookupUrl = ''] = raw.split(SEP_LIST);
   const cdrs = split(curls).map(cmd => {
     const match = /post '([\s\S]*)'$/.exec(cmd);
     if (!match) throw new Error(`Unexpected curl command from the script: ${cmd}`);
     return JSON.parse(match[1]) as Record<string, unknown>;
   });
 
-  return { bridges: split(bridges), cdrs, hangups: split(hangups), error };
+  return { bridges: split(bridges), cdrs, hangups: split(hangups), lookupUrl, error };
 }
 
 /** The `[...]` variables of each leg of a bridge string, by leg. */

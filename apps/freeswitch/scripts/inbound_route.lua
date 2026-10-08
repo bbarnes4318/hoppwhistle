@@ -516,6 +516,14 @@ local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. encoded_did
 if encoded_caller ~= "" and encoded_caller ~= "unknown" then
     lookup_url = lookup_url .. "&caller=" .. encoded_caller
 end
+-- A call Dograh transferred to us must never be routed back to the AI.
+-- deploy/dograh/direct-transfer marks those with a source header; its name is
+-- assembled so this script keeps no brand name (see inbound-route-lua.test.ts).
+local DOGRAH_SOURCE_HEADER = "sip_h_X-" .. "Hop" .. "whistle-Source"
+local from_dograh = (session:getVariable(DOGRAH_SOURCE_HEADER) or "") == "dograh-transfer"
+if from_dograh then
+    lookup_url = lookup_url .. "&via=dograh"
+end
 lookup_url = lookup_url .. "&k=" .. url_encode_component(INTERNAL_KEY)
 
 -- Bounds are passed as mod_curl arguments. Setting `curl_connect_timeout` and
@@ -617,6 +625,34 @@ if reject_flag == "true" then
   local reject_reason = json_value(response_body, "reason") or "BLOCKED"
   log("WARNING", "TCPA BLOCK: caller " .. caller_number .. " on DID " .. did_normalized .. " — reason: " .. reject_reason)
   session:hangup("CALL_REJECTED")
+  return
+end
+
+-- ── AI callback ─────────────────────────────────────────────────────────────
+-- A lead calling back one of the AI's caller IDs: hand the call to Dograh's
+-- Asterisk, where the number's inbound AI agent answers. The lead's own number
+-- is kept so the agent knows who is calling. Dograh records and logs the call
+-- itself, so no CDR is posted here. See services/dograh-callback-routing.ts.
+local ai_agent_bridge = json_value(response_body, "aiAgentBridge")
+if ai_agent_bridge and ai_agent_bridge ~= "" then
+  log("INFO", "AI callback: " .. caller_number .. " → DID " .. did_normalized .. " → " .. ai_agent_bridge)
+  session:execute("ring_ready")
+  session:setVariable("call_direction", "inbound")
+  session:setVariable("hangup_after_bridge", "true")
+  session:setVariable("continue_on_fail", "true")
+  session:setVariable("call_timeout", "30")
+  session:execute("export", "nolocal:absolute_codec_string=PCMU,PCMA")
+  session:execute("unset", "sip_h_Identity")
+  session:execute("unset", "sip_h_Identity-Info")
+  local ai_cid = string.gsub(caller_number, "[^%w%+]", "")
+  if ai_cid == "" then ai_cid = "unknown" end
+  session:execute("bridge", "[origination_caller_id_number=" .. ai_cid ..
+    ",origination_caller_id_name=" .. ai_cid .. "]" .. ai_agent_bridge)
+  if not session:answered() and session:ready() then
+    log("WARNING", "AI callback to Dograh failed (" ..
+      tostring(session:getVariable("originate_disposition") or "UNKNOWN") .. ") for DID " .. did_normalized)
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+  end
   return
 end
 
