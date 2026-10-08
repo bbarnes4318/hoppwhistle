@@ -10,7 +10,6 @@
 import { Loader2, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 
-import { Panel } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
@@ -97,9 +96,9 @@ export function CustomerNotes({
   };
 
   return (
-    <Panel className="min-w-0 overflow-hidden" aria-labelledby="notes-title">
-      <div className="flex h-[53px] items-center justify-between gap-3 border-b border-rule px-5">
-        <h2 id="notes-title" className="text-[16px] font-semibold text-ink">
+    <section className="min-w-0 border-t border-rule lg:border-t-0" aria-labelledby="notes-title">
+      <div className="flex min-h-[56px] items-center justify-between gap-3 px-7 pt-4">
+        <h2 id="notes-title" className="text-[15px] font-semibold text-ink">
           Notes
         </h2>
         {entries.length && editing === null ? (
@@ -112,7 +111,7 @@ export function CustomerNotes({
       </div>
 
       {editing !== null ? (
-        <div className="space-y-2 px-5 py-4">
+        <div className="space-y-2 px-7 py-4">
           <Textarea
             value={editing}
             onChange={e => setEditing(e.target.value)}
@@ -137,7 +136,7 @@ export function CustomerNotes({
         </div>
       ) : (
         <>
-          <form onSubmit={add} className="border-b border-rule px-5 py-4">
+          <form onSubmit={add} className="px-7 pb-5 pt-3">
             <Textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
@@ -169,9 +168,9 @@ export function CustomerNotes({
           </form>
 
           {entries.length ? (
-            <ol aria-label="Note history">
+            <ol aria-label="Note history" className="border-t border-rule">
               {entries.map((entry, i) => (
-                <li key={i} className="flex gap-3 px-5 py-3.5 [&+li]:border-t [&+li]:border-rule">
+                <li key={i} className="flex gap-3 px-7 py-4 [&+li]:border-t [&+li]:border-rule">
                   <span
                     aria-hidden
                     className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sunken text-[11px] font-semibold text-ink-2"
@@ -200,7 +199,7 @@ export function CustomerNotes({
             </ol>
           ) : (
             <InlineEmpty
-              className="px-5 py-5"
+              className="px-7 py-4"
               icon={MessageSquare}
               title="No notes yet"
               body="What you learn on a call belongs here, so the next conversation starts where this one ended."
@@ -208,6 +207,6 @@ export function CustomerNotes({
           )}
         </>
       )}
-    </Panel>
+    </section>
   );
 }

@@ -7,16 +7,7 @@
  * is a short composer: a title, a due day in one click, a priority, Enter.
  */
 
-import {
-  Ban,
-  Calendar,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ListChecks,
-  Loader2,
-  Plus,
-} from 'lucide-react';
+import { Ban, Calendar, Check, ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -26,7 +17,6 @@ import { cn } from '@/lib/utils';
 
 import { dueLabel, formatDateTime, PRIORITY_RANK, taskDueDate } from './format';
 import { PRIORITY_OPTIONS } from './lead-fields';
-import { InlineEmpty } from './primitives';
 import type { LeadTasks, NewTask } from './use-lead-record';
 
 const PRIORITY_TONE: Record<InsuranceTask['priority'], string> = {
@@ -149,7 +139,7 @@ function TaskRow({
   const open = task.status === 'OPEN';
 
   return (
-    <li className={cn('flex items-start gap-3', compact ? 'py-2' : 'px-5 py-3')}>
+    <li className={cn('flex items-start gap-3', compact ? 'py-2' : 'px-7 py-3')}>
       {open ? (
         <CompleteCircle task={task} tasks={tasks} />
       ) : (
@@ -265,7 +255,7 @@ function DoneFold({
         aria-expanded={show}
         className={cn(
           'flex w-full items-center gap-1.5 text-left text-[13px] font-medium text-ink-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          compact ? 'py-2' : 'px-5 py-3'
+          compact ? 'py-2' : 'px-7 py-3'
         )}
       >
         {show ? (
@@ -337,38 +327,12 @@ export function TaskList({
         <div className="h-4" />
       ) : null}
       {limit && rows.length > limit ? (
-        <p className={cn('text-[12.5px] text-ink-3', compact ? 'pb-1' : 'px-5 pb-3')}>
+        <p className={cn('text-[12.5px] text-ink-3', compact ? 'pb-1' : 'px-7 pb-3')}>
           +{rows.length - limit} more open
         </p>
       ) : null}
       {!limit ? <DoneFold done={done} tasks={tasks} compact={compact} /> : null}
     </div>
-  );
-}
-
-/** The "no open tasks" state, with the way to add one. */
-export function NoOpenTasks({
-  onAdd,
-  className,
-}: {
-  onAdd?: () => void;
-  className?: string;
-}): JSX.Element {
-  return (
-    <InlineEmpty
-      className={className}
-      icon={ListChecks}
-      title="No open tasks"
-      body="Create a follow-up so this customer doesn't fall through."
-      action={
-        onAdd ? (
-          <Button size="sm" variant="outline" onClick={onAdd}>
-            <Plus aria-hidden className="h-3.5 w-3.5" />
-            Add task
-          </Button>
-        ) : null
-      }
-    />
   );
 }
 
