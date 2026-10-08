@@ -158,7 +158,8 @@ def assign(api: str, agent_id: int, org_id: int, tcid: int, extra: List[str]) ->
         check=False,
     )
     dt.run(["docker", "exec", api, "rm", "-rf", IN_CONTAINER], check=False)
-    print(output.strip())
+    # The RESULT line carries every number; show the summary, not the list.
+    print("\n".join(l for l in output.strip().splitlines() if not l.startswith("RESULT ")))
     return parse_result(output) or {"ok": False, "error": "no RESULT line from assign_inbound_agent.py"}
 
 
