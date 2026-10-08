@@ -12,7 +12,8 @@ import { Panel } from '@/components/domain';
 import type { InsuranceLeadDetail } from '@/lib/api/leads';
 
 import { CustomerCallList } from './customer-calls';
-import { TaskList } from './customer-tasks';
+import { NoOpenTasks, TaskList } from './customer-tasks';
+import { GroupHeading } from './primitives';
 import type { LeadTasks } from './use-lead-record';
 
 function PanelLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
@@ -42,37 +43,30 @@ export function CustomerNextUp({
   const calls = lead.calls ?? [];
   return (
     <Panel className="min-w-0 overflow-hidden" aria-label="Next up">
-      <section className="px-5 pb-2 pt-3.5" aria-labelledby="next-tasks-title">
-        <div className="flex items-center justify-between gap-2">
-          <h2
-            id="next-tasks-title"
-            className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3"
-          >
-            Open tasks
-          </h2>
-          <PanelLink onClick={onOpenTasks}>Add or view all</PanelLink>
-        </div>
+      <section className="px-5 pb-2 pt-3" aria-labelledby="next-tasks-title">
+        <GroupHeading
+          id="next-tasks-title"
+          action={<PanelLink onClick={onOpenTasks}>All tasks</PanelLink>}
+        >
+          Open tasks
+        </GroupHeading>
         <TaskList
           list={lead.tasks ?? []}
           tasks={tasks}
           compact
           limit={3}
-          emptyText="No open tasks."
+          empty={<NoOpenTasks className="py-2" onAdd={onOpenTasks} />}
         />
       </section>
-      <section
-        className="border-t border-rule px-5 pb-2 pt-3.5"
-        aria-labelledby="recent-calls-title"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h2
-            id="recent-calls-title"
-            className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3"
-          >
-            Recent calls
-          </h2>
-          {calls.length ? <PanelLink onClick={onOpenCalls}>All {calls.length}</PanelLink> : null}
-        </div>
+      <section className="border-t border-rule px-5 pb-2 pt-3" aria-labelledby="recent-calls-title">
+        <GroupHeading
+          id="recent-calls-title"
+          action={
+            calls.length ? <PanelLink onClick={onOpenCalls}>All {calls.length}</PanelLink> : null
+          }
+        >
+          Recent calls
+        </GroupHeading>
         <CustomerCallList calls={calls} limit={3} />
       </section>
     </Panel>

@@ -141,30 +141,33 @@ export function CustomerEditDrawer({
         </Notice>
       ) : null}
       <div className="divide-y divide-rule">
-        {sectionsFor(lead.vertical).map(section => (
-          <section
-            key={section.id}
-            id={`edit-section-${section.id}`}
-            aria-labelledby={`edit-heading-${section.id}`}
-            className="scroll-mt-2 px-5 py-5"
-          >
-            <h3 id={`edit-heading-${section.id}`} className="text-[14px] font-semibold text-ink">
-              {section.title}
-            </h3>
-            {section.hint ? (
-              <p className="mt-0.5 text-[12.5px] text-ink-3">{section.hint}</p>
-            ) : null}
-            <LeadSectionFields
-              className="mt-3.5"
-              section={section}
-              lead={lead}
-              edits={editor.edits}
-              onEdit={editor.setField}
-              assignees={canAssign ? users : null}
-              disabled={editor.saving}
-            />
-          </section>
-        ))}
+        {sectionsFor(lead.vertical)
+          // Compliance and source data is kept off the customer page; the CRM sheet still edits it.
+          .filter(section => section.id !== 'compliance')
+          .map(section => (
+            <section
+              key={section.id}
+              id={`edit-section-${section.id}`}
+              aria-labelledby={`edit-heading-${section.id}`}
+              className="scroll-mt-2 px-5 py-5"
+            >
+              <h3 id={`edit-heading-${section.id}`} className="text-[14px] font-semibold text-ink">
+                {section.title}
+              </h3>
+              {section.hint ? (
+                <p className="mt-0.5 text-[12.5px] text-ink-3">{section.hint}</p>
+              ) : null}
+              <LeadSectionFields
+                className="mt-3.5"
+                section={section}
+                lead={lead}
+                edits={editor.edits}
+                onEdit={editor.setField}
+                assignees={canAssign ? users : null}
+                disabled={editor.saving}
+              />
+            </section>
+          ))}
       </div>
     </SheetDrawer>
   );

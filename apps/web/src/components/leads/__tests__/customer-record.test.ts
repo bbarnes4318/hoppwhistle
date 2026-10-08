@@ -4,10 +4,11 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { InsuranceLeadDetail, InsuranceTask } from '@/lib/api/leads';
+import type { InsuranceActivity, InsuranceLeadDetail, InsuranceTask } from '@/lib/api/leads';
 
+import { describeActivity } from '../customer/customer-activity';
 import { parseNotes } from '../customer/customer-notes';
-import { dueLabel, openTasks, stageLabel, taskDueDate } from '../customer/format';
+import { dispositionTone, dueLabel, openTasks, stageLabel, taskDueDate } from '../customer/format';
 import { buildLeadPatch, changedEdits, sectionsFor, toLocalInput } from '../customer/lead-fields';
 
 const lead = (patch: Partial<InsuranceLeadDetail> = {}): InsuranceLeadDetail =>
@@ -128,5 +129,66 @@ describe('parseNotes', () => {
       { at: null, author: null, body: 'Old imported note\nsecond line' },
     ]);
     expect(parseNotes(null)).toEqual([]);
+  });
+});
+
+describe('dispositionTone', () => {
+  it('sorts free-text dispositions into three families', () => {
+    expect(dispositionTone('NOT_INTERESTED')).toBe('bad');
+    expect(dispositionTone('Do Not Call')).toBe('bad');
+    expect(dispositionTone('APPLICATION_SUBMITTED')).toBe('good');
+    expect(dispositionTone('Transferred')).toBe('good');
+    expect(dispositionTone('NO_ANSWER')).toBe('neutral');
+    expect(dispositionTone('Voicemail')).toBe('neutral');
+  });
+});
+
+describe('describeActivity', () => {
+  const act = (patch: Partial<InsuranceActivity>): InsuranceActivity => ({
+    id: 'a',
+    tenantId: 't',
+    insuranceLeadId: 'lead-1',
+    type: 'CALL',
+    title: '',
+    description: null,
+    metadata: null,
+    createdById: null,
+    createdAt: '2026-10-07T18:05:00Z',
+    ...patch,
+  });
+
+  it('reads an API call entry as a call, with its outcome', () => {
+    expect(
+      describeActivity(
+        act({
+          title: 'Call (INBOUND) - Final Expense Inbound',
+          description: 'Disposition: NOT_INTERESTED',
+        })
+      )
+    ).toEqual({
+      title: 'Inbound call',
+      detail: 'Final Expense Inbound',
+      disposition: 'NOT_INTERESTED',
+    });
+  });
+
+  it('says nothing for a call with no disposition', () => {
+    expect(
+      describeActivity(
+        act({ title: 'Call (OUTBOUND) - Callback', description: 'Disposition: None' })
+      )
+    ).toEqual({ title: 'Outbound call', detail: 'Callback', disposition: null });
+  });
+
+  it('words enum values in running text', () => {
+    expect(
+      describeActivity(
+        act({
+          type: 'STATUS_CHANGE',
+          title: 'Status Changed',
+          description: 'Lead status changed from NEW to CLOSED_LOST.',
+        })
+      ).detail
+    ).toBe('Lead status changed from New to Closed lost.');
   });
 });

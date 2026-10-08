@@ -16,6 +16,7 @@ import { BENEFIT_LABEL } from '@hopwhistle/fex-engine/catalog';
 import {
   AlertTriangle,
   Calculator,
+  Check,
   ChevronRight,
   FileCheck2,
   FileText,
@@ -89,14 +90,6 @@ export function featuredQuote(
     quotes.find(q => q.selectedCarrier) ??
     null
   );
-}
-
-function planLine(q: FexQuoteSummary): string {
-  const benefit = q.selectedBenefit ? (BENEFIT_LABEL[q.selectedBenefit] ?? null) : null;
-  // "Graded Death Benefit (GDB)" already says Graded: the benefit only when it adds something.
-  const said = (q.selectedClass ?? '').toLowerCase();
-  const adds = benefit && !said.includes(benefit.toLowerCase().split(' ')[0]);
-  return [q.selectedProduct, q.selectedClass, adds ? benefit : null].filter(Boolean).join(' · ');
 }
 
 export function CustomerQuotesPanel({
@@ -194,10 +187,13 @@ export function CustomerQuotesPanel({
           <NoPlanChosen latest={latest} onOpen={() => latest && setOpenId(latest.id)} />
         )}
         {others.length ? (
-          <section aria-label={featured ? 'Other saved quotes' : 'Saved quotes'}>
-            <h3 className="border-t border-rule px-5 pb-1 pt-3.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+          <section
+            aria-label={featured ? 'Other saved quotes' : 'Saved quotes'}
+            className="border-t border-rule bg-paper"
+          >
+            <h3 className="px-5 pb-0.5 pt-3 text-[13px] font-semibold text-ink-2">
               {featured ? 'Other quotes' : 'Saved quotes'}
-              <span className="ml-1.5 tabular-nums">{others.length}</span>
+              <span className="ml-1.5 font-medium tabular-nums text-ink-3">{others.length}</span>
             </h3>
             <ul aria-label={`${name}'s quotes`}>
               {visible.map(q => (
@@ -330,6 +326,29 @@ export function CustomerQuotesPanel({
   );
 }
 
+function planParts(q: FexQuoteSummary): string[] {
+  const benefit = q.selectedBenefit ? (BENEFIT_LABEL[q.selectedBenefit] ?? null) : null;
+  const said = (q.selectedClass ?? '').toLowerCase();
+  const adds = benefit && !said.includes(benefit.toLowerCase().split(' ')[0]);
+  return [q.selectedClass, adds ? benefit : null].filter((p): p is string => Boolean(p));
+}
+
+function QuoteMeta({ q }: { q: FexQuoteSummary }): JSX.Element {
+  return (
+    <>
+      Quoted <time dateTime={q.createdAt}>{day(q.createdAt)}</time> by {q.createdBy.name}
+      {q.source !== 'CRM' ? ` · ${QUOTE_SOURCE_LABEL[q.source as QuoteSource] ?? q.source}` : ''}
+      {' · '}
+      {q.eligibleCount} plan{q.eligibleCount === 1 ? '' : 's'} compared
+    </>
+  );
+}
+
+/**
+ * The agent's working recommendation: the carrier's mark at full plate size,
+ * the plan named the way the carrier names it, the premium as the figure the
+ * eye lands on, and the next step on it.
+ */
 function FeaturedPlan({
   quote: q,
   written,
@@ -349,63 +368,66 @@ function FeaturedPlan({
   const fromThis = Boolean(q.applicationId);
 
   return (
-    <section aria-label="Selected plan" data-quote-id={q.id} className="px-5 pb-4 pt-3.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h3 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-          {fromThis ? 'Plan written' : 'Selected plan'}
-        </h3>
-        <p className="text-[12.5px] text-ink-3">
-          Quoted <time dateTime={q.createdAt}>{day(q.createdAt)}</time> by {q.createdBy.name}
-          {q.source !== 'CRM'
-            ? ` · ${QUOTE_SOURCE_LABEL[q.source as QuoteSource] ?? q.source}`
-            : ''}{' '}
-          · {q.eligibleCount} plan{q.eligibleCount === 1 ? '' : 's'} compared
-        </p>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
+    <section aria-label="Selected plan" data-quote-id={q.id} className="px-5 pb-4 pt-4">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <CarrierLogo names={[q.selectedCarrier, q.selectedProductId]} size="quoteHero" />
         <div className="min-w-[200px] flex-1">
-          <p className="text-[18px] font-semibold leading-6 text-ink">{q.selectedCarrier}</p>
-          <p className="mt-0.5 text-[14px] leading-5 text-ink-2">{planLine(q)}</p>
-          {fromThis ? (
-            <p className="mt-2">
-              <QuoteBadge tone="money">Application written</QuoteBadge>
-            </p>
+          <p className="flex flex-wrap items-center gap-2">
+            {fromThis ? (
+              <QuoteBadge tone="money">
+                <Check className="mr-1 h-3 w-3" aria-hidden />
+                Application written
+              </QuoteBadge>
+            ) : (
+              <QuoteBadge tone="live">
+                <Check className="mr-1 h-3 w-3" aria-hidden />
+                Selected plan
+              </QuoteBadge>
+            )}
+            <span className="text-[13px] font-medium text-ink-2">{q.selectedCarrier}</span>
+          </p>
+          <p className="mt-1.5 text-[18px] font-semibold leading-6 tracking-[-0.005em] text-ink">
+            {q.selectedProduct}
+          </p>
+          {planParts(q).length ? (
+            <p className="mt-0.5 text-[13.5px] leading-5 text-ink-2">{planParts(q).join(' · ')}</p>
           ) : null}
         </div>
         <div className="ml-auto text-right tabular-nums">
-          <p className="text-[30px] font-semibold leading-9 tracking-[-0.015em] text-ink">
+          <p className="text-[32px] font-semibold leading-9 tracking-[-0.02em] text-ink">
             {money(q.selectedPremium)}
-            <span className="ml-0.5 text-[14px] font-medium tracking-normal text-ink-3">
-              /{mode}
-            </span>
+            <span className="ml-1 text-[14px] font-medium tracking-normal text-ink-3">/{mode}</span>
           </p>
-          <p className="text-[14px] font-medium text-ink-2">
+          <p className="mt-0.5 text-[14px] font-medium text-ink-2">
             {wholeDollars(q.selectedFace)} coverage
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {/* Written: the application sits right under this panel, so no second way to it here. */}
-        {fromThis || written ? null : (
-          <Button size="sm" onClick={onWrite} disabled={preparing}>
-            {preparing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <FileCheck2 className="h-3.5 w-3.5" aria-hidden />
-            )}
-            Write application
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Written: the application sits right under this panel, so no second way to it here. */}
+          {fromThis || written ? null : (
+            <Button size="sm" onClick={onWrite} disabled={preparing}>
+              {preparing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <FileCheck2 className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Write application
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={onOpen}>
+            View quote
           </Button>
-        )}
-        <Button size="sm" variant="outline" onClick={onOpen}>
-          View quote
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onRequote}>
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          Requote
-        </Button>
+          <Button size="sm" variant="ghost" onClick={onRequote}>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Requote
+          </Button>
+        </div>
+        <p className="text-[12.5px] text-ink-3">
+          <QuoteMeta q={q} />
+        </p>
       </div>
     </section>
   );
@@ -419,16 +441,19 @@ function NoPlanChosen({
   onOpen: () => void;
 }): JSX.Element {
   return (
-    <section aria-label="Selected plan" className="flex flex-wrap items-center gap-4 px-5 py-4">
+    <section
+      aria-label="Selected plan"
+      className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4"
+    >
       <span
         aria-hidden
-        className="flex h-[76px] w-[190px] shrink-0 items-center justify-center gap-2 rounded-control border border-dashed border-rule-strong text-ink-3"
+        className="flex h-[76px] w-[190px] shrink-0 items-center justify-center rounded-[8px] border border-dashed border-rule-strong text-ink-3"
       >
         <Calculator className="h-5 w-5" />
       </span>
       <div className="min-w-[200px] flex-1">
         <p className="text-[15px] font-semibold text-ink">No plan chosen yet</p>
-        <p className="mt-0.5 text-[13.5px] leading-5 text-ink-2">
+        <p className="mt-0.5 text-[13px] leading-5 text-ink-3">
           {latest
             ? `The latest quote compared ${latest.eligibleCount} plan${latest.eligibleCount === 1 ? '' : 's'}${
                 latest.lowestPremium != null
@@ -447,6 +472,7 @@ function NoPlanChosen({
   );
 }
 
+/** Another saved quote: the same facts as the selected plan, one size down and one shade quieter. */
 function QuoteRow({
   quote: q,
   latest,
@@ -471,57 +497,54 @@ function QuoteRow({
         )}
       >
         {selected ? (
-          <CarrierLogo names={[q.selectedCarrier, q.selectedProductId]} size="md" />
+          <CarrierLogo names={[q.selectedCarrier, q.selectedProductId]} size="row" />
         ) : (
           <span
             aria-hidden
-            className="flex h-12 w-[128px] shrink-0 items-center justify-center gap-2 rounded-control border border-dashed border-rule-strong text-ink-3"
+            className="flex h-[50px] w-[120px] shrink-0 items-center justify-center gap-1.5 rounded-[6px] border border-dashed border-rule-strong text-ink-3"
           >
             <Calculator className="h-4 w-4" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">Compared</span>
+            <span className="text-[12px] font-medium">Compared</span>
           </span>
         )}
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[14px] font-semibold text-ink">
               {selected
-                ? q.selectedCarrier
+                ? q.selectedProduct || q.selectedCarrier
                 : `${q.eligibleCount} plan${q.eligibleCount === 1 ? '' : 's'} qualified`}
             </span>
             {latest ? <QuoteBadge tone="brand">Latest</QuoteBadge> : null}
             {q.applicationId ? <QuoteBadge tone="money">Application written</QuoteBadge> : null}
           </span>
           <span className="mt-0.5 block truncate text-[13px] text-ink-2">
-            {selected ? planLine(q) : quoteAsk(q)}
+            {selected ? [q.selectedCarrier, ...planParts(q)].join(' · ') : quoteAsk(q)}
           </span>
           <span className="block truncate text-[12px] text-ink-3">
-            <time dateTime={q.createdAt}>{day(q.createdAt)}</time> · {q.createdBy.name} ·{' '}
-            {q.eligibleCount} plan{q.eligibleCount === 1 ? '' : 's'} compared
+            <time dateTime={q.createdAt}>{day(q.createdAt)}</time> · {q.createdBy.name}
           </span>
         </span>
         <span className="text-right tabular-nums">
           {selected ? (
             <>
-              <span className="block text-[16px] font-semibold leading-6 text-ink">
+              <span className="block text-[15px] font-semibold leading-6 text-ink-2">
                 {money(q.selectedPremium)}
                 <span className="text-[12px] font-medium text-ink-3">/{mode}</span>
               </span>
-              <span className="block text-[12.5px] text-ink-2">
+              <span className="block text-[12.5px] text-ink-3">
                 {wholeDollars(q.selectedFace)} coverage
               </span>
             </>
           ) : q.lowestPremium != null ? (
             <>
-              <span className="block text-[11px] font-medium uppercase tracking-[0.06em] text-ink-3">
-                From
-              </span>
-              <span className="block text-[15px] font-semibold leading-5 text-ink">
+              <span className="block text-[12px] text-ink-3">From</span>
+              <span className="block text-[15px] font-semibold leading-5 text-ink-2">
                 {money(q.lowestPremium)}
                 <span className="text-[12px] font-medium text-ink-3">/{mode}</span>
               </span>
             </>
           ) : (
-            <span className="text-[12px] text-ink-3">No price</span>
+            <span className="text-[12.5px] text-ink-3">No price</span>
           )}
         </span>
         <ChevronRight

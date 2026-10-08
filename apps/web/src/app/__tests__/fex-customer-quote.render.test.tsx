@@ -549,14 +549,24 @@ describe('the customer workspace', () => {
   it('adds a task and a dated note from Notes & tasks', async () => {
     window.history.replaceState(null, '', '/insurance-leads/lead-1#tasks');
     render(withSession(<CustomerPage />));
+    // Nothing open: the empty state says so and offers the composer.
+    expect(await screen.findByText('No open tasks')).toBeTruthy();
+    const [open] = screen.getAllByRole('button', { name: /Add task/ });
+    fireEvent.click(open);
     fireEvent.change(await screen.findByLabelText('Task title'), {
       target: { value: 'Call back Friday' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Add task/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tomorrow' }));
+    const form = screen.getByRole('form', { name: 'Add a task' });
+    fireEvent.click(within(form).getByRole('button', { name: /Add task/ }));
     await waitFor(() => expect(posted('/api/v1/insurance-leads/lead-1/tasks')).toHaveLength(1));
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const day = (n: number) => String(n).padStart(2, '0');
     expect(posted('/api/v1/insurance-leads/lead-1/tasks')[0].body).toMatchObject({
       title: 'Call back Friday',
       priority: 'NORMAL',
+      dueAt: `${tomorrow.getFullYear()}-${day(tomorrow.getMonth() + 1)}-${day(tomorrow.getDate())}`,
     });
 
     fireEvent.change(screen.getByLabelText('New note'), {
@@ -590,7 +600,11 @@ describe('the customer workspace', () => {
     } as InsuranceLeadDetail;
     window.history.replaceState(null, '', '/insurance-leads/lead-1#tasks');
     render(withSession(<CustomerPage />));
-    const [complete] = await screen.findAllByRole('button', {
+    // The only open task leads as the Next action.
+    const next = await screen.findByRole('region', { name: 'Next action' });
+    expect(within(next).getByText('Send the policy packet')).toBeTruthy();
+    expect(within(next).getByText('High')).toBeTruthy();
+    const [complete] = within(next).getAllByRole('button', {
       name: 'Complete "Send the policy packet"',
     });
     fireEvent.click(complete);

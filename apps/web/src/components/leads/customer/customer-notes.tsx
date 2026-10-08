@@ -7,7 +7,7 @@
  * every change is also logged to Activity by the server.
  */
 
-import { Loader2, MessageSquare, Pencil } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 
 import { Panel } from '@/components/domain';
@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { patchInsuranceLeadFields, type InsuranceLeadDetail } from '@/lib/api/leads';
 
 import { formatDateTime } from './format';
+import { EditButton, InlineEmpty } from './primitives';
 
 /** "Oct 8, 2026, 2:05 PM · Jane Agent" -- the first line of an entry added here. */
 const ENTRY_HEADER = /^([A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s?[AP]M)(?: · (.+))?$/;
@@ -43,6 +44,15 @@ export function parseNotes(notes: string | null): NoteEntry[] {
         : { at: null, author: null, body: block };
     });
 }
+
+/** "Jane Agent" -> "JA". */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
 export function CustomerNotes({
   lead,
@@ -88,15 +98,16 @@ export function CustomerNotes({
 
   return (
     <Panel className="min-w-0 overflow-hidden" aria-labelledby="notes-title">
-      <div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-3">
+      <div className="flex h-[53px] items-center justify-between gap-3 border-b border-rule px-5">
         <h2 id="notes-title" className="text-[16px] font-semibold text-ink">
           Notes
         </h2>
         {entries.length && editing === null ? (
-          <Button size="sm" variant="ghost" onClick={() => setEditing(lead.notes ?? '')}>
-            <Pencil aria-hidden className="h-3.5 w-3.5" />
-            Edit all
-          </Button>
+          <EditButton
+            onClick={() => setEditing(lead.notes ?? '')}
+            label="Edit all"
+            className="-mr-2"
+          />
         ) : null}
       </div>
 
@@ -126,22 +137,31 @@ export function CustomerNotes({
         </div>
       ) : (
         <>
-          <form onSubmit={add} className="space-y-2 border-b border-rule px-5 py-4">
+          <form onSubmit={add} className="border-b border-rule px-5 py-4">
             <Textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              rows={draft ? 3 : 2}
-              placeholder="Add a note — what they said, what they need, what's next…"
+              rows={3}
+              placeholder="What they said, what they need, what happens next…"
               aria-label="New note"
-              className="min-h-0 resize-y"
+              className="min-h-[76px] resize-y"
               disabled={saving}
               onKeyDown={e => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) add(e);
               }}
             />
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12px] text-ink-3">Dated and signed. Ctrl+Enter to add.</p>
-              <Button size="sm" type="submit" disabled={saving || !draft.trim()}>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-[12px] text-ink-3">
+                Saved with the time and your name ·{' '}
+                <kbd className="rounded border border-rule bg-sunken px-1 font-sans text-[11px] text-ink-2">
+                  Ctrl
+                </kbd>{' '}
+                +{' '}
+                <kbd className="rounded border border-rule bg-sunken px-1 font-sans text-[11px] text-ink-2">
+                  Enter
+                </kbd>
+              </p>
+              <Button size="sm" variant="outline" type="submit" disabled={saving || !draft.trim()}>
                 {saving ? <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> : null}
                 Add note
               </Button>
@@ -149,28 +169,42 @@ export function CustomerNotes({
           </form>
 
           {entries.length ? (
-            <ol className="divide-y divide-rule">
+            <ol aria-label="Note history">
               {entries.map((entry, i) => (
-                <li key={i} className="px-5 py-3.5">
-                  {entry.at ? (
-                    <p className="text-[12.5px] text-ink-3">
-                      <span className="tabular-nums">{entry.at}</span>
-                      {entry.author ? (
-                        <span className="font-medium text-ink-2"> · {entry.author}</span>
+                <li key={i} className="flex gap-3 px-5 py-3.5 [&+li]:border-t [&+li]:border-rule">
+                  <span
+                    aria-hidden
+                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sunken text-[11px] font-semibold text-ink-2"
+                  >
+                    {entry.author ? (
+                      initials(entry.author)
+                    ) : (
+                      <MessageSquare className="h-3.5 w-3.5 text-ink-3" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px]">
+                      <span className="font-semibold text-ink">
+                        {entry.author ?? (entry.at ? 'Note' : 'Earlier note')}
+                      </span>
+                      {entry.at ? (
+                        <span className="tabular-nums text-ink-3">{entry.at}</span>
                       ) : null}
                     </p>
-                  ) : null}
-                  <p className="mt-0.5 whitespace-pre-wrap break-words text-[14px] leading-[22px] text-ink">
-                    {entry.body}
-                  </p>
+                    <p className="mt-0.5 whitespace-pre-wrap break-words text-[14px] leading-[22px] text-ink">
+                      {entry.body}
+                    </p>
+                  </div>
                 </li>
               ))}
             </ol>
           ) : (
-            <div className="flex items-center gap-3 px-5 py-5 text-[13.5px] text-ink-3">
-              <MessageSquare aria-hidden className="h-4 w-4" />
-              No notes yet. What you learn on a call belongs here.
-            </div>
+            <InlineEmpty
+              className="px-5 py-5"
+              icon={MessageSquare}
+              title="No notes yet"
+              body="What you learn on a call belongs here, so the next conversation starts where this one ended."
+            />
           )}
         </>
       )}
