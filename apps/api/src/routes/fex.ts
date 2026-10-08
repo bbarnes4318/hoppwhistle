@@ -12,7 +12,7 @@
  *   GET  /api/v1/fex/insights         the agency's quoting, for its principal
  *   GET  /api/v1/fex/settings         the agency's quoter settings and mine
  *   PUT  /api/v1/fex/settings         the agency's, principal only
- *   PUT  /api/v1/fex/settings/me      my own "open on connect" choice
+ *   PUT  /api/v1/fex/settings/me      my own choices: "open on connect", my carriers
  *
  * ── The data stays here ──────────────────────────────────────────────────────
  *
@@ -40,6 +40,15 @@
  * A saved quote's applicant and results are encrypted at rest
  * (`services/fex/payload.ts`); only non-health summary columns are in the
  * clear, and no audit row carries a condition or a medication.
+ *
+ * ── My carriers ──────────────────────────────────────────────────────────────
+ *
+ * An agent may pick the carriers they quote (Account → Quote Carriers). The
+ * pick is a list of carrier families, kept on the user (`fexCarriers` in their
+ * metadata), and a quote or a save run by that person carries only those
+ * carriers' plans. No pick -- or one that no longer names any carrier the
+ * engine quotes -- is every carrier. It narrows on top of the agency's
+ * settings, never widens them.
  */
 
 import {
@@ -241,18 +250,67 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     };
   }
 
-  /** Run the engine for a validated applicant and apply the agency's display settings. */
+  /**
+   * Run the engine for a validated applicant and apply the agency's display
+   * settings, then this person's own carriers when they picked some.
+   */
   function runQuote(
     engine: FexEngine,
     applicant: Parameters<typeof quoteAll>[1],
-    settings: FexSettingsShape
+    settings: FexSettingsShape,
+    carriers: ReadonlySet<string> | null = null
   ): ProductResult[] {
     return quoteAll(
       engine.bundle,
       applicant,
       { includeUnquotable: false, agentText: true },
       engine.drugs
-    ).filter(r => settings.showPriceOnly || r.uwLoaded);
+    ).filter(r => (settings.showPriceOnly || r.uwLoaded) && (!carriers || carriers.has(r.family)));
+  }
+
+  /** Every carrier family the engine quotes, A-Z: what an agent may pick from. */
+  function quotableCarriers(engine: FexEngine): string[] {
+    const families = new Set(engine.bundle.products.filter(p => p.quotable).map(p => p.family));
+    return [...families].sort((x, y) => x.localeCompare(y));
+  }
+
+  /** This person's saved choices, straight from their user record. */
+  async function myQuoteChoices(
+    userId: string | null
+  ): Promise<{ autoOpenOnCall: boolean | null; carriers: string[] | null }> {
+    if (!userId) return { autoOpenOnCall: null, carriers: null };
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { metadata: true },
+    });
+    const metadata = user?.metadata as {
+      fexAutoOpenOnCall?: unknown;
+      fexCarriers?: unknown;
+    } | null;
+    const auto = metadata?.fexAutoOpenOnCall;
+    const carriers = metadata?.fexCarriers;
+    return {
+      autoOpenOnCall: typeof auto === 'boolean' ? auto : null,
+      carriers: Array.isArray(carriers)
+        ? carriers.filter((c): c is string => typeof c === 'string')
+        : null,
+    };
+  }
+
+  /**
+   * The carriers this request quotes, or null for every one. A saved pick is
+   * read against today's engine: a carrier that left the data drops out, and a
+   * pick with none left is no pick at all -- never an empty quoter.
+   */
+  async function myCarrierFilter(
+    request: FastifyRequest,
+    engine: FexEngine
+  ): Promise<Set<string> | null> {
+    const { carriers } = await myQuoteChoices(getActingUserId(request));
+    if (!carriers) return null;
+    const quotable = new Set(quotableCarriers(engine));
+    const kept = carriers.filter(c => quotable.has(c));
+    return kept.length && kept.length < quotable.size ? new Set(kept) : null;
   }
 
   function present(
@@ -417,13 +475,17 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
       if (!parsed.ok) return validationError(reply, parsed.message);
 
       const settings = await loadSettings(tenantId);
-      const results = runQuote(engine, parsed.applicant, settings);
+      const carriers = await myCarrierFilter(request, engine);
+      const results = runQuote(engine, parsed.applicant, settings, carriers);
       const authority = await resolveStateAuthority(request, tenantId);
 
       return reply.send({
         data: {
           results: present(request, engine, results, settings),
           summary: summarise(results),
+          carriers: carriers
+            ? { selected: carriers.size, total: quotableCarriers(engine).length }
+            : null,
           licensed: authority.restricted ? authority.licensed.has(parsed.applicant.state) : null,
           engineVersion: engine.version,
           quotedAt: new Date().toISOString(),
@@ -466,7 +528,8 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     const applicant = parsed.applicant;
 
     const settings = await loadSettings(tenantId);
-    const results = runQuote(engine, applicant, settings);
+    // The quote as this person saw it: their carriers only.
+    const results = runQuote(engine, applicant, settings, await myCarrierFilter(request, engine));
 
     // The selection, from THIS run of the engine -- never from the client's results.
     let selected: { result: ProductResult; line: NonNullable<ProductResult['best']> } | null = null;
@@ -1014,14 +1077,16 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
 
   // ── Settings ───────────────────────────────────────────────────────────────
 
-  async function myAutoOpen(userId: string | null): Promise<boolean | null> {
-    if (!userId) return null;
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { metadata: true },
-    });
-    const value = (user?.metadata as { fexAutoOpenOnCall?: unknown } | null)?.fexAutoOpenOnCall;
-    return typeof value === 'boolean' ? value : null;
+  /** My choices as the browser sees them: a carrier pick is read against today's engine. */
+  async function presentMine(userId: string | null) {
+    const engine = getFexEngine();
+    const mine = await myQuoteChoices(userId);
+    const quotable = new Set(quotableCarriers(engine));
+    const kept = mine.carriers?.filter(c => quotable.has(c)) ?? [];
+    return {
+      autoOpenOnCall: mine.autoOpenOnCall,
+      carriers: kept.length && kept.length < quotable.size ? kept : null,
+    };
   }
 
   fastify.get('/api/v1/fex/settings', { preHandler: [authenticate] }, async (request, reply) => {
@@ -1031,7 +1096,7 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     return reply.send({
       data: {
         agency,
-        me: { autoOpenOnCall: await myAutoOpen(getActingUserId(request)) },
+        me: await presentMine(getActingUserId(request)),
         canEdit: isAgencyPrincipal(request),
       },
     });
@@ -1091,7 +1156,20 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     }
   );
 
-  const MySettingsSchema = z.object({ autoOpenOnCall: z.boolean().nullable() }).strict();
+  /*
+   * Either choice, or both. `carriers` is a list of carrier families, or null
+   * for every carrier; a list naming every carrier is stored as null, so a
+   * carrier added to the data later reaches this agent too.
+   */
+  const MySettingsSchema = z
+    .object({
+      autoOpenOnCall: z.boolean().nullable().optional(),
+      carriers: z.array(z.string().min(1).max(120)).max(200).nullable().optional(),
+    })
+    .strict()
+    .refine(body => body.autoOpenOnCall !== undefined || body.carriers !== undefined, {
+      message: 'nothing to save',
+    });
 
   fastify.put('/api/v1/fex/settings/me', { preHandler: [authenticate] }, async (request, reply) => {
     const tenantId = resolveTenant(request, reply);
@@ -1104,21 +1182,57 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     }
     const parsed = MySettingsSchema.safeParse(request.body ?? {});
     if (!parsed.success) {
-      return validationError(reply, 'autoOpenOnCall: must be true, false or null');
+      const issue = parsed.error.issues[0];
+      return validationError(reply, `${issue.path.join('.') || 'settings'}: ${issue.message}`);
     }
+    const { autoOpenOnCall, carriers } = parsed.data;
+
+    let nextCarriers: string[] | null | undefined = undefined;
+    if (carriers !== undefined) {
+      if (carriers === null) {
+        nextCarriers = null;
+      } else {
+        const quotable = quotableCarriers(getFexEngine());
+        const picked = [...new Set(carriers)];
+        const bad = picked.find(c => !quotable.includes(c));
+        if (bad)
+          return validationError(reply, `carriers: "${bad}" is not a carrier the quoter quotes`);
+        if (!picked.length) return validationError(reply, 'carriers: choose at least one carrier');
+        nextCarriers =
+          picked.length === quotable.length ? null : quotable.filter(c => picked.includes(c));
+      }
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { metadata: true },
     });
     if (!user) return notFound(reply, 'User not found');
+    const before = (user.metadata as Record<string, unknown> | null) ?? {};
     const metadata = {
-      ...((user.metadata as Record<string, unknown> | null) ?? {}),
-      fexAutoOpenOnCall: parsed.data.autoOpenOnCall,
+      ...before,
+      ...(autoOpenOnCall !== undefined ? { fexAutoOpenOnCall: autoOpenOnCall } : {}),
+      ...(nextCarriers !== undefined ? { fexCarriers: nextCarriers } : {}),
     };
     await prisma.user.update({
       where: { id: userId },
       data: { metadata: metadata as Prisma.InputJsonValue },
     });
-    return reply.send({ data: { me: { autoOpenOnCall: parsed.data.autoOpenOnCall } } });
+    if (nextCarriers !== undefined) {
+      await auditLog({
+        tenantId,
+        userId,
+        action: 'fex.my_carriers.updated',
+        entityType: 'User',
+        entityId: userId,
+        resource: request.url,
+        method: request.method,
+        changes: { from: before.fexCarriers ?? null, to: nextCarriers },
+        ipAddress: clientIp(request) ?? undefined,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+      });
+    }
+    return reply.send({ data: { me: await presentMine(userId) } });
   });
 }

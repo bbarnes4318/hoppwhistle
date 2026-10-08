@@ -45,6 +45,33 @@ const AGENT = {
 };
 const GOOGLE_ONLY = { ...BUYER, authMethod: 'GOOGLE', hasPassword: false };
 
+/** Three quoted carriers (one with two plans) and one the quoter does not quote. */
+const product = (id: string, family: string, quotable = true) => ({
+  id,
+  family,
+  product: `${family} plan ${id}`,
+  quotable,
+  appointed: quotable,
+});
+const CATALOG = {
+  engineVersion: 'test',
+  bundleSha256: 'abc',
+  conditions: [],
+  products: [
+    product('moo', 'Mutual of Omaha'),
+    product('ta', 'Transamerica'),
+    product('sn1', 'Security National'),
+    product('sn2', 'Security National'),
+    product('old', 'Retired Carrier', false),
+  ],
+};
+let myCarriers: string[] | null = null;
+
+/** A checkbox's or button's state, without a cast the type checker and the linter disagree about. */
+const isChecked = (el: HTMLElement): boolean => el instanceof HTMLInputElement && el.checked;
+const isDisabled = (el: HTMLElement): boolean => el instanceof HTMLButtonElement && el.disabled;
+const carrierWrites: unknown[] = [];
+
 let user: Record<string, unknown> = BUYER;
 const requests: Array<{ method: string; path: string }> = [];
 const licenseWrites: unknown[] = [];
@@ -52,6 +79,8 @@ const licenseWrites: unknown[] = [];
 beforeEach(() => {
   requests.length = 0;
   licenseWrites.length = 0;
+  carrierWrites.length = 0;
+  myCarriers = null;
   user = BUYER;
   localStorage.clear();
   localStorage.setItem('token', 'old-token');
@@ -59,6 +88,7 @@ beforeEach(() => {
     'IntersectionObserver',
     class {
       observe(): void {}
+      unobserve(): void {}
       disconnect(): void {}
     }
   );
@@ -84,6 +114,22 @@ beforeEach(() => {
           return (user.roles as string[]).includes('AGENT')
             ? json({ ringOn: 'softphone', cellForwardNumber: null })
             : json({ error: { code: 'FORBIDDEN', message: 'Agents only' } }, 403);
+        case '/api/v1/fex/catalog':
+          return json({ data: CATALOG });
+        case '/api/v1/fex/settings':
+          return json({
+            data: {
+              agency: {},
+              me: { autoOpenOnCall: null, carriers: myCarriers },
+              canEdit: false,
+            },
+          });
+        case '/api/v1/fex/settings/me': {
+          const body = JSON.parse(String(init?.body)) as { carriers: string[] | null };
+          carrierWrites.push(body);
+          myCarriers = body.carriers;
+          return json({ data: { me: { autoOpenOnCall: null, carriers: myCarriers } } });
+        }
         case '/api/v1/platform/context':
           return json({ data: { isPlatformAdmin: false, actingTenant: null, previewRole: null } });
         default:
@@ -100,6 +146,8 @@ afterEach(() => {
 });
 
 async function mountAccount(): Promise<void> {
+  const { resetFexCatalogCache } = await import('@/hooks/use-fex-quote');
+  resetFexCatalogCache();
   const { AuthSessionProvider } = await import('@/hooks/use-auth');
   const { PlatformContextProvider } = await import('@/hooks/use-platform-context');
   const { default: AccountPage } = await import('../(dashboard)/account/page');
@@ -187,6 +235,80 @@ describe('the Account page', () => {
     fireEvent.click(within(panel).getByRole('checkbox', { name: 'Florida (FL)' }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Save states' }));
     await waitFor(() => expect(licenseWrites).toEqual([{ licensedStates: ['GA', 'TX'] }]));
+  });
+
+  it('offers an agent only the carriers the quoter quotes, all of them by default', async () => {
+    user = AGENT;
+    await mountAccount();
+    const panel = await waitFor(() => {
+      const el = document.querySelector('[data-quote-carriers]') as HTMLElement;
+      expect(within(el).getAllByRole('checkbox')).toHaveLength(3);
+      return el;
+    });
+    const boxes = within(panel).getAllByRole('checkbox');
+    expect(boxes.map(b => b.closest('[data-carrier]')?.getAttribute('data-carrier'))).toEqual([
+      'Mutual of Omaha',
+      'Security National',
+      'Transamerica',
+    ]);
+    expect(boxes.every(isChecked)).toBe(true);
+    expect(within(panel).getByText('All 3 selected')).toBeTruthy();
+    expect(within(panel).getByText('2 plans')).toBeTruthy();
+    expect(within(panel).queryByText(/Retired Carrier/)).toBeNull();
+  });
+
+  it('saves the carriers an agent picks, and every carrier as no pick at all', async () => {
+    user = AGENT;
+    await mountAccount();
+    const panel = await waitFor(() => {
+      const el = document.querySelector('[data-quote-carriers]') as HTMLElement;
+      expect(within(el).getAllByRole('checkbox')).toHaveLength(3);
+      return el;
+    });
+    const save = within(panel).getByRole('button', { name: 'Save carriers' });
+    expect(isDisabled(save)).toBe(true);
+
+    // Clearing leaves nothing to quote: it cannot be saved.
+    fireEvent.click(within(panel).getByRole('button', { name: /Clear/ }));
+    expect(within(panel).getByText('Select at least one carrier.')).toBeTruthy();
+    expect(isDisabled(save)).toBe(true);
+
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Transamerica/ }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Mutual of Omaha/ }));
+    expect(within(panel).getByText('2 of 3 selected')).toBeTruthy();
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(within(panel).getByText('Saved. Your quotes show 2 carriers.')).toBeTruthy()
+    );
+    expect(carrierWrites).toEqual([{ carriers: ['Mutual of Omaha', 'Transamerica'] }]);
+
+    fireEvent.click(within(panel).getByRole('button', { name: /Select all/ }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save carriers' }));
+    await waitFor(() =>
+      expect(within(panel).getByText('Saved. Your quotes show every carrier.')).toBeTruthy()
+    );
+    expect(carrierWrites[1]).toEqual({ carriers: null });
+  });
+
+  it('opens on the carriers an agent saved, and filters them by name', async () => {
+    user = AGENT;
+    myCarriers = ['Transamerica'];
+    await mountAccount();
+    const panel = await waitFor(() => {
+      const el = document.querySelector('[data-quote-carriers]') as HTMLElement;
+      expect(within(el).getByText('1 of 3 selected')).toBeTruthy();
+      return el;
+    });
+    expect(isChecked(within(panel).getByRole('checkbox', { name: /Transamerica/ }))).toBe(true);
+    fireEvent.change(within(panel).getByPlaceholderText('Find a carrier or plan'), {
+      target: { value: 'omaha' },
+    });
+    expect(within(panel).getAllByRole('checkbox')).toHaveLength(1);
+  });
+
+  it('gives a buyer no carrier picker', async () => {
+    await mountAccount();
+    expect(document.getElementById('quote-carriers')).toBeNull();
   });
 
   it('tells a Google sign-up how to set a password instead of showing a form it would fail', async () => {

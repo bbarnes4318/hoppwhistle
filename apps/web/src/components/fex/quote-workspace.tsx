@@ -36,6 +36,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
 } from 'lucide-react';
+import Link from 'next/link';
 import * as React from 'react';
 
 import { Notice, Panel } from '@/components/domain';
@@ -650,6 +651,22 @@ export function QuoteWorkspace({
                 <span className="whitespace-nowrap text-[13px] font-medium tracking-normal text-ink-3">
                   of {results.length} quoted
                 </span>
+                {quote.data?.carriers ? (
+                  // The agent quotes only the carriers they picked on Account.
+                  <Link
+                    href="/account#quote-carriers"
+                    title="Choose the carriers you quote"
+                    className={cn(
+                      'inline-flex items-center gap-1 self-center whitespace-nowrap rounded-full bg-brand-tint px-2 py-0.5 text-[11.5px] font-semibold tracking-normal text-brand-ink hover:underline',
+                      FOCUS
+                    )}
+                  >
+                    <span className="tabular-nums">
+                      {quote.data.carriers.selected} of {quote.data.carriers.total}
+                    </span>{' '}
+                    carriers
+                  </Link>
+                ) : null}
                 {quote.stale ? (
                   <span className="inline-flex items-center gap-1 self-center text-[12px] font-medium tracking-normal text-ink-3">
                     <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
