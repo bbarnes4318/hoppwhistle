@@ -8,7 +8,9 @@
 #
 # A lead who calls back one of the numbers the AI dials out from is answered by
 # Dograh agent <id> (e.g. 15, "Final Expense - Alex (Inbound Callback Live
-# Transfer)") instead of ringing whoever that number is routed to.
+# Transfer)") instead of ringing whoever that number is routed to. Every number
+# in the AI's caller-ID pool moves to that agent, including numbers another
+# Dograh agent answered before.
 #
 # Steps (see deploy/dograh/inbound-callback/README.md):
 #   1. Dograh: the agent answers the caller-ID numbers; Asterisk accepts the
@@ -36,6 +38,8 @@ API_CONTAINER="${API_CONTAINER:-hopwhistle-api-dev}"
 NUMBERS="$(mktemp)"
 trap 'rm -f "$NUMBERS"' EXIT
 INSTALLER="$ROOT/deploy/dograh/inbound-callback/install_inbound_callback.py"
+# All callbacks go to the one agent: also move numbers another agent has.
+INSTALL_ARGS=(--agent-id "$AGENT" --env-file "$ENVF" --replace)
 
 set_env() {  # set_env KEY VALUE  (VALUE empty: remove KEY)
   local key="$1" value="$2" tmp
@@ -55,14 +59,14 @@ mark_numbers() {  # mark_numbers [--apply]  — from $NUMBERS, in the API contai
 
 case "$MODE" in
   "")
-    python3 "$INSTALLER" --agent-id "$AGENT" --env-file "$ENVF" --numbers-out "$NUMBERS"
+    python3 "$INSTALLER" "${INSTALL_ARGS[@]}" --numbers-out "$NUMBERS"
     echo
     echo "Hopwhistle would mark these $(wc -l < "$NUMBERS") numbers as AI callbacks"
     echo "(the API is rebuilt first on --apply, so this is not checked against its database now)."
     echo "Dry run. To do it:  $0 $AGENT --apply"
     ;;
   --apply)
-    OUT="$(python3 "$INSTALLER" --agent-id "$AGENT" --env-file "$ENVF" --numbers-out "$NUMBERS" --apply | tee /dev/stderr)"
+    OUT="$(python3 "$INSTALLER" "${INSTALL_ARGS[@]}" --numbers-out "$NUMBERS" --apply | tee /dev/stderr)"
     BRIDGE="$(printf '%s\n' "$OUT" | sed -n 's/^ *DOGRAH_CALLBACK_BRIDGE=//p' | tail -1)"
     if [ -z "$BRIDGE" ]; then
       echo "The Dograh/Asterisk step did not finish; nothing changed in Hopwhistle." >&2
@@ -83,7 +87,7 @@ case "$MODE" in
     "$ROOT/scripts/deploy.sh" --build api
     : > "$NUMBERS"
     mark_numbers --apply
-    python3 "$INSTALLER" --agent-id "$AGENT" --env-file "$ENVF" --rollback --apply
+    python3 "$INSTALLER" "${INSTALL_ARGS[@]}" --rollback --apply
     echo "Rolled back: callbacks use each number's normal route again."
     ;;
   *)

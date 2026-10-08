@@ -59,16 +59,16 @@ inbound run of agent 15.
 
 - **Still rings the old phone; no `AI callback` log line.** Check the setup
   output: `notInHopwhistle` numbers have no Hopwhistle record (calls to them are
-  not routed at all), and numbers the dry run reported "on another agent" were
-  left alone (`--replace` moves them).
+  not routed at all yet).
 - **`AI callback to Dograh failed` in the FreeSWITCH log.** Asterisk refused the
   call. `docker logs dograh-asterisk` names the reason. If Asterisk sees
   FreeSWITCH from an address other than `SIP_PUBLIC_IP`, add it:
   `python3 deploy/dograh/inbound-callback/install_inbound_callback.py --agent-id 15 --match <ip> --apply`.
 - **Asterisk takes it, Dograh hangs up.** `docker logs dograh-api-1 | grep "Inbound call"`
   says why (no matching number, no agent, quota).
-- **Numbers on another agent** are reported and left alone; add `--replace` to
-  the installer to move them.
+- **Numbers on another agent**: `setup-ai-callbacks.sh` moves them to the
+  callback agent (`--replace`), so every caller-ID number goes to the one agent.
+  Run the installer directly without `--replace` to leave them where they are.
 
 Status: `python3 deploy/dograh/inbound-callback/install_inbound_callback.py --status`.
 
