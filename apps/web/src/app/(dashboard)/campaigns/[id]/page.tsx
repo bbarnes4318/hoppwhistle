@@ -482,14 +482,15 @@ export default function CampaignDetailPage() {
     }
   };
 
-  // Submit Publisher Assignment
+  // Submit Publisher Assignment. The API emails the publisher and says whether it went.
+  type AssignResult = { emailed?: boolean; hasEmail?: boolean };
   const handleAssignPublisher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pubForm.publisherId) return;
 
     setSubmittingPub(true);
     try {
-      const res = await apiClient.post(`/api/v1/campaigns/${id}/publishers`, {
+      const res = await apiClient.post<AssignResult>(`/api/v1/campaigns/${id}/publishers`, {
         publisherId: pubForm.publisherId,
         payoutPerBillableCall: pubForm.payoutPerBillableCall
           ? Number(pubForm.payoutPerBillableCall)
@@ -509,7 +510,11 @@ export default function CampaignDetailPage() {
       } else {
         toast({
           title: 'Publisher Assigned',
-          description: 'Publisher has been assigned to this campaign.',
+          description: res.data?.emailed
+            ? 'Publisher has been assigned to this campaign and emailed.'
+            : res.data?.hasEmail
+              ? 'Publisher has been assigned, but the email could not be sent.'
+              : 'Publisher has been assigned. They have no email on file, so none was sent.',
           variant: 'success',
         });
         setPubDialogOpen(false);

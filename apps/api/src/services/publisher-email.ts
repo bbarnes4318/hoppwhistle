@@ -116,6 +116,88 @@ separate invitation to set up your sign-in.</p>
   }
 }
 
+interface CampaignAssignmentEmailPayload {
+  email: string;
+  publisherName: string;
+  /** The publisher's code -- the ID they send calls under. */
+  publisherId: string;
+  campaignName: string;
+  /** What they earn on this campaign, already formatted ("$12.00 per billable call"). */
+  payout?: string | null;
+  /** The agency the campaign belongs to. Decides the brand. */
+  tenantId?: string | null;
+  agencyName?: string | null;
+}
+
+/**
+ * Tells a publisher they have been added to a campaign.
+ *
+ * Assigning a publisher to a campaign used to write the row and tell nobody:
+ * the agency believed it had invited the publisher, and the publisher never
+ * heard. Like `sendWelcomeEmail`, this is not a login -- that is a portal-access
+ * invitation -- and it throws on an SMTP failure for the caller to handle.
+ *
+ * Returns whether a transport accepted the message.
+ */
+export async function sendCampaignAssignmentEmail(
+  payload: CampaignAssignmentEmailPayload
+): Promise<boolean> {
+  const { email, publisherName, publisherId, campaignName, payout } = payload;
+  const brand = payload.tenantId
+    ? await emailBrandForTenant(payload.tenantId)
+    : netEnrollEmailBrand();
+  const agency = payload.agencyName?.trim() || brand.productName;
+
+  const subject = `You've been added to the ${campaignName} campaign with ${agency}`;
+  const text = `Hello ${publisherName},
+
+${agency} has added you as a publisher on the ${campaignName} campaign.
+
+Campaign details:
+  - Campaign: ${campaignName}
+  - Publisher ID: ${publisherId}${payout ? `\n  - Payout: ${payout}` : ''}
+
+Send calls for this campaign under your Publisher ID, and every call will be
+reported back against it, along with what each one earned.
+
+If anything looks wrong, please reply to this message and we will look into it.
+
+Kind regards,
+${brand.signOff}`;
+
+  const row = (label: string, value: string, mono = false) =>
+    `<tr><td style="padding:6px 16px 6px 0;color:#55524b;">${label}</td><td style="padding:6px 0;${mono ? "font-family:'IBM Plex Mono',SFMono-Regular,Menlo,monospace;" : ''}color:#171614;">${escapeHtml(value)}</td></tr>`;
+
+  const html = renderEmail({
+    brand,
+    title: "You've been added to a campaign",
+    body: `<p>Hello <strong>${escapeHtml(publisherName)}</strong>,</p>
+<p><strong>${escapeHtml(agency)}</strong> has added you as a publisher on the <strong>${escapeHtml(campaignName)}</strong> campaign.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;font-size:14px;">
+  ${row('Campaign', campaignName)}
+  ${row('Publisher ID', publisherId, true)}
+  ${payout ? row('Payout', payout) : ''}
+</table>
+<p>Send calls for this campaign under your Publisher ID, and every call will be
+reported back against it, along with what each one earned.</p>
+<p>If anything looks wrong, please reply to this message and we will look into it.</p>`,
+  });
+
+  const transporter = getTransporter();
+  if (!transporter) {
+    logger.info({
+      msg: 'Publisher campaign email not sent: SMTP is not configured',
+      email,
+      publisherId,
+    });
+    return false;
+  }
+
+  await transporter.sendMail({ from: brand.from, to: email, subject, text, html });
+  logger.info({ msg: 'Publisher campaign email sent', email, publisherId, campaignName });
+  return true;
+}
+
 /**
  * Exported because the email shell below is shared. `agent-invite-email.ts`
  * renders into the same shell and needs the same escaping; a second copy is a
