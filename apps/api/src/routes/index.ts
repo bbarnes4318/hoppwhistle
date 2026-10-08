@@ -2317,7 +2317,44 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       },
     });
 
-    return reply.code(201).send({ data: assignment });
+    // Tell the publisher, if we have an address. Never fatal: the assignment
+    // is written either way. The response says whether it went, so the agency
+    // is not left believing an email was sent when it was not.
+    let emailed = false;
+    if (publisher.email) {
+      try {
+        const { sendCampaignAssignmentEmail } = await import('../services/publisher-email.js');
+        const agency = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        });
+        const perApplication = campaign.billingModel === 'PER_APPLICATION';
+        const rate = Number(
+          perApplication
+            ? (assignment.payoutPerApplication ?? campaign.publisherPayoutPerApplication)
+            : (assignment.payoutPerBillableCall ?? campaign.publisherPayoutPerBillableCall)
+        );
+        emailed = await sendCampaignAssignmentEmail({
+          email: publisher.email,
+          publisherName: publisher.name,
+          publisherId: publisher.code,
+          campaignName: campaign.name,
+          payout:
+            rate > 0
+              ? `$${rate.toFixed(2)} per ${perApplication ? 'application' : 'billable call'}`
+              : null,
+          tenantId,
+          agencyName: agency?.name ?? null,
+        });
+      } catch (error) {
+        request.log.error(
+          { err: error, publisherId, campaignId },
+          'Publisher campaign email could not be sent; assignment created anyway'
+        );
+      }
+    }
+
+    return reply.code(201).send({ data: assignment, emailed, hasEmail: Boolean(publisher.email) });
   });
 
   // PATCH campaign publisher assignment
