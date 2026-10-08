@@ -371,33 +371,32 @@ describe('the customer page', () => {
     expect(calls.some(c => c.path === '/api/v1/fex/quotes' && c.method === 'GET')).toBe(false);
   });
 
-  it('with quotes, shows the summary and the history, badges and all', async () => {
+  it('leads with the selected plan, then the other quotes', async () => {
     customerQuotes = [
-      summary({ id: 'q-2', createdAt: '2026-10-07T17:42:00Z', applicationId: 'app-1' }),
+      summary({ id: 'q-2', createdAt: '2026-10-07T17:42:00Z' }),
       summary({ id: 'q-1', selectedCarrier: null, selectedPremium: null, selectedFace: null }),
     ];
     render(withSession(<CustomerPage />));
-    const panel = (await screen.findByText('Last selected')).closest(
-      '[id="quotes"]'
-    ) as HTMLElement;
-    expect(within(panel).getByText('Lowest quoted')).toBeTruthy();
-    const cards = within(panel).getAllByRole('button', { name: /Mutual of Omaha|plans qualified/ });
-    expect(cards).toHaveLength(2);
-    expect(within(cards[0]).getByText('Latest')).toBeTruthy();
-    expect(within(cards[0]).getByText('Selected')).toBeTruthy();
-    expect(within(cards[0]).getByText('Application written')).toBeTruthy();
-    expect(within(cards[0]).getByText('7 plans compared')).toBeTruthy();
-    expect(within(cards[0]).getByText('$54.27')).toBeTruthy();
-    expect(within(cards[1]).getByText('7 plans qualified')).toBeTruthy();
-    // The carrier's mark, at a readable size.
-    expect(cards[0].querySelector('[data-carrier-logo]')?.className).toMatch(/w-\[128px\]/);
+    const plan = await screen.findByRole('region', { name: 'Selected plan' });
+    expect(within(plan).getByText('Mutual of Omaha')).toBeTruthy();
+    expect(within(plan).getByText('$54.27')).toBeTruthy();
+    expect(within(plan).getByText('$10,000 coverage')).toBeTruthy();
+    expect(within(plan).getByText(/7 plans compared/)).toBeTruthy();
+    // The carrier's mark, at the size it is recognised by.
+    expect(plan.querySelector('[data-carrier-logo]')?.className).toMatch(/w-\[190px\]/);
+    // The quote without a choice follows as a row of its own.
+    const others = screen.getByRole('region', { name: 'Other saved quotes' });
+    const rows = within(others).getAllByRole('button', { name: /plans qualified/ });
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('7 plans qualified')).toBeTruthy();
+    expect(screen.getByText(/lowest quoted \$41\.18\/mo/)).toBeTruthy();
   });
 
   it('opens a historical quote as stored, without re-pricing it', async () => {
     customerQuotes = [summary()];
     lead = { ...LEAD, state: 'FL' } as InsuranceLeadDetail;
     render(withSession(<CustomerPage />));
-    fireEvent.click(await screen.findByRole('button', { name: /Mutual of Omaha/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View quote' }));
     expect(await screen.findByText(/Historical quote/)).toBeTruthy();
     expect(screen.getByText(/Nothing here is recalculated/)).toBeTruthy();
     // The record has moved since: said, not hidden.
@@ -412,19 +411,35 @@ describe('the customer page', () => {
   it('Requote goes to the workspace with that quote’s answers', async () => {
     customerQuotes = [summary()];
     render(withSession(<CustomerPage />));
-    fireEvent.click(await screen.findByRole('button', { name: /Mutual of Omaha/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View quote' }));
     fireEvent.click(await screen.findByRole('button', { name: /Requote at today/ }));
+    expect(nav.push).toHaveBeenCalledWith('/insurance-leads/lead-1/quote?requote=q-1');
+  });
+
+  it('Requote on the selected plan goes straight to the workspace', async () => {
+    customerQuotes = [summary()];
+    render(withSession(<CustomerPage />));
+    fireEvent.click(await screen.findByRole('button', { name: /^Requote$/ }));
     expect(nav.push).toHaveBeenCalledWith('/insurance-leads/lead-1/quote?requote=q-1');
   });
 
   it('Use for application prefills the form from the quote as it was saved', async () => {
     customerQuotes = [summary()];
     render(withSession(<CustomerPage />));
-    fireEvent.click(await screen.findByRole('button', { name: /Mutual of Omaha/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View quote' }));
     fireEvent.click(await screen.findByRole('button', { name: /Use for application/ }));
     const dialog = await screen.findByRole('dialog', { name: /Write application — Jane Smith/ });
     expect(within(dialog).getByText(/From quote: Mutual of Omaha Living Promise/)).toBeTruthy();
     expect(within(dialog).getByDisplayValue('651.24')).toBeTruthy();
+  });
+
+  it('Write application on the selected plan writes it from that quote', async () => {
+    customerQuotes = [summary()];
+    render(withSession(<CustomerPage />));
+    const plan = await screen.findByRole('region', { name: 'Selected plan' });
+    fireEvent.click(within(plan).getByRole('button', { name: /Write application/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Write application — Jane Smith/ });
+    expect(within(dialog).getByText(/From quote: Mutual of Omaha Living Promise/)).toBeTruthy();
   });
 
   it('shows the application a quote became, and offers View application instead', async () => {
@@ -455,9 +470,140 @@ describe('the customer page', () => {
     const apps = (await screen.findByText(/From quote · Oct 3, 2026/)).closest(
       '[id="applications"]'
     ) as HTMLElement;
-    expect(within(apps).getByText('SUBMITTED')).toBeTruthy();
+    expect(within(apps).getByText('Submitted')).toBeTruthy();
     expect(screen.getByRole('button', { name: /View application/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Write application/ })).toBeNull();
+  });
+});
+
+// ─── The customer workspace: tabs, editing, tasks, notes ─────────────────────
+
+describe('the customer workspace', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  it('opens on Overview, read-only: no open inputs for the record', async () => {
+    render(withSession(<CustomerPage />));
+    expect(await screen.findByRole('tab', { name: 'Overview', selected: true })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Customer' })).toBeTruthy();
+    expect(screen.queryByLabelText('First name')).toBeNull();
+    expect(screen.queryByLabelText('Email')).toBeNull();
+  });
+
+  it('gives calls their own tab, and keeps the tab in the hash', async () => {
+    lead = {
+      ...LEAD,
+      calls: [
+        {
+          id: 'call-1',
+          createdAt: '2026-10-07T18:05:00Z',
+          direction: 'INBOUND',
+          campaignName: 'Final Expense Inbound',
+          buyerName: null,
+          connectedDuration: 7,
+          disposition: 'NOT_INTERESTED',
+        },
+      ],
+    } as InsuranceLeadDetail;
+    render(withSession(<CustomerPage />));
+    const tab = await screen.findByRole('tab', { name: /Calls/ });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Not interested')).toBeTruthy();
+    expect(within(table).getByText('0:07')).toBeTruthy();
+    expect(within(table).getByRole('link', { name: 'Open call' }).getAttribute('href')).toBe(
+      '/calls?call=call-1'
+    );
+    expect(window.location.hash).toBe('#calls');
+  });
+
+  it('edits the record in a drawer and saves only what changed', async () => {
+    render(withSession(<CustomerPage />));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit customer/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit Jane Smith/ });
+    fireEvent.change(within(dialog).getByLabelText('Email'), {
+      target: { value: 'jane@example.com' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Tobacco'), { target: { value: 'NO' } });
+    expect(within(dialog).getByText('2 unsaved changes')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'PATCH')).toHaveLength(1));
+    expect(calls.find(c => c.method === 'PATCH')?.body).toEqual({
+      email: 'jane@example.com',
+      smoker: 'NO',
+    });
+  });
+
+  it('asks before throwing away unsaved edits', async () => {
+    render(withSession(<CustomerPage />));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit customer/ }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit Jane Smith/ });
+    fireEvent.change(within(dialog).getByLabelText('City'), { target: { value: 'Nashville' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(within(dialog).getByText(/Discard 1 unsaved change\?/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+    expect(valueOf(within(dialog).getByLabelText('City'))).toBe('Nashville');
+    expect(calls.some(c => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('adds a task and a dated note from Notes & tasks', async () => {
+    window.history.replaceState(null, '', '/insurance-leads/lead-1#tasks');
+    render(withSession(<CustomerPage />));
+    fireEvent.change(await screen.findByLabelText('Task title'), {
+      target: { value: 'Call back Friday' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add task/ }));
+    await waitFor(() => expect(posted('/api/v1/insurance-leads/lead-1/tasks')).toHaveLength(1));
+    expect(posted('/api/v1/insurance-leads/lead-1/tasks')[0].body).toMatchObject({
+      title: 'Call back Friday',
+      priority: 'NORMAL',
+    });
+
+    fireEvent.change(screen.getByLabelText('New note'), {
+      target: { value: 'Prefers calls after 2pm' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
+    await waitFor(() => expect(calls.filter(c => c.method === 'PATCH')).toHaveLength(1));
+    const notes = String(calls.find(c => c.method === 'PATCH')?.body?.notes);
+    expect(notes).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}, .+\nPrefers calls after 2pm$/);
+  });
+
+  it('completes and, after asking, cancels an open task', async () => {
+    lead = {
+      ...LEAD,
+      tasks: [
+        {
+          id: 'task-1',
+          tenantId: 't',
+          insuranceLeadId: 'lead-1',
+          assignedToId: null,
+          title: 'Send the policy packet',
+          description: null,
+          status: 'OPEN',
+          priority: 'HIGH',
+          dueAt: null,
+          completedAt: null,
+          createdAt: '2026-10-01T00:00:00Z',
+          updatedAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+    } as InsuranceLeadDetail;
+    window.history.replaceState(null, '', '/insurance-leads/lead-1#tasks');
+    render(withSession(<CustomerPage />));
+    const [complete] = await screen.findAllByRole('button', {
+      name: 'Complete "Send the policy packet"',
+    });
+    fireEvent.click(complete);
+    await waitFor(() =>
+      expect(posted('/api/v1/insurance-leads/lead-1/tasks/task-1/complete')).toHaveLength(1)
+    );
+    const [cancel] = screen.getAllByRole('button', { name: 'Cancel "Send the policy packet"' });
+    fireEvent.click(cancel);
+    expect(posted('/api/v1/insurance-leads/lead-1/tasks/task-1/cancel')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel task' }));
+    await waitFor(() =>
+      expect(posted('/api/v1/insurance-leads/lead-1/tasks/task-1/cancel')).toHaveLength(1)
+    );
   });
 });
 
@@ -608,7 +754,7 @@ describe('elsewhere', () => {
     expect(screen.getByRole('link', { name: /Open customer/ }).getAttribute('href')).toBe(
       '/insurance-leads/lead-1'
     );
-    // The header's Call (the record's own Contact section has one too).
+    // The header's Call.
     fireEvent.click(screen.getAllByRole('button', { name: /^Call$/ })[0]);
     expect(phone.makeCall).toHaveBeenCalledWith('6155550142');
   });
