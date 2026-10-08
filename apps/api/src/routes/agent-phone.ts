@@ -684,7 +684,46 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           // Agent has no assigned number — fall back to a pool DID so the call
           // still presents a valid FracTEL number rather than a dead default.
           const rotated = await rotatePoolCallerId();
-          if (rotated) outboundCallerId = rotated;
+          if (rotated) {
+            outboundCallerId = rotated;
+          } else {
+            // No assigned number and no pool: never present the browser's
+            // number unchecked. Its saved pick can be a number this agency
+            // does not own (or no longer has), which the carrier then refuses
+            // with 403 and the call never leaves.
+            const owned = await prisma.phoneNumber.findMany({
+              where: {
+                tenantId,
+                status: 'ACTIVE',
+                callerIdEligible: true,
+                NOT: { number: { contains: '555' } },
+              },
+              select: { number: true, provider: true },
+              orderBy: { number: 'asc' },
+            });
+            if (owned.length > 0) {
+              const digits = (n: string) => n.replace(/\D/g, '').slice(-10);
+              const requested = callerId
+                ? owned.find(n => digits(n.number) === digits(callerId))
+                : undefined;
+              // Otherwise a number the first carrier of the softphone route
+              // issued, so it can attest to it.
+              const route = await prisma.carrierRoute.findUnique({
+                where: { tenantId_callType: { tenantId, callType: 'SOFTPHONE_MANUAL' } },
+                select: {
+                  steps: {
+                    where: { enabled: true },
+                    orderBy: { position: 'asc' },
+                    take: 1,
+                    select: { carrier: { select: { numberProvider: true } } },
+                  },
+                },
+              });
+              const provider = route?.steps[0]?.carrier.numberProvider;
+              const carriers = provider ? owned.find(n => n.provider === provider) : undefined;
+              outboundCallerId = (requested ?? carriers ?? owned[0]).number;
+            }
+          }
         }
       }
 
