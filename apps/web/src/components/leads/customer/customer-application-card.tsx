@@ -49,12 +49,11 @@ export function CustomerApplicationCard({
               <FileText aria-hidden className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <h2 id="applications-title" className="text-[15px] font-semibold text-ink">
+              <h2 id="applications-title" className="text-[16px] font-semibold text-ink">
                 Application
               </h2>
-              <p className="text-[13px] text-ink-2">
-                No application written yet
-                {writeHint ? <span className="text-ink-3"> · {writeHint}</span> : null}
+              <p className="text-[13px] text-ink-3">
+                No application written yet{writeHint ? ` · ${writeHint}` : '.'}
               </p>
             </div>
           </div>
@@ -100,7 +99,7 @@ export function CustomerApplicationCard({
                 voided && 'opacity-60'
               )}
             >
-              <CarrierLogo names={[app.carrier]} size="md" />
+              <CarrierLogo names={[app.carrier]} size="row" />
               <div className="min-w-[180px] flex-1">
                 <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span

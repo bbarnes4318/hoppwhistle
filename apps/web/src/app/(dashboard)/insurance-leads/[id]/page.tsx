@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -20,17 +20,17 @@ import { CustomerApplicationCard } from '@/components/leads/customer/customer-ap
 import { CustomerCallsTable } from '@/components/leads/customer/customer-calls';
 import { CustomerDetails } from '@/components/leads/customer/customer-details';
 import { CustomerEditDrawer } from '@/components/leads/customer/customer-edit-drawer';
-import { CustomerFacts } from '@/components/leads/customer/customer-facts';
 import { CustomerHeader } from '@/components/leads/customer/customer-header';
 import { CustomerNextUp } from '@/components/leads/customer/customer-next-up';
 import { CustomerNotes } from '@/components/leads/customer/customer-notes';
 import { CustomerSummaryCard } from '@/components/leads/customer/customer-summary-card';
-import { AddTaskForm, TaskList } from '@/components/leads/customer/customer-tasks';
+import { AddTaskForm, NoOpenTasks, TaskList } from '@/components/leads/customer/customer-tasks';
 import { assigneeLabel, openTasks } from '@/components/leads/customer/format';
 import type { LeadSectionId } from '@/components/leads/customer/lead-fields';
 import { useAssignableUsers, useLeadTasks } from '@/components/leads/customer/use-lead-record';
 import { leadDisplayName } from '@/components/leads/lead-detail-sheet';
 import { usePhone } from '@/components/phone';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useQuoteSession } from '@/contexts/quote-session-context';
@@ -93,6 +93,7 @@ export default function CustomerPage() {
   );
   const [editing, setEditing] = useState<{ focus: LeadSectionId | null } | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -215,6 +216,24 @@ export default function CustomerPage() {
   const openCount = openTasks(lead).open.length;
   const featured = fe ? featuredQuote(quotes.quotes, lead) : null;
   const edit = (focus?: LeadSectionId) => setEditing({ focus: focus ?? null });
+  /*
+   * One filled button at a time. When the Overview already holds the next
+   * step -- Write application on the selected plan, Create quote on an empty
+   * list -- the header's actions stay outlined; otherwise Quote (or, outside
+   * final expense, Write application) is the one to press.
+   */
+  const bodyLeads =
+    fe &&
+    !quotes.loading &&
+    (quotes.quotes.length === 0 || Boolean(featured && !featured.applicationId && !written));
+  const primary: 'quote' | 'application' | null =
+    tab === 'overview' && (bodyLeads || (fe && quotes.loading))
+      ? null
+      : fe
+        ? 'quote'
+        : written
+          ? null
+          : 'application';
 
   return (
     <div className="page-canvas !gap-5">
@@ -228,8 +247,9 @@ export default function CustomerPage() {
           onApplication={writeApplication}
           written={written}
           preparing={preparing}
+          assignee={assignee}
+          primary={primary}
         />
-        <CustomerFacts lead={lead} assignee={assignee} />
       </div>
 
       <Tabs value={tab} onValueChange={changeTab} className="min-w-0">
@@ -308,19 +328,46 @@ export default function CustomerPage() {
         <TabsContent value="tasks" className="mt-4">
           <div className="grid items-start gap-4 xl:grid-cols-2">
             <Panel className="min-w-0 overflow-hidden" aria-labelledby="tasks-title">
-              <div className="flex items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-                <h2 id="tasks-title" className="text-[16px] font-semibold text-ink">
+              <div className="flex h-[53px] items-center justify-between gap-3 border-b border-rule px-5">
+                <h2
+                  id="tasks-title"
+                  className="flex items-baseline gap-2 text-[16px] font-semibold text-ink"
+                >
                   Tasks
+                  {openCount ? (
+                    <span className="text-[13px] font-medium text-ink-3">
+                      {openCount} open
+                      {openTasks(lead).overdue ? ` · ${openTasks(lead).overdue} overdue` : ''}
+                    </span>
+                  ) : null}
                 </h2>
-                <p className="text-[12.5px] text-ink-3">
-                  {openCount} open
-                  {openTasks(lead).overdue ? ` · ${openTasks(lead).overdue} overdue` : ''}
-                </p>
+                {openCount && !addingTask ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7"
+                    onClick={() => setAddingTask(true)}
+                  >
+                    <Plus aria-hidden className="h-3.5 w-3.5" />
+                    Add task
+                  </Button>
+                ) : null}
               </div>
-              <div className="border-b border-rule">
-                <AddTaskForm tasks={tasks} />
-              </div>
-              <TaskList list={lead.tasks ?? []} tasks={tasks} />
+              {addingTask ? (
+                <div className="border-b border-rule bg-paper">
+                  <AddTaskForm tasks={tasks} autoFocus onClose={() => setAddingTask(false)} />
+                </div>
+              ) : null}
+              <TaskList
+                list={lead.tasks ?? []}
+                tasks={tasks}
+                featureNext
+                empty={
+                  addingTask ? null : (
+                    <NoOpenTasks className="px-5 py-5" onAdd={() => setAddingTask(true)} />
+                  )
+                }
+              />
             </Panel>
             <CustomerNotes lead={lead} onSaved={refresh} />
           </div>

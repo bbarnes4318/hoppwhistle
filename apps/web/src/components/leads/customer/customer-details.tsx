@@ -7,14 +7,13 @@
  * in the way.
  */
 
-import { ExternalLink, Pencil } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import * as React from 'react';
 
-import { Panel } from '@/components/domain';
-import { Button } from '@/components/ui/button';
+import { Panel, formatEnumLabel } from '@/components/domain';
 import type { InsuranceLeadDetail } from '@/lib/api/leads';
 import { money, wholeDollars } from '@/lib/fex/api';
-import { formatPhoneNumber } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 import { formatDateTime, priorityLabel, stageLabel } from './format';
 import {
@@ -26,6 +25,7 @@ import {
   type LeadSectionDef,
   type LeadSectionId,
 } from './lead-fields';
+import { EditButton } from './primitives';
 import { ReadField, ReadList } from './read-fields';
 
 const MONEY_KEYS = new Set(['faceAmount', 'coverageAmount', 'monthlyPremium']);
@@ -42,7 +42,19 @@ function display(
     case 'leadStage':
       return stageLabel(lead.leadStage);
     case 'priority':
-      return priorityLabel(lead.priority);
+      return priorityLabel(lead.priority) ?? 'Normal';
+    case 'nextFollowUpAt':
+      return lead.nextFollowUpAt ? (
+        formatDateTime(lead.nextFollowUpAt)
+      ) : (
+        <span className="text-ink-3">None set</span>
+      );
+    case 'lastContactedAt':
+      return lead.lastContactedAt ? (
+        formatDateTime(lead.lastContactedAt)
+      ) : (
+        <span className="text-ink-3">Never</span>
+      );
     case 'smoker':
       return TOBACCO_OPTIONS.find(o => o.value === raw)?.label ?? raw;
     case 'phone':
@@ -86,6 +98,32 @@ function display(
   return raw;
 }
 
+/**
+ * The fields an agent needs on every customer: missing, they say "Not
+ * entered" so the gap is seen. Any other empty field is folded into one
+ * quiet line under its group instead of a row of its own.
+ */
+const NEEDED = new Set([
+  'firstName',
+  'lastName',
+  'birthDate',
+  'age',
+  'gender',
+  'company',
+  'phone',
+  'email',
+  'address',
+  'city',
+  'state',
+  'zipCode',
+  'smoker',
+  'faceAmount',
+  'leadStage',
+  'nextFollowUpAt',
+  'assignedToId',
+  'doNotCall',
+]);
+
 function SectionCard({
   title,
   hint,
@@ -101,27 +139,22 @@ function SectionCard({
 }): JSX.Element {
   return (
     <Panel className="min-w-0 overflow-hidden" aria-labelledby={id ? `${id}-title` : undefined}>
-      <div className="flex items-start justify-between gap-3 px-5 pt-4">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3 px-5 pt-3.5">
+        <div className="min-w-0 pt-0.5">
           <h2 id={id ? `${id}-title` : undefined} className="text-[15px] font-semibold text-ink">
             {title}
           </h2>
           {hint ? <p className="mt-0.5 text-[12.5px] text-ink-3">{hint}</p> : null}
         </div>
         {onEdit ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="-mr-2 -mt-1 shrink-0"
+          <EditButton
             onClick={onEdit}
             aria-label={`Edit ${title.toLowerCase()}`}
-          >
-            <Pencil aria-hidden className="h-3.5 w-3.5" />
-            Edit
-          </Button>
+            className="-mr-2"
+          />
         ) : null}
       </div>
-      <div className="px-5 pb-3 pt-2">{children}</div>
+      <div className="px-5 pb-4 pt-1.5">{children}</div>
     </Panel>
   );
 }
@@ -139,11 +172,13 @@ function FieldsSection({
   canAssign: boolean;
   onEdit: (section: LeadSectionId) => void;
 }): JSX.Element {
-  // The legacy per-carrier figures: only those the lead carries are read out.
-  const fields =
-    section.id === 'carrierQuotes'
-      ? section.fields.filter(f => rawFieldValue(lead, f) !== '')
-      : section.fields.filter(f => f.key !== 'assignedToId' || canAssign || lead.assignedToId);
+  const fields = section.fields.filter(
+    f => f.key !== 'assignedToId' || canAssign || lead.assignedToId
+  );
+  const values = fields.map(field => ({ field, value: display(lead, field, assignee) }));
+  const isEmpty = (v: React.ReactNode) => v === null || v === undefined || v === '';
+  const shown = values.filter(({ field, value }) => !isEmpty(value) || NEEDED.has(field.key));
+  const folded = values.filter(({ field, value }) => isEmpty(value) && !NEEDED.has(field.key));
 
   return (
     <SectionCard
@@ -152,23 +187,28 @@ function FieldsSection({
       hint={section.hint}
       onEdit={() => onEdit(section.id)}
     >
-      {fields.length ? (
+      {shown.length ? (
         <ReadList columns={2}>
-          {fields.map(field => (
+          {shown.map(({ field, value }) => (
             <ReadField
               key={field.key}
               label={field.label}
               wide={field.wide}
               mono={field.key === 'leadidToken'}
+              missing={NEEDED.has(field.key)}
               stacked
             >
-              {display(lead, field, assignee)}
+              {value}
             </ReadField>
           ))}
         </ReadList>
-      ) : (
-        <p className="py-2 text-[13.5px] text-ink-3">None posted with this lead.</p>
-      )}
+      ) : null}
+      {folded.length ? (
+        <p className={cn('text-[12.5px] leading-5 text-ink-3', shown.length ? 'mt-2' : 'pt-1')}>
+          <span className="font-medium text-ink-3">Blank:</span>{' '}
+          {folded.map(({ field }) => field.label).join(' · ')}
+        </p>
+      ) : null}
     </SectionCard>
   );
 }
@@ -230,7 +270,9 @@ export function CustomerDetails({
       </div>
       <div className="min-w-0 space-y-4">{pick('finalExpense', 'crm').map(render)}</div>
       <div className="min-w-0 space-y-4 xl:col-span-2">
-        {pick('carrierQuotes').map(render)}
+        {pick('carrierQuotes')
+          .filter(section => section.fields.some(f => rawFieldValue(lead, f) !== ''))
+          .map(render)}
         {captures.length ? (
           <SectionCard title="Script data" hint="Answers captured by call scripts and lead forms.">
             <ReadList columns={2}>
@@ -255,7 +297,9 @@ export function CustomerDetails({
                   : 'B2B'}
             </ReadField>
             <ReadField label="Source">{lead.source}</ReadField>
-            <ReadField label="Lead status">{lead.status}</ReadField>
+            <ReadField label="Lead status">
+              {lead.status ? formatEnumLabel(lead.status) : null}
+            </ReadField>
             <ReadField label="Created">{formatDateTime(lead.createdAt)}</ReadField>
             <ReadField label="Updated">{formatDateTime(lead.updatedAt)}</ReadField>
             <ReadField label="Assigned">{formatDateTime(lead.assignedAt)}</ReadField>

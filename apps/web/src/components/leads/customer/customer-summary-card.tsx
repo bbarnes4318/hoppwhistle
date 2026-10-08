@@ -6,11 +6,10 @@
  * a page of open inputs.
  */
 
-import { Mail, MapPin, Pencil, Phone } from 'lucide-react';
+import { Mail, MapPin, Phone } from 'lucide-react';
 import * as React from 'react';
 
 import { Panel, StatusChip } from '@/components/domain';
-import { Button } from '@/components/ui/button';
 import type { InsuranceLeadDetail } from '@/lib/api/leads';
 import { formatPhoneNumber } from '@/lib/utils';
 
@@ -23,6 +22,7 @@ import {
   stageTone,
 } from './format';
 import type { LeadSectionId } from './lead-fields';
+import { EditButton, GroupHeading } from './primitives';
 import { ReadField, ReadList } from './read-fields';
 
 function ContactLine({
@@ -64,10 +64,7 @@ export function CustomerSummaryCard({
         <h2 id="customer-summary-title" className="text-[16px] font-semibold text-ink">
           Customer
         </h2>
-        <Button size="sm" variant="outline" onClick={() => onEdit()}>
-          <Pencil aria-hidden className="h-3.5 w-3.5" />
-          Edit customer
-        </Button>
+        <EditButton onClick={() => onEdit()} label="Edit customer" className="-mr-2" />
       </div>
 
       <section aria-label="Contact" className="px-5 py-3.5">
@@ -98,26 +95,20 @@ export function CustomerSummaryCard({
         </ul>
       </section>
 
-      <section
-        aria-labelledby="sales-status-title"
-        className="border-t border-rule px-5 pb-3 pt-3.5"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h3
-            id="sales-status-title"
-            className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3"
-          >
-            Sales status
-          </h3>
-          <button
-            type="button"
-            onClick={() => onEdit('crm')}
-            className="rounded-sm text-[12.5px] font-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Change
-          </button>
-        </div>
-        <ReadList className="mt-1.5">
+      <section aria-labelledby="sales-status-title" className="border-t border-rule px-5 pb-3 pt-3">
+        <GroupHeading
+          id="sales-status-title"
+          action={
+            <EditButton
+              onClick={() => onEdit('crm')}
+              aria-label="Edit sales status"
+              className="-mr-2"
+            />
+          }
+        >
+          Sales status
+        </GroupHeading>
+        <ReadList className="mt-1">
           <ReadField label="Stage" labelWidth="sm">
             <StatusChip
               size="sm"
@@ -145,9 +136,11 @@ export function CustomerSummaryCard({
           <ReadField label="Last contact" labelWidth="sm">
             {formatDateTime(lead.lastContactedAt) ?? <span className="text-ink-3">Never</span>}
           </ReadField>
-          <ReadField label="Customer since" labelWidth="sm">
+          <ReadField label="Source" labelWidth="sm">
+            {lead.source}
+          </ReadField>
+          <ReadField label="Since" labelWidth="sm">
             {formatDay(lead.createdAt)}
-            {lead.source ? <span className="text-ink-3"> · {lead.source}</span> : null}
           </ReadField>
         </ReadList>
       </section>

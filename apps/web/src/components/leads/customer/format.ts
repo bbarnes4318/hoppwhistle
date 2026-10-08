@@ -59,6 +59,18 @@ export function formatDay(iso: string | null | undefined): string | null {
     : null;
 }
 
+/** "Oct 7" this year, "Oct 7, 2025" before it: a date in a dense line. */
+export function formatShortDay(iso: string | null | undefined, now = new Date()): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!isValid(d)) return null;
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}
+
 /** "Oct 7, 2026, 2:11 PM" */
 export function formatDateTime(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -188,4 +200,26 @@ export function dueLabel(iso: string, now = new Date()): { text: string; overdue
   if (due < now && !sameDay) return { text: `Overdue · ${day}`, overdue: true };
   if (sameDay) return { text: 'Due today', overdue: due < now };
   return { text: `Due ${day}`, overdue: false };
+}
+
+export type OutcomeTone = 'good' | 'bad' | 'neutral';
+
+/**
+ * How a call ended, in one of three families, for a dot beside it: a sale,
+ * an application or a transfer moved the customer forward; "not interested",
+ * DNC or a wrong number closed a door; everything else (no answer, voicemail,
+ * busy, a callback) is neutral. Dispositions are free text, so this reads
+ * words, and anything it does not recognise stays neutral.
+ */
+export function dispositionTone(disposition: string): OutcomeTone {
+  const d = disposition.toUpperCase().replace(/[^A-Z]+/g, '_');
+  if (/NOT_INTERESTED|DNC|DO_NOT_CALL|WRONG|DECLIN|DISQUAL|HUNG|HANG|REFUS|DEAD|LOST/.test(d)) {
+    return 'bad';
+  }
+  if (
+    /SALE|SOLD|APPLICATION|SUBMIT|TRANSFER|CONVERT|COMPLETE|WON|ISSUED|APPOINT|INTERESTED/.test(d)
+  ) {
+    return 'good';
+  }
+  return 'neutral';
 }

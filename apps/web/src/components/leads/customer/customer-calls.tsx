@@ -7,7 +7,7 @@
  * the recording and the full detail live.
  */
 
-import { ArrowDownLeft, ArrowUpRight, PhoneCall } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, PhoneCall } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
@@ -15,9 +15,12 @@ import { EmptyState, Panel, formatEnumLabel } from '@/components/domain';
 import type { InsuranceLeadCall } from '@/lib/api/leads';
 import { cn } from '@/lib/utils';
 
-import { formatDateTime, formatSeconds } from './format';
+import { dispositionTone, formatDateTime, formatSeconds, type OutcomeTone } from './format';
 
 const callHref = (id: string) => `/calls?call=${encodeURIComponent(id)}`;
+
+/** Someone was on the line. */
+const talked = (call: InsuranceLeadCall) => (call.connectedDuration ?? 0) > 0;
 
 function Direction({ direction }: { direction: string }): JSX.Element {
   const outbound = direction === 'OUTBOUND';
@@ -31,10 +34,32 @@ function Direction({ direction }: { direction: string }): JSX.Element {
 }
 
 function Duration({ seconds }: { seconds: number | null }): JSX.Element {
-  if (seconds === null) return <span className="text-ink-3">—</span>;
+  if (seconds === null) return <span className="text-ink-3 opacity-60">—</span>;
   return (
-    <span className={seconds === 0 ? 'text-ink-3' : 'font-medium text-ink'}>
+    <span className={seconds === 0 ? 'text-ink-3 opacity-70' : 'font-semibold text-ink'}>
       {formatSeconds(seconds)}
+    </span>
+  );
+}
+
+const OUTCOME_DOT: Record<OutcomeTone, string> = {
+  good: 'bg-live',
+  bad: 'bg-dropped',
+  neutral: 'bg-ink-3',
+};
+
+/** How the call ended: a dot for its family, the words in ink; nothing recorded recedes. */
+export function Disposition({ value }: { value: string | null }): JSX.Element {
+  if (!value || /^none$/i.test(value)) {
+    return <span className="text-ink-3 opacity-60">—</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-2 font-medium text-ink">
+      <span
+        aria-hidden
+        className={cn('h-1.5 w-1.5 shrink-0 rounded-full', OUTCOME_DOT[dispositionTone(value)])}
+      />
+      {formatEnumLabel(value)}
     </span>
   );
 }
@@ -52,7 +77,7 @@ export function CustomerCallsTable({ calls }: { calls: InsuranceLeadCall[] }): J
       </Panel>
     );
   }
-  const connected = calls.filter(c => (c.connectedDuration ?? 0) > 0).length;
+  const connected = calls.filter(talked).length;
   return (
     <Panel className="min-w-0 overflow-hidden" aria-labelledby="calls-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-5 py-3">
@@ -90,7 +115,12 @@ export function CustomerCallsTable({ calls }: { calls: InsuranceLeadCall[] }): J
           <tbody className="divide-y divide-rule">
             {calls.map(call => (
               <tr key={call.id} className="group transition-colors hover:bg-sunken">
-                <td className="whitespace-nowrap px-5 py-2.5 tabular-nums text-ink">
+                <td
+                  className={cn(
+                    'whitespace-nowrap px-5 py-2.5 tabular-nums',
+                    talked(call) ? 'font-medium text-ink' : 'text-ink-2'
+                  )}
+                >
                   {formatDateTime(call.createdAt)}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
@@ -100,23 +130,20 @@ export function CustomerCallsTable({ calls }: { calls: InsuranceLeadCall[] }): J
                   <Duration seconds={call.connectedDuration} />
                 </td>
                 <td className="px-3 py-2.5">
-                  {call.disposition ? (
-                    <span className="text-ink">{formatEnumLabel(call.disposition)}</span>
-                  ) : (
-                    <span className="text-ink-3">None</span>
-                  )}
+                  <Disposition value={call.disposition} />
                 </td>
-                <td className="max-w-[260px] truncate px-3 py-2.5 text-ink-2">
+                <td className="max-w-[260px] truncate px-3 py-2.5 text-ink-3">
                   {[call.campaignName, call.buyerName].filter(Boolean).join(' · ') || (
-                    <span className="text-ink-3">—</span>
+                    <span className="text-ink-3 opacity-60">—</span>
                   )}
                 </td>
                 <td className="whitespace-nowrap px-5 py-2.5 text-right">
                   <Link
                     href={callHref(call.id)}
-                    className="rounded-sm font-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex items-center gap-0.5 rounded-sm font-medium text-ink-2 transition-colors hover:text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:text-brand-ink"
                   >
                     Open call
+                    <ChevronRight aria-hidden className="h-3.5 w-3.5" />
                   </Link>
                 </td>
               </tr>
@@ -144,13 +171,17 @@ export function CustomerCallList({
       {calls.slice(0, limit).map(call => (
         <li key={call.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
           <div className="min-w-0">
-            <div className="font-medium tabular-nums text-ink">
+            <div
+              className={cn('tabular-nums', talked(call) ? 'font-medium text-ink' : 'text-ink-2')}
+            >
               {formatDateTime(call.createdAt)}
             </div>
             <div className="truncate text-[12.5px] text-ink-3">
               {[
                 call.direction === 'OUTBOUND' ? 'Outbound' : 'Inbound',
-                call.disposition ? formatEnumLabel(call.disposition) : null,
+                call.disposition && !/^none$/i.test(call.disposition)
+                  ? formatEnumLabel(call.disposition)
+                  : null,
                 call.campaignName,
                 call.buyerName,
               ]
@@ -160,7 +191,10 @@ export function CustomerCallList({
           </div>
           <div className="flex shrink-0 items-center gap-3 tabular-nums">
             <Duration seconds={call.connectedDuration} />
-            <Link href={callHref(call.id)} className="font-medium text-brand-ink hover:underline">
+            <Link
+              href={callHref(call.id)}
+              className="font-medium text-ink-2 transition-colors hover:text-brand-ink"
+            >
               Open
             </Link>
           </div>

@@ -203,7 +203,12 @@ export function LeadDetailBody({ lead, onRefresh }: LeadDetailBodyProps) {
       <Section title={`Tasks & Follow-ups (${lead.tasks?.length || 0})`}>
         <div className="space-y-3">
           <AddTaskForm tasks={tasks} compact />
-          <TaskList list={lead.tasks ?? []} tasks={tasks} compact emptyText="No tasks yet." />
+          <TaskList
+            list={lead.tasks ?? []}
+            tasks={tasks}
+            compact
+            empty={<p className="py-2 text-[13px] text-ink-3">No open tasks.</p>}
+          />
         </div>
       </Section>
 
