@@ -14,6 +14,7 @@ export default defineConfig({
     'cli/link-application-customers': 'src/cli/link-application-customers.ts',
     'cli/vonage-diagnose': 'src/cli/vonage-diagnose.ts',
     'cli/dograh-callerid-import': 'src/cli/dograh-callerid-import.ts',
+    'cli/dograh-callback-numbers': 'src/cli/dograh-callback-numbers.ts',
   },
   format: ['esm'],
   dts: {

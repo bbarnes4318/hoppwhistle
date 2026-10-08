@@ -61,6 +61,7 @@ import {
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { recordBlockedCall } from '../services/blocked-call.js';
 import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
+import { findDograhCallbackRoute } from '../services/dograh-callback-routing.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -503,7 +504,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     '/api/v1/freeswitch/lookup',
     { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    const query = request.query as { did?: string; caller?: string };
+    const query = request.query as { did?: string; caller?: string; via?: string };
     const did = query.did?.replace(/[^\d+]/g, '') || '';
     const caller = query.caller?.replace(/[^\d+]/g, '') || '';
 
@@ -555,6 +556,30 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     const { normalizedDid, variants } = didLookupVariants(did);
+
+    // A lead calling back one of the AI's caller IDs goes to the AI voice
+    // agent, whatever the DID is otherwise routed to.
+    // See services/dograh-callback-routing.ts.
+    try {
+      const aiCallback = await findDograhCallbackRoute({
+        did: normalizedDid,
+        caller,
+        fromDograh: query.via === 'dograh',
+      });
+      if (aiCallback) {
+        console.log(
+          `[FS-LOOKUP] AI callback: did=${aiCallback.did} caller=${caller} → Dograh (${aiCallback.bridge})`
+        );
+        return reply.send({
+          aiAgentBridge: aiCallback.bridge,
+          tenantId: aiCallback.tenantId,
+          routeType: 'AI_CALLBACK',
+        });
+      }
+    } catch (err) {
+      // Fail open to the DID's ordinary route rather than dropping the call.
+      console.error('[FS-LOOKUP] AI callback check failed (using normal routing):', err);
+    }
 
     // Try to get Redis RTB leased route first
     let routeInfo = null;
