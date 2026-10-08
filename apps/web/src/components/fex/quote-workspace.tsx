@@ -72,7 +72,7 @@ import { cn } from '@/lib/utils';
 
 import { ComparePanel, CompareTray } from './compare-panel';
 import { CheckRow, FOCUS, shortLabel } from './parts';
-import { healthSearchId, medsSearchId, QuoteIntake } from './quote-intake';
+import { QuoteIntake, type QuoteIntakeHandle } from './quote-intake';
 import { ResultCard } from './result-card';
 import { SelectedQuoteBar } from './result-row';
 
@@ -400,20 +400,11 @@ export function QuoteWorkspace({
   const ready = Boolean(toApplicant(draft));
 
   /** Alt+H: the condition search; Alt+M: the medication search. */
-  const focusHealthSearch = React.useCallback(
-    (code?: string) => {
-      const input = document.getElementById(
-        code === 'KeyM' ? medsSearchId(idPrefix) : healthSearchId(idPrefix)
-      );
-      if (!input) return;
-      setEditing(true);
-      requestAnimationFrame(() => {
-        input.scrollIntoView({ block: 'nearest' });
-        input.focus();
-      });
-    },
-    [idPrefix]
-  );
+  const intakeRef = React.useRef<QuoteIntakeHandle>(null);
+  const focusHealthSearch = React.useCallback((code?: string) => {
+    setEditing(true);
+    intakeRef.current?.focusSearch(code === 'KeyM' ? 'meds' : 'health');
+  }, []);
 
   /*
    * Keyboard. Alt+H (or Alt+M) jumps to the health search from anywhere in the
@@ -1004,6 +995,7 @@ export function QuoteWorkspace({
           )}
         >
           <QuoteIntake
+            ref={intakeRef}
             idPrefix={idPrefix}
             draft={draft}
             dispatch={dispatch}

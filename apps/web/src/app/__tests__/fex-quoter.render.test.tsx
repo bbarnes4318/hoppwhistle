@@ -268,6 +268,12 @@ const READY: QuoteDraft = {
   ageOrDob: { mode: 'age', age: '68' },
 };
 
+/** Open an intake section (one is open at a time), unless it already is. */
+const openSection = (name: string): void => {
+  const toggle = screen.getByRole('button', { name });
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+};
+
 // ─── QuoteWorkspace ──────────────────────────────────────────────────────────
 
 describe('QuoteWorkspace', () => {
@@ -277,6 +283,7 @@ describe('QuoteWorkspace', () => {
     const before = quotesPosted().length;
     expect(before).toBe(1);
 
+    openSection('Applicant');
     const age = screen.getByLabelText(/^Age/);
     fireEvent.change(age, { target: { value: '6' } });
     fireEvent.change(age, { target: { value: '69' } });
@@ -294,6 +301,7 @@ describe('QuoteWorkspace', () => {
 
     let release!: () => void;
     holdQuote = new Promise(r => (release = r));
+    openSection('Applicant');
     fireEvent.change(screen.getByLabelText(/^Age/), { target: { value: '71' } });
 
     await waitFor(() => expect(quotesPosted().length).toBe(2));
@@ -344,7 +352,7 @@ describe('QuoteWorkspace', () => {
     );
   });
 
-  it('keeps Medications as its own section, each with its use asked beneath it', async () => {
+  it('keeps four sections, one open at a time, each showing its state', async () => {
     quoteResults = () => [
       result({
         needsIndication: [
@@ -357,15 +365,70 @@ describe('QuoteWorkspace', () => {
       meds: [{ key: 'm1', drugId: 'gabapentin', name: 'gabapentin', lastTakenMonthsAgo: 0 }],
     };
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
-    // Four sections, Health and Medications each with their own search.
     for (const name of ['Applicant', 'Coverage', 'Health', 'Medications'])
       expect(screen.getByRole('heading', { name })).toBeTruthy();
+    // The applicant is answered: its state, not its form. Health is open.
+    expect(screen.getByText('TN · Female · Age 68 · Non-tobacco')).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Add a condition' })).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Add a medication' })).toBeTruthy();
-    // The medication is listed, and its use is asked right under it.
+    expect(screen.queryByRole('combobox', { name: 'Add a medication' })).toBeNull();
+    // Closed, Medications still names what a carrier asked.
     const meds = screen.getByRole('heading', { name: 'Medications' }).closest('section')!;
-    expect(within(meds).getByText('gabapentin')).toBeTruthy();
-    expect(await within(meds).findByLabelText('Prescribed for')).toBeTruthy();
+    expect(await within(meds).findByText(/what is it for\?/)).toBeTruthy();
+    // Opened, the use is asked right in the medication's row.
+    openSection('Medications');
+    expect(screen.queryByRole('combobox', { name: 'Add a condition' })).toBeNull();
+    const select = within(meds).getByLabelText('What gabapentin is prescribed for');
+    fireEvent.change(select, { target: { value: 'NEUROPATHY' } });
+    await waitFor(() =>
+      expect(quotesPosted().at(-1)?.body).toMatchObject({
+        applicant: { meds: [{ drugId: 'gabapentin', indication: 'NEUROPATHY' }] },
+      })
+    );
+  });
+
+  it("opens a condition's questions the moment it is added, and returns to the list", async () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Diabetes' }));
+    // The questions replace the list, with the cursor in the first one.
+    const questions = screen.getByRole('group', { name: 'Diabetes questions' });
+    const dx = within(questions).getByLabelText('Diagnosed');
+    expect(document.activeElement).toBe(dx);
+    expect(screen.queryByRole('combobox', { name: 'Add a condition' })).toBeNull();
+    const health = screen.getByRole('heading', { name: 'Health' }).closest('section')!;
+    expect(within(health).getByText(/2 details to ask/)).toBeTruthy();
+
+    fireEvent.change(dx, { target: { value: '18' } });
+    await waitFor(() =>
+      expect(quotesPosted().at(-1)?.body).toMatchObject({
+        applicant: { conditions: [{ code: 'DIABETES', diagnosedMonthsAgo: 18 }] },
+      })
+    );
+    fireEvent.click(within(questions).getByRole('button', { name: 'Done' }));
+    // Back on the list: Diabetes answered, the cursor in the search again.
+    const search = await screen.findByRole('combobox', { name: 'Add a condition' });
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    const list = screen.getByRole('list', { name: 'Selected conditions' });
+    expect(within(list).getByText(/Dx 1–2 yrs/)).toBeTruthy();
+
+    // Reopened from its row, the answer is still there.
+    fireEvent.click(within(list).getByRole('button', { name: /^Diabetes/ }));
+    expect(valueOf(screen.getByLabelText('Diagnosed'))).toBe('18');
+  });
+
+  it('names unanswered details above Get quotes, and each opens its question', async () => {
+    const draft: QuoteDraft = {
+      ...READY,
+      conditions: [{ key: 'c1', code: 'SEIZURES', onMeds: false, detail: {} }],
+    };
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
+    await screen.findAllByText(/Living Promise/);
+    expect(screen.getByText(/Quoting on assumptions/)).toBeTruthy();
+    openSection('Coverage');
+    fireEvent.click(screen.getByRole('button', { name: 'Seizures / epilepsy' }));
+    const questions = screen.getByRole('group', { name: 'Seizures / epilepsy questions' });
+    expect(document.activeElement).toBe(within(questions).getByLabelText('Diagnosed'));
+    expect(within(questions).getByLabelText('Last seizure')).toBeTruthy();
   });
 
   it('posts a used quote once and hands the selection on', async () => {
