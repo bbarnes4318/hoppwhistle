@@ -32,6 +32,9 @@ from api.services.campaign.areacode_state import (
 
 NO_CALLER_ID_FOR_STATE_REASON = "NO_CALLER_ID_AVAILABLE_FOR_DESTINATION_STATE"
 
+# HOPWHISTLE PATCH: where the AI's transfer tool sends every live lead.
+SHARED_TRANSFER_DID = os.environ.get("DOGRAH_TRANSFER_DESTINATION") or "+17207940675"
+
 
 class NoCallerIdForDestinationStateError(Exception):
     """Raised (strict policy) when no authorized same-state caller ID exists for
@@ -396,21 +399,10 @@ class CampaignCallDispatcher:
             logger.info(f"Provider name: {provider.PROVIDER_NAME}")
             logger.info(f"Queued run context: {queued_run.context_variables}")
 
-            campaign_transfer = (
-                campaign.orchestrator_metadata.get("transfer_destination")
-                if isinstance(campaign.orchestrator_metadata, dict)
-                else None
-            )
-            transfer_destination = (
-                campaign_transfer
-                or queued_run.context_variables.get("transfer_destination")
-                or "+14233398241"
-            )
-            if not campaign_transfer:
-                logger.warning(
-                    f"Campaign {campaign.id} has no transfer_destination; "
-                    f"transfers go to {transfer_destination}"
-                )
+            # HOPWHISTLE PATCH: every transfer goes to the shared campaign DID.
+            # Neither a lead's own transfer_destination nor a campaign setting
+            # can send a live lead anywhere else.
+            transfer_destination = SHARED_TRANSFER_DID
 
             # Merge context variables (queued_run context already includes retry info if applicable)
             initial_context = {
@@ -429,9 +421,6 @@ class CampaignCallDispatcher:
                 "caller_id_state_match": bool(
                     dest_state and caller_id_state == dest_state
                 ),
-                # HOPWHISTLE PATCH: the campaign's own transfer number (its
-                # shared DID) always wins. A lead uploaded with its own
-                # transfer_destination must not send the live lead elsewhere.
                 "transfer_destination": transfer_destination,
                 "telephony_configuration_id": campaign.telephony_configuration_id,
             }
