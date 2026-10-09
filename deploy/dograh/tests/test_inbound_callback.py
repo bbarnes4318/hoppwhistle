@@ -74,9 +74,18 @@ def test_replace_block_is_idempotent_and_reversible():
 
 
 def test_udp_transport_port():
-    assert udp_transport(TRANSPORTS) == ("transport-udp", 5070)
+    assert udp_transport(TRANSPORTS) == ("transport-udp", 5070, None)
     assert udp_transport(TRANSPORTS, "transport-tcp") is None
     assert udp_transport("nothing here") is None
+
+
+def test_udp_transport_reports_a_specific_bind_address():
+    bound = """
+Transport:  transport-fractel         udp      0      0  5.161.18.25:5064
+Transport:  transport-udp             udp      0      0  0.0.0.0:5062
+"""
+    assert udp_transport(bound) == ("transport-fractel", 5064, "5.161.18.25")
+    assert udp_transport(bound, "transport-udp") == ("transport-udp", 5062, None)
 
 
 def test_bridge_template_for_hopwhistle():

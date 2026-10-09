@@ -124,10 +124,16 @@ def replace_block(text: str, block: Optional[str]) -> str:
 
 
 def udp_transport(text: str, name: Optional[str] = None) -> Optional[tuple]:
-    """(name, port) of a UDP transport in ``pjsip show transports`` output."""
+    """(name, port, bound address) of a UDP transport in ``pjsip show transports``.
+
+    The address is None for a wildcard bind (0.0.0.0 / [::]). A transport bound
+    to one address answers only there, so FreeSWITCH must be sent to it.
+    """
     for match in re.finditer(r"Transport:\s+(\S+)\s+udp\s+\d+\s+\d+\s+(\S+):(\d+)", text):
         if name is None or match.group(1) == name:
-            return match.group(1), int(match.group(3))
+            host = match.group(2).strip("[]")
+            bound = None if host in ("0.0.0.0", "::", "") else host
+            return match.group(1), int(match.group(3)), bound
     return None
 
 
@@ -262,13 +268,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         matches = [fs_host] + [m for m in args.match if m != fs_host]
 
         port = args.asterisk_port
+        bound = None
         if port is None:
             found = udp_transport(dt.asterisk(args.container, "pjsip show transports"), args.transport)
             if not found:
                 print("REFUSED: no UDP transport found in Asterisk; pass --asterisk-port.")
                 return 1
-            port = found[1]
-        template = bridge_template(args.asterisk_host or fs_host, port)
+            _, port, bound = found
+        # Oct 8: the bridge went to SIP_PUBLIC_IP:5064 while Asterisk's 5064
+        # transport was bound to another address, and every callback failed.
+        template = bridge_template(args.asterisk_host or bound or fs_host, port)
         blocks = {
             "pjsip.conf": pjsip_block(matches, args.transport),
             "extensions.conf": extensions_block(stasis_app),
