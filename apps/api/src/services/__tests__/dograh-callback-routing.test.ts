@@ -12,13 +12,15 @@ const CALLER_ID = { dograhCallerId: true };
 
 type Row = { id?: string; number: string; tenantId?: string; metadata: Record<string, unknown> };
 
-function prismaWith(rows: Row[]) {
+function prismaWith(rows: Row[], campaignRoute: { id: string } | null = null) {
   const findMany = vi.fn().mockResolvedValue(rows.map(r => ({ tenantId: 'agency-a', ...r })));
   const update = vi.fn().mockResolvedValue({});
+  const findFirst = vi.fn().mockResolvedValue(campaignRoute);
   return {
     findMany,
     update,
-    client: { phoneNumber: { findMany, update } } as unknown as Parameters<
+    findFirst,
+    client: { phoneNumber: { findMany, update }, didRoute: { findFirst } } as unknown as Parameters<
       typeof findDograhCallbackRoute
     >[0]['prismaClient'],
   };
@@ -116,6 +118,28 @@ describe('findDograhCallbackRoute', () => {
         template: TEMPLATE,
       })
     ).toBeNull();
+  });
+
+  it('never takes a campaign DID: an AI transfer to it arrives from the lead', async () => {
+    const { client, findFirst } = prismaWith([{ number: '+18885550123', metadata: CALLBACK }], {
+      id: 'route-1',
+    });
+    expect(
+      await findDograhCallbackRoute({
+        did: '+18885550123',
+        caller: '+14235551212',
+        prismaClient: client,
+        template: TEMPLATE,
+      })
+    ).toBeNull();
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          OR: [{ campaignId: { not: null } }, { sharedRoutingGroupId: { not: null } }],
+        }) as unknown,
+      })
+    );
   });
 
   it('does nothing when callbacks are not configured', async () => {
