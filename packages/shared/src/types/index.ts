@@ -22,3 +22,4 @@ export const RouteSchema = z.object({
 });
 
 export type Route = z.infer<typeof RouteSchema>;
+
