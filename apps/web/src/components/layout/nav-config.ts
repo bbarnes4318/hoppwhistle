@@ -17,6 +17,7 @@ import {
   GitBranch,
   Globe,
   HandCoins,
+  Lightbulb,
   Handshake,
   Hash,
   Headphones,
@@ -248,9 +249,33 @@ export const PLATFORM_NAV: NavGroup[] = [
         icon: FileSignature,
         title: 'Send the MSA and campaign agreements for e-signature',
       },
+      {
+        name: 'Product feedback',
+        href: '/admin/product-feedback',
+        icon: Lightbulb,
+        title: "Every agency's feedback: triage it, plan it, post updates, ship it",
+      },
     ],
   },
 ];
+
+/**
+ * Feedback & Roadmap: an agency's people send the product team an idea or a
+ * problem, and follow it from review to release (`/feedback`).
+ *
+ * Every working agency role has it -- agents, managers, owners and admins --
+ * and always in the group about their own account, never among the screens
+ * they sell from: it is somewhere they go when they have something to say,
+ * not part of the shift. Buyers, publishers and read-only accounts do not:
+ * the API refuses them (`routes/product-feedback.ts`). Staff manage it from
+ * Admin -> Product feedback above.
+ */
+export const FEEDBACK_ITEM: NavItem = {
+  name: 'Feedback & Roadmap',
+  href: '/feedback',
+  icon: Lightbulb,
+  title: 'Send the product team an idea or a problem, and follow it to release',
+};
 
 export function publisherNav(canViewRecordings: boolean): NavGroup[] {
   const items: NavItem[] = [
@@ -380,7 +405,7 @@ export const AGENCY_OWNER_NAV: NavGroup[] = [
   },
   {
     label: 'Account',
-    items: [platformItem('/settings/users'), platformItem('/settings')],
+    items: [platformItem('/settings/users'), platformItem('/settings'), FEEDBACK_ITEM],
   },
   {
     label: 'Call Network',
@@ -579,6 +604,7 @@ export const WHITE_LABEL_OWNER_NAV: NavGroup[] = [
       },
       platformItem('/settings'),
       UPGRADES_ITEM,
+      FEEDBACK_ITEM,
     ],
   },
 ];
@@ -709,6 +735,8 @@ export function firstUpgradeGroupOf(groups: NavGroup[]): string | null {
  *                         upgrade only (`agentNav`).
  *   Account  Account      their own login and password.
  *            Payroll      while MY_PAYROLL_ENABLED is on.
+ *            Feedback & Roadmap  ideas and problems for the product team, and
+ *                         what became of them (FEEDBACK_ITEM).
  *
  * ── What is not here ─────────────────────────────────────────────────────────
  *
@@ -754,6 +782,7 @@ export const AGENT_NAV: NavGroup[] = [
       ...(MY_PAYROLL_ENABLED
         ? [{ name: 'Payroll', href: '/payroll', icon: Receipt } satisfies NavItem]
         : []),
+      FEEDBACK_ITEM,
     ],
   },
 ];
@@ -818,7 +847,10 @@ export const MANAGER_NAV: NavGroup[] = [
   SUPERVISION_GROUP,
   {
     label: 'Account',
-    items: [{ name: 'Account', href: '/account', icon: UserCog, title: 'Your login and password' }],
+    items: [
+      { name: 'Account', href: '/account', icon: UserCog, title: 'Your login and password' },
+      FEEDBACK_ITEM,
+    ],
   },
 ];
 

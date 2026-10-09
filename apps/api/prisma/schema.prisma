@@ -139,6 +139,9 @@ model Tenant {
   fexQuotes                FexQuote[]
   /// This agency's quoter settings. Absent means the defaults.
   fexSettings              FexTenantSettings?
+  /// Feedback this agency's people sent the product team. See `ProductFeedback`.
+  productFeedback          ProductFeedback[]
+  productFeedbackVotes     ProductFeedbackVote[]
 
   @@index([slug])
   @@index([status])
@@ -454,6 +457,14 @@ model User {
 
   /// Final expense quotes this person saved.
   fexQuotesCreated FexQuote[] @relation("FexQuoteCreatedBy")
+
+  /// Feedback & Roadmap. See `ProductFeedback`.
+  productFeedbackSubmitted    ProductFeedback[]            @relation("ProductFeedbackSubmittedBy")
+  productFeedbackAssigned     ProductFeedback[]            @relation("ProductFeedbackAssignedTo")
+  productFeedbackVotes        ProductFeedbackVote[]
+  productFeedbackComments     ProductFeedbackComment[]
+  productFeedbackStatusEvents ProductFeedbackStatusEvent[]
+  productFeedbackReads        ProductFeedbackRead[]
 
   @@index([tenantId, email])
   @@index([tenantId, status])
@@ -6006,4 +6017,207 @@ model SharedRoutingGroupMember {
 enum SharedRoutingGroupStatus {
   ACTIVE
   PAUSED
+}
+
+// ============================================================================
+// Feedback & Roadmap: agents and agency principals tell the product team what
+// would make the platform better, and follow each request from review to
+// release. Triaged by platform admins at Admin -> Product feedback. The
+// vocabulary is `packages/shared/src/product-feedback.ts`; the API is
+// `routes/product-feedback.ts`. See migrations/20261017000000_product_feedback.
+// ============================================================================
+
+enum ProductFeedbackCategory {
+  IDEA
+  IMPROVEMENT
+  PROBLEM
+  WORKFLOW
+  COMPLAINT
+  OTHER
+}
+
+enum ProductFeedbackStatus {
+  NEW
+  UNDER_REVIEW
+  NEEDS_INFO
+  CONSIDERING
+  PLANNED
+  IN_PROGRESS
+  TESTING
+  SHIPPED
+  NOT_PLANNED
+  MERGED
+}
+
+enum ProductFeedbackPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+/// PRIVATE: the submitter and their agency's OWNER/ADMIN. TENANT: everybody in
+/// the submitting agency. PUBLIC: the roadmap, every agency -- readers outside
+/// the submitting agency see only the public title and summary.
+enum ProductFeedbackVisibility {
+  PRIVATE
+  TENANT
+  PUBLIC
+}
+
+enum ProductFeedbackUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// A target is a kind and the date its period starts, never free text, so
+/// "Next week" becomes "This week" on its own. NONE: no timeline yet.
+enum ProductFeedbackTargetKind {
+  NONE
+  WEEK
+  MONTH
+  QUARTER
+  DATE
+}
+
+/// PUBLIC_UPDATE and QUESTION are the product team speaking to the agency;
+/// USER_REPLY is the agency answering; INTERNAL_NOTE is never served to anybody
+/// but platform admins -- the agency-side queries do not select it at all.
+enum ProductFeedbackCommentKind {
+  PUBLIC_UPDATE
+  QUESTION
+  USER_REPLY
+  INTERNAL_NOTE
+}
+
+/// One request: an idea, a problem, a complaint. `tenantId` is the agency it
+/// came from, taken from the authenticated principal, never from the request
+/// body; null only for an item the product team put on the roadmap itself.
+model ProductFeedback {
+  id                   String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// A short human reference, "#123", for conversations about it.
+  number               Int                       @unique @default(autoincrement())
+  tenantId             String?
+  submittedByUserId    String?
+  /// The submitter's roles when they sent it, e.g. "AGENT". A snapshot.
+  submittedByRole      String?
+  title                String
+  description          String                    @db.Text
+  /// What the roadmap shows in place of the submitter's own words, when set.
+  publicTitle          String?
+  publicSummary        String?                   @db.Text
+  category             ProductFeedbackCategory
+  /// The nav entry it concerns, as its href ('/quote'), or 'other'.
+  productArea          String?
+  urgency              ProductFeedbackUrgency?
+  status               ProductFeedbackStatus     @default(NEW)
+  priority             ProductFeedbackPriority   @default(NORMAL)
+  visibility           ProductFeedbackVisibility @default(PRIVATE)
+  /// The page the submitter was on before opening Feedback & Roadmap.
+  sourceRoute          String?
+  /// Browser context captured at submission: viewport, timezone, user agent.
+  clientContext        Json?
+  targetKind           ProductFeedbackTargetKind @default(NONE)
+  targetDate           DateTime?                 @db.Date
+  assignedToUserId     String?
+  mergedIntoId         String?                   @db.Uuid
+  shippedAt            DateTime?                 @db.Timestamptz(3)
+  /// The last time the product team said something the agency can see: a
+  /// public update, a question, a status or target change. Drives "New update".
+  lastPublicActivityAt DateTime                  @default(now()) @db.Timestamptz(3)
+  /// The agency's last reply, and the product team's last word after it. A
+  /// reply newer than the staff word is "awaiting our response".
+  lastUserReplyAt      DateTime?                 @db.Timestamptz(3)
+  lastStaffReplyAt     DateTime?                 @db.Timestamptz(3)
+  createdAt            DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  tenant       Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submittedBy  User?                        @relation("ProductFeedbackSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  assignedTo   User?                        @relation("ProductFeedbackAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  mergedInto   ProductFeedback?             @relation("ProductFeedbackMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   ProductFeedback[]            @relation("ProductFeedbackMerge")
+  votes        ProductFeedbackVote[]
+  comments     ProductFeedbackComment[]
+  statusEvents ProductFeedbackStatusEvent[]
+  reads        ProductFeedbackRead[]
+
+  @@index([tenantId, status])
+  @@index([submittedByUserId, createdAt])
+  @@index([visibility, status])
+  @@index([status, updatedAt])
+  @@index([mergedIntoId])
+  @@map("product_feedback")
+}
+
+/// "I want this too". One per person per request: the unique key is what
+/// rejects a second vote, not the API.
+model ProductFeedbackVote {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  feedbackId String   @db.Uuid
+  userId     String
+  /// The voter's agency, for "12 of them at Life Leads Plus" on the staff side.
+  tenantId   String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  feedback ProductFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([feedbackId, userId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("product_feedback_votes")
+}
+
+/// The thread on a request. See `ProductFeedbackCommentKind` for who sees what.
+model ProductFeedbackComment {
+  id           String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  feedbackId   String                     @db.Uuid
+  kind         ProductFeedbackCommentKind
+  authorUserId String?
+  /// The author's agency for a USER_REPLY; null for the product team.
+  tenantId     String?
+  /// A public update's heading, e.g. "Development update".
+  headline     String?
+  body         String                     @db.Text
+  createdAt    DateTime                   @default(now()) @db.Timestamptz(3)
+
+  feedback ProductFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  author   User?           @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([feedbackId, createdAt])
+  @@map("product_feedback_comments")
+}
+
+/// Every status a request has actually been in, in order: the timeline. Never
+/// inferred, so a stage that did not happen is never drawn as done.
+model ProductFeedbackStatusEvent {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  feedbackId  String                 @db.Uuid
+  fromStatus  ProductFeedbackStatus?
+  toStatus    ProductFeedbackStatus
+  actorUserId String?
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+
+  feedback ProductFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  actor    User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([feedbackId, createdAt])
+  @@map("product_feedback_status_events")
+}
+
+/// When a person last opened a request, for the "New update" marker.
+model ProductFeedbackRead {
+  userId     String
+  feedbackId String   @db.Uuid
+  lastReadAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedback ProductFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, feedbackId])
+  @@index([feedbackId])
+  @@map("product_feedback_reads")
 }

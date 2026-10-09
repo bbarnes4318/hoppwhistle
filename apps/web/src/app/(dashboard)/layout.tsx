@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
 import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { portalRedirectTarget } from '@/lib/portal-host';
+import { rememberRoute } from '@/lib/product-feedback';
 import { getRedirectPath } from '@/lib/roles';
 import { isRouteBlockedFor, whiteLabelRedirectFor } from '@/lib/staff-only-routes';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * prompt to pick an agency instead of on a page that cannot load.
    */
   const platform = usePlatformContext();
+
+  // The page somebody was on before Feedback & Roadmap, so their feedback says
+  // where it came from without asking them. Session storage, this tab only.
+  useEffect(() => rememberRoute(pathname), [pathname]);
 
   /*
    * A page that embeds another application full-bleed (the AI Voice app on

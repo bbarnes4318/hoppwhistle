@@ -29,7 +29,12 @@ function gw(name: string, over: Partial<StepRow['gateways'][number]> = {}) {
   };
 }
 
-function step(carrierCode: string, position: number, gateways: StepRow['gateways'], over: Partial<StepRow> = {}): StepRow {
+function step(
+  carrierCode: string,
+  position: number,
+  gateways: StepRow['gateways'],
+  over: Partial<StepRow> = {}
+): StepRow {
   return {
     position,
     enabled: true,
@@ -89,8 +94,16 @@ describe('resolveChain ordering', () => {
   });
 
   it('breaks position and priority ties on name so the chain is stable', () => {
-    const a = resolveChain(route([step('B', 0, [gw('b')]), step('A', 0, [gw('a')])]), 'INBOUND', NOW);
-    const b = resolveChain(route([step('A', 0, [gw('a')]), step('B', 0, [gw('b')])]), 'INBOUND', NOW);
+    const a = resolveChain(
+      route([step('B', 0, [gw('b')]), step('A', 0, [gw('a')])]),
+      'INBOUND',
+      NOW
+    );
+    const b = resolveChain(
+      route([step('A', 0, [gw('a')]), step('B', 0, [gw('b')])]),
+      'INBOUND',
+      NOW
+    );
     expect(a.gateways.map(g => g.gateway)).toEqual(b.gateways.map(g => g.gateway));
   });
 });
@@ -138,8 +151,14 @@ describe('resolveChain fallback', () => {
   it.each([
     ['no route at all', null],
     ['a disabled route', route([step('FRACTEL', 0, [gw('fractel1')])], { enabled: false })],
-    ['a route with no enabled steps', route([step('FRACTEL', 0, [gw('fractel1')], { enabled: false })])],
-    ['a route whose only carrier has no enabled gateway', route([step('FRACTEL', 0, [gw('fractel1', { enabled: false })])])],
+    [
+      'a route with no enabled steps',
+      route([step('FRACTEL', 0, [gw('fractel1')], { enabled: false })]),
+    ],
+    [
+      'a route whose only carrier has no enabled gateway',
+      route([step('FRACTEL', 0, [gw('fractel1', { enabled: false })])]),
+    ],
     ['a route with no steps', route([])],
   ])('falls back to the legacy chain for %s', (_label, input) => {
     const chain = resolveChain(input, 'INBOUND', NOW);
@@ -427,10 +446,12 @@ describe('per-carrier caller ID', () => {
 
   it('holds one number for the whole of one call, and spreads across calls', () => {
     const first = resolveChain(
-      route([step('FRACTEL', 0, [gw('fractel1'), gw('fractel2', { priority: 1 })], {
-        callerIdStrategy: 'POOL',
-        callerIdPool: fractelPool,
-      })]),
+      route([
+        step('FRACTEL', 0, [gw('fractel1'), gw('fractel2', { priority: 1 })], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: fractelPool,
+        }),
+      ]),
       'SOFTPHONE_MANUAL',
       NOW,
       { callerIdRotation: 0 }
@@ -439,10 +460,12 @@ describe('per-carrier caller ID', () => {
     expect(new Set(first.gateways.map(g => g.callerId)).size).toBe(1);
 
     const second = resolveChain(
-      route([step('FRACTEL', 0, [gw('fractel1')], {
-        callerIdStrategy: 'POOL',
-        callerIdPool: fractelPool,
-      })]),
+      route([
+        step('FRACTEL', 0, [gw('fractel1')], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: fractelPool,
+        }),
+      ]),
       'SOFTPHONE_MANUAL',
       NOW,
       { callerIdRotation: 1 }
@@ -454,7 +477,11 @@ describe('per-carrier caller ID', () => {
 describe('rotatePrimaryGateways', () => {
   const chain = resolveChain(
     route([
-      step('FRACTEL', 0, [1, 2, 3].map((n, i) => gw(`fractel${n}`, { priority: i }))),
+      step(
+        'FRACTEL',
+        0,
+        [1, 2, 3].map((n, i) => gw(`fractel${n}`, { priority: i }))
+      ),
       step('BULKVS', 1, [gw('bulkvs')]),
     ]),
     'PREDICTIVE_DIALER',
@@ -531,7 +558,11 @@ describe('health folding', () => {
   });
 
   it('fully resets on success so unrelated failures cannot accumulate into a trip', () => {
-    const u = applyOutcome({ consecutiveFailures: CIRCUIT_FAILURE_THRESHOLD - 1 }, { ok: true }, NOW);
+    const u = applyOutcome(
+      { consecutiveFailures: CIRCUIT_FAILURE_THRESHOLD - 1 },
+      { ok: true },
+      NOW
+    );
     expect(u.consecutiveFailures).toBe(0);
     expect(u.circuitOpenUntil).toBeNull();
     expect(u.lastSuccessAt).toEqual(NOW);
@@ -540,7 +571,11 @@ describe('health folding', () => {
 
 describe('per-carrier attestation', () => {
   it('sends no header for a carrier that has no attestation configured', () => {
-    const chain = resolveChain(route([step('FRACTEL', 0, [gw('fractel1')])]), 'SOFTPHONE_MANUAL', NOW);
+    const chain = resolveChain(
+      route([step('FRACTEL', 0, [gw('fractel1')])]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
 
     expect(chain.gateways[0].attestation).toBeNull();
     expect(buildBridgeString(chain, '8005551212')).not.toContain('P-Attestation-Indicator');
@@ -767,10 +802,9 @@ describe('Vonage failover and circuit breaking', () => {
     ]);
 
   it('tries Vonage first and FracTEL after it when Vonage is primary', () => {
-    expect(resolveChain(steps(null), 'PREDICTIVE_DIALER', NOW).gateways.map(g => g.gateway)).toEqual([
-      'vonage',
-      'fractel1',
-    ]);
+    expect(
+      resolveChain(steps(null), 'PREDICTIVE_DIALER', NOW).gateways.map(g => g.gateway)
+    ).toEqual(['vonage', 'fractel1']);
   });
 
   it('tries Vonage after FracTEL when Vonage is the fallback', () => {
@@ -840,7 +874,10 @@ describe('Vonage failover and circuit breaking', () => {
 describe('leg outcome reporting', () => {
   const chain = resolveChain(
     route([
-      step('VONAGE', 0, [gw('vonage')], { callerIdStrategy: 'POOL', callerIdPool: ['14155550100'] }),
+      step('VONAGE', 0, [gw('vonage')], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: ['14155550100'],
+      }),
       step('FRACTEL', 1, [gw('fractel1')]),
     ]),
     'SOFTPHONE_MANUAL',

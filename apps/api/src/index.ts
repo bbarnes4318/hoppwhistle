@@ -280,6 +280,11 @@ async function buildServer() {
   // platform admin's side of both. See routes/upgrades.ts.
   const { registerUpgradeRoutes } = await import('./routes/upgrades.js');
   await server.register(registerUpgradeRoutes);
+  // Feedback & Roadmap: an agency's people send the product team ideas and
+  // problems and follow them to release; platform admins triage them. See
+  // routes/product-feedback.ts.
+  const { registerProductFeedbackRoutes } = await import('./routes/product-feedback.js');
+  await server.register(registerProductFeedbackRoutes);
   // Returns (a buyer's disputed call, and the agency's decision on it) and the
   // Today screen. Same access and scoping as the three above.
   const { registerReturnRoutes } = await import('./routes/returns.js');

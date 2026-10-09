@@ -202,6 +202,10 @@ const DATABASE_BACKED = [
   // `insurance_activities` and both quoter tables to seed two agencies whose
   // agents quote CRM customers.
   '**/src/__tests__/fex-customer-quotes.test.ts',
+  // Truncates `tenants`, `roles`, `audit_logs`, `platform_admins` and
+  // `product_feedback` to seed Life Leads Plus, an unrelated agency and a
+  // platform operator: Feedback & Roadmap's isolation and lifecycle.
+  '**/src/__tests__/product-feedback.test.ts',
 ];
 
 export default defineConfig({
