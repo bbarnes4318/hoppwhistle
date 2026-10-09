@@ -166,6 +166,7 @@ describe('AGENCY_OWNER_NAV: the working menu, then the upgrades', () => {
       [
         ['Team Members', '/settings/users', false],
         ['Settings', '/settings', false],
+        ['Feedback & Roadmap', '/feedback', false],
       ],
     ],
     [
@@ -412,7 +413,13 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
         ],
       ],
       ['Work', [['Power Dialer', '/call-center']]],
-      ['Account', [['Account', '/account']]],
+      [
+        'Account',
+        [
+          ['Account', '/account'],
+          ['Feedback & Roadmap', '/feedback'],
+        ],
+      ],
     ]);
   });
 
@@ -429,7 +436,13 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
           ['Leaderboard', '/leaderboard'],
         ],
       ],
-      ['Account', [['Account', '/account']]],
+      [
+        'Account',
+        [
+          ['Account', '/account'],
+          ['Feedback & Roadmap', '/feedback'],
+        ],
+      ],
     ]);
   });
 
@@ -494,6 +507,7 @@ describe("the agent's nav: the owner's product, through an agent's lens", () => 
     expect(account?.items.map(item => [item.name, item.href])).toEqual([
       ['Account', '/account'],
       ['Payroll', '/payroll'],
+      ['Feedback & Roadmap', '/feedback'],
     ]);
     vi.doUnmock('@/lib/feature-flags');
     vi.resetModules();

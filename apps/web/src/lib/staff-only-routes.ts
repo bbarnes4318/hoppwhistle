@@ -91,6 +91,10 @@ export const STAFF_ONLY_ROUTES = [
   '/admin/agreements',
   // One DID shared across agencies: cross-agency routing configuration.
   '/admin/shared-routing',
+  // The product team's side of Feedback & Roadmap: every agency's feedback,
+  // internal notes and triage. An agency's own side is `/feedback`, which is
+  // not here. The API is `requirePlatformAdmin` regardless.
+  '/admin/product-feedback',
 
   /*
    * NetEnroll's two unbuilt screens, which an agency principal was being shown

@@ -334,6 +334,40 @@ export const ENUM_TONE: Record<string, Record<string, StatusTone>> = {
     PAYMENT_DISPUTE_UPDATED: 'ringing',
   },
   SettlementDisputeStatus: { UNDER_REVIEW: 'ringing', WITHDRAWN: 'neutral' },
+
+  // Feedback & Roadmap. The agency-facing chip is FeedbackStatusChip, drawn in
+  // the brand; these are the tones anything generic reads. Moving toward
+  // release is amber, released is green, waiting on the submitter is amber,
+  // a decision not to build or a merge is not a failure.
+  ProductFeedbackStatus: {
+    NEW: 'ringing',
+    UNDER_REVIEW: 'ringing',
+    NEEDS_INFO: 'ringing',
+    CONSIDERING: 'neutral',
+    PLANNED: 'neutral',
+    IN_PROGRESS: 'ringing',
+    TESTING: 'ringing',
+    SHIPPED: 'live',
+    NOT_PLANNED: 'neutral',
+    MERGED: 'neutral',
+  },
+  ProductFeedbackCategory: {
+    IDEA: 'neutral',
+    IMPROVEMENT: 'neutral',
+    PROBLEM: 'neutral',
+    WORKFLOW: 'neutral',
+    COMPLAINT: 'neutral',
+  },
+  ProductFeedbackPriority: { CRITICAL: 'dropped' },
+  ProductFeedbackVisibility: { PRIVATE: 'neutral', TENANT: 'neutral', PUBLIC: 'neutral' },
+  ProductFeedbackUrgency: { MEDIUM: 'neutral' },
+  ProductFeedbackTargetKind: { WEEK: 'neutral', QUARTER: 'neutral', DATE: 'neutral' },
+  ProductFeedbackCommentKind: {
+    PUBLIC_UPDATE: 'neutral',
+    QUESTION: 'ringing',
+    USER_REPLY: 'neutral',
+    INTERNAL_NOTE: 'neutral',
+  },
 };
 
 /** Values that render with their acronym intact rather than title-cased. */

@@ -36,7 +36,7 @@ describe('a MANAGER', () => {
   it('is shown the floor and their account, and nothing administrative', () => {
     const nav = navFor({ ...VIEWER, isManagerOnly: true });
     expect(nav).toBe(MANAGER_NAV);
-    expect(hrefs(nav)).toEqual(['/monitor', '/account']);
+    expect(hrefs(nav)).toEqual(['/monitor', '/account', '/feedback']);
   });
 
   it('keeps an agent’s pages when they also take calls', () => {

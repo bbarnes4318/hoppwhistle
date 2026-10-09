@@ -139,6 +139,7 @@ REQUIRED_MIGRATIONS="
 20261015000001_manager_role_row
 20261016000000_insurance_activity_quote
 20261016000001_fex_quote_customer_fk
+20261017000000_product_feedback
 "
 MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
@@ -577,6 +578,12 @@ migration_applied() {
       echo "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'sales_workspace_access_same_tenant')
             AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'agreement_envelopes_immutable'
               AND prosrc LIKE '%salesWorkspaceId%')" ;;
+    *_product_feedback)
+      # Wrapped BEGIN..COMMIT; the last foreign key, on the reads table, stands
+      # for the types, tables and indexes before it.
+      echo "SELECT to_regclass('public.product_feedback') IS NOT NULL
+            AND EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'product_feedback_reads_feedbackId_fkey')" ;;
     *_fex_quote_engine)
       # Every statement is guarded (IF NOT EXISTS / duplicate_object); the
       # last one, the application's link column index, stands for the rest.
