@@ -21,7 +21,11 @@
  *   - a call Dograh itself sent us (`fromDograh`: its direct-transfer header),
  *     which would loop the transfer straight back to the AI;
  *   - a call whose caller ID is itself one of the AI's numbers, which is the AI
- *     transferring through FracTEL rather than a lead calling back.
+ *     transferring through FracTEL rather than a lead calling back;
+ *   - a DID routed to a campaign or a shared routing group. Those are where the
+ *     AI's transfer tool sends live leads, and a transfer through FracTEL
+ *     arrives from the lead's own number, so it looks exactly like a callback.
+ *     The caller-ID pool can include such a DID; it must still ring agents.
  */
 
 import { Prisma } from '@prisma/client';
@@ -98,8 +102,22 @@ export async function findDograhCallbackRoute(input: {
   );
   if (!owned) return null;
   if (caller && rows.some(r => nanpE164(r.number) === caller)) return null;
+  if (await isTransferDestination(prisma, did)) return null;
 
   return { bridge, tenantId: owned.tenantId, did };
+}
+
+/** The DID routes to a campaign or a shared group, so AI transfers land on it. */
+async function isTransferDestination(prisma: PrismaLike, did: string): Promise<boolean> {
+  const route = await prisma.didRoute.findFirst({
+    where: {
+      did: { in: storedForms(did) },
+      status: 'ACTIVE',
+      OR: [{ campaignId: { not: null } }, { sharedRoutingGroupId: { not: null } }],
+    },
+    select: { id: true },
+  });
+  return !!route;
 }
 
 export interface MarkResult {
