@@ -396,6 +396,22 @@ class CampaignCallDispatcher:
             logger.info(f"Provider name: {provider.PROVIDER_NAME}")
             logger.info(f"Queued run context: {queued_run.context_variables}")
 
+            campaign_transfer = (
+                campaign.orchestrator_metadata.get("transfer_destination")
+                if isinstance(campaign.orchestrator_metadata, dict)
+                else None
+            )
+            transfer_destination = (
+                campaign_transfer
+                or queued_run.context_variables.get("transfer_destination")
+                or "+14233398241"
+            )
+            if not campaign_transfer:
+                logger.warning(
+                    f"Campaign {campaign.id} has no transfer_destination; "
+                    f"transfers go to {transfer_destination}"
+                )
+
             # Merge context variables (queued_run context already includes retry info if applicable)
             initial_context = {
                 **queued_run.context_variables,
@@ -413,11 +429,10 @@ class CampaignCallDispatcher:
                 "caller_id_state_match": bool(
                     dest_state and caller_id_state == dest_state
                 ),
-                "transfer_destination": (
-                    queued_run.context_variables.get("transfer_destination")
-                    or (isinstance(campaign.orchestrator_metadata, dict) and campaign.orchestrator_metadata.get("transfer_destination"))
-                    or "+14233398241"
-                ),
+                # HOPWHISTLE PATCH: the campaign's own transfer number (its
+                # shared DID) always wins. A lead uploaded with its own
+                # transfer_destination must not send the live lead elsewhere.
+                "transfer_destination": transfer_destination,
                 "telephony_configuration_id": campaign.telephony_configuration_id,
             }
 
