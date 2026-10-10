@@ -386,6 +386,13 @@ export interface QuoteOptions {
    * reason, follows. Nothing else changes.
    */
   agentText?: boolean;
+  /**
+   * Price a monthly quote even where the carrier publishes no monthly factor,
+   * at `ESTIMATED_MONTHLY_FACTOR` of the annual premium, with a note saying
+   * so. Off by default, which is exactly v18: no monthly premium, the annual
+   * one only. Agents quote and sell monthly, so the app turns this on.
+   */
+  estimateMonthly?: boolean;
 }
 
 // ─── The answer ─────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ export * from './types.js';
 export { DrugIndex, IMPLIES, rootCondition } from './drug-index.js';
 export {
   agesOn,
+  ESTIMATED_MONTHLY_FACTOR,
   formatMonths,
   heightLabel,
   MODE_LABEL,
