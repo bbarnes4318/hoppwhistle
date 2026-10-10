@@ -220,9 +220,7 @@ export async function resolveSalesWorkspace(
  * What `/api/auth/me` reports, so the navigation is drawn from the same answer
  * the API enforces. Null when there is no Sales CRM for this principal.
  */
-export async function salesCapabilityFor(
-  principal: SalesPrincipal | undefined | null
-): Promise<{
+export async function salesCapabilityFor(principal: SalesPrincipal | undefined | null): Promise<{
   scope: 'PLATFORM' | 'TENANT';
   level: SalesAccessLevel;
   via: SalesAccessVia;

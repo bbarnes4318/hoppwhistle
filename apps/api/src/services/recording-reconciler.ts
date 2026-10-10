@@ -26,18 +26,31 @@ export async function reconcileRecordingForCall(callId: string): Promise<Reconci
   });
 
   if (!call) {
-    logger.info({ callId, finalAction: 'failed_stale_processing' }, '[Recording Reconciler] Call not found');
+    logger.info(
+      { callId, finalAction: 'failed_stale_processing' },
+      '[Recording Reconciler] Call not found'
+    );
     return { action: 'failed_stale_processing', callId, error: 'Call not found' };
   }
 
-  if (call.recordingStatus === 'READY' || call.recordingStatus === 'FAILED' || call.recordingStatus === null) {
-    logger.info({ callId, currentStatus: call.recordingStatus, finalAction: 'not_needed' }, '[Recording Reconciler] No reconciliation needed');
+  if (
+    call.recordingStatus === 'READY' ||
+    call.recordingStatus === 'FAILED' ||
+    call.recordingStatus === null
+  ) {
+    logger.info(
+      { callId, currentStatus: call.recordingStatus, finalAction: 'not_needed' },
+      '[Recording Reconciler] No reconciliation needed'
+    );
     return { action: 'not_needed', callId };
   }
 
   const activeStatuses = ['PENDING', 'RECORDING', 'PROCESSING'];
   if (!activeStatuses.includes(call.recordingStatus || '')) {
-    logger.info({ callId, currentStatus: call.recordingStatus, finalAction: 'not_needed' }, '[Recording Reconciler] Status is not active');
+    logger.info(
+      { callId, currentStatus: call.recordingStatus, finalAction: 'not_needed' },
+      '[Recording Reconciler] Status is not active'
+    );
     return { action: 'not_needed', callId };
   }
 
@@ -75,9 +88,7 @@ export async function reconcileRecordingForCall(callId: string): Promise<Reconci
 
   const now = Date.now();
   const lastRelevantTime =
-    call.recordingCompletedAt?.getTime() ||
-    call.endedAt?.getTime() ||
-    call.updatedAt.getTime();
+    call.recordingCompletedAt?.getTime() || call.endedAt?.getTime() || call.updatedAt.getTime();
 
   const ageMs = now - lastRelevantTime;
 
@@ -119,7 +130,10 @@ export async function reconcileRecordingForCall(callId: string): Promise<Reconci
         try {
           fs.unlinkSync(filePath);
         } catch (cleanupErr) {
-          logger.warn({ callId, filePath, err: cleanupErr }, '[Recording Reconciler] Failed to clean up WAV file after upload');
+          logger.warn(
+            { callId, filePath, err: cleanupErr },
+            '[Recording Reconciler] Failed to clean up WAV file after upload'
+          );
         }
 
         logger.info(
@@ -181,7 +195,10 @@ export async function reconcileStaleRecordingsForTenant(tenantId: string): Promi
   });
 
   if (staleCalls.length > 0) {
-    logger.info({ tenantId, count: staleCalls.length }, '[Recording Reconciler] Reconciling stale calls for tenant');
+    logger.info(
+      { tenantId, count: staleCalls.length },
+      '[Recording Reconciler] Reconciling stale calls for tenant'
+    );
     await Promise.allSettled(staleCalls.map(call => reconcileRecordingForCall(call.id)));
   }
 }

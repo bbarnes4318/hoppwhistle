@@ -1,4 +1,4 @@
-name: docker  # pinned: project name must never drift, or compose invents empty volumes
+name: docker # pinned: project name must never drift, or compose invents empty volumes
 services:
   # ============================================================================
   # Database & Cache

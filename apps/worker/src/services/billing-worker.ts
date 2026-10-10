@@ -179,57 +179,55 @@ export class BillingWorker {
     }
   }
 
-  private async dispatchMessages(
-    streamMessages: Array<[string, string[]]>
-  ): Promise<void> {
+  private async dispatchMessages(streamMessages: Array<[string, string[]]>): Promise<void> {
     if (!this.redis) return;
-        for (const [messageId, fields] of streamMessages) {
-          const fieldMap: Record<string, string> = {};
-          for (let i = 0; i < fields.length; i += 2) {
-            fieldMap[fields[i]] = fields[i + 1];
-          }
+    for (const [messageId, fields] of streamMessages) {
+      const fieldMap: Record<string, string> = {};
+      for (let i = 0; i < fields.length; i += 2) {
+        fieldMap[fields[i]] = fields[i + 1];
+      }
 
-          const payload = JSON.parse(fieldMap.payload || '{}');
+      const payload = JSON.parse(fieldMap.payload || '{}');
 
-          // Process call.completed events
-          if (payload.event === 'call.completed') {
-            // Validate event structure
-            const eventData = payload.data;
-            if (eventData.callId && (eventData.duration !== undefined || eventData.callState)) {
-              // Transform to billing event format if needed
-              const billingEvent: CallCompletedEvent = {
-                event: 'call.completed',
-                tenantId: payload.tenantId,
-                data: {
-                  callId: eventData.callId,
-                  direction: eventData.direction || 'OUTBOUND',
-                  duration: eventData.duration || 0,
-                  answered:
-                    eventData.answered !== undefined
-                      ? eventData.answered
-                      : eventData.callState?.status === 'completed' ||
-                        eventData.callState?.status === 'answered',
-                  publisherId: eventData.publisherId,
-                  buyerId: eventData.buyerId,
-                  campaignId: eventData.campaignId,
-                  hasRecording: eventData.hasRecording,
-                  recordingDuration: eventData.recordingDuration,
-                },
-              };
-              await this.processCallCompleted(billingEvent, messageId);
-            } else {
-              // Invalid event, acknowledge and skip
-              await this.redis.xack('events:stream', 'billing-group', messageId);
-            }
-          }
-          // Process conversion.confirmed events
-          else if (payload.event === 'conversion.confirmed') {
-            await this.processConversionConfirmed(payload as ConversionConfirmedEvent, messageId);
-          } else {
-            // Not our event, acknowledge and skip
-            await this.redis.xack('events:stream', 'billing-group', messageId);
-          }
+      // Process call.completed events
+      if (payload.event === 'call.completed') {
+        // Validate event structure
+        const eventData = payload.data;
+        if (eventData.callId && (eventData.duration !== undefined || eventData.callState)) {
+          // Transform to billing event format if needed
+          const billingEvent: CallCompletedEvent = {
+            event: 'call.completed',
+            tenantId: payload.tenantId,
+            data: {
+              callId: eventData.callId,
+              direction: eventData.direction || 'OUTBOUND',
+              duration: eventData.duration || 0,
+              answered:
+                eventData.answered !== undefined
+                  ? eventData.answered
+                  : eventData.callState?.status === 'completed' ||
+                    eventData.callState?.status === 'answered',
+              publisherId: eventData.publisherId,
+              buyerId: eventData.buyerId,
+              campaignId: eventData.campaignId,
+              hasRecording: eventData.hasRecording,
+              recordingDuration: eventData.recordingDuration,
+            },
+          };
+          await this.processCallCompleted(billingEvent, messageId);
+        } else {
+          // Invalid event, acknowledge and skip
+          await this.redis.xack('events:stream', 'billing-group', messageId);
         }
+      }
+      // Process conversion.confirmed events
+      else if (payload.event === 'conversion.confirmed') {
+        await this.processConversionConfirmed(payload as ConversionConfirmedEvent, messageId);
+      } else {
+        // Not our event, acknowledge and skip
+        await this.redis.xack('events:stream', 'billing-group', messageId);
+      }
+    }
   }
 
   private async consumeEvents(): Promise<void> {

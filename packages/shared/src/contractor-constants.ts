@@ -85,11 +85,7 @@ export const DISPOSITION_COLORS: Record<DispositionValue, string> = {
 
 // ─── Call Sources ─────────────────────────────────────────────────────────────
 
-export const CALL_SOURCES = [
-  'CALL_CENTER',
-  'SOFTPHONE',
-  'AI_VOICE',
-] as const;
+export const CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'] as const;
 
 export type CallSourceValue = (typeof CALL_SOURCES)[number];
 
@@ -101,11 +97,7 @@ export const CALL_SOURCE_LABELS: Record<CallSourceValue, string> = {
 
 // ─── Follow-Up Statuses ───────────────────────────────────────────────────────
 
-export const FOLLOW_UP_STATUSES = [
-  'PENDING',
-  'COMPLETED',
-  'CANCELLED',
-] as const;
+export const FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'] as const;
 
 export type FollowUpStatusValue = (typeof FOLLOW_UP_STATUSES)[number];
 

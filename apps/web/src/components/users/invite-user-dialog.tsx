@@ -178,7 +178,9 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess, roles }: Invit
     // An agent is only sent calls from the states they are licensed in, and
     // this form has no way to record them. "Add an agent" does.
     if (formData.role === 'AGENT') {
-      setError('Agents are added with "Add an agent", which records the states they are licensed in.');
+      setError(
+        'Agents are added with "Add an agent", which records the states they are licensed in.'
+      );
       return;
     }
 

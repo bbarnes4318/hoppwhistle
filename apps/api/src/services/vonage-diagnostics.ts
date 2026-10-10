@@ -136,7 +136,11 @@ export function judgeVonageLeg(
 /** Whether a number's Vonage-side forwarding matches what this platform expects. */
 export function judgeInboundForwarding(
   number: string,
-  actual: { voiceCallbackType?: string; voiceCallbackValue?: string; applicationId?: string } | null,
+  actual: {
+    voiceCallbackType?: string;
+    voiceCallbackValue?: string;
+    applicationId?: string;
+  } | null,
   expected: { mode: 'sip'; uri: string } | { mode: 'application'; applicationId: string }
 ): CheckResult {
   const name = `Inbound forwarding for ${number}`;
@@ -171,6 +175,11 @@ export function judgeInboundForwarding(
 }
 
 export function formatReport(results: CheckResult[]): string {
-  const mark: Record<CheckStatus, string> = { pass: 'PASS', warn: 'WARN', fail: 'FAIL', skip: 'SKIP' };
+  const mark: Record<CheckStatus, string> = {
+    pass: 'PASS',
+    warn: 'WARN',
+    fail: 'FAIL',
+    skip: 'SKIP',
+  };
   return results.map(r => `[${mark[r.status]}] ${r.name}\n       ${r.detail}`).join('\n');
 }

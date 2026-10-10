@@ -276,7 +276,7 @@ class FlowStore {
 
   private extractNodeConfig(flowNode: Flow['nodes'][number]): Record<string, unknown> {
     const config: Record<string, unknown> = {};
-    
+
     switch (flowNode.type) {
       case 'ivr':
         config.prompt = flowNode.prompt;
@@ -338,11 +338,13 @@ class FlowStore {
         config.reason = flowNode.reason;
         break;
     }
-    
+
     return config;
   }
 
-  private extractEdges(flowNode: Flow['nodes'][number]): Array<{ target: string; condition?: string }> {
+  private extractEdges(
+    flowNode: Flow['nodes'][number]
+  ): Array<{ target: string; condition?: string }> {
     const edges: Array<{ target: string; condition?: string }> = [];
 
     switch (flowNode.type) {
@@ -435,16 +437,16 @@ class FlowStore {
 
   private mapNodeType(type: Flow['nodes'][number]['type']): NodeType {
     const mapping: Record<string, NodeType> = {
-      'ivr': 'IVR',
-      'if': 'CONDITIONAL',
-      'queue': 'QUEUE',
-      'buyer': 'BUYER_FORWARD',
-      'record': 'RECORDING',
-      'tag': 'IVR', // Tag is stored as IVR
-      'whisper': 'TRANSFER',
-      'timeout': 'IVR',
-      'fallback': 'TRANSFER',
-      'hangup': 'HANGUP',
+      ivr: 'IVR',
+      if: 'CONDITIONAL',
+      queue: 'QUEUE',
+      buyer: 'BUYER_FORWARD',
+      record: 'RECORDING',
+      tag: 'IVR', // Tag is stored as IVR
+      whisper: 'TRANSFER',
+      timeout: 'IVR',
+      fallback: 'TRANSFER',
+      hangup: 'HANGUP',
     };
     return mapping[type] || 'IVR';
   }
@@ -522,7 +524,7 @@ class FlowStore {
 
     // Find entry node (node with type IVR and name 'Entry', or first node)
     const entryNode = nodes.find(n => n.name === 'Entry') || nodes[0];
-    
+
     // Build node map (db node id -> db node)
     const nodeMap = new Map<string, DbNode>();
     nodes.forEach(node => {
@@ -552,10 +554,15 @@ class FlowStore {
 
     // Reconstruct entry
     const entryEdges = edgeMap.get(entryNode.id) || [];
-    const entryTarget = readNodeConfig(entryNode.config)?.target || (entryEdges[0] ? entryEdges[0].toNodeId : null) || (flowNodes[0]?.id || '');
+    const entryTarget =
+      readNodeConfig(entryNode.config)?.target ||
+      (entryEdges[0] ? entryEdges[0].toNodeId : null) ||
+      flowNodes[0]?.id ||
+      '';
 
     // Get flow name from Flow table or metadata
-    const flowName = readVersionMetadata(dbVersion.metadata)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
+    const flowName =
+      readVersionMetadata(dbVersion.metadata)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
 
     return {
       id: dbVersion.flowId,
@@ -570,7 +577,11 @@ class FlowStore {
     };
   }
 
-  private reconstructFlowNode(dbNode: DbNode, edgeMap: Map<string, DbEdge[]>, nodeIdMap: Map<string, string>): Flow['nodes'][number] {
+  private reconstructFlowNode(
+    dbNode: DbNode,
+    edgeMap: Map<string, DbEdge[]>,
+    nodeIdMap: Map<string, string>
+  ): Flow['nodes'][number] {
     const config: StoredNodeConfig = readNodeConfig(dbNode.config) || {};
     const outgoingEdges = edgeMap.get(dbNode.id) || [];
 
@@ -598,7 +609,7 @@ class FlowStore {
             target: getTargetId(e),
           }));
         const defaultEdge = outgoingEdges.find(e => !e.condition);
-        
+
         return {
           id: dbNode.id,
           type: 'ivr',
@@ -606,7 +617,7 @@ class FlowStore {
           timeout: config.timeout,
           maxDigits: config.maxDigits,
           finishOnKey: config.finishOnKey,
-          choices: choices.length > 0 ? choices : (config.choices || []),
+          choices: choices.length > 0 ? choices : config.choices || [],
           default: defaultEdge ? getTargetId(defaultEdge) : config.default,
           ...(config.next ? { next: config.next } : {}),
         };
@@ -614,12 +625,12 @@ class FlowStore {
       case 'if': {
         const thenEdge = outgoingEdges.find(e => e.condition === 'true');
         const elseEdge = outgoingEdges.find(e => e.condition === 'false');
-        
+
         return {
           id: dbNode.id,
           type: 'if',
           condition: config.condition || '',
-          then: thenEdge ? getTargetId(thenEdge) : (config.then || ''),
+          then: thenEdge ? getTargetId(thenEdge) : config.then || '',
           else: elseEdge ? getTargetId(elseEdge) : config.else,
         };
       }
@@ -627,7 +638,7 @@ class FlowStore {
         const onConnectEdge = outgoingEdges.find(e => e.condition === 'connected');
         const onTimeoutEdge = outgoingEdges.find(e => e.condition === 'timeout');
         const onFullEdge = outgoingEdges.find(e => e.condition === 'full');
-        
+
         return {
           id: dbNode.id,
           type: 'queue',
@@ -644,7 +655,7 @@ class FlowStore {
         const nextEdge = outgoingEdges.find(e => !e.condition);
         const onNoBuyersEdge = outgoingEdges.find(e => e.condition === 'no-buyers');
         const onAllBusyEdge = outgoingEdges.find(e => e.condition === 'all-busy');
-        
+
         return {
           id: dbNode.id,
           type: 'buyer',
@@ -652,13 +663,17 @@ class FlowStore {
           strategy: config.strategy || 'round-robin',
           onNoBuyers: onNoBuyersEdge ? getTargetId(onNoBuyersEdge) : config.onNoBuyers,
           onAllBusy: onAllBusyEdge ? getTargetId(onAllBusyEdge) : config.onAllBusy,
-          ...(nextEdge ? { next: getTargetId(nextEdge) } : (config.next ? { next: config.next } : {})),
+          ...(nextEdge
+            ? { next: getTargetId(nextEdge) }
+            : config.next
+              ? { next: config.next }
+              : {}),
         };
       }
       case 'record': {
         const onCompleteEdge = outgoingEdges.find(e => e.condition === 'complete');
         const onErrorEdge = outgoingEdges.find(e => e.condition === 'error');
-        
+
         return {
           id: dbNode.id,
           type: 'record',
@@ -671,18 +686,22 @@ class FlowStore {
       }
       case 'tag': {
         const nextEdge = outgoingEdges.find(e => !e.condition);
-        
+
         return {
           id: dbNode.id,
           type: 'tag',
           tags: config.tags || {},
-          ...(nextEdge ? { next: getTargetId(nextEdge) } : (config.next ? { next: config.next } : {})),
+          ...(nextEdge
+            ? { next: getTargetId(nextEdge) }
+            : config.next
+              ? { next: config.next }
+              : {}),
         };
       }
       case 'whisper': {
         const onAcceptEdge = outgoingEdges.find(e => e.condition === 'accept');
         const onRejectEdge = outgoingEdges.find(e => e.condition === 'reject');
-        
+
         return {
           id: dbNode.id,
           type: 'whisper',
@@ -695,12 +714,16 @@ class FlowStore {
       }
       case 'timeout': {
         const nextEdge = outgoingEdges.find(e => !e.condition);
-        
+
         return {
           id: dbNode.id,
           type: 'timeout',
           duration: config.duration || 0,
-          ...(nextEdge ? { next: getTargetId(nextEdge) } : (config.next ? { next: config.next } : {})),
+          ...(nextEdge
+            ? { next: getTargetId(nextEdge) }
+            : config.next
+              ? { next: config.next }
+              : {}),
         };
       }
       case 'fallback': {
@@ -708,11 +731,11 @@ class FlowStore {
           .filter(e => !e.condition || e.condition !== 'all-failed')
           .map(e => getTargetId(e));
         const onAllFailedEdge = outgoingEdges.find(e => e.condition === 'all-failed');
-        
+
         return {
           id: dbNode.id,
           type: 'fallback',
-          targets: targets.length > 0 ? targets : (config.targets || []),
+          targets: targets.length > 0 ? targets : config.targets || [],
           onAllFailed: onAllFailedEdge ? getTargetId(onAllFailedEdge) : config.onAllFailed,
         };
       }
@@ -729,13 +752,13 @@ class FlowStore {
 
   private mapDbNodeTypeToFlowType(dbType: string): Flow['nodes'][number]['type'] {
     const mapping: Record<string, Flow['nodes'][number]['type']> = {
-      'IVR': 'ivr',
-      'CONDITIONAL': 'if',
-      'QUEUE': 'queue',
-      'BUYER_FORWARD': 'buyer',
-      'RECORDING': 'record',
-      'TRANSFER': 'whisper',
-      'HANGUP': 'hangup',
+      IVR: 'ivr',
+      CONDITIONAL: 'if',
+      QUEUE: 'queue',
+      BUYER_FORWARD: 'buyer',
+      RECORDING: 'record',
+      TRANSFER: 'whisper',
+      HANGUP: 'hangup',
     };
     return mapping[dbType] || 'ivr';
   }
@@ -898,7 +921,7 @@ class FlowStore {
    */
   async listFlows(tenantId?: string): Promise<string[]> {
     const prisma = getPrismaClient();
-    
+
     const where: Prisma.FlowWhereInput = {};
     if (tenantId) {
       where.tenantId = tenantId;

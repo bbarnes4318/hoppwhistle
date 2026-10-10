@@ -39,10 +39,7 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
-import {
-  Prisma,
-  SettlementDisputeStatus,
-} from '@prisma/client';
+import { Prisma, SettlementDisputeStatus } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 
@@ -69,7 +66,9 @@ export interface DisputeFacts {
  * we do not recognise is not evidence that a dispute is finished, and guessing
  * "won" would be guessing in the direction that stops containing anything.
  */
-export function disputeStatusFrom(stripeStatus: string | null | undefined): SettlementDisputeStatus {
+export function disputeStatusFrom(
+  stripeStatus: string | null | undefined
+): SettlementDisputeStatus {
   switch (stripeStatus) {
     case 'warning_needs_response':
     case 'warning_under_review':
@@ -169,7 +168,7 @@ export async function recordDispute(params: {
       data: {
         status,
         stripeStatus: facts.stripeStatus,
-        closedAt: facts.closed ? existing.closedAt ?? now : existing.closedAt,
+        closedAt: facts.closed ? (existing.closedAt ?? now) : existing.closedAt,
       },
     });
 

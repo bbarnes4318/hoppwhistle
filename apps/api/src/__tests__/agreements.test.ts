@@ -54,9 +54,7 @@ const MIGRATIONS = [
   '20261007000000_agreements',
   '20261008000000_agreements_party_details',
   '20261009000000_sales_workspaces',
-].map(
-  name => join(__dirname, `../../prisma/migrations/${name}/migration.sql`)
-);
+].map(name => join(__dirname, `../../prisma/migrations/${name}/migration.sql`));
 
 describe('Agreements suite wiring', () => {
   it('runs against a real database when running in CI', () => {

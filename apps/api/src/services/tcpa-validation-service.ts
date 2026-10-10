@@ -15,10 +15,10 @@
 import { getRedisClient } from './redis.js';
 
 // ── Environment ──────────────────────────────────────────────────────────────
-const TCPA_API_KEY    = process.env.TCPA_API_KEY    || '';
+const TCPA_API_KEY = process.env.TCPA_API_KEY || '';
 const TCPA_API_SECRET = process.env.TCPA_API_SECRET || '';
-const TCPA_API_URL    = 'https://app.realvalidito.com/dnclookup/validate';
-const CACHE_TTL_SECS  = 86400; // 24 hours
+const TCPA_API_URL = 'https://app.realvalidito.com/dnclookup/validate';
+const CACHE_TTL_SECS = 86400; // 24 hours
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TcpaResult {
@@ -43,12 +43,12 @@ interface RealValiditorResponse {
   data?: {
     cleaned_number?: string[];
     tcpa_litigator?: string[];
-    federal_dnc?:    string[];
-    invalid?:        string[];
+    federal_dnc?: string[];
+    invalid?: string[];
   };
   error?: {
     error_code: number;
-    message:    string;
+    message: string;
   };
 }
 
@@ -140,9 +140,9 @@ class TcpaValidationService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          api_key:    TCPA_API_KEY,
+          api_key: TCPA_API_KEY,
           api_secret: TCPA_API_SECRET,
-          numbers:    [tenDigit],
+          numbers: [tenDigit],
         }),
         signal: controller.signal,
       });
@@ -163,10 +163,10 @@ class TcpaValidationService {
         return this.buildResult(tenDigit, { isClean: true, cached: false });
       }
 
-      const isLitigator  = (json.data.tcpa_litigator || []).includes(tenDigit);
-      const isFederalDnc = (json.data.federal_dnc    || []).includes(tenDigit);
-      const isClean      = (json.data.cleaned_number  || []).includes(tenDigit);
-      const isInvalid    = (json.data.invalid          || []).includes(tenDigit);
+      const isLitigator = (json.data.tcpa_litigator || []).includes(tenDigit);
+      const isFederalDnc = (json.data.federal_dnc || []).includes(tenDigit);
+      const isClean = (json.data.cleaned_number || []).includes(tenDigit);
+      const isInvalid = (json.data.invalid || []).includes(tenDigit);
 
       const result = this.buildResult(tenDigit, {
         isLitigator,
@@ -197,12 +197,12 @@ class TcpaValidationService {
   ): TcpaResult {
     return {
       number,
-      isLitigator:  flags.isLitigator  ?? false,
+      isLitigator: flags.isLitigator ?? false,
       isFederalDnc: flags.isFederalDnc ?? false,
-      isClean:      flags.isClean      ?? false,
-      isInvalid:    flags.isInvalid    ?? false,
-      cached:       flags.cached       ?? false,
-      checkedAt:    new Date().toISOString(),
+      isClean: flags.isClean ?? false,
+      isInvalid: flags.isInvalid ?? false,
+      cached: flags.cached ?? false,
+      checkedAt: new Date().toISOString(),
     };
   }
 }

@@ -1,12 +1,7 @@
 // scriptAdapter.ts - Adapter to use Golden Path script in IntegratedScriptPanel
 // This bridges the script format with the component
 
-import {
-  SCRIPT_NODES,
-  STARTING_NODE,
-  replaceVariables,
-  SCRIPT_PHASES,
-} from './scriptData';
+import { SCRIPT_NODES, STARTING_NODE, replaceVariables, SCRIPT_PHASES } from './scriptData';
 import type { ScriptNode } from './types';
 
 export interface AdaptedNode {

@@ -69,21 +69,25 @@ async function importNumbers(options: ImportOptions) {
         const rowNum = i + index + 1;
         try {
           // Extract fields
-          const number = options.numberColumn !== undefined
-            ? record[Object.keys(record)[options.numberColumn]]
-            : record.number || record.phone || record.phoneNumber || record[0];
+          const number =
+            options.numberColumn !== undefined
+              ? record[Object.keys(record)[options.numberColumn]]
+              : record.number || record.phone || record.phoneNumber || record[0];
 
-          const tenantId = options.tenantColumn !== undefined
-            ? record[Object.keys(record)[options.tenantColumn]]
-            : record.tenantId || record.tenant_id || record.tenant || record[1];
+          const tenantId =
+            options.tenantColumn !== undefined
+              ? record[Object.keys(record)[options.tenantColumn]]
+              : record.tenantId || record.tenant_id || record.tenant || record[1];
 
-          const campaignId = options.campaignColumn !== undefined
-            ? record[Object.keys(record)[options.campaignColumn]]
-            : record.campaignId || record.campaign_id || record.campaign || record[2];
+          const campaignId =
+            options.campaignColumn !== undefined
+              ? record[Object.keys(record)[options.campaignColumn]]
+              : record.campaignId || record.campaign_id || record.campaign || record[2];
 
-          const provider = options.providerColumn !== undefined
-            ? record[Object.keys(record)[options.providerColumn]]
-            : record.provider || record[3] || 'local';
+          const provider =
+            options.providerColumn !== undefined
+              ? record[Object.keys(record)[options.providerColumn]]
+              : record.provider || record[3] || 'local';
 
           if (!number) {
             throw new Error('Phone number is required');
@@ -171,13 +175,15 @@ async function importNumbers(options: ImportOptions) {
       })
     );
 
-    console.log(`Processed ${Math.min(i + batchSize, records.length)}/${records.length} records...`);
+    console.log(
+      `Processed ${Math.min(i + batchSize, records.length)}/${records.length} records...`
+    );
   }
 
   console.log(`\n✅ Import complete:`);
   console.log(`   Imported: ${imported}`);
   console.log(`   Skipped: ${skipped}`);
-  
+
   if (errors.length > 0) {
     console.log(`\n❌ Errors:`);
     errors.slice(0, 10).forEach(({ row, error }) => {
@@ -216,7 +222,9 @@ if (!options.file) {
   console.error('  --number-column=N        Column index for phone number (default: auto-detect)');
   console.error('  --tenant-column=N        Column index for tenant ID (default: auto-detect)');
   console.error('  --campaign-column=N      Column index for campaign ID (default: auto-detect)');
-  console.error('  --provider-column=N      Column index for provider (default: auto-detect or "local")');
+  console.error(
+    '  --provider-column=N      Column index for provider (default: auto-detect or "local")'
+  );
   console.error('\nCSV Format:');
   console.error('  number,tenant_id,campaign_id,provider');
   console.error('  +15551234567,t_123,c_abc,signalwire');
@@ -227,8 +235,7 @@ importNumbers(options as ImportOptions)
   .then(() => {
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('Import failed:', error);
     process.exit(1);
   });
-

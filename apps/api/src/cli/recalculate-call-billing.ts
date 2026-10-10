@@ -79,13 +79,16 @@ Options:
       console.log(`\nChanges detected (${results.changes.length} calls):`);
       for (const change of results.changes) {
         console.log(`Call ID: ${change.callId} (${change.callSid})`);
-        console.log(`  Before: Billable: ${change.before.billable}, Revenue: $${change.before.revenue}, Payout: $${change.before.payout}`);
-        console.log(`  After:  Billable: ${change.after.billable}, Revenue: $${change.after.revenue}, Payout: $${change.after.payout}`);
+        console.log(
+          `  Before: Billable: ${change.before.billable}, Revenue: $${change.before.revenue}, Payout: $${change.before.payout}`
+        );
+        console.log(
+          `  After:  Billable: ${change.after.billable}, Revenue: $${change.after.revenue}, Payout: $${change.after.payout}`
+        );
       }
     } else {
       console.log(`\nNo billing changes detected.`);
     }
-
   } catch (error) {
     console.error('Error during recalculation:', error);
     process.exit(1);

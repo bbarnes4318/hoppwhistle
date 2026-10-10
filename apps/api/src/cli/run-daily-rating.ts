@@ -38,10 +38,7 @@
  */
 
 import { getPrismaClient } from '../lib/prisma.js';
-import {
-  lastClosedCalendarDay,
-  nextCalendarDay,
-} from '../services/rating/calendar-day.js';
+import { lastClosedCalendarDay, nextCalendarDay } from '../services/rating/calendar-day.js';
 import { measureTrailingDeliveryDays } from '../services/rating/delivery-day.js';
 import { rateFor } from '../services/rating/rate-curve.js';
 import {
@@ -104,11 +101,9 @@ async function main(): Promise<void> {
         windowSettings.deliveryDayLookback
       );
 
-      const verdict =
-        measured?.closingPct == null ? null : rateFor(curve, measured.closingPct);
+      const verdict = measured?.closingPct == null ? null : rateFor(curve, measured.closingPct);
 
-      const rate =
-        verdict === null ? null : verdict.kind === 'BELOW_MINIMUM' ? null : verdict.rate;
+      const rate = verdict === null ? null : verdict.kind === 'BELOW_MINIMUM' ? null : verdict.rate;
 
       const note =
         measured === null
@@ -147,9 +142,7 @@ async function main(): Promise<void> {
     console.error(`  ${failure.tenantId}  FAILED: ${failure.error}`);
   }
 
-  console.log(
-    `\n${run.results.length} agencies rated, ${run.failures.length} failed.`
-  );
+  console.log(`\n${run.results.length} agencies rated, ${run.failures.length} failed.`);
 
   // A failure for one agency leaves the others correctly rated, but the run as
   // a whole did not do its job, and a cron needs to know that.

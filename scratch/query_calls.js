@@ -13,10 +13,10 @@ async function run() {
         fromNumberId: true,
         direction: true,
         status: true,
-        createdAt: true
-      }
+        createdAt: true,
+      },
     });
-    console.log("CALLS:" + JSON.stringify(calls, null, 2));
+    console.log('CALLS:' + JSON.stringify(calls, null, 2));
   } catch (err) {
     console.error(err);
   } finally {

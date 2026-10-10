@@ -94,9 +94,8 @@ async function authenticateWebSocket(
   // to trust it: the value is still a credential that is verified below, and it
   // never names a tenant.
   const apiKey =
-    (typeof request.headers['x-api-key'] === 'string'
-      ? (request.headers['x-api-key'])
-      : undefined) ?? (typeof query.apiKey === 'string' ? query.apiKey : undefined);
+    (typeof request.headers['x-api-key'] === 'string' ? request.headers['x-api-key'] : undefined) ??
+    (typeof query.apiKey === 'string' ? query.apiKey : undefined);
 
   if (apiKey) {
     const prisma = getPrismaClient();
@@ -248,15 +247,11 @@ export async function registerWebSocketRoutes(fastify: FastifyInstance) {
               break;
 
             case 'ping':
-              socket.send(
-                JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() })
-              );
+              socket.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
               break;
           }
         } catch {
-          socket.send(
-            JSON.stringify({ type: 'error', message: 'Invalid message format' })
-          );
+          socket.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
         }
       });
 

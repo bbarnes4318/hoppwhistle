@@ -23,7 +23,7 @@ console.log(`Found ${recordings.length} recordings in JSON data.`);
 // Base volume paths on host
 const basePaths = [
   '/var/lib/docker/volumes/docker_minio_data/_data/recordings/recordings',
-  '/var/lib/docker/volumes/docker_minio_data/_data/hopwhistle-recordings/recordings'
+  '/var/lib/docker/volumes/docker_minio_data/_data/hopwhistle-recordings/recordings',
 ];
 
 let copiedCount = 0;
@@ -32,29 +32,29 @@ let missingCount = 0;
 for (const rec of recordings) {
   const callId = rec.callId;
   const createdAt = new Date(rec.createdAt);
-  
+
   // Format Date: YYYY-MM-DD_HH-MM-SS (Local/EST approximation)
   // Shift by -4 hours for EST/EDT
   const estTime = new Date(createdAt.getTime() - 4 * 60 * 60 * 1000);
   const dateStr = estTime.toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-  
+
   const fromNum = rec.call?.callerId || 'unknown';
   const toNum = rec.call?.toNumber || 'unknown';
   const shortId = callId.substring(0, 8);
-  
+
   // Clean names
   const cleanFrom = fromNum.replace(/[^\d]/g, '');
   const cleanTo = toNum.replace(/[^\d]/g, '');
-  
+
   const friendlyName = `${dateStr}_From_${cleanFrom}_To_${cleanTo}_${shortId}.wav`;
-  
+
   // Try to find the file in either S3 storage key path or dates folder
   // Path format: YYYY/MM/DD/callId.wav
   const year = createdAt.getUTCFullYear();
   const month = String(createdAt.getUTCMonth() + 1).padStart(2, '0');
   const day = String(createdAt.getUTCDate()).padStart(2, '0');
   const subPath = `${year}/${month}/${day}/${callId}.wav`;
-  
+
   let sourceFile = null;
   for (const basePath of basePaths) {
     const checkPath = path.join(basePath, subPath);
@@ -69,7 +69,7 @@ for (const rec of recordings) {
       break;
     }
   }
-  
+
   if (sourceFile) {
     // If it's a directory (MinIO storage format), look for the part.1 file inside
     if (fs.statSync(sourceFile).isDirectory()) {

@@ -119,10 +119,7 @@ export class CallStateService {
   /**
    * Update call state (partial update)
    */
-  async updateCallState(
-    callId: string,
-    updates: Partial<CallState>
-  ): Promise<CallState | null> {
+  async updateCallState(callId: string, updates: Partial<CallState>): Promise<CallState | null> {
     const existing = await this.getCallState(callId);
     if (!existing) {
       return null;
@@ -141,10 +138,7 @@ export class CallStateService {
   /**
    * Add participant to call
    */
-  async addParticipant(
-    callId: string,
-    participant: CallParticipant
-  ): Promise<CallState | null> {
+  async addParticipant(callId: string, participant: CallParticipant): Promise<CallState | null> {
     const existing = await this.getCallState(callId);
     if (!existing) {
       return null;
@@ -175,7 +169,7 @@ export class CallStateService {
 
     const updated: CallState = {
       ...existing,
-      participants: existing.participants.map((p) =>
+      participants: existing.participants.map(p =>
         p.id === participantId ? { ...p, ...updates } : p
       ),
       updatedAt: new Date().toISOString(),
@@ -219,9 +213,7 @@ export class CallStateService {
 
     const updated: CallState = {
       ...existing,
-      timers: existing.timers.map((t) =>
-        t.id === timerId ? { ...t, ...updates } : t
-      ),
+      timers: existing.timers.map(t => (t.id === timerId ? { ...t, ...updates } : t)),
       updatedAt: new Date().toISOString(),
     };
 
@@ -232,10 +224,7 @@ export class CallStateService {
   /**
    * Update current node
    */
-  async updateCurrentNode(
-    callId: string,
-    nodeId: string
-  ): Promise<CallState | null> {
+  async updateCurrentNode(callId: string, nodeId: string): Promise<CallState | null> {
     return this.updateCallState(callId, { current_node: nodeId });
   }
 
@@ -249,4 +238,3 @@ export class CallStateService {
 }
 
 export const callStateService = new CallStateService();
-

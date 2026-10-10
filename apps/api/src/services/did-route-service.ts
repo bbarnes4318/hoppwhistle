@@ -116,8 +116,7 @@ export class DidRouteService {
           // Auto-created routes (label "Auto-routed …") must follow the CURRENT
           // assignment — otherwise reassigning a number keeps ringing the previous
           // owner's extension. Only a route with a human-set label is preserved.
-          const isAutoRoute =
-            !existingRoute.label || existingRoute.label.startsWith('Auto-routed');
+          const isAutoRoute = !existingRoute.label || existingRoute.label.startsWith('Auto-routed');
           const shouldUpdateDestination =
             hasCampaign || isAutoRoute || !isValidPhoneDestination(existingRoute.destination);
 
@@ -147,8 +146,7 @@ export class DidRouteService {
           });
 
           if (duplicate) {
-            const isAutoDuplicate =
-              !duplicate.label || duplicate.label.startsWith('Auto-routed');
+            const isAutoDuplicate = !duplicate.label || duplicate.label.startsWith('Auto-routed');
             const shouldUpdateDestination =
               hasCampaign || isAutoDuplicate || !isValidPhoneDestination(duplicate.destination);
 

@@ -273,9 +273,7 @@ describe.skipIf(!gate.available)('Platform capability: not self-serve', () => {
       expect(after, 'an authenticated request created a platform capability').toBe(before);
 
       // And specifically: neither principal granted it to the ordinary user.
-      expect(
-        await prisma.platformAdmin.findUnique({ where: { userId: plainUserId } })
-      ).toBeNull();
+      expect(await prisma.platformAdmin.findUnique({ where: { userId: plainUserId } })).toBeNull();
       expect(await prisma.platformAdmin.findUnique({ where: { userId: ownerId } })).toBeNull();
     });
   }

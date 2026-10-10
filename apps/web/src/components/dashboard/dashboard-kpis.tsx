@@ -3,7 +3,6 @@
 import { Phone, DollarSign, CheckCircle, Receipt, PhoneMissed, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 
-
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 

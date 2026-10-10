@@ -45,11 +45,11 @@ the Dograh API image** (`api`, and any campaign or worker service built from it;
 `docker compose config | grep -B3 "dograh.*api"` lists them), add:
 
 ```yaml
-    volumes:
-      - /opt/dograh-patches/ari-trunk/provider.py:/app/api/services/telephony/providers/ari/provider.py:ro
-    environment:
-      DOGRAH_ARI_TRUNK: twilio             # or vonage / anveo; fractel to go back
-      # DOGRAH_ARI_TRANSFER_TRUNK: fractel # only if transfers should stay on FracTEL
+volumes:
+  - /opt/dograh-patches/ari-trunk/provider.py:/app/api/services/telephony/providers/ari/provider.py:ro
+environment:
+  DOGRAH_ARI_TRUNK: twilio # or vonage / anveo; fractel to go back
+  # DOGRAH_ARI_TRANSFER_TRUNK: fractel # only if transfers should stay on FracTEL
 ```
 
 Then check the file and restart only those services:

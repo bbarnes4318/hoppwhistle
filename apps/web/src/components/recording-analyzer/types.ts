@@ -7,19 +7,47 @@ export type FieldDef = {
 };
 
 export const VERTICALS: Array<{ key: Vertical; label: string; description: string }> = [
-  { key: 'ACA', label: 'ACA Health', description: 'Enrollments, carrier, follow-ups, billable, transcript optional.' },
-  { key: 'FINAL_EXPENSE', label: 'Final Expense', description: 'Apps, quotes, premium, carrier, follow-ups, billable, transcript optional.' },
-  { key: 'MEDICARE', label: 'Medicare', description: 'Enrollments, carrier, follow-ups, billable, transcript optional.' },
+  {
+    key: 'ACA',
+    label: 'ACA Health',
+    description: 'Enrollments, carrier, follow-ups, billable, transcript optional.',
+  },
+  {
+    key: 'FINAL_EXPENSE',
+    label: 'Final Expense',
+    description: 'Apps, quotes, premium, carrier, follow-ups, billable, transcript optional.',
+  },
+  {
+    key: 'MEDICARE',
+    label: 'Medicare',
+    description: 'Enrollments, carrier, follow-ups, billable, transcript optional.',
+  },
 ];
 
 export const FIELDS_BY_VERTICAL: Record<Vertical, FieldDef[]> = {
   FINAL_EXPENSE: [
     { key: 'Applications Submitted', label: 'Applications Submitted', defaultChecked: true },
-    { key: 'Monthly Premium (if app submitted)', label: 'Monthly Premium (if app submitted)', defaultChecked: true },
-    { key: 'Carrier (If app submitted)', label: 'Carrier (If app submitted)', defaultChecked: true },
+    {
+      key: 'Monthly Premium (if app submitted)',
+      label: 'Monthly Premium (if app submitted)',
+      defaultChecked: true,
+    },
+    {
+      key: 'Carrier (If app submitted)',
+      label: 'Carrier (If app submitted)',
+      defaultChecked: true,
+    },
     { key: 'Quotes', label: 'Quotes', defaultChecked: true },
-    { key: 'Monthly Premium (If Quote Provided)', label: 'Monthly Premium (If Quote Provided)', defaultChecked: true },
-    { key: 'Carrier (If Quote Provided)', label: 'Carrier (If Quote Provided)', defaultChecked: true },
+    {
+      key: 'Monthly Premium (If Quote Provided)',
+      label: 'Monthly Premium (If Quote Provided)',
+      defaultChecked: true,
+    },
+    {
+      key: 'Carrier (If Quote Provided)',
+      label: 'Carrier (If Quote Provided)',
+      defaultChecked: true,
+    },
     { key: 'Follow-Ups', label: 'Follow-Ups', defaultChecked: true },
     { key: 'Billable', label: 'Billable (Y/N)', defaultChecked: true },
     { key: 'Reason (If No)', label: 'Reason (If No)' },

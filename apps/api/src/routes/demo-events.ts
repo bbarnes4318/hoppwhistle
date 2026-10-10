@@ -62,27 +62,31 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
 
     switch (event) {
       case 'call.started':
-        updatedState = await callStateService.updateCallState(mockCallId, {
-          status: 'ringing',
-        }) || callState;
+        updatedState =
+          (await callStateService.updateCallState(mockCallId, {
+            status: 'ringing',
+          })) || callState;
         break;
 
       case 'call.answered':
-        updatedState = await callStateService.updateCallState(mockCallId, {
-          status: 'answered',
-        }) || callState;
+        updatedState =
+          (await callStateService.updateCallState(mockCallId, {
+            status: 'answered',
+          })) || callState;
         break;
 
       case 'call.completed':
-        updatedState = await callStateService.updateCallState(mockCallId, {
-          status: 'completed',
-        }) || callState;
+        updatedState =
+          (await callStateService.updateCallState(mockCallId, {
+            status: 'completed',
+          })) || callState;
         break;
 
       case 'call.failed':
-        updatedState = await callStateService.updateCallState(mockCallId, {
-          status: 'failed',
-        }) || callState;
+        updatedState =
+          (await callStateService.updateCallState(mockCallId, {
+            status: 'failed',
+          })) || callState;
         break;
     }
 
@@ -104,7 +108,8 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
     if (event === 'call.completed') {
       eventData.direction = 'OUTBOUND'; // Default, can be overridden
       eventData.duration = Math.floor(Math.random() * 300) + 30;
-      eventData.answered = updatedState.status === 'completed' || updatedState.status === 'answered';
+      eventData.answered =
+        updatedState.status === 'completed' || updatedState.status === 'answered';
       eventData.hasRecording = Math.random() > 0.3;
       if (eventData.hasRecording) {
         eventData.recordingDuration = eventData.duration;
@@ -127,7 +132,11 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
 
   // Endpoint to start a sequence of mock call events
   fastify.post('/api/v1/demo/events/call/sequence', async (request, _reply) => {
-    const { callId, tenantId, delay = 1000 } = request.body as {
+    const {
+      callId,
+      tenantId,
+      delay = 1000,
+    } = request.body as {
       callId?: string;
       tenantId?: string;
       delay?: number;
@@ -190,4 +199,3 @@ export async function registerDemoEventRoutes(fastify: FastifyInstance) {
     };
   });
 }
-

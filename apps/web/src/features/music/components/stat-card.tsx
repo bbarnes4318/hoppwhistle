@@ -21,7 +21,10 @@ export function StatCard({
 }: StatCardProps) {
   const { label, positive } = formatChange(change);
 
-  const accentMap: Record<string, { bg: string; border: string; iconBg: string; iconText: string }> = {
+  const accentMap: Record<
+    string,
+    { bg: string; border: string; iconBg: string; iconText: string }
+  > = {
     blue: {
       bg: 'from-blue-500/10 to-transparent',
       border: 'border-blue-500/20',
@@ -74,12 +77,8 @@ export function StatCard({
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-            {title}
-          </p>
-          <p className="text-2xl font-bold tracking-tight text-zinc-100">
-            {value}
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">{title}</p>
+          <p className="text-2xl font-bold tracking-tight text-zinc-100">{value}</p>
         </div>
         <div className={cn('rounded-lg p-2', accent.iconBg)}>
           <Icon className={cn('h-5 w-5', accent.iconText)} />
@@ -90,9 +89,7 @@ export function StatCard({
         <span
           className={cn(
             'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
-            positive
-              ? 'bg-emerald-500/15 text-emerald-400'
-              : 'bg-red-500/15 text-red-400'
+            positive ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
           )}
         >
           {positive ? '↑' : '↓'} {label}

@@ -19,11 +19,11 @@ matching `$${default_password}` in all twenty static directory files.
 FreeSWITCH's directory is a single flat `default` domain with no tenant
 dimension. Three consequences followed, and all three were live:
 
-| # | Defect | What it looked like on the floor |
-| - | ------ | -------------------------------- |
-| 1 | The allocator scanned **per agency** against a **global** directory | Agency A's `1000` and Agency B's `1000` were the same SIP user. Whichever browser registered last received **both agencies' calls**. |
-| 2 | One password authenticated every extension | Any agent could register as any extension on the platform, including another agency's, and take their calls. |
-| 3 | The pool was twenty wide, with a silent fallback to `'1000'` | An agency's twenty-first agent took over the first agent's registration. No error, no log — just another agent's calls arriving. |
+| #   | Defect                                                              | What it looked like on the floor                                                                                                     |
+| --- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The allocator scanned **per agency** against a **global** directory | Agency A's `1000` and Agency B's `1000` were the same SIP user. Whichever browser registered last received **both agencies' calls**. |
+| 2   | One password authenticated every extension                          | Any agent could register as any extension on the platform, including another agency's, and take their calls.                         |
+| 3   | The pool was twenty wide, with a silent fallback to `'1000'`        | An agency's twenty-first agent took over the first agent's registration. No error, no log — just another agent's calls arriving.     |
 
 Defect 1 is the one that blocks the product outright: the model is "agencies add
 their own agents", and past the first agency, every agent added collided with
@@ -178,7 +178,7 @@ WHERE u.metadata->>'extension' IS DISTINCT FROM c.extension;
   routing an agent still means a `BuyerEndpoint` that only NetEnroll staff can
   create. `CampaignAgent` exists in the schema and is still referenced nowhere.
 - **It does not per-tenant the SIP domain.** Extensions are globally unique,
-  which makes the flat domain *safe*; it does not make it *scoped*. A per-tenant
+  which makes the flat domain _safe_; it does not make it _scoped_. A per-tenant
   realm is the follow-up that would let two agencies both use extension `1000`.
 - **It does not rotate anything on a schedule.** `rotatePassword` exists and
   nothing calls it. A rotation is not instant either: the agent's softphone

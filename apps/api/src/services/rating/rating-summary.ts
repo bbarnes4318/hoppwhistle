@@ -191,8 +191,7 @@ export async function getRatingSummary(
         dayKeys: appliedChange.windowDayKeys,
         deliveredCalls: appliedChange.deliveredCalls,
         submittedApplications: appliedChange.submittedApplications,
-        closingPct:
-          appliedChange.closingPct === null ? null : toNumber(appliedChange.closingPct),
+        closingPct: appliedChange.closingPct === null ? null : toNumber(appliedChange.closingPct),
       }
     : {
         // Not yet rated. Show the shape of the window that WOULD be used, so
@@ -248,8 +247,7 @@ export async function getRatingSummary(
      * that did not add up to what it is being charged.
      */
     curveRate: appliedChange?.curveRate == null ? null : toNumber(appliedChange.curveRate),
-    rateOffset:
-      appliedChange?.rateOffset == null ? rateOffset : toNumber(appliedChange.rateOffset),
+    rateOffset: appliedChange?.rateOffset == null ? rateOffset : toNumber(appliedChange.rateOffset),
     currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
     trackingRate,
     trackingBelowMinimum,

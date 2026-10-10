@@ -88,7 +88,6 @@ export default function MusicCampaignsPage() {
 
   return (
     <div className="space-y-5">
-      
       {/* ─── Header ─── */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div className="space-y-1.5">
@@ -96,7 +95,8 @@ export default function MusicCampaignsPage() {
             <Megaphone className="h-6 w-6 text-[var(--m-accent)]" /> Fan Campaigns
           </h1>
           <p className="text-xs text-[var(--m-muted)] font-medium max-w-xl">
-            “Create measurable fan engagement campaigns across RPS stations, sponsors, markets, and artist audiences.”
+            “Create measurable fan engagement campaigns across RPS stations, sponsors, markets, and
+            artist audiences.”
           </p>
           <div className="flex items-center gap-2 pt-1 flex-wrap">
             <span className="px-2 py-0.5 bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/20 rounded text-[9px] text-[var(--m-accent)] font-bold uppercase tracking-wider font-mono">
@@ -170,7 +170,9 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Fans Reached
           </div>
-          <div className="mt-2 text-2xl font-black text-[var(--m-text)]">{formatCompactNumber(totalContacted)}</div>
+          <div className="mt-2 text-2xl font-black text-[var(--m-text)]">
+            {formatCompactNumber(totalContacted)}
+          </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Total Connections</div>
         </div>
         {/* Card 3: Verified Actions */}
@@ -181,7 +183,9 @@ export default function MusicCampaignsPage() {
           <div className="mt-2 text-2xl font-black text-emerald-600">
             {formatCompactNumber(totalVerified)}
           </div>
-          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Verified Actions Logged</div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">
+            Verified Actions Logged
+          </div>
         </div>
         {/* Card 4: Sponsor-Ready Proof */}
         <div className="m-metric-tile">
@@ -191,7 +195,9 @@ export default function MusicCampaignsPage() {
           <div className="mt-2 text-2xl font-black text-[var(--m-text)]">
             {formatCompactNumber(totalProof)}
           </div>
-          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Attributed Records</div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">
+            Attributed Records
+          </div>
         </div>
         {/* Card 5: Blended CPA */}
         <div className="m-metric-tile">
@@ -315,8 +321,11 @@ export default function MusicCampaignsPage() {
                   <span
                     className={cn(
                       'text-[10px] font-bold uppercase',
-                      selectedCampaign.status === 'active' ? 'text-[var(--m-accent)]' :
-                      selectedCampaign.status === 'completed' ? 'text-emerald-600' : 'text-[var(--m-dim)]'
+                      selectedCampaign.status === 'active'
+                        ? 'text-[var(--m-accent)]'
+                        : selectedCampaign.status === 'completed'
+                          ? 'text-emerald-600'
+                          : 'text-[var(--m-dim)]'
                     )}
                   >
                     {selectedCampaign.status}
@@ -439,7 +448,9 @@ export default function MusicCampaignsPage() {
                   Approved Conversational Script
                 </h3>
                 <div className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded p-3 text-xs font-mono m-text-dim leading-relaxed">
-                  {"\"Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?\""}
+                  {
+                    "\"Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?\""
+                  }
                 </div>
               </div>
             </div>
@@ -492,7 +503,6 @@ export default function MusicCampaignsPage() {
       {isBuilderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-6">
           <div className="w-full max-w-4xl bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
               <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--m-text)] uppercase tracking-wide">
                 <Mic className="h-5 w-5 text-[var(--m-accent)]" /> New Fan Campaign
@@ -545,14 +555,16 @@ export default function MusicCampaignsPage() {
 
               {/* Step Content */}
               <div className="flex-1 p-6 md:p-8 overflow-y-auto">
-                
                 {/* Step 1: Artist / Station */}
                 {builderStep === 1 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-[var(--m-text)]">Select Artist & Station Profile</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">
+                        Select Artist & Station Profile
+                      </h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
-                        Select the active broadcast profile and phone node for this outreach campaign.
+                        Select the active broadcast profile and phone node for this outreach
+                        campaign.
                       </p>
                     </div>
                     <div className="space-y-5">
@@ -600,18 +612,38 @@ export default function MusicCampaignsPage() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
-                        { label: 'Drive Spotify Pre-Saves', desc: 'Auto-verify Spotify API actions' },
-                        { label: 'Sell Concert Tickets', desc: 'Secure early-access ticket intent' },
-                        { label: 'Promote Merch Drops', desc: 'Broadcast exclusive merch passcodes' },
-                        { label: 'Generate VIP Interest', desc: 'Collect phone sign-ups for VIP passes' },
-                        { label: 'Reactivate Fan Club', desc: 'Follow-up with cold member database' },
-                        { label: 'Capture Fan Feedback', desc: 'Conduct short surveys and responses' },
+                        {
+                          label: 'Drive Spotify Pre-Saves',
+                          desc: 'Auto-verify Spotify API actions',
+                        },
+                        {
+                          label: 'Sell Concert Tickets',
+                          desc: 'Secure early-access ticket intent',
+                        },
+                        {
+                          label: 'Promote Merch Drops',
+                          desc: 'Broadcast exclusive merch passcodes',
+                        },
+                        {
+                          label: 'Generate VIP Interest',
+                          desc: 'Collect phone sign-ups for VIP passes',
+                        },
+                        {
+                          label: 'Reactivate Fan Club',
+                          desc: 'Follow-up with cold member database',
+                        },
+                        {
+                          label: 'Capture Fan Feedback',
+                          desc: 'Conduct short surveys and responses',
+                        },
                       ].map(obj => (
                         <div
                           key={obj.label}
                           className="p-4 border border-[var(--m-border)] rounded-md bg-[var(--m-surface-3)] hover:bg-[var(--m-surface-2)] hover:border-[var(--m-accent)] cursor-pointer transition-all space-y-1"
                         >
-                          <span className="text-sm font-bold text-[var(--m-text)]">{obj.label}</span>
+                          <span className="text-sm font-bold text-[var(--m-text)]">
+                            {obj.label}
+                          </span>
                           <p className="text-[10px] text-[var(--m-muted)]">{obj.desc}</p>
                         </div>
                       ))}
@@ -623,7 +655,9 @@ export default function MusicCampaignsPage() {
                 {builderStep === 3 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-[var(--m-text)]">Target Audience Segment</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">
+                        Target Audience Segment
+                      </h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Define the opt-in audience to queue for conversational dialing.
                       </p>
@@ -635,7 +669,7 @@ export default function MusicCampaignsPage() {
                           Upload Opted-In Fan List (CSV)
                         </span>
                         <p className="text-xs text-[var(--m-muted)] mt-2 max-w-sm mx-auto">
-                           CSV must include phone numbers and matching TCPA consent timestamps.
+                          CSV must include phone numbers and matching TCPA consent timestamps.
                         </p>
                       </div>
                       <div className="relative">
@@ -675,7 +709,9 @@ export default function MusicCampaignsPage() {
                 {builderStep === 4 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-[var(--m-text)]">Market & Dialer Configuration</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">
+                        Market & Dialer Configuration
+                      </h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Configure conversational bounds, timezone guards, and voice pacing.
                       </p>
@@ -728,7 +764,9 @@ export default function MusicCampaignsPage() {
                 {builderStep === 5 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-[var(--m-text)]">Sponsor Connection & Split</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">
+                        Sponsor Connection & Split
+                      </h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Link sponsor inventory to monetize verified fan interactions.
                       </p>
@@ -761,7 +799,8 @@ export default function MusicCampaignsPage() {
                         <div>
                           <p className="font-bold">Monetization Split Ratio</p>
                           <p className="text-[10px] mt-1 text-amber-800">
-                            Split ratio defaults to 70% Artist Payout / 30% RPS Network Share. Revenue is computed on verified intent payload syncs.
+                            Split ratio defaults to 70% Artist Payout / 30% RPS Network Share.
+                            Revenue is computed on verified intent payload syncs.
                           </p>
                         </div>
                       </div>
@@ -773,7 +812,9 @@ export default function MusicCampaignsPage() {
                 {builderStep === 6 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-[var(--m-text)]">Compliance Review & Verification</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">
+                        Compliance Review & Verification
+                      </h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Review dialing architecture safety protocols.
                       </p>
@@ -793,23 +834,27 @@ export default function MusicCampaignsPage() {
                           <p className="text-xl font-bold text-[var(--m-accent)]">~8,060 answers</p>
                         </div>
                       </div>
-                      
+
                       <div className="bg-emerald-50 border border-emerald-250 rounded-md p-6">
                         <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2 text-emerald-900">
                           <ShieldCheck className="h-5 w-5 text-emerald-600" /> Compliance Checkmarks
                         </h4>
                         <ul className="space-y-3 text-xs text-emerald-800 mb-6">
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> DNC Registry Scrubbed
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> DNC Registry
+                            Scrubbed
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Regional Safe Dialing Hours Locked
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Regional Safe
+                            Dialing Hours Locked
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> AI Opening Disclosure Active
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> AI Opening
+                            Disclosure Active
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Opt-out 블랙리스트 Auto-sync Active
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Opt-out 블랙리스트
+                            Auto-sync Active
                           </li>
                         </ul>
                         <label className="flex items-start gap-3 p-3 bg-[var(--m-surface)] border border-[var(--m-border)] rounded cursor-pointer hover:border-[var(--m-accent)] transition-colors">
@@ -820,14 +865,14 @@ export default function MusicCampaignsPage() {
                             onChange={e => setIsComplianceChecked(e.target.checked)}
                           />
                           <span className="text-[11px] text-[var(--m-text-2)] leading-snug">
-                            I verify that this campaign cohort complies with TCPA opt-in consent parameters and authorize launching this station stream.
+                            I verify that this campaign cohort complies with TCPA opt-in consent
+                            parameters and authorize launching this station stream.
                           </span>
                         </label>
                       </div>
                     </div>
                   </div>
                 )}
-
               </div>
             </div>
 
@@ -844,7 +889,7 @@ export default function MusicCampaignsPage() {
               >
                 Back
               </button>
-              
+
               {builderStep < 6 ? (
                 <button
                   onClick={() => setBuilderStep(builderStep + 1)}
@@ -854,7 +899,9 @@ export default function MusicCampaignsPage() {
                 </button>
               ) : (
                 <button
-                  onClick={() => { void handleLaunch(); }}
+                  onClick={() => {
+                    void handleLaunch();
+                  }}
                   disabled={isLaunching || !isComplianceChecked}
                   className="flex items-center gap-1.5 px-6 py-2 bg-[var(--m-accent)] text-white rounded text-sm font-bold hover:bg-[#008be5] transition-colors disabled:opacity-50"
                   title={!isComplianceChecked ? 'Please verify compliance requirements above' : ''}
@@ -864,7 +911,6 @@ export default function MusicCampaignsPage() {
                 </button>
               )}
             </div>
-            
           </div>
         </div>
       )}

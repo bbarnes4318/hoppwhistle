@@ -217,7 +217,9 @@ export function registerMusicVoiceRoutes(
       });
     } catch (error: unknown) {
       console.error('[Music Console Voice] Create error:', error);
-      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to create voice agent' });
+      return reply
+        .status(500)
+        .send({ error: thrownMessage(error) || 'Failed to create voice agent' });
     }
   });
 
@@ -264,7 +266,9 @@ export function registerMusicVoiceRoutes(
       return reply.send({ success: true });
     } catch (error: unknown) {
       console.error('[Music Console Voice] Delete error:', error);
-      return reply.status(500).send({ error: thrownMessage(error) || 'Failed to delete voice agent' });
+      return reply
+        .status(500)
+        .send({ error: thrownMessage(error) || 'Failed to delete voice agent' });
     }
   });
 
@@ -293,10 +297,13 @@ export function registerMusicVoiceRoutes(
       }
 
       // Fetch calls from Vapi filtered by assistant ID
-      const res = await fetch(`${VAPI_BASE}/call?limit=${limit}&assistantId=${agent.vapiAssistantId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        cache: 'no-store',
-      });
+      const res = await fetch(
+        `${VAPI_BASE}/call?limit=${limit}&assistantId=${agent.vapiAssistantId}`,
+        {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          cache: 'no-store',
+        }
+      );
 
       if (!res.ok) {
         throw new Error(`Failed to fetch calls from Vapi: Status ${res.status}`);

@@ -61,8 +61,7 @@ export function FeatureGrid() {
             What your agency actually gets.
           </h2>
           <p className="text-base sm:text-lg text-slate-400">
-            Delivered calls, a portal to watch them in, and a settlement you can check line by
-            line.
+            Delivered calls, a portal to watch them in, and a settlement you can check line by line.
           </p>
         </div>
 

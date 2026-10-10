@@ -3,4 +3,3 @@ export interface ClientConfig {
   baseUrl: string;
   apiKey?: string;
 }
-

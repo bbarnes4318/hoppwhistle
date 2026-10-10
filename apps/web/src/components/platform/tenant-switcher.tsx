@@ -84,9 +84,7 @@ export function TenantSwitcher({ state }: { state?: PlatformContextState }) {
               : 'border-rule bg-surface text-ink-2 hover:border-rule-strong hover:text-ink'
           )}
           aria-label={
-            inside
-              ? `Acting inside ${label}. Change agency`
-              : 'Cross-agency view. Choose an agency'
+            inside ? `Acting inside ${label}. Change agency` : 'Cross-agency view. Choose an agency'
           }
         >
           {inside ? (
@@ -147,9 +145,7 @@ export function TenantSwitcher({ state }: { state?: PlatformContextState }) {
           >
             <Building2 aria-hidden className="mr-2 h-3.5 w-3.5" />
             <span className="flex-1 truncate">{tenant.name}</span>
-            {tenant.id === ctx.actingTenant?.id && (
-              <Check aria-hidden className="h-3.5 w-3.5" />
-            )}
+            {tenant.id === ctx.actingTenant?.id && <Check aria-hidden className="h-3.5 w-3.5" />}
           </DropdownMenuItem>
         ))}
 

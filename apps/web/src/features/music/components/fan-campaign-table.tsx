@@ -22,16 +22,36 @@ export function FanCampaignTable({ campaigns }: FanCampaignTableProps) {
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-[var(--m-border)] bg-[var(--m-surface-2)]">
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">Campaign</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">Artist</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">Type</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Fans Contacted</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Answers</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Verified</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Engagement</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Spent</th>
-              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">Proof</th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">
+                Campaign
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">
+                Artist
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">
+                Type
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Fans Contacted
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Answers
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Verified
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Engagement
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Spent
+              </th>
+              <th className="px-4 py-3 font-semibold text-[var(--m-muted)] uppercase tracking-wider text-right">
+                Proof
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -53,17 +73,37 @@ export function FanCampaignTable({ campaigns }: FanCampaignTableProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold', st.bg, st.text)}>
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold',
+                        st.bg,
+                        st.text
+                      )}
+                    >
                       <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
                       {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">{formatCompactNumber(c.fansContacted)}</td>
-                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">{formatCompactNumber(c.humanAnswers)}</td>
-                  <td className="px-4 py-3 text-right text-emerald-700 font-mono font-bold">{formatCompactNumber(c.verifiedEngagements)}</td>
-                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">{formatPercentage(c.fansContacted > 0 ? (c.verifiedEngagements / c.fansContacted) * 100 : 0)}</td>
-                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">{formatCurrency(c.verifiedEngagements * c.cpa)}</td>
-                  <td className="px-4 py-3 text-right text-[var(--m-muted)] font-mono">{formatCompactNumber(c.proofCaptured)}</td>
+                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">
+                    {formatCompactNumber(c.fansContacted)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">
+                    {formatCompactNumber(c.humanAnswers)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-emerald-700 font-mono font-bold">
+                    {formatCompactNumber(c.verifiedEngagements)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">
+                    {formatPercentage(
+                      c.fansContacted > 0 ? (c.verifiedEngagements / c.fansContacted) * 100 : 0
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[var(--m-text-2)] font-mono">
+                    {formatCurrency(c.verifiedEngagements * c.cpa)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[var(--m-muted)] font-mono">
+                    {formatCompactNumber(c.proofCaptured)}
+                  </td>
                 </tr>
               );
             })}

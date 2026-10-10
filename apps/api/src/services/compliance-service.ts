@@ -94,7 +94,6 @@ export class ComplianceService {
     }
 
     return { blocked: false };
-
   }
 
   /**
@@ -116,10 +115,7 @@ export class ComplianceService {
           tokenHash,
           phoneNumber: normalized,
           status: 'VERIFIED',
-          OR: [
-            { expiresAt: null },
-            { expiresAt: { gt: new Date() } },
-          ],
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
       });
 
@@ -134,10 +130,7 @@ export class ComplianceService {
         tenantId,
         phoneNumber: normalized,
         status: 'VERIFIED',
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
-        ],
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       orderBy: {
         verifiedAt: 'desc',
@@ -413,4 +406,3 @@ export class ComplianceService {
 
 // Export singleton instance
 export const complianceService = new ComplianceService();
-

@@ -3,10 +3,7 @@ import { Prisma } from '@prisma/client';
 import Fastify from 'fastify';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import {
-  internalKeyHeaders,
-  useTestInternalKey,
-} from '../../__tests__/helpers/internal-key.js';
+import { internalKeyHeaders, useTestInternalKey } from '../../__tests__/helpers/internal-key.js';
 import { announceSkip, databaseGate, redisGate } from '../../__tests__/helpers/live-services.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { registerAuthRoutes } from '../../routes/auth.js';
@@ -612,7 +609,11 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     expect(pingResult.token).toBeDefined();
 
     // 2. Process Post using postService (leases '+18005550300' and writes to Redis)
-    const postResult = await postService.processPost(pingResult.token!, 'pub-a-int', '+15552223333');
+    const postResult = await postService.processPost(
+      pingResult.token!,
+      'pub-a-int',
+      '+15552223333'
+    );
     expect(postResult.accepted).toBe(true);
     expect(postResult.transfer_number).toBe('+18005550300');
 

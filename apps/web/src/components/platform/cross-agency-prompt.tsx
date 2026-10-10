@@ -49,8 +49,8 @@ export function CrossAgencyPrompt({
 
         <h2 className="t-title mb-2 text-ink">Choose an agency</h2>
         <p className="t-body mb-4 text-ink-2">
-          {what} shows one agency&rsquo;s data, and you have not entered one. You are still
-          signed in &mdash; nothing here needs you to sign in again.
+          {what} shows one agency&rsquo;s data, and you have not entered one. You are still signed
+          in &mdash; nothing here needs you to sign in again.
         </p>
 
         {!open && (

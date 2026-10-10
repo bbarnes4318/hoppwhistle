@@ -17,13 +17,7 @@ export interface ScreenshotOptions {
  * Capture screenshot of an element or the entire page
  */
 export async function captureScreenshot(options: ScreenshotOptions = {}): Promise<string> {
-  const {
-    element,
-    format = 'png',
-    quality = 1,
-    backgroundColor = '#ffffff',
-    scale = 2,
-  } = options;
+  const { element, format = 'png', quality = 1, backgroundColor = '#ffffff', scale = 2 } = options;
 
   const targetElement = element || document.body;
 
@@ -40,7 +34,7 @@ export async function captureScreenshot(options: ScreenshotOptions = {}): Promis
     logging: false,
     windowWidth: targetElement.scrollWidth,
     windowHeight: targetElement.scrollHeight,
-    ignoreElements: (el) => {
+    ignoreElements: el => {
       // Ignore elements that might interfere with capture
       // Skip if it's a hidden image or logo that shouldn't be in the screenshot
       if (el.tagName === 'IMG' && (el as HTMLImageElement).src.includes('logo')) {
@@ -116,10 +110,7 @@ export async function exportDashboard(
 /**
  * Export chart as PNG
  */
-export async function exportChart(
-  chartElement: HTMLElement,
-  filename?: string
-): Promise<void> {
+export async function exportChart(chartElement: HTMLElement, filename?: string): Promise<void> {
   const dataUrl = await captureScreenshot({
     element: chartElement,
     format: 'png',
@@ -134,10 +125,7 @@ export async function exportChart(
 /**
  * Export multiple elements as a combined image
  */
-export async function exportCombined(
-  elementIds: string[],
-  filename?: string
-): Promise<void> {
+export async function exportCombined(elementIds: string[], filename?: string): Promise<void> {
   const elements = elementIds
     .map(id => document.getElementById(id))
     .filter(Boolean) as HTMLElement[];
@@ -151,7 +139,7 @@ export async function exportCombined(
   container.style.position = 'absolute';
   container.style.left = '-9999px';
   container.style.width = `${Math.max(...elements.map(el => el.scrollWidth))}px`;
-  
+
   let totalHeight = 0;
   elements.forEach((el, index) => {
     const clone = el.cloneNode(true) as HTMLElement;
@@ -159,7 +147,7 @@ export async function exportCombined(
     container.appendChild(clone);
     totalHeight += el.scrollHeight + (index < elements.length - 1 ? 20 : 0);
   });
-  
+
   container.style.height = `${totalHeight}px`;
   document.body.appendChild(container);
 
@@ -176,4 +164,3 @@ export async function exportCombined(
     document.body.removeChild(container);
   }
 }
-

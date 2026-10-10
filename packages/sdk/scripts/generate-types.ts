@@ -17,7 +17,7 @@ async function generateTypes() {
     // Load and modify the YAML to ensure compatibility
     const yamlContent = readFileSync(openApiSpecPath, 'utf-8');
     const spec = yaml.load(yamlContent) as any;
-    
+
     // Ensure openapi version is exactly 3.0.0 (redoc/validation expects this format)
     if (spec.openapi) {
       const version = spec.openapi.toString();
@@ -25,7 +25,7 @@ async function generateTypes() {
         spec.openapi = '3.0.0';
       }
     }
-    
+
     // Convert to JSON and write to temp file (openapi-typescript handles JSON better)
     const tempPath = join(process.cwd(), 'temp-openapi.json');
     const jsonContent = JSON.stringify(spec, null, 2);
@@ -39,7 +39,7 @@ async function generateTypes() {
 
     console.log('Calling openapi-typescript...');
     console.log(`Using spec version: ${verifySpec.openapi}`);
-    
+
     // Try passing the spec object directly instead of file path
     console.log('Attempting to pass spec object directly...');
     const typeNodes = await openapiTS(spec, {
@@ -58,11 +58,15 @@ async function generateTypes() {
       false,
       ts.ScriptKind.TS
     );
-    
-    const output = COMMENT_HEADER + typeNodes.map(node => printer.printNode(ts.EmitHint.Unspecified, node, sourceFile)).join('\n\n');
-    
+
+    const output =
+      COMMENT_HEADER +
+      typeNodes
+        .map(node => printer.printNode(ts.EmitHint.Unspecified, node, sourceFile))
+        .join('\n\n');
+
     writeFileSync(outputPath, output, 'utf-8');
-    
+
     // Clean up temp file
     try {
       unlinkSync(tempPath);

@@ -300,9 +300,7 @@ const NEVER_FOR_AGENT: readonly Permission[] = [
  * floor less the one capability the role exists for. A manager supervises; it
  * administers nobody and writes no configuration.
  */
-const NEVER_FOR_MANAGER: readonly Permission[] = NEVER_FOR_AGENT.filter(
-  p => p !== 'calls:monitor'
-);
+const NEVER_FOR_MANAGER: readonly Permission[] = NEVER_FOR_AGENT.filter(p => p !== 'calls:monitor');
 
 /** The same list, as a set, for the default-deny filter below. */
 const KNOWN_PERMISSIONS: ReadonlySet<string> = new Set<string>(ALL_PERMISSIONS);
@@ -365,10 +363,7 @@ function permissionMatches(required: Permission, userPermission: Permission): bo
  * declared permission, so it is dropped. A role that genuinely needs every
  * `calls:` verb lists them, which is also the only spelling a reader can audit.
  */
-export function effectivePermissionsFor(
-  roleName: RoleName,
-  rowPermissions: unknown
-): Permission[] {
+export function effectivePermissionsFor(roleName: RoleName, rowPermissions: unknown): Permission[] {
   const granted = new Set<Permission>(ROLE_PERMISSIONS[roleName] ?? []);
 
   if (Array.isArray(rowPermissions)) {
@@ -794,4 +789,3 @@ export function buildPublisherScopedWhere(user: ScopedPrincipal | null | undefin
   }
   return { publisherId: 'none' };
 }
-

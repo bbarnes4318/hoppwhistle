@@ -338,10 +338,7 @@ vi.mock('../event-bus.js', () => ({
 }));
 
 // Imports after mocking
-import {
-  internalKeyHeaders,
-  useTestInternalKey,
-} from '../../__tests__/helpers/internal-key.js';
+import { internalKeyHeaders, useTestInternalKey } from '../../__tests__/helpers/internal-key.js';
 import { registerDidRouteRoutes } from '../../routes/did-routes.js';
 import { auctionService } from '../auction-service.js';
 import { postService } from '../post-service.js';

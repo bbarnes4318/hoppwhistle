@@ -60,7 +60,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
 async function main(): Promise<void> {
   const tenantId = arg('tenant');
   if (!tenantId) {
-    console.error('usage: vonage-diagnose --tenant <tenantId> [--dest N] [--check-numbers] [--test-call N --yes]');
+    console.error(
+      'usage: vonage-diagnose --tenant <tenantId> [--dest N] [--check-numbers] [--test-call N --yes]'
+    );
     process.exit(2);
   }
   const destination = arg('dest') ?? '8005551212';
@@ -105,7 +107,8 @@ async function main(): Promise<void> {
     results.push({
       name: 'Vonage DIDs on this account',
       status: 'warn',
-      detail: 'None. Buy or import Vonage numbers (provider "vonage") to receive calls and to present caller ID.',
+      detail:
+        'None. Buy or import Vonage numbers (provider "vonage") to receive calls and to present caller ID.',
     });
   }
   for (const n of vonageNumbers) {
@@ -125,7 +128,11 @@ async function main(): Promise<void> {
     const adapter = new VonageAdapter();
     const routing = adapter.routing();
     if (!adapter.isConfigured()) {
-      results.push({ name: 'Vonage Numbers API', status: 'skip', detail: 'VONAGE_API_KEY/SECRET not set' });
+      results.push({
+        name: 'Vonage Numbers API',
+        status: 'skip',
+        detail: 'VONAGE_API_KEY/SECRET not set',
+      });
     } else if (!routing.ok) {
       results.push({ name: 'Vonage number routing mode', status: 'fail', detail: routing.reason });
     } else {
@@ -166,7 +173,11 @@ async function main(): Promise<void> {
   if (testCall) {
     const ten = normalizeNanp(testCall);
     if (!flag('yes')) {
-      results.push({ name: 'Live test call', status: 'skip', detail: 'Add --yes to place a real call.' });
+      results.push({
+        name: 'Live test call',
+        status: 'skip',
+        detail: 'Add --yes to place a real call.',
+      });
     } else if (!ten || eligible.length === 0) {
       results.push({
         name: 'Live test call',

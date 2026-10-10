@@ -10,18 +10,18 @@ agents work consumer prospects; it is unchanged. The Sales CRM (nav: **Sales
 CRM**) uses its own tables and an agent sees none of it unless the owner
 grants it.
 
-| Piece                                    | Where                                                            |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| Migration (tables, backfill, triggers)   | `apps/api/prisma/migrations/20261009000000_sales_workspaces/`    |
-| The one workspace resolver               | `apps/api/src/lib/sales-workspace.ts`                            |
-| Sales API (CRM, access, settings, suites)| `apps/api/src/routes/sales.ts`                                   |
-| Agreement management (both surfaces)     | `apps/api/src/routes/agreement-surface.ts`                       |
-| Suites, issuer identity, template sets   | `apps/api/src/services/agreements/{suites,issuer,template-sets}.ts` |
-| Agreement → prospect sync, stage policy  | `apps/api/src/services/sales/{agreement-sync,stage-policy}.ts`   |
-| Screens                                  | `apps/web/src/app/(dashboard)/sales-crm/`                        |
-| Shared agreement screens                 | `apps/web/src/components/agreements/`                            |
-| Security test matrix                     | `apps/api/src/__tests__/sales-workspaces.test.ts`                |
-| Navigation tests                         | `apps/web/src/components/layout/__tests__/sales-crm-nav.test.tsx` |
+| Piece                                     | Where                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Migration (tables, backfill, triggers)    | `apps/api/prisma/migrations/20261009000000_sales_workspaces/`       |
+| The one workspace resolver                | `apps/api/src/lib/sales-workspace.ts`                               |
+| Sales API (CRM, access, settings, suites) | `apps/api/src/routes/sales.ts`                                      |
+| Agreement management (both surfaces)      | `apps/api/src/routes/agreement-surface.ts`                          |
+| Suites, issuer identity, template sets    | `apps/api/src/services/agreements/{suites,issuer,template-sets}.ts` |
+| Agreement → prospect sync, stage policy   | `apps/api/src/services/sales/{agreement-sync,stage-policy}.ts`      |
+| Screens                                   | `apps/web/src/app/(dashboard)/sales-crm/`                           |
+| Shared agreement screens                  | `apps/web/src/components/agreements/`                               |
+| Security test matrix                      | `apps/api/src/__tests__/sales-workspaces.test.ts`                   |
+| Navigation tests                          | `apps/web/src/components/layout/__tests__/sales-crm-nav.test.tsx`   |
 
 ## Model
 
@@ -39,7 +39,7 @@ SalesWorkspace (PLATFORM | TENANT)          the company doing the selling
 ```
 
 - `scopeType` is explicit. A check constraint enforces `PLATFORM ⇔ tenantId IS
-  NULL`; a partial unique index allows exactly one PLATFORM workspace; `tenantId`
+NULL`; a partial unique index allows exactly one PLATFORM workspace; `tenantId`
   is unique, so a tenant has at most one.
 - Only a **top-level white-label tenant** (`whiteLabel` and no parent) is a sales
   issuer. A child agency never has, and never inherits, a workspace.
@@ -60,16 +60,16 @@ SalesWorkspace (PLATFORM | TENANT)          the company doing the selling
 It reads the authenticated principal and the database — never a header, query
 parameter, body field, Origin or hostname.
 
-| Principal                                        | Workspace                       | Level           |
-| ------------------------------------------------ | ------------------------------- | --------------- |
-| Platform admin, cross-agency view                | NetEnroll (PLATFORM)            | MANAGER         |
-| Platform admin acting inside a tenant (the existing acting-tenant row) | that tenant's | MANAGER (support) |
-| …while previewing a role                         | judged as the previewed role    |                 |
-| White-label tenant **OWNER**                     | its own                         | MANAGER (implicit, cannot be revoked) |
-| Any user of that tenant with a grant             | its tenant's                    | the grant       |
-| ADMIN, AGENT without a grant                     | refused (403 `SALES_ACCESS_REQUIRED`) |           |
-| Child agency, normal agency                      | refused (403 `SALES_WORKSPACE_UNAVAILABLE`) |     |
-| API key                                          | refused (403)                   |                 |
+| Principal                                                              | Workspace                                   | Level                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------- |
+| Platform admin, cross-agency view                                      | NetEnroll (PLATFORM)                        | MANAGER                               |
+| Platform admin acting inside a tenant (the existing acting-tenant row) | that tenant's                               | MANAGER (support)                     |
+| …while previewing a role                                               | judged as the previewed role                |                                       |
+| White-label tenant **OWNER**                                           | its own                                     | MANAGER (implicit, cannot be revoked) |
+| Any user of that tenant with a grant                                   | its tenant's                                | the grant                             |
+| ADMIN, AGENT without a grant                                           | refused (403 `SALES_ACCESS_REQUIRED`)       |                                       |
+| Child agency, normal agency                                            | refused (403 `SALES_WORKSPACE_UNAVAILABLE`) |                                       |
+| API key                                                                | refused (403)                               |                                       |
 
 Levels: **READONLY** reads; **MEMBER** also works prospects and sends, resends and
 re-delivers agreements; **MANAGER** also edits suite settings, manages grants,
@@ -84,7 +84,7 @@ can never disagree with the API.
 
 ## Access grants
 
-Settings → *Who can use the Sales CRM* (owner / managers only). A grant names an
+Settings → _Who can use the Sales CRM_ (owner / managers only). A grant names an
 existing user of the **same tenant**; another tenant's user is "not found", and a
 database trigger refuses the row regardless. Granting never changes the person's
 role: an agent you grant stays an agent everywhere else. Every grant, change and
@@ -99,10 +99,10 @@ scoped to it — a white-label suite's envelopes are not in its lists and its id
 404 there. The same engine serves `/api/v1/sales/agreements` for the caller's own
 workspace (`/sales-crm/agreements`).
 
-| Setting                         | Who edits it                       |
-| ------------------------------- | ---------------------------------- |
-| Display name, legal entity, d/b/a, notice address and email, reply-to, default signatory and title, internal copy emails | the workspace's MANAGERs (`/sales-crm/settings`) |
-| Template set, seal reference and location, link origin, brand theme, reference prefix, enabled | platform admins only (`/api/v1/platform/agreement-suites`), audited as `agreement_suite.*` |
+| Setting                                                                                                                  | Who edits it                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Display name, legal entity, d/b/a, notice address and email, reply-to, default signatory and title, internal copy emails | the workspace's MANAGERs (`/sales-crm/settings`)                                           |
+| Template set, seal reference and location, link origin, brand theme, reference prefix, enabled                           | platform admins only (`/api/v1/platform/agreement-suites`), audited as `agreement_suite.*` |
 
 The brand is **not** the legal entity. A new white-label suite starts with its
 brand name and **no** legal entity, notice details or signatory, and cannot send
@@ -164,19 +164,19 @@ an MSA linked to a different prospect is refused).
 
 ## Sales CRM ↔ agreements
 
-*Send agreement* on a prospect opens the workspace's own agreement form with the
+_Send agreement_ on a prospect opens the workspace's own agreement form with the
 prospect filled in; the envelope is linked to it. Every lifecycle event writes a
 timeline entry (deduplicated by `sourceKey`), and `stage-policy.ts` moves the
 stage forward only:
 
-| Event                | Activity              | Stage                                   |
-| -------------------- | --------------------- | --------------------------------------- |
-| sent                 | `AGREEMENT_SENT`      | → AGREEMENT_SENT, if not already further |
-| first opened         | `AGREEMENT_VIEWED`    | → AGREEMENT_REVIEW, if not further      |
-| agency details entered | `AGREEMENT_DETAILS_ENTERED` (lists what the agency entered: name, entity or individual, principal and signer, address, contact, billing) | unchanged |
-| signed               | `AGREEMENT_SIGNED`    | → AGREEMENT_SIGNED, if not further      |
-| completed            | `AGREEMENT_COMPLETED` | → AGREEMENT_SIGNED, if not further      |
-| voided / expired / changes requested | `AGREEMENT_VOIDED` / `AGREEMENT_EXPIRED` / `CHANGES_REQUESTED` | unchanged |
+| Event                                | Activity                                                                                                                                 | Stage                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| sent                                 | `AGREEMENT_SENT`                                                                                                                         | → AGREEMENT_SENT, if not already further |
+| first opened                         | `AGREEMENT_VIEWED`                                                                                                                       | → AGREEMENT_REVIEW, if not further       |
+| agency details entered               | `AGREEMENT_DETAILS_ENTERED` (lists what the agency entered: name, entity or individual, principal and signer, address, contact, billing) | unchanged                                |
+| signed                               | `AGREEMENT_SIGNED`                                                                                                                       | → AGREEMENT_SIGNED, if not further       |
+| completed                            | `AGREEMENT_COMPLETED`                                                                                                                    | → AGREEMENT_SIGNED, if not further       |
+| voided / expired / changes requested | `AGREEMENT_VOIDED` / `AGREEMENT_EXPIRED` / `CHANGES_REQUESTED`                                                                           | unchanged                                |
 
 WON and LOST are never changed by an agreement, and a signature never marks a
 prospect WON — that is a person's explicit act. The sync runs after the
@@ -229,7 +229,7 @@ After deploying, for Life Leads Plus:
 
 1. The owner opens **Sales CRM → Settings** and enters the legal contracting
    entity, notice address and email, signatory and copy addresses.
-2. Nothing else: its MSA/CPA/CPL are installed (see *Template sets*), and
+2. Nothing else: its MSA/CPA/CPL are installed (see _Template sets_), and
    it can send as soon as step 1 is saved.
 3. Optional: a seal of its own — generate a p12 as in `docs/AGREEMENTS.md` with
    the issuer's own subject, add `AGREEMENT_SEAL_LIFE_LEADS_PLUS_P12_BASE64` and

@@ -12,7 +12,6 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { requireUpgrade } from '../lib/tenant-upgrades.js';
 
-
 /**
  * The acting tenant, from `lib/tenant-context.ts`.
  *

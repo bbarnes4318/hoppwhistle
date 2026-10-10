@@ -15,9 +15,9 @@ import type { RetentionPolicy, StatusConfig } from './RetentionDashboard';
 // ============================================================================
 
 interface PolicyCardProps {
- policy: RetentionPolicy;
- statusConfig: StatusConfig;
- onClick?: () => void;
+  policy: RetentionPolicy;
+  statusConfig: StatusConfig;
+  onClick?: () => void;
 }
 
 // ============================================================================
@@ -25,168 +25,167 @@ interface PolicyCardProps {
 // ============================================================================
 
 export function PolicyCard({ policy, statusConfig, onClick }: PolicyCardProps): JSX.Element {
- const StatusIcon = statusConfig.icon;
- const isClickable = policy.status === 'DECLINED';
+  const StatusIcon = statusConfig.icon;
+  const isClickable = policy.status === 'DECLINED';
 
- const cardContent = (
- <Card
- className={cn(
- 'transition-all hover:shadow-md',
- statusConfig.priority === 'high' && 'border-ringing bg-ringing-tint',
- statusConfig.priority === 'critical' &&
- 'border-dropped bg-dropped-tint animate-pulse cursor-pointer',
- statusConfig.priority === 'complete' && 'opacity-75'
- )}
- onClick={isClickable ? onClick : undefined}
- >
- <CardContent className="p-4">
- <div className="flex items-center justify-between gap-4">
- {/* Left: Customer Info */}
- <div className="flex items-center gap-4 min-w-0 flex-1">
- <div
- className={cn(
- 'w-12 h-12 rounded-full flex items-center justify-center',
- statusConfig.priority === 'critical'
- ? 'bg-dropped-tint'
- : statusConfig.priority === 'high'
- ? 'bg-ringing-tint'
- : 'bg-primary/10'
- )}
- >
- <User
- className={cn(
- 'h-6 w-6',
- statusConfig.priority === 'critical'
- ? 'text-dropped-ink'
- : statusConfig.priority === 'high'
- ? 'text-ringing-ink'
- : 'text-primary'
- )}
- />
- </div>
+  const cardContent = (
+    <Card
+      className={cn(
+        'transition-all hover:shadow-md',
+        statusConfig.priority === 'high' && 'border-ringing bg-ringing-tint',
+        statusConfig.priority === 'critical' &&
+          'border-dropped bg-dropped-tint animate-pulse cursor-pointer',
+        statusConfig.priority === 'complete' && 'opacity-75'
+      )}
+      onClick={isClickable ? onClick : undefined}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Customer Info */}
+          <div className="flex items-center gap-4 min-w-0 flex-1">
+            <div
+              className={cn(
+                'w-12 h-12 rounded-full flex items-center justify-center',
+                statusConfig.priority === 'critical'
+                  ? 'bg-dropped-tint'
+                  : statusConfig.priority === 'high'
+                    ? 'bg-ringing-tint'
+                    : 'bg-primary/10'
+              )}
+            >
+              <User
+                className={cn(
+                  'h-6 w-6',
+                  statusConfig.priority === 'critical'
+                    ? 'text-dropped-ink'
+                    : statusConfig.priority === 'high'
+                      ? 'text-ringing-ink'
+                      : 'text-primary'
+                )}
+              />
+            </div>
 
- <div className="min-w-0 flex-1">
- <div className="flex items-center gap-2">
- <h3 className="font-semibold text-foreground truncate">
- {policy.lead?.fullName || 'Unknown Customer'}
- </h3>
- <Badge variant="outline" className={cn('text-xs', statusConfig.color)}>
- <StatusIcon className="h-3 w-3 mr-1" />
- {statusConfig.label}
- </Badge>
- </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-foreground truncate">
+                  {policy.lead?.fullName || 'Unknown Customer'}
+                </h3>
+                <Badge variant="outline" className={cn('text-xs', statusConfig.color)}>
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {statusConfig.label}
+                </Badge>
+              </div>
 
- <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
- <span className="flex items-center gap-1">
- <Phone className="h-3 w-3" />
- {formatPhoneNumber(policy.lead?.phoneNumber || '')}
- </span>
- {policy.carrier && <span className="truncate">{policy.carrier}</span>}
- {policy.lead?.city && policy.lead?.state && (
- <span>
- {policy.lead.city}, {policy.lead.state}
- </span>
- )}
- </div>
- </div>
- </div>
+              <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Phone className="h-3 w-3" />
+                  {formatPhoneNumber(policy.lead?.phoneNumber || '')}
+                </span>
+                {policy.carrier && <span className="truncate">{policy.carrier}</span>}
+                {policy.lead?.city && policy.lead?.state && (
+                  <span>
+                    {policy.lead.city}, {policy.lead.state}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
 
- {/* Center: Policy Info */}
- <div className="hidden md:flex items-center gap-6">
- {policy.coverage && (
- <div className="text-center">
- <p className="text-xs text-muted-foreground">Coverage</p>
- <p className="font-semibold">{formatCurrency(policy.coverage)}</p>
- </div>
- )}
- {policy.monthlyPremium && (
- <div className="text-center">
- <p className="text-xs text-muted-foreground">Premium</p>
- <p className="font-semibold">{formatCurrency(policy.monthlyPremium)}/mo</p>
- </div>
- )}
- {policy.policyType && (
- <div className="text-center">
- <p className="text-xs text-muted-foreground">Type</p>
- <p className="font-semibold capitalize">
- {policy.policyType.replace('_', ' ').toLowerCase()}
- </p>
- </div>
- )}
- </div>
+          {/* Center: Policy Info */}
+          <div className="hidden md:flex items-center gap-6">
+            {policy.coverage && (
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Coverage</p>
+                <p className="font-semibold">{formatCurrency(policy.coverage)}</p>
+              </div>
+            )}
+            {policy.monthlyPremium && (
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Premium</p>
+                <p className="font-semibold">{formatCurrency(policy.monthlyPremium)}/mo</p>
+              </div>
+            )}
+            {policy.policyType && (
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Type</p>
+                <p className="font-semibold capitalize">
+                  {policy.policyType.replace('_', ' ').toLowerCase()}
+                </p>
+              </div>
+            )}
+          </div>
 
- {/* Right: Onboarding Progress + Actions */}
- <div className="flex items-center gap-4">
- <div className="text-center">
- <p className="text-xs text-muted-foreground">Attempts</p>
- <div className="flex items-center gap-2">
- <span
- className={cn(
- 'font-semibold',
- policy.onboardingAttempts >= 7
- ? 'text-dropped-ink'
- : policy.onboardingAttempts >= 4
- ? 'text-ringing-ink'
- : 'text-foreground'
- )}
- >
- {policy.onboardingAttempts}/9
- </span>
- <div className="w-16 h-2 bg-muted rounded-full">
- <div
- className={cn(
- 'h-2 rounded-full transition-all',
- policy.onboardingAttempts >= 7
- ? 'bg-dropped'
- : policy.onboardingAttempts >= 4
- ? 'bg-ringing'
- : 'bg-primary'
- )}
- style={{ width: `${(policy.onboardingAttempts / 9) * 100}%` }}
- />
- </div>
- </div>
- </div>
+          {/* Right: Onboarding Progress + Actions */}
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">Attempts</p>
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'font-semibold',
+                    policy.onboardingAttempts >= 7
+                      ? 'text-dropped-ink'
+                      : policy.onboardingAttempts >= 4
+                        ? 'text-ringing-ink'
+                        : 'text-foreground'
+                  )}
+                >
+                  {policy.onboardingAttempts}/9
+                </span>
+                <div className="w-16 h-2 bg-muted rounded-full">
+                  <div
+                    className={cn(
+                      'h-2 rounded-full transition-all',
+                      policy.onboardingAttempts >= 7
+                        ? 'bg-dropped'
+                        : policy.onboardingAttempts >= 4
+                          ? 'bg-ringing'
+                          : 'bg-primary'
+                    )}
+                    style={{ width: `${(policy.onboardingAttempts / 9) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
 
- {policy.status === 'DECLINED' ? (
- <Button
- variant="destructive"
- size="sm"
- className="gap-1"
- onClick={e => {
- e.stopPropagation();
- onClick?.();
- }}
- >
- GI Offer
- <ChevronRight className="h-4 w-4" />
- </Button>
- ) : (
- <Link href={`/retention/${policy.id}`}>
- <Button variant="outline" size="sm" className="gap-1">
- View
- <ChevronRight className="h-4 w-4" />
- </Button>
- </Link>
- )}
- </div>
- </div>
+            {policy.status === 'DECLINED' ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1"
+                onClick={e => {
+                  e.stopPropagation();
+                  onClick?.();
+                }}
+              >
+                GI Offer
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Link href={`/retention/${policy.id}`}>
+                <Button variant="outline" size="sm" className="gap-1">
+                  View
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
 
- {/* Critical Alert Banner */}
- {policy.status === 'DECLINED' && (
- <div className="mt-3 p-3 rounded-lg bg-dropped-tint border border-dropped">
- <p className="text-sm text-dropped-ink font-medium flex items-center gap-2">
- <StatusIcon className="h-4 w-4" />
- Policy Declined - Present Guaranteed Issue Offer to Customer
- </p>
- </div>
- )}
- </CardContent>
- </Card>
- );
+        {/* Critical Alert Banner */}
+        {policy.status === 'DECLINED' && (
+          <div className="mt-3 p-3 rounded-lg bg-dropped-tint border border-dropped">
+            <p className="text-sm text-dropped-ink font-medium flex items-center gap-2">
+              <StatusIcon className="h-4 w-4" />
+              Policy Declined - Present Guaranteed Issue Offer to Customer
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
- return cardContent;
+  return cardContent;
 }
 
 export default PolicyCard;
-

@@ -46,13 +46,13 @@ describe('Call Center Lookup API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = Fastify();
-    
+
     // Setup simple auth decorator
-    app.addHook('onRequest', async (request) => {
+    app.addHook('onRequest', async request => {
       await Promise.resolve();
       request.user = { tenantId: 'test-tenant-id' };
     });
-    
+
     void app.register(registerCallCenterRoutes);
   });
 
@@ -70,7 +70,7 @@ describe('Call Center Lookup API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as LookupBody;
     expect(body.customer).toBeNull();
-    
+
     // Verify last-10-digit matching was passed to prisma
     expect(mockPrisma.insuranceLead.findMany).toHaveBeenCalledWith({
       where: {
@@ -124,7 +124,7 @@ describe('Call Center Lookup API', () => {
     expect(body.customer).not.toBeNull();
     expect(body.customer!.id).toBe('lead-1');
     expect(body.customer!.recordType).toBe('InsuranceLead');
-    
+
     // Duplicate includes the prospect intake
     expect(body.duplicates).toHaveLength(1);
     expect(body.duplicates[0].id).toBe('intake-1');

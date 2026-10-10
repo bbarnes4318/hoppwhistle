@@ -67,12 +67,16 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    * trailing window percentage that actually sets the rate, the current rate,
    * and the rate today is tracking toward for tomorrow.
    */
-  fastify.get('/api/v1/rating/summary', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
-    const tenantId = resolveTenant(request, reply);
-    if (!tenantId) return;
+  fastify.get(
+    '/api/v1/rating/summary',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
-    return reply.send({ data: await getRatingSummary(tenantId, { prisma }) });
-  });
+      return reply.send({ data: await getRatingSummary(tenantId, { prisma }) });
+    }
+  );
 
   /**
    * GET /api/v1/rating/history
@@ -166,29 +170,33 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
    * being able to check your own price against the published schedule is the
    * point; it names no other agency and carries no per-agency figure.
    */
-  fastify.get('/api/v1/rating/curve', { preHandler: [authenticate, requireAgencyPrincipal] }, async (request, reply) => {
-    const tenantId = resolveTenant(request, reply);
-    if (!tenantId) return;
+  fastify.get(
+    '/api/v1/rating/curve',
+    { preHandler: [authenticate, requireAgencyPrincipal] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
-    const [curve, windowSettings] = await Promise.all([
-      loadActiveCurve(prisma),
-      loadWindowSettings(prisma),
-    ]);
+      const [curve, windowSettings] = await Promise.all([
+        loadActiveCurve(prisma),
+        loadWindowSettings(prisma),
+      ]);
 
-    return reply.send({
-      data: {
-        version: curve.version,
-        minimumClosingPct: curve.minimumClosingPct,
-        flatFromClosingPct: curve.flatFromClosingPct,
-        // No introductory rate. Phase 3 removed the concept; an agency's
-        // opening rate and block are agreed per tenant, not carried on the
-        // curve, and there is no "first N applications" price to publish.
-        windowDeliveryDays: windowSettings.windowDeliveryDays,
-        deliveryDayLookback: windowSettings.deliveryDayLookback,
-        anchors: curve.anchors,
-      },
-    });
-  });
+      return reply.send({
+        data: {
+          version: curve.version,
+          minimumClosingPct: curve.minimumClosingPct,
+          flatFromClosingPct: curve.flatFromClosingPct,
+          // No introductory rate. Phase 3 removed the concept; an agency's
+          // opening rate and block are agreed per tenant, not carried on the
+          // curve, and there is no "first N applications" price to publish.
+          windowDeliveryDays: windowSettings.windowDeliveryDays,
+          deliveryDayLookback: windowSettings.deliveryDayLookback,
+          anchors: curve.anchors,
+        },
+      });
+    }
+  );
 
   // ==========================================================================
   // Platform-scoped
@@ -404,8 +412,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
 
       const sorted = [...anchors].sort((a, b) => a.closingPct - b.closingPct);
       const minimumClosingPct = body.minimumClosingPct ?? sorted[0].closingPct;
-      const flatFromClosingPct =
-        body.flatFromClosingPct ?? sorted[sorted.length - 1].closingPct;
+      const flatFromClosingPct = body.flatFromClosingPct ?? sorted[sorted.length - 1].closingPct;
 
       /*
        * No introductory package is accepted or required. Phase 2 demanded an

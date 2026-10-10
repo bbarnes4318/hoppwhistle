@@ -1,6 +1,6 @@
 'use client';
 
-import { 
+import {
   Activity,
   Download,
   MapPin,
@@ -26,27 +26,43 @@ import type { FanProfile, FanSegment, FanSource } from '../types';
 // Helper text formatting functions
 function formatSegment(seg: string) {
   switch (seg) {
-    case 'superfan': return 'Superfan';
-    case 'vip_list': return 'VIP List';
-    case 'previous_merch': return 'Merch Buyer';
-    case 'tour_city': return 'Tour City Fan';
-    case 'stream_save': return 'Stream Saver';
-    case 'fan_club_inactive': return 'Inactive Fan Club';
-    case 'festival_audience': return 'Festival Audience';
-    default: return seg.replace(/_/g, ' ');
+    case 'superfan':
+      return 'Superfan';
+    case 'vip_list':
+      return 'VIP List';
+    case 'previous_merch':
+      return 'Merch Buyer';
+    case 'tour_city':
+      return 'Tour City Fan';
+    case 'stream_save':
+      return 'Stream Saver';
+    case 'fan_club_inactive':
+      return 'Inactive Fan Club';
+    case 'festival_audience':
+      return 'Festival Audience';
+    default:
+      return seg.replace(/_/g, ' ');
   }
 }
 
 function formatSource(src: string) {
   switch (src) {
-    case 'pre_save_page': return 'Spotify Presave';
-    case 'merch_checkout': return 'Merch Checkout';
-    case 'ticketing_partner': return 'Ticketing Partner';
-    case 'qr_code': return 'QR Code';
-    case 'sms_opt_in': return 'SMS Opt-In';
-    case 'vip_waitlist': return 'VIP Waitlist';
-    case 'fan_club': return 'Fan Club';
-    default: return src.replace(/_/g, ' ');
+    case 'pre_save_page':
+      return 'Spotify Presave';
+    case 'merch_checkout':
+      return 'Merch Checkout';
+    case 'ticketing_partner':
+      return 'Ticketing Partner';
+    case 'qr_code':
+      return 'QR Code';
+    case 'sms_opt_in':
+      return 'SMS Opt-In';
+    case 'vip_waitlist':
+      return 'VIP Waitlist';
+    case 'fan_club':
+      return 'Fan Club';
+    default:
+      return src.replace(/_/g, ' ');
   }
 }
 
@@ -84,8 +100,14 @@ export function FanDatabaseTable() {
   }, []);
 
   const handleExport = () => {
-    const csvContent = 'data:text/csv;charset=utf-8,Name,Phone,City,Segment,Source,EngagementScore,VerifiedActions,Consent\n' + 
-      filteredFans.map(f => `${f.name},${f.phone},${f.city},${f.segment},${f.source},${f.engagementScore},${f.verifiedActions},${f.consentStatus}`).join('\n');
+    const csvContent =
+      'data:text/csv;charset=utf-8,Name,Phone,City,Segment,Source,EngagementScore,VerifiedActions,Consent\n' +
+      filteredFans
+        .map(
+          f =>
+            `${f.name},${f.phone},${f.city},${f.segment},${f.source},${f.engagementScore},${f.verifiedActions},${f.consentStatus}`
+        )
+        .join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -109,7 +131,10 @@ export function FanDatabaseTable() {
       const lines = text.split('\n').filter(l => l.trim().length > 0);
       const newFans: FanProfile[] = [];
       lines.forEach((line, idx) => {
-        if (idx === 0 && (line.toLowerCase().includes('name') || line.toLowerCase().includes('phone'))) {
+        if (
+          idx === 0 &&
+          (line.toLowerCase().includes('name') || line.toLowerCase().includes('phone'))
+        ) {
           return; // skip header
         }
         const parts = line.split(',');
@@ -156,21 +181,28 @@ export function FanDatabaseTable() {
 
   // Filters logic
   const filteredFans = fanList.filter(f => {
-    const matchesSearch = 
-      f.name.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch =
+      f.name.toLowerCase().includes(search.toLowerCase()) ||
       f.city.toLowerCase().includes(search.toLowerCase()) ||
       f.phone.includes(search);
     const matchesSegment = segmentFilter === 'all' || f.segment === segmentFilter;
     const matchesSource = sourceFilter === 'all' || f.source === sourceFilter;
     const matchesMarket = marketFilter === 'all' || f.city === marketFilter;
     const matchesConsent = consentFilter === 'all' || f.consentStatus === consentFilter;
-    
+
     let matchesScore = true;
     if (scoreFilter === '50') matchesScore = f.engagementScore >= 50;
     else if (scoreFilter === '70') matchesScore = f.engagementScore >= 70;
     else if (scoreFilter === '90') matchesScore = f.engagementScore >= 90;
 
-    return matchesSearch && matchesSegment && matchesSource && matchesMarket && matchesConsent && matchesScore;
+    return (
+      matchesSearch &&
+      matchesSegment &&
+      matchesSource &&
+      matchesMarket &&
+      matchesConsent &&
+      matchesScore
+    );
   });
 
   // Unique list of filters
@@ -217,46 +249,50 @@ export function FanDatabaseTable() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 3);
 
-  const avgEngagement = totalFiltered > 0 
-    ? Math.round(filteredFans.reduce((acc, f) => acc + f.engagementScore, 0) / totalFiltered) 
-    : 0;
+  const avgEngagement =
+    totalFiltered > 0
+      ? Math.round(filteredFans.reduce((acc, f) => acc + f.engagementScore, 0) / totalFiltered)
+      : 0;
 
-  const totalActions = filteredFans.reduce((acc, f) => acc + f.verifiedActions, 0);  return (
+  const totalActions = filteredFans.reduce((acc, f) => acc + f.verifiedActions, 0);
+  return (
     <div className="space-y-3">
       {/* Top compact header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[var(--m-border-2)] pb-2 mb-1">
         <div>
           <h1 className="text-lg font-black tracking-tight flex items-center gap-2 text-[var(--m-text)] uppercase">
-            <Users className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Fan Database & Audience Intelligence
+            <Users className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Fan Database & Audience
+            Intelligence
           </h1>
           <p className="text-[10px] text-[var(--m-muted)] mt-0.5">
-            Segment opted-in fans by engagement, market, source, station affinity, and monetization readiness.
+            Segment opted-in fans by engagement, market, source, station affinity, and monetization
+            readiness.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2 shrink-0">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            accept=".csv" 
-            onChange={handleImportFile} 
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept=".csv"
+            onChange={handleImportFile}
           />
-          <button 
+          <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-[var(--m-surface-2)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded text-[10px] font-bold text-[var(--m-text-2)] hover:text-[var(--m-text)] transition-colors"
           >
             <Upload className="h-3 w-3" /> Import Audience
           </button>
-          
-          <button 
+
+          <button
             onClick={handleExport}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-[var(--m-surface-2)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded text-[10px] font-bold text-[var(--m-text-2)] hover:text-[var(--m-text)] transition-colors"
           >
             <Download className="h-3 w-3" /> Export Segment
           </button>
 
-          <button 
+          <button
             onClick={() => {
               toast({
                 title: 'Campaign Builder Opened',
@@ -273,46 +309,72 @@ export function FanDatabaseTable() {
       {/* Audience KPI Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-1">
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Total Opt-In</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Total Opt-In
+          </span>
           <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">
             {totalFiltered > 0 ? (totalFiltered * 1000).toLocaleString() : '0'}
           </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px] border-l-2 border-l-[var(--m-accent)]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Superfans</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Superfans
+          </span>
           <span className="text-sm font-bold text-[var(--m-accent)] block mt-0.5 font-mono">
             {filteredFans.filter(f => f.segment === 'superfan').length * 80}
           </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Avg Engagement</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Avg Engagement
+          </span>
           <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">
             {avgEngagement > 0 ? `${avgEngagement}/100` : '—'}
           </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Verified Actions</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Verified Actions
+          </span>
           <span className="text-sm font-bold text-[var(--m-accent-2)] block mt-0.5 font-mono">
             {totalActions.toLocaleString()}
           </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Opt-Out Rate</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Opt-Out Rate
+          </span>
           <span className="text-sm font-bold text-red-650 block mt-0.5 font-mono">1.2%</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Monetized</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Monetized
+          </span>
           <span className="text-sm font-bold text-emerald-700 block mt-0.5 font-mono">
             {Math.round(optInPct * 0.7)}% Ready
           </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Top Source</span>
-          <span className="text-[10px] font-bold text-[var(--m-text)] truncate block mt-1" title="Spotify Presave">Spotify Presave</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Top Source
+          </span>
+          <span
+            className="text-[10px] font-bold text-[var(--m-text)] truncate block mt-1"
+            title="Spotify Presave"
+          >
+            Spotify Presave
+          </span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Top Market</span>
-          <span className="text-[10px] font-bold text-[var(--m-text)] truncate block mt-1" title="Austin">Austin</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">
+            Top Market
+          </span>
+          <span
+            className="text-[10px] font-bold text-[var(--m-text)] truncate block mt-1"
+            title="Austin"
+          >
+            Austin
+          </span>
         </div>
       </div>
 
@@ -320,15 +382,15 @@ export function FanDatabaseTable() {
       <div className="bg-[var(--m-surface)] p-2 border border-[var(--m-border-2)] rounded flex flex-wrap items-center gap-2 mb-1.5">
         <div className="relative flex-1 min-w-[150px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--m-muted)]" />
-          <input 
-            type="text" 
+          <input
+            type="text"
             placeholder="Search fans, city, phone..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded pl-8 pr-3 py-1 text-[11px] text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors font-medium placeholder-[var(--m-dim)]"
           />
           {search && (
-            <button 
+            <button
               onClick={() => setSearch('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--m-muted)] hover:text-[var(--m-text)]"
             >
@@ -338,42 +400,48 @@ export function FanDatabaseTable() {
         </div>
 
         {/* Filters dropdowns */}
-        <select 
+        <select
           value={segmentFilter}
-          onChange={(e) => setSegmentFilter(e.target.value)}
+          onChange={e => setSegmentFilter(e.target.value)}
           className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
         >
           <option value="all">All Segments</option>
           {uniqueSegments.map(s => (
-            <option key={s} value={s}>{formatSegment(s)}</option>
+            <option key={s} value={s}>
+              {formatSegment(s)}
+            </option>
           ))}
         </select>
 
-        <select 
+        <select
           value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value)}
+          onChange={e => setSourceFilter(e.target.value)}
           className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
         >
           <option value="all">All Sources</option>
           {uniqueSources.map(s => (
-            <option key={s} value={s}>{formatSource(s)}</option>
+            <option key={s} value={s}>
+              {formatSource(s)}
+            </option>
           ))}
         </select>
 
-        <select 
+        <select
           value={marketFilter}
-          onChange={(e) => setMarketFilter(e.target.value)}
+          onChange={e => setMarketFilter(e.target.value)}
           className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
         >
           <option value="all">All Markets</option>
           {uniqueMarkets.map(m => (
-            <option key={m} value={m}>{m}</option>
+            <option key={m} value={m}>
+              {m}
+            </option>
           ))}
         </select>
 
-        <select 
+        <select
           value={consentFilter}
-          onChange={(e) => setConsentFilter(e.target.value)}
+          onChange={e => setConsentFilter(e.target.value)}
           className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
         >
           <option value="all">All Consent</option>
@@ -382,9 +450,9 @@ export function FanDatabaseTable() {
           <option value="pending">Pending</option>
         </select>
 
-        <select 
+        <select
           value={scoreFilter}
-          onChange={(e) => setScoreFilter(e.target.value)}
+          onChange={e => setScoreFilter(e.target.value)}
           className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
         >
           <option value="all">Any Score</option>
@@ -393,8 +461,13 @@ export function FanDatabaseTable() {
           <option value="90">Score &gt;= 90</option>
         </select>
 
-        {(search || segmentFilter !== 'all' || sourceFilter !== 'all' || marketFilter !== 'all' || consentFilter !== 'all' || scoreFilter !== 'all') && (
-          <button 
+        {(search ||
+          segmentFilter !== 'all' ||
+          sourceFilter !== 'all' ||
+          marketFilter !== 'all' ||
+          consentFilter !== 'all' ||
+          scoreFilter !== 'all') && (
+          <button
             onClick={() => {
               setSearch('');
               setSegmentFilter('all');
@@ -431,14 +504,17 @@ export function FanDatabaseTable() {
               <tbody className="divide-y divide-[var(--m-border-2)] bg-[var(--m-surface)]">
                 {filteredFans.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-20 text-[var(--m-muted)] text-xs font-semibold">
+                    <td
+                      colSpan={8}
+                      className="text-center py-20 text-[var(--m-muted)] text-xs font-semibold"
+                    >
                       No matching opted-in fans found. Try clearing filters.
                     </td>
                   </tr>
                 ) : (
                   filteredFans.map(fan => (
-                    <tr 
-                      key={fan.id} 
+                    <tr
+                      key={fan.id}
                       onClick={() => {
                         setSelectedFan(fan);
                         setShowFullPhone(false);
@@ -447,9 +523,13 @@ export function FanDatabaseTable() {
                     >
                       <td className="px-3 py-1.5">
                         <div className="font-bold text-[var(--m-text)] text-[11px]">{fan.name}</div>
-                        <div className="text-[9px] text-[var(--m-muted)] mt-0.2 font-mono">{maskPhoneNumber(fan.phone)}</div>
+                        <div className="text-[9px] text-[var(--m-muted)] mt-0.2 font-mono">
+                          {maskPhoneNumber(fan.phone)}
+                        </div>
                       </td>
-                      <td className="px-3 py-1.5 text-[var(--m-text-2)] font-semibold text-[10px]">{fan.city}</td>
+                      <td className="px-3 py-1.5 text-[var(--m-text-2)] font-semibold text-[10px]">
+                        {fan.city}
+                      </td>
                       <td className="px-3 py-1.5">
                         <span className="px-1.5 py-0.2 bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded text-[9px] font-bold text-[var(--m-text-2)]">
                           {formatSegment(fan.segment)}
@@ -461,9 +541,14 @@ export function FanDatabaseTable() {
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-[var(--m-text)] font-extrabold font-mono w-4">{fan.engagementScore}</span>
+                          <span className="text-[10px] text-[var(--m-text)] font-extrabold font-mono w-4">
+                            {fan.engagementScore}
+                          </span>
                           <div className="w-12 h-1 bg-[var(--m-surface-3)] rounded-full overflow-hidden shrink-0">
-                            <div className="h-full bg-[var(--m-accent)]" style={{ width: `${fan.engagementScore}%` }} />
+                            <div
+                              className="h-full bg-[var(--m-accent)]"
+                              style={{ width: `${fan.engagementScore}%` }}
+                            />
                           </div>
                         </div>
                       </td>
@@ -487,12 +572,12 @@ export function FanDatabaseTable() {
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex justify-center">
-                          <button 
-                            className="p-0.5 hover:bg-[var(--m-surface-3)] rounded text-[var(--m-muted)] hover:text-[var(--m-text)] transition-colors flex items-center justify-center border border-transparent hover:border-[var(--m-border)]" 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setSelectedFan(fan); 
-                              setShowFullPhone(false); 
+                          <button
+                            className="p-0.5 hover:bg-[var(--m-surface-3)] rounded text-[var(--m-muted)] hover:text-[var(--m-text)] transition-colors flex items-center justify-center border border-transparent hover:border-[var(--m-border)]"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setSelectedFan(fan);
+                              setShowFullPhone(false);
                             }}
                           >
                             <MoreVertical className="h-3 w-3" />
@@ -521,14 +606,39 @@ export function FanDatabaseTable() {
                 <span className="text-emerald-700">{optInPct}% OPT-IN RATE</span>
               </div>
               <div className="h-2 bg-[var(--m-surface)] rounded overflow-hidden flex">
-                <div className="h-full bg-emerald-500" style={{ width: `${optInPct}%` }} title={`Opted In: ${optedInCount}`} />
-                <div className="h-full bg-amber-500" style={{ width: `${totalFiltered > 0 ? (pendingCount / totalFiltered) * 100 : 0}%` }} title={`Pending: ${pendingCount}`} />
-                <div className="h-full bg-rose-550" style={{ width: `${totalFiltered > 0 ? (optedOutCount / totalFiltered) * 100 : 0}%` }} title={`Opted Out: ${optedOutCount}`} />
+                <div
+                  className="h-full bg-emerald-500"
+                  style={{ width: `${optInPct}%` }}
+                  title={`Opted In: ${optedInCount}`}
+                />
+                <div
+                  className="h-full bg-amber-500"
+                  style={{
+                    width: `${totalFiltered > 0 ? (pendingCount / totalFiltered) * 100 : 0}%`,
+                  }}
+                  title={`Pending: ${pendingCount}`}
+                />
+                <div
+                  className="h-full bg-rose-550"
+                  style={{
+                    width: `${totalFiltered > 0 ? (optedOutCount / totalFiltered) * 100 : 0}%`,
+                  }}
+                  title={`Opted Out: ${optedOutCount}`}
+                />
               </div>
               <div className="flex justify-between text-[8px] text-[var(--m-muted)] font-semibold">
-                <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Opt-in ({optedInCount})</span>
-                <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Pending ({pendingCount})</span>
-                <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Opt-out ({optedOutCount})</span>
+                <span className="flex items-center gap-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Opt-in (
+                  {optedInCount})
+                </span>
+                <span className="flex items-center gap-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Pending ({pendingCount}
+                  )
+                </span>
+                <span className="flex items-center gap-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Opt-out ({optedOutCount}
+                  )
+                </span>
               </div>
             </div>
 
@@ -539,8 +649,13 @@ export function FanDatabaseTable() {
               </h3>
               <div className="space-y-1">
                 {sortedSegments.map(s => (
-                  <div key={s.segment} className="flex justify-between items-center bg-[var(--m-surface-2)] px-2 py-1 rounded border border-[var(--m-border-2)] text-[10px]">
-                    <span className="font-bold text-[var(--m-text-2)]">{formatSegment(s.segment)}</span>
+                  <div
+                    key={s.segment}
+                    className="flex justify-between items-center bg-[var(--m-surface-2)] px-2 py-1 rounded border border-[var(--m-border-2)] text-[10px]"
+                  >
+                    <span className="font-bold text-[var(--m-text-2)]">
+                      {formatSegment(s.segment)}
+                    </span>
                     <div className="flex items-center gap-2 font-mono text-[9px]">
                       <span className="text-[var(--m-muted)]">{s.count} fans</span>
                       <span className="text-[var(--m-dim)]">|</span>
@@ -561,12 +676,17 @@ export function FanDatabaseTable() {
               </h3>
               <div className="space-y-1">
                 {sortedMarkets.map(m => (
-                  <div key={m.city} className="flex justify-between items-center bg-[var(--m-surface-2)] px-2 py-1 rounded border border-[var(--m-border-2)] text-[10px]">
+                  <div
+                    key={m.city}
+                    className="flex justify-between items-center bg-[var(--m-surface-2)] px-2 py-1 rounded border border-[var(--m-border-2)] text-[10px]"
+                  >
                     <span className="font-bold text-[var(--m-text-2)]">{m.city}</span>
                     <div className="flex items-center gap-2 font-mono text-[9px]">
                       <span className="text-[var(--m-muted)]">{m.count} fans</span>
                       <span className="text-[var(--m-dim)]">|</span>
-                      <span className="text-[var(--m-accent-2)] font-bold">{m.actions} Actions</span>
+                      <span className="text-[var(--m-accent-2)] font-bold">
+                        {m.actions} Actions
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -583,7 +703,9 @@ export function FanDatabaseTable() {
             <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded p-2">
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-600 animate-pulse shrink-0" />
-                <span className="text-[9px] font-extrabold text-emerald-700 uppercase tracking-wider">Sponsor Ready</span>
+                <span className="text-[9px] font-extrabold text-emerald-700 uppercase tracking-wider">
+                  Sponsor Ready
+                </span>
               </div>
               <div className="text-[9px] text-emerald-800 font-mono font-bold">
                 {totalFiltered > 0 ? Math.round(totalFiltered * 3.4) : 0} Active Ad Slots
@@ -592,12 +714,13 @@ export function FanDatabaseTable() {
 
             {/* Recommended Play */}
             <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded p-2.5 space-y-1">
-              <span className="text-[8px] font-bold uppercase tracking-wider text-[var(--m-muted)] block">Recommended Play</span>
+              <span className="text-[8px] font-bold uppercase tracking-wider text-[var(--m-muted)] block">
+                Recommended Play
+              </span>
               <p className="text-[10px] text-[var(--m-text-2)] leading-normal">
-                {segmentFilter === 'superfan' 
+                {segmentFilter === 'superfan'
                   ? 'Superfans identified. Launch high-fidelity Voice Broadcast Campaign to promote Nona Ray VIP tickets.'
-                  : 'Audience segment active. Deploy a direct sponsor integration play to monetize verified interaction inventory.'
-                }
+                  : 'Audience segment active. Deploy a direct sponsor integration play to monetize verified interaction inventory.'}
               </p>
             </div>
           </div>
@@ -606,10 +729,13 @@ export function FanDatabaseTable() {
 
       {/* Upgraded Detail Drawer */}
       {selectedFan && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs" onClick={() => setSelectedFan(null)}>
-          <div 
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs"
+          onClick={() => setSelectedFan(null)}
+        >
+          <div
             className="w-full max-w-xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
           >
             {/* Pinned Header */}
             <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
@@ -618,12 +744,16 @@ export function FanDatabaseTable() {
                   <Star className="h-4 w-4 text-amber-500 fill-current" /> {selectedFan.name}
                 </h2>
                 <div className="flex items-center gap-2 text-[10px] text-[var(--m-muted)] mt-1 font-semibold">
-                  <span className="font-mono bg-[var(--m-surface-3)] px-1 rounded border border-[var(--m-border-2)] text-[var(--m-text-2)]">{selectedFan.id}</span>
+                  <span className="font-mono bg-[var(--m-surface-3)] px-1 rounded border border-[var(--m-border-2)] text-[var(--m-text-2)]">
+                    {selectedFan.id}
+                  </span>
                   <span>•</span>
-                  <span className="font-mono text-[var(--m-text-2)]">{showFullPhone ? selectedFan.phone : maskPhoneNumber(selectedFan.phone)}</span>
+                  <span className="font-mono text-[var(--m-text-2)]">
+                    {showFullPhone ? selectedFan.phone : maskPhoneNumber(selectedFan.phone)}
+                  </span>
                   {!showFullPhone && (
-                    <button 
-                      onClick={() => setShowFullPhone(true)} 
+                    <button
+                      onClick={() => setShowFullPhone(true)}
                       className="text-[8px] font-extrabold text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-1.5 py-0.2 rounded bg-[var(--m-surface-3)]"
                     >
                       Reveal DID
@@ -631,65 +761,83 @@ export function FanDatabaseTable() {
                   )}
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedFan(null)} 
+              <button
+                onClick={() => setSelectedFan(null)}
                 className="p-1.5 hover:bg-[var(--m-surface-3)] rounded border border-[var(--m-border-2)] flex items-center justify-center bg-[var(--m-surface-2)] transition-colors"
                 title="Close"
               >
                 <X className="h-3.5 w-3.5 text-[var(--m-muted)]" />
               </button>
             </div>
- 
+
             {/* Content Container */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Info Matrix */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)]">
                   <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-wider mb-0.5 flex items-center gap-1 font-bold">
-                    <MapPin className="h-3 w-3 shrink-0"/> Market Play
+                    <MapPin className="h-3 w-3 shrink-0" /> Market Play
                   </div>
                   <div className="font-bold text-xs text-[var(--m-text)]">{selectedFan.city}</div>
                 </div>
                 <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)]">
                   <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-wider mb-0.5 flex items-center gap-1 font-bold">
-                    <Star className="h-3 w-3 shrink-0"/> Audience Segment
+                    <Star className="h-3 w-3 shrink-0" /> Audience Segment
                   </div>
-                  <div className="font-bold text-xs text-[var(--m-text)]">{formatSegment(selectedFan.segment)}</div>
+                  <div className="font-bold text-xs text-[var(--m-text)]">
+                    {formatSegment(selectedFan.segment)}
+                  </div>
                 </div>
                 <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)]">
                   <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-wider mb-0.5 flex items-center gap-1 font-bold">
-                    <Music className="h-3 w-3 shrink-0"/> Station Affinity
+                    <Music className="h-3 w-3 shrink-0" /> Station Affinity
                   </div>
-                  <div className="font-bold text-xs text-[var(--m-text)] truncate">{selectedFan.favoriteArtist}</div>
+                  <div className="font-bold text-xs text-[var(--m-text)] truncate">
+                    {selectedFan.favoriteArtist}
+                  </div>
                 </div>
                 <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)]">
                   <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-wider mb-0.5 flex items-center gap-1 font-bold">
-                    <Activity className="h-3 w-3 shrink-0"/> Engagement Score
+                    <Activity className="h-3 w-3 shrink-0" /> Engagement Score
                   </div>
-                  <div className="font-bold text-xs text-[var(--m-accent)]">{selectedFan.engagementScore}/100</div>
+                  <div className="font-bold text-xs text-[var(--m-accent)]">
+                    {selectedFan.engagementScore}/100
+                  </div>
                 </div>
               </div>
 
               {/* Consent & Compliance Details */}
               <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden bg-[var(--m-surface)]">
                 <div className="bg-[var(--m-surface-2)] px-3 py-1.5 border-b border-[var(--m-border-2)] flex items-center gap-2 font-black text-[8px] uppercase tracking-wider text-[var(--m-text-2)]">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Consent & Compliance Audit
+                  <ShieldCheck className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Consent &
+                  Compliance Audit
                 </div>
                 <div className="p-3 space-y-1.5 text-[11px]">
                   <div className="flex justify-between border-b border-[var(--m-border-2)] pb-1">
                     <span className="text-[var(--m-muted)] font-semibold">Consent Status</span>
-                    <span className={cn("font-bold uppercase", 
-                      selectedFan.consentStatus === 'opted_in' ? 'text-emerald-700' : 'text-rose-700'
-                    )}>
+                    <span
+                      className={cn(
+                        'font-bold uppercase',
+                        selectedFan.consentStatus === 'opted_in'
+                          ? 'text-emerald-700'
+                          : 'text-rose-700'
+                      )}
+                    >
                       {selectedFan.consentStatus}
                     </span>
                   </div>
                   <div className="flex justify-between border-b border-[var(--m-border-2)] pb-1">
-                    <span className="text-[var(--m-muted)] font-semibold">Opt-In Capture Source</span>
-                    <span className="font-bold text-[var(--m-text-2)]">{formatSource(selectedFan.source)}</span>
+                    <span className="text-[var(--m-muted)] font-semibold">
+                      Opt-In Capture Source
+                    </span>
+                    <span className="font-bold text-[var(--m-text-2)]">
+                      {formatSource(selectedFan.source)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[var(--m-muted)] font-semibold">TCPA Compliance Method</span>
+                    <span className="text-[var(--m-muted)] font-semibold">
+                      TCPA Compliance Method
+                    </span>
                     <span className="text-emerald-700 font-bold">Double Opt-In Signed</span>
                   </div>
                 </div>
@@ -698,56 +846,65 @@ export function FanDatabaseTable() {
               {/* Dynamic recommended play trigger block */}
               <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded-lg p-3 space-y-2.5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)] flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5 text-[var(--m-accent)]" /> Recommended Next Play Action
+                  <TrendingUp className="w-3.5 h-3.5 text-[var(--m-accent)]" /> Recommended Next
+                  Play Action
                 </div>
-                
+
                 <div className="text-xs text-[var(--m-text-2)] leading-normal">
-                  Fan displays high engagement on <span className="font-semibold text-[var(--m-text)]">{selectedFan.favoriteArtist}</span>, capturing <span className="font-bold text-[var(--m-accent-2)]">{selectedFan.verifiedActions} verified actions</span>.
+                  Fan displays high engagement on{' '}
+                  <span className="font-semibold text-[var(--m-text)]">
+                    {selectedFan.favoriteArtist}
+                  </span>
+                  , capturing{' '}
+                  <span className="font-bold text-[var(--m-accent-2)]">
+                    {selectedFan.verifiedActions} verified actions
+                  </span>
+                  .
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                  <button 
+                  <button
                     onClick={() => {
-                      toast({ 
-                        title: 'VIP Campaign Setup', 
-                        description: `Initiated VIP Pre-Sale Campaign play for ${selectedFan.name}.` 
+                      toast({
+                        title: 'VIP Campaign Setup',
+                        description: `Initiated VIP Pre-Sale Campaign play for ${selectedFan.name}.`,
                       });
                     }}
                     className="py-1.5 px-2 bg-[var(--m-surface)] hover:bg-[var(--m-surface-2)] border border-[var(--m-border-2)] hover:border-[var(--m-accent)]/50 rounded text-[10px] font-bold text-[var(--m-text-2)] text-left truncate transition-all"
                   >
                     + VIP Pre-Sale Play
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => {
-                      toast({ 
-                        title: 'Merch Drop Setup', 
-                        description: `Initiated Capsule Merchandise drop play for ${selectedFan.name}.` 
+                      toast({
+                        title: 'Merch Drop Setup',
+                        description: `Initiated Capsule Merchandise drop play for ${selectedFan.name}.`,
                       });
                     }}
                     className="py-1.5 px-2 bg-[var(--m-surface)] hover:bg-[var(--m-surface-2)] border border-[var(--m-border-2)] hover:border-[var(--m-accent)]/50 rounded text-[10px] font-bold text-[var(--m-text-2)] text-left truncate transition-all"
                   >
                     + Merch Drop Play
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => {
-                      toast({ 
-                        title: 'Compliance Request', 
+                      toast({
+                        title: 'Compliance Request',
                         description: `Requested suppression review for ${selectedFan.name}.`,
-                        variant: 'destructive'
+                        variant: 'destructive',
                       });
                     }}
                     className="py-1.5 px-2 bg-[var(--m-surface)] hover:bg-red-50 border border-[var(--m-border-2)] hover:border-red-500/50 rounded text-[10px] font-bold text-red-700 text-left truncate transition-all"
                   >
                     ⚠ Suppress Fan Review
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => {
-                      toast({ 
-                        title: 'Sponsor Pipeline Update', 
-                        description: `Added ${selectedFan.name} to Sponsor-Ready Audience segment.` 
+                      toast({
+                        title: 'Sponsor Pipeline Update',
+                        description: `Added ${selectedFan.name} to Sponsor-Ready Audience segment.`,
                       });
                     }}
                     className="py-1.5 px-2 bg-[var(--m-surface)] hover:bg-emerald-50 border border-[var(--m-border-2)] hover:border-emerald-500/50 rounded text-[10px] font-bold text-emerald-700 text-left truncate transition-all"
@@ -761,26 +918,40 @@ export function FanDatabaseTable() {
               <div className="space-y-1.5">
                 <h3 className="text-[9px] font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-1 flex justify-between">
                   <span>AUDIENCE TELEMETRY HISTORY</span>
-                  <span className="font-mono text-[8px] text-[var(--m-accent)] font-bold">{selectedFan.totalInteractions} Interactions</span>
+                  <span className="font-mono text-[8px] text-[var(--m-accent)] font-bold">
+                    {selectedFan.totalInteractions} Interactions
+                  </span>
                 </h3>
                 <div className="space-y-2">
                   <div className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] p-2 rounded flex justify-between items-center text-xs">
                     <div>
-                      <div className="font-bold text-[var(--m-text)] text-[11px]">Tour Ticket Pre-Sale Broadcast</div>
-                      <div className="text-[9px] text-[var(--m-muted)] font-semibold mt-0.5">Apr 24, 2026 • 2m 14s • Routing: Inbound</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">
+                        Tour Ticket Pre-Sale Broadcast
+                      </div>
+                      <div className="text-[9px] text-[var(--m-muted)] font-semibold mt-0.5">
+                        Apr 24, 2026 • 2m 14s • Routing: Inbound
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-[8px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold uppercase">Ticket Intent</span>
+                      <span className="text-[8px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold uppercase">
+                        Ticket Intent
+                      </span>
                     </div>
                   </div>
-                  
+
                   <div className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] p-2 rounded flex justify-between items-center text-xs">
                     <div>
-                      <div className="font-bold text-[var(--m-text)] text-[11px]">Album Announcement Opt-In</div>
-                      <div className="text-[9px] text-[var(--m-muted)] font-semibold mt-0.5">Apr 15, 2026 • Web QR Code Scan</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">
+                        Album Announcement Opt-In
+                      </div>
+                      <div className="text-[9px] text-[var(--m-muted)] font-semibold mt-0.5">
+                        Apr 15, 2026 • Web QR Code Scan
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-[8px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold uppercase">Opted In</span>
+                      <span className="text-[8px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold uppercase">
+                        Opted In
+                      </span>
                     </div>
                   </div>
                 </div>

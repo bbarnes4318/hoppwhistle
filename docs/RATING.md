@@ -39,7 +39,7 @@ Two further narrowings, both stated in the code:
 
 - **`direction: INBOUND`.** A delivered call is one NetEnroll delivered. An
   agency's own outbound dialling is its business. Counting it would inflate the
-  denominator, depress the measured closing percentage and *raise* the agency's
+  denominator, depress the measured closing percentage and _raise_ the agency's
   price — an error that costs the customer money is not an acceptable default.
 - **`blocked: false`.** A call the compliance layer refused was never offered to
   an agent. It cannot carry `answeredAt` today; the flag is asserted anyway so a
@@ -82,11 +82,11 @@ Phase 2 used one term, "business day", for two incompatible jobs. This is the
 correction, and it matters because the wrong reading is invisible: a shortened
 deadline is not an error message, it is just an earlier date.
 
-| Term | Means | Used for | File |
-| --- | --- | --- | --- |
-| **Calendar day** | 00:00:00.000–23:59:59.999 in America/New_York | the day boundary everything else is built from; the day a rate is effective on; the day an application is attributed to | `services/rating/calendar-day.ts` |
-| **Business Day** | Monday–Friday, excluding US federal holidays (observed) | **contractual notice periods only** | `services/rating/business-day.ts` |
-| **Delivery Day** | a calendar day on which NetEnroll delivered at least one call **to that agency** | **the rating window only** | `services/rating/delivery-day.ts` |
+| Term             | Means                                                                            | Used for                                                                                                                | File                              |
+| ---------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| **Calendar day** | 00:00:00.000–23:59:59.999 in America/New_York                                    | the day boundary everything else is built from; the day a rate is effective on; the day an application is attributed to | `services/rating/calendar-day.ts` |
+| **Business Day** | Monday–Friday, excluding US federal holidays (observed)                          | **contractual notice periods only**                                                                                     | `services/rating/business-day.ts` |
+| **Delivery Day** | a calendar day on which NetEnroll delivered at least one call **to that agency** | **the rating window only**                                                                                              | `services/rating/delivery-day.ts` |
 
 **None of the three may stand in for another.**
 
@@ -106,11 +106,11 @@ at 04:00Z.
 The signed agreement counts four things in Business Days, and every one of them
 is a period the agency is entitled to:
 
-| Period | Length |
-| --- | ---: |
-| Settlement dispute window | 5 Business Days |
-| Delivery window | 30 Business Days |
-| Grace period on failed settlement | 5 Business Days |
+| Period                            |           Length |
+| --------------------------------- | ---------------: |
+| Settlement dispute window         |  5 Business Days |
+| Delivery window                   | 30 Business Days |
+| Grace period on failed settlement |  5 Business Days |
 
 Reading these as calendar days **shortens every one**. A five-day dispute window
 opened on a Thursday runs Thu, Fri, Mon, Tue, Wed and expires on the following
@@ -127,9 +127,9 @@ Day.
 Two functions, deliberately named apart, because both readings appear in
 commercial writing and a single ambiguous helper is how the off-by-one gets in:
 
-- `businessDayPeriodEnd(start, n)` — an *n*-Business-Day period **beginning** on
+- `businessDayPeriodEnd(start, n)` — an _n_-Business-Day period **beginning** on
   `start`, counting `start` as day 1. Thursday + 5 → the following Wednesday.
-- `addBusinessDays(day, n)` — *n* Business Days **after** `day`, exclusive of it.
+- `addBusinessDays(day, n)` — _n_ Business Days **after** `day`, exclusive of it.
   Thursday + 5 → the following Thursday.
 
 Phase 2 does not enforce any of these periods. Phase 3 enforces the grace
@@ -147,10 +147,10 @@ The rating window is **the trailing three Delivery Days**. This is right whether
 an agency works five days a week or seven, and — the point — it does not depend
 on knowing which:
 
-| | Monday's window |
-| --- | --- |
-| agency that takes no weekend calls | the prior **Thursday, Friday, Monday** |
-| agency that does take weekend calls | **Saturday, Sunday, Monday** |
+|                                     | Monday's window                        |
+| ----------------------------------- | -------------------------------------- |
+| agency that takes no weekend calls  | the prior **Thursday, Friday, Monday** |
+| agency that does take weekend calls | **Saturday, Sunday, Monday**           |
 
 Calendar days would price the first agency's Monday off Saturday and Sunday, two
 days on which it was delivered nothing, with a third of its denominator zero for
@@ -202,18 +202,18 @@ cuts that distortion to under 2% across the whole range.
 ### Anchor points (curve v1)
 
 | closing % | rate |
-| ---: | ---: |
-| 5.0% | $264 |
-| 6.0% | $234 |
-| 7.0% | $204 |
-| 8.0% | $184 |
-| 9.0% | $169 |
-| 10.0% | $159 |
-| 11.0% | $159 |
-| 12.0% | $149 |
-| 13.0% | $144 |
-| 14.0% | $139 |
-| 15.0% | $134 |
+| --------: | ---: |
+|      5.0% | $264 |
+|      6.0% | $234 |
+|      7.0% | $204 |
+|      8.0% | $184 |
+|      9.0% | $169 |
+|     10.0% | $159 |
+|     11.0% | $159 |
+|     12.0% | $149 |
+|     13.0% | $144 |
+|     14.0% | $139 |
+|     15.0% | $134 |
 
 Between two anchors, linear interpolation, rounded to the nearest dollar.
 
@@ -295,16 +295,16 @@ default 3) as is how far back to look for those days
 
 Every run writes one immutable `rate_changes` row:
 
-| Column | |
-| --- | --- |
-| `tenantId`, `effectiveCalendarDay` | the agency and the calendar day the rate applies to |
-| `windowStart`, `windowEndExclusive` | the span, which for a non-contiguous window is wider than the days |
-| `windowDeliveryDays`, `windowDaysFound`, `windowDayKeys` | Delivery Days asked for, found, and which ones |
-| `deliveredCalls`, `submittedApplications` | the two counts |
-| `closingPct` | what they produce; null when there were no delivered calls |
-| `curveVersionId`, `curveVersion` | which curve priced it |
-| `previousRate`, `newRate` | before and after; `newRate` is null below the minimum |
-| `status` | `APPLIED`, `BELOW_MINIMUM` or `NO_DATA` |
+| Column                                                   |                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `tenantId`, `effectiveCalendarDay`                       | the agency and the calendar day the rate applies to                |
+| `windowStart`, `windowEndExclusive`                      | the span, which for a non-contiguous window is wider than the days |
+| `windowDeliveryDays`, `windowDaysFound`, `windowDayKeys` | Delivery Days asked for, found, and which ones                     |
+| `deliveredCalls`, `submittedApplications`                | the two counts                                                     |
+| `closingPct`                                             | what they produce; null when there were no delivered calls         |
+| `curveVersionId`, `curveVersion`                         | which curve priced it                                              |
+| `previousRate`, `newRate`                                | before and after; `newRate` is null below the minimum              |
+| `status`                                                 | `APPLIED`, `BELOW_MINIMUM` or `NO_DATA`                            |
 
 This is the row shown to an agency that disputes its price, so it is complete
 enough to recompute the rate from itself.
@@ -361,8 +361,8 @@ pnpm --filter @hopwhistle/api rating:run -- --dry-run     # compute and print, w
 ```
 
 Intended schedule: a little after midnight Eastern, `5 0 * * *` in
-America/New_York. `lastClosedBusinessDay()` reads the Eastern clock, so a run
-that fires at 23:00 Eastern rates the *previous* day rather than one that still
+America/New*York. `lastClosedBusinessDay()` reads the Eastern clock, so a run
+that fires at 23:00 Eastern rates the \_previous* day rather than one that still
 has an hour left in it.
 
 The engine lives in `apps/api` rather than `apps/worker` because the worker talks
@@ -378,12 +378,12 @@ by hand, for platform staff.
 `/rating` in the agency portal, from `GET /api/v1/rating/summary`. Four numbers,
 laid out so that no two of them can be read as each other:
 
-| | |
-| --- | --- |
-| **Current rate** | dollars per submitted application, today. An em dash under review — there is no rate below the floor, and a `$0` renders as a price |
-| **Rating window** | the trailing window percentage that *actually set* that rate, with the days it covers and both counts |
-| **Today so far** | today's live closing percentage. Muted, and labelled "does not set today's rate" |
-| **Tracking toward** | what tomorrow would be if today closed now. Muted and explicitly provisional |
+|                     |                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Current rate**    | dollars per submitted application, today. An em dash under review — there is no rate below the floor, and a `$0` renders as a price |
+| **Rating window**   | the trailing window percentage that _actually set_ that rate, with the days it covers and both counts                               |
+| **Today so far**    | today's live closing percentage. Muted, and labelled "does not set today's rate"                                                    |
+| **Tracking toward** | what tomorrow would be if today closed now. Muted and explicitly provisional                                                        |
 
 An agency that reads "today so far" as the window percentage thinks its price
 changed at 10am. An agency that reads "tracking toward" as the current rate
@@ -456,12 +456,12 @@ replay every migration from the beginning.
 
 ## 6. Tests
 
-| Suite | Cases | What it pins |
-| --- | ---: | --- |
-| `services/rating/__tests__/calendar-day.test.ts` | 14 | Eastern reckoning, the 23:59:59 boundary, both DST transitions, month/year/leap-day walks, weekday naming, a non-contiguous window spanning its gap, malformed input refused |
-| `services/rating/__tests__/business-day.test.ts` | 19 | Weekends and all eleven federal holidays including observed days; Thursday + 5 Business Days ending the following Wednesday; a holiday inside a period extending it; the two counting readings kept apart; the three contractual periods |
-| `services/rating/__tests__/rate-curve.test.ts` | 13 | Every anchor exactly; interpolation; flat at and above 15%; no rate below 5% and a rate exactly at 5%; continuity across 10%; monotonicity; a past settlement priced from its own version |
-| `__tests__/rating-engine.test.ts` | 45 | Against a real database: the two counts, day attribution, Delivery Day windows for both agency schedules, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
+| Suite                                            | Cases | What it pins                                                                                                                                                                                                                                                     |
+| ------------------------------------------------ | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/rating/__tests__/calendar-day.test.ts` |    14 | Eastern reckoning, the 23:59:59 boundary, both DST transitions, month/year/leap-day walks, weekday naming, a non-contiguous window spanning its gap, malformed input refused                                                                                     |
+| `services/rating/__tests__/business-day.test.ts` |    19 | Weekends and all eleven federal holidays including observed days; Thursday + 5 Business Days ending the following Wednesday; a holiday inside a period extending it; the two counting readings kept apart; the three contractual periods                         |
+| `services/rating/__tests__/rate-curve.test.ts`   |    13 | Every anchor exactly; interpolation; flat at and above 15%; no rate below 5% and a rate exactly at 5%; continuity across 10%; monotonicity; a past settlement priced from its own version                                                                        |
+| `__tests__/rating-engine.test.ts`                |    45 | Against a real database: the two counts, day attribution, Delivery Day windows for both agency schedules, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
 
 The cases the brief names, and where they are:
 

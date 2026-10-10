@@ -15,7 +15,7 @@ import type {
   RpsNetworkSummary,
   ArtistTierConfig,
   RevenueSourceDistribution,
-  SponsorPackage
+  SponsorPackage,
 } from '../types';
 
 // ── Seeded PRNG
@@ -132,7 +132,7 @@ export const fanCampaigns: FanCampaign[] = [
     humanAnswers: 4420,
     answerRate: 52,
     verifiedEngagements: 1989,
-    cpa: 3.10,
+    cpa: 3.1,
     proofCaptured: 4400,
     startDate: '2026-03-15',
     campaignValue: 11934.0,
@@ -145,17 +145,40 @@ export const fanCampaigns: FanCampaign[] = [
 ];
 
 // ── Proof Records Data ──
-const FAN_NAMES = ['Marcus Chen', 'Sophia Rivera', 'Jake Thompson', 'Aisha Patel', 'Chris Anderson', 'Luna Martinez', 'Tyler Brooks', 'Emma Wilson'];
-const STATUSES: InteractionStatus[] = ['completed', 'completed', 'completed', 'no_answer', 'voicemail', 'opted_out'];
-const OUTCOMES: FanOutcome[] = ['pre_saved', 'ticket_intent', 'merch_intent', 'vip_interest', 'needs_follow_up', 'no_action'];
+const FAN_NAMES = [
+  'Marcus Chen',
+  'Sophia Rivera',
+  'Jake Thompson',
+  'Aisha Patel',
+  'Chris Anderson',
+  'Luna Martinez',
+  'Tyler Brooks',
+  'Emma Wilson',
+];
+const STATUSES: InteractionStatus[] = [
+  'completed',
+  'completed',
+  'completed',
+  'no_answer',
+  'voicemail',
+  'opted_out',
+];
+const OUTCOMES: FanOutcome[] = [
+  'pre_saved',
+  'ticket_intent',
+  'merch_intent',
+  'vip_interest',
+  'needs_follow_up',
+  'no_action',
+];
 const SENTIMENTS: Sentiment[] = ['positive', 'positive', 'neutral', 'negative'];
 const INTENTS: IntentLevel[] = ['high', 'high', 'medium', 'low', 'none'];
 
 const SNIPPETS = [
   "AI: Nona Ray's new album drops Friday. Want me to set up a pre-save?\nFan: Yes! I've been waiting for this.",
-  "AI: Tickets for Jace Vale go on sale tomorrow. Want early access?\nFan: Absolutely. Send me the link.",
-  "AI: We have a limited merch drop coming up. Interested?\nFan: Yeah, what kind of merch?",
-  "AI: VIP upgrades are available for your upcoming show. Want to hear more?\nFan: Definitely, how much is it?",
+  'AI: Tickets for Jace Vale go on sale tomorrow. Want early access?\nFan: Absolutely. Send me the link.',
+  'AI: We have a limited merch drop coming up. Interested?\nFan: Yeah, what kind of merch?',
+  'AI: VIP upgrades are available for your upcoming show. Want to hear more?\nFan: Definitely, how much is it?',
 ];
 
 export const proofRecords: ProofRecord[] = Array.from({ length: 300 }, (_, i) => {
@@ -168,7 +191,7 @@ export const proofRecords: ProofRecord[] = Array.from({ length: 300 }, (_, i) =>
     campaignId: camp.id,
     campaignName: camp.name,
     fanName: pick(FAN_NAMES, i * 13),
-    fanPhone: `+1 ${range(i*100, 200, 999)}-${range(i*200, 200, 999)}-${range(i*300, 1000, 9999)}`,
+    fanPhone: `+1 ${range(i * 100, 200, 999)}-${range(i * 200, 200, 999)}-${range(i * 300, 1000, 9999)}`,
     artist: camp.artist,
     segment: camp.segment,
     status,
@@ -193,7 +216,7 @@ export const topKpis = {
   humanAnswers: { value: 7820, change: 11.8 },
   verifiedEngagements: { value: 4892, change: 18.4 },
   preSaves: { value: 2890, change: 22.1 },
-  costPerPreSave: { value: 1.10, change: -8.2 },
+  costPerPreSave: { value: 1.1, change: -8.2 },
   proofCaptured: { value: 7750, change: 16.7 },
 };
 
@@ -216,7 +239,7 @@ export const livePulse: LivePulseData = {
   answerRate: 62.8,
   verifiedRate: 71.2,
   spend: 3180,
-  cpa: 1.10,
+  cpa: 1.1,
   status: 'dialing',
 };
 
@@ -240,16 +263,41 @@ export const campaignTimeSeries: CampaignTimeSeriesPoint[] = Array.from({ length
 }));
 
 // ── Fans Database ──
-const FAN_SOURCES: FanSource[] = ['fan_club', 'pre_save_page', 'merch_checkout', 'ticketing_partner', 'qr_code', 'sms_opt_in', 'vip_waitlist'];
-const FAN_SEGMENTS: FanSegment[] = ['superfan', 'vip_list', 'previous_merch', 'tour_city', 'stream_save', 'fan_club_inactive', 'festival_audience'];
-const CITIES = ['Los Angeles', 'New York', 'Chicago', 'Austin', 'Nashville', 'London', 'Toronto', 'Miami'];
+const FAN_SOURCES: FanSource[] = [
+  'fan_club',
+  'pre_save_page',
+  'merch_checkout',
+  'ticketing_partner',
+  'qr_code',
+  'sms_opt_in',
+  'vip_waitlist',
+];
+const FAN_SEGMENTS: FanSegment[] = [
+  'superfan',
+  'vip_list',
+  'previous_merch',
+  'tour_city',
+  'stream_save',
+  'fan_club_inactive',
+  'festival_audience',
+];
+const CITIES = [
+  'Los Angeles',
+  'New York',
+  'Chicago',
+  'Austin',
+  'Nashville',
+  'London',
+  'Toronto',
+  'Miami',
+];
 const CONSENT_STATUSES = ['opted_in', 'opted_in', 'opted_in', 'opted_out', 'pending'] as const;
 
 export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
   return {
     id: `fan-${i}`,
     name: pick(FAN_NAMES, i * 11) + (i > 10 ? ` ${i}` : ''),
-    phone: `+1 ${range(i*100, 200, 999)}-${range(i*200, 200, 999)}-${range(i*300, 1000, 9999)}`,
+    phone: `+1 ${range(i * 100, 200, 999)}-${range(i * 200, 200, 999)}-${range(i * 300, 1000, 9999)}`,
     city: pick(CITIES, i * 17),
     segment: pick(FAN_SEGMENTS, i * 19),
     source: pick(FAN_SOURCES, i * 23),
@@ -257,7 +305,10 @@ export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
     lastInteraction: `2026-04-${String(range(i * 37, 10, 24)).padStart(2, '0')}T14:30:00Z`,
     verifiedActions: range(i * 41, 0, 5),
     preSaves: range(i * 43, 0, 3),
-    favoriteArtist: pick(['Nona Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'], i * 47),
+    favoriteArtist: pick(
+      ['Nona Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'],
+      i * 47
+    ),
     consentStatus: pick(CONSENT_STATUSES, i * 53),
     totalInteractions: range(i * 59, 1, 12),
   };
@@ -275,7 +326,7 @@ export const defaultMusicSettings: MusicSettings = {
   notificationsEnabled: true,
   emailReports: true,
   reportFrequency: 'weekly',
-  
+
   defaultArtist: 'Nona Ray',
   defaultCampaignOwner: 'Marketing Team',
   reportingCurrency: 'USD',
@@ -294,7 +345,7 @@ export const defaultMusicSettings: MusicSettings = {
   dataRetentionWindow: '90_days',
   defaultCampaignType: 'album_presave',
   defaultGoal: 'Maximize Pre-Saves',
-  defaultCpaTarget: 1.50,
+  defaultCpaTarget: 1.5,
   defaultAttributionWindow: '7_days',
   alertCampaignLaunch: true,
   alertCpaThreshold: true,
@@ -311,11 +362,11 @@ export const networkSummary: RpsNetworkSummary = {
   verifiedActions: 954000,
   sponsorRevenue: 6850000,
   artistPayout: 4795000, // 70% artist share
-  rpsShare: 2055000,     // 30% RPS platform share
+  rpsShare: 2055000, // 30% RPS platform share
   mediaInventorySold: 1210000, // units sold
   sponsorReadyProofRecords: 924000,
   optOutRate: 2.1,
-  averageCostPerVerifiedAction: 1.10,
+  averageCostPerVerifiedAction: 1.1,
 };
 
 // ── RPS Artist Tiers ──
@@ -430,7 +481,7 @@ export const sponsorPackages: SponsorPackage[] = [
     tier: 'Bronze',
     calls: 100000,
     price: 75000,
-    cpaTarget: 1.20,
+    cpaTarget: 1.2,
     description: 'Regional brand activation utilizing standard voice engine line pools.',
   },
   {
@@ -444,30 +495,33 @@ export const sponsorPackages: SponsorPackage[] = [
     tier: 'Gold',
     calls: 1000000,
     price: 600000,
-    cpaTarget: 1.10,
-    description: 'National campaigns unlocking dedicated caller IDs and custom artist voice cloning.',
+    cpaTarget: 1.1,
+    description:
+      'National campaigns unlocking dedicated caller IDs and custom artist voice cloning.',
   },
   {
     tier: 'Platinum',
     calls: 5000000,
     price: 2000000,
     cpaTarget: 1.05,
-    description: 'Enterprise media partnerships with continuous DSP sync, custom APIs, and guaranteed CPA margins.',
+    description:
+      'Enterprise media partnerships with continuous DSP sync, custom APIs, and guaranteed CPA margins.',
   },
 ];
 
 // ── Safely derive Campaign Economics ──
 export function getCampaignEconomics(campaign: FanCampaign) {
-  const campaignValue = campaign.campaignValue ?? (campaign.verifiedEngagements * 2.80);
-  const sponsorRevenue = campaign.sponsorRevenue ?? (campaign.fansContacted * 1.50);
-  const artistShare = campaign.artistShare ?? (sponsorRevenue * 0.70);
-  const rpsShare = campaign.rpsShare ?? (sponsorRevenue * 0.30);
+  const campaignValue = campaign.campaignValue ?? campaign.verifiedEngagements * 2.8;
+  const sponsorRevenue = campaign.sponsorRevenue ?? campaign.fansContacted * 1.5;
+  const artistShare = campaign.artistShare ?? sponsorRevenue * 0.7;
+  const rpsShare = campaign.rpsShare ?? sponsorRevenue * 0.3;
   const mediaInventoryUnits = campaign.mediaInventoryUnits ?? campaign.fansContacted;
-  
+
   // Guard against division by zero
-  const rawReadiness = campaign.verifiedEngagements > 0 
-    ? (campaign.proofCaptured / campaign.verifiedEngagements) * 100 
-    : 0;
+  const rawReadiness =
+    campaign.verifiedEngagements > 0
+      ? (campaign.proofCaptured / campaign.verifiedEngagements) * 100
+      : 0;
   const proofReadinessScore = campaign.proofReadinessScore ?? rawReadiness;
 
   return {
@@ -479,5 +533,3 @@ export function getCampaignEconomics(campaign: FanCampaign) {
     proofReadinessScore: Math.min(100, Number(proofReadinessScore.toFixed(1))),
   };
 }
-
-

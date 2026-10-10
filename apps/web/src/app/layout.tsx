@@ -38,7 +38,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${fontVariables} bg-background text-foreground font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          forcedTheme="light"
+          enableSystem={false}
+        >
           {/*
             One answer to "are you NetEnroll staff, and which agency are you
             inside" for the whole tree. It was a per-component fetch, which is

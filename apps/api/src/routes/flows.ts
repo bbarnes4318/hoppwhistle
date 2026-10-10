@@ -20,7 +20,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
     try {
       const user = request.user;
       const tenantId = getActingTenantId(request);
-      
+
       if (!tenantId) {
         return sendTenantRefusal(request, reply);
       }
@@ -59,7 +59,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
   // Get all flow versions
   fastify.get('/api/v1/flows', async request => {
     const tenantId = getActingTenantId(request);
-    
+
     if (!tenantId) {
       request.server.log.warn('No tenant ID for flows list');
       return {
@@ -73,7 +73,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
       flowIds.map(async flowId => {
         const published = await flowStore.getPublishedFlow(flowId);
         const versions = await flowStore.getFlowVersions(flowId);
-        
+
         // Filter by tenant ID if stored in flow metadata
         const firstVersion = versions[0];
         const storedTenantId = (firstVersion?.flow as (Flow & { tenantId?: string }) | undefined)
@@ -83,7 +83,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
             return null; // Skip flows from other tenants
           }
         }
-        
+
         return {
           id: flowId,
           name: firstVersion?.flow?.name || flowId,

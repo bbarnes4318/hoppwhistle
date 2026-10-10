@@ -39,6 +39,11 @@ describe('registerAndConfirm', () => {
   });
 
   it('rejects when the registrar never answers', async () => {
-    await expect(registerAndConfirm(fakeRegisterer(() => {}), 20)).rejects.toThrow('no answer');
+    await expect(
+      registerAndConfirm(
+        fakeRegisterer(() => {}),
+        20
+      )
+    ).rejects.toThrow('no answer');
   });
 });

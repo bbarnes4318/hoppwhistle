@@ -20,7 +20,10 @@ const SOFIA_UP = [
   '=================================================================================================',
 ].join('\n');
 
-function chainWith(over: Partial<RouteRow['steps'][number]> = {}, numberFormat: 'NANP11' | 'E164' = 'NANP11') {
+function chainWith(
+  over: Partial<RouteRow['steps'][number]> = {},
+  numberFormat: 'NANP11' | 'E164' = 'NANP11'
+) {
   return resolveChain(
     {
       callType: 'CC_MANUAL',
@@ -58,7 +61,9 @@ describe('Vonage diagnostics', () => {
   });
 
   it('warns on a gateway whose pings go unanswered', () => {
-    expect(judgeGateway(parseSofiaGatewayStatus(SOFIA_UP.replace('UP (ping)', 'DOWN'))).status).toBe('warn');
+    expect(
+      judgeGateway(parseSofiaGatewayStatus(SOFIA_UP.replace('UP (ping)', 'DOWN'))).status
+    ).toBe('warn');
   });
 
   it('passes a Vonage leg dialed 1XXXXXXXXXX presenting an owned number', () => {

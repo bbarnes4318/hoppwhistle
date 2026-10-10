@@ -77,7 +77,8 @@ const CONFIG = {
   ],
 
   // SignalWire carrier
-  SIGNALWIRE_SIP_DOMAIN: process.env.SIGNALWIRE_OUTBOUND_PROXY || 'pvn-shanevici.sip.signalwire.com',
+  SIGNALWIRE_SIP_DOMAIN:
+    process.env.SIGNALWIRE_OUTBOUND_PROXY || 'pvn-shanevici.sip.signalwire.com',
   SIGNALWIRE_DIDS: (process.env.SIGNALWIRE_DIDS || '+18652679650,+17253022220').split(','),
   SIGNALWIRE_PROJECT_ID: process.env.SIGNALWIRE_PROJECT_ID,
   SIGNALWIRE_API_TOKEN: process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN,
@@ -252,7 +253,12 @@ async function getOrCreateSignalWireCredential() {
         if (c.name === 'FreeSWITCH AWS (3.214.60.13)') return true;
         if (c.name === 'FreeSWITCH Vapi Trunk') return true;
         // Fallback: any credential pointing to our FreeSWITCH on port 5070
-        return c.gateways && c.gateways.some(g => g.ip === '3.214.60.13' && g.port === 5070 && g.inboundEnabled === true);
+        return (
+          c.gateways &&
+          c.gateways.some(
+            g => g.ip === '3.214.60.13' && g.port === 5070 && g.inboundEnabled === true
+          )
+        );
       })
     : null;
 
@@ -425,7 +431,9 @@ async function runDialer(contacts, calledNumbers) {
 
   function waitForSlot() {
     if (activeCount < CONFIG.MAX_CONCURRENT) return Promise.resolve();
-    return new Promise(resolve => { resolveSlot = resolve; });
+    return new Promise(resolve => {
+      resolveSlot = resolve;
+    });
   }
 
   async function processContact(contact, idx, didEntry) {
@@ -566,7 +574,8 @@ Assistant: ${CONFIG.ASSISTANT_ID}
 
   // Determine carrier
   const carrierIdx = args.indexOf('--carrier');
-  const carrier = carrierIdx !== -1 && args[carrierIdx + 1] ? args[carrierIdx + 1].toLowerCase() : 'signalwire';
+  const carrier =
+    carrierIdx !== -1 && args[carrierIdx + 1] ? args[carrierIdx + 1].toLowerCase() : 'signalwire';
   const isSignalWire = carrier === 'signalwire';
 
   if (isSignalWire) {

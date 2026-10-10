@@ -150,8 +150,7 @@ export function isInternalLeg(token: string): boolean {
  */
 export function getInboundExternalGateways(): string {
   return (
-    process.env.INBOUND_EXTERNAL_GATEWAYS ||
-    'fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
+    process.env.INBOUND_EXTERNAL_GATEWAYS || 'fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
   );
 }
 

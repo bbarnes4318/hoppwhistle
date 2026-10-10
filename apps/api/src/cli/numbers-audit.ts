@@ -21,10 +21,7 @@ async function auditInventory(options: AuditOptions) {
   console.log('');
 
   try {
-    const result = await provisioningService.auditInventory(
-      options.provider,
-      options.tenantId
-    );
+    const result = await provisioningService.auditInventory(options.provider, options.tenantId);
 
     console.log(`📊 Audit Results:`);
     console.log(`   Local numbers: ${result.localNumbers.length}`);
@@ -36,7 +33,7 @@ async function auditInventory(options: AuditOptions) {
 
     if (discrepancies.missingInProvider.length > 0) {
       console.log(`⚠️  Missing in Provider (${discrepancies.missingInProvider.length}):`);
-      discrepancies.missingInProvider.slice(0, 10).forEach((num) => {
+      discrepancies.missingInProvider.slice(0, 10).forEach(num => {
         console.log(`   - ${num.number} (${num.id})`);
       });
       if (discrepancies.missingInProvider.length > 10) {
@@ -47,7 +44,7 @@ async function auditInventory(options: AuditOptions) {
 
     if (discrepancies.missingInLocal.length > 0) {
       console.log(`⚠️  Missing in Local DB (${discrepancies.missingInLocal.length}):`);
-      discrepancies.missingInLocal.slice(0, 10).forEach((num) => {
+      discrepancies.missingInLocal.slice(0, 10).forEach(num => {
         console.log(`   - ${num.number} (${num.providerId})`);
       });
       if (discrepancies.missingInLocal.length > 10) {
@@ -98,11 +95,13 @@ for (const arg of args) {
 if (!options.provider) {
   console.error('Usage: tsx src/cli/numbers-audit.ts --provider=signalwire [--tenant=t_123]');
   console.error('\nOptions:');
-  console.error('  --provider=PROVIDER      Provider to audit (local, signalwire, telnyx, bandwidth)');
+  console.error(
+    '  --provider=PROVIDER      Provider to audit (local, signalwire, telnyx, bandwidth)'
+  );
   console.error('  --tenant=ID              Optional tenant ID filter');
   console.error('\nAvailable providers:');
   const available = provisioningService.getAvailableProviders();
-  available.forEach((p) => console.error(`   - ${p}`));
+  available.forEach(p => console.error(`   - ${p}`));
   process.exit(1);
 }
 
@@ -110,8 +109,7 @@ auditInventory(options as AuditOptions)
   .then(() => {
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('Audit failed:', error);
     process.exit(1);
   });
-

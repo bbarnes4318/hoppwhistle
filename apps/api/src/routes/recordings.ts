@@ -134,7 +134,10 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         try {
           await recordingService.markRecordingFailed(resolvedCallId, errorMsg);
         } catch (markErr) {
-          request.log.error({ error: markErr, callId: resolvedCallId }, 'Failed to mark recording as failed');
+          request.log.error(
+            { error: markErr, callId: resolvedCallId },
+            'Failed to mark recording as failed'
+          );
         }
       }
       void reply.code(400);
@@ -195,8 +198,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       )?.accessToRecordings;
     }
 
-    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
-                           (user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER') ?? false);
+    const isAdminOrOwner =
+      userRoles.some(role => role === 'ADMIN' || role === 'OWNER') ||
+      (user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER') ?? false);
 
     return {
       isAdminOrOwner,
@@ -218,7 +222,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       return true;
     }
     if (profile.userRoles.includes('PUBLISHER')) {
-      return !!(profile.publisherAccessToRecordings && recording.call?.publisherId === profile.publisherId);
+      return !!(
+        profile.publisherAccessToRecordings && recording.call?.publisherId === profile.publisherId
+      );
     }
     if (profile.userRoles.includes('BUYER')) {
       return !!(profile.buyerAccessToRecordings && recording.call?.buyerId === profile.buyerId);
@@ -523,8 +529,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
           return { error: { code: 'FORBIDDEN', message: 'Access denied to this recording' } };
         }
 
-        const { stream, contentType, contentLength } = await recordingService.getRecordingStream(recordingId);
-        
+        const { stream, contentType, contentLength } =
+          await recordingService.getRecordingStream(recordingId);
+
         void reply.type(contentType);
         if (contentLength !== undefined) {
           void reply.header('Content-Length', contentLength.toString());

@@ -320,7 +320,7 @@ export const complexFlow: Flow = {
     {
       id: 'if-business-hours',
       type: 'if',
-      condition: "${hour >= 9 && hour < 17}",
+      condition: '${hour >= 9 && hour < 17}',
       then: 'queue-primary',
       else: 'queue-after-hours',
     },
@@ -402,4 +402,3 @@ export const exampleFlows: Record<string, Flow> = {
   'buyer-rotation': buyerRotationFlow,
   'complex-flow': complexFlow,
 };
-

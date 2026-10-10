@@ -200,7 +200,11 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
       const { enabled, legTimeoutSeconds, carriers } = request.body ?? {};
 
       if (legTimeoutSeconds !== undefined) {
-        if (!Number.isInteger(legTimeoutSeconds) || legTimeoutSeconds < 5 || legTimeoutSeconds > 120) {
+        if (
+          !Number.isInteger(legTimeoutSeconds) ||
+          legTimeoutSeconds < 5 ||
+          legTimeoutSeconds > 120
+        ) {
           return reply.code(400).send({
             error: {
               code: 'INVALID_TIMEOUT',
@@ -320,11 +324,9 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
       const { status, callerIdStrategy, callerIdNumber, attestation } = request.body ?? {};
 
       if (status !== undefined && status !== 'ACTIVE' && status !== 'INACTIVE') {
-        return reply
-          .code(400)
-          .send({
-            error: { code: 'INVALID_STATUS', message: 'status must be ACTIVE or INACTIVE' },
-          });
+        return reply.code(400).send({
+          error: { code: 'INVALID_STATUS', message: 'status must be ACTIVE or INACTIVE' },
+        });
       }
       if (callerIdStrategy !== undefined && !CALLER_ID_STRATEGIES.has(callerIdStrategy)) {
         return reply.code(400).send({
@@ -421,9 +423,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         where: { id: request.params.gatewayId, tenantId },
       });
       if (!gateway) {
-        return reply
-          .code(404)
-          .send({ error: { code: 'NOT_FOUND', message: 'Gateway not found' } });
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Gateway not found' } });
       }
 
       const { enabled, priority, numberFormat, techPrefix } = request.body ?? {};
@@ -489,9 +489,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         data: { consecutiveFailures: 0, circuitOpenUntil: null, lastFailureCause: null },
       });
       if (result.count === 0) {
-        return reply
-          .code(404)
-          .send({ error: { code: 'NOT_FOUND', message: 'Gateway not found' } });
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Gateway not found' } });
       }
 
       invalidateCarrierRoutingCache(tenantId);
@@ -577,9 +575,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         corr?: string;
       };
 
-      const callType: CallRouteType = isCallRouteType(query.type)
-        ? query.type
-        : 'SOFTPHONE_MANUAL';
+      const callType: CallRouteType = isCallRouteType(query.type) ? query.type : 'SOFTPHONE_MANUAL';
       const destination = query.dest ?? '';
 
       const legacy = resolveChain(null, callType);

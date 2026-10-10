@@ -447,7 +447,10 @@ export default function CampaignGeoIntelligenceMap() {
           getPosition: (d: (typeof pulses)[number]) => [d.lng, d.lat],
           getRadius: (d: (typeof pulses)[number]) => d.size * 900,
           getFillColor: [0, 0, 0, 0],
-          getLineColor: (d: (typeof pulses)[number]) => [...d.color, Math.max(0, 255 - d.size * 4.2)],
+          getLineColor: (d: (typeof pulses)[number]) => [
+            ...d.color,
+            Math.max(0, 255 - d.size * 4.2),
+          ],
           lineWidthMinPixels: 1.5,
           stroked: true,
           pickable: false,
@@ -718,10 +721,14 @@ export default function CampaignGeoIntelligenceMap() {
               {/* DeckGL canvas drawing WebGL visualization layer overlays on top */}
               <DeckGL
                 viewState={viewState}
-                onViewStateChange={(e: { viewState: typeof viewState }) => setViewState(e.viewState)}
+                onViewStateChange={(e: { viewState: typeof viewState }) =>
+                  setViewState(e.viewState)
+                }
                 controller={{ doubleClickZoom: false, dragRotate: true }}
                 layers={deckLayers}
-                getCursor={({ isHovering }: { isHovering: boolean }) => (isHovering ? 'pointer' : 'default')}
+                getCursor={({ isHovering }: { isHovering: boolean }) =>
+                  isHovering ? 'pointer' : 'default'
+                }
                 style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto' }}
               />
             </div>

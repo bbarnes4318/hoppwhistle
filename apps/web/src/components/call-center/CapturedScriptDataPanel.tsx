@@ -59,7 +59,10 @@ export function CapturedScriptDataPanel({
         ? `${activeCallData.heightFeet as string} ft ${(activeCallData.heightInches as string) || 0} in`
         : '—',
     },
-    { label: 'Weight', value: activeCallData.weight ? `${activeCallData.weight as string} lbs` : '—' },
+    {
+      label: 'Weight',
+      value: activeCallData.weight ? `${activeCallData.weight as string} lbs` : '—',
+    },
     { label: 'Citizenship', value: activeCallData.citizenship || '—' },
     { label: 'Birth State', value: activeCallData.birthState || '—' },
   ];

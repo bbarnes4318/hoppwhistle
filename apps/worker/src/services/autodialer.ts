@@ -28,12 +28,12 @@ export class Autodialer {
 
   private async loop() {
     while (this.isRunning) {
-        try {
-          await this.processCampaigns();
-        } catch (err) {
-          // Log error but don't crash the loop
-          console.error('Dialer Loop Error:', err instanceof Error ? err.message : err);
-        }
+      try {
+        await this.processCampaigns();
+      } catch (err) {
+        // Log error but don't crash the loop
+        console.error('Dialer Loop Error:', err instanceof Error ? err.message : err);
+      }
       // Wait 2 seconds before checking again
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -121,7 +121,10 @@ export class Autodialer {
         data: { status: 'CONTACTED', lastContactedAt: new Date() },
       });
     } catch (e) {
-      console.error('Failed to update lead status (ignoring to keep dialing):', e instanceof Error ? e.message : e);
+      console.error(
+        'Failed to update lead status (ignoring to keep dialing):',
+        e instanceof Error ? e.message : e
+      );
     }
   }
 

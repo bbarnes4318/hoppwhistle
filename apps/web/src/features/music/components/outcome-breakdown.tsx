@@ -25,7 +25,11 @@ export function OutcomeBreakdownCard({ data }: { data: OutcomeBreakdown[] }) {
             <div className="h-1.5 w-full rounded-full bg-zinc-800">
               <div
                 className="h-1.5 rounded-full transition-all duration-700"
-                style={{ width: `${(item.count / total) * 100}%`, backgroundColor: item.color, opacity: 0.7 }}
+                style={{
+                  width: `${(item.count / total) * 100}%`,
+                  backgroundColor: item.color,
+                  opacity: 0.7,
+                }}
               />
             </div>
           </div>

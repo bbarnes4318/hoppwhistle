@@ -1,8 +1,8 @@
 /**
  * k6 Load Test: Reporting Endpoints
- * 
+ *
  * Target: 100 QPS with <300ms p95 latency
- * 
+ *
  * This test simulates dashboard and analytics queries that would be made
  * by multiple users viewing reports simultaneously.
  */
@@ -18,16 +18,16 @@ const reportingLatency = new Trend('reporting_request_latency_ms');
 // Test configuration
 export const options = {
   stages: [
-    { duration: '30s', target: 20 },   // Ramp up to 20 VUs
-    { duration: '1m', target: 50 },    // Ramp up to 50 VUs
-    { duration: '2m', target: 100 },   // Ramp up to 100 VUs (target: 100 QPS)
-    { duration: '5m', target: 100 },   // Stay at 100 VUs
-    { duration: '1m', target: 0 },     // Ramp down
+    { duration: '30s', target: 20 }, // Ramp up to 20 VUs
+    { duration: '1m', target: 50 }, // Ramp up to 50 VUs
+    { duration: '2m', target: 100 }, // Ramp up to 100 VUs (target: 100 QPS)
+    { duration: '5m', target: 100 }, // Stay at 100 VUs
+    { duration: '1m', target: 0 }, // Ramp down
   ],
   thresholds: {
-    'http_req_duration': ['p(95)<300'], // 95% of requests should be below 300ms
-    'reporting_requests_successful': ['rate>0.98'], // 98% success rate
-    'reporting_request_latency_ms': ['p(95)<300'], // 95% latency below 300ms
+    http_req_duration: ['p(95)<300'], // 95% of requests should be below 300ms
+    reporting_requests_successful: ['rate>0.98'], // 98% success rate
+    reporting_request_latency_ms: ['p(95)<300'], // 95% latency below 300ms
   },
 };
 
@@ -102,9 +102,9 @@ export default function () {
 
   // Check response
   const success = check(response, {
-    'status is 200': (r) => r.status === 200,
-    'response time < 300ms': (r) => r.timings.duration < 300,
-    'response has data': (r) => {
+    'status is 200': r => r.status === 200,
+    'response time < 300ms': r => r.timings.duration < 300,
+    'response has data': r => {
       try {
         const body = JSON.parse(r.body);
         return body.metrics !== undefined || body.data !== undefined || Array.isArray(body);
@@ -124,18 +124,18 @@ export default function () {
 
 export function handleSummary(data) {
   return {
-    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    stdout: textSummary(data, { indent: ' ', enableColors: true }),
     'results/reporting-endpoints.json': JSON.stringify(data),
   };
 }
 
 function textSummary(data, options) {
   const indent = options.indent || '';
-  
+
   let summary = '\n';
   summary += `${indent}Reporting Endpoints Load Test Results\n`;
   summary += `${indent}=====================================\n\n`;
-  
+
   // HTTP metrics
   if (data.metrics.http_req_duration) {
     const p50 = data.metrics.http_req_duration.values['p(50)'];
@@ -146,25 +146,24 @@ function textSummary(data, options) {
     summary += `${indent}  p95: ${p95.toFixed(2)}ms\n`;
     summary += `${indent}  p99: ${p99.toFixed(2)}ms\n\n`;
   }
-  
+
   // Custom metrics
   if (data.metrics.reporting_requests_successful) {
     const rate = data.metrics.reporting_requests_successful.values.rate;
     summary += `${indent}Reporting Request Success Rate: ${(rate * 100).toFixed(2)}%\n`;
   }
-  
+
   if (data.metrics.reporting_request_latency_ms) {
     const p95 = data.metrics.reporting_request_latency_ms.values['p(95)'];
     summary += `${indent}Reporting Request Latency (p95): ${p95.toFixed(2)}ms\n`;
   }
-  
+
   // Request rate
   if (data.metrics.http_reqs) {
     const rate = data.metrics.http_reqs.values.rate;
     summary += `${indent}Request Rate: ${rate.toFixed(2)} req/s\n`;
   }
-  
+
   summary += '\n';
   return summary;
 }
-

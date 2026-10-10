@@ -11,11 +11,11 @@
 name: SIP Tests (DISABLED)
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch: # Manual trigger only
 
 jobs:
   sip-tests:
-    if: false  # Always skip
+    if: false # Always skip
     runs-on: ubuntu-latest
     steps:
       - run: echo "SIP tests disabled"

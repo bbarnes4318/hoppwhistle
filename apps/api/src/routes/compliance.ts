@@ -117,15 +117,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
     };
   }>('/api/v1/compliance/consent', async (request, reply) => {
     try {
-      const {
-        phoneNumber,
-        token,
-        provider,
-        callId,
-        ipAddress,
-        source,
-        expiresAt,
-      } = request.body;
+      const { phoneNumber, token, provider, callId, ipAddress, source, expiresAt } = request.body;
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
@@ -174,7 +166,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
   // List DNC lists
   fastify.get('/api/v1/compliance/dnc-lists', async (request, reply) => {
     const tenantId = getActingTenantId(request);
-    
+
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
     }
@@ -199,7 +191,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
     });
 
     return {
-      data: lists.map((list) => ({
+      data: lists.map(list => ({
         id: list.id,
         name: list.name,
         type: list.type,
@@ -222,7 +214,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
     try {
       const userId = getActingUserId(request) ?? undefined;
       const tenantId = getActingTenantId(request);
-      
+
       if (!tenantId) {
         return sendTenantRefusal(request, reply);
       }
@@ -307,7 +299,7 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
   fastify.delete('/api/v1/compliance/dnc-lists/:listId', async (request, reply) => {
     const userId = getActingUserId(request) ?? undefined;
     const tenantId = getActingTenantId(request);
-    
+
     if (!tenantId) {
       return sendTenantRefusal(request, reply);
     }
@@ -385,4 +377,3 @@ export function registerComplianceRoutes(fastify: FastifyInstance): Promise<void
 
   return Promise.resolve();
 }
-

@@ -111,4 +111,3 @@ export async function registerHealthRoutes(fastify: FastifyInstance): Promise<vo
     };
   });
 }
-

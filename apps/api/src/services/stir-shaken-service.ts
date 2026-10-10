@@ -5,9 +5,9 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { logger } from './logger.js';
 
 export interface StirShakenHeaders {
-  identity?: string;      // Identity header
-  origId?: string;        // Originating Identity header
-  passthru?: string;      // Passport header
+  identity?: string; // Identity header
+  origId?: string; // Originating Identity header
+  passthru?: string; // Passport header
 }
 
 export interface StirShakenAttestation {
@@ -112,21 +112,24 @@ export class StirShakenService {
     });
 
     // Log audit
-    await this.prisma.auditLog.create({
-      data: {
-        tenantId: (await this.prisma.stirShakenStatus.findUnique({ where: { callId } }))!.tenantId,
-        userId,
-        action: 'stir_shaken.override',
-        entityType: 'stir_shaken_status',
-        entityId: callId,
-        changes: {
-          attestation,
-          reason,
+    await this.prisma.auditLog
+      .create({
+        data: {
+          tenantId: (await this.prisma.stirShakenStatus.findUnique({ where: { callId } }))!
+            .tenantId,
+          userId,
+          action: 'stir_shaken.override',
+          entityType: 'stir_shaken_status',
+          entityId: callId,
+          changes: {
+            attestation,
+            reason,
+          },
         },
-      },
-    }).catch((err) => {
-      logger.error('Failed to log audit:', err);
-    });
+      })
+      .catch(err => {
+        logger.error('Failed to log audit:', err);
+      });
 
     logger.info(`Overridden STIR/SHAKEN attestation for call ${callId} to ${attestation}`);
   }
@@ -139,7 +142,7 @@ export class StirShakenService {
     phoneNumber: string
   ): Promise<StirShakenAttestation | null> {
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    
+
     const status = await this.prisma.stirShakenStatus.findFirst({
       where: {
         tenantId,
@@ -185,4 +188,3 @@ export class StirShakenService {
 }
 
 export const stirShakenService = new StirShakenService();
-

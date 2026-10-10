@@ -52,7 +52,7 @@ export class TrustedFormService {
       // Stub implementation - replace with actual TrustedForm API call
       const response = await fetch(`${this.baseUrl}/certificates/${token}`, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
       });
@@ -112,7 +112,7 @@ export class JornayaService {
       // Stub implementation - replace with actual Jornaya API call
       const response = await fetch(`${this.baseUrl}/leads/${token}/verify`, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
       });
@@ -179,4 +179,3 @@ export class ConsentProviderService {
 }
 
 export const consentProviderService = new ConsentProviderService();
-

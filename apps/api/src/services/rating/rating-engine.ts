@@ -308,113 +308,114 @@ export async function rateAgencyForClosedDay(
     lookbackDays: windowSettings.deliveryDayLookback,
   };
 
-  const write = async () => prisma.$transaction(async tx => {
-    const rateChange = await tx.rateChange.create({
-      data: {
-        tenantId: options.tenantId,
-        effectiveCalendarDay,
-        windowStart: recordedWindow.start,
-        windowEndExclusive: recordedWindow.endExclusive,
-        windowDeliveryDays: recordedWindow.requested,
-        windowDaysFound: recordedWindow.found,
-        windowDayKeys: measured ? recordedWindow.dayKeys : [],
-        deliveredCalls: measured?.deliveredCalls ?? 0,
-        submittedApplications: measured?.submittedApplications ?? 0,
-        closingPct:
-          measured?.closingPct == null
-            ? null
-            : new Prisma.Decimal(measured.closingPct.toFixed(6)),
-        curveVersionId: curve.id,
-        curveVersion: curve.version,
-        previousRate: previousRate === null ? null : new Prisma.Decimal(previousRate),
-        newRate: newRate === null ? null : new Prisma.Decimal(newRate),
-        curveRate: curveRate === null ? null : new Prisma.Decimal(curveRate),
-        rateOffset: new Prisma.Decimal(rateOffset.toFixed(2)),
-        status,
-        computedAt: now,
-      },
-    });
-
-    /*
-     * What the agency's own state becomes.
-     *
-     * The rate change above always records what the CURVE returned — that is
-     * the measurement record, and it exists whatever commercial arrangement is
-     * in force. What the agency is actually priced at is this, and there are
-     * three cases where it is not the curve's answer:
-     *
-     *   OPENING_BLOCK  An opening rate and block were agreed before the
-     *                  agency's first Delivery Day. The agreed rate stands
-     *                  until the settlement of that first day, after which the
-     *                  curve governs -- there is no introductory package and no
-     *                  first-N-applications count anywhere in this decision.
-     *
-     *   open review    An agency below the curve's minimum stays under review
-     *                  until a platform admin clears the flag. A recovered
-     *                  window does not un-flag it: "only a platform admin can
-     *                  clear it" would mean nothing if the next day's numbers
-     *                  could do it instead. The measurement is still recorded,
-     *                  so the operator reviewing the flag can see the recovery.
-     *
-     *   below minimum  No rate at all. `currentRate` is nulled rather than left
-     *                  showing yesterday's number: a stale rate on a paused
-     *                  account is exactly the sort of thing that gets billed by
-     *                  accident.
-     */
-    const heldByAgreement = state?.status === AgencyRatingStatus.OPENING_BLOCK;
-    const heldByReview = openFlag !== null && status !== RateChangeStatus.BELOW_MINIMUM;
-
-    const nextStatus = heldByAgreement
-      ? AgencyRatingStatus.OPENING_BLOCK
-      : status === RateChangeStatus.BELOW_MINIMUM || heldByReview
-        ? AgencyRatingStatus.UNDER_REVIEW
-        : AgencyRatingStatus.RATED;
-
-    const appliedRate =
-      heldByAgreement || heldByReview
-        ? (state?.currentRate ?? null)
-        : newRate === null
-          ? null
-          : new Prisma.Decimal(newRate);
-
-    const stateFields = {
-      status: nextStatus,
-      currentRate: appliedRate,
-      curveVersionId: curve.id,
-      // The day the measurement covers, whatever rate is in force.
-      currentRateCalendarDay: effectiveCalendarDay,
-      lastRatedCalendarDay: closedDay,
-    };
-
-    await tx.agencyRatingState.upsert({
-      where: { tenantId: options.tenantId },
-      create: { tenantId: options.tenantId, ...stateFields },
-      update: stateFields,
-    });
-
-    if (status === RateChangeStatus.BELOW_MINIMUM && measured?.closingPct != null) {
-      // One open flag at a time. A second consecutive day below the minimum is
-      // the same review, not a new one.
-      const open = await tx.ratingReviewFlag.findFirst({
-        where: { tenantId: options.tenantId, clearedAt: null },
+  const write = async () =>
+    prisma.$transaction(async tx => {
+      const rateChange = await tx.rateChange.create({
+        data: {
+          tenantId: options.tenantId,
+          effectiveCalendarDay,
+          windowStart: recordedWindow.start,
+          windowEndExclusive: recordedWindow.endExclusive,
+          windowDeliveryDays: recordedWindow.requested,
+          windowDaysFound: recordedWindow.found,
+          windowDayKeys: measured ? recordedWindow.dayKeys : [],
+          deliveredCalls: measured?.deliveredCalls ?? 0,
+          submittedApplications: measured?.submittedApplications ?? 0,
+          closingPct:
+            measured?.closingPct == null
+              ? null
+              : new Prisma.Decimal(measured.closingPct.toFixed(6)),
+          curveVersionId: curve.id,
+          curveVersion: curve.version,
+          previousRate: previousRate === null ? null : new Prisma.Decimal(previousRate),
+          newRate: newRate === null ? null : new Prisma.Decimal(newRate),
+          curveRate: curveRate === null ? null : new Prisma.Decimal(curveRate),
+          rateOffset: new Prisma.Decimal(rateOffset.toFixed(2)),
+          status,
+          computedAt: now,
+        },
       });
 
-      if (!open) {
-        await tx.ratingReviewFlag.create({
-          data: {
-            tenantId: options.tenantId,
-            rateChangeId: rateChange.id,
-            closingPct: new Prisma.Decimal(measured.closingPct.toFixed(6)),
-            deliveredCalls: measured.deliveredCalls,
-            submittedApplications: measured.submittedApplications,
-            raisedAt: now,
-          },
-        });
-      }
-    }
+      /*
+       * What the agency's own state becomes.
+       *
+       * The rate change above always records what the CURVE returned — that is
+       * the measurement record, and it exists whatever commercial arrangement is
+       * in force. What the agency is actually priced at is this, and there are
+       * three cases where it is not the curve's answer:
+       *
+       *   OPENING_BLOCK  An opening rate and block were agreed before the
+       *                  agency's first Delivery Day. The agreed rate stands
+       *                  until the settlement of that first day, after which the
+       *                  curve governs -- there is no introductory package and no
+       *                  first-N-applications count anywhere in this decision.
+       *
+       *   open review    An agency below the curve's minimum stays under review
+       *                  until a platform admin clears the flag. A recovered
+       *                  window does not un-flag it: "only a platform admin can
+       *                  clear it" would mean nothing if the next day's numbers
+       *                  could do it instead. The measurement is still recorded,
+       *                  so the operator reviewing the flag can see the recovery.
+       *
+       *   below minimum  No rate at all. `currentRate` is nulled rather than left
+       *                  showing yesterday's number: a stale rate on a paused
+       *                  account is exactly the sort of thing that gets billed by
+       *                  accident.
+       */
+      const heldByAgreement = state?.status === AgencyRatingStatus.OPENING_BLOCK;
+      const heldByReview = openFlag !== null && status !== RateChangeStatus.BELOW_MINIMUM;
 
-    return rateChange;
-  });
+      const nextStatus = heldByAgreement
+        ? AgencyRatingStatus.OPENING_BLOCK
+        : status === RateChangeStatus.BELOW_MINIMUM || heldByReview
+          ? AgencyRatingStatus.UNDER_REVIEW
+          : AgencyRatingStatus.RATED;
+
+      const appliedRate =
+        heldByAgreement || heldByReview
+          ? (state?.currentRate ?? null)
+          : newRate === null
+            ? null
+            : new Prisma.Decimal(newRate);
+
+      const stateFields = {
+        status: nextStatus,
+        currentRate: appliedRate,
+        curveVersionId: curve.id,
+        // The day the measurement covers, whatever rate is in force.
+        currentRateCalendarDay: effectiveCalendarDay,
+        lastRatedCalendarDay: closedDay,
+      };
+
+      await tx.agencyRatingState.upsert({
+        where: { tenantId: options.tenantId },
+        create: { tenantId: options.tenantId, ...stateFields },
+        update: stateFields,
+      });
+
+      if (status === RateChangeStatus.BELOW_MINIMUM && measured?.closingPct != null) {
+        // One open flag at a time. A second consecutive day below the minimum is
+        // the same review, not a new one.
+        const open = await tx.ratingReviewFlag.findFirst({
+          where: { tenantId: options.tenantId, clearedAt: null },
+        });
+
+        if (!open) {
+          await tx.ratingReviewFlag.create({
+            data: {
+              tenantId: options.tenantId,
+              rateChangeId: rateChange.id,
+              closingPct: new Prisma.Decimal(measured.closingPct.toFixed(6)),
+              deliveredCalls: measured.deliveredCalls,
+              submittedApplications: measured.submittedApplications,
+              raisedAt: now,
+            },
+          });
+        }
+      }
+
+      return rateChange;
+    });
 
   /*
    * Idempotence under concurrency, not just under repetition.

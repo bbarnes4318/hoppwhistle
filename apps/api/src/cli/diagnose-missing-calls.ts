@@ -238,7 +238,9 @@ async function loadOperator(email: string): Promise<Operator | null> {
       ? user.platformActingTenant
       : null;
 
-  const effectiveTenantId = isPlatformAdmin ? (selection?.tenantId ?? null) : (user.tenantId ?? null);
+  const effectiveTenantId = isPlatformAdmin
+    ? (selection?.tenantId ?? null)
+    : (user.tenantId ?? null);
 
   // Inside an agency a platform operator carries ADMIN and OWNER for it
   // (ACTING_TENANT_ROLES); in the cross-agency view they carry none.
@@ -253,7 +255,7 @@ async function loadOperator(email: string): Promise<Operator | null> {
     roles,
     buyerId: user.buyerId ?? null,
     publisherId:
-      user.publisherId ?? ((user.metadata as { publisherId?: string } | null)?.publisherId ?? null),
+      user.publisherId ?? (user.metadata as { publisherId?: string } | null)?.publisherId ?? null,
     isPlatformAdmin,
     actingTenantId: selection?.tenantId ?? null,
     actingTenantName: selection?.tenant.name ?? null,
@@ -329,8 +331,12 @@ function verdict(
   }
 
   if (!op) {
-    out.push(`${totalCalls.toLocaleString()} call rows exist, across ${withCalls.length} agenc${withCalls.length === 1 ? 'y' : 'ies'}.`);
-    out.push('Re-run with --email <the address you sign in with> to see which of them your portal is asking for.');
+    out.push(
+      `${totalCalls.toLocaleString()} call rows exist, across ${withCalls.length} agenc${withCalls.length === 1 ? 'y' : 'ies'}.`
+    );
+    out.push(
+      'Re-run with --email <the address you sign in with> to see which of them your portal is asking for.'
+    );
     return out;
   }
 
@@ -345,7 +351,9 @@ function verdict(
     out.push(
       'Every agency-scoped route, /api/v1/calls included, answers 409 NO_ACTING_TENANT in that'
     );
-    out.push('state. Your calls are untouched; nothing is being deleted. The query is refused, not empty.');
+    out.push(
+      'state. Your calls are untouched; nothing is being deleted. The query is refused, not empty.'
+    );
     out.push('');
     if (op.isPlatformAdmin) {
       out.push('FIX, either of:');
@@ -375,7 +383,9 @@ function verdict(
   if (actingCalls === 0) {
     out.push('WRONG AGENCY — the portal is asking for an agency that has no calls.');
     out.push('');
-    out.push(`You are acting as ${op.actingTenantName ?? op.homeTenantName ?? op.effectiveTenantId}`);
+    out.push(
+      `You are acting as ${op.actingTenantName ?? op.homeTenantName ?? op.effectiveTenantId}`
+    );
     out.push(`(${op.effectiveTenantId}), which owns 0 call rows.`);
     out.push('');
     out.push('The calls are here:');
@@ -396,12 +406,18 @@ function verdict(
   if (!op.isAdminOrOwner) {
     out.push('NARROWED BY ROLE — the agency has calls, you are not being shown them.');
     out.push('');
-    out.push(`Your roles are [${op.roles.join(', ') || 'none'}]. Neither ADMIN nor OWNER is among them,`);
-    out.push('so buildCallWhere() narrows the list to the calls you answered, instead of the whole');
+    out.push(
+      `Your roles are [${op.roles.join(', ') || 'none'}]. Neither ADMIN nor OWNER is among them,`
+    );
+    out.push(
+      'so buildCallWhere() narrows the list to the calls you answered, instead of the whole'
+    );
     out.push('agency.');
     out.push('');
     out.push(`  the agency holds        ${actingCalls.toLocaleString()} calls`);
-    out.push(`  you are shown           ${replay?.visibleToThisOperator.toLocaleString() ?? '?'} of them`);
+    out.push(
+      `  you are shown           ${replay?.visibleToThisOperator.toLocaleString() ?? '?'} of them`
+    );
     out.push('');
     out.push('FIX: grant your account ADMIN or OWNER in this agency (a UserRole row).');
     return out;
@@ -416,12 +432,16 @@ function verdict(
    */
   const biggest = withCalls.find(t => t.tenantId !== op.effectiveTenantId);
   if (biggest && biggest.calls > actingCalls * 5) {
-    out.push('NOTE — most of the platform\'s calls are in a DIFFERENT agency.');
+    out.push("NOTE — most of the platform's calls are in a DIFFERENT agency.");
     out.push('');
-    out.push(`  you are inside   ${acting?.tenantName ?? op.effectiveTenantId}: ${actingCalls.toLocaleString()} calls`);
-    out.push(`  the largest is   ${biggest.tenantName ?? biggest.tenantId}: ${biggest.calls.toLocaleString()} calls`);
+    out.push(
+      `  you are inside   ${acting?.tenantName ?? op.effectiveTenantId}: ${actingCalls.toLocaleString()} calls`
+    );
+    out.push(
+      `  the largest is   ${biggest.tenantName ?? biggest.tenantId}: ${biggest.calls.toLocaleString()} calls`
+    );
     out.push('');
-    out.push('If the calls you are looking for are that agency\'s, enter it instead —');
+    out.push("If the calls you are looking for are that agency's, enter it instead —");
     out.push('the switcher in the topbar. The rest of this verdict is about the one you are in.');
     out.push('');
   }
@@ -429,8 +449,12 @@ function verdict(
   out.push('THE QUERY IS FINE — and the portal is still showing you nothing.');
   out.push('');
   out.push(`Acting agency: ${op.actingTenantName ?? op.homeTenantName ?? op.effectiveTenantId}`);
-  out.push(`Calls it owns: ${actingCalls.toLocaleString()}  (earliest ${acting?.earliest}, latest ${acting?.latest})`);
-  out.push(`Rows /api/v1/calls would return for you: ${replay?.visibleToThisOperator.toLocaleString() ?? '?'}`);
+  out.push(
+    `Calls it owns: ${actingCalls.toLocaleString()}  (earliest ${acting?.earliest}, latest ${acting?.latest})`
+  );
+  out.push(
+    `Rows /api/v1/calls would return for you: ${replay?.visibleToThisOperator.toLocaleString() ?? '?'}`
+  );
   out.push('');
   out.push('So the rows exist, the scoping resolves, and the query returns them. Whatever is');
   out.push('emptying the table is between the route and the browser:');
@@ -494,7 +518,9 @@ async function main() {
     } else {
       line('        calls  agency                             earliest     latest');
       for (const t of byTenant) {
-        const name = (t.orphaned ? `!! ${t.tenantId} (no tenant row)` : `${t.tenantName ?? t.tenantId}`)
+        const name = (
+          t.orphaned ? `!! ${t.tenantId} (no tenant row)` : `${t.tenantName ?? t.tenantId}`
+        )
           .slice(0, 32)
           .padEnd(32);
         line(
@@ -511,12 +537,16 @@ async function main() {
     line(`B. THE LAST ${args.months} MONTHS`);
     line();
     if (months.length === 0) {
-      line(`   (no calls in the last ${args.months} months — this is a stopped ingest, not a portal fault)`);
+      line(
+        `   (no calls in the last ${args.months} months — this is a stopped ingest, not a portal fault)`
+      );
     } else {
       const perMonth = new Map<string, number>();
       for (const m of months) perMonth.set(m.month, (perMonth.get(m.month) ?? 0) + m.calls);
       for (const [month, n] of perMonth) {
-        const bar = '█'.repeat(Math.min(40, Math.ceil(n / Math.max(1, Math.max(...perMonth.values()) / 40))));
+        const bar = '█'.repeat(
+          Math.min(40, Math.ceil(n / Math.max(1, Math.max(...perMonth.values()) / 40)))
+        );
         line(`   ${month}  ${n.toLocaleString().padStart(8)}  ${bar}`);
       }
     }
@@ -555,7 +585,9 @@ async function main() {
       line('E. WHAT /api/v1/calls RETURNS FOR THEM');
       line();
       line(`   rows in the acting agency   ${replay?.scopedToTenant.toLocaleString() ?? '0'}`);
-      line(`   rows this operator is shown ${replay?.visibleToThisOperator.toLocaleString() ?? '0'}`);
+      line(
+        `   rows this operator is shown ${replay?.visibleToThisOperator.toLocaleString() ?? '0'}`
+      );
     }
 
     line();

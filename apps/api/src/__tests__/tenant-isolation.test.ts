@@ -752,7 +752,9 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
         },
       });
       expect(second.statusCode).toBe(400);
-      expect(await prisma.user.findUnique({ where: { email: 'second@example.invalid' } })).toBeNull();
+      expect(
+        await prisma.user.findUnique({ where: { email: 'second@example.invalid' } })
+      ).toBeNull();
     });
   });
 
@@ -760,7 +762,7 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
   // 6. Issuing an invitation cannot cross the boundary either
   // ══════════════════════════════════════════════════════════════════════════
   describe('an agency owner can only invite into their own agency', () => {
-    it('issues a grant for the caller\'s own tenant, with no way to name another', async () => {
+    it("issues a grant for the caller's own tenant, with no way to name another", async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/auth/activation-grants',
@@ -768,7 +770,12 @@ describe.skipIf(!gate.available)('Tenant isolation: two agencies', () => {
         // A tenantId in the body is not part of the contract. Sending one must
         // change nothing -- this is the assertion that there is no field to
         // find.
-        payload: { email: 'newagent@example.invalid', role: 'AGENT', licensedStates: ['TN'], tenantId: b.tenantId },
+        payload: {
+          email: 'newagent@example.invalid',
+          role: 'AGENT',
+          licensedStates: ['TN'],
+          tenantId: b.tenantId,
+        },
       });
 
       expect(response.statusCode).toBe(201);

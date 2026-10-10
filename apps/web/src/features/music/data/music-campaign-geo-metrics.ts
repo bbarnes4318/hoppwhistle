@@ -4,13 +4,55 @@ import { areaCodeCentroids } from '@/features/campaign-map/data/areaCodeCentroid
 import { npaNxxSample } from '@/features/campaign-map/data/npaNxxSample';
 
 export const musicCampaigns = [
-  { id: 'mc-001', name: 'Summer Vibes Push', artist: 'Nova Eclipse', trackTitle: 'Golden Hour', type: 'Pre-Save Campaign' },
-  { id: 'mc-002', name: 'Midnight Sessions', artist: 'DJ Phantom', trackTitle: 'Neon Dreams', type: 'VIP List Outreach' },
-  { id: 'mc-003', name: 'Street Anthems Vol. 3', artist: 'Kilo Blaze', trackTitle: 'City Lights', type: 'Merch Drop Promo' },
-  { id: 'mc-004', name: 'Soul Revival', artist: 'Aria James', trackTitle: 'Velvet Nights', type: 'Pre-Save Campaign' },
-  { id: 'mc-005', name: 'Latin Heat', artist: 'Los Reyes', trackTitle: 'Fuego', type: 'Tour On-Sale Alert' },
-  { id: 'mc-006', name: 'Indie Discovery', artist: 'Willow & Oak', trackTitle: 'Paper Wings', type: 'VIP List Outreach' },
-  { id: 'mc-007', name: 'Bass Drop Festival', artist: 'SYNTHWAVE', trackTitle: 'Digital Storm', type: 'Listening Market Activation' },
+  {
+    id: 'mc-001',
+    name: 'Summer Vibes Push',
+    artist: 'Nova Eclipse',
+    trackTitle: 'Golden Hour',
+    type: 'Pre-Save Campaign',
+  },
+  {
+    id: 'mc-002',
+    name: 'Midnight Sessions',
+    artist: 'DJ Phantom',
+    trackTitle: 'Neon Dreams',
+    type: 'VIP List Outreach',
+  },
+  {
+    id: 'mc-003',
+    name: 'Street Anthems Vol. 3',
+    artist: 'Kilo Blaze',
+    trackTitle: 'City Lights',
+    type: 'Merch Drop Promo',
+  },
+  {
+    id: 'mc-004',
+    name: 'Soul Revival',
+    artist: 'Aria James',
+    trackTitle: 'Velvet Nights',
+    type: 'Pre-Save Campaign',
+  },
+  {
+    id: 'mc-005',
+    name: 'Latin Heat',
+    artist: 'Los Reyes',
+    trackTitle: 'Fuego',
+    type: 'Tour On-Sale Alert',
+  },
+  {
+    id: 'mc-006',
+    name: 'Indie Discovery',
+    artist: 'Willow & Oak',
+    trackTitle: 'Paper Wings',
+    type: 'VIP List Outreach',
+  },
+  {
+    id: 'mc-007',
+    name: 'Bass Drop Festival',
+    artist: 'SYNTHWAVE',
+    trackTitle: 'Digital Storm',
+    type: 'Listening Market Activation',
+  },
 ];
 
 function seededRandom(seed: number) {
@@ -83,26 +125,22 @@ export function generateMusicCampaignGeoMetrics(campaignId: string = 'all'): Geo
     const answered = Math.floor(contacted * (0.3 + seededRandom(seed++) * 0.4 * perfScale));
     const verifiedListens = Math.floor(answered * (0.4 + seededRandom(seed++) * 0.45));
     const engagements = Math.floor(verifiedListens * (0.45 + seededRandom(seed++) * 0.45));
-    
+
     // Opt-ins represent Pre-Saves, Tour Alerts or Merch Sign-Ups
-    const optIns = seededRandom(seed++) > 0.6
-      ? Math.floor(engagements * (0.2 + seededRandom(seed++) * 0.5))
-      : 0;
-    
-    const callbacks = seededRandom(seed++) > 0.8
-      ? Math.floor(engagements * (0.1 + seededRandom(seed++) * 0.3))
-      : 0;
+    const optIns =
+      seededRandom(seed++) > 0.6 ? Math.floor(engagements * (0.2 + seededRandom(seed++) * 0.5)) : 0;
+
+    const callbacks =
+      seededRandom(seed++) > 0.8 ? Math.floor(engagements * (0.1 + seededRandom(seed++) * 0.3)) : 0;
 
     // In music context: transfers are DSP clickthroughs, conversions are pre-saves
     const transfers = Math.floor(engagements * (0.2 + seededRandom(seed++) * 0.4 * perfScale));
-    const conversions = transfers > 0 
-      ? Math.floor(transfers * (0.25 + seededRandom(seed++) * 0.5))
-      : 0;
+    const conversions =
+      transfers > 0 ? Math.floor(transfers * (0.25 + seededRandom(seed++) * 0.5)) : 0;
 
     // Unsubscribes / Opt-outs
-    const dnc = seededRandom(seed++) > 0.85
-      ? Math.floor(answered * (0.04 + seededRandom(seed++) * 0.1))
-      : 0;
+    const dnc =
+      seededRandom(seed++) > 0.85 ? Math.floor(answered * (0.04 + seededRandom(seed++) * 0.1)) : 0;
 
     // Costs & Revenue: $0.18 cost per contact, conversions represent save value ($4.50) + opt-in list value ($1.50)
     const spend = contacted * 0.18;

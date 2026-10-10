@@ -24,14 +24,14 @@ carrying a `tenantId` column) and flagged those whose call arguments contained n
 `tenantId`. That produced **139 candidate call sites**, which were then read and
 classified by hand:
 
-| Classification | Count | Meaning |
-| --- | ---: | --- |
-| `SCOPED_WHERE_VAR` | 9 | `where` is a variable built as `{ tenantId, … }` earlier in the handler. Safe. |
-| `SELF_LOOKUP` | 14 | `User.findUnique({ where: { id: user.userId } })` — the id came from the verified JWT. Safe. |
-| `GUARDED_BY_PRIOR_FETCH` | 41 | An earlier query in the same handler fetched the row `{ id, tenantId }` and 404'd on a miss. Safe. |
-| `POST_CHECK` | 11 | The row is fetched by id, then `row.tenantId !== user.tenantId` is compared. Safe. |
-| **Genuinely unscoped** | **20** | Fixed. Listed in §3. |
-| Not a tenant question | 44 | `ApiKey.findUnique({ where: { keyHash } })` and similar — these *are* the tenant derivation, not a violation of it. |
+| Classification           |  Count | Meaning                                                                                                             |
+| ------------------------ | -----: | ------------------------------------------------------------------------------------------------------------------- |
+| `SCOPED_WHERE_VAR`       |      9 | `where` is a variable built as `{ tenantId, … }` earlier in the handler. Safe.                                      |
+| `SELF_LOOKUP`            |     14 | `User.findUnique({ where: { id: user.userId } })` — the id came from the verified JWT. Safe.                        |
+| `GUARDED_BY_PRIOR_FETCH` |     41 | An earlier query in the same handler fetched the row `{ id, tenantId }` and 404'd on a miss. Safe.                  |
+| `POST_CHECK`             |     11 | The row is fetched by id, then `row.tenantId !== user.tenantId` is compared. Safe.                                  |
+| **Genuinely unscoped**   | **20** | Fixed. Listed in §3.                                                                                                |
+| Not a tenant question    |     44 | `ApiKey.findUnique({ where: { keyHash } })` and similar — these _are_ the tenant derivation, not a violation of it. |
 
 Separately, three whole-file patterns were found that no per-query check would
 have caught. They are §2, and they were the larger problem.
@@ -75,7 +75,7 @@ single-use activation token, and the token carries the tenant:
   `stripeSessionId` so a redelivered Stripe webhook mints no second grant;
 - `apps/api/src/services/tenant-activation.ts` issues and redeems them;
 - `POST /api/auth/register` and the new-account branch of `POST /api/auth/google`
-  require one, and create the user **ACTIVE** — the grant *is* the approval,
+  require one, and create the user **ACTIVE** — the grant _is_ the approval,
   which closes the "no way to self-activate" half as well;
 - `POST /api/v1/auth/activation-grants` lets an agency OWNER/ADMIN invite into
   **their own** agency. There is deliberately no `tenantId` field in that body.
@@ -136,27 +136,27 @@ a foreign key, so those rows silently fail to write — worth a follow-up.
 
 ### Fixed — read or write of a tenant-scoped model with no tenant filter
 
-| File | Route / function | What it did | Fix |
-| --- | --- | --- | --- |
-| `agent-phone.ts:92` | `getUser()` | Returned `{ userId: 'demo-agent', tenantId: 'default-tenant-id' }` for an unauthenticated request — an invented principal on the softphone surface. | Replaced with `requireAgent()`, which 401s. |
-| `agent-phone.ts` ×4 | `call/:callId/{answer,hangup,transfer,screenpop}` | `call.findUnique({ where: { id: callId } })` — any call on the platform. | `findFirst({ where: { id: callId, tenantId } })`. |
-| `agent-phone.ts` ×3 | same | `call.update({ where: { id: callId } })` — wrote to any call. | `updateMany({ where: { id: callId, tenantId } })`. |
-| `agent-phone.ts:1037` | `webrtc/credentials` | `user.findMany({ select: { metadata: true } })` — **every user row on the platform**, to pick a free extension. | Scoped to `{ tenantId }`. |
-| `agent-phone.ts:1081` | same | `phoneNumber.findMany({ where: { userId, status } })`. | Added `tenantId`. |
-| `agent-phone.ts:28` | `shouldRecordCall()` | Campaign looked up by id alone, deciding whether *this* agency's call is recorded. | Takes `tenantId`, uses `findFirst`. |
-| `agent-phone.ts:294` | `call/originate` | On a missing/expired token, took `callerId` **from the request body**, found the PhoneNumber ending in those digits, and adopted that number's owner as the acting user and tenant. Caller IDs are not secret. | Removed. An expired session is a session to renew. |
-| `index.ts:3517,3590` | `POST /calls/:callId/recording-status` | No tenant at all: fetched and wrote any Call by primary key, to any caller (the `/api/v1` hook populates `request.user` but never refuses). | `resolveTenant()` + tenant on both queries. |
-| `index.ts:3614` | `GET /calls/:callId/recording-debug` | Same, on the read side — returned metadata and recording rows. | `resolveTenant()` + tenant on the query. |
-| `index.ts:2852` | `GET /publishers/:id/rtb-credentials` | `publisher.findUnique({ where: { id } })`, gated only by `requirePublisherAccess()`, which returns `true` for **any** publisherId once the caller holds ADMIN or OWNER and never compares tenants. | `findFirst({ where: { id, tenantId } })`. |
-| `index.ts:5207,5215,5258,5321` | reporting + dashboard | `|| 'default'`, see §2.3. | `resolveTenant()`. |
-| `index.ts:644` | `POST /numbers` | Skipped the quota check when the demo **header** was present. | Decided by `isDemoTenantAuthEnabled()` instead. |
-| `admin-billing.ts` ×6 | all of `/api/v1/admin/billing/*` | Every route took `billingAccountId` from the request and ran raw SQL against it with no ownership check. An owner of one agency could read another's rate cards, close their billing period, pull their invoice PDF and **send a Stripe Connect payout against their account**. | New `requireOwnBillingAccount()` guard; `rate-cards` list joins `billing_accounts` on tenant; invoice PDF joins through its billing account. |
-| `admin-billing.ts:281` | preHandler | `if (demoTenantId) return;` — the header skipped the ADMIN/OWNER check outright, on the invoice and payout surface. | Gated on `isDemoTenantAuthEnabled()`. |
-| `quotas.ts:482` | `DELETE /admin/…/quota/overrides/:id` | Deleted by override id; a mismatched path deleted another tenant's override while writing an audit row naming this one. | `deleteMany({ where: { id, tenantId } })` + 404. |
-| `did-routes.ts:959` | FreeSWITCH CDR webhook | `didRoute.update({ where: { id: body.routeId } })` — `routeId` arrives in an unauthenticated webhook body; anyone reaching the endpoint could inflate another agency's per-route call and duration counters, which they are rated on. | `updateMany` with `tenantId`. |
-| `did-routes.ts:981` | same | `phoneNumber.updateMany({ where: { number } })` — released a leased transfer number by E.164 across all agencies. | Added `tenantId`. |
-| `post.ts` / `post-service.ts` | `POST /api/v1/post` | Authenticated the publisher by API key, then called `processPost(token)` — the ping named by the token was never checked against the authenticating publisher. Any publisher with a valid key could post another agency's ping token and lease the number it had won. | `processPost(token, publisherId, …)`; ping's `publisherId` compared, answered as `PING_NOT_FOUND`. |
-| `post.ts:227` | `GET /internal/route/:e164` | **No auth at all** — returned any DID's routing (buyer, campaign, tenant) to anyone. The two `/internal/` routes beside it had a key check. | Same internal-key/localhost guard. |
+| File                           | Route / function                                  | What it did                                                                                                                                                                                                                                                                     | Fix                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------ |
+| `agent-phone.ts:92`            | `getUser()`                                       | Returned `{ userId: 'demo-agent', tenantId: 'default-tenant-id' }` for an unauthenticated request — an invented principal on the softphone surface.                                                                                                                             | Replaced with `requireAgent()`, which 401s.                                                                                                  |
+| `agent-phone.ts` ×4            | `call/:callId/{answer,hangup,transfer,screenpop}` | `call.findUnique({ where: { id: callId } })` — any call on the platform.                                                                                                                                                                                                        | `findFirst({ where: { id: callId, tenantId } })`.                                                                                            |
+| `agent-phone.ts` ×3            | same                                              | `call.update({ where: { id: callId } })` — wrote to any call.                                                                                                                                                                                                                   | `updateMany({ where: { id: callId, tenantId } })`.                                                                                           |
+| `agent-phone.ts:1037`          | `webrtc/credentials`                              | `user.findMany({ select: { metadata: true } })` — **every user row on the platform**, to pick a free extension.                                                                                                                                                                 | Scoped to `{ tenantId }`.                                                                                                                    |
+| `agent-phone.ts:1081`          | same                                              | `phoneNumber.findMany({ where: { userId, status } })`.                                                                                                                                                                                                                          | Added `tenantId`.                                                                                                                            |
+| `agent-phone.ts:28`            | `shouldRecordCall()`                              | Campaign looked up by id alone, deciding whether _this_ agency's call is recorded.                                                                                                                                                                                              | Takes `tenantId`, uses `findFirst`.                                                                                                          |
+| `agent-phone.ts:294`           | `call/originate`                                  | On a missing/expired token, took `callerId` **from the request body**, found the PhoneNumber ending in those digits, and adopted that number's owner as the acting user and tenant. Caller IDs are not secret.                                                                  | Removed. An expired session is a session to renew.                                                                                           |
+| `index.ts:3517,3590`           | `POST /calls/:callId/recording-status`            | No tenant at all: fetched and wrote any Call by primary key, to any caller (the `/api/v1` hook populates `request.user` but never refuses).                                                                                                                                     | `resolveTenant()` + tenant on both queries.                                                                                                  |
+| `index.ts:3614`                | `GET /calls/:callId/recording-debug`              | Same, on the read side — returned metadata and recording rows.                                                                                                                                                                                                                  | `resolveTenant()` + tenant on the query.                                                                                                     |
+| `index.ts:2852`                | `GET /publishers/:id/rtb-credentials`             | `publisher.findUnique({ where: { id } })`, gated only by `requirePublisherAccess()`, which returns `true` for **any** publisherId once the caller holds ADMIN or OWNER and never compares tenants.                                                                              | `findFirst({ where: { id, tenantId } })`.                                                                                                    |
+| `index.ts:5207,5215,5258,5321` | reporting + dashboard                             | `                                                                                                                                                                                                                                                                               |                                                                                                                                              | 'default'`, see §2.3. | `resolveTenant()`. |
+| `index.ts:644`                 | `POST /numbers`                                   | Skipped the quota check when the demo **header** was present.                                                                                                                                                                                                                   | Decided by `isDemoTenantAuthEnabled()` instead.                                                                                              |
+| `admin-billing.ts` ×6          | all of `/api/v1/admin/billing/*`                  | Every route took `billingAccountId` from the request and ran raw SQL against it with no ownership check. An owner of one agency could read another's rate cards, close their billing period, pull their invoice PDF and **send a Stripe Connect payout against their account**. | New `requireOwnBillingAccount()` guard; `rate-cards` list joins `billing_accounts` on tenant; invoice PDF joins through its billing account. |
+| `admin-billing.ts:281`         | preHandler                                        | `if (demoTenantId) return;` — the header skipped the ADMIN/OWNER check outright, on the invoice and payout surface.                                                                                                                                                             | Gated on `isDemoTenantAuthEnabled()`.                                                                                                        |
+| `quotas.ts:482`                | `DELETE /admin/…/quota/overrides/:id`             | Deleted by override id; a mismatched path deleted another tenant's override while writing an audit row naming this one.                                                                                                                                                         | `deleteMany({ where: { id, tenantId } })` + 404.                                                                                             |
+| `did-routes.ts:959`            | FreeSWITCH CDR webhook                            | `didRoute.update({ where: { id: body.routeId } })` — `routeId` arrives in an unauthenticated webhook body; anyone reaching the endpoint could inflate another agency's per-route call and duration counters, which they are rated on.                                           | `updateMany` with `tenantId`.                                                                                                                |
+| `did-routes.ts:981`            | same                                              | `phoneNumber.updateMany({ where: { number } })` — released a leased transfer number by E.164 across all agencies.                                                                                                                                                               | Added `tenantId`.                                                                                                                            |
+| `post.ts` / `post-service.ts`  | `POST /api/v1/post`                               | Authenticated the publisher by API key, then called `processPost(token)` — the ping named by the token was never checked against the authenticating publisher. Any publisher with a valid key could post another agency's ping token and lease the number it had won.           | `processPost(token, publisherId, …)`; ping's `publisherId` compared, answered as `PING_NOT_FOUND`.                                           |
+| `post.ts:227`                  | `GET /internal/route/:e164`                       | **No auth at all** — returned any DID's routing (buyer, campaign, tenant) to anyone. The two `/internal/` routes beside it had a key check.                                                                                                                                     | Same internal-key/localhost guard.                                                                                                           |
 
 ### Fixed — the three files the brief called out
 
@@ -199,7 +199,7 @@ above.
 - `automation.ts` — already gated; its demo fallback is behind
   `isDemoTenantAuthEnabled()` and its jobs are keyed by tenant.
 - `ApiKey.findUnique({ where: { keyHash } })` in `ping.ts`, `post.ts`,
-  `automation.ts`, `index.ts` — these *are* the tenant derivation for a webhook.
+  `automation.ts`, `index.ts` — these _are_ the tenant derivation for a webhook.
 - `User.findUnique({ where: { email } })` in `auth.ts` — email is globally
   unique; the tenant comes from the row, not from the request.
 
@@ -209,7 +209,7 @@ above.
 
 - ~~**`did-routes.ts` FreeSWITCH endpoints** (`/freeswitch/lookup`,
   `/freeswitch/cdr`, call events) are documented `NO AUTH — internal network
-  only`. They are public webhooks that derive their tenant from the resource
+only`. They are public webhooks that derive their tenant from the resource
   being addressed (the DID, and the route row it resolves to), which is the
   correct shape. The residual risk is that "internal network only" is a
   deployment assumption, not an enforced one — they are reachable through nginx
@@ -308,11 +308,11 @@ systematic pass over that class.
 
 Three enumerations, each read by hand rather than pattern-matched:
 
-| Surface | How enumerated | Sites |
-| --- | --- | ---: |
-| Event-bus publishes | `eventBus.publish(` across `apps/api` and `apps/worker` | 20 |
-| Redis reads and writes | every module importing `getRedisClient` | 16 files |
-| Broadcast to a client | `@fastify/websocket` routes, `text/event-stream` responses | 3 |
+| Surface                | How enumerated                                             |    Sites |
+| ---------------------- | ---------------------------------------------------------- | -------: |
+| Event-bus publishes    | `eventBus.publish(` across `apps/api` and `apps/worker`    |       20 |
+| Redis reads and writes | every module importing `getRedisClient`                    | 16 files |
+| Broadcast to a client  | `@fastify/websocket` routes, `text/event-stream` responses |        3 |
 
 For each, two questions: **where does the tenant come from**, and **can a caller
 influence it?** A key that carries no tenant is not automatically a finding —
@@ -346,7 +346,7 @@ Three problems, and the third is the one that matters.
    subscriber on the platform was handed the same `DEFAULT_TENANT_ID`. The
    delivery filter (`payload.tenantId === tenantId`) then compared each event
    against that one agency — so the feed served whichever agency the environment
-   variable happened to name, to anyone who connected, and served the *other*
+   variable happened to name, to anyone who connected, and served the _other_
    agency nothing.
 
 The subscription mechanism was decoration on top of that. A `subscribe` message
@@ -424,13 +424,13 @@ reader of this document should be able to see the whole class in one place.
 
 Every publish, and what supplies its `tenantId`.
 
-| Site | Tenant from | Caller-influenced? |
-| --- | --- | --- |
-| `services/flow-engine.ts` ×9 | `this.tenantId`, set once from the flow's own execution context when the engine is constructed | No |
-| `services/recording-service.ts` ×2 | `call.tenantId`, read from the Call row the recording belongs to | No |
+| Site                                       | Tenant from                                                                                                      | Caller-influenced?                                                                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `services/flow-engine.ts` ×9               | `this.tenantId`, set once from the flow's own execution context when the engine is constructed                   | No                                                                                                         |
+| `services/recording-service.ts` ×2         | `call.tenantId`, read from the Call row the recording belongs to                                                 | No                                                                                                         |
 | `routes/did-routes.ts` ×2 (FreeSWITCH CDR) | `route.tenantId` on the `DidRoute` row resolved from `body.routeId`, or the RTB route info resolved from the DID | No — the row is the tenant. `body.routeId` names the resource; Phase 1 already scoped the writes beside it |
-| `routes/agent-phone.ts` ×8 | `requireAgent(request).tenantId`, i.e. the authenticated principal through the Phase 1 helper | No |
-| `routes/demo-events.ts` ×2 | the request body | Yes, and deliberately: platform-capability-gated (§2.4) |
+| `routes/agent-phone.ts` ×8                 | `requireAgent(request).tenantId`, i.e. the authenticated principal through the Phase 1 helper                    | No                                                                                                         |
+| `routes/demo-events.ts` ×2                 | the request body                                                                                                 | Yes, and deliberately: platform-capability-gated (§2.4)                                                    |
 
 No publish takes its tenant from a header, a query parameter, a hostname, or —
 outside the platform-gated demo routes — a request body.
@@ -439,19 +439,19 @@ outside the platform-gated demo routes — a request body.
 
 ## 4. Redis keys — every key, and its tenant dimension
 
-| Key | Written by | Tenant dimension | Verdict |
-| --- | --- | --- | --- |
-| `call:<callId>` | `services/call-state.ts` | In the value, not the key | **Fixed** (§2.3). The key is collision-free (UUID), but the id arrives from the wire, so access is now compared |
-| `agent:status:<userId>` | `routes/agent-phone.ts`, read by `services/routing.ts` | Implicit: a user belongs to exactly one agency, and both sites resolve the user id from within a tenant-scoped query or from the authenticated principal | Safe. A caller cannot name another agency's user id and have it read |
-| `live:metrics:v1:<tenantId>:<role>:<scopeId>` | `routes/live-metrics.ts` | **In the key**, from `getActingTenantId()` | Safe |
-| `route:did:<e164>` | `services/number-pool-service.ts`, `routes/did-routes.ts` | In the value. The key is a DID, which is globally unique and is the *addressed resource* | Safe — the correct shape for a webhook: the tenant is derived from the thing being addressed |
-| `ping:lease:<pingId>`, `ping:result:<requestId>` | `services/number-pool-service.ts`, `services/auction-service.ts` | In the value; keys are server-generated opaque ids | Safe |
-| `ping:cap:reserved:<endpointId>` | `services/auction-service.ts` | A buyer endpoint id, itself tenant-owned | Safe |
-| `lock:number:<e164>` | `services/number-pool-service.ts` | None, and correctly so: it is a lock over a globally unique DID, and per-tenant locks would not exclude each other | Safe |
-| `tcpa:<tenDigit>` | `services/tcpa-validation-service.ts` | None | Safe by nature. The value is a third party's answer about a phone number — federal DNC and litigator status — which is a fact about the number, not about any agency. A per-tenant key would multiply the API bill for identical answers |
-| `session:<sessionId>` | `middleware/session.ts` | In the value; the key is a server-generated session id | Safe |
-| `rate_limit:<type>:<identifier>:<window>` | `middleware/rate-limit.ts` | Identifier is an API key id or an IP | Safe |
-| `events:stream` (+ consumer groups) | `services/event-bus.ts`, both workers | In each entry's payload | Safe. Consumers are server-side; no request reads the stream |
+| Key                                              | Written by                                                       | Tenant dimension                                                                                                                                         | Verdict                                                                                                                                                                                                                                  |
+| ------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `call:<callId>`                                  | `services/call-state.ts`                                         | In the value, not the key                                                                                                                                | **Fixed** (§2.3). The key is collision-free (UUID), but the id arrives from the wire, so access is now compared                                                                                                                          |
+| `agent:status:<userId>`                          | `routes/agent-phone.ts`, read by `services/routing.ts`           | Implicit: a user belongs to exactly one agency, and both sites resolve the user id from within a tenant-scoped query or from the authenticated principal | Safe. A caller cannot name another agency's user id and have it read                                                                                                                                                                     |
+| `live:metrics:v1:<tenantId>:<role>:<scopeId>`    | `routes/live-metrics.ts`                                         | **In the key**, from `getActingTenantId()`                                                                                                               | Safe                                                                                                                                                                                                                                     |
+| `route:did:<e164>`                               | `services/number-pool-service.ts`, `routes/did-routes.ts`        | In the value. The key is a DID, which is globally unique and is the _addressed resource_                                                                 | Safe — the correct shape for a webhook: the tenant is derived from the thing being addressed                                                                                                                                             |
+| `ping:lease:<pingId>`, `ping:result:<requestId>` | `services/number-pool-service.ts`, `services/auction-service.ts` | In the value; keys are server-generated opaque ids                                                                                                       | Safe                                                                                                                                                                                                                                     |
+| `ping:cap:reserved:<endpointId>`                 | `services/auction-service.ts`                                    | A buyer endpoint id, itself tenant-owned                                                                                                                 | Safe                                                                                                                                                                                                                                     |
+| `lock:number:<e164>`                             | `services/number-pool-service.ts`                                | None, and correctly so: it is a lock over a globally unique DID, and per-tenant locks would not exclude each other                                       | Safe                                                                                                                                                                                                                                     |
+| `tcpa:<tenDigit>`                                | `services/tcpa-validation-service.ts`                            | None                                                                                                                                                     | Safe by nature. The value is a third party's answer about a phone number — federal DNC and litigator status — which is a fact about the number, not about any agency. A per-tenant key would multiply the API bill for identical answers |
+| `session:<sessionId>`                            | `middleware/session.ts`                                          | In the value; the key is a server-generated session id                                                                                                   | Safe                                                                                                                                                                                                                                     |
+| `rate_limit:<type>:<identifier>:<window>`        | `middleware/rate-limit.ts`                                       | Identifier is an API key id or an IP                                                                                                                     | Safe                                                                                                                                                                                                                                     |
+| `events:stream` (+ consumer groups)              | `services/event-bus.ts`, both workers                            | In each entry's payload                                                                                                                                  | Safe. Consumers are server-side; no request reads the stream                                                                                                                                                                             |
 
 Two workers (`recording-analysis-worker`, `industry-research-worker`) create
 consumer groups on `events:stream` and read entries whose tenant is in the
@@ -461,11 +461,11 @@ payload written by the publisher. Nothing a caller sends reaches those keys.
 
 ## 5. Broadcast surfaces
 
-| Surface | Tenant at subscribe time | Verdict |
-| --- | --- | --- |
-| `routes/websocket.ts` `/ws/events` | Now from the verified credential; channels authorised on subscribe | **Fixed** (§2.1) |
-| `routes/lead-inject.ts` `/lead-inject/stream` (SSE) | `resolveTenant(request, reply)`; the store and emitter are keyed by tenant (`lead:<tenantId>`) | Safe — fixed in Phase 1 |
-| `routes/automation.ts` `/status/:jobId` (SSE) | `getTenantJob(jobId, tenantId)` compares the job's tenant before the stream opens and 404s on a miss | Safe |
+| Surface                                             | Tenant at subscribe time                                                                             | Verdict                 |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------- |
+| `routes/websocket.ts` `/ws/events`                  | Now from the verified credential; channels authorised on subscribe                                   | **Fixed** (§2.1)        |
+| `routes/lead-inject.ts` `/lead-inject/stream` (SSE) | `resolveTenant(request, reply)`; the store and emitter are keyed by tenant (`lead:<tenantId>`)       | Safe — fixed in Phase 1 |
+| `routes/automation.ts` `/status/:jobId` (SSE)       | `getTenantJob(jobId, tenantId)` compares the job's tenant before the stream opens and 404s on a miss | Safe                    |
 
 The rule this pass leaves behind: **a subscription is authorised when it is
 made, not filtered when it is delivered.** A delivery-time filter is one
@@ -506,13 +506,13 @@ both halves in one commit.
 
 ## 7.1 What was open
 
-| Endpoint | Called by | What an unauthenticated caller could do |
-| --- | --- | --- |
-| `GET /freeswitch/lookup` | `inbound_route.lua`, `dialplan/default.xml` | Ask where any DID on the platform routes: the destination, the campaign, the recording policy. A DID enumeration oracle. |
-| `POST /freeswitch/cdr` | `inbound_route.lua` | Write a Call row against the tenant of any `routeId`. Phase 1 scoped the *update* by tenant; nothing stopped the row being created. |
-| `POST /freeswitch/recording-uploaded` | `upload-recording.sh` | Attach an arbitrary recording URL to a call. |
-| `GET /freeswitch/carrier-route` | `dialplan/default.xml`, `dialplan/vapi_outbound.xml` | Read any agency's carrier waterfall, including gateway hostnames, by passing `?tenant=`. |
-| `POST /freeswitch/carrier-result` | both dialplans' hangup hooks | **Take a `tenantId` from its own body or query** and write gateway health against it. An unauthenticated cross-agency write: poison another agency's waterfall into failing over away from a working carrier. |
+| Endpoint                              | Called by                                            | What an unauthenticated caller could do                                                                                                                                                                       |
+| ------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /freeswitch/lookup`              | `inbound_route.lua`, `dialplan/default.xml`          | Ask where any DID on the platform routes: the destination, the campaign, the recording policy. A DID enumeration oracle.                                                                                      |
+| `POST /freeswitch/cdr`                | `inbound_route.lua`                                  | Write a Call row against the tenant of any `routeId`. Phase 1 scoped the _update_ by tenant; nothing stopped the row being created.                                                                           |
+| `POST /freeswitch/recording-uploaded` | `upload-recording.sh`                                | Attach an arbitrary recording URL to a call.                                                                                                                                                                  |
+| `GET /freeswitch/carrier-route`       | `dialplan/default.xml`, `dialplan/vapi_outbound.xml` | Read any agency's carrier waterfall, including gateway hostnames, by passing `?tenant=`.                                                                                                                      |
+| `POST /freeswitch/carrier-result`     | both dialplans' hangup hooks                         | **Take a `tenantId` from its own body or query** and write gateway health against it. An unauthenticated cross-agency write: poison another agency's waterfall into failing over away from a working carrier. |
 
 The last one is the same shape as the `demo-events.ts` finding — a `tenantId`
 read straight off the wire — and it survived the Phase 2 sweep because that
@@ -532,9 +532,9 @@ mod_curl can send a URL, a method and a body. It cannot compute an HMAC, hold a
 client certificate, or set a request header. A shared secret is the strongest
 thing that fits through that pipe.
 
-**Why a query parameter exists at all, and what it costs.** mod_curl's syntax is
+**Why a query parameter exists at all, and what it costs.** mod*curl's syntax is
 `curl <url> [headers|json] [get|head|post [body]] [connect-timeout n] [timeout
-n]`, where `headers` means *return* the response headers, not *send* these.
+n]`, where `headers` means \_return* the response headers, not _send_ these.
 There is no request-header argument in any released version. So the dialplan and
 the Lua script pass the secret in the query string, and **FreeSWITCH logs the
 URLs it fetches** — the secret is in FreeSWITCH's logs. That is stated rather
@@ -542,8 +542,8 @@ than glossed, and it is why:
 
 - it is its **own** secret, used for nothing else, so a log leak costs one
   rotation and reaches nothing but these five read-mostly endpoints;
-- the Lua script redacts it from its *own* log lines (mod_curl's it cannot);
-- callers that *can* send a header do — `upload-recording.sh` uses real curl;
+- the Lua script redacts it from its _own_ log lines (mod_curl's it cannot);
+- callers that _can_ send a header do — `upload-recording.sh` uses real curl;
 - the guard reports which transport was used, so the query form can be measured
   and withdrawn once both mod_curl callers move to something that can carry a
   header. That is the follow-up, and it is smaller than this change was.
@@ -561,7 +561,7 @@ failure at 3am.
 
 **It does not choose a tenant.** The endpoints still derive their tenant from
 the resource being addressed — the DID, the `DidRoute` row — which is the
-correct shape for a webhook and is unchanged. The secret proves the *caller* is
+correct shape for a webhook and is unchanged. The secret proves the _caller_ is
 FreeSWITCH. Nothing here reads a tenant from the wire, and `carrier-result`'s
 body `tenantId` is now behind the guard rather than in front of it.
 
@@ -572,15 +572,15 @@ is in the PR body; the short version is **FreeSWITCH first**, because a caller
 sending a header the API does not yet check breaks nothing, while an API
 checking a header the caller does not yet send drops every call.
 
-| File | Change |
-| --- | --- |
-| `apps/freeswitch/scripts/inbound_route.lua` | Reads `FREESWITCH_INTERNAL_KEY` from the environment; appends `&k=` to the lookup and CDR URLs, percent-encoded; redacts it from its own log lines; logs an explicit error if it is unset. |
-| `apps/freeswitch/conf/dialplan/default.xml` | `&k=$${internal_key}` on the lookup, carrier-route and carrier-result URLs. |
-| `apps/freeswitch/conf/dialplan/vapi_outbound.xml` | Same, on its carrier-route and carrier-result URLs. |
-| `apps/freeswitch/conf/vars.xml` | `internal_key` global, from `${FREESWITCH_INTERNAL_KEY}`. |
-| `apps/freeswitch/docker-entrypoint.sh` | Substitutes it, and warns loudly when it is unset. Deliberately no default value: a placeholder would produce a config that looks configured and authenticates against nothing. |
-| `apps/freeswitch/scripts/upload-recording.sh` | Sends `X-Internal-Key` — it is real curl and can. |
-| `infra/docker/docker-compose.dev.yml` | Passes the same value to both the `api` and `freeswitch` services, with no default. |
+| File                                              | Change                                                                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/freeswitch/scripts/inbound_route.lua`       | Reads `FREESWITCH_INTERNAL_KEY` from the environment; appends `&k=` to the lookup and CDR URLs, percent-encoded; redacts it from its own log lines; logs an explicit error if it is unset. |
+| `apps/freeswitch/conf/dialplan/default.xml`       | `&k=$${internal_key}` on the lookup, carrier-route and carrier-result URLs.                                                                                                                |
+| `apps/freeswitch/conf/dialplan/vapi_outbound.xml` | Same, on its carrier-route and carrier-result URLs.                                                                                                                                        |
+| `apps/freeswitch/conf/vars.xml`                   | `internal_key` global, from `${FREESWITCH_INTERNAL_KEY}`.                                                                                                                                  |
+| `apps/freeswitch/docker-entrypoint.sh`            | Substitutes it, and warns loudly when it is unset. Deliberately no default value: a placeholder would produce a config that looks configured and authenticates against nothing.            |
+| `apps/freeswitch/scripts/upload-recording.sh`     | Sends `X-Internal-Key` — it is real curl and can.                                                                                                                                          |
+| `infra/docker/docker-compose.dev.yml`             | Passes the same value to both the `api` and `freeswitch` services, with no default.                                                                                                        |
 
 ## 7.4 Tests
 
@@ -630,28 +630,28 @@ has walked, so those can be scheduled rather than discovered.
 **Examined** means it was looked at in the course of other work and a verdict
 recorded, without an exhaustive pass. **Never examined** means what it says.
 
-| Surface | Can it read or write agency-scoped data? | Status | When |
-| --- | --- | --- | --- |
-| `apps/api` HTTP routes — Prisma queries | Yes | **Audited** — 139 candidate sites read and classified | Phase 1 |
-| `apps/api` — tenant resolution (`lib/tenant-context.ts` and its ~90 call sites) | Yes | **Audited**, re-audited when the refusal was split | Phase 1, Phase 2 |
-| `apps/api` — event-bus publishes (20 sites) | Yes | **Audited** — §3 | Phase 2 |
-| `apps/api` / `apps/worker` — Redis keys (16 modules) | Yes | **Audited** — §4 | Phase 2 |
-| `apps/api` — WebSocket `/ws/events` | Yes | **Audited**, rewritten — §2.1 | Phase 2 |
-| `apps/api` — SSE (`lead-inject`, `automation`) | Yes | **Audited** — §5 | Phase 1, Phase 2 |
-| `apps/api` — the five `/api/v1/freeswitch/*` endpoints | Yes | **Audited**, closed — §7 | Phase 2c |
-| `apps/api` — platform-admin capability and the acting-tenant switch | Yes | **Audited** | Phase 1b, Phase 2 |
-| `apps/api` — rating: measurement, curve, engine | Yes (it is the billing input) | **Audited** by construction; every query carries a tenant and is tested against two agencies | Phase 2 |
-| FreeSWITCH Lua + dialplan callers | They *cause* writes | **Examined** while closing §7. Not audited: nobody has read the dialplan for other API calls | Phase 2c |
-| **`apps/worker` — scheduled jobs** | **Yes** | **NEVER EXAMINED** | — |
-| **`apps/dialer-v2`** | **Yes** | **NEVER EXAMINED** | — |
-| **ClickHouse — reads** | **Yes** | **Examined here only** (see 8.2) | — |
-| **ClickHouse — the ETL that writes it** | **Yes** | **NEVER EXAMINED** | — |
-| **MinIO / S3 — recordings** | **Yes** | **Examined here only** (see 8.2) | — |
-| **`apps/api` — `routes/freeswitch-mock.ts`** | No, but it is an open endpoint | **Examined here only** (see 8.2) | — |
-| **`apps/api` — the CLI commands under `src/cli/`** | **Yes** | **NEVER EXAMINED** | — |
-| `apps/web` | It renders what the API returns | Not a boundary. The API is the boundary; a web bug shows a user their own data wrongly, not another agency's | — |
-| `apps/media`, `apps/monitor`, `apps/avatar-worker` | No — no tenant dimension, no database access found | **Examined here** | — |
-| Kamailio, RTPengine | No — SIP signalling and media relay, no agency data | **Examined here** | — |
+| Surface                                                                         | Can it read or write agency-scoped data?            | Status                                                                                                       | When              |
+| ------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
+| `apps/api` HTTP routes — Prisma queries                                         | Yes                                                 | **Audited** — 139 candidate sites read and classified                                                        | Phase 1           |
+| `apps/api` — tenant resolution (`lib/tenant-context.ts` and its ~90 call sites) | Yes                                                 | **Audited**, re-audited when the refusal was split                                                           | Phase 1, Phase 2  |
+| `apps/api` — event-bus publishes (20 sites)                                     | Yes                                                 | **Audited** — §3                                                                                             | Phase 2           |
+| `apps/api` / `apps/worker` — Redis keys (16 modules)                            | Yes                                                 | **Audited** — §4                                                                                             | Phase 2           |
+| `apps/api` — WebSocket `/ws/events`                                             | Yes                                                 | **Audited**, rewritten — §2.1                                                                                | Phase 2           |
+| `apps/api` — SSE (`lead-inject`, `automation`)                                  | Yes                                                 | **Audited** — §5                                                                                             | Phase 1, Phase 2  |
+| `apps/api` — the five `/api/v1/freeswitch/*` endpoints                          | Yes                                                 | **Audited**, closed — §7                                                                                     | Phase 2c          |
+| `apps/api` — platform-admin capability and the acting-tenant switch             | Yes                                                 | **Audited**                                                                                                  | Phase 1b, Phase 2 |
+| `apps/api` — rating: measurement, curve, engine                                 | Yes (it is the billing input)                       | **Audited** by construction; every query carries a tenant and is tested against two agencies                 | Phase 2           |
+| FreeSWITCH Lua + dialplan callers                                               | They _cause_ writes                                 | **Examined** while closing §7. Not audited: nobody has read the dialplan for other API calls                 | Phase 2c          |
+| **`apps/worker` — scheduled jobs**                                              | **Yes**                                             | **NEVER EXAMINED**                                                                                           | —                 |
+| **`apps/dialer-v2`**                                                            | **Yes**                                             | **NEVER EXAMINED**                                                                                           | —                 |
+| **ClickHouse — reads**                                                          | **Yes**                                             | **Examined here only** (see 8.2)                                                                             | —                 |
+| **ClickHouse — the ETL that writes it**                                         | **Yes**                                             | **NEVER EXAMINED**                                                                                           | —                 |
+| **MinIO / S3 — recordings**                                                     | **Yes**                                             | **Examined here only** (see 8.2)                                                                             | —                 |
+| **`apps/api` — `routes/freeswitch-mock.ts`**                                    | No, but it is an open endpoint                      | **Examined here only** (see 8.2)                                                                             | —                 |
+| **`apps/api` — the CLI commands under `src/cli/`**                              | **Yes**                                             | **NEVER EXAMINED**                                                                                           | —                 |
+| `apps/web`                                                                      | It renders what the API returns                     | Not a boundary. The API is the boundary; a web bug shows a user their own data wrongly, not another agency's | —                 |
+| `apps/media`, `apps/monitor`, `apps/avatar-worker`                              | No — no tenant dimension, no database access found  | **Examined here**                                                                                            | —                 |
+| Kamailio, RTPengine                                                             | No — SIP signalling and media relay, no agency data | **Examined here**                                                                                            | —                 |
 
 ## 8.2 The ones nothing has audited
 
@@ -665,15 +665,15 @@ Seven services run on a schedule with no request and no authenticated
 principal, which means `lib/tenant-context.ts` protects none of them: they
 choose their own tenants.
 
-| Service | What it touches |
-| --- | --- |
-| `billing-worker.ts` | consumes `call.*` from the event bus, rates calls, writes accruals |
-| `invoice-generator.ts` | closes billing periods, writes invoices |
-| `accrual-ledger.ts` | the accrual ledger |
-| `clickhouse-etl.ts` | copies call and event rows into ClickHouse |
-| `dialer-worker.ts` / `autodialer.ts` | reserves leads and originates calls |
-| `stripe-service.ts` | Stripe; contains no `tenant` reference at all |
-| `recording-analysis-worker.ts`, `industry-research-worker.ts` | consume `events:stream` |
+| Service                                                       | What it touches                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `billing-worker.ts`                                           | consumes `call.*` from the event bus, rates calls, writes accruals |
+| `invoice-generator.ts`                                        | closes billing periods, writes invoices                            |
+| `accrual-ledger.ts`                                           | the accrual ledger                                                 |
+| `clickhouse-etl.ts`                                           | copies call and event rows into ClickHouse                         |
+| `dialer-worker.ts` / `autodialer.ts`                          | reserves leads and originates calls                                |
+| `stripe-service.ts`                                           | Stripe; contains no `tenant` reference at all                      |
+| `recording-analysis-worker.ts`, `industry-research-worker.ts` | consume `events:stream`                                            |
 
 They talk to Postgres through raw `pg`, not Prisma, so **the Phase 1 audit could
 not have seen them even in principle** — it enumerated `prisma.<model>.<op>`
@@ -772,14 +772,14 @@ reads a tenant from a header, a query parameter or a body.
 
 ## 9.1 New tables, and their tenant dimension
 
-| Table | Tenant dimension |
-| --- | --- |
-| `agency_billing_profiles` | `tenantId`, unique. One row per agency |
-| `application_credit_ledger` | `tenantId` on every row; the balance is `SUM(quantity)` filtered by it |
-| `daily_settlements` | `tenantId`, unique with `deliveryDay` |
-| `settlement_payment_attempts` | via `settlementId` → `daily_settlements.tenantId` |
-| `delivery_hold_events` | `tenantId` |
-| `billing_notifications` | `tenantId` |
+| Table                         | Tenant dimension                                                       |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| `agency_billing_profiles`     | `tenantId`, unique. One row per agency                                 |
+| `application_credit_ledger`   | `tenantId` on every row; the balance is `SUM(quantity)` filtered by it |
+| `daily_settlements`           | `tenantId`, unique with `deliveryDay`                                  |
+| `settlement_payment_attempts` | via `settlementId` → `daily_settlements.tenantId`                      |
+| `delivery_hold_events`        | `tenantId`                                                             |
+| `billing_notifications`       | `tenantId`                                                             |
 
 Every one carries a foreign key to `tenants` with `ON DELETE CASCADE`, and every
 query in `services/billing/` filters on `tenantId`. There is no aggregate

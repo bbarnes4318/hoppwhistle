@@ -35,7 +35,10 @@ export class EventBus {
   /**
    * Publish an event to the event bus
    */
-  async publish(channel: EventChannel, payload: Omit<EventPayload, 'id' | 'timestamp'>): Promise<string> {
+  async publish(
+    channel: EventChannel,
+    payload: Omit<EventPayload, 'id' | 'timestamp'>
+  ): Promise<string> {
     const eventPayload: EventPayload = {
       ...payload,
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -87,7 +90,7 @@ export class EventBus {
     const reader = getRedisClient().duplicate({ commandTimeout: undefined });
     // duplicate() copies options, not listeners. An ioredis 'error' with no
     // listener is an unhandled 'error' event, which takes the process down.
-    reader.on('error', (err) => {
+    reader.on('error', err => {
       console.error('[EventBus] Subscriber connection error:', err.message);
     });
 
@@ -136,14 +139,14 @@ export class EventBus {
         } catch (err) {
           if (isRunning) {
             console.error('Error in event subscription:', err);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
     };
 
     // Start processing in background
-    const loop = processMessages().catch((err) => {
+    const loop = processMessages().catch(err => {
       console.error('Fatal error in event subscription:', err);
     });
 
@@ -192,7 +195,7 @@ export class EventBus {
       const conn = getRedisClient().duplicate();
       // duplicate() copies options, not listeners. An ioredis 'error' with no
       // listener is an unhandled 'error' event, which takes the process down.
-      conn.on('error', (err) => {
+      conn.on('error', err => {
         console.error('[EventBus] Pub/sub connection error:', err.message);
       });
 
@@ -220,8 +223,8 @@ export class EventBus {
       this.subscriber = conn;
     }
 
-    const patterns = channels.filter((ch) => ch.endsWith('.*'));
-    const specificChannels = channels.filter((ch) => !ch.endsWith('.*'));
+    const patterns = channels.filter(ch => ch.endsWith('.*'));
+    const specificChannels = channels.filter(ch => !ch.endsWith('.*'));
 
     if (patterns.length > 0) {
       await this.subscriber.psubscribe(...patterns);
@@ -284,4 +287,3 @@ export class EventBus {
 }
 
 export const eventBus = new EventBus();
-

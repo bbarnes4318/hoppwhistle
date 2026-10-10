@@ -333,9 +333,7 @@ describe.skipIf(!gate.available)('Audit trail: records or raises', () => {
 
       // And it works again once the trail is writable.
       await expect(enterActingTenant(operatorId, tenantId)).resolves.toMatchObject({ tenantId });
-      expect(
-        await prisma.auditLog.count({ where: { action: 'platform.tenant.entered' } })
-      ).toBe(1);
+      expect(await prisma.auditLog.count({ where: { action: 'platform.tenant.entered' } })).toBe(1);
     });
   });
 });

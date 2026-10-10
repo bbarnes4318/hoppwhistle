@@ -61,10 +61,9 @@ There is no surcharge anywhere in this product, in any form: no fee line, no
 percentage on a settlement total, nothing itemised separately from the price.
 See §13.
 
-
 **This is the platform billing the agency.** A campaign's own billing model
 (`Campaign.billingModel`, set on the campaign's Settings tab) is a different
-thing: what the agency charges its *buyers* and pays its *publishers*, per
+thing: what the agency charges its _buyers_ and pays its _publishers_, per
 billable call (`PER_CALL`) or per submitted application (`PER_APPLICATION`).
 The two are exclusive on a campaign — a `PER_APPLICATION` call is never also
 priced per call — and are computed in `services/billing-service.ts`, not in
@@ -81,14 +80,14 @@ An agency is subject to the billing system **only** when a platform admin has
 explicitly enrolled it. Unenrolled is the default, and unenrolled means
 untouched:
 
-| | unenrolled | enrolled |
-| --- | --- | --- |
-| delivery gate | not consulted; calls deliver exactly as they did before Phase 3 existed | every condition in §3 applies |
-| submitted applications | no ledger row of any kind — not a consumption, not an overrun | metered per §1 |
-| nightly settlement | skipped entirely; **no settlement row**, not even one saying zero | settled per §4 |
-| `delivery_hold_events`, notifications | never written | per §3 |
-| the portal | "Billing is not enabled for this agency" | the panel in §6 |
-| the cross-agency view | shown as `not enrolled`, carrying **no flags** | flagged per §6 |
+|                                       | unenrolled                                                              | enrolled                      |
+| ------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
+| delivery gate                         | not consulted; calls deliver exactly as they did before Phase 3 existed | every condition in §3 applies |
+| submitted applications                | no ledger row of any kind — not a consumption, not an overrun           | metered per §1                |
+| nightly settlement                    | skipped entirely; **no settlement row**, not even one saying zero       | settled per §4                |
+| `delivery_hold_events`, notifications | never written                                                           | per §3                        |
+| the portal                            | "Billing is not enabled for this agency"                                | the panel in §6               |
+| the cross-agency view                 | shown as `not enrolled`, carrying **no flags**                          | flagged per §6                |
 
 ### Why this exists
 
@@ -116,7 +115,7 @@ database the migration has actually been applied to, and checks that the gate
 returns `enrolled: false, allowed: true` for each, that no hold event exists,
 that no notification was sent and that the ledger is empty.
 `delivery-gating-paths.test.ts` does the same through the real HTTP routes,
-using conditions that *do* refuse an enrolled agency (a suspension, a missing
+using conditions that _do_ refuse an enrolled agency (a suspension, a missing
 mandate, no terms at all) so a pass means the gate is genuinely not applied
 rather than applied and saying yes.
 
@@ -140,13 +139,13 @@ Platform-only; an agency OWNER gets 403 on all three and the row does not move.
 Enrolment is **refused** unless all of these are already in place, and the
 refusal names every missing one at once rather than one per attempt:
 
-| Blocker | Why it must be there first |
-| --- | --- |
-| `NO_BILLING_PROFILE` | everything else is read off it |
-| `NO_DAILY_BLOCK` | a block of zero means every application is Overrun and the ceiling is zero, so delivery stops on the first application |
-| `NO_MAX_DAILY_DEBIT` | a maximum of zero halts every settlement |
-| `NO_OPENING_RATE` | no price: the gate refuses with `NO_OPENING_AGREEMENT` and the settlement has nothing to bill overrun at |
-| `NO_VALID_MANDATE` | no mandate, no delivery — enrolling without one stops the agency immediately |
+| Blocker              | Why it must be there first                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `NO_BILLING_PROFILE` | everything else is read off it                                                                                         |
+| `NO_DAILY_BLOCK`     | a block of zero means every application is Overrun and the ceiling is zero, so delivery stops on the first application |
+| `NO_MAX_DAILY_DEBIT` | a maximum of zero halts every settlement                                                                               |
+| `NO_OPENING_RATE`    | no price: the gate refuses with `NO_OPENING_AGREEMENT` and the settlement has nothing to bill overrun at               |
+| `NO_VALID_MANDATE`   | no mandate, no delivery — enrolling without one stops the agency immediately                                           |
 
 The reason for checking is the same reason the switch exists. Enrolment takes
 effect on the next call offered, so enrolling an agency that fails any of these
@@ -227,18 +226,18 @@ table. `mode` is `DRY_RUN`, `CHARGED` or `ALL` (the default).
 Every column is on the row it came from — nothing is recomputed and nothing is
 summarised away:
 
-| column | |
-| --- | --- |
-| `agency`, `tenant_id` | who to invoice |
-| `delivery_day` | the day being billed |
-| `delivered_calls`, `submitted_applications` | the two counts |
-| `day_closing_pct` | that day's closing percentage |
-| `window_closing_pct`, `window_delivery_days`, `window_days_found`, `window_day_keys` | the trailing window that set the rate |
-| `rate`, `curve_version` | the price and the curve version that produced it |
-| `overrun_quantity`, `overrun_amount` | Overrun billed |
-| `configured_block_quantity`, `unused_paid_applications`, `next_block_quantity`, `next_block_amount` | the block sold |
-| `total_charged`, `max_daily_debit` | what was, or would have been, taken |
-| `payment_status`, `stripe_payment_intent_id`, `paid_at`, `grace_period_ends_on`, `computed_at` | what happened to it |
+| column                                                                                              |                                                  |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `agency`, `tenant_id`                                                                               | who to invoice                                   |
+| `delivery_day`                                                                                      | the day being billed                             |
+| `delivered_calls`, `submitted_applications`                                                         | the two counts                                   |
+| `day_closing_pct`                                                                                   | that day's closing percentage                    |
+| `window_closing_pct`, `window_delivery_days`, `window_days_found`, `window_day_keys`                | the trailing window that set the rate            |
+| `rate`, `curve_version`                                                                             | the price and the curve version that produced it |
+| `overrun_quantity`, `overrun_amount`                                                                | Overrun billed                                   |
+| `configured_block_quantity`, `unused_paid_applications`, `next_block_quantity`, `next_block_amount` | the block sold                                   |
+| `total_charged`, `max_daily_debit`                                                                  | what was, or would have been, taken              |
+| `payment_status`, `stripe_payment_intent_id`, `paid_at`, `grace_period_ends_on`, `computed_at`      | what happened to it                              |
 
 `day_closing_pct` is **derived** from the two counts on the row rather than
 stored beside them: it is exactly `submitted_applications / delivered_calls`, and
@@ -257,10 +256,10 @@ does not reach a finance team as a spreadsheet formula.
 
 Do not confuse them. They are both safe, but they are not the same:
 
-| | writes | charges |
-| --- | --- | --- |
-| `--plan-only` | **nothing** — a preview, printed | no |
-| `--settle-without-charge` | **everything** — the settlement row and the block | no |
+|                           | writes                                            | charges |
+| ------------------------- | ------------------------------------------------- | ------- |
+| `--plan-only`             | **nothing** — a preview, printed                  | no      |
+| `--settle-without-charge` | **everything** — the settlement row and the block | no      |
 
 These were `--dry-run` and `--no-charge`: two flags one character apart, where
 one writes nothing and the other writes everything except the debit. That is a
@@ -318,15 +317,15 @@ Nothing is updated and nothing is deleted. The purchases stay exactly as they
 were written; the retirement is a **later row**, which is the only correction
 this ledger has. One row per retired lot, carrying:
 
-| field | |
-| --- | --- |
-| `quantity` | negative — whatever was left on that lot |
-| `deliveryDay` | the day the retired block was **for**, not when somebody pressed the button |
-| `unitRate` | the rate the block was nominally sold at, so the row reads on its own |
-| `amount` | **null** — no money moved in either direction |
-| `purchaseEntryId` | the lot it retired |
-| `settlementId` | the `DRY_RUN` settlement that sold that lot |
-| `lotIndex` | `-1` |
+| field             |                                                                             |
+| ----------------- | --------------------------------------------------------------------------- |
+| `quantity`        | negative — whatever was left on that lot                                    |
+| `deliveryDay`     | the day the retired block was **for**, not when somebody pressed the button |
+| `unitRate`        | the rate the block was nominally sold at, so the row reads on its own       |
+| `amount`          | **null** — no money moved in either direction                               |
+| `purchaseEntryId` | the lot it retired                                                          |
+| `settlementId`    | the `DRY_RUN` settlement that sold that lot                                 |
+| `lotIndex`        | `-1`                                                                        |
 
 ### It cannot happen twice
 
@@ -359,7 +358,6 @@ not the dry run.
 on would retire, computed the same way as the closeout itself so the preview and
 the act cannot disagree.
 
-
 ---
 
 ## 0d. Go-live runbook — one agency, unenrolled to charging
@@ -380,12 +378,12 @@ what reverses it, which a screen cannot tell you.
 
 **Before you start**, have to hand:
 
-| | |
-| --- | --- |
-| tenant id | `SELECT id, name, slug FROM tenants WHERE slug = '…';` |
-| a platform admin token | an agency OWNER token gets 403 on every step here |
-| the Insertion Order | the agreed rate, the rate offset, the Daily Block, the maximum daily debit |
-| the arithmetic | maximum daily debit = (block + ceiling) × **effective** rate, where the effective rate is the curve rate plus the agency's offset. 45 agents at $134 with a 50% ceiling and no offset is (45 + 22) × 134 = **$8,978**. The same agency with a $6 offset is (45 + 22) × 140 = **$9,380**. 15 agents at $134 is (15 + 7) × 134 = **$2,948**. |
+|                        |                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| tenant id              | `SELECT id, name, slug FROM tenants WHERE slug = '…';`                                                                                                                                                                                                                                                                                     |
+| a platform admin token | an agency OWNER token gets 403 on every step here                                                                                                                                                                                                                                                                                          |
+| the Insertion Order    | the agreed rate, the rate offset, the Daily Block, the maximum daily debit                                                                                                                                                                                                                                                                 |
+| the arithmetic         | maximum daily debit = (block + ceiling) × **effective** rate, where the effective rate is the curve rate plus the agency's offset. 45 agents at $134 with a 50% ceiling and no offset is (45 + 22) × 134 = **$8,978**. The same agency with a $6 offset is (45 + 22) × 140 = **$9,380**. 15 agents at $134 is (15 + 7) × 134 = **$2,948**. |
 
 Below, `$T` is the tenant id and `$ADMIN` a platform admin bearer token. Routes
 are written relative to `https://<api>/api/v1`; in full, each call is:
@@ -511,7 +509,7 @@ Daily settlement is ACH only; card fees at these volumes would run roughly
 $87,000 a year on one account (§5). Omit `method` for ACH.
 
 **Check the arithmetic before you send it.** 45 × $134 = $6,030. The maximum
-daily debit governs *settlements*; it does not cap this call.
+daily debit governs _settlements_; it does not cap this call.
 
 **Verify** — a `201` whose body carries `balance` equal to the quantity:
 
@@ -520,7 +518,7 @@ GET /platform/delivery/agencies/$T/enrolment      → balance: 45
 ```
 
 **Undo: none.** This is a real charge and the product has no refund, credit,
-reversal or make-good, by design. A repeat of the *identical* call does not
+reversal or make-good, by design. A repeat of the _identical_ call does not
 double-charge — Stripe is given an idempotency key of
 `opening:$T:<day>:<quantity>:<rate>` — but a call with a different quantity or
 rate is a second charge.
@@ -626,8 +624,8 @@ A missing day means that day never settled; find out why before continuing.
 
 ### Step 8 — Turn charging on ⚠️ retires the dry run's credits, irreversibly
 
-**Timing.** Do this *after* the last dry-run Delivery Day's settlement has run,
-and *before* the next Delivery Day's calls start — early in the morning. Doing
+**Timing.** Do this _after_ the last dry-run Delivery Day's settlement has run,
+and _before_ the next Delivery Day's calls start — early in the morning. Doing
 it mid-day retires the credits the agency is delivering against right then, and
 it will stop at its Overrun ceiling within the hour.
 
@@ -656,10 +654,10 @@ GET /platform/delivery/agencies/$T/enrolment
 
 **Undo — read this carefully, it is two different things:**
 
-| | |
-| --- | --- |
-| the charging switch | `PUT …/charges {"enabled": false}` — reversible, immediate, future settlements go back to `DRY_RUN` |
-| the closeout | **not reversible.** It is an append-only ledger row, and there is no path in this system that returns a credit. |
+|                     |                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| the charging switch | `PUT …/charges {"enabled": false}` — reversible, immediate, future settlements go back to `DRY_RUN`             |
+| the closeout        | **not reversible.** It is an append-only ledger row, and there is no path in this system that returns a credit. |
 
 So turning charging back off does **not** restore the retired credits. An agency
 left on a zero balance receives no calls (`NO_CREDITS`). If you back out here,
@@ -691,7 +689,7 @@ GET /platform/delivery/overview                   the agency shows a balance, no
 **Undo: none.** A real debit against a real mandate, and there are no refunds.
 
 > **Why not just let the last dry-run settlement charge?** Turning charging on
-> *before* the final dry-run day's settlement would make that settlement charge
+> _before_ the final dry-run day's settlement would make that settlement charge
 > the day's Overrun and sell a full paid block in one debit, and step 9 would be
 > unnecessary. It is not the recommended order because that day then appears
 > both on the hand-raised invoice from step 7 and on the agency's bank
@@ -718,37 +716,37 @@ SELECT "deliveryDay", "totalCharged", "maxDailyDebit", "paymentStatus",
  WHERE "tenantId" = '…' ORDER BY "deliveryDay" DESC LIMIT 1;
 ```
 
-| `paymentStatus` | what it means | what to do |
-| --- | --- | --- |
-| `SUCCEEDED` / `PENDING` | the debit was accepted by Stripe. ACH settles over days, so `PENDING` is normal for a while | nothing; `settlement:run -- --resume-stalled` picks up the ones Stripe has since resolved |
-| `NOT_CHARGED` | nothing was owed that day | nothing |
-| `HALTED_MAX_DEBIT` | the total breached the Insertion Order cap; **no debit was placed** and platform admins were notified | do not raise the cap to make it go through — find out why the day was that large |
-| `HALTED_NO_MANDATE` | the mandate stopped being usable | back to step 3 |
-| `FAILED` | the debit was declined. Delivery holds at the paid balance once the Business Day grace period expires | `settlement:run -- --retry-failed` after the agency fixes the account |
+| `paymentStatus`         | what it means                                                                                         | what to do                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `SUCCEEDED` / `PENDING` | the debit was accepted by Stripe. ACH settles over days, so `PENDING` is normal for a while           | nothing; `settlement:run -- --resume-stalled` picks up the ones Stripe has since resolved |
+| `NOT_CHARGED`           | nothing was owed that day                                                                             | nothing                                                                                   |
+| `HALTED_MAX_DEBIT`      | the total breached the Insertion Order cap; **no debit was placed** and platform admins were notified | do not raise the cap to make it go through — find out why the day was that large          |
+| `HALTED_NO_MANDATE`     | the mandate stopped being usable                                                                      | back to step 3                                                                            |
+| `FAILED`                | the debit was declined. Delivery holds at the paid balance once the Business Day grace period expires | `settlement:run -- --retry-failed` after the agency fixes the account                     |
 
 Run it once more, deliberately, and confirm it charges nothing: one settlement
 per agency per Delivery Day is a unique index, so the second run reports
 `alreadySettled` (§4).
 
-**Undo:** `PUT …/charges {"enabled": false}` stops *future* settlements from
+**Undo:** `PUT …/charges {"enabled": false}` stops _future_ settlements from
 charging. It does not undo a debit that has already been placed.
 
 ---
 
 ### If something looks wrong
 
-| symptom | first thing to look at | the stop |
-| --- | --- | --- |
-| the agency stopped delivering right after enrolling | `GET /platform/delivery/overview` for its flags; `delivery_hold_events` for the reason | `POST …/unenrol` |
-| it stops mid-morning every day | balance is zero and it is hitting the Overrun ceiling — it needs a block, or its Daily Block is set too low | sell a block (step 9) |
-| a settlement halted on the maximum daily debit | the day's counts and rate; the cap is a contractual commitment, so the day is the thing to explain, not the cap | leave it halted |
-| a debit failed | `settlement_payment_attempts` for Stripe's failure code; the agency has until `gracePeriodEndsOn` (Business Days) before delivery holds | `--retry-failed` once fixed |
-| you are not sure and calls are moving | — | `POST /platform/delivery/agencies/$T/suspend` stops delivery immediately and does **not** touch the ledger; paid applications survive it and are there when you resume |
-| you want the agency out of billing entirely | — | `POST …/unenrol`. Ledger and settlements stay as the record of what was charged |
-| a card payment was charged back | the agency's row on `GET /platform/delivery/overview`, flagged `disputed`; `settlement_disputes` for Stripe's reference and status | nothing to stop — delivery already stopped on the webhook. Resuming is `POST …/disputes/stand-down`, and it is a decision, not a formality (§12) |
+| symptom                                             | first thing to look at                                                                                                                  | the stop                                                                                                                                                               |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the agency stopped delivering right after enrolling | `GET /platform/delivery/overview` for its flags; `delivery_hold_events` for the reason                                                  | `POST …/unenrol`                                                                                                                                                       |
+| it stops mid-morning every day                      | balance is zero and it is hitting the Overrun ceiling — it needs a block, or its Daily Block is set too low                             | sell a block (step 9)                                                                                                                                                  |
+| a settlement halted on the maximum daily debit      | the day's counts and rate; the cap is a contractual commitment, so the day is the thing to explain, not the cap                         | leave it halted                                                                                                                                                        |
+| a debit failed                                      | `settlement_payment_attempts` for Stripe's failure code; the agency has until `gracePeriodEndsOn` (Business Days) before delivery holds | `--retry-failed` once fixed                                                                                                                                            |
+| you are not sure and calls are moving               | —                                                                                                                                       | `POST /platform/delivery/agencies/$T/suspend` stops delivery immediately and does **not** touch the ledger; paid applications survive it and are there when you resume |
+| you want the agency out of billing entirely         | —                                                                                                                                       | `POST …/unenrol`. Ledger and settlements stay as the record of what was charged                                                                                        |
+| a card payment was charged back                     | the agency's row on `GET /platform/delivery/overview`, flagged `disputed`; `settlement_disputes` for Stripe's reference and status      | nothing to stop — delivery already stopped on the webhook. Resuming is `POST …/disputes/stand-down`, and it is a decision, not a formality (§12)                       |
 
 **Nothing on this page ever gives money back.** Suspend, unenrol and disabling
-charging all stop things happening *next*; none of them reverses a debit, a
+charging all stop things happening _next_; none of them reverses a debit, a
 consumption or a closeout. That is the design, not a gap in the runbook.
 
 ---
@@ -766,12 +764,12 @@ call is delivered and whether an application is billed tonight.
 
 ### Four kinds of row
 
-| Type | `quantity` | Carries |
-| --- | ---: | --- |
-| `PURCHASE` | +N | the unit rate, the amount, the Delivery Day the block is **for**, the Stripe payment reference, and the rate curve version that priced it |
-| `CONSUMPTION` | −1 | the application, the purchase lot it drew on, which unit of that lot, and the rate that lot was bought at |
-| `OVERRUN` | 0 | the application and the Delivery Day. No rate: an overrun is priced that evening, and the settlement row for its Delivery Day is where that money is recorded |
-| `DRY_RUN_CLOSEOUT` | −N | the lot it retires, the `DRY_RUN` settlement that sold that lot, the day that block was for, and the rate it was nominally sold at. `amount` is **null** — no money moved (§0c) |
+| Type               | `quantity` | Carries                                                                                                                                                                         |
+| ------------------ | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PURCHASE`         |         +N | the unit rate, the amount, the Delivery Day the block is **for**, the Stripe payment reference, and the rate curve version that priced it                                       |
+| `CONSUMPTION`      |         −1 | the application, the purchase lot it drew on, which unit of that lot, and the rate that lot was bought at                                                                       |
+| `OVERRUN`          |          0 | the application and the Delivery Day. No rate: an overrun is priced that evening, and the settlement row for its Delivery Day is where that money is recorded                   |
+| `DRY_RUN_CLOSEOUT` |         −N | the lot it retires, the `DRY_RUN` settlement that sold that lot, the day that block was for, and the rate it was nominally sold at. `amount` is **null** — no money moved (§0c) |
 
 An overrun does not move a balance because there was no balance to move.
 
@@ -878,10 +876,10 @@ Rounding it up would extend a credit nobody agreed to.
 
 **The launch numbers, which this arithmetic reproduces exactly:**
 
-| | agents | Daily Block | ceiling | overrun ceiling | maximum daily debit at $134 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| larger agency | 45 | 45 | 50% | `floor(45 × 0.5)` = **22** | `(45 + 22) × 134` = **$8,978** |
-| smaller agency | 15 | 15 | 50% | `floor(15 × 0.5)` = **7** | `(15 + 7) × 134` = **$2,948** |
+|                | agents | Daily Block | ceiling |            overrun ceiling |    maximum daily debit at $134 |
+| -------------- | -----: | ----------: | ------: | -------------------------: | -----------------------------: |
+| larger agency  |     45 |          45 |     50% | `floor(45 × 0.5)` = **22** | `(45 + 22) × 134` = **$8,978** |
+| smaller agency |     15 |          15 |     50% |  `floor(15 × 0.5)` = **7** |  `(15 + 7) × 134` = **$2,948** |
 
 Those are the figures on the Insertion Orders. `maxDailyDebitFor()` computes
 them, and `settlement.test.ts` asserts both to the dollar, so the number on the
@@ -896,7 +894,7 @@ and this number decides how much credit is extended.
 
 `PENDING` breaks the streak. A settlement that has not been paid yet is not a
 settlement free of unpaid debits, and being wrong in that direction extends
-*less* credit rather than more.
+_less_ credit rather than more.
 
 ### At the ceiling, delivery stops for the rest of the Delivery Day
 
@@ -906,7 +904,7 @@ platform admins are notified once rather than once per refused call.
 
 **A call already connected finishes normally.** Nothing in the gate writes to a
 `Call` row, and no path in this codebase tears down a live channel on a billing
-condition. The gate is consulted when a call is about to be *offered*.
+condition. The gate is consulted when a call is about to be _offered_.
 `settlement.test.ts` puts a call in `ANSWERED` with no `endedAt`, reaches the
 ceiling around it, and asserts the call is untouched while the gate has flipped
 to refusing.
@@ -939,19 +937,19 @@ read. See §0 — this is the ordering the whole switch rests on.
 
 ### The conditions, in the order they are checked
 
-The order is severity, not convenience: an agency that is suspended *and* at its
+The order is severity, not convenience: an agency that is suspended _and_ at its
 ceiling should be told it is suspended, because that is the thing a human has to
 act on.
 
-| Reason | Meaning |
-| --- | --- |
-| `ADMIN_SUSPENDED` | a platform admin suspended the account |
-| `NO_MANDATE` | no valid ACH mandate. No mandate, no delivery |
-| `BELOW_MINIMUM_CLOSING` | the trailing window closed below 5.0%. Only a platform admin clears it |
-| `SETTLEMENT_UNPAID` | a settlement is unpaid past its grace period |
-| `NO_OPENING_AGREEMENT` | no opening rate and block were ever agreed, so there is no price and nothing has been bought |
-| `NO_CREDITS` | the prepaid application credit balance is spent. Resumes as soon as credits are added |
-| `CEILING_REACHED` | *(no longer raised)* the balance was spent and that day's Overrun had reached the ceiling |
+| Reason                  | Meaning                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `ADMIN_SUSPENDED`       | a platform admin suspended the account                                                       |
+| `NO_MANDATE`            | no valid ACH mandate. No mandate, no delivery                                                |
+| `BELOW_MINIMUM_CLOSING` | the trailing window closed below 5.0%. Only a platform admin clears it                       |
+| `SETTLEMENT_UNPAID`     | a settlement is unpaid past its grace period                                                 |
+| `NO_OPENING_AGREEMENT`  | no opening rate and block were ever agreed, so there is no price and nothing has been bought |
+| `NO_CREDITS`            | the prepaid application credit balance is spent. Resumes as soon as credits are added        |
+| `CEILING_REACHED`       | _(no longer raised)_ the balance was spent and that day's Overrun had reached the ceiling    |
 
 Nothing here reads a stored "paused" flag. Every condition is recomputed from
 the rows that decide it, because a stored flag is stale the instant a settlement
@@ -974,12 +972,12 @@ a bank statement.
 
 **Gated.**
 
-| Path | File | What the refusal looks like |
-| --- | --- | --- |
-| `GET /api/v1/freeswitch/lookup` — **Redis RTB lease branch** | `routes/did-routes.ts` | `{reject: true, reason: "DELIVERY_PAUSED", deliveryHoldReason}` |
-| `GET /api/v1/freeswitch/lookup` — **`DidRoute` branch** | `routes/did-routes.ts` | same, and checked **before** buyer selection, so an agency at its ceiling never reaches the fallback that rings every extension on the campaign |
-| `POST /api/v1/agent/call/incoming` | `routes/agent-phone.ts` | `403` with `deliveryHoldReason`, and **no `Call` row is created** |
-| flow action `buyer.route` | `services/flow-engine.ts` | the action returns without publishing `call.buyer.route`; a `call.delivery.held` event is published instead |
+| Path                                                         | File                      | What the refusal looks like                                                                                                                     |
+| ------------------------------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/freeswitch/lookup` — **Redis RTB lease branch** | `routes/did-routes.ts`    | `{reject: true, reason: "DELIVERY_PAUSED", deliveryHoldReason}`                                                                                 |
+| `GET /api/v1/freeswitch/lookup` — **`DidRoute` branch**      | `routes/did-routes.ts`    | same, and checked **before** buyer selection, so an agency at its ceiling never reaches the fallback that rings every extension on the campaign |
+| `POST /api/v1/agent/call/incoming`                           | `routes/agent-phone.ts`   | `403` with `deliveryHoldReason`, and **no `Call` row is created**                                                                               |
+| flow action `buyer.route`                                    | `services/flow-engine.ts` | the action returns without publishing `call.buyer.route`; a `call.delivery.held` event is published instead                                     |
 
 `reject: true` is the shape `apps/freeswitch/scripts/inbound_route.lua` already
 hangs up on, and it hangs up **before answering**. That matters for the
@@ -994,16 +992,16 @@ that were never offered to anybody into the agency's call history.
 
 **Examined and deliberately not gated.**
 
-| Path | Why not |
-| --- | --- |
-| `POST /api/v1/agent/call/:callId/answer` | the agent picking up a call the gate already allowed. Refusing here would cut off a ringing call mid-offer and would contradict "a call already connected finishes normally" |
-| `POST /api/v1/freeswitch/cdr` | records a call that has already happened |
-| `POST /api/v1/agent/call/originate` | the agency's own **outbound** dialling. Not NetEnroll delivery, and excluded from the Phase 2 denominator by `direction: INBOUND` |
-| `apps/worker` autodialer / hopper, `apps/dialer-v2` | outbound dialers, same reason |
-| `routes/lead-inject.ts` | broadcasts lead **data** over SSE. Not a call |
-| `services/insurance-lead-delivery.ts`, `insurance-lead-bulk-delivery.ts` | posts lead records to buyers. Not a call |
-| `services/routing.ts` `selectBestBuyer` | a selection helper *below* the two gated callers. Gating there would sit underneath `did-routes`' "ring every campaign extension" fallback, so the gate is above it instead |
-| `routes/freeswitch-mock.ts` `/api/v1/numbers/lookup` | a mock returning a hard-coded zero-uuid tenant. Not a production delivery path |
+| Path                                                                     | Why not                                                                                                                                                                      |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/agent/call/:callId/answer`                                 | the agent picking up a call the gate already allowed. Refusing here would cut off a ringing call mid-offer and would contradict "a call already connected finishes normally" |
+| `POST /api/v1/freeswitch/cdr`                                            | records a call that has already happened                                                                                                                                     |
+| `POST /api/v1/agent/call/originate`                                      | the agency's own **outbound** dialling. Not NetEnroll delivery, and excluded from the Phase 2 denominator by `direction: INBOUND`                                            |
+| `apps/worker` autodialer / hopper, `apps/dialer-v2`                      | outbound dialers, same reason                                                                                                                                                |
+| `routes/lead-inject.ts`                                                  | broadcasts lead **data** over SSE. Not a call                                                                                                                                |
+| `services/insurance-lead-delivery.ts`, `insurance-lead-bulk-delivery.ts` | posts lead records to buyers. Not a call                                                                                                                                     |
+| `services/routing.ts` `selectBestBuyer`                                  | a selection helper _below_ the two gated callers. Gating there would sit underneath `did-routes`' "ring every campaign extension" fallback, so the gate is above it instead  |
+| `routes/freeswitch-mock.ts` `/api/v1/numbers/lookup`                     | a mock returning a hard-coded zero-uuid tenant. Not a production delivery path                                                                                               |
 
 `delivery-gating-paths.test.ts` drives the two HTTP paths against a real
 database and asserts both the allow and the refuse, including that the
@@ -1370,11 +1368,11 @@ carries none. Two columns rather than one enum with a member per pair, because
 `ceilingFor()` asks only the first question and the settlement asks only the
 second, and a combined enum makes both of them enumerate both.
 
-| | |
-| --- | --- |
-| `MELIO` | **the default.** Invoiced and collected in Melio. No debit is placed here. |
-| `OFFLINE` | billed outside this platform some other way — a check, a wire, an invoice raised in somebody else's system. |
-| `STRIPE` | this platform debits a saved mandate off-session, nightly. What every agency was on before the column existed, and what they are still on. |
+|           |                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MELIO`   | **the default.** Invoiced and collected in Melio. No debit is placed here.                                                                 |
+| `OFFLINE` | billed outside this platform some other way — a check, a wire, an invoice raised in somebody else's system.                                |
+| `STRIPE`  | this platform debits a saved mandate off-session, nightly. What every agency was on before the column existed, and what they are still on. |
 
 `MELIO` and `OFFLINE` are behaviourally identical — same gateway, same
 `EXTERNAL` settlement, no debit either way. They are separate members so the
@@ -1483,7 +1481,7 @@ the nightly run down for every agency, not just the one on the new provider.
 
 **Melio cannot pull an unattended debit from an agency's bank account.** Its
 partner API is an accounts-**payable** surface: bills, vendors, payouts pushed
-*out* to vendors. This platform's settlement needs the opposite — a nightly pull
+_out_ to vendors. This platform's settlement needs the opposite — a nightly pull
 debit with nobody present to approve it.
 
 That question is closed. Nobody needs to go and re-check it in a sandbox.
@@ -1522,7 +1520,7 @@ columns comes back `MELIO`, and an agency explicitly on `STRIPE` stays there.
 
 ### The migration is two files, and has to be
 
-PostgreSQL refuses to *use* a new enum value in the transaction that added it:
+PostgreSQL refuses to _use_ a new enum value in the transaction that added it:
 
     ERROR:  unsafe use of new value "MELIO" of enum type "PaymentProvider"
     HINT:   New enum values must be committed before they can be used.
@@ -1784,15 +1782,15 @@ counted a lifetime total of applications to decide when it stopped applying.
 
 All of it is removed:
 
-| Was | Now |
-| --- | --- |
-| `RateCurve.introductoryRate` / `.introductoryApplications` | not on the type; `toRateCurve` does not read the columns |
-| `countSubmittedApplicationsLifetime()` | deleted |
-| `AgencyRatingState.introductoryApplicationsUsed` written every run | not written |
-| `RatingSummary.introductory` | not on the response |
-| `POST /api/v1/platform/rating/curve` **required** both fields, 400 without them | neither accepted; a curve is its anchors |
-| `/rating` showed "Introductory rate: $159 … for the first 5" | removed |
-| a missing rating state defaulted to `INTRODUCTORY` at $159 | no state means **no rate** — an em dash — and the gate refuses with `NO_OPENING_AGREEMENT` |
+| Was                                                                             | Now                                                                                        |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `RateCurve.introductoryRate` / `.introductoryApplications`                      | not on the type; `toRateCurve` does not read the columns                                   |
+| `countSubmittedApplicationsLifetime()`                                          | deleted                                                                                    |
+| `AgencyRatingState.introductoryApplicationsUsed` written every run              | not written                                                                                |
+| `RatingSummary.introductory`                                                    | not on the response                                                                        |
+| `POST /api/v1/platform/rating/curve` **required** both fields, 400 without them | neither accepted; a curve is its anchors                                                   |
+| `/rating` showed "Introductory rate: $159 … for the first 5"                    | removed                                                                                    |
+| a missing rating state defaulted to `INTRODUCTORY` at $159                      | no state means **no rate** — an em dash — and the gate refuses with `NO_OPENING_AGREEMENT` |
 
 The database keeps the columns and the `INTRODUCTORY` enum member. Migrations
 against the production database are applied by piping SQL into psql by hand and
@@ -1916,12 +1914,12 @@ TEST_REDIS_URL=redis://localhost:6379/1 \
   pnpm --filter @hopwhistle/api test
 ```
 
-| Suite | Cases | What it pins |
-| --- | ---: | --- |
-| `__tests__/settlement.test.ts` | 55 | enrolment, the dry run, the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
-| `__tests__/delivery-gating-paths.test.ts` | 11 | that every delivery path asks the gate when the agency is enrolled, **and does not when it is not** — driven through the real route handlers |
-| `__tests__/db-push-constraints.test.ts` | +3 | the three triggers are installed |
-| `__tests__/phase5-platform.test.ts` | 25 | the platform-wide screens, the rate offset, chargebacks, non-production tenants and onboarding — against a real database |
+| Suite                                     | Cases | What it pins                                                                                                                                 |
+| ----------------------------------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `__tests__/settlement.test.ts`            |    55 | enrolment, the dry run, the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database  |
+| `__tests__/delivery-gating-paths.test.ts` |    11 | that every delivery path asks the gate when the agency is enrolled, **and does not when it is not** — driven through the real route handlers |
+| `__tests__/db-push-constraints.test.ts`   |    +3 | the three triggers are installed                                                                                                             |
+| `__tests__/phase5-platform.test.ts`       |    25 | the platform-wide screens, the rate offset, chargebacks, non-production tenants and onboarding — against a real database                     |
 
 The cases the brief names, and where they are:
 
@@ -2100,13 +2098,13 @@ never drop, and nothing writes either. Grep.
 `/admin/onboarding`, and `routes/onboarding.ts` behind it. Each step reports its
 state and the server refuses one asked for out of order.
 
-| | Step | Route |
-| --- | --- | --- |
-| a | **Tenant** — legal name, state, contact name, email, phone, licensed agent count, delivery days and hours | `POST /api/v1/platform/onboarding/agencies` |
-| b | **Terms** — opening rate, rate offset, opening daily block, daily application target, overrun ceiling percentage, maximum daily debit | `PUT …/agencies/:tenantId/terms` |
-| c | **Payment method** — ACH mandate or card | `PUT …/agencies/:tenantId/payment-method` |
-| d | **Owner and activation link** | `POST …/agencies/:tenantId/owner` |
-| e | **Enrol** — the existing prerequisite check | `POST /api/v1/platform/delivery/agencies/:tenantId/enrol` |
+|     | Step                                                                                                                                  | Route                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| a   | **Tenant** — legal name, state, contact name, email, phone, licensed agent count, delivery days and hours                             | `POST /api/v1/platform/onboarding/agencies`               |
+| b   | **Terms** — opening rate, rate offset, opening daily block, daily application target, overrun ceiling percentage, maximum daily debit | `PUT …/agencies/:tenantId/terms`                          |
+| c   | **Payment method** — ACH mandate or card                                                                                              | `PUT …/agencies/:tenantId/payment-method`                 |
+| d   | **Owner and activation link**                                                                                                         | `POST …/agencies/:tenantId/owner`                         |
+| e   | **Enrol** — the existing prerequisite check                                                                                           | `POST /api/v1/platform/delivery/agencies/:tenantId/enrol` |
 
 **The state is derived, never stored.** There is no "current step" column. Each
 step's state is read from the rows that step writes — the agency profile, the
@@ -2163,15 +2161,15 @@ and does not gain one here.
 
 So on a dispute:
 
-| | |
-| --- | --- |
-| consumed credits | stay consumed |
-| the ledger | is not reversed. There is no entry type for it and there is not going to be one — `settlement.test.ts` and the Phase 5 suite both read the enum labels out of `pg_enum` |
-| the settlement | keeps every figure it was written with, including `rate`, `curveRate` and `rateOffset`, all under the immutability trigger |
-| delivery | **stops**, immediately, on the webhook |
-| the platform view | flags the tenant as `disputed` — its own state, not folded into "suspended" |
-| platform admins | are notified. Platform only: telling an agency's floor before anybody has looked is alarm, not information |
-| Overrun | **none at all**, withdrawn rather than reduced, while a dispute is outstanding |
+|                   |                                                                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| consumed credits  | stay consumed                                                                                                                                                           |
+| the ledger        | is not reversed. There is no entry type for it and there is not going to be one — `settlement.test.ts` and the Phase 5 suite both read the enum labels out of `pg_enum` |
+| the settlement    | keeps every figure it was written with, including `rate`, `curveRate` and `rateOffset`, all under the immutability trigger                                              |
+| delivery          | **stops**, immediately, on the webhook                                                                                                                                  |
+| the platform view | flags the tenant as `disputed` — its own state, not folded into "suspended"                                                                                             |
+| platform admins   | are notified. Platform only: telling an agency's floor before anybody has looked is alarm, not information                                                              |
+| Overrun           | **none at all**, withdrawn rather than reduced, while a dispute is outstanding                                                                                          |
 
 ### The webhook
 
@@ -2258,14 +2256,14 @@ rule.
 
 Everywhere the rate appears, because it is part of the rate:
 
-| | |
-| --- | --- |
-| `rate_changes` | `newRate` is effective; `curveRate` and `rateOffset` are stored beside it |
-| `daily_settlements` | the same three, all under the immutability trigger |
-| the CSV export | `rate`, `curve_rate`, `rate_offset` — the first is the sum of the other two |
-| the agency's portal | the rate, with "…from the curve, plus your agreed rate offset of…" beneath it |
-| the platform views | the rate, with `(curve $159 + $6)` beside it where one applies |
-| the maximum daily debit | `(block + ceiling) × effective rate` |
+|                           |                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `rate_changes`            | `newRate` is effective; `curveRate` and `rateOffset` are stored beside it                |
+| `daily_settlements`       | the same three, all under the immutability trigger                                       |
+| the CSV export            | `rate`, `curve_rate`, `rate_offset` — the first is the sum of the other two              |
+| the agency's portal       | the rate, with "…from the curve, plus your agreed rate offset of…" beneath it            |
+| the platform views        | the rate, with `(curve $159 + $6)` beside it where one applies                           |
+| the maximum daily debit   | `(block + ceiling) × effective rate`                                                     |
 | the settlement derivation | recomputed against the offset **the settlement records**, never the agency's current one |
 
 **The rate change stores both halves so a rate recomputes from its own row.** A
@@ -2289,7 +2287,7 @@ ceiling would halt on a cap that was never the real cost of the day.
 ### Card-paying agencies get a lower Overrun ceiling
 
 **25% above the Daily Block, flat — it does not rise with settlement history.**
-The ACH schedule extends *more* credit to an agency with a longer record of
+The ACH schedule extends _more_ credit to an agency with a longer record of
 clean settlements. A card payment can be taken back without our consent up to
 months after it settled, so a run of clean card settlements is not the evidence
 that schedule treats it as, and letting one earn the doubled ceiling would be
@@ -2318,11 +2316,11 @@ anything to what it is handed.
 Every agency-scoped screen has a platform-wide counterpart, and a platform admin
 with no acting tenant lands on it rather than on a prompt.
 
-| | |
-| --- | --- |
-| `/delivery` | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and current rate — one row per agency, with platform totals across the top. `GET /api/v1/platform/delivery/overview` |
-| `/rating` | every agency's closing percentage, current rate and the rate each is tracking toward, side by side. `GET /api/v1/platform/rating/overview` |
-| `/delivery/settlements` | every agency's settlements over a date range, filterable by agency, with the CSV export widened to match. `GET /api/v1/platform/delivery/settlements` |
+|                         |                                                                                                                                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/delivery`             | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and current rate — one row per agency, with platform totals across the top. `GET /api/v1/platform/delivery/overview` |
+| `/rating`               | every agency's closing percentage, current rate and the rate each is tracking toward, side by side. `GET /api/v1/platform/rating/overview`                                                                              |
+| `/delivery/settlements` | every agency's settlements over a date range, filterable by agency, with the CSV export widened to match. `GET /api/v1/platform/delivery/settlements`                                                                   |
 
 **The switcher is a filter, not a gate.** Selecting an agency narrows any of
 these to that agency; leaving returns to the platform-wide view. The narrowing

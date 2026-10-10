@@ -1,6 +1,16 @@
 'use client';
 
-import { ShieldCheck, HelpCircle, X, Check, Ticket, ShoppingBag, Sparkles, Clock, AlertCircle } from 'lucide-react';
+import {
+  ShieldCheck,
+  HelpCircle,
+  X,
+  Check,
+  Ticket,
+  ShoppingBag,
+  Sparkles,
+  Clock,
+  AlertCircle,
+} from 'lucide-react';
 import React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -33,10 +43,16 @@ export function PageHeader({
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           {Icon && <Icon className="h-6 w-6 text-[var(--m-accent)] shrink-0" />}
-          <h1 className="text-xl lg:text-2xl font-black tracking-tight text-[var(--m-text)] leading-tight">{title}</h1>
+          <h1 className="text-xl lg:text-2xl font-black tracking-tight text-[var(--m-text)] leading-tight">
+            {title}
+          </h1>
           {badge}
         </div>
-        {description && <p className="text-xs text-[var(--m-muted)] font-medium max-w-3xl leading-relaxed">{description}</p>}
+        {description && (
+          <p className="text-xs text-[var(--m-muted)] font-medium max-w-3xl leading-relaxed">
+            {description}
+          </p>
+        )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </header>
@@ -94,10 +110,14 @@ export function MetricCard({
             {tag}
           </div>
         )}
-        <div className="text-xs font-bold text-[var(--m-text-2)] uppercase tracking-wider">{label}</div>
+        <div className="text-xs font-bold text-[var(--m-text-2)] uppercase tracking-wider">
+          {label}
+        </div>
       </div>
       <div className="mt-4 flex items-baseline justify-between gap-2">
-        <div className="text-3xl lg:text-4xl font-extrabold font-mono tracking-tight text-[var(--m-text)]">{value}</div>
+        <div className="text-3xl lg:text-4xl font-extrabold font-mono tracking-tight text-[var(--m-text)]">
+          {value}
+        </div>
         {change !== undefined && (
           <span
             className={cn(
@@ -184,29 +204,34 @@ interface ProofBadgeProps {
 
 export function ProofBadge({ outcome, verified = true, className }: ProofBadgeProps) {
   const norm = outcome.toLowerCase().replace(/_/g, ' ');
-  
+
   // Custom styling per outcome: Solid background fills with high-contrast text
   let outcomeIcon = <HelpCircle className="h-3.5 w-3.5 text-white" />;
-  let pillColorClass = "bg-zinc-700 text-white border-zinc-600";
-  
+  let pillColorClass = 'bg-zinc-700 text-white border-zinc-600';
+
   if (norm === 'pre saved' || norm === 'pre_saved') {
     outcomeIcon = <Check className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-emerald-600 text-white border-emerald-500 shadow-[0_2px_6px_rgba(16,185,129,0.3)]";
+    pillColorClass =
+      'bg-emerald-600 text-white border-emerald-500 shadow-[0_2px_6px_rgba(16,185,129,0.3)]';
   } else if (norm === 'ticket intent') {
     outcomeIcon = <Ticket className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-cyan-600 text-white border-cyan-500 shadow-[0_2px_6px_rgba(6,182,212,0.3)]";
+    pillColorClass =
+      'bg-cyan-600 text-white border-cyan-500 shadow-[0_2px_6px_rgba(6,182,212,0.3)]';
   } else if (norm === 'merch intent') {
     outcomeIcon = <ShoppingBag className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-amber-600 text-white border-amber-500 shadow-[0_2px_6px_rgba(245,158,11,0.3)]";
+    pillColorClass =
+      'bg-amber-600 text-white border-amber-500 shadow-[0_2px_6px_rgba(245,158,11,0.3)]';
   } else if (norm === 'vip interest') {
     outcomeIcon = <Sparkles className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-blue-600 text-white border-blue-500 shadow-[0_2px_6px_rgba(20,92,255,0.3)]";
+    pillColorClass =
+      'bg-blue-600 text-white border-blue-500 shadow-[0_2px_6px_rgba(20,92,255,0.3)]';
   } else if (norm === 'needs follow up') {
     outcomeIcon = <Clock className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-rose-600 text-white border-rose-500 shadow-[0_2px_6px_rgba(244,63,94,0.3)]";
+    pillColorClass =
+      'bg-rose-600 text-white border-rose-500 shadow-[0_2px_6px_rgba(244,63,94,0.3)]';
   } else if (norm === 'no action') {
     outcomeIcon = <AlertCircle className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-zinc-700 text-white border-zinc-600";
+    pillColorClass = 'bg-zinc-700 text-white border-zinc-600';
   }
 
   return (

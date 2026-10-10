@@ -158,7 +158,10 @@ async function main(): Promise<void> {
      * real bank accounts.
      */
     const tenants = tenantFilter
-      ? await prisma.tenant.findMany({ where: { id: tenantFilter }, select: { id: true, name: true } })
+      ? await prisma.tenant.findMany({
+          where: { id: tenantFilter },
+          select: { id: true, name: true },
+        })
       : await prisma.tenant.findMany({
           where: { status: 'ACTIVE' },
           select: { id: true, name: true },

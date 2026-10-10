@@ -13,7 +13,7 @@ rebuild.**
 `pipecat.services.fish.tts` already exists in the image — Dograh pins its own
 pipecat fork and that fork ships a complete `FishAudioTTSService`. The only
 thing missing is `ormsgpack`: `api/Dockerfile` installs pipecat with a fixed
-extras list that stops at `smallest`, so the `[fish]` extra (which is *only*
+extras list that stops at `smallest`, so the `[fish]` extra (which is _only_
 `ormsgpack>=1.7.0`) never lands.
 
 `msgpack==1.1.2` is already in `api/requirements.txt` and produces byte-identical
@@ -27,12 +27,12 @@ msgpack release ever diverges, that test fails rather than the dialer.
 
 ## Files
 
-| File | Role |
-| --- | --- |
-| `apply_fish_tts_patch.py` | Idempotent, dry-run-first patcher. Reads the upstream files out of the running container, applies anchored edits, `compile()`s the result, writes to the mount directory. |
-| `fish_msgpack_shim.py` | The `ormsgpack` → `msgpack` shim. Mounted as a new module; nothing upstream is replaced. |
-| `test_apply_fish_tts_patch.py` | Patcher, shim, and codec-equivalence tests. |
-| `conftest.py` | Registers the `requires_container` marker. |
+| File                           | Role                                                                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apply_fish_tts_patch.py`      | Idempotent, dry-run-first patcher. Reads the upstream files out of the running container, applies anchored edits, `compile()`s the result, writes to the mount directory. |
+| `fish_msgpack_shim.py`         | The `ormsgpack` → `msgpack` shim. Mounted as a new module; nothing upstream is replaced.                                                                                  |
+| `test_apply_fish_tts_patch.py` | Patcher, shim, and codec-equivalence tests.                                                                                                                               |
+| `conftest.py`                  | Registers the `requires_container` marker.                                                                                                                                |
 
 ## What gets patched
 
@@ -97,14 +97,14 @@ the orchestrator's 300s stuck-batch timer.
 
 In AI Voice → settings, set TTS provider to **Fish Audio**:
 
-| Field | Value |
-| --- | --- |
-| `api_key` | your Fish key |
-| `model` | `s2.1-pro-free` (default) |
-| `voice` | Fish `reference_id` — clone one at `/voice-studio` and copy the id |
-| `latency` | `balanced` |
-| `speed` / `volume` | `1.0` / `0` |
-| `normalize` | on |
+| Field              | Value                                                              |
+| ------------------ | ------------------------------------------------------------------ |
+| `api_key`          | your Fish key                                                      |
+| `model`            | `s2.1-pro-free` (default)                                          |
+| `voice`            | Fish `reference_id` — clone one at `/voice-studio` and copy the id |
+| `latency`          | `balanced`                                                         |
+| `speed` / `volume` | `1.0` / `0`                                                        |
+| `normalize`        | on                                                                 |
 
 ### On `s2.1-pro-free`
 
@@ -134,7 +134,7 @@ the LLM emits. Two consequences:
 
 Marker syntax is model-dependent: S2 family uses `[brackets]` with free-form
 descriptions; legacy S1 uses `(parentheses)` with a fixed tag set. Paralanguage
-effects — `(break)`, `(breath)`, `(sigh)` — use parentheses in *both*. The
+effects — `(break)`, `(breath)`, `(sigh)` — use parentheses in _both_. The
 Studio renders the correct syntax for whichever model is selected.
 
 **Worth knowing:** if the LLM emits a bracket marker while the TTS provider is

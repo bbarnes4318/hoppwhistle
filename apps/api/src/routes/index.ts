@@ -5973,78 +5973,79 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     '/api/v1/webhooks',
     { preHandler: [webhookAccess('webhooks:write')] },
     async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const tenantId = getActingTenantId(request);
+      const user = (request as AuthRequest).user;
+      const tenantId = getActingTenantId(request);
 
-    if (!tenantId) {
-      return sendTenantRefusal(request, reply);
-    }
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
 
-    const body = request.body;
+      const body = request.body;
 
-    if (!body.url || !body.url.trim()) {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'URL is required' } };
-    }
+      if (!body.url || !body.url.trim()) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'URL is required' } };
+      }
 
-    if (!body.events || !Array.isArray(body.events) || body.events.length === 0) {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
-    }
+      if (!body.events || !Array.isArray(body.events) || body.events.length === 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
+      }
 
-    // Validate URL format
-    try {
-      new URL(body.url);
-    } catch {
-      void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
-    }
+      // Validate URL format
+      try {
+        new URL(body.url);
+      } catch {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
+      }
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const { randomBytes } = await import('crypto');
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const { randomBytes } = await import('crypto');
 
-    // Generate webhook secret
-    const secret = randomBytes(32).toString('hex');
+      // Generate webhook secret
+      const secret = randomBytes(32).toString('hex');
 
-    const webhook = await prisma.webhook.create({
-      data: {
+      const webhook = await prisma.webhook.create({
+        data: {
+          tenantId,
+          url: body.url.trim(),
+          events: body.events,
+          secret,
+          status: body.status || 'ACTIVE',
+        },
+      });
+
+      // Audit log
+      const { auditCreate } = await import('../services/audit.js');
+      await auditCreate(
         tenantId,
-        url: body.url.trim(),
-        events: body.events,
-        secret,
-        status: body.status || 'ACTIVE',
-      },
-    });
+        'Webhook',
+        webhook.id,
+        {
+          url: webhook.url,
+          events: webhook.events,
+          status: webhook.status,
+        },
+        {
+          userId: user?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        }
+      );
 
-    // Audit log
-    const { auditCreate } = await import('../services/audit.js');
-    await auditCreate(
-      tenantId,
-      'Webhook',
-      webhook.id,
-      {
+      void reply.code(201);
+      return {
+        id: webhook.id,
+        tenantId: webhook.tenantId,
         url: webhook.url,
         events: webhook.events,
-        status: webhook.status,
-      },
-      {
-        userId: user?.userId,
-        ipAddress: request.ip,
-        requestId: request.id,
-      }
-    );
-
-    void reply.code(201);
-    return {
-      id: webhook.id,
-      tenantId: webhook.tenantId,
-      url: webhook.url,
-      events: webhook.events,
-      status: webhook.status.toLowerCase(),
-      createdAt: webhook.createdAt.toISOString(),
-      updatedAt: webhook.updatedAt.toISOString(),
-    };
-  });
+        status: webhook.status.toLowerCase(),
+        createdAt: webhook.createdAt.toISOString(),
+        updatedAt: webhook.updatedAt.toISOString(),
+      };
+    }
+  );
 
   fastify.get<{ Params: { webhookId: string } }>(
     '/api/v1/webhooks/:webhookId',
@@ -6095,74 +6096,75 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     '/api/v1/webhooks/:webhookId',
     { preHandler: [webhookAccess('webhooks:write')] },
     async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const tenantId = getActingTenantId(request);
+      const user = (request as AuthRequest).user;
+      const tenantId = getActingTenantId(request);
 
-    if (!tenantId) {
-      return sendTenantRefusal(request, reply);
-    }
-
-    const { webhookId } = request.params as { webhookId: string };
-    const body = request.body;
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-    const existingWebhook = await prisma.webhook.findFirst({
-      where: {
-        id: webhookId,
-        tenantId,
-      },
-    });
-
-    if (!existingWebhook) {
-      void reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (body.url !== undefined) {
-      try {
-        new URL(body.url);
-        updateData.url = body.url.trim();
-      } catch {
-        void reply.code(400);
-        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
       }
-    }
-    if (body.events !== undefined) {
-      if (!Array.isArray(body.events) || body.events.length === 0) {
-        void reply.code(400);
-        return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
+
+      const { webhookId } = request.params as { webhookId: string };
+      const body = request.body;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const existingWebhook = await prisma.webhook.findFirst({
+        where: {
+          id: webhookId,
+          tenantId,
+        },
+      });
+
+      if (!existingWebhook) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
       }
-      updateData.events = body.events;
+
+      const updateData: Record<string, unknown> = {};
+      if (body.url !== undefined) {
+        try {
+          new URL(body.url);
+          updateData.url = body.url.trim();
+        } catch {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
+        }
+      }
+      if (body.events !== undefined) {
+        if (!Array.isArray(body.events) || body.events.length === 0) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
+        }
+        updateData.events = body.events;
+      }
+      if (body.status !== undefined) {
+        updateData.status = body.status.toUpperCase();
+      }
+
+      const updatedWebhook = await prisma.webhook.update({
+        where: { id: webhookId },
+        data: updateData,
+      });
+
+      // Audit log
+      const { auditUpdate } = await import('../services/audit.js');
+      await auditUpdate(tenantId, 'Webhook', webhookId, existingWebhook, updatedWebhook, {
+        userId: user?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
+
+      return {
+        id: updatedWebhook.id,
+        tenantId: updatedWebhook.tenantId,
+        url: updatedWebhook.url,
+        events: updatedWebhook.events,
+        status: updatedWebhook.status.toLowerCase(),
+        lastTriggeredAt: updatedWebhook.lastTriggeredAt?.toISOString() || null,
+        createdAt: updatedWebhook.createdAt.toISOString(),
+        updatedAt: updatedWebhook.updatedAt.toISOString(),
+      };
     }
-    if (body.status !== undefined) {
-      updateData.status = body.status.toUpperCase();
-    }
-
-    const updatedWebhook = await prisma.webhook.update({
-      where: { id: webhookId },
-      data: updateData,
-    });
-
-    // Audit log
-    const { auditUpdate } = await import('../services/audit.js');
-    await auditUpdate(tenantId, 'Webhook', webhookId, existingWebhook, updatedWebhook, {
-      userId: user?.userId,
-      ipAddress: request.ip,
-      requestId: request.id,
-    });
-
-    return {
-      id: updatedWebhook.id,
-      tenantId: updatedWebhook.tenantId,
-      url: updatedWebhook.url,
-      events: updatedWebhook.events,
-      status: updatedWebhook.status.toLowerCase(),
-      lastTriggeredAt: updatedWebhook.lastTriggeredAt?.toISOString() || null,
-      createdAt: updatedWebhook.createdAt.toISOString(),
-      updatedAt: updatedWebhook.updatedAt.toISOString(),
-    };
-  });
+  );
 
   fastify.delete<{ Params: { webhookId: string } }>(
     '/api/v1/webhooks/:webhookId',
@@ -6606,7 +6608,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           return reply.code(400).send({
             error: {
               code: 'NOT_AGENCY_STAFF',
-              message: 'A buyer or publisher login cannot take the agency\'s calls',
+              message: "A buyer or publisher login cannot take the agency's calls",
             },
           });
         }

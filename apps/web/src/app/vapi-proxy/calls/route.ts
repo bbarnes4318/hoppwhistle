@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     let finalPhoneNumberId = body.phoneNumberId;
     if (finalPhoneNumberId && finalPhoneNumberId.startsWith('+')) {
       const pnRes = await fetch(`${VAPI_BASE}/phone-number`, {
-        headers: { Authorization: `Bearer ${VAPI_API_KEY}` }
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
       });
       if (pnRes.ok) {
         const phoneNumbers = await pnRes.json();
@@ -69,7 +69,11 @@ export async function POST(request: Request) {
       const text = await res.text();
       console.error('[Vapi Proxy] Vapi API Error Response:', text);
       let err;
-      try { err = JSON.parse(text); } catch (e) { err = { message: text }; }
+      try {
+        err = JSON.parse(text);
+      } catch (e) {
+        err = { message: text };
+      }
       throw new Error(err.message || `Vapi API error: ${res.status}`);
     }
     const data = await res.json();

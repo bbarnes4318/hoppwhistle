@@ -815,10 +815,7 @@ vi.mock('../secrets.js', () => ({
 // ────────────────────────────────────────────────────────────────────────────
 // Imports after Mocking
 // ────────────────────────────────────────────────────────────────────────────
-import {
-  internalKeyHeaders,
-  useTestInternalKey,
-} from '../../__tests__/helpers/internal-key.js';
+import { internalKeyHeaders, useTestInternalKey } from '../../__tests__/helpers/internal-key.js';
 import { registerAuthRoutes } from '../../routes/auth.js';
 import { registerDidRouteRoutes } from '../../routes/did-routes.js';
 import {

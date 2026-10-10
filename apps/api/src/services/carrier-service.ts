@@ -103,7 +103,7 @@ export class TwilioCarrierProvider implements CarrierProvider {
         `https://lookups.twilio.com/v1/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Type=carrier`,
         {
           headers: {
-            'Authorization': `Basic ${Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString('base64')}`,
+            Authorization: `Basic ${Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString('base64')}`,
           },
         }
       );
@@ -323,4 +323,3 @@ export class CarrierService {
 }
 
 export const carrierService = new CarrierService();
-

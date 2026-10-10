@@ -68,7 +68,9 @@ async function assignNumber(options: AssignOptions) {
   });
 
   if (!phoneNumber) {
-    throw new Error(`Number ${normalizedNumber} not found or not active for tenant ${options.tenantId}`);
+    throw new Error(
+      `Number ${normalizedNumber} not found or not active for tenant ${options.tenantId}`
+    );
   }
 
   // Assign using provisioning service
@@ -107,7 +109,9 @@ for (const arg of args) {
 }
 
 if (!options.tenantId || !options.campaignId || !options.number) {
-  console.error('Usage: tsx src/cli/numbers-assign.ts --tenant=t_123 --campaign=c_abc --number=+15551234567');
+  console.error(
+    'Usage: tsx src/cli/numbers-assign.ts --tenant=t_123 --campaign=c_abc --number=+15551234567'
+  );
   console.error('\nOptions:');
   console.error('  --tenant=ID              Tenant ID');
   console.error('  --campaign=ID            Campaign ID');
@@ -119,8 +123,7 @@ assignNumber(options as AssignOptions)
   .then(() => {
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('Assignment failed:', error);
     process.exit(1);
   });
-

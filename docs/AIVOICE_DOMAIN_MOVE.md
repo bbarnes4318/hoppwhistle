@@ -26,11 +26,11 @@ Dograh app, and the portal's API signs you into it by setting a cookie —
 That cookie handoff works only while the portal and the AI Voice app share one
 registrable domain. They used to:
 
-| | before | now |
-| --- | --- | --- |
-| portal | `hopwhistle.com` | **`agents.netenroll.com`** |
-| AI Voice app | `aivoice.hopwhistle.com` | `aivoice.hopwhistle.com` |
-| same registrable domain? | yes → cookie flows | **no → cookie dropped** |
+|                          | before                   | now                        |
+| ------------------------ | ------------------------ | -------------------------- |
+| portal                   | `hopwhistle.com`         | **`agents.netenroll.com`** |
+| AI Voice app             | `aivoice.hopwhistle.com` | `aivoice.hopwhistle.com`   |
+| same registrable domain? | yes → cookie flows       | **no → cookie dropped**    |
 
 When the portal moved to `agents.netenroll.com`, two independent browser rules
 started blocking the handoff, and neither is fixable with a configuration
@@ -60,14 +60,14 @@ change — `routes/aivoice.ts` already names the two settings it needs.
 **A redirect will not do.** Pointing `aivoice.netenroll.com` at
 `aivoice.hopwhistle.com` with a 301 looks like it works — the page loads — but
 the browser ends up on `hopwhistle.com` and the cookie is dropped exactly as
-before. The app has to be *served* on the netenroll hostname.
+before. The app has to be _served_ on the netenroll hostname.
 
 ### Who owns which half
 
-| | where | who |
-| --- | --- | --- |
-| DNS, TLS, the vhost, Dograh's own config | the server and the **dograh** repo | Dograh side |
-| `AIVOICE_URL` / `AIVOICE_COOKIE_DOMAIN` | `/opt/hopwhistle/.env` | this repo, step 4 |
+|                                          | where                              | who               |
+| ---------------------------------------- | ---------------------------------- | ----------------- |
+| DNS, TLS, the vhost, Dograh's own config | the server and the **dograh** repo | Dograh side       |
+| `AIVOICE_URL` / `AIVOICE_COOKIE_DOMAIN`  | `/opt/hopwhistle/.env`             | this repo, step 4 |
 
 ---
 
@@ -75,12 +75,12 @@ before. The app has to be *served* on the netenroll hostname.
 
 The record **already exists and points at the wrong machine**:
 
-| hostname | resolves to | |
-| --- | --- | --- |
-| `agents.netenroll.com` | `178.156.223.97` | the portal + Dograh box |
-| `aivoice.hopwhistle.com` | `178.156.223.97` | same box |
+| hostname                    | resolves to          |                                    |
+| --------------------------- | -------------------- | ---------------------------------- |
+| `agents.netenroll.com`      | `178.156.223.97`     | the portal + Dograh box            |
+| `aivoice.hopwhistle.com`    | `178.156.223.97`     | same box                           |
 | **`aivoice.netenroll.com`** | **`178.156.198.66`** | **the netenroll apex box — wrong** |
-| `netenroll.com` | `178.156.198.66` | |
+| `netenroll.com`             | `178.156.198.66`     |                                    |
 
 It is not a wildcard artifact: a random `*.netenroll.com` label returns
 NXDOMAIN, so this record was created explicitly.
@@ -241,7 +241,7 @@ cd /opt/dograh && ./remote_up.sh     # or: docker compose up -d --force-recreate
 still shows a login after everything above, check it, because a mismatched
 secret produces a token Dograh rejects without saying why.
 
-The cookie side is confirmed clean: Dograh only ever *reads*
+The cookie side is confirmed clean: Dograh only ever _reads_
 `dograh_auth_token`, and its single cookie write
 (`ui/src/app/api/auth/logout/route.ts`) sets `path: '/'` with no domain. Nothing
 pins a cookie domain.
@@ -253,7 +253,7 @@ Open `https://agents.netenroll.com/voice-agents`.
 **Why that address and not `aivoice.netenroll.com` directly.** Both work, and
 they are not the same thing. `aivoice.netenroll.com` is the AI Voice app on its
 own — it will ask you to log in, because nothing has signed you in. The portal
-page at `/voice-agents` is the one that *mints the session* and then shows the
+page at `/voice-agents` is the one that _mints the session_ and then shows the
 same app in a frame, already signed in. So `/voice-agents` is the thing this
 whole document is about, and the thing to test. Going straight to
 `aivoice.netenroll.com` and being asked for a password is not a failure.

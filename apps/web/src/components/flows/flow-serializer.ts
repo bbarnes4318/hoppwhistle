@@ -87,7 +87,8 @@ export class FlowSerializer {
           maxDigits: (config.maxDigits as number) || undefined,
           finishOnKey: (config.finishOnKey as string) || undefined,
           choices,
-          default: outgoingEdges.find(e => !e.condition)?.target || (config.default as string | undefined),
+          default:
+            outgoingEdges.find(e => !e.condition)?.target || (config.default as string | undefined),
           ...(next ? { next } : {}),
         };
       }
@@ -389,10 +390,7 @@ export class FlowSerializer {
     return baseNode;
   }
 
-  private createEdgesFromFlowNode(
-    flowNode: Flow['nodes'][number],
-    edges: Edge[]
-  ): void {
+  private createEdgesFromFlowNode(flowNode: Flow['nodes'][number], edges: Edge[]): void {
     switch (flowNode.type) {
       case 'ivr':
         // Create edges for IVR choices

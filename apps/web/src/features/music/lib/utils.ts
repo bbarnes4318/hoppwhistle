@@ -100,4 +100,3 @@ export function formatChange(change: number): { label: string; positive: boolean
   const label = `${absVal.toFixed(1)}%`;
   return { label, positive };
 }
-

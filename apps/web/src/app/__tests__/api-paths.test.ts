@@ -164,7 +164,7 @@ describe('apiClient paths', () => {
       'These ask for a path the server does not serve. The client prepends ' +
         `window.location.origin, so the request never reaches the API — the ` +
         'Next.js server 404s it and the API log stays clean. Served prefixes: ' +
-        SERVED_PREFIXES.join(', '),
+        SERVED_PREFIXES.join(', ')
     ).toEqual([]);
   });
 

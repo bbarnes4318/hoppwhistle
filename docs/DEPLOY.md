@@ -59,7 +59,7 @@ psql "$DATABASE_URL" -tAc \
 If that prints `f`, something ran the Prisma CLI against production. Stop and
 work out what before deploying anything.
 
-### NEXT_PUBLIC_* is welded in at build time
+### NEXT*PUBLIC*\* is welded in at build time
 
 `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` are inlined by Next.js when the
 web image is **built**. Setting them on the running container does nothing; the
@@ -196,7 +196,7 @@ sudo nginx -t && sudo systemctl reload nginx
 (Take that `.bak` yourself before the `cp` above. `sudo cp
 /etc/nginx/sites-available/hopwhistle{,.bak}`.)
 
-### Step 2.2 — Rebuild with the new NEXT_PUBLIC_* values
+### Step 2.2 — Rebuild with the new NEXT*PUBLIC*\* values
 
 The compose defaults already carry them, so a plain rebuild is enough. Passing
 them explicitly costs nothing and makes the shell history say what was built:
@@ -321,12 +321,12 @@ place.
 
 The script checks five things, and names the one that failed:
 
-| Failure | What it means |
-| --- | --- |
-| `did not upgrade: … 400` | nginx is not forwarding `Upgrade`/`Connection` to `127.0.0.1:8083`. |
-| `fell through to the web app` | `location /ws` is missing or misspelled, so `location /` served the request. |
-| `did not upgrade: … 404` | no `/ws` block matched — check `server_name` and the path. |
-| `Sec-WebSocket-Accept does not match` | something answered `101` that is not the FreeSWITCH ws binding. |
+| Failure                                     | What it means                                                                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `did not upgrade: … 400`                    | nginx is not forwarding `Upgrade`/`Connection` to `127.0.0.1:8083`.                                                                |
+| `fell through to the web app`               | `location /ws` is missing or misspelled, so `location /` served the request.                                                       |
+| `did not upgrade: … 404`                    | no `/ws` block matched — check `server_name` and the path.                                                                         |
+| `Sec-WebSocket-Accept does not match`       | something answered `101` that is not the FreeSWITCH ws binding.                                                                    |
 | ``did not negotiate the `sip` subprotocol`` | `proxy_set_header Sec-WebSocket-Protocol sip;` is missing. FreeSWITCH drops the socket right after a handshake that looks healthy. |
 
 It takes an optional URL, so the same check covers the old host while it is
@@ -355,7 +355,7 @@ closing the pipe hides its status anyway. That is what
 
 The committed server block is asserted against the hopwhistle one by
 `apps/api/src/__tests__/ws-proxy.test.ts`, so the two cannot drift in CI. That
-test covers what is *in the repo*; this step covers what is *on the box*.
+test covers what is _in the repo_; this step covers what is _on the box_.
 
 **On the URL the softphone actually dials.** It is derived, not configured:
 `phone-provider.tsx` reads `window.location.hostname` and builds
@@ -454,7 +454,7 @@ grep -c 'hopwhistle.com' apps/freeswitch/conf/directory/default.xml
 **Expected output:** `2` — the `<alias>` entries are unchanged.
 
 **Reversal:** n/a — this step asserts, it does not change anything. If the realm
-*has* moved, revert the commit that moved it before anything else; every agent
+_has_ moved, revert the commit that moved it before anything else; every agent
 is already unable to register.
 
 ### Step 2.8 — Verify the redirect from the old host
@@ -620,32 +620,32 @@ api web`.
 ### Setup, once
 
 The workflow SSHes from a GitHub runner to the production box. That needs a
-keypair, and the two halves go in *opposite* places — this is the part that is
+keypair, and the two halves go in _opposite_ places — this is the part that is
 easy to get backwards:
 
-| Half | Where | Why |
-| --- | --- | --- |
-| **Public** (`.pub`) | `~/.ssh/authorized_keys` **on the production host** | so the host accepts the connection |
-| **Private** | GitHub → Settings → Secrets and variables → **Actions** → `DEPLOY_SSH_KEY` | so the runner can make it |
+| Half                | Where                                                                      | Why                                |
+| ------------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| **Public** (`.pub`) | `~/.ssh/authorized_keys` **on the production host**                        | so the host accepts the connection |
+| **Private**         | GitHub → Settings → Secrets and variables → **Actions** → `DEPLOY_SSH_KEY` | so the runner can make it          |
 
-A GitHub **deploy key** is not this. Deploy keys grant access *to the
-repository*; they have nothing to do with reaching your server.
+A GitHub **deploy key** is not this. Deploy keys grant access _to the
+repository_; they have nothing to do with reaching your server.
 
 **Secrets** (Settings → Secrets and variables → Actions → Secrets):
 
-| Name | Value |
-| --- | --- |
-| `DEPLOY_SSH_KEY` | the **private** key, whole file including the BEGIN/END lines |
-| `DEPLOY_HOST` | the production host or IP |
-| `DEPLOY_USER` | the SSH user that owns the checkout |
-| `DEPLOY_KNOWN_HOSTS` | *optional but recommended* — output of `ssh-keyscan -H <host>`, captured once from a machine you trust. Without it the workflow accepts whatever answers on that address. |
+| Name                 | Value                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEPLOY_SSH_KEY`     | the **private** key, whole file including the BEGIN/END lines                                                                                                             |
+| `DEPLOY_HOST`        | the production host or IP                                                                                                                                                 |
+| `DEPLOY_USER`        | the SSH user that owns the checkout                                                                                                                                       |
+| `DEPLOY_KNOWN_HOSTS` | _optional but recommended_ — output of `ssh-keyscan -H <host>`, captured once from a machine you trust. Without it the workflow accepts whatever answers on that address. |
 
 **Variables** (same page → Variables):
 
-| Name | Value |
-| --- | --- |
+| Name                    | Value                                                                                                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PLATFORM_ADMIN_EMAILS` | comma-separated NetEnroll staff addresses. Without it only the addresses named in `platform-admins.ts` (`joel.vasquez@outlook.com`, `hallken9@gmail.com`) are provisioned. |
-| `DEPLOY_PATH` | only if the checkout is not at `/opt/hopwhistle` |
+| `DEPLOY_PATH`           | only if the checkout is not at `/opt/hopwhistle`                                                                                                                           |
 
 Generate the keypair on a machine you trust, never in CI:
 

@@ -148,7 +148,10 @@ export const ARPABET_REFERENCE_URL =
  */
 export function stripMarkers(text: string): string {
   return text
-    .replace(new RegExp(`${escapeRegex(PHONEME_OPEN)}[\\s\\S]*?${escapeRegex(PHONEME_CLOSE)}`, 'g'), '')
+    .replace(
+      new RegExp(`${escapeRegex(PHONEME_OPEN)}[\\s\\S]*?${escapeRegex(PHONEME_CLOSE)}`, 'g'),
+      ''
+    )
     .replace(/\[[^\]\n]{1,60}\]/g, '')
     .replace(/\((?:break|long-break|breath|sigh|laugh|cough|lip-smacking)\)/g, '')
     .replace(/\s+/g, ' ')

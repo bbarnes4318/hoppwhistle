@@ -60,7 +60,9 @@ describe.skipIf(!gate.available)('complianceService.checkOverride', () => {
   });
 
   it('applies an override that names no call to every call to the number', async () => {
-    expect((await complianceService.checkOverride(tenantId, openNumber, 'call-x')).hasOverride).toBe(true);
+    expect(
+      (await complianceService.checkOverride(tenantId, openNumber, 'call-x')).hasOverride
+    ).toBe(true);
     expect((await complianceService.checkOverride(tenantId, openNumber)).hasOverride).toBe(true);
   });
 

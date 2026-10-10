@@ -164,7 +164,9 @@ export default function MusicConsolePage() {
             <div className="m-metric-tile-value">{networkSummary.activeStations}</div>
             <Sparkline data={[18, 19, 21, 20, 22, 24, 25]} color="var(--m-accent)" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Active Station DIDs</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">
+            Active Station DIDs
+          </div>
         </div>
 
         {/* KPI 2: Fan Interactions */}
@@ -200,7 +202,9 @@ export default function MusicConsolePage() {
             </div>
             <Sparkline data={verifiedActionsSeries} color="#10b981" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Verified Actions Logged</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">
+            Verified Actions Logged
+          </div>
         </div>
 
         {/* KPI 4: Sponsor Revenue */}
@@ -217,7 +221,9 @@ export default function MusicConsolePage() {
             </div>
             <Sparkline data={sponsorRevenueSeries} color="#dfc38c" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Total Sponsor Revenue</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">
+            Total Sponsor Revenue
+          </div>
         </div>
 
         {/* KPI 5: Artist Payout */}
@@ -340,7 +346,9 @@ export default function MusicConsolePage() {
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Answer Rate</span>
-                <span className="font-bold text-[var(--m-text)] font-mono">{livePulse.answerRate}%</span>
+                <span className="font-bold text-[var(--m-text)] font-mono">
+                  {livePulse.answerRate}%
+                </span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Verified Action Rate</span>

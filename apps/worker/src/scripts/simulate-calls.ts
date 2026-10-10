@@ -9,15 +9,17 @@ import { Redis } from 'ioredis';
 
 async function simulateCalls() {
   const args = process.argv.slice(2);
-  const tenantIdArg = args.find((arg) => arg.startsWith('--tenant-id='));
-  const billingAccountIdArg = args.find((arg) => arg.startsWith('--billing-account-id='));
-  const countArg = args.find((arg) => arg.startsWith('--count='));
+  const tenantIdArg = args.find(arg => arg.startsWith('--tenant-id='));
+  const billingAccountIdArg = args.find(arg => arg.startsWith('--billing-account-id='));
+  const countArg = args.find(arg => arg.startsWith('--count='));
 
   const tenantId = tenantIdArg?.split('=')[1] || process.env.DEFAULT_TENANT_ID || 'test-tenant';
   const billingAccountId = billingAccountIdArg?.split('=')[1] || 'test-billing-account';
   const count = countArg ? parseInt(countArg.split('=')[1], 10) : 100;
 
-  console.log(`Simulating ${count} calls for tenant ${tenantId} (Billing Account: ${billingAccountId})...`);
+  console.log(
+    `Simulating ${count} calls for tenant ${tenantId} (Billing Account: ${billingAccountId})...`
+  );
 
   const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -45,14 +47,7 @@ async function simulateCalls() {
     };
 
     // Publish to Redis stream
-    await redis.xadd(
-      'events:stream',
-      '*',
-      'channel',
-      'call.*',
-      'payload',
-      JSON.stringify(event)
-    );
+    await redis.xadd('events:stream', '*', 'channel', 'call.*', 'payload', JSON.stringify(event));
 
     // Also publish to pub/sub
     await redis.publish('call.completed', JSON.stringify(event));
@@ -70,8 +65,7 @@ async function simulateCalls() {
   await redis.quit();
 }
 
-simulateCalls().catch((error) => {
+simulateCalls().catch(error => {
   console.error('Error:', error);
   process.exit(1);
 });
-

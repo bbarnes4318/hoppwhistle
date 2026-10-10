@@ -1,7 +1,9 @@
 const https = require('https');
 
 // Step 1: Reset SignalWire SIP endpoint password
-const SW_AUTH = Buffer.from('01a8aa68-cc95-492e-b9d8-605e2b3e74f6:PTe87f4727416c25cec62281bb1cc2ed43a58434515198d0b8').toString('base64');
+const SW_AUTH = Buffer.from(
+  '01a8aa68-cc95-492e-b9d8-605e2b3e74f6:PTe87f4727416c25cec62281bb1cc2ed43a58434515198d0b8'
+).toString('base64');
 const SIP_ENDPOINT_ID = '6f70b224-0bf8-4908-b955-3b51f740d98c';
 const NEW_PASSWORD = 'Hopwhistle2026!';
 
@@ -17,18 +19,21 @@ function updateSignalWireEndpoint() {
       path: `/api/relay/rest/endpoints/sip/${SIP_ENDPOINT_ID}`,
       method: 'PUT',
       headers: {
-        'Authorization': `Basic ${SW_AUTH}`,
+        Authorization: `Basic ${SW_AUTH}`,
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      }
+        'Content-Length': Buffer.byteLength(data),
+      },
     };
-    const req = https.request(opts, (res) => {
+    const req = https.request(opts, res => {
       let body = '';
-      res.on('data', (c) => body += c);
+      res.on('data', c => (body += c));
       res.on('end', () => {
         console.log('[SignalWire] Update SIP endpoint password:', res.statusCode);
         if (res.statusCode >= 200 && res.statusCode < 300) resolve();
-        else { console.log(body); reject(new Error('SW update failed')); }
+        else {
+          console.log(body);
+          reject(new Error('SW update failed'));
+        }
       });
     });
     req.write(data);
@@ -41,22 +46,22 @@ function updateVapiCredential() {
     const data = JSON.stringify({
       outboundAuthenticationPlan: {
         authUsername: 'fe',
-        authPassword: NEW_PASSWORD
-      }
+        authPassword: NEW_PASSWORD,
+      },
     });
     const opts = {
       hostname: 'api.vapi.ai',
       path: `/credential/${VAPI_CREDENTIAL_ID}`,
       method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${VAPI_KEY}`,
+        Authorization: `Bearer ${VAPI_KEY}`,
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      }
+        'Content-Length': Buffer.byteLength(data),
+      },
     };
-    const req = https.request(opts, (res) => {
+    const req = https.request(opts, res => {
       let body = '';
-      res.on('data', (c) => body += c);
+      res.on('data', c => (body += c));
       res.on('end', () => {
         console.log('[Vapi] Update credential password:', res.statusCode);
         console.log(body);

@@ -237,7 +237,9 @@ async function main() {
     line(`  database   ${identity.database}`);
     line(`  host       ${identity.host}`);
     line(`  size       ${identity.sizePretty}`);
-    line(`  migrations ${identity.hasPrismaMigrations ? '_prisma_migrations present' : 'no _prisma_migrations table'}`);
+    line(
+      `  migrations ${identity.hasPrismaMigrations ? '_prisma_migrations present' : 'no _prisma_migrations table'}`
+    );
     line();
 
     line('  TABLE            ROWS        EARLIEST      LATEST');

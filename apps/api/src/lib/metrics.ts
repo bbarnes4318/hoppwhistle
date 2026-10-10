@@ -150,4 +150,3 @@ export const redisOperationDuration = new Histogram({
   buckets: [0.001, 0.005, 0.01, 0.05, 0.1],
   registers: [register],
 });
-

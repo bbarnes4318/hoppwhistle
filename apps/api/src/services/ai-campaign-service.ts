@@ -992,7 +992,17 @@ function normalizePhoneNumber(phone: string): string | null {
 // Disposition & Classification Helpers (Centralized)
 // ============================================================================
 
-export function classifyCall(call: { status: string; outcome: string | null }): 'HUMAN_REACHED' | 'ASSISTANT_ENDED' | 'VOICEMAIL' | 'NO_ANSWER' | 'BUSY' | 'FAILED' | 'UNKNOWN' {
+export function classifyCall(call: {
+  status: string;
+  outcome: string | null;
+}):
+  | 'HUMAN_REACHED'
+  | 'ASSISTANT_ENDED'
+  | 'VOICEMAIL'
+  | 'NO_ANSWER'
+  | 'BUSY'
+  | 'FAILED'
+  | 'UNKNOWN' {
   const outcome = call.outcome;
   const status = call.status;
 
@@ -1017,12 +1027,17 @@ export function classifyCall(call: { status: string; outcome: string | null }): 
   if (status === 'BUSY' || outcome === 'customer-busy' || outcome === 'busy') {
     return 'BUSY';
   }
-  if (status === 'FAILED' || outcome === 'failed-to-connect' || outcome === 'failed' || outcome === 'error' || outcome === 'silence-timeout') {
+  if (
+    status === 'FAILED' ||
+    outcome === 'failed-to-connect' ||
+    outcome === 'failed' ||
+    outcome === 'error' ||
+    outcome === 'silence-timeout'
+  ) {
     return 'FAILED';
   }
   return 'UNKNOWN';
 }
-
 
 // ============================================================================
 // Restart Unreached Campaign Action
@@ -1092,8 +1107,12 @@ export async function getRestartUnreachedPreview(
     }
 
     const isWrongNumber =
-      (contact.metadata && typeof contact.metadata === 'object' && (contact.metadata as { wrongNumber?: unknown }).wrongNumber === true) ||
-      contact.calls.some(c => c.outcome && ['wrong-number', 'wrong_number', 'WRONG_NUMBER'].includes(c.outcome));
+      (contact.metadata &&
+        typeof contact.metadata === 'object' &&
+        (contact.metadata as { wrongNumber?: unknown }).wrongNumber === true) ||
+      contact.calls.some(
+        c => c.outcome && ['wrong-number', 'wrong_number', 'WRONG_NUMBER'].includes(c.outcome)
+      );
     if (isWrongNumber) {
       preview.wrongNumberExcluded++;
       continue;
@@ -1156,152 +1175,163 @@ export async function executeRestartUnreached(
 ): Promise<RestartUnreachedPreview> {
   const prisma = getPrismaClient();
 
-  return await prisma.$transaction(async (tx) => {
-    // No "archivedAt": AI campaigns have never had one. The column is not on
-    // ai_campaigns, the field is not on any model in the Prisma schema, and
-    // AICampaignStatus has no ARCHIVED member -- archiving an AI campaign is
-    // not a feature that exists. Selecting it made this whole transaction fail
-    // with `column "archivedAt" does not exist`, so POST
-    // /api/v1/ai-campaigns/:id/restart-unreached returned 400 on every call.
-    // The guard below it could never have fired, because nothing ever set it.
-    // The id is compared as text, not cast to ::uuid -- see the note at the top
-    // of this file. That cast was the second of the two reasons this endpoint
-    // could never succeed, hidden behind the archivedAt error above.
-    const campaigns = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+  return await prisma.$transaction(
+    async tx => {
+      // No "archivedAt": AI campaigns have never had one. The column is not on
+      // ai_campaigns, the field is not on any model in the Prisma schema, and
+      // AICampaignStatus has no ARCHIVED member -- archiving an AI campaign is
+      // not a feature that exists. Selecting it made this whole transaction fail
+      // with `column "archivedAt" does not exist`, so POST
+      // /api/v1/ai-campaigns/:id/restart-unreached returned 400 on every call.
+      // The guard below it could never have fired, because nothing ever set it.
+      // The id is compared as text, not cast to ::uuid -- see the note at the top
+      // of this file. That cast was the second of the two reasons this endpoint
+      // could never succeed, hidden behind the archivedAt error above.
+      const campaigns = await tx.$queryRaw<Array<{ id: string; status: string }>>`
       SELECT id, status FROM ai_campaigns 
       WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
       FOR UPDATE
     `;
-    if (campaigns.length === 0) {
-      throw new Error('Campaign not found or unauthorized');
-    }
-    const campaign = campaigns[0];
-    if (campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED') {
-      throw new Error('Campaign must be PAUSED or COMPLETED to restart');
-    }
+      if (campaigns.length === 0) {
+        throw new Error('Campaign not found or unauthorized');
+      }
+      const campaign = campaigns[0];
+      if (campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED') {
+        throw new Error('Campaign must be PAUSED or COMPLETED to restart');
+      }
 
-    const contacts = await tx.aICampaignContact.findMany({
-      where: { campaignId },
-      include: {
-        calls: {
-          orderBy: { startedAt: 'desc' },
+      const contacts = await tx.aICampaignContact.findMany({
+        where: { campaignId },
+        include: {
+          calls: {
+            orderBy: { startedAt: 'desc' },
+          },
         },
-      },
-    });
+      });
 
-    const { complianceService } = await import('./compliance-service.js');
-    const eligibleContactIds: string[] = [];
+      const { complianceService } = await import('./compliance-service.js');
+      const eligibleContactIds: string[] = [];
 
-    const preview: RestartUnreachedPreview = {
-      totalContacts: contacts.length,
-      humanReachedExcluded: 0,
-      assistantEndedExcluded: 0,
-      unknownExcluded: 0,
-      dncExcluded: 0,
-      wrongNumberExcluded: 0,
-      activeCallExcluded: 0,
-      neverAttemptedEligible: 0,
-      noAnswerEligible: 0,
-      busyEligible: 0,
-      voicemailEligible: 0,
-      failedOrSilenceEligible: 0,
-      totalEligible: 0,
-    };
+      const preview: RestartUnreachedPreview = {
+        totalContacts: contacts.length,
+        humanReachedExcluded: 0,
+        assistantEndedExcluded: 0,
+        unknownExcluded: 0,
+        dncExcluded: 0,
+        wrongNumberExcluded: 0,
+        activeCallExcluded: 0,
+        neverAttemptedEligible: 0,
+        noAnswerEligible: 0,
+        busyEligible: 0,
+        voicemailEligible: 0,
+        failedOrSilenceEligible: 0,
+        totalEligible: 0,
+      };
 
-    for (const contact of contacts) {
-      const dncResult = await complianceService.checkDnc(tenantId, contact.phoneNumber, campaignId, tx);
-      if (dncResult.blocked || contact.status === 'SKIPPED') {
-        preview.dncExcluded++;
-        continue;
-      }
+      for (const contact of contacts) {
+        const dncResult = await complianceService.checkDnc(
+          tenantId,
+          contact.phoneNumber,
+          campaignId,
+          tx
+        );
+        if (dncResult.blocked || contact.status === 'SKIPPED') {
+          preview.dncExcluded++;
+          continue;
+        }
 
-      const isWrongNumber =
-        (contact.metadata && typeof contact.metadata === 'object' && (contact.metadata as { wrongNumber?: unknown }).wrongNumber === true) ||
-        contact.calls.some(c => c.outcome && ['wrong-number', 'wrong_number', 'WRONG_NUMBER'].includes(c.outcome));
-      if (isWrongNumber) {
-        preview.wrongNumberExcluded++;
-        continue;
-      }
+        const isWrongNumber =
+          (contact.metadata &&
+            typeof contact.metadata === 'object' &&
+            (contact.metadata as { wrongNumber?: unknown }).wrongNumber === true) ||
+          contact.calls.some(
+            c => c.outcome && ['wrong-number', 'wrong_number', 'WRONG_NUMBER'].includes(c.outcome)
+          );
+        if (isWrongNumber) {
+          preview.wrongNumberExcluded++;
+          continue;
+        }
 
-      const hasActiveCall = contact.calls.some(c =>
-        ['QUEUED', 'RINGING', 'IN_PROGRESS'].includes(c.status)
-      );
-      if (hasActiveCall) {
-        preview.activeCallExcluded++;
-        continue;
-      }
+        const hasActiveCall = contact.calls.some(c =>
+          ['QUEUED', 'RINGING', 'IN_PROGRESS'].includes(c.status)
+        );
+        if (hasActiveCall) {
+          preview.activeCallExcluded++;
+          continue;
+        }
 
-      const hasHumanCall = contact.calls.some(c => classifyCall(c) === 'HUMAN_REACHED');
-      if (hasHumanCall) {
-        preview.humanReachedExcluded++;
-        continue;
-      }
+        const hasHumanCall = contact.calls.some(c => classifyCall(c) === 'HUMAN_REACHED');
+        if (hasHumanCall) {
+          preview.humanReachedExcluded++;
+          continue;
+        }
 
-      const hasAssistantEndedCall = contact.calls.some(c => classifyCall(c) === 'ASSISTANT_ENDED');
-      if (hasAssistantEndedCall) {
-        preview.assistantEndedExcluded++;
-        continue;
-      }
+        const hasAssistantEndedCall = contact.calls.some(
+          c => classifyCall(c) === 'ASSISTANT_ENDED'
+        );
+        if (hasAssistantEndedCall) {
+          preview.assistantEndedExcluded++;
+          continue;
+        }
 
-      const hasAmbiguousCall = contact.calls.some(c => classifyCall(c) === 'UNKNOWN');
-      if (hasAmbiguousCall) {
-        preview.unknownExcluded++;
-        continue;
-      }
+        const hasAmbiguousCall = contact.calls.some(c => classifyCall(c) === 'UNKNOWN');
+        if (hasAmbiguousCall) {
+          preview.unknownExcluded++;
+          continue;
+        }
 
-
-      let isEligible = false;
-      if (contact.calls.length === 0) {
-        preview.neverAttemptedEligible++;
-        preview.totalEligible++;
-        isEligible = true;
-      } else {
-        const latestCall = contact.calls[0];
-        const classification = classifyCall(latestCall);
-        if (classification === 'VOICEMAIL') {
-          preview.voicemailEligible++;
+        let isEligible = false;
+        if (contact.calls.length === 0) {
+          preview.neverAttemptedEligible++;
           preview.totalEligible++;
           isEligible = true;
-        } else if (classification === 'NO_ANSWER') {
-          preview.noAnswerEligible++;
-          preview.totalEligible++;
-          isEligible = true;
-        } else if (classification === 'BUSY') {
-          preview.busyEligible++;
-          preview.totalEligible++;
-          isEligible = true;
-        } else if (classification === 'FAILED') {
-          preview.failedOrSilenceEligible++;
-          preview.totalEligible++;
-          isEligible = true;
+        } else {
+          const latestCall = contact.calls[0];
+          const classification = classifyCall(latestCall);
+          if (classification === 'VOICEMAIL') {
+            preview.voicemailEligible++;
+            preview.totalEligible++;
+            isEligible = true;
+          } else if (classification === 'NO_ANSWER') {
+            preview.noAnswerEligible++;
+            preview.totalEligible++;
+            isEligible = true;
+          } else if (classification === 'BUSY') {
+            preview.busyEligible++;
+            preview.totalEligible++;
+            isEligible = true;
+          } else if (classification === 'FAILED') {
+            preview.failedOrSilenceEligible++;
+            preview.totalEligible++;
+            isEligible = true;
+          }
+        }
+
+        if (isEligible) {
+          eligibleContactIds.push(contact.id);
         }
       }
 
-      if (isEligible) {
-        eligibleContactIds.push(contact.id);
+      if (eligibleContactIds.length > 0) {
+        await tx.aICampaignContact.updateMany({
+          where: {
+            id: { in: eligibleContactIds },
+          },
+          data: {
+            status: 'PENDING',
+          },
+        });
       }
 
-    }
-
-    if (eligibleContactIds.length > 0) {
-      await tx.aICampaignContact.updateMany({
-        where: {
-          id: { in: eligibleContactIds },
-        },
-        data: {
-          status: 'PENDING',
-        },
+      await tx.aICampaign.update({
+        where: { id: campaignId },
+        data: { status: 'READY' },
       });
+
+      return preview;
+    },
+    {
+      timeout: 10000,
     }
-
-    await tx.aICampaign.update({
-      where: { id: campaignId },
-      data: { status: 'READY' },
-    });
-
-    return preview;
-  }, {
-    timeout: 10000
-  });
+  );
 }
-

@@ -8,4 +8,3 @@ console.log('🚀 Media service starting...');
 export const processMedia = async () => {
   // Add your media processing logic here
 };
-

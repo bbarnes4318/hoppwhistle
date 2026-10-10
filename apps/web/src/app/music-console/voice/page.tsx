@@ -113,7 +113,10 @@ function getOutcomeBadge(reason?: string) {
     case 'customer-ended-call':
       return { label: 'Completed', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     case 'customer-did-not-answer':
-      return { label: 'No Answer', cls: 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]' };
+      return {
+        label: 'No Answer',
+        cls: 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]',
+      };
     case 'customer-busy':
       return { label: 'Busy Retry', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     case 'silence-timed-out':
@@ -145,7 +148,8 @@ function getRpsOutcome(reason?: string) {
     case 'voicemail':
       return { label: 'Voicemail / Delivered', color: 'text-indigo-600' };
     default:
-      if (reason.includes('error')) return { label: 'Failed Connection / Retry', color: 'text-red-600' };
+      if (reason.includes('error'))
+        return { label: 'Failed Connection / Retry', color: 'text-red-600' };
       return { label: 'Stream Ended', color: 'text-[var(--m-text-2)]' };
   }
 }
@@ -153,7 +157,10 @@ function getRpsOutcome(reason?: string) {
 function getCallDuration(call: VoiceInteraction): number {
   if (typeof call.duration === 'number' && call.duration > 0) return Math.round(call.duration);
   if (call.startedAt && call.endedAt) {
-    return Math.max(0, Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
+    return Math.max(
+      0,
+      Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+    );
   }
   return 0;
 }
@@ -188,10 +195,10 @@ export default function MusicVoicePage() {
 
   const [selectedDIDs, setSelectedDIDs] = useState<string[]>(AVAILABLE_DIDS);
   const [contacts, setContacts] = useState<string[]>([]);
-  
+
   // Custom interactive selectors
   const [selectedCampaign, setSelectedCampaign] = useState('demo');
-  
+
   // Compliance checklists
   const [compliance, setCompliance] = useState({
     optIn: false,
@@ -208,7 +215,7 @@ export default function MusicVoicePage() {
     errors: 0,
   });
   const [dispatching, setDispatching] = useState(false);
-  
+
   const cancelRef = useRef(false);
   const pauseRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,7 +234,7 @@ export default function MusicVoicePage() {
   const getAuthHeaders = useCallback(() => {
     const token = localStorage.getItem('token') || '';
     return {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
   }, []);
@@ -268,21 +275,24 @@ export default function MusicVoicePage() {
   }, [toast, getAuthHeaders]);
 
   // ─── Fetch calls ───
-  const fetchInteractions = useCallback(async (agentId: string) => {
-    try {
-      setRefreshing(true);
-      const res = await fetch(`/api/v1/music-console/voice-agents/${agentId}/calls?limit=100`, {
-        headers: getAuthHeaders(),
-      });
-      if (!res.ok) throw new Error('Failed to fetch interactions');
-      const data = await res.json();
-      setInteractions(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [getAuthHeaders]);
+  const fetchInteractions = useCallback(
+    async (agentId: string) => {
+      try {
+        setRefreshing(true);
+        const res = await fetch(`/api/v1/music-console/voice-agents/${agentId}/calls?limit=100`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) throw new Error('Failed to fetch interactions');
+        const data = await res.json();
+        setInteractions(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [getAuthHeaders]
+  );
 
   useEffect(() => {
     void fetchAgents();
@@ -318,7 +328,7 @@ export default function MusicVoicePage() {
       interactions
         .filter(c => getCallDuration(c) > 0)
         .reduce((sum, c) => sum + getCallDuration(c), 0) /
-        Math.max(1, interactions.filter(c => getCallDuration(c) > 0).length),
+      Math.max(1, interactions.filter(c => getCallDuration(c) > 0).length),
   };
 
   // ─── Handle file upload ───
@@ -338,11 +348,11 @@ export default function MusicVoicePage() {
           return null;
         })
         .filter((n): n is string => n !== null);
-      
+
       setContacts(parsedNumbers);
-      toast({ 
-        title: 'Contacts Loaded', 
-        description: `${parsedNumbers.length} fan phone numbers parsed and ready` 
+      toast({
+        title: 'Contacts Loaded',
+        description: `${parsedNumbers.length} fan phone numbers parsed and ready`,
       });
     };
     reader.readAsText(file);
@@ -421,84 +431,108 @@ export default function MusicVoicePage() {
   };
 
   // ─── Dispatch engine — fire-and-backoff ───
-  const dispatchCampaign = useCallback(async (contactList: string[], agentId: string) => {
-    setDispatching(true);
-    cancelRef.current = false;
-    pauseRef.current = false;
-    let dispatched = 0;
-    let errors = 0;
-    const activeDIDs = selectedDIDs.length > 0 ? selectedDIDs : AVAILABLE_DIDS;
+  const dispatchCampaign = useCallback(
+    async (contactList: string[], agentId: string) => {
+      setDispatching(true);
+      cancelRef.current = false;
+      pauseRef.current = false;
+      let dispatched = 0;
+      let errors = 0;
+      const activeDIDs = selectedDIDs.length > 0 ? selectedDIDs : AVAILABLE_DIDS;
 
-    setCampaign({ running: true, paused: false, dispatched: 0, total: contactList.length, errors: 0 });
+      setCampaign({
+        running: true,
+        paused: false,
+        dispatched: 0,
+        total: contactList.length,
+        errors: 0,
+      });
 
-    for (let i = 0; i < contactList.length; i++) {
-      if (cancelRef.current) break;
+      for (let i = 0; i < contactList.length; i++) {
+        if (cancelRef.current) break;
 
-      while (pauseRef.current && !cancelRef.current) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-      if (cancelRef.current) break;
-
-      const phone = contactList[i];
-      const didEntry = activeDIDs[i % activeDIDs.length];
-
-      try {
-        const res = await fetch(`/api/v1/music-console/voice-agents/${agentId}/calls`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({
-            phoneNumberId: didEntry,
-            customer: { number: phone },
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          const msg = (err as { error?: string }).error || `HTTP ${res.status}`;
-          if (msg.includes('oncurrency') || msg.includes('capacity')) {
-            toast({ title: 'System Capacity Limit', description: 'Waiting 30s for voice outbound channels...' });
-            await new Promise(r => setTimeout(r, 30000));
-            i--; 
-            continue;
-          }
-          errors++;
-        } else {
-          dispatched++;
+        while (pauseRef.current && !cancelRef.current) {
+          await new Promise(r => setTimeout(r, 500));
         }
-      } catch {
-        errors++;
+        if (cancelRef.current) break;
+
+        const phone = contactList[i];
+        const didEntry = activeDIDs[i % activeDIDs.length];
+
+        try {
+          const res = await fetch(`/api/v1/music-console/voice-agents/${agentId}/calls`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              phoneNumberId: didEntry,
+              customer: { number: phone },
+            }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const msg = (err as { error?: string }).error || `HTTP ${res.status}`;
+            if (msg.includes('oncurrency') || msg.includes('capacity')) {
+              toast({
+                title: 'System Capacity Limit',
+                description: 'Waiting 30s for voice outbound channels...',
+              });
+              await new Promise(r => setTimeout(r, 30000));
+              i--;
+              continue;
+            }
+            errors++;
+          } else {
+            dispatched++;
+          }
+        } catch {
+          errors++;
+        }
+
+        setCampaign(prev => ({ ...prev, dispatched, errors }));
+
+        if (i < contactList.length - 1 && !cancelRef.current) {
+          await new Promise(r => setTimeout(r, DISPATCH_DELAY_MS));
+        }
       }
 
-      setCampaign(prev => ({ ...prev, dispatched, errors }));
-
-      if (i < contactList.length - 1 && !cancelRef.current) {
-        await new Promise(r => setTimeout(r, DISPATCH_DELAY_MS));
+      setCampaign(prev => ({ ...prev, running: false, paused: false }));
+      setDispatching(false);
+      toast({
+        title: cancelRef.current
+          ? 'Voice Stream Activation Terminated'
+          : 'Voice Stream Campaign Complete',
+        description: `${dispatched} fan interactions active, ${errors} Failed Dispatches`,
+      });
+      if (selectedAgent) {
+        void fetchInteractions(selectedAgent.id);
       }
-    }
-
-    setCampaign(prev => ({ ...prev, running: false, paused: false }));
-    setDispatching(false);
-    toast({
-      title: cancelRef.current ? 'Voice Stream Activation Terminated' : 'Voice Stream Campaign Complete',
-      description: `${dispatched} fan interactions active, ${errors} Failed Dispatches`,
-    });
-    if (selectedAgent) {
-      void fetchInteractions(selectedAgent.id);
-    }
-  }, [selectedDIDs, toast, fetchInteractions, getAuthHeaders, selectedAgent]);
+    },
+    [selectedDIDs, toast, fetchInteractions, getAuthHeaders, selectedAgent]
+  );
 
   const handleStartCampaign = () => {
     if (!selectedAgent) {
-      toast({ title: 'Error', description: 'Please select a voice agent first', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please select a voice agent first',
+        variant: 'destructive',
+      });
       return;
     }
     if (contacts.length === 0) {
       toast({ title: 'Error', description: 'Please load contacts first', variant: 'destructive' });
       return;
     }
-    if (!compliance.optIn || !compliance.suppression || !compliance.disclosure || !compliance.script) {
+    if (
+      !compliance.optIn ||
+      !compliance.suppression ||
+      !compliance.disclosure ||
+      !compliance.script
+    ) {
       toast({
         title: 'Compliance Required',
-        description: 'Please review and verify all items in the Campaign Compliance Checklist before launching.',
+        description:
+          'Please review and verify all items in the Campaign Compliance Checklist before launching.',
         variant: 'destructive',
       });
       return;
@@ -509,7 +543,10 @@ export default function MusicVoicePage() {
   const handlePauseCampaign = () => {
     pauseRef.current = true;
     setCampaign(prev => ({ ...prev, paused: true }));
-    toast({ title: 'Campaign Paused', description: 'Outstanding dispatches will freeze. Resume to continue.' });
+    toast({
+      title: 'Campaign Paused',
+      description: 'Outstanding dispatches will freeze. Resume to continue.',
+    });
   };
 
   const handleResumeCampaign = () => {
@@ -546,7 +583,7 @@ export default function MusicVoicePage() {
             Launch, monitor, and control fan voice streams across stations.
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2 text-[10px]">
           {agents.length > 0 && (
             <div className="flex items-center gap-2">
@@ -582,7 +619,9 @@ export default function MusicVoicePage() {
             </DialogTrigger>
             <DialogContent className="music-console m-dark-mode sm:max-w-[550px] bg-[var(--m-surface)] border border-[var(--m-border)] text-[var(--m-text)] shadow-2xl z-[9999]">
               <DialogHeader>
-                <DialogTitle className="text-sm font-bold uppercase tracking-wider text-[var(--m-text)]">Create Voice AI Agent</DialogTitle>
+                <DialogTitle className="text-sm font-bold uppercase tracking-wider text-[var(--m-text)]">
+                  Create Voice AI Agent
+                </DialogTitle>
                 <DialogDescription className="text-xs text-[var(--m-muted)]">
                   Build a custom AI voice agent for direct fan phone engagement campaigns.
                 </DialogDescription>
@@ -590,7 +629,12 @@ export default function MusicVoicePage() {
               <div className="space-y-3 py-3 text-xs">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label htmlFor="agent-name" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Agent Name</Label>
+                    <Label
+                      htmlFor="agent-name"
+                      className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                    >
+                      Agent Name
+                    </Label>
                     <Input
                       id="agent-name"
                       placeholder="e.g. Tour Promo Campaign"
@@ -600,7 +644,12 @@ export default function MusicVoicePage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="agent-category" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Category</Label>
+                    <Label
+                      htmlFor="agent-category"
+                      className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                    >
+                      Category
+                    </Label>
                     <select
                       id="agent-category"
                       value={newAgent.category}
@@ -616,7 +665,12 @@ export default function MusicVoicePage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="first-message" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">First Message (greeting)</Label>
+                  <Label
+                    htmlFor="first-message"
+                    className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                  >
+                    First Message (greeting)
+                  </Label>
                   <Input
                     id="first-message"
                     placeholder="Hey! This is Andrea, calling to see if you pre-saved the new album..."
@@ -627,7 +681,12 @@ export default function MusicVoicePage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="system-prompt" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">System Prompt (agent behavior instructions)</Label>
+                  <Label
+                    htmlFor="system-prompt"
+                    className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                  >
+                    System Prompt (agent behavior instructions)
+                  </Label>
                   <Textarea
                     id="system-prompt"
                     placeholder="You are an enthusiastic artist management representative. Your goal is to guide fans to pre-save the upcoming album and invite them to the VIP list. Keep responses under 2 sentences and sound natural..."
@@ -640,7 +699,12 @@ export default function MusicVoicePage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label htmlFor="voice-select" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Voice</Label>
+                    <Label
+                      htmlFor="voice-select"
+                      className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                    >
+                      Voice
+                    </Label>
                     <select
                       id="voice-select"
                       value={newAgent.voice}
@@ -655,12 +719,19 @@ export default function MusicVoicePage() {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="transfer-number" className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Live Transfer Number</Label>
+                    <Label
+                      htmlFor="transfer-number"
+                      className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]"
+                    >
+                      Live Transfer Number
+                    </Label>
                     <Input
                       id="transfer-number"
                       placeholder="+18554800625"
                       value={newAgent.forwardingNumber}
-                      onChange={e => setNewAgent(prev => ({ ...prev, forwardingNumber: e.target.value }))}
+                      onChange={e =>
+                        setNewAgent(prev => ({ ...prev, forwardingNumber: e.target.value }))
+                      }
                       className="m-input text-[11px] py-1 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[var(--m-text)]"
                     />
                   </div>
@@ -722,8 +793,12 @@ export default function MusicVoicePage() {
             {/* Total Interactions */}
             <div className="m-inset-card hover:border-[var(--m-accent)]/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">Total Interactions</span>
-                <span className="text-base font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">{stats.total}</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  Total Interactions
+                </span>
+                <span className="text-base font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">
+                  {stats.total}
+                </span>
               </div>
               <Phone className="h-3.5 w-3.5 text-[var(--m-accent)] opacity-70" />
             </div>
@@ -731,8 +806,12 @@ export default function MusicVoicePage() {
             {/* Human Answers */}
             <div className="m-inset-card hover:border-[var(--m-accent-2)]/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">Human Answers</span>
-                <span className="text-base font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">{stats.answered}</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  Human Answers
+                </span>
+                <span className="text-base font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">
+                  {stats.answered}
+                </span>
               </div>
               <PhoneIncoming className="h-3.5 w-3.5 text-[var(--m-accent-2)] opacity-70" />
             </div>
@@ -740,8 +819,12 @@ export default function MusicVoicePage() {
             {/* No Answer */}
             <div className="m-inset-card hover:border-slate-500/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">No Answer</span>
-                <span className="text-base font-bold m-font-mono text-[var(--m-muted)] mt-0.5 block">{stats.noAnswer + stats.busy}</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  No Answer
+                </span>
+                <span className="text-base font-bold m-font-mono text-[var(--m-muted)] mt-0.5 block">
+                  {stats.noAnswer + stats.busy}
+                </span>
               </div>
               <PhoneOff className="h-3.5 w-3.5 text-[var(--m-muted)] opacity-70" />
             </div>
@@ -749,8 +832,12 @@ export default function MusicVoicePage() {
             {/* Live Interactions */}
             <div className="m-inset-card hover:border-[var(--m-warning)]/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">Live Interactions</span>
-                <span className="text-base font-bold m-font-mono text-[#D97706] mt-0.5 block">{stats.inProgress}</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  Live Interactions
+                </span>
+                <span className="text-base font-bold m-font-mono text-[#D97706] mt-0.5 block">
+                  {stats.inProgress}
+                </span>
               </div>
               <Activity className="h-3.5 w-3.5 text-[#D97706] opacity-70 animate-pulse" />
             </div>
@@ -758,8 +845,12 @@ export default function MusicVoicePage() {
             {/* Failed Dispatches */}
             <div className="m-inset-card hover:border-red-500/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">Failed Dispatches</span>
-                <span className="text-base font-bold m-font-mono text-red-650 mt-0.5 block">{stats.errors}</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  Failed Dispatches
+                </span>
+                <span className="text-base font-bold m-font-mono text-red-650 mt-0.5 block">
+                  {stats.errors}
+                </span>
               </div>
               <AlertTriangle className="h-3.5 w-3.5 text-red-500 opacity-70" />
             </div>
@@ -767,7 +858,9 @@ export default function MusicVoicePage() {
             {/* Avg Conversation */}
             <div className="m-inset-card hover:border-[var(--m-accent)]/30 p-2.5 flex items-center justify-between h-14 transition-all duration-300 relative overflow-hidden group">
               <div>
-                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">Avg Conversation</span>
+                <span className="text-[8px] font-bold tracking-wider text-[var(--m-muted)] uppercase block">
+                  Avg Conversation
+                </span>
                 <span className="text-base font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">
                   {stats.avgDuration > 0 ? `${Math.round(stats.avgDuration)}s` : '—'}
                 </span>
@@ -807,7 +900,9 @@ export default function MusicVoicePage() {
                     </label>
                     <select
                       value={selectedAgent?.id || ''}
-                      onChange={e => setSelectedAgent(agents.find(a => a.id === e.target.value) || null)}
+                      onChange={e =>
+                        setSelectedAgent(agents.find(a => a.id === e.target.value) || null)
+                      }
                       className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-1.5 py-0.5 text-[10px] text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]"
                     >
                       {agents.map(a => (
@@ -842,8 +937,12 @@ export default function MusicVoicePage() {
                     ) : (
                       <div className="space-y-0.5">
                         <Upload className="h-4 w-4 mx-auto text-slate-500" />
-                        <span className="block text-[10px] text-[var(--m-text)] font-bold">Load Target Fan List</span>
-                        <span className="block text-[8px] text-[var(--m-muted)]">Supports TXT/CSV (1 phone # per line)</span>
+                        <span className="block text-[10px] text-[var(--m-text)] font-bold">
+                          Load Target Fan List
+                        </span>
+                        <span className="block text-[8px] text-[var(--m-muted)]">
+                          Supports TXT/CSV (1 phone # per line)
+                        </span>
                       </div>
                     )}
                   </div>
@@ -852,46 +951,55 @@ export default function MusicVoicePage() {
                 {/* Compliance Checklist */}
                 <div className="space-y-1 bg-[var(--m-surface-3)] rounded p-2 border border-[var(--m-border)]">
                   <span className="block text-[8px] font-bold uppercase tracking-wider text-[var(--m-text)] mb-1 flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3 text-[var(--m-accent)]" /> Campaign Compliance Checklist
+                    <ShieldCheck className="h-3 w-3 text-[var(--m-accent)]" /> Campaign Compliance
+                    Checklist
                   </span>
-                  
+
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1">
                     <label className="flex items-center gap-1.5 text-[9px] text-[var(--m-text-2)] cursor-pointer hover:text-[var(--m-text)] transition-colors">
                       <input
                         type="checkbox"
                         className="w-3 h-3 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)] cursor-pointer"
                         checked={compliance.optIn}
-                        onChange={e => setCompliance(prev => ({ ...prev, optIn: e.target.checked }))}
+                        onChange={e =>
+                          setCompliance(prev => ({ ...prev, optIn: e.target.checked }))
+                        }
                       />
                       <span>Opt-in Audience</span>
                     </label>
-                    
+
                     <label className="flex items-center gap-1.5 text-[9px] text-[var(--m-text-2)] cursor-pointer hover:text-[var(--m-text)] transition-colors">
                       <input
                         type="checkbox"
                         className="w-3 h-3 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)] cursor-pointer"
                         checked={compliance.suppression}
-                        onChange={e => setCompliance(prev => ({ ...prev, suppression: e.target.checked }))}
+                        onChange={e =>
+                          setCompliance(prev => ({ ...prev, suppression: e.target.checked }))
+                        }
                       />
                       <span>DNC Suppressed</span>
                     </label>
-                    
+
                     <label className="flex items-center gap-1.5 text-[9px] text-[var(--m-text-2)] cursor-pointer hover:text-[var(--m-text)] transition-colors">
                       <input
                         type="checkbox"
                         className="w-3 h-3 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)] cursor-pointer"
                         checked={compliance.disclosure}
-                        onChange={e => setCompliance(prev => ({ ...prev, disclosure: e.target.checked }))}
+                        onChange={e =>
+                          setCompliance(prev => ({ ...prev, disclosure: e.target.checked }))
+                        }
                       />
                       <span>Rec Disclosure</span>
                     </label>
-                    
+
                     <label className="flex items-center gap-1.5 text-[9px] text-[var(--m-text-2)] cursor-pointer hover:text-[var(--m-text)] transition-colors">
                       <input
                         type="checkbox"
                         className="w-3 h-3 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)] cursor-pointer"
                         checked={compliance.script}
-                        onChange={e => setCompliance(prev => ({ ...prev, script: e.target.checked }))}
+                        onChange={e =>
+                          setCompliance(prev => ({ ...prev, script: e.target.checked }))
+                        }
                       />
                       <span>Script Approved</span>
                     </label>
@@ -904,7 +1012,9 @@ export default function MusicVoicePage() {
                 {campaign.running && (
                   <div className="space-y-1 bg-[var(--m-surface-2)] rounded p-1.5 border border-[var(--m-border-2)]">
                     <div className="flex justify-between items-center text-[9px]">
-                      <span className="text-[var(--m-muted)] font-semibold">Broadcasting Stream</span>
+                      <span className="text-[var(--m-muted)] font-semibold">
+                        Broadcasting Stream
+                      </span>
                       <span className="font-mono text-[var(--m-text)] font-bold">
                         {campaign.dispatched}/{campaign.total}
                       </span>
@@ -977,14 +1087,14 @@ export default function MusicVoicePage() {
                     <Phone className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Station Line Pool
                   </h2>
                   <div className="flex gap-2 text-[9px] font-bold">
-                    <button 
+                    <button
                       onClick={() => setSelectedDIDs(AVAILABLE_DIDS)}
                       className="text-[var(--m-accent)] hover:underline"
                     >
                       All
                     </button>
                     <span className="text-[var(--m-border)]">|</span>
-                    <button 
+                    <button
                       onClick={() => setSelectedDIDs([])}
                       className="text-[var(--m-muted)] hover:text-[var(--m-text)] hover:underline"
                     >
@@ -995,7 +1105,9 @@ export default function MusicVoicePage() {
 
                 <div className="text-[9px] text-[var(--m-muted)] font-semibold mb-2 flex justify-between bg-[var(--m-surface-3)] border border-[var(--m-border-2)] px-2 py-1 rounded">
                   <span>ACTIVE OUTBOUND LINES</span>
-                  <span className="font-mono text-[var(--m-accent)] font-bold">{selectedDIDs.length} / {AVAILABLE_DIDS.length} Selected</span>
+                  <span className="font-mono text-[var(--m-accent)] font-bold">
+                    {selectedDIDs.length} / {AVAILABLE_DIDS.length} Selected
+                  </span>
                 </div>
 
                 {/* Scrollable list */}
@@ -1003,16 +1115,20 @@ export default function MusicVoicePage() {
                   {AVAILABLE_DIDS.map((did, idx) => {
                     const isSelected = selectedDIDs.includes(did);
                     const category = getDidLabel(idx);
-                    const badgeCls = 
-                      category === 'Primary' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                      category === 'Backup' ? 'bg-amber-50 text-amber-700 border-amber-250' :
-                      'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]';
+                    const badgeCls =
+                      category === 'Primary'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : category === 'Backup'
+                          ? 'bg-amber-50 text-amber-700 border-amber-250'
+                          : 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]';
 
                     return (
                       <label
                         key={did}
                         className={`flex items-center gap-2 text-[10px] font-mono py-1 px-1.5 rounded cursor-pointer hover:bg-[var(--m-surface-3)] transition-colors border ${
-                          isSelected ? 'border-[var(--m-border)] bg-[var(--m-surface-2)]' : 'border-transparent'
+                          isSelected
+                            ? 'border-[var(--m-border)] bg-[var(--m-surface-2)]'
+                            : 'border-transparent'
                         }`}
                       >
                         <input
@@ -1024,10 +1140,18 @@ export default function MusicVoicePage() {
                             else setSelectedDIDs(prev => prev.filter(d => d !== did));
                           }}
                         />
-                        <span className={isSelected ? 'text-[var(--m-text)] font-semibold' : 'text-[var(--m-muted)]'}>
+                        <span
+                          className={
+                            isSelected
+                              ? 'text-[var(--m-text)] font-semibold'
+                              : 'text-[var(--m-muted)]'
+                          }
+                        >
                           {did}
                         </span>
-                        <span className={`ml-auto text-[7px] font-extrabold uppercase px-1 py-0.2 rounded border ${badgeCls}`}>
+                        <span
+                          className={`ml-auto text-[7px] font-extrabold uppercase px-1 py-0.2 rounded border ${badgeCls}`}
+                        >
                           {category}
                         </span>
                       </label>
@@ -1041,7 +1165,8 @@ export default function MusicVoicePage() {
             <div className="m-card p-3.5 bg-[var(--m-surface)] flex flex-col justify-between h-[360px] shadow-sm">
               <div className="flex flex-col h-full">
                 <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2">
-                  <Activity className="h-3.5 w-3.5 text-[var(--m-warning)] animate-pulse" /> Live Interaction Feed
+                  <Activity className="h-3.5 w-3.5 text-[var(--m-warning)] animate-pulse" /> Live
+                  Interaction Feed
                 </h2>
 
                 <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 max-h-[290px]">
@@ -1054,8 +1179,8 @@ export default function MusicVoicePage() {
                       const outcome = getOutcomeBadge(call.endedReason);
                       const duration = getCallDuration(call);
                       return (
-                        <div 
-                          key={call.id} 
+                        <div
+                          key={call.id}
                           className="flex items-center justify-between gap-1.5 border border-[var(--m-border-2)] bg-[var(--m-surface-2)] rounded p-1.5 hover:bg-[var(--m-surface-3)] hover:border-[var(--m-border)] transition-colors"
                         >
                           <div className="min-w-0">
@@ -1063,11 +1188,13 @@ export default function MusicVoicePage() {
                               <span className="font-mono text-[var(--m-text)] font-bold text-[10px]">
                                 {maskPhoneNumber(call.customer?.number)}
                               </span>
-                              <span className={`text-[7px] font-extrabold px-1 py-0.2 rounded uppercase border ${
-                                call.status === 'ended' 
-                                  ? 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]' 
-                                  : 'bg-blue-50 text-blue-700 border-blue-200'
-                              }`}>
+                              <span
+                                className={`text-[7px] font-extrabold px-1 py-0.2 rounded uppercase border ${
+                                  call.status === 'ended'
+                                    ? 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
                                 {call.status}
                               </span>
                             </div>
@@ -1075,16 +1202,18 @@ export default function MusicVoicePage() {
                               Line: {call.phoneNumber?.number || 'Rotation'}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[7px] font-extrabold px-1.5 py-0.2 rounded uppercase border ${outcome.cls}`}>
+                            <span
+                              className={`text-[7px] font-extrabold px-1.5 py-0.2 rounded uppercase border ${outcome.cls}`}
+                            >
                               {outcome.label}
                             </span>
-                            
+
                             <span className="font-mono text-[9px] text-[var(--m-muted)] font-bold shrink-0">
                               {duration > 0 ? `${duration}s` : '—'}
                             </span>
-                            
+
                             {call.recordingUrl ? (
                               <a
                                 href={call.recordingUrl}
@@ -1095,7 +1224,9 @@ export default function MusicVoicePage() {
                                 <Play className="w-2 h-2 fill-current" /> Rec
                               </a>
                             ) : (
-                              <span className="text-[8px] text-[var(--m-dim)] font-semibold">No Rec</span>
+                              <span className="text-[8px] text-[var(--m-dim)] font-semibold">
+                                No Rec
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1113,7 +1244,9 @@ export default function MusicVoicePage() {
               <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)]">
                 Recent Media Interactions Log
               </h2>
-              <span className="text-[9px] text-[var(--m-muted)] font-bold">Showing last 5 dispatches</span>
+              <span className="text-[9px] text-[var(--m-muted)] font-bold">
+                Showing last 5 dispatches
+              </span>
             </div>
 
             {interactions.length === 0 ? (
@@ -1125,12 +1258,24 @@ export default function MusicVoicePage() {
                 <table className="w-full text-[10px] text-left border-collapse m-table m-dense-table">
                   <thead>
                     <tr className="border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">Fan Destination</th>
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">Station Route Line</th>
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">Dial State</th>
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">Operational Outcome</th>
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5 text-right">Length</th>
-                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5 text-center">Audio Proof</th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">
+                        Fan Destination
+                      </th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">
+                        Station Route Line
+                      </th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">
+                        Dial State
+                      </th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5">
+                        Operational Outcome
+                      </th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5 text-right">
+                        Length
+                      </th>
+                      <th className="font-bold text-[var(--m-muted)] uppercase py-1 px-2.5 text-center">
+                        Audio Proof
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1138,7 +1283,10 @@ export default function MusicVoicePage() {
                       const rpsOutcome = getRpsOutcome(call.endedReason);
                       const duration = getCallDuration(call);
                       return (
-                        <tr key={call.id} className="border-b border-[var(--m-border-2)] hover:bg-[var(--m-surface-3)] transition-colors">
+                        <tr
+                          key={call.id}
+                          className="border-b border-[var(--m-border-2)] hover:bg-[var(--m-surface-3)] transition-colors"
+                        >
                           <td className="font-mono text-[var(--m-text)] font-semibold py-1.5 px-2.5">
                             {maskPhoneNumber(call.customer?.number)}
                           </td>
@@ -1146,11 +1294,13 @@ export default function MusicVoicePage() {
                             {call.phoneNumber?.number || 'Rotation Pool'}
                           </td>
                           <td className="py-1.5 px-2.5">
-                            <span className={`px-1.5 py-0.2 rounded text-[7px] font-extrabold uppercase border ${
-                              call.status === 'ended' 
-                                ? 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]' 
-                                : 'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}>
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[7px] font-extrabold uppercase border ${
+                                call.status === 'ended'
+                                  ? 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}
+                            >
                               {call.status}
                             </span>
                           </td>
@@ -1163,10 +1313,10 @@ export default function MusicVoicePage() {
                           <td className="py-1.5 px-2.5">
                             <div className="flex justify-center">
                               {call.recordingUrl ? (
-                                <a 
-                                  href={call.recordingUrl} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
+                                <a
+                                  href={call.recordingUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
                                   className="text-[var(--m-muted)] hover:text-[var(--m-accent)] transition-colors"
                                 >
                                   <ExternalLink className="w-3 h-3" />

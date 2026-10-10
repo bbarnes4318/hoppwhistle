@@ -17,6 +17,7 @@ If the same `resource_limit_exceeded` error appears again, stop and escalate ins
 ---
 
 ## Prerequisites:
+
 - Hetzner confirms server limit has been increased.
 - Billing/account verification is complete.
 - API token has Read & Write permission.
@@ -25,6 +26,7 @@ If the same `resource_limit_exceeded` error appears again, stop and escalate ins
 - Correct location and server type are selected.
 
 ## Retry steps:
+
 1. Confirm project limits allow at least 1 server.
 2. Upload or confirm SSH key `hetzner_pvn` exists.
 3. Create server:
@@ -52,15 +54,16 @@ If this project remains blocked, the account owner may choose one of these optio
 3. Use another verified Hetzner account/project only if authorized by the business owner.
 4. Temporarily continue operating on AWS until Hetzner provisioning is available.
 
-*   Do not use Vultr as the migration source.
-*   Do not cut DNS to an unvalidated server.
-*   Do not stop AWS production services.
+- Do not use Vultr as the migration source.
+- Do not cut DNS to an unvalidated server.
+- Do not stop AWS production services.
 
 ---
 
 ## Firewall Requirements
 
 Required ports to review before SIP/call testing:
+
 - 22 TCP: SSH, restricted to admin IPs if possible
 - 80 TCP: HTTP / cert validation
 - 443 TCP: HTTPS / web / WSS

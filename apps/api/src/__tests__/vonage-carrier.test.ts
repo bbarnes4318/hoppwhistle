@@ -144,9 +144,14 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
         where: { tenantId: tenantA },
         include: { steps: true },
       });
-      expect(routes.map(r => r.callType).sort()).toEqual(
-        ['CC_MANUAL', 'CC_POWER_DIALER', 'DOGRAH_AI', 'INBOUND', 'PREDICTIVE_DIALER', 'SOFTPHONE_MANUAL']
-      );
+      expect(routes.map(r => r.callType).sort()).toEqual([
+        'CC_MANUAL',
+        'CC_POWER_DIALER',
+        'DOGRAH_AI',
+        'INBOUND',
+        'PREDICTIVE_DIALER',
+        'SOFTPHONE_MANUAL',
+      ]);
       for (const r of routes) {
         const step = r.steps.find(s => s.carrierId === vonage.id);
         expect(step, r.callType).toBeDefined();
@@ -186,14 +191,18 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
         'FRACTEL',
       ]);
       // Tenant B's identical call type is untouched.
-      expect((await getCarrierChain(tenantB, 'CC_POWER_DIALER')).carrierOrder).toEqual([
-        'FRACTEL',
-      ]);
+      expect((await getCarrierChain(tenantB, 'CC_POWER_DIALER')).carrierOrder).toEqual(['FRACTEL']);
     });
 
     it('can be switched back off from the same page', async () => {
-      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [['VONAGE', true], ['FRACTEL', true]]);
-      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [['VONAGE', false], ['FRACTEL', true]]);
+      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [
+        ['VONAGE', true],
+        ['FRACTEL', true],
+      ]);
+      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [
+        ['VONAGE', false],
+        ['FRACTEL', true],
+      ]);
       expect((await getCarrierChain(tenantA, 'SOFTPHONE_MANUAL')).carrierOrder).toEqual([
         'FRACTEL',
       ]);
@@ -214,7 +223,10 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
 
   describe('Vonage caller ID', () => {
     beforeEach(async () => {
-      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [['VONAGE', true], ['FRACTEL', true]]);
+      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [
+        ['VONAGE', true],
+        ['FRACTEL', true],
+      ]);
       await addNumber(tenantA, '+14155550100', 'vonage');
       await addNumber(tenantA, '+14155550101', 'vonage');
       await addNumber(tenantA, '+14155550102', 'vonage', { callerIdEligible: false });
@@ -267,8 +279,14 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
     let callA: string;
 
     beforeEach(async () => {
-      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [['VONAGE', true], ['FRACTEL', true]]);
-      await setWaterfall(tenantA, 'CC_POWER_DIALER', [['FRACTEL', true], ['VONAGE', true]]);
+      await setWaterfall(tenantA, 'SOFTPHONE_MANUAL', [
+        ['VONAGE', true],
+        ['FRACTEL', true],
+      ]);
+      await setWaterfall(tenantA, 'CC_POWER_DIALER', [
+        ['FRACTEL', true],
+        ['VONAGE', true],
+      ]);
       await addNumber(tenantA, '+14155550100', 'vonage');
       await addNumber(tenantA, '+12816991120', 'fractel');
       // Tenant B owns the number the call presents — the caller-ID heuristic
@@ -346,9 +364,15 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
     });
 
     it('formats the inbound forward legs per carrier', async () => {
-      await setWaterfall(tenantA, 'INBOUND', [['VONAGE', true], ['TWILIO', true], ['FRACTEL', true]]);
+      await setWaterfall(tenantA, 'INBOUND', [
+        ['VONAGE', true],
+        ['TWILIO', true],
+        ['FRACTEL', true],
+      ]);
       const inbound = await getInboundCarrierChain(tenantA);
-      expect(inbound.gatewaysCsv).toBe('vonage,twilio,fractel1,fractel2,fractel3,fractel4,fractel5,fractel6');
+      expect(inbound.gatewaysCsv).toBe(
+        'vonage,twilio,fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
+      );
       const [vonageLeg, twilioLeg] = inbound.bridgeTemplate.split('|');
       expect(vonageLeg).toMatch(/^sofia\/gateway\/vonage\/1/);
       expect(twilioLeg).toMatch(/^sofia\/gateway\/twilio\/\+1/);
@@ -367,7 +391,12 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
 
     it("opens Vonage's circuit on carrier faults, for this tenant only", async () => {
       for (let i = 0; i < 5; i++) {
-        const res = await report({ gateway: 'vonage', cause: 'CALL_REJECTED', answered: 'false', tenant: tenantA });
+        const res = await report({
+          gateway: 'vonage',
+          cause: 'CALL_REJECTED',
+          answered: 'false',
+          tenant: tenantA,
+        });
         expect(res.statusCode).toBe(200);
       }
       const a = await gatewayOf(tenantA, 'vonage');
@@ -381,7 +410,10 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
       const fractel = await gatewayOf(tenantA, 'fractel1');
       expect(fractel.consecutiveFailures).toBe(0);
 
-      await setWaterfall(tenantA, 'PREDICTIVE_DIALER', [['VONAGE', true], ['FRACTEL', true]]);
+      await setWaterfall(tenantA, 'PREDICTIVE_DIALER', [
+        ['VONAGE', true],
+        ['FRACTEL', true],
+      ]);
       const chain = await getCarrierChain(tenantA, 'PREDICTIVE_DIALER');
       expect(chain.gateways[0].gateway).toBe('fractel1');
       expect(chain.gateways.at(-1)).toMatchObject({ gateway: 'vonage', demoted: true });
@@ -406,7 +438,12 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
           metadata: { callerId: '14155550100' },
         },
       });
-      await report({ gateway: 'vonage', cause: 'PROGRESS_TIMEOUT', answered: 'false', tenant: tenantA });
+      await report({
+        gateway: 'vonage',
+        cause: 'PROGRESS_TIMEOUT',
+        answered: 'false',
+        tenant: tenantA,
+      });
       await report({
         gateway: 'vonage',
         carrier: 'VONAGE',
@@ -447,7 +484,13 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
       await report({ ...leg, phase: 'answer', answered: 'true' });
       // The hangup handler merges its own key meanwhile.
       await prisma.$executeRaw`UPDATE "calls" SET "metadata" = COALESCE("metadata", '{}'::jsonb) || '{"endReason":"agent"}'::jsonb WHERE "id" = ${call.id}`;
-      await report({ ...leg, phase: 'end', answered: 'true', cause: 'NORMAL_CLEARING', carrier: 'OTHER' });
+      await report({
+        ...leg,
+        phase: 'end',
+        answered: 'true',
+        cause: 'NORMAL_CLEARING',
+        carrier: 'OTHER',
+      });
 
       const gw = await gatewayOf(tenantA, 'vonage');
       expect(Number(gw.totalAttempts)).toBe(1);
@@ -468,7 +511,12 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
           direction: 'OUTBOUND',
         },
       });
-      await recordLegOutcome({ gateway: 'vonage', answered: true, callId: callB.id, tenantId: tenantA });
+      await recordLegOutcome({
+        gateway: 'vonage',
+        answered: true,
+        callId: callB.id,
+        tenantId: tenantA,
+      });
       // The leg's tenant hint said A; the row is B's, so B's gateway is credited
       // and the attribution lands on B's own row — never A's counters.
       expect((await gatewayOf(tenantA, 'vonage')).lastSuccessAt).toBeNull();
@@ -507,7 +555,9 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
     it('sets and clears the attestation claim per carrier', async () => {
       const vonage = await carrierOf(tenantA, 'VONAGE');
       expect((await patch(tenantA, vonage.id, { attestation: 'A' })).json().attestation).toBe('A');
-      expect((await patch(tenantA, vonage.id, { attestation: null })).json().attestation).toBeNull();
+      expect(
+        (await patch(tenantA, vonage.id, { attestation: null })).json().attestation
+      ).toBeNull();
       expect((await patch(tenantA, vonage.id, { attestation: 'Z' })).statusCode).toBe(400);
       expect((await carrierOf(tenantA, 'FRACTEL')).attestation).toBeNull();
     });
@@ -517,16 +567,25 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
       await addNumber(tenantB, '+16465550000', 'vonage');
       const vonage = await carrierOf(tenantA, 'VONAGE');
 
-      const foreign = await patch(tenantA, vonage.id, { callerIdStrategy: 'FIXED', callerIdNumber: '16465550000' });
+      const foreign = await patch(tenantA, vonage.id, {
+        callerIdStrategy: 'FIXED',
+        callerIdNumber: '16465550000',
+      });
       expect(foreign.statusCode).toBe(400);
       expect(foreign.json().error.code).toBe('UNKNOWN_CALLER_ID');
 
       const missing = await patch(tenantA, vonage.id, { callerIdStrategy: 'FIXED' });
       expect(missing.json().error.code).toBe('CALLER_ID_REQUIRED');
 
-      const ok = await patch(tenantA, vonage.id, { callerIdStrategy: 'FIXED', callerIdNumber: '(415) 555-0100' });
+      const ok = await patch(tenantA, vonage.id, {
+        callerIdStrategy: 'FIXED',
+        callerIdNumber: '(415) 555-0100',
+      });
       expect(ok.statusCode).toBe(200);
-      expect(ok.json()).toMatchObject({ callerIdStrategy: 'FIXED', callerIdNumber: '+14155550100' });
+      expect(ok.json()).toMatchObject({
+        callerIdStrategy: 'FIXED',
+        callerIdNumber: '+14155550100',
+      });
     });
 
     it("cannot reach another tenant's carrier", async () => {
@@ -536,7 +595,10 @@ describe.skipIf(!gate.available)('Vonage carrier integration', () => {
     });
 
     it('takes an INACTIVE carrier out of every waterfall', async () => {
-      await setWaterfall(tenantA, 'CC_MANUAL', [['VONAGE', true], ['FRACTEL', true]]);
+      await setWaterfall(tenantA, 'CC_MANUAL', [
+        ['VONAGE', true],
+        ['FRACTEL', true],
+      ]);
       const vonage = await carrierOf(tenantA, 'VONAGE');
       await patch(tenantA, vonage.id, { status: 'INACTIVE' });
       expect((await getCarrierChain(tenantA, 'CC_MANUAL')).carrierOrder).toEqual(['FRACTEL']);

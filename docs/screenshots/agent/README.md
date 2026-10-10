@@ -16,15 +16,15 @@ Each screen has three shots:
 | `<id>-1366-full.png` | 1366 wide, the whole page              |
 | `<id>-390.png`       | 390 wide (a phone), the whole page     |
 
-| Screen               | Route            | What changed                                                                                                                                                            |
-| -------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent-my-day`       | `/delivery/me`   | Hero tiles with a 7-day shape, the closing percentage against the agency, a secondary row and a "Your last 7 days" table                                                |
-| `agent-power-dialer` | `/call-center`   | The row of figures is the server's, not browser tallies; the auto-dialer bar and the Application queue use the shared buttons, panel, table and empty state             |
-| `agent-applications` | `/applications`  | "Every application you submitted"; no Agent column repeating their own name                                                                                             |
-| `agent-customers`    | `/insurance-leads` | No Agent column                                                                                                                                                       |
-| `agent-leaderboard`  | `/leaderboard`   | "Where you stand on the floor…" instead of "Your agents ranked…"                                                                                                        |
-| `agent-settings`     | `/settings`      | No Webhooks (an owner's plumbing); opens on DNC lists; no duplicated "Settings" heading                                                                                 |
-| `agent-calls`        | `/calls`         | Unchanged apart from quiet zeros in the live strip; it already hides Went to, Revenue and Payout from agents                                                            |
+| Screen               | Route              | What changed                                                                                                                                                |
+| -------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-my-day`       | `/delivery/me`     | Hero tiles with a 7-day shape, the closing percentage against the agency, a secondary row and a "Your last 7 days" table                                    |
+| `agent-power-dialer` | `/call-center`     | The row of figures is the server's, not browser tallies; the auto-dialer bar and the Application queue use the shared buttons, panel, table and empty state |
+| `agent-applications` | `/applications`    | "Every application you submitted"; no Agent column repeating their own name                                                                                 |
+| `agent-customers`    | `/insurance-leads` | No Agent column                                                                                                                                             |
+| `agent-leaderboard`  | `/leaderboard`     | "Where you stand on the floor…" instead of "Your agents ranked…"                                                                                            |
+| `agent-settings`     | `/settings`        | No Webhooks (an owner's plumbing); opens on DNC lists; no duplicated "Settings" heading                                                                     |
+| `agent-calls`        | `/calls`           | Unchanged apart from quiet zeros in the live strip; it already hides Went to, Revenue and Payout from agents                                                |
 
 The live strip across the top is the same on every screen, with its plain zeros
 now quiet (ink-3) and its coloured conversion left as a warning.

@@ -299,7 +299,8 @@ export class BillingService {
 
           if (match && (match as any).bids.length > 0) {
             const winningBid =
-              (match as any).bids.find((b: any) => b.buyerEndpointId === buyerEndpointId) || (match as any).bids[0];
+              (match as any).bids.find((b: any) => b.buyerEndpointId === buyerEndpointId) ||
+              (match as any).bids[0];
             rtbBidAmount = winningBid.amount;
           }
         }

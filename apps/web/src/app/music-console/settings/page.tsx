@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
 import { defaultMusicSettings } from '../../../features/music/data/demo-music-data';
 import type { MusicCampaignType } from '../../../features/music/types';
 
-
 // ─── Extended Music Settings Type Definition ─────────────────
 interface ExtendedMusicSettings {
   organizationName: string;
@@ -32,7 +31,7 @@ interface ExtendedMusicSettings {
   notificationsEnabled: boolean;
   emailReports: boolean;
   reportFrequency: 'daily' | 'weekly' | 'monthly';
-  
+
   defaultArtist: string;
   defaultCampaignOwner: string;
   reportingCurrency: string;
@@ -78,7 +77,12 @@ export default function MusicSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'organization' | 'voice_safety' | 'compliance' | 'campaign_defaults' | 'reporting' | 'integrations'
+    | 'organization'
+    | 'voice_safety'
+    | 'compliance'
+    | 'campaign_defaults'
+    | 'reporting'
+    | 'integrations'
   >('organization');
 
   const [settings, setSettings] = useState<ExtendedMusicSettings>({
@@ -147,10 +151,11 @@ export default function MusicSettingsPage() {
             <SettingsIcon className="h-4.5 w-4.5 m-text-accent" /> RPS Platform Settings
           </h1>
           <p className="text-[10px] m-text-muted mt-0.5">
-            Configure station identity, voice controls, compliance rules, campaign defaults, reporting, and provider sync.
+            Configure station identity, voice controls, compliance rules, campaign defaults,
+            reporting, and provider sync.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2 shrink-0">
           {isDirty ? (
             <span className="px-2 py-0.5 rounded text-[8px] font-extrabold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 shadow-xs animate-pulse">
@@ -162,7 +167,7 @@ export default function MusicSettingsPage() {
             </span>
           )}
 
-          <button 
+          <button
             onClick={handleSave}
             disabled={isSaving}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-accent)] text-white rounded text-[10px] font-extrabold hover:bg-[#008be5] transition-colors disabled:opacity-40"
@@ -182,10 +187,10 @@ export default function MusicSettingsPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-2.5 py-1.5 rounded font-black text-[9px] uppercase tracking-wider transition-all text-left border shrink-0 lg:shrink-1",
-                activeTab === tab.id 
-                  ? "bg-[var(--m-surface)] text-[var(--m-accent)] border-[var(--m-border)] shadow-xs" 
-                  : "text-[var(--m-muted)] hover:text-[var(--m-text)] border-transparent hover:bg-[var(--m-surface-3)]"
+                'flex items-center gap-2 px-2.5 py-1.5 rounded font-black text-[9px] uppercase tracking-wider transition-all text-left border shrink-0 lg:shrink-1',
+                activeTab === tab.id
+                  ? 'bg-[var(--m-surface)] text-[var(--m-accent)] border-[var(--m-border)] shadow-xs'
+                  : 'text-[var(--m-muted)] hover:text-[var(--m-text)] border-transparent hover:bg-[var(--m-surface-3)]'
               )}
             >
               <tab.icon className="h-3.5 w-3.5 shrink-0" />
@@ -196,30 +201,33 @@ export default function MusicSettingsPage() {
 
         {/* Right: Tab content forms scrollable */}
         <div className="flex-grow bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded p-4 overflow-y-auto min-h-0">
-          
           {/* Tab 1: Organization */}
           {activeTab === 'organization' && (
             <div className="space-y-4 animate-fadeIn">
               <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <Building className="h-4 w-4 text-[var(--m-accent)]" /> Organization Profile
               </h2>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Label / Team Name</label>
-                  <input 
-                    type="text" 
-                    className="m-input text-xs" 
-                    value={settings.organizationName} 
-                    onChange={e => handleUpdate('organizationName', e.target.value)} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Label / Team Name
+                  </label>
+                  <input
+                    type="text"
+                    className="m-input text-xs"
+                    value={settings.organizationName}
+                    onChange={e => handleUpdate('organizationName', e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">RPS Platform Division</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.organizationDivision} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    RPS Platform Division
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.organizationDivision}
                     onChange={e => handleUpdate('organizationDivision', e.target.value)}
                   >
                     <option value="RPS Records">RPS Records</option>
@@ -231,30 +239,36 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Artist</label>
-                  <input 
-                    type="text" 
-                    className="m-input text-xs" 
-                    value={settings.defaultArtist} 
-                    onChange={e => handleUpdate('defaultArtist', e.target.value)} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Artist
+                  </label>
+                  <input
+                    type="text"
+                    className="m-input text-xs"
+                    value={settings.defaultArtist}
+                    onChange={e => handleUpdate('defaultArtist', e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Campaign Owner</label>
-                  <input 
-                    type="text" 
-                    className="m-input text-xs" 
-                    value={settings.defaultCampaignOwner} 
-                    onChange={e => handleUpdate('defaultCampaignOwner', e.target.value)} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Campaign Owner
+                  </label>
+                  <input
+                    type="text"
+                    className="m-input text-xs"
+                    value={settings.defaultCampaignOwner}
+                    onChange={e => handleUpdate('defaultCampaignOwner', e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Reporting Currency</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.reportingCurrency} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Reporting Currency
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.reportingCurrency}
                     onChange={e => handleUpdate('reportingCurrency', e.target.value)}
                   >
                     <option value="USD">USD ($)</option>
@@ -264,10 +278,12 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Platform Timezone</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.timezone} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Platform Timezone
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.timezone}
                     onChange={e => handleUpdate('timezone', e.target.value)}
                   >
                     <option value="America/New_York">Eastern Time (ET)</option>
@@ -286,215 +302,243 @@ export default function MusicSettingsPage() {
               <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <ShieldAlert className="h-4 w-4 text-[var(--m-accent)]" /> Voice & Brand Safety
               </h2>
- 
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-3">
-                   <div>
-                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Approved Voice Persona</label>
-                     <select 
-                       className="m-select text-xs" 
-                       value={settings.approvedVoicePersona} 
-                       onChange={e => handleUpdate('approvedVoicePersona', e.target.value)}
-                     >
-                       <option value="Artist-Approved Promo">Artist-Approved Promo (Sarah - Studio Voice)</option>
-                       <option value="Tour Manager">Tour Manager (Marcus - Studio Voice)</option>
-                       <option value="Merch Concierge">Merch Concierge (Brian - Studio Voice)</option>
-                     </select>
-                   </div>
- 
-                   <div>
-                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Max Interaction Length (seconds)</label>
-                     <input 
-                       type="number" 
-                       className="m-input text-xs" 
-                       value={settings.maxCallDuration} 
-                       onChange={e => handleUpdate('maxCallDuration', Number(e.target.value))} 
-                     />
-                   </div>
- 
-                   <div className="grid grid-cols-2 gap-2 pt-1.5">
-                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.artistSafeMode} 
-                         onChange={e => handleUpdate('artistSafeMode', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
-                       />
-                       <span>Artist-Safe Mode</span>
-                     </label>
- 
-                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.requireScriptApproval} 
-                         onChange={e => handleUpdate('requireScriptApproval', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
-                       />
-                       <span>Require Script Approval</span>
-                     </label>
- 
-                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.boundedScriptMode} 
-                         onChange={e => handleUpdate('boundedScriptMode', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
-                       />
-                       <span>Bounded Script Mode</span>
-                     </label>
- 
-                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.allowFreeformAi} 
-                         onChange={e => handleUpdate('allowFreeformAi', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
-                       />
-                       <span>Allow Freeform AI</span>
-                     </label>
-                   </div>
-                 </div>
- 
-                 <div className="space-y-3">
-                   <div>
-                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Brand Safety Rules / Prompts</label>
-                     <textarea 
-                       rows={3}
-                       className="m-textarea text-xs" 
-                       value={settings.brandSafetyNotes} 
-                       onChange={e => handleUpdate('brandSafetyNotes', e.target.value)} 
-                     />
-                   </div>
- 
-                   <div>
-                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Prohibited Broadcast Phrases</label>
-                     <textarea 
-                       rows={2}
-                       className="m-textarea text-xs" 
-                       value={settings.prohibitedPhrases} 
-                       onChange={e => handleUpdate('prohibitedPhrases', e.target.value)} 
-                     />
-                   </div>
-                 </div>
-               </div>
-             </div>
-           )}
- 
-           {/* Tab 3: Compliance */}
-           {activeTab === 'compliance' && (
-             <div className="space-y-4 animate-fadeIn">
-               <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
-                 <ShieldCheck className="h-4 w-4 text-[var(--m-accent-2)]" /> Compliance & Consent
-               </h2>
- 
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-3">
-                   <div className="grid grid-cols-2 gap-2">
-                     <label className="flex items-center gap-2 p-2 border border-emerald-200 rounded bg-emerald-50 cursor-pointer text-[10px] transition-colors hover:bg-emerald-100/50">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.requireOptInConsent} 
-                         onChange={e => handleUpdate('requireOptInConsent', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-emerald-600 rounded border-emerald-300 bg-[var(--m-surface)]" 
-                       />
-                       <span className="font-bold text-emerald-800">Strict Opt-In Consent</span>
-                     </label>
- 
-                     <label className="flex items-center gap-2 p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] text-[10px] transition-colors">
-                       <input 
-                         type="checkbox" 
-                         checked={settings.consentSourceRequired} 
-                         onChange={e => handleUpdate('consentSourceRequired', e.target.checked)} 
-                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
-                       />
-                       <span>Enforce Consent Log</span>
-                     </label>
-                   </div>
- 
-                   <div className="grid grid-cols-2 gap-3">
-                     <div>
-                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">TCPA Consent Mode</label>
-                       <select 
-                         className="m-select text-xs" 
-                         value={settings.tcpaConsentMode} 
-                         onChange={e => handleUpdate('tcpaConsentMode', e.target.value)}
-                       >
-                         <option value="strict">Strict (Double Opt-In)</option>
-                         <option value="standard">Standard (Single Opt-In)</option>
-                       </select>
-                     </div>
- 
-                     <div>
-                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Recording Disclosure</label>
-                       <select 
-                         className="m-select text-xs" 
-                         value={settings.recordingDisclosure} 
-                         onChange={e => handleUpdate('recordingDisclosure', e.target.value)}
-                       >
-                         <option value="single_party">Single-Party Consent State</option>
-                         <option value="all_party">All-Party Mandatory Announcement</option>
-                       </select>
-                     </div>
-                   </div>
- 
-                   <div className="grid grid-cols-2 gap-3">
-                     <div>
-                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Data Retention Window</label>
-                       <select 
-                         className="m-select text-xs" 
-                         value={settings.dataRetentionWindow} 
-                         onChange={e => handleUpdate('dataRetentionWindow', e.target.value)}
-                       >
-                         <option value="30_days">30 Days</option>
-                         <option value="90_days">90 Days</option>
-                         <option value="1_year">1 Year</option>
-                         <option value="indefinite">Indefinite</option>
-                       </select>
-                     </div>
- 
-                     <div>
-                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Opt-Out Handling</label>
-                       <select 
-                         className="m-select text-xs" 
-                         value={settings.optOutHandling} 
-                         onChange={e => handleUpdate('optOutHandling', e.target.value)}
-                       >
-                         <option value="auto_blacklist">Auto-Suppression DNC</option>
-                         <option value="manual_review">Manual operator review</option>
-                       </select>
-                     </div>
-                   </div>
-                 </div>
- 
-                 <div className="space-y-3">
-                   <div>
-                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Global Suppression CSV Upload</label>
-                     <div className="border border-dashed border-[var(--m-border)] rounded bg-[var(--m-surface)] p-5 text-center cursor-pointer hover:bg-[var(--m-surface-3)] hover:border-[var(--m-accent)] transition-all">
-                       <Upload className="h-5 w-5 mx-auto mb-1 text-[var(--m-muted)]" />
-                       <span className="block text-[10px] font-bold text-[var(--m-text-2)]">Load Suppression List (.CSV)</span>
-                       <span className="block text-[8px] text-[var(--m-muted)] mt-0.5">Mutes specific DIDs globally across active campaigns</span>
-                     </div>
-                   </div>
- 
-                   <div className="bg-[var(--m-surface)] rounded p-2 border border-[var(--m-border-2)] space-y-1">
-                     <span className="block text-[8px] font-bold uppercase tracking-wider text-[var(--m-text-2)] mb-1">Suppression Checklist</span>
-                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
-                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                       <span>TCPA opt-in check verified</span>
-                     </div>
-                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
-                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                       <span>Audio disclosure check configured</span>
-                     </div>
-                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
-                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                       <span>Compliance suppression lists loaded</span>
-                     </div>
-                   </div>
-                 </div>
-               </div>
-             </div>
-           )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Approved Voice Persona
+                    </label>
+                    <select
+                      className="m-select text-xs"
+                      value={settings.approvedVoicePersona}
+                      onChange={e => handleUpdate('approvedVoicePersona', e.target.value)}
+                    >
+                      <option value="Artist-Approved Promo">
+                        Artist-Approved Promo (Sarah - Studio Voice)
+                      </option>
+                      <option value="Tour Manager">Tour Manager (Marcus - Studio Voice)</option>
+                      <option value="Merch Concierge">
+                        Merch Concierge (Brian - Studio Voice)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Max Interaction Length (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      className="m-input text-xs"
+                      value={settings.maxCallDuration}
+                      onChange={e => handleUpdate('maxCallDuration', Number(e.target.value))}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1.5">
+                    <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={settings.artistSafeMode}
+                        onChange={e => handleUpdate('artistSafeMode', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
+                      />
+                      <span>Artist-Safe Mode</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={settings.requireScriptApproval}
+                        onChange={e => handleUpdate('requireScriptApproval', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
+                      />
+                      <span>Require Script Approval</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={settings.boundedScriptMode}
+                        onChange={e => handleUpdate('boundedScriptMode', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
+                      />
+                      <span>Bounded Script Mode</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={settings.allowFreeformAi}
+                        onChange={e => handleUpdate('allowFreeformAi', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
+                      />
+                      <span>Allow Freeform AI</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Brand Safety Rules / Prompts
+                    </label>
+                    <textarea
+                      rows={3}
+                      className="m-textarea text-xs"
+                      value={settings.brandSafetyNotes}
+                      onChange={e => handleUpdate('brandSafetyNotes', e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Prohibited Broadcast Phrases
+                    </label>
+                    <textarea
+                      rows={2}
+                      className="m-textarea text-xs"
+                      value={settings.prohibitedPhrases}
+                      onChange={e => handleUpdate('prohibitedPhrases', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 3: Compliance */}
+          {activeTab === 'compliance' && (
+            <div className="space-y-4 animate-fadeIn">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-[var(--m-accent-2)]" /> Compliance & Consent
+              </h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center gap-2 p-2 border border-emerald-200 rounded bg-emerald-50 cursor-pointer text-[10px] transition-colors hover:bg-emerald-100/50">
+                      <input
+                        type="checkbox"
+                        checked={settings.requireOptInConsent}
+                        onChange={e => handleUpdate('requireOptInConsent', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-emerald-600 rounded border-emerald-300 bg-[var(--m-surface)]"
+                      />
+                      <span className="font-bold text-emerald-800">Strict Opt-In Consent</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] text-[10px] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={settings.consentSourceRequired}
+                        onChange={e => handleUpdate('consentSourceRequired', e.target.checked)}
+                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
+                      />
+                      <span>Enforce Consent Log</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                        TCPA Consent Mode
+                      </label>
+                      <select
+                        className="m-select text-xs"
+                        value={settings.tcpaConsentMode}
+                        onChange={e => handleUpdate('tcpaConsentMode', e.target.value)}
+                      >
+                        <option value="strict">Strict (Double Opt-In)</option>
+                        <option value="standard">Standard (Single Opt-In)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                        Recording Disclosure
+                      </label>
+                      <select
+                        className="m-select text-xs"
+                        value={settings.recordingDisclosure}
+                        onChange={e => handleUpdate('recordingDisclosure', e.target.value)}
+                      >
+                        <option value="single_party">Single-Party Consent State</option>
+                        <option value="all_party">All-Party Mandatory Announcement</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                        Data Retention Window
+                      </label>
+                      <select
+                        className="m-select text-xs"
+                        value={settings.dataRetentionWindow}
+                        onChange={e => handleUpdate('dataRetentionWindow', e.target.value)}
+                      >
+                        <option value="30_days">30 Days</option>
+                        <option value="90_days">90 Days</option>
+                        <option value="1_year">1 Year</option>
+                        <option value="indefinite">Indefinite</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                        Opt-Out Handling
+                      </label>
+                      <select
+                        className="m-select text-xs"
+                        value={settings.optOutHandling}
+                        onChange={e => handleUpdate('optOutHandling', e.target.value)}
+                      >
+                        <option value="auto_blacklist">Auto-Suppression DNC</option>
+                        <option value="manual_review">Manual operator review</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Global Suppression CSV Upload
+                    </label>
+                    <div className="border border-dashed border-[var(--m-border)] rounded bg-[var(--m-surface)] p-5 text-center cursor-pointer hover:bg-[var(--m-surface-3)] hover:border-[var(--m-accent)] transition-all">
+                      <Upload className="h-5 w-5 mx-auto mb-1 text-[var(--m-muted)]" />
+                      <span className="block text-[10px] font-bold text-[var(--m-text-2)]">
+                        Load Suppression List (.CSV)
+                      </span>
+                      <span className="block text-[8px] text-[var(--m-muted)] mt-0.5">
+                        Mutes specific DIDs globally across active campaigns
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--m-surface)] rounded p-2 border border-[var(--m-border-2)] space-y-1">
+                    <span className="block text-[8px] font-bold uppercase tracking-wider text-[var(--m-text-2)] mb-1">
+                      Suppression Checklist
+                    </span>
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span>TCPA opt-in check verified</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span>Audio disclosure check configured</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span>Compliance suppression lists loaded</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Tab 4: Campaign Defaults */}
           {activeTab === 'campaign_defaults' && (
@@ -505,11 +549,15 @@ export default function MusicSettingsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Campaign Type</label>
-                  <select 
-                    className="m-select text-xs capitalize" 
-                    value={settings.defaultCampaignType} 
-                    onChange={e => handleUpdate('defaultCampaignType', e.target.value as MusicCampaignType)}
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Campaign Type
+                  </label>
+                  <select
+                    className="m-select text-xs capitalize"
+                    value={settings.defaultCampaignType}
+                    onChange={e =>
+                      handleUpdate('defaultCampaignType', e.target.value as MusicCampaignType)
+                    }
                   >
                     <option value="album_presave">Album Pre-Save</option>
                     <option value="tour_onsale">Tour On-Sale</option>
@@ -519,20 +567,26 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Campaign Goal</label>
-                  <input 
-                    type="text" 
-                    className="m-input text-xs" 
-                    value={settings.defaultGoal} 
-                    onChange={e => handleUpdate('defaultGoal', e.target.value)} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Campaign Goal
+                  </label>
+                  <input
+                    type="text"
+                    className="m-input text-xs"
+                    value={settings.defaultGoal}
+                    onChange={e => handleUpdate('defaultGoal', e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Audience Segment</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.defaultCampaignType === 'album_presave' ? 'stream_save' : 'superfan'} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Audience Segment
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={
+                      settings.defaultCampaignType === 'album_presave' ? 'stream_save' : 'superfan'
+                    }
                     onChange={() => {}}
                   >
                     <option value="superfan">Superfans</option>
@@ -543,10 +597,12 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Station Outbound Route</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.defaultStationRouting} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Station Outbound Route
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.defaultStationRouting}
                     onChange={e => handleUpdate('defaultStationRouting', e.target.value)}
                   >
                     <option value="primary">Primary Line Pool</option>
@@ -556,21 +612,25 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Target CPA ($)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    className="m-input text-xs" 
-                    value={settings.defaultCpaTarget} 
-                    onChange={e => handleUpdate('defaultCpaTarget', parseFloat(e.target.value))} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Target CPA ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="m-input text-xs"
+                    value={settings.defaultCpaTarget}
+                    onChange={e => handleUpdate('defaultCpaTarget', parseFloat(e.target.value))}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Attribution Window</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.defaultAttributionWindow} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Attribution Window
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.defaultAttributionWindow}
                     onChange={e => handleUpdate('defaultAttributionWindow', e.target.value)}
                   >
                     <option value="24_hours">24 Hours</option>
@@ -580,20 +640,24 @@ export default function MusicSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Market Plays</label>
-                  <input 
-                    type="text" 
-                    className="m-input text-xs" 
-                    value={settings.defaultMarketTargeting} 
-                    onChange={e => handleUpdate('defaultMarketTargeting', e.target.value)} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Market Plays
+                  </label>
+                  <input
+                    type="text"
+                    className="m-input text-xs"
+                    value={settings.defaultMarketTargeting}
+                    onChange={e => handleUpdate('defaultMarketTargeting', e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Default Proof Requirements</label>
-                  <select 
-                    className="m-select text-xs" 
-                    value={settings.defaultProofRequirements} 
+                  <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                    Default Proof Requirements
+                  </label>
+                  <select
+                    className="m-select text-xs"
+                    value={settings.defaultProofRequirements}
                     onChange={e => handleUpdate('defaultProofRequirements', e.target.value)}
                   >
                     <option value="audio_transcript">Audio + Verbatim Transcript</option>
@@ -617,41 +681,43 @@ export default function MusicSettingsPage() {
                 <div className="space-y-3">
                   <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Email Automated Reports</span>
-                    <input 
-                      type="checkbox" 
-                      checked={settings.emailReports} 
-                      onChange={e => handleUpdate('emailReports', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                    <input
+                      type="checkbox"
+                      checked={settings.emailReports}
+                      onChange={e => handleUpdate('emailReports', e.target.checked)}
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
                     />
                   </label>
 
                   <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Sponsor-Ready Report Mode</span>
-                    <input 
-                      type="checkbox" 
-                      checked={settings.sponsorReadyReportMode} 
-                      onChange={e => handleUpdate('sponsorReadyReportMode', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                    <input
+                      type="checkbox"
+                      checked={settings.sponsorReadyReportMode}
+                      onChange={e => handleUpdate('sponsorReadyReportMode', e.target.checked)}
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
                     />
                   </label>
 
                   <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Auto-Generate Artist Summaries</span>
-                    <input 
-                      type="checkbox" 
-                      checked={settings.autoGenerateArtistSummaries} 
-                      onChange={e => handleUpdate('autoGenerateArtistSummaries', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                    <input
+                      type="checkbox"
+                      checked={settings.autoGenerateArtistSummaries}
+                      onChange={e => handleUpdate('autoGenerateArtistSummaries', e.target.checked)}
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]"
                     />
                   </label>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Report Compilation Frequency</label>
-                    <select 
-                      className="m-select text-xs" 
-                      value={settings.reportFrequency} 
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Report Compilation Frequency
+                    </label>
+                    <select
+                      className="m-select text-xs"
+                      value={settings.reportFrequency}
                       onChange={e => handleUpdate('reportFrequency', e.target.value)}
                     >
                       <option value="daily">Daily</option>
@@ -661,10 +727,12 @@ export default function MusicSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Export Format Defaults</label>
-                    <select 
-                      className="m-select text-xs" 
-                      value={settings.exportDefaults} 
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Export Format Defaults
+                    </label>
+                    <select
+                      className="m-select text-xs"
+                      value={settings.exportDefaults}
                       onChange={e => handleUpdate('exportDefaults', e.target.value)}
                     >
                       <option value="pdf_csv">PDF Summary + CSV Proof Logs</option>
@@ -687,70 +755,97 @@ export default function MusicSettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">DSP Target Destination link</label>
-                    <input 
-                      type="text" 
-                      className="m-input text-xs font-mono" 
-                      value={settings.dspDestinationLinks} 
-                      onChange={e => handleUpdate('dspDestinationLinks', e.target.value)} 
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      DSP Target Destination link
+                    </label>
+                    <input
+                      type="text"
+                      className="m-input text-xs font-mono"
+                      value={settings.dspDestinationLinks}
+                      onChange={e => handleUpdate('dspDestinationLinks', e.target.value)}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">CRM / Audience Sync Endpoint</label>
-                    <input 
-                      type="text" 
-                      className="m-input text-xs font-mono" 
-                      value={settings.crmAudienceSources} 
-                      onChange={e => handleUpdate('crmAudienceSources', e.target.value)} 
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      CRM / Audience Sync Endpoint
+                    </label>
+                    <input
+                      type="text"
+                      className="m-input text-xs font-mono"
+                      value={settings.crmAudienceSources}
+                      onChange={e => handleUpdate('crmAudienceSources', e.target.value)}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Data Warehouse Export Link</label>
-                    <input 
-                      type="text" 
-                      className="m-input text-xs font-mono" 
-                      value={settings.dataWarehouseExport} 
-                      onChange={e => handleUpdate('dataWarehouseExport', e.target.value)} 
+                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">
+                      Data Warehouse Export Link
+                    </label>
+                    <input
+                      type="text"
+                      className="m-input text-xs font-mono"
+                      value={settings.dataWarehouseExport}
+                      onChange={e => handleUpdate('dataWarehouseExport', e.target.value)}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <span className="block text-[9px] font-bold m-text-muted uppercase tracking-wider mb-1">Dynamic API Gateway Feeds</span>
-                  
+                  <span className="block text-[9px] font-bold m-text-muted uppercase tracking-wider mb-1">
+                    Dynamic API Gateway Feeds
+                  </span>
+
                   <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-[var(--m-text)] text-[11px]">Artist Stream DSP Gateway</div>
-                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" /> Connected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">
+                        Artist Stream DSP Gateway
+                      </div>
+                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />{' '}
+                        Connected
+                      </div>
                     </div>
-                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">Configure</button>
+                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">
+                      Configure
+                    </button>
                   </div>
-                  
+
                   <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-[var(--m-text)] text-[11px]">Audience Ticketing Webhook</div>
-                      <div className="text-[8px] text-[var(--m-muted)] mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[var(--m-muted)]" /> Disconnected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">
+                        Audience Ticketing Webhook
+                      </div>
+                      <div className="text-[8px] text-[var(--m-muted)] mt-0.5 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--m-muted)]" />{' '}
+                        Disconnected
+                      </div>
                     </div>
-                    <button className="text-[9px] font-bold bg-[var(--m-accent)] hover:bg-[var(--m-accent-2)] text-white px-2.5 py-0.5 rounded transition-colors">Connect</button>
+                    <button className="text-[9px] font-bold bg-[var(--m-accent)] hover:bg-[var(--m-accent-2)] text-white px-2.5 py-0.5 rounded transition-colors">
+                      Connect
+                    </button>
                   </div>
-                  
+
                   <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-[var(--m-text)] text-[11px]">E-Commerce Monetization Sync</div>
-                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" /> Connected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">
+                        E-Commerce Monetization Sync
+                      </div>
+                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />{' '}
+                        Connected
+                      </div>
                     </div>
-                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">Configure</button>
+                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">
+                      Configure
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           )}
-
         </div>
       </div>
     </div>
   );
 }
-

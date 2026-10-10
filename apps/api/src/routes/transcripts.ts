@@ -63,7 +63,12 @@ class TranscriptRepository {
     return result.rows[0] || null;
   }
 
-  async listTranscripts(tenantId: string, query?: string, limit: number = 20, offset: number = 0): Promise<TranscriptRow[]> {
+  async listTranscripts(
+    tenantId: string,
+    query?: string,
+    limit: number = 20,
+    offset: number = 0
+  ): Promise<TranscriptRow[]> {
     let sql = `SELECT t.* FROM transcripts t WHERE t.tenant_id = $1`;
     const params: (string | number)[] = [tenantId];
     if (query) {
@@ -122,11 +127,14 @@ export function registerTranscriptRoutes(fastify: FastifyInstance): Promise<void
           fullText: transcript.full_text,
           speakerLabels: transcript.speaker_labels,
           segments: transcript.segments || [],
-          analysis: transcript.billable !== null ? {
-            billable: transcript.billable,
-            applicationSubmitted: transcript.application_submitted,
-            reasoning: transcript.reasoning,
-          } : null,
+          analysis:
+            transcript.billable !== null
+              ? {
+                  billable: transcript.billable,
+                  applicationSubmitted: transcript.application_submitted,
+                  reasoning: transcript.reasoning,
+                }
+              : null,
           createdAt: transcript.created_at,
         };
       } catch (error) {
@@ -148,7 +156,11 @@ export function registerTranscriptRoutes(fastify: FastifyInstance): Promise<void
       return sendTenantRefusal(request, reply);
     }
 
-    const { q, page = 1, limit = 20 } = request.query as {
+    const {
+      q,
+      page = 1,
+      limit = 20,
+    } = request.query as {
       q?: string;
       page?: number;
       limit?: number;
@@ -187,4 +199,3 @@ export function registerTranscriptRoutes(fastify: FastifyInstance): Promise<void
 
   return Promise.resolve();
 }
-

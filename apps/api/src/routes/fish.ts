@@ -205,7 +205,9 @@ export function registerFishRoutes(fastify: FastifyInstance): Promise<void> {
           sampleCount += 1;
           form.append(
             'voices',
-            new Blob([new Uint8Array(buffer)], { type: part.mimetype || 'application/octet-stream' }),
+            new Blob([new Uint8Array(buffer)], {
+              type: part.mimetype || 'application/octet-stream',
+            }),
             part.filename || `sample-${sampleCount}.wav`
           );
         } else if (part.type === 'field' && typeof part.value === 'string') {

@@ -165,7 +165,9 @@ docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] psql -U callfabric -d callfabric
 ```bash
 docker compose exec redis redis-cli ping
 ```
-*Expected:*
+
+_Expected:_
+
 ```
 PONG
 ```
@@ -177,7 +179,9 @@ PONG
 ```bash
 curl -s http://localhost:8123/ping
 ```
-*Expected:*
+
+_Expected:_
+
 ```
 Ok.
 ```
@@ -212,7 +216,9 @@ docker compose exec freeswitch fs_cli -x "global_getvar public_ip"
 docker compose exec freeswitch fs_cli -x "global_getvar sip_public_ip"
 docker compose exec freeswitch fs_cli -x "global_getvar domain"
 ```
-*Expected:*
+
+_Expected:_
+
 - `public_ip` equals the Hetzner public IP
 - `sip_public_ip` equals the Hetzner public IP
 - `domain` equals SIP_DOMAIN / production SIP domain
@@ -224,6 +230,7 @@ docker compose exec freeswitch fs_cli -x "global_getvar domain"
 ```bash
 wscat -c wss://hopwhistle.com/ws -p sip
 ```
+
 > [!NOTE]
 > If testing before DNS cutover, use the temporary Hetzner hostname or direct IP only if TLS/cert behavior is understood.
 
@@ -263,6 +270,7 @@ docker compose logs --tail=100 rtpengine
 Execute these steps during the migration maintenance window.
 
 ### Pre-cutover checklist:
+
 - [ ] Reduce DNS TTL to 300 seconds.
 - [ ] Confirm AWS database dump completed successfully.
 - [ ] Confirm AWS recordings sync completed successfully.
@@ -288,6 +296,7 @@ Execute these steps during the migration maintenance window.
 - [ ] Confirm rollback commands are ready.
 
 ### Cutover checklist:
+
 - [ ] Update DNS A records to Hetzner IP.
 - [ ] Update carrier inbound SIP routes to Hetzner.
 - [ ] Update Vapi SIP trunk target to Hetzner.
@@ -299,16 +308,17 @@ Execute these steps during the migration maintenance window.
 - [ ] Monitor logs for at least 30–60 minutes after cutover.
 
 ### Rollback checklist:
+
 - [ ] Repoint DNS to AWS IP 3.214.60.13.
 - [ ] Repoint Vapi/carrier SIP routing to AWS IP 3.214.60.13.
 - [ ] SSH into AWS:
-    ```bash
-    ssh -i ~/.ssh/hopwhistle-aws.pem ubuntu@3.214.60.13
-    ```
+  ```bash
+  ssh -i ~/.ssh/hopwhistle-aws.pem ubuntu@3.214.60.13
+  ```
 - [ ] Restart AWS stack:
-    ```bash
-    cd /opt/hopwhistle
-    docker compose start api worker transcriber freeswitch
-    ```
+  ```bash
+  cd /opt/hopwhistle
+  docker compose start api worker transcriber freeswitch
+  ```
 - [ ] Confirm AWS health checks pass.
 - [ ] Confirm calls work again.

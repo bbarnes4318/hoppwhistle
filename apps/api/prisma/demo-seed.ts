@@ -9,12 +9,22 @@ const AREA_CODES = ['212', '310', '415', '646', '713', '312', '404', '305'];
 const FIRST_NAMES = ['John', 'Jane', 'Michael', 'Sarah', 'David', 'Emily', 'Robert', 'Jessica'];
 const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis'];
 const COMPANY_NAMES = [
-  'Acme Corp', 'Tech Solutions', 'Global Services', 'Digital Marketing',
-  'Sales Pro', 'Lead Gen Experts', 'Call Center Plus', 'Telecom Solutions'
+  'Acme Corp',
+  'Tech Solutions',
+  'Global Services',
+  'Digital Marketing',
+  'Sales Pro',
+  'Lead Gen Experts',
+  'Call Center Plus',
+  'Telecom Solutions',
 ];
 const CAMPAIGN_NAMES = [
-  'Summer Sale 2024', 'Holiday Campaign', 'New Product Launch',
-  'Customer Retention', 'Lead Generation', 'Market Research'
+  'Summer Sale 2024',
+  'Holiday Campaign',
+  'New Product Launch',
+  'Customer Retention',
+  'Lead Generation',
+  'Market Research',
 ];
 
 function randomElement<T>(array: T[]): T {
@@ -48,12 +58,39 @@ function generateTranscriptionText(duration: number): string {
   const wordsPerMinute = 150;
   const wordCount = Math.floor((duration / 60) * wordsPerMinute);
   const words = [
-    'hello', 'hi', 'thank', 'you', 'yes', 'no', 'please', 'sure', 'absolutely',
-    'interested', 'information', 'product', 'service', 'price', 'cost', 'discount',
-    'offer', 'deal', 'special', 'today', 'now', 'available', 'help', 'assist',
-    'question', 'answer', 'understand', 'explain', 'details', 'more', 'information'
+    'hello',
+    'hi',
+    'thank',
+    'you',
+    'yes',
+    'no',
+    'please',
+    'sure',
+    'absolutely',
+    'interested',
+    'information',
+    'product',
+    'service',
+    'price',
+    'cost',
+    'discount',
+    'offer',
+    'deal',
+    'special',
+    'today',
+    'now',
+    'available',
+    'help',
+    'assist',
+    'question',
+    'answer',
+    'understand',
+    'explain',
+    'details',
+    'more',
+    'information',
   ];
-  
+
   let text = '';
   for (let i = 0; i < wordCount; i++) {
     if (i > 0) text += ' ';
@@ -108,14 +145,22 @@ async function main() {
   console.log('📞 Creating phone numbers...');
   const phoneNumbers = [];
   const bulkVsDids = [
-    '12816989460', '12816989461',
-    '14063165877', '14402992856',
-    '14402992860', '16102819660',
-    '16102819662', '17038313168',
-    '17042283589', '17042286088',
-    '18036135410', '18036135412',
-    '19124185540', '19124185542',
-    '19542083921', '19542083922'
+    '12816989460',
+    '12816989461',
+    '14063165877',
+    '14402992856',
+    '14402992860',
+    '16102819660',
+    '16102819662',
+    '17038313168',
+    '17042283589',
+    '17042286088',
+    '18036135410',
+    '18036135412',
+    '19124185540',
+    '19124185542',
+    '19542083921',
+    '19542083922',
   ];
 
   for (const did of bulkVsDids) {
@@ -181,9 +226,7 @@ async function main() {
         data: {
           buyerId: buyer.id,
           type: j === 0 ? 'SIP' : 'PSTN',
-          destination: j === 0 
-            ? `sip:buyer${i}@example.com`
-            : randomPhoneNumber(),
+          destination: j === 0 ? `sip:buyer${i}@example.com` : randomPhoneNumber(),
           priority: j + 1,
           status: 'ACTIVE',
         },
@@ -232,8 +275,12 @@ async function main() {
       const answeredAt = new Date(startedAt.getTime() + randomInt(2, 10) * 1000);
       const endedAt = new Date(answeredAt.getTime() + duration * 1000);
 
-      const status = Math.random() > 0.15 ? CallStatus.COMPLETED : 
-                     Math.random() > 0.5 ? CallStatus.NO_ANSWER : CallStatus.FAILED;
+      const status =
+        Math.random() > 0.15
+          ? CallStatus.COMPLETED
+          : Math.random() > 0.5
+            ? CallStatus.NO_ANSWER
+            : CallStatus.FAILED;
       const direction = Math.random() > 0.3 ? CallDirection.INBOUND : CallDirection.OUTBOUND;
       const campaign = randomElement(campaigns);
       const fromNumber = randomElement(phoneNumbers);
@@ -305,7 +352,7 @@ async function main() {
         const recording = await prisma.recording.findFirst({
           where: { callId: call.id },
         });
-        
+
         if (recording) {
           const transcriptionText = generateTranscriptionText(duration);
           await prisma.transcription.create({
@@ -344,17 +391,17 @@ async function main() {
   // Generate invoices for the last 30 days
   console.log('🧾 Generating invoices...');
   const invoiceStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  
+
   for (let i = 0; i < 4; i++) {
     const invoiceDate = new Date(invoiceStart.getTime() + i * 7 * 24 * 60 * 60 * 1000);
     const dueDate = new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    
+
     // Calculate totals from calls in this period
     const periodStart = new Date(invoiceDate.getTime() - 7 * 24 * 60 * 60 * 1000);
     const periodEnd = invoiceDate;
-    
-    const periodCalls = calls.filter(c => 
-      c.createdAt >= periodStart && c.createdAt < periodEnd && c.cost
+
+    const periodCalls = calls.filter(
+      c => c.createdAt >= periodStart && c.createdAt < periodEnd && c.cost
     );
     const subtotal = periodCalls.reduce((sum, c) => sum + Number(c.cost || 0), 0);
     const tax = subtotal * 0.08; // 8% tax
@@ -381,8 +428,12 @@ async function main() {
     // Create invoice lines
     const lineItems = [
       { description: 'Call Minutes', quantity: Math.floor(subtotal / 0.03), unitPrice: 0.03 },
-      { description: 'Phone Numbers', quantity: phoneNumbers.length, unitPrice: 2.00 },
-      { description: 'Transcriptions', quantity: Math.floor(periodCalls.length * 0.5), unitPrice: 0.10 },
+      { description: 'Phone Numbers', quantity: phoneNumbers.length, unitPrice: 2.0 },
+      {
+        description: 'Transcriptions',
+        quantity: Math.floor(periodCalls.length * 0.5),
+        unitPrice: 0.1,
+      },
     ];
 
     for (const item of lineItems) {
@@ -424,11 +475,10 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
+  .catch(e => {
     console.error('❌ Error generating demo data:', e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
-

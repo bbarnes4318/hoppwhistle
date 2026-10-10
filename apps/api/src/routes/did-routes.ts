@@ -60,7 +60,11 @@ import {
 } from '../lib/tenant-scope-guards.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { recordBlockedCall } from '../services/blocked-call.js';
-import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
+import {
+  getInboundCarrierChain,
+  gatewayFromChannelName,
+  recordGatewayOutcome,
+} from '../services/carrier-routing.js';
 import { findDograhCallbackRoute } from '../services/dograh-callback-routing.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
@@ -504,327 +508,355 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     '/api/v1/freeswitch/lookup',
     { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    const query = request.query as { did?: string; caller?: string; via?: string };
-    const did = query.did?.replace(/[^\d+]/g, '') || '';
-    const caller = query.caller?.replace(/[^\d+]/g, '') || '';
+      const query = request.query as { did?: string; caller?: string; via?: string };
+      const did = query.did?.replace(/[^\d+]/g, '') || '';
+      const caller = query.caller?.replace(/[^\d+]/g, '') || '';
 
-    if (!did) {
-      return reply.code(400).send({ error: 'did parameter required' });
-    }
+      if (!did) {
+        return reply.code(400).send({ error: 'did parameter required' });
+      }
 
-    // ── TCPA Litigator Check (before any routing) ──────────────────────
-    if (caller) {
+      // ── TCPA Litigator Check (before any routing) ──────────────────────
+      if (caller) {
+        try {
+          const tcpaResult = await tcpaValidationService.validateNumber(caller);
+          if (tcpaResult.isLitigator) {
+            console.log(
+              `[TCPA-BLOCK][FS-LOOKUP] Blocking litigator ${caller} on DID ${did} (cached=${tcpaResult.cached})`
+            );
+
+            // Record the block against the agency that owns the dialled DID.
+            // This used to insert with `tenantId: 'default'` -- not a tenant id,
+            // on a foreign key -- so every litigator block since it was written
+            // was recorded nowhere.
+            //
+            // `terminationParty: SYSTEM` because we refused the INVITE: it keeps
+            // blocked calls out of the abandon numerator while still counting
+            // them as instrumented, so an agency that blocks a lot of traffic
+            // does not look uninstrumented.
+            await recordBlockedCall(
+              {
+                toNumber: did,
+                callerId: caller,
+                callSid: `fs_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                blockReason: 'TCPA_LITIGATOR',
+                source: 'freeswitch',
+                terminationParty: 'SYSTEM',
+                terminationCause: 'TCPA_LITIGATOR_BLOCK',
+                metadata: { tcpaResult },
+              },
+              request.log
+            );
+
+            return reply.send({
+              reject: true,
+              reason: 'TCPA_LITIGATOR',
+              message: 'Caller is a known TCPA litigator',
+            });
+          }
+        } catch (err) {
+          console.error('[TCPA] FreeSWITCH lookup validation error (fail-open):', err);
+        }
+      }
+
+      const { normalizedDid, variants } = didLookupVariants(did);
+
+      // A lead calling back one of the AI's caller IDs goes to the AI voice
+      // agent, whatever the DID is otherwise routed to.
+      // See services/dograh-callback-routing.ts.
       try {
-        const tcpaResult = await tcpaValidationService.validateNumber(caller);
-        if (tcpaResult.isLitigator) {
+        const aiCallback = await findDograhCallbackRoute({
+          did: normalizedDid,
+          caller,
+          fromDograh: query.via === 'dograh',
+        });
+        if (aiCallback) {
           console.log(
-            `[TCPA-BLOCK][FS-LOOKUP] Blocking litigator ${caller} on DID ${did} (cached=${tcpaResult.cached})`
+            `[FS-LOOKUP] AI callback: did=${aiCallback.did} caller=${caller} → Dograh (${aiCallback.bridge})`
           );
-
-          // Record the block against the agency that owns the dialled DID.
-          // This used to insert with `tenantId: 'default'` -- not a tenant id,
-          // on a foreign key -- so every litigator block since it was written
-          // was recorded nowhere.
-          //
-          // `terminationParty: SYSTEM` because we refused the INVITE: it keeps
-          // blocked calls out of the abandon numerator while still counting
-          // them as instrumented, so an agency that blocks a lot of traffic
-          // does not look uninstrumented.
-          await recordBlockedCall(
-            {
-              toNumber: did,
-              callerId: caller,
-              callSid: `fs_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-              blockReason: 'TCPA_LITIGATOR',
-              source: 'freeswitch',
-              terminationParty: 'SYSTEM',
-              terminationCause: 'TCPA_LITIGATOR_BLOCK',
-              metadata: { tcpaResult },
-            },
-            request.log
-          );
-
           return reply.send({
-            reject: true,
-            reason: 'TCPA_LITIGATOR',
-            message: 'Caller is a known TCPA litigator',
+            aiAgentBridge: aiCallback.bridge,
+            tenantId: aiCallback.tenantId,
+            routeType: 'AI_CALLBACK',
           });
         }
       } catch (err) {
-        console.error('[TCPA] FreeSWITCH lookup validation error (fail-open):', err);
+        // Fail open to the DID's ordinary route rather than dropping the call.
+        console.error('[FS-LOOKUP] AI callback check failed (using normal routing):', err);
       }
-    }
 
-    const { normalizedDid, variants } = didLookupVariants(did);
+      // Try to get Redis RTB leased route first
+      let routeInfo = null;
+      let foundDid = normalizedDid;
+      for (const variant of variants) {
+        routeInfo = await numberPoolService.getRouteInfo(variant);
+        if (routeInfo) {
+          foundDid = variant;
+          break;
+        }
+      }
 
-    // A lead calling back one of the AI's caller IDs goes to the AI voice
-    // agent, whatever the DID is otherwise routed to.
-    // See services/dograh-callback-routing.ts.
-    try {
-      const aiCallback = await findDograhCallbackRoute({
-        did: normalizedDid,
-        caller,
-        fromDograh: query.via === 'dograh',
-      });
-      if (aiCallback) {
+      if (routeInfo) {
+        /*
+         * Delivery gating, RTB branch.
+         *
+         * The lease already names the agency, so the gate is asked before the
+         * destination is handed over. Refusing here rather than after the bridge
+         * is the difference between a call that was never delivered and a call
+         * that was delivered and then cut off.
+         */
+        if (routeInfo.tenant_id) {
+          const gate = await isDeliveryAllowed(routeInfo.tenant_id);
+          if (!gate.allowed) {
+            console.warn(
+              `[FS-LOOKUP] Delivery held for tenant ${routeInfo.tenant_id} on DID ${foundDid}: ${gate.reason ?? 'unknown'}`
+            );
+            return reply.send({
+              reject: true,
+              reason: 'DELIVERY_PAUSED',
+              deliveryHoldReason: gate.reason,
+              message: gate.detail ?? 'Delivery is paused for this agency',
+            });
+          }
+        }
+
+        // Resolve recordingEnabled unless disabled by campaign/tenant
+        let recordingEnabled = true;
+        if (routeInfo.campaign_id) {
+          try {
+            const campaign = await prisma.campaign.findUnique({
+              where: { id: routeInfo.campaign_id },
+              select: { recordingEnabled: true },
+            });
+            if (campaign && campaign.recordingEnabled === false) {
+              recordingEnabled = false;
+            }
+          } catch (err) {
+            console.error('[FS-LOOKUP] Error fetching campaign recording status:', err);
+          }
+        }
+
         console.log(
-          `[FS-LOOKUP] AI callback: did=${aiCallback.did} caller=${caller} → Dograh (${aiCallback.bridge})`
+          `[FS-LOOKUP] Redis RTB route: did=${foundDid} → buyer=${routeInfo.buyer_id} destination=${routeInfo.buyer_destination}`
+        );
+
+        const rtbCarriers = await getInboundCarrierChain(routeInfo.tenant_id);
+
+        // The auction winner is the only party on an RTB leg; tagging it lets
+        // the CDR credit the buyer only when that leg actually answered.
+        const rtbDialString = routeInfo.buyer_destination
+          ? tagDestinationLegs(routeInfo.buyer_destination, () => ({
+              party: routeInfo.buyer_id ? `buyer:${routeInfo.buyer_id}` : null,
+              target: routeInfo.buyer_endpoint_id || null,
+              timeout: DEFAULT_BUYER_RING_SECONDS,
+            }))
+          : '';
+
+        return reply.send({
+          destination: routeInfo.buyer_destination,
+          dialString: rtbDialString,
+          externalGateways: rtbCarriers.gatewaysCsv,
+          externalBridgeTemplate: rtbCarriers.bridgeTemplate,
+          recordingEnabled: recordingEnabled,
+          routeId: `rtb-${routeInfo.ping_id}`, // Format routeId so CDR can recognise it's an RTB route
+          buyerId: routeInfo.buyer_id,
+          targetId: routeInfo.buyer_endpoint_id,
+          buyerEndpointId: routeInfo.buyer_endpoint_id,
+          pingId: routeInfo.ping_id,
+          campaignId: routeInfo.campaign_id || null,
+          publisherId: routeInfo.publisher_id || null,
+          tenantId: routeInfo.tenant_id || 'default',
+          vertical: routeInfo.vertical || null,
+          transferNumber: routeInfo.transfer_number || foundDid,
+          routeType: 'RTB',
+        });
+      }
+
+      const route = await prisma.didRoute.findFirst({
+        where: {
+          did: { in: variants },
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          did: true,
+          destination: true,
+          buyerId: true,
+          campaignId: true,
+          publisherId: true,
+          recordingEnabled: true,
+          label: true,
+          tenantId: true,
+          sharedRoutingGroupId: true,
+        },
+      });
+
+      if (!route) {
+        console.log(`[FS-LOOKUP] No route for DID: ${normalizedDid}`);
+        return reply.code(404).send({ error: 'no_route', did: normalizedDid });
+      }
+
+      /*
+       * Delivery gating, DidRoute branch.
+       *
+       * Before buyer selection, not after: selection reaches into campaign
+       * configuration and a fallback that rings every extension on the campaign,
+       * and an agency at its Overrun ceiling should not have any of that happen.
+       *
+       * A shared DID is gated per member agency instead, inside shared routing:
+       * the call is delivered to whichever agency answers, not to the DID's
+       * owner, so one held agency must not stop the others' calls.
+       */
+      const gate = route.sharedRoutingGroupId
+        ? { allowed: true, reason: null, detail: null }
+        : await isDeliveryAllowed(route.tenantId);
+      if (!gate.allowed) {
+        console.warn(
+          `[FS-LOOKUP] Delivery held for tenant ${route.tenantId} on DID ${normalizedDid}: ${gate.reason ?? 'unknown'}`
         );
         return reply.send({
-          aiAgentBridge: aiCallback.bridge,
-          tenantId: aiCallback.tenantId,
-          routeType: 'AI_CALLBACK',
+          reject: true,
+          reason: 'DELIVERY_PAUSED',
+          deliveryHoldReason: gate.reason,
+          message: gate.detail ?? 'Delivery is paused for this agency',
         });
       }
-    } catch (err) {
-      // Fail open to the DID's ordinary route rather than dropping the call.
-      console.error('[FS-LOOKUP] AI callback check failed (using normal routing):', err);
-    }
 
-    // Try to get Redis RTB leased route first
-    let routeInfo = null;
-    let foundDid = normalizedDid;
-    for (const variant of variants) {
-      routeInfo = await numberPoolService.getRouteInfo(variant);
-      if (routeInfo) {
-        foundDid = variant;
-        break;
-      }
-    }
+      let destination = route.destination;
+      let buyerId = route.buyerId || null;
+      let targetId: string | null = null;
+      let agentCellKeys: string[] = [];
+      // The plan with every leg tagged with who it rings. Set by campaign
+      // routing; a static route is tagged below.
+      let dialString: string | null = null;
 
-    if (routeInfo) {
-      /*
-       * Delivery gating, RTB branch.
-       *
-       * The lease already names the agency, so the gate is asked before the
-       * destination is handed over. Refusing here rather than after the bridge
-       * is the difference between a call that was never delivered and a call
-       * that was delivered and then cut off.
-       */
-      if (routeInfo.tenant_id) {
-        const gate = await isDeliveryAllowed(routeInfo.tenant_id);
-        if (!gate.allowed) {
-          console.warn(
-            `[FS-LOOKUP] Delivery held for tenant ${routeInfo.tenant_id} on DID ${foundDid}: ${gate.reason ?? 'unknown'}`
-          );
-          return reply.send({
-            reject: true,
-            reason: 'DELIVERY_PAUSED',
-            deliveryHoldReason: gate.reason,
-            message: gate.detail ?? 'Delivery is paused for this agency',
-          });
-        }
-      }
-
-      // Resolve recordingEnabled unless disabled by campaign/tenant
-      let recordingEnabled = true;
-      if (routeInfo.campaign_id) {
+      if (route.sharedRoutingGroupId) {
+        /*
+         * One DID, several agencies: every member campaign's eligible agents,
+         * one at a time in round-robin order. The call is recorded under the
+         * answering agent's agency by the CDR handler. See
+         * services/shared-routing.ts.
+         */
+        buyerId = null;
         try {
-          const campaign = await prisma.campaign.findUnique({
-            where: { id: routeInfo.campaign_id },
-            select: { recordingEnabled: true },
+          const { selectSharedRoundRobin } = await import('../services/shared-routing.js');
+          const plan = await selectSharedRoundRobin(route.sharedRoutingGroupId, {
+            callerId: caller,
           });
-          if (campaign && campaign.recordingEnabled === false) {
-            recordingEnabled = false;
+          if (plan) {
+            destination = plan.endpoint;
+            dialString = plan.dialString;
+            agentCellKeys = plan.agentCellKeys;
+            console.log(
+              `[FS-LOOKUP] Shared route: group=${route.sharedRoutingGroupId} caller=${caller} → ${plan.order.length} agent(s) in rotation`
+            );
+          } else {
+            destination = '';
+            console.log(
+              `[FS-LOOKUP] Shared route: no eligible agent in group=${route.sharedRoutingGroupId} caller=${caller}`
+            );
           }
-        } catch (err) {
-          console.error('[FS-LOOKUP] Error fetching campaign recording status:', err);
+        } catch (sharedErr) {
+          // Unlike a campaign, a shared route has no destination of its own to
+          // fail open to: ringing nobody is recorded as an unanswered call.
+          console.error(
+            `[FS-LOOKUP] Shared routing error for group ${route.sharedRoutingGroupId} caller ${caller}:`,
+            sharedErr
+          );
+          destination = '';
         }
+      } else if (route.campaignId) {
+        try {
+          const { routingService } = await import('../services/routing.js');
+          const bestBuyer = await routingService.selectBestBuyer(
+            route.tenantId,
+            route.campaignId,
+            { callerId: caller },
+            { throwOnError: true }
+          );
+
+          if (bestBuyer) {
+            destination = bestBuyer.endpoint;
+            dialString = bestBuyer.dialString || null;
+            buyerId = bestBuyer.buyerId;
+            targetId = bestBuyer.targetId || null;
+            agentCellKeys = bestBuyer.agentCellKeys ?? [];
+            console.log(
+              `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
+            );
+          } else {
+            /*
+             * Nobody passed the gates. This used to ring every buyer on the
+             * campaign with no gates at all -- paused, capped, closed and broke
+             * buyers included -- which is exactly the set routing had just
+             * refused. Now the call is recorded as unanswered instead.
+             */
+            destination = '';
+            buyerId = null;
+            console.log(
+              `[FS-LOOKUP] Dynamic route returned no eligible destinations; refusing to bypass routing filters for campaign=${route.campaignId} caller=${caller}`
+            );
+          }
+        } catch (routingErr) {
+          console.error(
+            `[FS-LOOKUP] Dynamic routing error for campaign ${route.campaignId} caller ${caller} (fail-open):`,
+            routingErr
+          );
+        }
+      } else {
+        console.log(
+          `[FS-LOOKUP] Static route: ${route.did} → ${destination} (buyer: ${buyerId || 'none'})`
+        );
       }
 
-      console.log(
-        `[FS-LOOKUP] Redis RTB route: did=${foundDid} → buyer=${routeInfo.buyer_id} destination=${routeInfo.buyer_destination}`
-      );
-
-      const rtbCarriers = await getInboundCarrierChain(routeInfo.tenant_id);
-
-      // The auction winner is the only party on an RTB leg; tagging it lets
-      // the CDR credit the buyer only when that leg actually answered.
-      const rtbDialString = routeInfo.buyer_destination
-        ? tagDestinationLegs(routeInfo.buyer_destination, () => ({
-            party: routeInfo.buyer_id ? `buyer:${routeInfo.buyer_id}` : null,
-            target: routeInfo.buyer_endpoint_id || null,
-            timeout: DEFAULT_BUYER_RING_SECONDS,
-          }))
-        : '';
-
-      return reply.send({
-        destination: routeInfo.buyer_destination,
-        dialString: rtbDialString,
-        externalGateways: rtbCarriers.gatewaysCsv,
-        externalBridgeTemplate: rtbCarriers.bridgeTemplate,
-        recordingEnabled: recordingEnabled,
-        routeId: `rtb-${routeInfo.ping_id}`, // Format routeId so CDR can recognise it's an RTB route
-        buyerId: routeInfo.buyer_id,
-        targetId: routeInfo.buyer_endpoint_id,
-        buyerEndpointId: routeInfo.buyer_endpoint_id,
-        pingId: routeInfo.ping_id,
-        campaignId: routeInfo.campaign_id || null,
-        publisherId: routeInfo.publisher_id || null,
-        tenantId: routeInfo.tenant_id || 'default',
-        vertical: routeInfo.vertical || null,
-        transferNumber: routeInfo.transfer_number || foundDid,
-        routeType: 'RTB',
-      });
-    }
-
-    const route = await prisma.didRoute.findFirst({
-      where: {
-        did: { in: variants },
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        did: true,
-        destination: true,
-        buyerId: true,
-        campaignId: true,
-        publisherId: true,
-        recordingEnabled: true,
-        label: true,
-        tenantId: true,
-        sharedRoutingGroupId: true,
-      },
-    });
-
-    if (!route) {
-      console.log(`[FS-LOOKUP] No route for DID: ${normalizedDid}`);
-      return reply.code(404).send({ error: 'no_route', did: normalizedDid });
-    }
-
-    /*
-     * Delivery gating, DidRoute branch.
-     *
-     * Before buyer selection, not after: selection reaches into campaign
-     * configuration and a fallback that rings every extension on the campaign,
-     * and an agency at its Overrun ceiling should not have any of that happen.
-     *
-     * A shared DID is gated per member agency instead, inside shared routing:
-     * the call is delivered to whichever agency answers, not to the DID's
-     * owner, so one held agency must not stop the others' calls.
-     */
-    const gate = route.sharedRoutingGroupId
-      ? { allowed: true, reason: null, detail: null }
-      : await isDeliveryAllowed(route.tenantId);
-    if (!gate.allowed) {
-      console.warn(
-        `[FS-LOOKUP] Delivery held for tenant ${route.tenantId} on DID ${normalizedDid}: ${gate.reason ?? 'unknown'}`
-      );
-      return reply.send({
-        reject: true,
-        reason: 'DELIVERY_PAUSED',
-        deliveryHoldReason: gate.reason,
-        message: gate.detail ?? 'Delivery is paused for this agency',
-      });
-    }
-
-    let destination = route.destination;
-    let buyerId = route.buyerId || null;
-    let targetId: string | null = null;
-    let agentCellKeys: string[] = [];
-    // The plan with every leg tagged with who it rings. Set by campaign
-    // routing; a static route is tagged below.
-    let dialString: string | null = null;
-
-    if (route.sharedRoutingGroupId) {
-      /*
-       * One DID, several agencies: every member campaign's eligible agents,
-       * one at a time in round-robin order. The call is recorded under the
-       * answering agent's agency by the CDR handler. See
-       * services/shared-routing.ts.
-       */
-      buyerId = null;
-      try {
-        const { selectSharedRoundRobin } = await import('../services/shared-routing.js');
-        const plan = await selectSharedRoundRobin(route.sharedRoutingGroupId, {
-          callerId: caller,
+      // Never hand FreeSWITCH a non-routable destination. DidRoute rows for
+      // campaign-driven DIDs carry the literal sentinel "Campaign"; if buyer
+      // selection produced nothing, that sentinel used to leak through and get
+      // bridged as sofia/gateway/<gw>/Campaign — a guaranteed dead call with
+      // ~60s of dead air for the caller.
+      const sanitized = sanitizeDestinationString(destination);
+      if (sanitized.dropped.length > 0) {
+        console.warn(
+          `[FS-LOOKUP] Dropped non-routable destination leg(s) for DID ${normalizedDid}: ${sanitized.dropped.join(
+            ' ; '
+          )}`
+        );
+      }
+      if (!sanitized.destination) {
+        console.warn(
+          `[FS-LOOKUP] Route ${route.id} (campaign=${route.campaignId || 'none'}) resolved to no eligible destination for DID ${normalizedDid}`
+        );
+        return reply.send({
+          destination: '',
+          noEligibleDestination: true,
+          recordingEnabled: route.recordingEnabled,
+          routeId: route.id,
+          buyerId: buyerId,
+          targetId: targetId,
+          campaignId: route.campaignId || null,
+          publisherId: route.publisherId || null,
+          tenantId: route.tenantId,
+          label: route.label || null,
         });
-        if (plan) {
-          destination = plan.endpoint;
-          dialString = plan.dialString;
-          agentCellKeys = plan.agentCellKeys;
-          console.log(
-            `[FS-LOOKUP] Shared route: group=${route.sharedRoutingGroupId} caller=${caller} → ${plan.order.length} agent(s) in rotation`
-          );
-        } else {
-          destination = '';
-          console.log(
-            `[FS-LOOKUP] Shared route: no eligible agent in group=${route.sharedRoutingGroupId} caller=${caller}`
-          );
-        }
-      } catch (sharedErr) {
-        // Unlike a campaign, a shared route has no destination of its own to
-        // fail open to: ringing nobody is recorded as an unanswered call.
-        console.error(
-          `[FS-LOOKUP] Shared routing error for group ${route.sharedRoutingGroupId} caller ${caller}:`,
-          sharedErr
-        );
-        destination = '';
       }
-    } else if (route.campaignId) {
-      try {
-        const { routingService } = await import('../services/routing.js');
-        const bestBuyer = await routingService.selectBestBuyer(
-          route.tenantId,
-          route.campaignId,
-          { callerId: caller },
-          { throwOnError: true }
-        );
 
-        if (bestBuyer) {
-          destination = bestBuyer.endpoint;
-          dialString = bestBuyer.dialString || null;
-          buyerId = bestBuyer.buyerId;
-          targetId = bestBuyer.targetId || null;
-          agentCellKeys = bestBuyer.agentCellKeys ?? [];
-          console.log(
-            `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
-          );
-        } else {
-          /*
-           * Nobody passed the gates. This used to ring every buyer on the
-           * campaign with no gates at all -- paused, capped, closed and broke
-           * buyers included -- which is exactly the set routing had just
-           * refused. Now the call is recorded as unanswered instead.
-           */
-          destination = '';
-          buyerId = null;
-          console.log(
-            `[FS-LOOKUP] Dynamic route returned no eligible destinations; refusing to bypass routing filters for campaign=${route.campaignId} caller=${caller}`
-          );
-        }
-      } catch (routingErr) {
-        console.error(
-          `[FS-LOOKUP] Dynamic routing error for campaign ${route.campaignId} caller ${caller} (fail-open):`,
-          routingErr
-        );
+      const inboundCarriers = await getInboundCarrierChain(route.tenantId);
+
+      if (!dialString) {
+        dialString = await tagStaticDestination(route.tenantId, sanitized.destination, buyerId);
       }
-    } else {
-      console.log(
-        `[FS-LOOKUP] Static route: ${route.did} → ${destination} (buyer: ${buyerId || 'none'})`
-      );
-    }
+      const sanitizedDial = sanitizeDestinationString(dialString);
 
-    // Never hand FreeSWITCH a non-routable destination. DidRoute rows for
-    // campaign-driven DIDs carry the literal sentinel "Campaign"; if buyer
-    // selection produced nothing, that sentinel used to leak through and get
-    // bridged as sofia/gateway/<gw>/Campaign — a guaranteed dead call with
-    // ~60s of dead air for the caller.
-    const sanitized = sanitizeDestinationString(destination);
-    if (sanitized.dropped.length > 0) {
-      console.warn(
-        `[FS-LOOKUP] Dropped non-routable destination leg(s) for DID ${normalizedDid}: ${sanitized.dropped.join(
-          ' ; '
-        )}`
-      );
-    }
-    if (!sanitized.destination) {
-      console.warn(
-        `[FS-LOOKUP] Route ${route.id} (campaign=${route.campaignId || 'none'}) resolved to no eligible destination for DID ${normalizedDid}`
-      );
       return reply.send({
-        destination: '',
-        noEligibleDestination: true,
+        destination: sanitized.destination,
+        // Preferred by inbound_route.lua: the same plan, every leg tagged with
+        // the party it rings, so the CDR can say who actually answered.
+        dialString: sanitizedDial.destination || '',
+        externalGateways: inboundCarriers.gatewaysCsv,
+        externalBridgeTemplate: inboundCarriers.bridgeTemplate,
+        // Ten-digit keys of legs that are agents' own cells, comma-separated.
+        // inbound_route.lua makes those legs press 1 to accept and skips a busy one.
+        agentCellLegs: agentCellKeys.join(','),
         recordingEnabled: route.recordingEnabled,
         routeId: route.id,
         buyerId: buyerId,
@@ -835,34 +867,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         label: route.label || null,
       });
     }
-
-    const inboundCarriers = await getInboundCarrierChain(route.tenantId);
-
-    if (!dialString) {
-      dialString = await tagStaticDestination(route.tenantId, sanitized.destination, buyerId);
-    }
-    const sanitizedDial = sanitizeDestinationString(dialString);
-
-    return reply.send({
-      destination: sanitized.destination,
-      // Preferred by inbound_route.lua: the same plan, every leg tagged with
-      // the party it rings, so the CDR can say who actually answered.
-      dialString: sanitizedDial.destination || '',
-      externalGateways: inboundCarriers.gatewaysCsv,
-      externalBridgeTemplate: inboundCarriers.bridgeTemplate,
-      // Ten-digit keys of legs that are agents' own cells, comma-separated.
-      // inbound_route.lua makes those legs press 1 to accept and skips a busy one.
-      agentCellLegs: agentCellKeys.join(','),
-      recordingEnabled: route.recordingEnabled,
-      routeId: route.id,
-      buyerId: buyerId,
-      targetId: targetId,
-      campaignId: route.campaignId || null,
-      publisherId: route.publisherId || null,
-      tenantId: route.tenantId,
-      label: route.label || null,
-    });
-  });
+  );
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/v1/freeswitch/cdr — Call Detail Record webhook
@@ -874,663 +879,675 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     '/api/v1/freeswitch/cdr',
     { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as {
-      callId: string; // FreeSWITCH UUID
-      routeId: string; // DidRoute ID
-      tenantId: string;
-      callerNumber: string; // ANI (who called)
-      did: string; // DNIS (tracking number)
-      destination: string; // Where we forwarded to
-      buyerId?: string;
-      campaignId?: string;
-      targetId?: string;
-      buyerEndpointId?: string;
-      pingId?: string;
-      routeType?: string;
-      rtbRoute?: boolean;
-      transferNumber?: string;
-      carrierCost?: number;
-      costSource?: string;
-      duration: number; // Total duration in seconds
-      connectedDuration?: number;
-      billDuration?: number;
-      hangupCause: string;
-      // FreeSWITCH sip_hangup_disposition, e.g. "recv_bye". Optional: it is only
-      // sent by deployments that have the current inbound_route.lua. Without it
-      // a NORMAL_CLEARING call records terminationParty = UNKNOWN.
-      sipHangupDisposition?: string;
-      startedAt: string; // ISO timestamp
-      answeredAt?: string;
-      endedAt: string;
-      recordingPath?: string; // Local file path on FS
-      recordingDuration?: number;
-      /** Bridged B-leg channel name, e.g. sofia/gateway/fractel3/+18005551212 */
-      bridgeChannelName?: string;
-      /** Gateway the call actually used, when the Lua could name it directly. */
-      gateway?: string;
-      /**
-       * Who answered: `buyer:<id>`, `agent:<userId>`, or empty when nobody
-       * did. Read by inbound_route.lua off the answered leg's `x_leg_party`.
-       * When present it is the ONLY source of attribution; see
-       * services/cdr-attribution.ts. Absent only from a script that predates
-       * per-leg tagging.
-       */
-      answeredParty?: string;
-      /** The number the answered leg dialed (`x_leg_number`). */
-      answeredNumber?: string;
-      /** The buyer endpoint of the answered leg (`x_leg_target`), when it was a buyer. */
-      answeredTarget?: string;
-    };
-
-    if (!body.callId || !body.routeId || !body.tenantId) {
-      return reply.code(400).send({ error: 'callId, routeId, and tenantId are required' });
-    }
-
-    // Feed carrier health before anything that can fail below. Inbound forwards
-    // out to the PSTN through the same gateways as outbound, so their failures
-    // are evidence about the carrier and belong in the same counters that
-    // decide the waterfall order. Fire-and-forget: this must never be the
-    // reason a CDR is lost.
-    {
-      const gateway = body.gateway || gatewayFromChannelName(body.bridgeChannelName);
-      if (gateway) {
-        void recordGatewayOutcome(
-          gateway,
-          { ok: body.hangupCause === 'NORMAL_CLEARING', cause: body.hangupCause },
-          body.tenantId
-        );
-      }
-    }
-
-    try {
-      // Map hangup cause to CallStatus
-      const statusMap: Record<string, string> = {
-        NORMAL_CLEARING: 'COMPLETED',
-        USER_BUSY: 'BUSY',
-        NO_ANSWER: 'NO_ANSWER',
-        CALL_REJECTED: 'FAILED',
-        ORIGINATOR_CANCEL: 'CANCELLED',
-        // The no-agent prompt: every leg was rung and none answered.
-        NO_USER_RESPONSE: 'NO_ANSWER',
+      const body = request.body as {
+        callId: string; // FreeSWITCH UUID
+        routeId: string; // DidRoute ID
+        tenantId: string;
+        callerNumber: string; // ANI (who called)
+        did: string; // DNIS (tracking number)
+        destination: string; // Where we forwarded to
+        buyerId?: string;
+        campaignId?: string;
+        targetId?: string;
+        buyerEndpointId?: string;
+        pingId?: string;
+        routeType?: string;
+        rtbRoute?: boolean;
+        transferNumber?: string;
+        carrierCost?: number;
+        costSource?: string;
+        duration: number; // Total duration in seconds
+        connectedDuration?: number;
+        billDuration?: number;
+        hangupCause: string;
+        // FreeSWITCH sip_hangup_disposition, e.g. "recv_bye". Optional: it is only
+        // sent by deployments that have the current inbound_route.lua. Without it
+        // a NORMAL_CLEARING call records terminationParty = UNKNOWN.
+        sipHangupDisposition?: string;
+        startedAt: string; // ISO timestamp
+        answeredAt?: string;
+        endedAt: string;
+        recordingPath?: string; // Local file path on FS
+        recordingDuration?: number;
+        /** Bridged B-leg channel name, e.g. sofia/gateway/fractel3/+18005551212 */
+        bridgeChannelName?: string;
+        /** Gateway the call actually used, when the Lua could name it directly. */
+        gateway?: string;
+        /**
+         * Who answered: `buyer:<id>`, `agent:<userId>`, or empty when nobody
+         * did. Read by inbound_route.lua off the answered leg's `x_leg_party`.
+         * When present it is the ONLY source of attribution; see
+         * services/cdr-attribution.ts. Absent only from a script that predates
+         * per-leg tagging.
+         */
+        answeredParty?: string;
+        /** The number the answered leg dialed (`x_leg_number`). */
+        answeredNumber?: string;
+        /** The buyer endpoint of the answered leg (`x_leg_target`), when it was a buyer. */
+        answeredTarget?: string;
       };
-      let callStatus = statusMap[body.hangupCause] || 'COMPLETED';
 
-      // A CDR that names who answered (possibly nobody) comes from the current
-      // inbound_route.lua, which sends `answeredAt` only when a leg answered.
-      const attributesByAnsweredLeg = typeof body.answeredParty === 'string';
-      if (attributesByAnsweredLeg && !body.answeredAt && callStatus === 'COMPLETED') {
-        callStatus = 'NO_ANSWER';
+      if (!body.callId || !body.routeId || !body.tenantId) {
+        return reply.code(400).send({ error: 'callId, routeId, and tenantId are required' });
       }
 
-      // The status map collapses five causes into a CallStatus and throws the
-      // rest away, which is why abandon rate was never sourceable: CANCELLED
-      // and NO_ANSWER both mean "not answered" but only one is a caller giving
-      // up. Keep the raw cause and the party we derive from it.
-      const terminationCause = normalizeHangupCause(body.hangupCause);
-      const terminationParty = deriveTerminationParty(body.hangupCause, body.sipHangupDisposition);
+      // Feed carrier health before anything that can fail below. Inbound forwards
+      // out to the PSTN through the same gateways as outbound, so their failures
+      // are evidence about the carrier and belong in the same counters that
+      // decide the waterfall order. Fire-and-forget: this must never be the
+      // reason a CDR is lost.
+      {
+        const gateway = body.gateway || gatewayFromChannelName(body.bridgeChannelName);
+        if (gateway) {
+          void recordGatewayOutcome(
+            gateway,
+            { ok: body.hangupCause === 'NORMAL_CLEARING', cause: body.hangupCause },
+            body.tenantId
+          );
+        }
+      }
 
-      // Sanitize FK fields — Lua sends "null" / "" for missing IDs which would
-      // violate foreign-key constraints if passed through.
-      const sanitizeFk = (v: string | null | undefined): string | null =>
-        v && v !== '' && v !== 'null' && v !== 'undefined' ? v : null;
+      try {
+        // Map hangup cause to CallStatus
+        const statusMap: Record<string, string> = {
+          NORMAL_CLEARING: 'COMPLETED',
+          USER_BUSY: 'BUSY',
+          NO_ANSWER: 'NO_ANSWER',
+          CALL_REJECTED: 'FAILED',
+          ORIGINATOR_CANCEL: 'CANCELLED',
+          // The no-agent prompt: every leg was rung and none answered.
+          NO_USER_RESPONSE: 'NO_ANSWER',
+        };
+        let callStatus = statusMap[body.hangupCause] || 'COMPLETED';
 
-      let phoneNumberId: string | null = null;
-      let buyerId: string | null = null;
-      let targetId: string | null = null;
-      let campaignId: string | null | undefined = null;
-      let publisherId: string | null | undefined = null;
-      let tenantId: string = body.tenantId;
-      let buyerName: string | null = null;
-      let rtbMetadata: RtbMetadata | null = null;
-      let callSource = 'PAY_PER_CALL';
-      // Set when the DID is shared across agencies (see services/shared-routing.ts).
-      let sharedRoutingGroupId: string | null = null;
-      let sharedRouteMeta: Record<string, string | null> | null = null;
-
-      const isRtbRouteId =
-        body.routeId.startsWith('rtb-') || body.routeType === 'RTB' || body.rtbRoute;
-
-      if (isRtbRouteId) {
-        // Resolve RTB route
-        const pingId =
-          body.pingId || (body.routeId.startsWith('rtb-') ? body.routeId.substring(4) : null);
-        let rtbRouteInfo = null;
-        if (body.did) {
-          rtbRouteInfo = await numberPoolService.getRouteInfo(body.did);
+        // A CDR that names who answered (possibly nobody) comes from the current
+        // inbound_route.lua, which sends `answeredAt` only when a leg answered.
+        const attributesByAnsweredLeg = typeof body.answeredParty === 'string';
+        if (attributesByAnsweredLeg && !body.answeredAt && callStatus === 'COMPLETED') {
+          callStatus = 'NO_ANSWER';
         }
 
-        if (!rtbRouteInfo && pingId) {
-          console.log(
-            `[FS-CDR] Redis route for DID ${body.did} expired, falling back to DB for pingId ${pingId}`
-          );
-          const pingReq = await prisma.pingRequest.findUnique({
-            where: { id: pingId },
-            include: {
-              publisher: true,
-              bids: {
-                where: { status: 'WON' },
-                include: {
-                  buyerEndpoint: true,
-                },
-              },
-            },
-          });
-          if (pingReq && pingReq.bids.length > 0) {
-            const wBid = pingReq.bids[0];
-            const campaign = await prisma.campaign.findFirst({
-              where: {
-                publisherId: pingReq.publisherId,
-                status: 'ACTIVE',
-                buyers: {
-                  some: {
-                    buyerId: wBid.buyerId,
-                    status: 'ACTIVE',
+        // The status map collapses five causes into a CallStatus and throws the
+        // rest away, which is why abandon rate was never sourceable: CANCELLED
+        // and NO_ANSWER both mean "not answered" but only one is a caller giving
+        // up. Keep the raw cause and the party we derive from it.
+        const terminationCause = normalizeHangupCause(body.hangupCause);
+        const terminationParty = deriveTerminationParty(
+          body.hangupCause,
+          body.sipHangupDisposition
+        );
+
+        // Sanitize FK fields — Lua sends "null" / "" for missing IDs which would
+        // violate foreign-key constraints if passed through.
+        const sanitizeFk = (v: string | null | undefined): string | null =>
+          v && v !== '' && v !== 'null' && v !== 'undefined' ? v : null;
+
+        let phoneNumberId: string | null = null;
+        let buyerId: string | null = null;
+        let targetId: string | null = null;
+        let campaignId: string | null | undefined = null;
+        let publisherId: string | null | undefined = null;
+        let tenantId: string = body.tenantId;
+        let buyerName: string | null = null;
+        let rtbMetadata: RtbMetadata | null = null;
+        let callSource = 'PAY_PER_CALL';
+        // Set when the DID is shared across agencies (see services/shared-routing.ts).
+        let sharedRoutingGroupId: string | null = null;
+        let sharedRouteMeta: Record<string, string | null> | null = null;
+
+        const isRtbRouteId =
+          body.routeId.startsWith('rtb-') || body.routeType === 'RTB' || body.rtbRoute;
+
+        if (isRtbRouteId) {
+          // Resolve RTB route
+          const pingId =
+            body.pingId || (body.routeId.startsWith('rtb-') ? body.routeId.substring(4) : null);
+          let rtbRouteInfo = null;
+          if (body.did) {
+            rtbRouteInfo = await numberPoolService.getRouteInfo(body.did);
+          }
+
+          if (!rtbRouteInfo && pingId) {
+            console.log(
+              `[FS-CDR] Redis route for DID ${body.did} expired, falling back to DB for pingId ${pingId}`
+            );
+            const pingReq = await prisma.pingRequest.findUnique({
+              where: { id: pingId },
+              include: {
+                publisher: true,
+                bids: {
+                  where: { status: 'WON' },
+                  include: {
+                    buyerEndpoint: true,
                   },
                 },
               },
             });
-            rtbRouteInfo = {
-              tenant_id: pingReq.publisher.tenantId,
-              ping_id: pingReq.id,
-              buyer_id: wBid.buyerId,
-              buyer_endpoint_id: wBid.buyerEndpointId,
-              publisher_id: pingReq.publisherId,
-              campaign_id: campaign?.id || null,
-              buyer_destination: wBid.buyerEndpoint.destination,
-              transfer_number: body.did,
-              caller_number: pingReq.callerNumber || body.callerNumber || null,
-              rtb_bid_amount: Number(wBid.amount),
-              buyer_bid_id: wBid.id,
-              post_accepted_at: pingReq.postedAt
-                ? pingReq.postedAt.toISOString()
-                : new Date().toISOString(),
-              publisher_request_id: pingReq.requestId || null,
-              vertical: pingReq.vertical || null,
-              expires_at: pingReq.expiresAt ? pingReq.expiresAt.toISOString() : null,
-              leased_at: pingReq.createdAt
-                ? pingReq.createdAt.toISOString()
-                : new Date().toISOString(),
+            if (pingReq && pingReq.bids.length > 0) {
+              const wBid = pingReq.bids[0];
+              const campaign = await prisma.campaign.findFirst({
+                where: {
+                  publisherId: pingReq.publisherId,
+                  status: 'ACTIVE',
+                  buyers: {
+                    some: {
+                      buyerId: wBid.buyerId,
+                      status: 'ACTIVE',
+                    },
+                  },
+                },
+              });
+              rtbRouteInfo = {
+                tenant_id: pingReq.publisher.tenantId,
+                ping_id: pingReq.id,
+                buyer_id: wBid.buyerId,
+                buyer_endpoint_id: wBid.buyerEndpointId,
+                publisher_id: pingReq.publisherId,
+                campaign_id: campaign?.id || null,
+                buyer_destination: wBid.buyerEndpoint.destination,
+                transfer_number: body.did,
+                caller_number: pingReq.callerNumber || body.callerNumber || null,
+                rtb_bid_amount: Number(wBid.amount),
+                buyer_bid_id: wBid.id,
+                post_accepted_at: pingReq.postedAt
+                  ? pingReq.postedAt.toISOString()
+                  : new Date().toISOString(),
+                publisher_request_id: pingReq.requestId || null,
+                vertical: pingReq.vertical || null,
+                expires_at: pingReq.expiresAt ? pingReq.expiresAt.toISOString() : null,
+                leased_at: pingReq.createdAt
+                  ? pingReq.createdAt.toISOString()
+                  : new Date().toISOString(),
+              };
+            }
+          }
+
+          if (rtbRouteInfo) {
+            buyerId = rtbRouteInfo.buyer_id;
+            targetId = rtbRouteInfo.buyer_endpoint_id;
+            campaignId = rtbRouteInfo.campaign_id;
+            publisherId = rtbRouteInfo.publisher_id;
+            tenantId = rtbRouteInfo.tenant_id || tenantId;
+            callSource = 'INBOUND_RTB';
+
+            // Look up phoneNumberId for the transfer number/did in the DB
+            if (rtbRouteInfo.transfer_number) {
+              const phone = await prisma.phoneNumber.findFirst({
+                where: { number: rtbRouteInfo.transfer_number },
+                select: { id: true },
+              });
+              if (phone) {
+                phoneNumberId = phone.id;
+              }
+            }
+
+            rtbMetadata = {
+              pingId: rtbRouteInfo.ping_id,
+              transferNumber: rtbRouteInfo.transfer_number,
+              bidAmount: rtbRouteInfo.rtb_bid_amount,
+              buyerBidId: rtbRouteInfo.buyer_bid_id,
+              publisherRequestId: rtbRouteInfo.publisher_request_id,
+              postAcceptedAt: rtbRouteInfo.post_accepted_at,
+              routeType: 'RTB',
             };
           }
         }
 
-        if (rtbRouteInfo) {
-          buyerId = rtbRouteInfo.buyer_id;
-          targetId = rtbRouteInfo.buyer_endpoint_id;
-          campaignId = rtbRouteInfo.campaign_id;
-          publisherId = rtbRouteInfo.publisher_id;
-          tenantId = rtbRouteInfo.tenant_id || tenantId;
-          callSource = 'INBOUND_RTB';
+        // If not RTB or if RTB route lookup failed, look up DidRoute record
+        if (!rtbMetadata) {
+          const route = await prisma.didRoute.findUnique({
+            where: { id: body.routeId },
+            select: {
+              phoneNumberId: true,
+              buyerId: true,
+              campaignId: true,
+              publisherId: true,
+              tenantId: true,
+              label: true,
+              sharedRoutingGroupId: true,
+            },
+          });
 
-          // Look up phoneNumberId for the transfer number/did in the DB
-          if (rtbRouteInfo.transfer_number) {
-            const phone = await prisma.phoneNumber.findFirst({
-              where: { number: rtbRouteInfo.transfer_number },
-              select: { id: true },
-            });
-            if (phone) {
-              phoneNumberId = phone.id;
-            }
+          if (!route) {
+            return reply.code(404).send({ error: 'Route not found' });
           }
+          sharedRoutingGroupId = route.sharedRoutingGroupId ?? null;
 
-          rtbMetadata = {
-            pingId: rtbRouteInfo.ping_id,
-            transferNumber: rtbRouteInfo.transfer_number,
-            bidAmount: rtbRouteInfo.rtb_bid_amount,
-            buyerBidId: rtbRouteInfo.buyer_bid_id,
-            publisherRequestId: rtbRouteInfo.publisher_request_id,
-            postAcceptedAt: rtbRouteInfo.post_accepted_at,
-            routeType: 'RTB',
+          phoneNumberId = route.phoneNumberId;
+          buyerId = sanitizeFk(body.buyerId) || sanitizeFk(route.buyerId) || null;
+          targetId = sanitizeFk(body.targetId) || null;
+          campaignId = route.campaignId || null;
+          publisherId = route.publisherId || null;
+          tenantId = route.tenantId;
+          buyerName = route.label || null;
+        }
+
+        // The route's own tenant, before a shared DID moves the call to the
+        // answering agency: the route's counters belong to the DID's owner.
+        const routeTenantId = tenantId;
+
+        /*
+         * A shared DID: the call belongs to the agency whose agent answered it.
+         *
+         * The answered leg names `agent:<userId>`; that agent's own agency must
+         * be a member of the group, and the call is recorded under that member's
+         * tenant and campaign -- call log, recording, disposition, billing and
+         * leaderboard all land with the agency that took it. The attribution
+         * below then validates the agent against that tenant as it would on the
+         * agency's own campaign. A call nobody answered, or answered by someone
+         * who is not a member agency's agent, stays with the DID's owner.
+         */
+        if (sharedRoutingGroupId) {
+          sharedRouteMeta = {
+            groupId: sharedRoutingGroupId,
+            routeId: body.routeId,
+            ownerTenantId: routeTenantId,
+            ownerCampaignId: campaignId ?? null,
+            ownerPublisherId: publisherId ?? null,
           };
-        }
-      }
-
-      // If not RTB or if RTB route lookup failed, look up DidRoute record
-      if (!rtbMetadata) {
-        const route = await prisma.didRoute.findUnique({
-          where: { id: body.routeId },
-          select: {
-            phoneNumberId: true,
-            buyerId: true,
-            campaignId: true,
-            publisherId: true,
-            tenantId: true,
-            label: true,
-            sharedRoutingGroupId: true,
-          },
-        });
-
-        if (!route) {
-          return reply.code(404).send({ error: 'Route not found' });
-        }
-        sharedRoutingGroupId = route.sharedRoutingGroupId ?? null;
-
-        phoneNumberId = route.phoneNumberId;
-        buyerId = sanitizeFk(body.buyerId) || sanitizeFk(route.buyerId) || null;
-        targetId = sanitizeFk(body.targetId) || null;
-        campaignId = route.campaignId || null;
-        publisherId = route.publisherId || null;
-        tenantId = route.tenantId;
-        buyerName = route.label || null;
-      }
-
-      // The route's own tenant, before a shared DID moves the call to the
-      // answering agency: the route's counters belong to the DID's owner.
-      const routeTenantId = tenantId;
-
-      /*
-       * A shared DID: the call belongs to the agency whose agent answered it.
-       *
-       * The answered leg names `agent:<userId>`; that agent's own agency must
-       * be a member of the group, and the call is recorded under that member's
-       * tenant and campaign -- call log, recording, disposition, billing and
-       * leaderboard all land with the agency that took it. The attribution
-       * below then validates the agent against that tenant as it would on the
-       * agency's own campaign. A call nobody answered, or answered by someone
-       * who is not a member agency's agent, stays with the DID's owner.
-       */
-      if (sharedRoutingGroupId) {
-        sharedRouteMeta = {
-          groupId: sharedRoutingGroupId,
-          routeId: body.routeId,
-          ownerTenantId: routeTenantId,
-          ownerCampaignId: campaignId ?? null,
-          ownerPublisherId: publisherId ?? null,
-        };
-        const { parseAnsweredParty } = await import('../services/cdr-attribution.js');
-        const party = parseAnsweredParty(body.answeredParty);
-        if (body.answeredAt && party.kind === 'agent') {
-          try {
-            const { markAnswered, resolveSharedAnswerer } = await import(
-              '../services/shared-routing.js'
-            );
-            const member = await resolveSharedAnswerer(sharedRoutingGroupId, party.id);
-            if (member) {
-              if (member.tenantId !== routeTenantId) {
-                // The DID, its publisher and its route label are the owner's;
-                // none of them is a row of the answering agency.
-                phoneNumberId = null;
-                publisherId = null;
-                buyerName = null;
-              }
-              tenantId = member.tenantId;
-              campaignId = member.campaignId;
-              sharedRouteMeta.answeredTenantId = member.tenantId;
-              await markAnswered(sharedRoutingGroupId, party.id);
-            } else {
-              console.warn(
-                `[FS-CDR] Shared route ${sharedRoutingGroupId}: answering agent ${party.id} is not in a member agency; call ${body.callId} stays with the DID owner`
-              );
-            }
-          } catch (sharedErr) {
-            console.error('[FS-CDR] Failed to resolve the shared route answerer:', sharedErr);
-          }
-        }
-      }
-
-      // Who answered, from the answered leg. When the CDR carries it, it
-      // replaces everything above: the plan's first buyer is not who answered.
-      let answeredByUserId: string | null = null;
-      let answeredVia: string | null = null;
-      let answeredAttribution: import('../services/cdr-attribution.js').AnsweredAttribution | null =
-        null;
-      if (attributesByAnsweredLeg) {
-        const { resolveAnsweredParty } = await import('../services/cdr-attribution.js');
-        buyerId = null;
-        buyerName = null;
-        targetId = null;
-        if (body.answeredAt) {
-          try {
-            answeredAttribution = await resolveAnsweredParty(prisma, {
-              tenantId,
-              answeredParty: body.answeredParty,
-              answeredTarget: sanitizeFk(body.answeredTarget),
-              answeredNumber: body.answeredNumber,
-            });
-            buyerId = answeredAttribution.buyerId;
-            buyerName = answeredAttribution.buyerName;
-            targetId = answeredAttribution.targetId;
-            answeredByUserId = answeredAttribution.answeredByUserId;
-            if (answeredByUserId) {
-              answeredVia = /^\d{4}$/.test((body.answeredNumber ?? '').trim())
-                ? 'softphone'
-                : 'agent_cell';
-            }
-          } catch (attrErr) {
-            console.error('[FS-CDR] Failed to resolve the answering party:', attrErr);
-          }
-        }
-      }
-
-      // Resolve buyer name from buyer record if we have a buyerId. The id must
-      // name a real buyer: when the routed party was a campaign AGENT, routing
-      // hands back the agent's user id in this slot, and writing that to
-      // calls.buyerId violates its foreign key and loses the whole call row.
-      if (buyerId && !attributesByAnsweredLeg) {
-        try {
-          const buyer = await prisma.buyer.findUnique({
-            where: { id: buyerId },
-            select: { name: true },
-          });
-          if (buyer) {
-            buyerName = buyerName || buyer.name;
-          } else {
-            buyerId = null;
-          }
-        } catch (dbErr) {
-          console.error('[FS-CDR] Failed to resolve buyer name:', dbErr);
-        }
-      }
-
-      // Credit a call answered on an agent's cell to that agent. The softphone
-      // path attributes on disposition; a cell has no disposition screen, so
-      // the bridged leg's dialed number is matched against the campaign's
-      // cell-forwarding agents here.
-      if (!attributesByAnsweredLeg && body.answeredAt && campaignId) {
-        const dialedKey = dialedKeyFromChannelName(body.bridgeChannelName);
-        if (dialedKey) {
-          try {
-            const assignments = await prisma.campaignAgent.findMany({
-              where: { tenantId, campaignId, status: 'ACTIVE' },
-              select: { userId: true, user: { select: { metadata: true } } },
-            });
-            const matches = assignments.filter(
-              a => cellKey(readCellForwardNumber(a.user.metadata)) === dialedKey
-            );
-            if (matches.length === 1) {
-              answeredByUserId = matches[0].userId;
-              answeredVia = 'agent_cell';
-            } else if (matches.length > 1) {
-              console.warn(
-                `[FS-CDR] ${matches.length} agents on campaign ${campaignId} share cell ${dialedKey}; not attributing call ${body.callId}`
-              );
-            }
-          } catch (attrErr) {
-            console.error('[FS-CDR] Failed to resolve answering agent:', attrErr);
-          }
-        }
-      }
-
-      // Carrier attribution. Two different carriers can be involved in one
-      // inbound call and both are worth keeping: the one that DELIVERED it
-      // (whoever issued the DID — a Vonage number arrives over Vonage's SIP
-      // forwarding) and the one that carried the forward leg out to the buyer
-      // or agent cell, which is the gateway that actually connected.
-      let inboundCarrier: { provider: string | null; forwardGateway: string | null } | null = null;
-      try {
-        const forwardGateway = body.gateway || gatewayFromChannelName(body.bridgeChannelName) || null;
-        const did = phoneNumberId
-          ? await prisma.phoneNumber.findFirst({
-              where: { id: phoneNumberId, tenantId },
-              select: { provider: true },
-            })
-          : null;
-        if (did?.provider || forwardGateway) {
-          inboundCarrier = { provider: did?.provider ?? null, forwardGateway };
-        }
-      } catch (carrierErr) {
-        console.error('[FS-CDR] Failed to resolve carrier attribution:', carrierErr);
-      }
-
-      // Create Call record
-      const call = await prisma.call.create({
-        data: {
-          tenantId: tenantId,
-          callSid: `fs-${body.callId}`,
-          direction: 'INBOUND',
-          status: callStatus as 'COMPLETED' | 'BUSY' | 'NO_ANSWER' | 'FAILED' | 'CANCELLED',
-          fromNumberId: phoneNumberId,
-          toNumber: body.destination,
-          callerId: body.callerNumber,
-          did: body.did || (rtbMetadata ? rtbMetadata.transferNumber : null),
-          targetNumber: attributesByAnsweredLeg
-            ? stripLegVars(body.answeredNumber ?? '') || null
-            : body.destination,
-          duration: body.duration || 0,
-          connectedDuration: body.connectedDuration || 0,
-          campaignId: campaignId,
-          buyerId: buyerId,
-          targetId: targetId,
-          publisherId: publisherId,
-          startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
-          answeredAt: body.answeredAt ? new Date(body.answeredAt) : null,
-          endedAt: body.endedAt ? new Date(body.endedAt) : new Date(),
-          buyerName: buyerName,
-          recordingStatus: body.recordingPath ? 'PENDING' : null,
-          callSource: callSource,
-          terminationCause: terminationCause,
-          terminationParty: terminationParty,
-          cost:
-            body.carrierCost !== undefined && body.carrierCost !== null
-              ? new Prisma.Decimal(body.carrierCost)
-              : null,
-          answeredByUserId,
-          metadata:
-            rtbMetadata || answeredByUserId || inboundCarrier || sharedRouteMeta
-              ? {
-                  ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
-                  ...(sharedRouteMeta ? { sharedRoute: sharedRouteMeta } : {}),
-                  ...(answeredByUserId
-                    ? { answeredByAgentId: answeredByUserId, answeredVia: answeredVia ?? 'agent_cell' }
-                    : {}),
-                  ...(inboundCarrier
-                    ? {
-                        carrier: {
-                          inboundProvider: inboundCarrier.provider,
-                          // Only a leg that answered says which gateway
-                          // connected; an unanswered call's last leg did not.
-                          gateway: body.answeredAt ? inboundCarrier.forwardGateway : null,
-                        },
-                      }
-                    : {}),
-                }
-              : undefined,
-        },
-      });
-
-      // A buyer endpoint that answered has taken one call against its cap.
-      if (answeredAttribution?.endpoint && call.answeredAt) {
-        const { countDelivery } = await import('../services/cdr-attribution.js');
-        await countDelivery(answeredAttribution, call.answeredAt);
-      }
-
-      // A softphone disposition saved before this CDR landed waits for it.
-      try {
-        const { isSoftphoneCallSid, mergePendingDisposition } = await import(
-          '../services/pending-disposition.js'
-        );
-        if (isSoftphoneCallSid(call.callSid)) {
-          await mergePendingDisposition(prisma, {
-            tenantId,
-            callSid: call.callSid,
-            callId: call.id,
-          });
-        }
-      } catch (mergeErr) {
-        console.error('[FS-CDR] Failed to merge a pending disposition:', mergeErr);
-      }
-
-      // Calculate call billing
-      try {
-        const { billingService } = await import('../services/billing-service.js');
-        await billingService.calculateCallBilling(call.id);
-
-        // Fetch updated call details with buyer info
-        const updatedCall = await prisma.call.findUnique({
-          where: { id: call.id },
-          include: { buyer: true },
-        });
-
-        if (updatedCall) {
-          // If billable and buyer is upfront, process deduction immediately
-          if (updatedCall.billable && updatedCall.buyer?.billingType === 'UPFRONT') {
-            const { buyerBillingService } = await import('../services/buyer-billing-service.js');
-            await buyerBillingService.processCallBilling(updatedCall.id);
-          }
-
-          // Publish events to event bus
-          const { eventBus } = await import('../services/event-bus.js');
-
-          // Publish call.completed (for billing-worker rating)
-          await eventBus.publish('call.*', {
-            event: 'call.completed',
-            tenantId: tenantId,
-            data: {
-              callId: updatedCall.id,
-              direction: updatedCall.direction,
-              duration: updatedCall.duration || 0,
-              answered: callStatus === 'COMPLETED' || callStatus === 'ANSWERED',
-              publisherId: updatedCall.publisherId || undefined,
-              buyerId: updatedCall.buyerId || undefined,
-              campaignId: updatedCall.campaignId || undefined,
-              hasRecording: !!body.recordingPath,
-              recordingDuration: body.recordingDuration || body.duration || 0,
-            },
-          });
-
-          // Publish call.ended (for real-time dashboards)
-          await eventBus.publish('call.*', {
-            event: 'call.ended',
-            tenantId: tenantId,
-            data: {
-              callId: updatedCall.id,
-              direction: updatedCall.direction,
-              duration: updatedCall.duration || 0,
-              status: updatedCall.status,
-              endedAt: updatedCall.endedAt?.toISOString() || new Date().toISOString(),
-            },
-          });
-        }
-      } catch (billingErr) {
-        console.error(
-          '[FS-CDR] Failed to calculate billing and publish events for call:',
-          call.id,
-          billingErr
-        );
-      }
-
-      // If there's a recording, trigger background upload.
-      if (body.recordingPath) {
-        const recordingPath = body.recordingPath;
-        const callId = call.id;
-        const duration = body.recordingDuration || body.duration || 0;
-
-        // Mark call as PROCESSING while we upload
-        await prisma.call.update({
-          where: { id: callId },
-          data: { recordingStatus: 'PROCESSING' },
-        });
-
-        setTimeout(() => {
-          (async () => {
+          const { parseAnsweredParty } = await import('../services/cdr-attribution.js');
+          const party = parseAnsweredParty(body.answeredParty);
+          if (body.answeredAt && party.kind === 'agent') {
             try {
-              const fs = await import('fs');
-              if (fs.existsSync(recordingPath)) {
-                console.log(`[FS-CDR] Background upload started for file: ${recordingPath}`);
-                const fileBuffer = fs.readFileSync(recordingPath);
-                const { RecordingService } = await import('../services/recording-service.js');
-                const recordingService = new RecordingService();
-
-                const uploadResult = await recordingService.uploadRecording({
-                  callId: callId,
-                  format: 'wav',
-                  file: fileBuffer,
-                  duration: duration,
-                });
-
-                console.log(
-                  `[FS-CDR] Background upload complete for call ${callId}. Recording ID: ${uploadResult.id}`
-                );
+              const { markAnswered, resolveSharedAnswerer } = await import(
+                '../services/shared-routing.js'
+              );
+              const member = await resolveSharedAnswerer(sharedRoutingGroupId, party.id);
+              if (member) {
+                if (member.tenantId !== routeTenantId) {
+                  // The DID, its publisher and its route label are the owner's;
+                  // none of them is a row of the answering agency.
+                  phoneNumberId = null;
+                  publisherId = null;
+                  buyerName = null;
+                }
+                tenantId = member.tenantId;
+                campaignId = member.campaignId;
+                sharedRouteMeta.answeredTenantId = member.tenantId;
+                await markAnswered(sharedRoutingGroupId, party.id);
               } else {
-                console.error(`[FS-CDR] Recording file not found at local path: ${recordingPath}`);
-                const { RecordingService } = await import('../services/recording-service.js');
-                const recordingService = new RecordingService();
-                await recordingService.markRecordingFailed(
-                  callId,
-                  `Recording file not found at local path: ${recordingPath}`
+                console.warn(
+                  `[FS-CDR] Shared route ${sharedRoutingGroupId}: answering agent ${party.id} is not in a member agency; call ${body.callId} stays with the DID owner`
                 );
               }
-            } catch (uploadErr) {
-              console.error(`[FS-CDR] Failed to upload recording in background:`, uploadErr);
-              try {
-                const { RecordingService } = await import('../services/recording-service.js');
-                const recordingService = new RecordingService();
-                await recordingService.markRecordingFailed(
-                  callId,
-                  uploadErr instanceof Error ? uploadErr.message : 'S3 upload failed'
-                );
-              } catch (err) {
-                console.error(`[FS-CDR] Failed to mark recording as failed:`, err);
-              }
+            } catch (sharedErr) {
+              console.error('[FS-CDR] Failed to resolve the shared route answerer:', sharedErr);
             }
-          })().catch(err => {
-            console.error('[FS-CDR] Background IIFE error:', err);
-          });
-        }, 1000); // 1-second delay
-      }
+          }
+        }
 
-      // Update DID route stats if not an RTB route.
-      //
-      // `updateMany` with the tenant rather than `update` by id: this handler
-      // is the unauthenticated FreeSWITCH CDR webhook, and `routeId` arrives in
-      // its body. Unscoped, anyone who could reach the endpoint could inflate
-      // another agency's per-route call and duration counters -- numbers the
-      // agency is billed and rated on. A mismatched routeId now updates
-      // nothing instead.
-      if (!body.routeId.startsWith('rtb-')) {
-        await prisma.didRoute.updateMany({
-          where: { id: body.routeId, tenantId: routeTenantId },
+        // Who answered, from the answered leg. When the CDR carries it, it
+        // replaces everything above: the plan's first buyer is not who answered.
+        let answeredByUserId: string | null = null;
+        let answeredVia: string | null = null;
+        let answeredAttribution:
+          | import('../services/cdr-attribution.js').AnsweredAttribution
+          | null = null;
+        if (attributesByAnsweredLeg) {
+          const { resolveAnsweredParty } = await import('../services/cdr-attribution.js');
+          buyerId = null;
+          buyerName = null;
+          targetId = null;
+          if (body.answeredAt) {
+            try {
+              answeredAttribution = await resolveAnsweredParty(prisma, {
+                tenantId,
+                answeredParty: body.answeredParty,
+                answeredTarget: sanitizeFk(body.answeredTarget),
+                answeredNumber: body.answeredNumber,
+              });
+              buyerId = answeredAttribution.buyerId;
+              buyerName = answeredAttribution.buyerName;
+              targetId = answeredAttribution.targetId;
+              answeredByUserId = answeredAttribution.answeredByUserId;
+              if (answeredByUserId) {
+                answeredVia = /^\d{4}$/.test((body.answeredNumber ?? '').trim())
+                  ? 'softphone'
+                  : 'agent_cell';
+              }
+            } catch (attrErr) {
+              console.error('[FS-CDR] Failed to resolve the answering party:', attrErr);
+            }
+          }
+        }
+
+        // Resolve buyer name from buyer record if we have a buyerId. The id must
+        // name a real buyer: when the routed party was a campaign AGENT, routing
+        // hands back the agent's user id in this slot, and writing that to
+        // calls.buyerId violates its foreign key and loses the whole call row.
+        if (buyerId && !attributesByAnsweredLeg) {
+          try {
+            const buyer = await prisma.buyer.findUnique({
+              where: { id: buyerId },
+              select: { name: true },
+            });
+            if (buyer) {
+              buyerName = buyerName || buyer.name;
+            } else {
+              buyerId = null;
+            }
+          } catch (dbErr) {
+            console.error('[FS-CDR] Failed to resolve buyer name:', dbErr);
+          }
+        }
+
+        // Credit a call answered on an agent's cell to that agent. The softphone
+        // path attributes on disposition; a cell has no disposition screen, so
+        // the bridged leg's dialed number is matched against the campaign's
+        // cell-forwarding agents here.
+        if (!attributesByAnsweredLeg && body.answeredAt && campaignId) {
+          const dialedKey = dialedKeyFromChannelName(body.bridgeChannelName);
+          if (dialedKey) {
+            try {
+              const assignments = await prisma.campaignAgent.findMany({
+                where: { tenantId, campaignId, status: 'ACTIVE' },
+                select: { userId: true, user: { select: { metadata: true } } },
+              });
+              const matches = assignments.filter(
+                a => cellKey(readCellForwardNumber(a.user.metadata)) === dialedKey
+              );
+              if (matches.length === 1) {
+                answeredByUserId = matches[0].userId;
+                answeredVia = 'agent_cell';
+              } else if (matches.length > 1) {
+                console.warn(
+                  `[FS-CDR] ${matches.length} agents on campaign ${campaignId} share cell ${dialedKey}; not attributing call ${body.callId}`
+                );
+              }
+            } catch (attrErr) {
+              console.error('[FS-CDR] Failed to resolve answering agent:', attrErr);
+            }
+          }
+        }
+
+        // Carrier attribution. Two different carriers can be involved in one
+        // inbound call and both are worth keeping: the one that DELIVERED it
+        // (whoever issued the DID — a Vonage number arrives over Vonage's SIP
+        // forwarding) and the one that carried the forward leg out to the buyer
+        // or agent cell, which is the gateway that actually connected.
+        let inboundCarrier: { provider: string | null; forwardGateway: string | null } | null =
+          null;
+        try {
+          const forwardGateway =
+            body.gateway || gatewayFromChannelName(body.bridgeChannelName) || null;
+          const did = phoneNumberId
+            ? await prisma.phoneNumber.findFirst({
+                where: { id: phoneNumberId, tenantId },
+                select: { provider: true },
+              })
+            : null;
+          if (did?.provider || forwardGateway) {
+            inboundCarrier = { provider: did?.provider ?? null, forwardGateway };
+          }
+        } catch (carrierErr) {
+          console.error('[FS-CDR] Failed to resolve carrier attribution:', carrierErr);
+        }
+
+        // Create Call record
+        const call = await prisma.call.create({
           data: {
-            totalCalls: { increment: 1 },
-            totalDuration: { increment: body.duration || 0 },
-            lastCallAt: new Date(),
+            tenantId: tenantId,
+            callSid: `fs-${body.callId}`,
+            direction: 'INBOUND',
+            status: callStatus as 'COMPLETED' | 'BUSY' | 'NO_ANSWER' | 'FAILED' | 'CANCELLED',
+            fromNumberId: phoneNumberId,
+            toNumber: body.destination,
+            callerId: body.callerNumber,
+            did: body.did || (rtbMetadata ? rtbMetadata.transferNumber : null),
+            targetNumber: attributesByAnsweredLeg
+              ? stripLegVars(body.answeredNumber ?? '') || null
+              : body.destination,
+            duration: body.duration || 0,
+            connectedDuration: body.connectedDuration || 0,
+            campaignId: campaignId,
+            buyerId: buyerId,
+            targetId: targetId,
+            publisherId: publisherId,
+            startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
+            answeredAt: body.answeredAt ? new Date(body.answeredAt) : null,
+            endedAt: body.endedAt ? new Date(body.endedAt) : new Date(),
+            buyerName: buyerName,
+            recordingStatus: body.recordingPath ? 'PENDING' : null,
+            callSource: callSource,
+            terminationCause: terminationCause,
+            terminationParty: terminationParty,
+            cost:
+              body.carrierCost !== undefined && body.carrierCost !== null
+                ? new Prisma.Decimal(body.carrierCost)
+                : null,
+            answeredByUserId,
+            metadata:
+              rtbMetadata || answeredByUserId || inboundCarrier || sharedRouteMeta
+                ? {
+                    ...(rtbMetadata ? { rtb: rtbMetadata } : {}),
+                    ...(sharedRouteMeta ? { sharedRoute: sharedRouteMeta } : {}),
+                    ...(answeredByUserId
+                      ? {
+                          answeredByAgentId: answeredByUserId,
+                          answeredVia: answeredVia ?? 'agent_cell',
+                        }
+                      : {}),
+                    ...(inboundCarrier
+                      ? {
+                          carrier: {
+                            inboundProvider: inboundCarrier.provider,
+                            // Only a leg that answered says which gateway
+                            // connected; an unanswered call's last leg did not.
+                            gateway: body.answeredAt ? inboundCarrier.forwardGateway : null,
+                          },
+                        }
+                      : {}),
+                  }
+                : undefined,
           },
         });
-      }
 
-      // Release leased number if it was an RTB call
-      if (rtbMetadata && rtbMetadata.transferNumber) {
-        // Change Redis key TTL to 120 seconds
-        try {
-          const redis = getRedisClient();
-          await redis.expire(`route:did:${rtbMetadata.transferNumber}`, 120);
-        } catch (redisErr) {
-          console.error('[FS-CDR] Failed to set Redis TTL for transfer number:', redisErr);
+        // A buyer endpoint that answered has taken one call against its cap.
+        if (answeredAttribution?.endpoint && call.answeredAt) {
+          const { countDelivery } = await import('../services/cdr-attribution.js');
+          await countDelivery(answeredAttribution, call.answeredAt);
         }
 
-        // Release the number in database immediately back to pool
+        // A softphone disposition saved before this CDR landed waits for it.
         try {
-          await prisma.phoneNumber.updateMany({
-            // Scoped: released by E.164 alone, this would return another
-            // agency's leased transfer number to the pool mid-call.
-            where: { number: rtbMetadata.transferNumber, tenantId },
+          const { isSoftphoneCallSid, mergePendingDisposition } = await import(
+            '../services/pending-disposition.js'
+          );
+          if (isSoftphoneCallSid(call.callSid)) {
+            await mergePendingDisposition(prisma, {
+              tenantId,
+              callSid: call.callSid,
+              callId: call.id,
+            });
+          }
+        } catch (mergeErr) {
+          console.error('[FS-CDR] Failed to merge a pending disposition:', mergeErr);
+        }
+
+        // Calculate call billing
+        try {
+          const { billingService } = await import('../services/billing-service.js');
+          await billingService.calculateCallBilling(call.id);
+
+          // Fetch updated call details with buyer info
+          const updatedCall = await prisma.call.findUnique({
+            where: { id: call.id },
+            include: { buyer: true },
+          });
+
+          if (updatedCall) {
+            // If billable and buyer is upfront, process deduction immediately
+            if (updatedCall.billable && updatedCall.buyer?.billingType === 'UPFRONT') {
+              const { buyerBillingService } = await import('../services/buyer-billing-service.js');
+              await buyerBillingService.processCallBilling(updatedCall.id);
+            }
+
+            // Publish events to event bus
+            const { eventBus } = await import('../services/event-bus.js');
+
+            // Publish call.completed (for billing-worker rating)
+            await eventBus.publish('call.*', {
+              event: 'call.completed',
+              tenantId: tenantId,
+              data: {
+                callId: updatedCall.id,
+                direction: updatedCall.direction,
+                duration: updatedCall.duration || 0,
+                answered: callStatus === 'COMPLETED' || callStatus === 'ANSWERED',
+                publisherId: updatedCall.publisherId || undefined,
+                buyerId: updatedCall.buyerId || undefined,
+                campaignId: updatedCall.campaignId || undefined,
+                hasRecording: !!body.recordingPath,
+                recordingDuration: body.recordingDuration || body.duration || 0,
+              },
+            });
+
+            // Publish call.ended (for real-time dashboards)
+            await eventBus.publish('call.*', {
+              event: 'call.ended',
+              tenantId: tenantId,
+              data: {
+                callId: updatedCall.id,
+                direction: updatedCall.direction,
+                duration: updatedCall.duration || 0,
+                status: updatedCall.status,
+                endedAt: updatedCall.endedAt?.toISOString() || new Date().toISOString(),
+              },
+            });
+          }
+        } catch (billingErr) {
+          console.error(
+            '[FS-CDR] Failed to calculate billing and publish events for call:',
+            call.id,
+            billingErr
+          );
+        }
+
+        // If there's a recording, trigger background upload.
+        if (body.recordingPath) {
+          const recordingPath = body.recordingPath;
+          const callId = call.id;
+          const duration = body.recordingDuration || body.duration || 0;
+
+          // Mark call as PROCESSING while we upload
+          await prisma.call.update({
+            where: { id: callId },
+            data: { recordingStatus: 'PROCESSING' },
+          });
+
+          setTimeout(() => {
+            (async () => {
+              try {
+                const fs = await import('fs');
+                if (fs.existsSync(recordingPath)) {
+                  console.log(`[FS-CDR] Background upload started for file: ${recordingPath}`);
+                  const fileBuffer = fs.readFileSync(recordingPath);
+                  const { RecordingService } = await import('../services/recording-service.js');
+                  const recordingService = new RecordingService();
+
+                  const uploadResult = await recordingService.uploadRecording({
+                    callId: callId,
+                    format: 'wav',
+                    file: fileBuffer,
+                    duration: duration,
+                  });
+
+                  console.log(
+                    `[FS-CDR] Background upload complete for call ${callId}. Recording ID: ${uploadResult.id}`
+                  );
+                } else {
+                  console.error(
+                    `[FS-CDR] Recording file not found at local path: ${recordingPath}`
+                  );
+                  const { RecordingService } = await import('../services/recording-service.js');
+                  const recordingService = new RecordingService();
+                  await recordingService.markRecordingFailed(
+                    callId,
+                    `Recording file not found at local path: ${recordingPath}`
+                  );
+                }
+              } catch (uploadErr) {
+                console.error(`[FS-CDR] Failed to upload recording in background:`, uploadErr);
+                try {
+                  const { RecordingService } = await import('../services/recording-service.js');
+                  const recordingService = new RecordingService();
+                  await recordingService.markRecordingFailed(
+                    callId,
+                    uploadErr instanceof Error ? uploadErr.message : 'S3 upload failed'
+                  );
+                } catch (err) {
+                  console.error(`[FS-CDR] Failed to mark recording as failed:`, err);
+                }
+              }
+            })().catch(err => {
+              console.error('[FS-CDR] Background IIFE error:', err);
+            });
+          }, 1000); // 1-second delay
+        }
+
+        // Update DID route stats if not an RTB route.
+        //
+        // `updateMany` with the tenant rather than `update` by id: this handler
+        // is the unauthenticated FreeSWITCH CDR webhook, and `routeId` arrives in
+        // its body. Unscoped, anyone who could reach the endpoint could inflate
+        // another agency's per-route call and duration counters -- numbers the
+        // agency is billed and rated on. A mismatched routeId now updates
+        // nothing instead.
+        if (!body.routeId.startsWith('rtb-')) {
+          await prisma.didRoute.updateMany({
+            where: { id: body.routeId, tenantId: routeTenantId },
             data: {
-              poolStatus: 'AVAILABLE',
-              lastAssignedAt: null,
+              totalCalls: { increment: 1 },
+              totalDuration: { increment: body.duration || 0 },
+              lastCallAt: new Date(),
             },
           });
-          console.log(
-            `[FS-CDR] Released transfer number ${rtbMetadata.transferNumber} back to pool`
-          );
-        } catch (dbErr) {
-          console.error('[FS-CDR] Failed to release number in DB:', dbErr);
         }
+
+        // Release leased number if it was an RTB call
+        if (rtbMetadata && rtbMetadata.transferNumber) {
+          // Change Redis key TTL to 120 seconds
+          try {
+            const redis = getRedisClient();
+            await redis.expire(`route:did:${rtbMetadata.transferNumber}`, 120);
+          } catch (redisErr) {
+            console.error('[FS-CDR] Failed to set Redis TTL for transfer number:', redisErr);
+          }
+
+          // Release the number in database immediately back to pool
+          try {
+            await prisma.phoneNumber.updateMany({
+              // Scoped: released by E.164 alone, this would return another
+              // agency's leased transfer number to the pool mid-call.
+              where: { number: rtbMetadata.transferNumber, tenantId },
+              data: {
+                poolStatus: 'AVAILABLE',
+                lastAssignedAt: null,
+              },
+            });
+            console.log(
+              `[FS-CDR] Released transfer number ${rtbMetadata.transferNumber} back to pool`
+            );
+          } catch (dbErr) {
+            console.error('[FS-CDR] Failed to release number in DB:', dbErr);
+          }
+        }
+
+        console.log(
+          `[FS-CDR] Call ${body.callId}: ${body.callerNumber} → ${body.did} → ${body.destination} | ${body.duration}s | ${body.hangupCause}`
+        );
+
+        return reply.code(201).send({
+          callId: call.id,
+          callSid: call.callSid,
+          status: callStatus,
+        });
+      } catch (err) {
+        console.error('[FS-CDR] Error persisting CDR:', err);
+        return reply.code(500).send({ error: 'Failed to persist CDR' });
       }
-
-      console.log(
-        `[FS-CDR] Call ${body.callId}: ${body.callerNumber} → ${body.did} → ${body.destination} | ${body.duration}s | ${body.hangupCause}`
-      );
-
-      return reply.code(201).send({
-        callId: call.id,
-        callSid: call.callSid,
-        status: callStatus,
-      });
-    } catch (err) {
-      console.error('[FS-CDR] Error persisting CDR:', err);
-      return reply.code(500).send({ error: 'Failed to persist CDR' });
     }
-  });
+  );
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/v1/freeswitch/recording-uploaded — Recording upload notification

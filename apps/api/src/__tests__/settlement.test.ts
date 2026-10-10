@@ -17,10 +17,7 @@ import {
 } from '../services/billing/credit-ledger.js';
 import { evaluateDeliveryGate } from '../services/billing/delivery-gate.js';
 import { getAgencyStrip } from '../services/billing/live-strip.js';
-import {
-  runDailySettlement,
-  settleAgencyForDeliveryDay,
-} from '../services/billing/settlement.js';
+import { runDailySettlement, settleAgencyForDeliveryDay } from '../services/billing/settlement.js';
 import {
   loadAgencyTerms,
   maxDailyDebitFor,
@@ -489,7 +486,6 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
     await grantPlatformAdmin(operatorId, { note: 'settlement suite fixture' });
   });
 
-
   // ══════════════════════════════════════════════════════════════════════════
   // 0. Enrolment — the opt-in
   //
@@ -564,9 +560,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(row?.status).toBe('SUBMITTED');
       expect(row?.submittedAt).not.toBeNull();
 
-      expect(
-        await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })
-      ).toBe(0);
+      expect(await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })).toBe(
+        0
+      );
       expect(await creditBalance(prisma, big.id)).toBe(0);
     });
 
@@ -625,7 +621,10 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       });
 
       expect(response.statusCode).toBe(409);
-      const codes = response.json().error.blockers.map((b: any) => b.code).sort();
+      const codes = response
+        .json()
+        .error.blockers.map((b: any) => b.code)
+        .sort();
       expect(codes).toEqual([
         'NO_DAILY_BLOCK',
         'NO_MAX_DAILY_DEBIT',
@@ -651,9 +650,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       });
 
       expect(response.statusCode).toBe(409);
-      expect(response.json().error.blockers.map((b: any) => b.code)).toEqual([
-        'NO_VALID_MANDATE',
-      ]);
+      expect(response.json().error.blockers.map((b: any) => b.code)).toEqual(['NO_VALID_MANDATE']);
     });
 
     /**
@@ -761,9 +758,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(decision.allowed).toBe(true);
 
       // The record of what it was charged is untouched.
-      expect(
-        await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })
-      ).toBe(1);
+      expect(await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })).toBe(
+        1
+      );
     });
 
     it('tells an unenrolled agency that billing does not apply, without zeroes', async () => {
@@ -1159,10 +1156,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
 
         expect(await creditBalance(prisma, big.id)).toBe(45);
 
-        const [first, second] = await Promise.all([
-          enableCharging(big.id),
-          enableCharging(big.id),
-        ]);
+        const [first, second] = await Promise.all([enableCharging(big.id), enableCharging(big.id)]);
 
         // Between them, 40 credits over 2 lots -- once, however the two calls
         // interleave.
@@ -1632,7 +1626,12 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       await purchase(big.id, 10);
       await seedDeliveredCalls(big.id, CLOSED_DAY, 40);
       await submitApplications(big.id, CLOSED_DAY, 3);
-      await settleAgencyForDeliveryDay({ tenantId: big.id, deliveryDay: CLOSED_DAY, prisma, gateway });
+      await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
 
       const dryRunLots = await prisma.applicationCreditLedgerEntry.count({
         where: { tenantId: big.id, entryType: 'PURCHASE', settlementId: { not: null } },
@@ -2879,7 +2878,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(agents[0].occupancyPct).toBeNull();
     });
 
-    it("shows an agent their own numbers and no money at all", async () => {
+    it('shows an agent their own numbers and no money at all', async () => {
       await seedTerms(big.id);
       await seedOpeningAgreement(big.id);
 
@@ -3146,7 +3145,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(smallRow.deliveredCalls).toBe(0);
       expect(smallRow.enrolled).toBe(false);
       expect(smallRow.flags.noValidMandate).toBe(false);
-      expect(Object.values(smallRow.flags).every((f) => f === false)).toBe(true);
+      expect(Object.values(smallRow.flags).every(f => f === false)).toBe(true);
       expect(smallRow.settlement.status).toBe('NOT_ENROLLED');
 
       // An ENROLLED agency that then loses its mandate is flagged, which is the
@@ -3157,9 +3156,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
         url: `/api/v1/platform/delivery/overview?day=${CLOSED_DAY}`,
         headers: tokenFor(operatorId, null),
       });
-      const flagged = afterEnrolment
-        .json()
-        .data.agencies.find((r: any) => r.tenantId === small.id);
+      const flagged = afterEnrolment.json().data.agencies.find((r: any) => r.tenantId === small.id);
       expect(flagged.enrolled).toBe(true);
       expect(flagged.flags.noValidMandate).toBe(true);
     });
@@ -3224,7 +3221,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
         const char = line[i];
         if (quoted) {
           if (char !== '"') cell += char;
-          else if (line[i + 1] === '"') (cell += '"'), i++;
+          else if (line[i + 1] === '"') ((cell += '"'), i++);
           else quoted = false;
         } else if (char === '"') quoted = true;
         else if (char === ',') (cells.push(cell), (cell = ''));
@@ -3422,16 +3419,14 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
        * make-good would give back something that was paid for, and none of
        * those exists here.
        */
-      expect(labels).toEqual([
-        'CONSUMPTION',
-        'DRY_RUN_CLOSEOUT',
-        'OVERRUN',
-        'PURCHASE',
-      ]);
+      expect(labels).toEqual(['CONSUMPTION', 'DRY_RUN_CLOSEOUT', 'OVERRUN', 'PURCHASE']);
 
       // And no money is attached to one, ever.
       const withMoney = await prisma.applicationCreditLedgerEntry.count({
-        where: { entryType: 'DRY_RUN_CLOSEOUT', OR: [{ amount: { not: null } }, { stripePaymentIntentId: { not: null } }] },
+        where: {
+          entryType: 'DRY_RUN_CLOSEOUT',
+          OR: [{ amount: { not: null } }, { stripePaymentIntentId: { not: null } }],
+        },
       });
       expect(withMoney).toBe(0);
     });
@@ -3477,11 +3472,7 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
     let keySeq = 0;
     const newKey = () => `test-key-${++keySeq}-${Math.random().toString(36).slice(2, 10)}`;
 
-    async function buy(
-      tenantId: string,
-      userId: string,
-      payload: Record<string, unknown>
-    ) {
+    async function buy(tenantId: string, userId: string, payload: Record<string, unknown>) {
       return app.inject({
         method: 'POST',
         url: '/api/v1/delivery/credits/purchase',
@@ -3620,7 +3611,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(read.statusCode).toBe(403);
 
       expect(gateway.achCharges).toHaveLength(0);
-      expect((await prisma.agencyBillingProfile.findUnique({ where: { tenantId: big.id } }))?.autoRefill).toBe(true);
+      expect(
+        (await prisma.agencyBillingProfile.findUnique({ where: { tenantId: big.id } }))?.autoRefill
+      ).toBe(true);
     });
 
     it('refuses an invoiced (OFFLINE or MELIO) agency with a clear code', async () => {
@@ -3705,7 +3698,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(tooMany.statusCode).toBe(409);
       expect(tooMany.json().error.code).toBe('EXCEEDS_DAILY_LIMIT');
 
-      expect((await buy(big.id, big.ownerId, { quantity: 10, idempotencyKey: newKey() })).statusCode).toBe(201);
+      expect(
+        (await buy(big.id, big.ownerId, { quantity: 10, idempotencyKey: newKey() })).statusCode
+      ).toBe(201);
       // Today's purchases count against the same ceiling.
       const again = await buy(big.id, big.ownerId, { quantity: 6, idempotencyKey: newKey() });
       expect(again.statusCode).toBe(409);

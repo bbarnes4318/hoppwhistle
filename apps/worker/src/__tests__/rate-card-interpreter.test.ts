@@ -11,7 +11,7 @@ describe('RateCardInterpreter', () => {
       const rateCard = {
         inbound: {
           perMinute: 0.05,
-          connectionFee: 0.10,
+          connectionFee: 0.1,
         },
       };
 
@@ -26,14 +26,14 @@ describe('RateCardInterpreter', () => {
 
       expect(result.callMinutes.toNumber()).toBe(3);
       expect(result.callAmount.toNumber()).toBe(0.15); // 3 * 0.05
-      expect(result.connectionFee.toNumber()).toBe(0.10);
+      expect(result.connectionFee.toNumber()).toBe(0.1);
       expect(result.total.toNumber()).toBe(0.25);
     });
 
     it('should calculate outbound call charges correctly', () => {
       const rateCard = {
         outbound: {
-          perMinute: 0.10,
+          perMinute: 0.1,
           connectionFee: 0.15,
         },
       };
@@ -48,7 +48,7 @@ describe('RateCardInterpreter', () => {
       const result = interpreter.calculateCallCharges(rateCard, context);
 
       expect(result.callMinutes.toNumber()).toBe(1);
-      expect(result.callAmount.toNumber()).toBe(0.10);
+      expect(result.callAmount.toNumber()).toBe(0.1);
       expect(result.connectionFee.toNumber()).toBe(0.15);
       expect(result.total.toNumber()).toBe(0.25);
     });
@@ -57,7 +57,7 @@ describe('RateCardInterpreter', () => {
       const rateCard = {
         inbound: {
           perMinute: 0.05,
-          connectionFee: 0.10,
+          connectionFee: 0.1,
         },
       };
 
@@ -95,7 +95,7 @@ describe('RateCardInterpreter', () => {
       const result = interpreter.calculateCallCharges(rateCard, context);
 
       expect(result.recordingFee.toNumber()).toBe(0.25);
-      expect(result.total.toNumber()).toBe(0.30); // 0.05 + 0.25
+      expect(result.total.toNumber()).toBe(0.3); // 0.05 + 0.25
     });
 
     it('should calculate recording fee per minute', () => {
@@ -125,7 +125,7 @@ describe('RateCardInterpreter', () => {
     it('should round up minutes correctly', () => {
       const rateCard = {
         inbound: {
-          perMinute: 0.10,
+          perMinute: 0.1,
         },
       };
 
@@ -162,12 +162,12 @@ describe('RateCardInterpreter', () => {
     it('should return CPA amount from rate card', () => {
       const rateCard = {
         cpa: {
-          amount: 25.00,
+          amount: 25.0,
         },
       };
 
       const amount = interpreter.calculateCPACharge(rateCard);
-      expect(amount.toNumber()).toBe(25.00);
+      expect(amount.toNumber()).toBe(25.0);
     });
 
     it('should return zero if no CPA rate', () => {
@@ -200,4 +200,3 @@ describe('RateCardInterpreter', () => {
     });
   });
 });
-

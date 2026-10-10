@@ -138,7 +138,7 @@ export async function auditUpdate(
 ): Promise<void> {
   // Calculate changes
   const changes: Record<string, { before: unknown; after: unknown }> = {};
-  
+
   const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const key of allKeys) {
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
@@ -225,4 +225,3 @@ export async function auditRead(
     success: true,
   });
 }
-

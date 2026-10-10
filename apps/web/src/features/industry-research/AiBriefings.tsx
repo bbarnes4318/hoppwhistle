@@ -160,7 +160,11 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
               Audio playback isn’t supported in this browser — read the transcript below.
             </span>
           )}
-          <button className="ir-btn ir-btn-ghost" onClick={() => void copy()} aria-label="Copy transcript">
+          <button
+            className="ir-btn ir-btn-ghost"
+            onClick={() => void copy()}
+            aria-label="Copy transcript"
+          >
             Copy
           </button>
           <button
@@ -238,7 +242,11 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
                 {avatar.reason}
               </p>
             )}
-            <button className="ir-btn ir-btn-ghost" style={{ marginTop: 6 }} onClick={() => void loadAvatar()}>
+            <button
+              className="ir-btn ir-btn-ghost"
+              style={{ marginTop: 6 }}
+              onClick={() => void loadAvatar()}
+            >
               Retry
             </button>
           </div>

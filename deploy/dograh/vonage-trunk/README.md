@@ -45,13 +45,13 @@ runs at most as many calls at once as you have Vonage numbers.
 
 ## Pieces
 
-| File | Role |
-| --- | --- |
-| `setup_vonage.py` | The one command above. |
-| `install_vonage_trunk.py` | The `vonage` PJSIP trunk, test call (`--test-call`), `--status`, `--rollback`. |
-| `vonage_config.py` | Runs in `dograh-api-1`. Creates the Vonage configuration, moves numbers, and assigns or restores a campaign. |
-| `../ari-trunk/apply_caller_trunk_patch.py` | Per-call trunk from the caller ID (`DOGRAH_ARI_CALLER_TRUNKS`). |
-| `../anveo-trunk/set_caller_id_pool.py` | Loads the Vonage numbers into the Vonage configuration. |
+| File                                       | Role                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `setup_vonage.py`                          | The one command above.                                                                                       |
+| `install_vonage_trunk.py`                  | The `vonage` PJSIP trunk, test call (`--test-call`), `--status`, `--rollback`.                               |
+| `vonage_config.py`                         | Runs in `dograh-api-1`. Creates the Vonage configuration, moves numbers, and assigns or restores a campaign. |
+| `../ari-trunk/apply_caller_trunk_patch.py` | Per-call trunk from the caller ID (`DOGRAH_ARI_CALLER_TRUNKS`).                                              |
+| `../anveo-trunk/set_caller_id_pool.py`     | Loads the Vonage numbers into the Vonage configuration.                                                      |
 
 ## Rollback
 

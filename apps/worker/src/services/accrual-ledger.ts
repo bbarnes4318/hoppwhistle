@@ -9,7 +9,14 @@ export interface AccrualEntry {
   publisherId?: string;
   buyerId?: string;
   callId?: string;
-  type: 'CALL_MINUTE_INBOUND' | 'CALL_MINUTE_OUTBOUND' | 'CONNECTION_FEE' | 'RECORDING_FEE' | 'CPA_CONVERSION' | 'TAX' | 'ADJUSTMENT';
+  type:
+    | 'CALL_MINUTE_INBOUND'
+    | 'CALL_MINUTE_OUTBOUND'
+    | 'CONNECTION_FEE'
+    | 'RECORDING_FEE'
+    | 'CPA_CONVERSION'
+    | 'TAX'
+    | 'ADJUSTMENT';
   amount: Decimal;
   currency: string;
   description: string;
@@ -93,13 +100,15 @@ export class AccrualLedgerService {
     periodDate: Date,
     publisherId?: string,
     buyerId?: string
-  ): Promise<Array<{
-    id: string;
-    type: string;
-    amount: string;
-    description: string;
-    callId?: string;
-  }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      type: string;
+      amount: string;
+      description: string;
+      callId?: string;
+    }>
+  > {
     let sql = `
       SELECT id, type, amount, description, "callId" AS call_id
       FROM accrual_ledger
@@ -219,7 +228,7 @@ export class AccrualLedgerService {
     sql += ` GROUP BY type`;
 
     const result = await this.pool.query(sql, params);
-    
+
     const byType: Record<string, Decimal> = {};
     let total = new Decimal(0);
     let count = 0;
@@ -240,4 +249,3 @@ export class AccrualLedgerService {
     return { total, byType, count };
   }
 }
-

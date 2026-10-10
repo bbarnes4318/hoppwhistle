@@ -62,12 +62,7 @@ interface EditRouteDialogProps {
   onSuccess: () => void;
 }
 
-export function EditRouteDialog({
-  open,
-  onOpenChange,
-  route,
-  onSuccess,
-}: EditRouteDialogProps) {
+export function EditRouteDialog({ open, onOpenChange, route, onSuccess }: EditRouteDialogProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -122,7 +117,11 @@ export function EditRouteDialog({
     e.preventDefault();
 
     if (routeType === 'STATIC' && !destination) {
-      toast({ title: 'Error', description: 'Please enter a destination number', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please enter a destination number',
+        variant: 'destructive',
+      });
       return;
     }
     if (routeType === 'CAMPAIGN' && (!campaignId || campaignId === 'none')) {
@@ -208,7 +207,11 @@ export function EditRouteDialog({
         <DialogHeader>
           <DialogTitle>Edit Inbound Route</DialogTitle>
           <DialogDescription>
-            Modify or delete the routing for DID: <span className="font-mono text-foreground font-semibold">{formatPhoneNumber(route.did)}</span>.
+            Modify or delete the routing for DID:{' '}
+            <span className="font-mono text-foreground font-semibold">
+              {formatPhoneNumber(route.did)}
+            </span>
+            .
           </DialogDescription>
         </DialogHeader>
 
@@ -242,12 +245,18 @@ export function EditRouteDialog({
                   disabled={saving || deleting}
                   required
                 />
-                <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
+                <p className="text-xs text-muted-foreground">
+                  The number where calls will be forwarded.
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="edit-buyer">Associated Buyer (Optional)</Label>
-                <Select value={buyerId} onValueChange={setBuyerId} disabled={saving || deleting || loadingOptions}>
+                <Select
+                  value={buyerId}
+                  onValueChange={setBuyerId}
+                  disabled={saving || deleting || loadingOptions}
+                >
                   <SelectTrigger id="edit-buyer">
                     <SelectValue placeholder="Select a buyer" />
                   </SelectTrigger>
@@ -265,7 +274,12 @@ export function EditRouteDialog({
           ) : (
             <div className="space-y-2">
               <Label htmlFor="edit-campaign">Associated Campaign</Label>
-              <Select value={campaignId} onValueChange={setCampaignId} disabled={saving || deleting || loadingOptions} required>
+              <Select
+                value={campaignId}
+                onValueChange={setCampaignId}
+                disabled={saving || deleting || loadingOptions}
+                required
+              >
                 <SelectTrigger id="edit-campaign">
                   <SelectValue placeholder="Select a campaign" />
                 </SelectTrigger>
@@ -277,7 +291,9 @@ export function EditRouteDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Calls will follow the dynamic buyer routing rules of the campaign.</p>
+              <p className="text-xs text-muted-foreground">
+                Calls will follow the dynamic buyer routing rules of the campaign.
+              </p>
             </div>
           )}
 

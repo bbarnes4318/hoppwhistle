@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  Phone,
-  PhoneOff,
-  Mic,
-  MicOff,
-  Pause,
-  Play,
-  PhoneCall,
-  PhoneForwarded,
-} from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Pause, Play, PhoneCall, PhoneForwarded } from 'lucide-react';
 import { useState } from 'react';
 
 import { formatPhone } from '@/components/domain/phone-cell';
@@ -34,15 +25,8 @@ export function DialerControls({
   onPhoneNumberChange,
   compact = false,
 }: DialerControlsProps): JSX.Element {
-  const {
-    currentCall,
-    agentStatus,
-    makeCall,
-    hangupCall,
-    toggleMute,
-    toggleHold,
-    isConnecting,
-  } = usePhone();
+  const { currentCall, agentStatus, makeCall, hangupCall, toggleMute, toggleHold, isConnecting } =
+    usePhone();
 
   const [internalPhoneNumber, setInternalPhoneNumber] = useState('');
   const phoneNumber = externalPhoneNumber ?? internalPhoneNumber;

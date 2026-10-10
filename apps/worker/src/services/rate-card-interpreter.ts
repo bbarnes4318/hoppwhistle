@@ -51,10 +51,7 @@ export class RateCardInterpreter {
   /**
    * Calculate call charges based on rate card and call context
    */
-  calculateCallCharges(
-    rateCard: RateCardStructure,
-    context: CallRatingContext
-  ): RatingResult {
+  calculateCallCharges(rateCard: RateCardStructure, context: CallRatingContext): RatingResult {
     const breakdown: RatingResult['breakdown'] = [];
     let callAmount = new Decimal(0);
     let connectionFee = new Decimal(0);
@@ -63,11 +60,9 @@ export class RateCardInterpreter {
 
     // Calculate billable minutes (round up to nearest minute)
     const callMinutes = this.roundUpMinutes(context.duration);
-    
+
     // Get rates based on direction
-    const rates = context.direction === 'INBOUND' 
-      ? rateCard.inbound 
-      : rateCard.outbound;
+    const rates = context.direction === 'INBOUND' ? rateCard.inbound : rateCard.outbound;
 
     // Connection fee (one-time, if call was answered)
     if (rates?.connectionFee && context.answered) {
@@ -122,10 +117,7 @@ export class RateCardInterpreter {
     // CPA is handled separately via conversion.confirmed event
     // This method doesn't calculate CPA
 
-    const total = callAmount
-      .plus(connectionFee)
-      .plus(recordingFee)
-      .plus(cpaAmount);
+    const total = callAmount.plus(connectionFee).plus(recordingFee).plus(cpaAmount);
 
     return {
       callMinutes,
@@ -174,4 +166,3 @@ export class RateCardInterpreter {
     return amount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   }
 }
-

@@ -480,9 +480,8 @@ describe.skipIf(!gate.available)('Returns', () => {
       });
 
       // And it reads back the same way on the list.
-      const listed = (
-        await get(wl.ownerId, wl.id, `/api/v1/returns?callId=${calls.paid}`)
-      ).json().data[0];
+      const listed = (await get(wl.ownerId, wl.id, `/api/v1/returns?callId=${calls.paid}`)).json()
+        .data[0];
       expect(listed.clawback).toEqual({
         paymentId: clawback.id,
         amount: -20,
@@ -491,9 +490,9 @@ describe.skipIf(!gate.available)('Returns', () => {
     });
 
     it('a second ACCEPT on a clawed-back call is 409 and writes no second clawback', async () => {
-      expect(
-        (await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' })).statusCode
-      ).toBe(200);
+      expect((await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' })).statusCode).toBe(
+        200
+      );
       const again = await decide(wl.ownerId, wl.id, calls.paid, { decision: 'ACCEPT' });
       expect(again.statusCode).toBe(409);
       expect(await prisma.publisherPayment.count({ where: { kind: 'CLAWBACK' } })).toBe(1);

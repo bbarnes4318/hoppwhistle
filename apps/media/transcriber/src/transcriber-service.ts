@@ -44,13 +44,11 @@ export class TranscriberService {
     this.timeoutMs = parseInt(process.env.PY_SVC_TIMEOUT_MS || '900000', 10); // 15 minutes default
   }
 
-  async transcribe(
-    input: {
-      recordingUrl: string;
-      format?: string;
-      options: TranscriptionOptions;
-    }
-  ): Promise<TranscriptionResult> {
+  async transcribe(input: {
+    recordingUrl: string;
+    format?: string;
+    options: TranscriptionOptions;
+  }): Promise<TranscriptionResult> {
     const job = {
       job: 'transcribe',
       recordingUrl: input.recordingUrl,
@@ -89,16 +87,16 @@ export class TranscriberService {
         resolve(result);
       };
 
-      pythonProcess.stdout.on('data', (data) => {
+      pythonProcess.stdout.on('data', data => {
         stdout += data.toString();
       });
 
-      pythonProcess.stderr.on('data', (data) => {
+      pythonProcess.stderr.on('data', data => {
         stderr += data.toString();
         logger.debug(`Python stderr: ${data.toString()}`);
       });
 
-      pythonProcess.on('close', (code) => {
+      pythonProcess.on('close', code => {
         if (code !== 0) {
           logger.error(`Python process exited with code ${code}`);
           logger.error(`Stderr: ${stderr}`);
@@ -123,7 +121,7 @@ export class TranscriberService {
         }
       });
 
-      pythonProcess.on('error', (error) => {
+      pythonProcess.on('error', error => {
         logger.error(`Failed to spawn Python process: ${error}`);
         settle({
           ok: false,
@@ -149,4 +147,3 @@ export class TranscriberService {
     });
   }
 }
-

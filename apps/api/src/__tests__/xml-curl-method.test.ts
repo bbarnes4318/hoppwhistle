@@ -11,7 +11,16 @@ import { describe, expect, it } from 'vitest';
  */
 describe('the FreeSWITCH directory binding', () => {
   const config = readFileSync(
-    join(__dirname, '..', '..', '..', 'freeswitch', 'conf', 'autoload_configs', 'xml_curl.conf.xml'),
+    join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'freeswitch',
+      'conf',
+      'autoload_configs',
+      'xml_curl.conf.xml'
+    ),
     'utf8'
   );
 

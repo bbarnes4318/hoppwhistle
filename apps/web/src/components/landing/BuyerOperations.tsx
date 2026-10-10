@@ -94,10 +94,10 @@ export function BuyerOperations() {
                 Both sides of the delivery see the same numbers.
               </h2>
               <p className="text-slate-500 text-base sm:text-lg leading-relaxed">
-                Your agency sees the calls delivered to it, the applications they produced, and
-                what each one cost. Publishers see the calls they sent and what those calls
-                earned. Neither side has to take the other on trust, and there is one ledger
-                behind both views.
+                Your agency sees the calls delivered to it, the applications they produced, and what
+                each one cost. Publishers see the calls they sent and what those calls earned.
+                Neither side has to take the other on trust, and there is one ledger behind both
+                views.
               </p>
             </div>
 

@@ -9,10 +9,12 @@ import {
 
 /**
  * Quota Middleware
- * 
+ *
  * Checks quotas before allowing call creation or other quota-limited operations.
  */
-export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes' | 'phone_numbers' | 'budget') {
+export function requireQuotaCheck(
+  quotaType: 'concurrent_calls' | 'daily_minutes' | 'phone_numbers' | 'budget'
+) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user;
     if (!user || !user.tenantId) {
@@ -24,7 +26,9 @@ export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes
 
     try {
       let result: QuotaCheckResult | BudgetCheckResult;
-      const body = request.body as { estimatedMinutes?: number; estimatedCost?: number } | undefined;
+      const body = request.body as
+        | { estimatedMinutes?: number; estimatedCost?: number }
+        | undefined;
 
       switch (quotaType) {
         case 'concurrent_calls':
@@ -33,7 +37,11 @@ export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes
 
         case 'daily_minutes': {
           const estimatedMinutes = body?.estimatedMinutes || 1;
-          result = await quotaService.checkDailyMinutes(user.tenantId, estimatedMinutes, overrideToken);
+          result = await quotaService.checkDailyMinutes(
+            user.tenantId,
+            estimatedMinutes,
+            overrideToken
+          );
           break;
         }
 
@@ -66,8 +74,9 @@ export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes
       }
 
       // Add quota info to request for downstream use
-      (request as FastifyRequest & { quotaCheck?: QuotaCheckResult | BudgetCheckResult }).quotaCheck =
-        result;
+      (
+        request as FastifyRequest & { quotaCheck?: QuotaCheckResult | BudgetCheckResult }
+      ).quotaCheck = result;
     } catch (error) {
       logger.error({ msg: 'Quota check failed', error, tenantId: user.tenantId });
       void reply.code(500);
@@ -76,4 +85,3 @@ export function requireQuotaCheck(quotaType: 'concurrent_calls' | 'daily_minutes
     return undefined;
   };
 }
-

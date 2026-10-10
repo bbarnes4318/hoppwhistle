@@ -6,7 +6,9 @@ import { logger } from './logger.js';
 
 export interface CnamProvider {
   name: string;
-  lookup(phoneNumber: string): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }>;
+  lookup(
+    phoneNumber: string
+  ): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }>;
 }
 
 export interface CnamResult {
@@ -22,7 +24,9 @@ export interface CnamResult {
 export class MockCnamProvider implements CnamProvider {
   name = 'mock';
 
-  lookup(phoneNumber: string): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
+  lookup(
+    phoneNumber: string
+  ): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
     // Mock implementation - returns fake names based on area code
     const areaCode = phoneNumber.slice(2, 5);
     const mockNames: Record<string, string> = {
@@ -63,7 +67,9 @@ export class TwilioCnamProvider implements CnamProvider {
     this.apiSecret = apiSecret || process.env.TWILIO_API_SECRET;
   }
 
-  async lookup(phoneNumber: string): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
+  async lookup(
+    phoneNumber: string
+  ): Promise<{ callerName: string | null; metadata?: Record<string, unknown> }> {
     if (!this.apiKey || !this.apiSecret) {
       logger.warn('Twilio credentials not configured, using mock');
       return new MockCnamProvider().lookup(phoneNumber);
@@ -75,7 +81,7 @@ export class TwilioCnamProvider implements CnamProvider {
         `https://lookups.twilio.com/v1/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Type=caller-name`,
         {
           headers: {
-            'Authorization': `Basic ${Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString('base64')}`,
+            Authorization: `Basic ${Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString('base64')}`,
           },
         }
       );
@@ -276,4 +282,3 @@ export class CnamService {
 }
 
 export const cnamService = new CnamService();
-
