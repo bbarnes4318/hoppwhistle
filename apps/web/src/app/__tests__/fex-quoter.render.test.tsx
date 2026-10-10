@@ -770,9 +770,15 @@ describe('QuoteWorkspace', () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
     await screen.findByText('Golden Eagle Final Expense');
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
-    fireEvent.click(await screen.findByRole('radio', { name: 'Verify rate only' }));
-    expect(rowIds()).toEqual(['moo_living_promise']);
-    expect(screen.getByRole('button', { name: 'Remove filter: Verify rate only' })).toBeTruthy();
+    // The popover mounts asynchronously; under a loaded test run that can
+    // take longer than the default second.
+    fireEvent.click(
+      await screen.findByRole('radio', { name: 'Verify rate only' }, { timeout: 4000 })
+    );
+    await waitFor(() => expect(rowIds()).toEqual(['moo_living_promise']));
+    expect(
+      await screen.findByRole('button', { name: 'Remove filter: Verify rate only' })
+    ).toBeTruthy();
   });
 
   it('shows a localized error over the last good results', async () => {
