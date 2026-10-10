@@ -181,7 +181,7 @@ export function factsFor(product: Product, isStaff: boolean): FexFacts {
     benefitByClass: Object.fromEntries(
       product.classes.map(cls => [cls.code, BENEFIT_LABEL[cls.benefit] ?? cls.benefit])
     ),
-    alerts: [...product.alerts],
+    alerts: product.alerts.map(agentAlert),
   };
   if (isStaff) {
     facts.staff = {
@@ -192,6 +192,18 @@ export function factsFor(product: Product, isStaff: boolean): FexFacts {
     };
   }
   return facts;
+}
+
+/**
+ * A bundle alert as the quoter states it now. The bundle still says "annual
+ * premium shown" for a carrier with no published monthly factor; the quote
+ * is priced monthly on an estimated factor (`estimateMonthly`), so the alert
+ * says that instead.
+ */
+export function agentAlert(alert: string): string {
+  return /annual premium shown/i.test(alert)
+    ? 'Monthly premium is estimated: the carrier publishes no monthly factor. Confirm the exact monthly premium with the carrier.'
+    : alert;
 }
 
 function presentReason(reason: Reason, isStaff: boolean): Reason {

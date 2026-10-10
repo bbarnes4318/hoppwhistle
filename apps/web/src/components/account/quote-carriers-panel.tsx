@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Landmark, Loader2, Search, X } from 'lucide-react';
+import { Check, Landmark, Loader2, Search } from 'lucide-react';
 import Link from 'next/link';
 import * as React from 'react';
 
@@ -28,8 +28,10 @@ import { cn } from '@/lib/utils';
  * quote results are cut by. The pick is saved on the agent
  * (`PUT /api/v1/fex/settings/me`, `{ carriers }`), and from then on every quote
  * they run, on the Quote page, in a call or on a customer, carries only those
- * carriers' plans. Picking every carrier is saved as "every carrier", so a
- * carrier added to the quoter later shows up without a visit here.
+ * carriers' plans. Each click saves at once -- there is no Save button -- and
+ * a save that fails puts the card back the way it was. Picking every carrier
+ * is saved as "every carrier", so a carrier added to the quoter later shows up
+ * without a visit here.
  *
  * It narrows the agency's own settings; it never widens them. A carrier the
  * agency is not appointed with is marked, since its plans stay behind "Show not
@@ -55,9 +57,6 @@ function carriersOf(products: readonly FexCatalogProduct[]): CarrierOption[] {
   return [...byFamily.values()].sort((a, b) => a.family.localeCompare(b.family));
 }
 
-const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
-  a.size === b.size && [...a].every(x => b.has(x));
-
 export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean }): JSX.Element {
   const { catalog, error: catalogError } = useFexCatalog();
   const { settings, loading, setSettings } = useFexSettings();
@@ -76,6 +75,8 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [justSaved, setJustSaved] = React.useState(false);
+  /** Only the latest click's answer is applied; an earlier one landing late is ignored. */
+  const latestSave = React.useRef(0);
 
   // The form starts from what is saved, once both reads are in.
   const ready = carriers.length > 0 && settings !== null;
@@ -102,7 +103,6 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
     );
   }
 
-  const changed = !sameSet(selected, saved);
   const everyCarrier = selected.size === all.size;
   const needle = query.trim().toLowerCase();
   const shown = needle
@@ -113,39 +113,39 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
       )
     : carriers;
 
-  const edit = (next: Set<string>) => {
+  /** Show the pick at once, save it, and put it back if the save fails. */
+  async function commit(next: Set<string>): Promise<void> {
+    if (readOnly || !selected) return;
+    if (next.size === 0) {
+      setError('Keep at least one carrier: the quoter needs one to quote.');
+      return;
+    }
+    const before = selected;
+    const call = ++latestSave.current;
     setSelected(next);
     setError(null);
     setJustSaved(false);
-  };
-  const toggle = (family: string) => {
-    const next = new Set(selected);
-    if (next.has(family)) next.delete(family);
-    else next.add(family);
-    edit(next);
-  };
-
-  async function save(): Promise<void> {
-    if (!selected || selected.size === 0) {
-      setError('Choose at least one carrier to quote.');
-      return;
-    }
     setSaving(true);
     const result = await fexApi.saveMySettings({
-      carriers: selected.size === all.size ? null : [...selected].sort(),
+      carriers: next.size === all.size ? null : [...next].sort(),
     });
+    if (call !== latestSave.current) return;
     setSaving(false);
     if (!result.ok) {
+      setSelected(before);
       setError(result.message || 'Your carriers were not saved.');
       return;
     }
     if (settings) setSettings({ ...settings, me: result.data.me });
-    setSelected(
-      new Set(result.data.me.carriers?.length ? result.data.me.carriers : [...all.values()])
-    );
-    setError(null);
     setJustSaved(true);
   }
+
+  const toggle = (family: string) => {
+    const next = new Set(selected);
+    if (next.has(family)) next.delete(family);
+    else next.add(family);
+    void commit(next);
+  };
 
   return (
     <PanelShell
@@ -176,19 +176,10 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
               size="sm"
               variant="ghost"
               disabled={readOnly || everyCarrier}
-              onClick={() => edit(new Set(all))}
+              onClick={() => void commit(new Set(all))}
             >
               <Check aria-hidden className="mr-1.5 h-3.5 w-3.5" />
               Select all
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={readOnly || selected.size === 0}
-              onClick={() => edit(new Set())}
-            >
-              <X aria-hidden className="mr-1.5 h-3.5 w-3.5" />
-              Clear
             </Button>
           </div>
         </div>
@@ -209,7 +200,10 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
                     data-carrier={carrier.family}
                     data-selected={on || undefined}
                     className={cn(
-                      'group flex h-full cursor-pointer items-center gap-3 rounded-card border px-3 py-2.5 transition-colors duration-150 ne-motion',
+                      // `relative` keeps the sr-only checkbox inside its card. Without
+                      // it the checkbox sits against a far-off ancestor, and focusing it
+                      // on click scrolled the app shell out of view.
+                      'group relative flex h-full cursor-pointer items-center gap-3 rounded-card border px-3 py-2.5 transition-colors duration-150 ne-motion',
                       'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-1',
                       on
                         ? 'border-brand bg-brand-tint'
@@ -262,49 +256,29 @@ export function QuoteCarriersPanel({ readOnly = false }: { readOnly?: boolean })
         )}
 
         {error ? <Notice tone="error" title={error} /> : null}
-        {justSaved && !changed ? (
-          <Notice
-            tone="info"
-            title={
-              everyCarrier
-                ? 'Saved. Your quotes show every carrier.'
-                : `Saved. Your quotes show ${selected.size} ${selected.size === 1 ? 'carrier' : 'carriers'}.`
-            }
-          />
-        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-rule pt-4">
-          <Button
-            size="sm"
-            onClick={() => void save()}
-            disabled={readOnly || saving || !changed || selected.size === 0}
-          >
-            {saving ? <Loader2 aria-hidden className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            Save carriers
-          </Button>
-          {changed ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => edit(new Set(saved))}
-              disabled={saving}
-            >
-              Undo changes
-            </Button>
-          ) : null}
-          <span className="t-meta ml-auto text-ink-3">
+          <span className="t-meta text-ink-3" aria-live="polite" data-carriers-status>
             {readOnly ? (
               'Not available in a read-only preview.'
-            ) : selected.size === 0 ? (
-              <span className="text-dropped-ink">Select at least one carrier.</span>
-            ) : changed ? (
-              'Unsaved changes'
+            ) : saving ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                Saving…
+              </span>
+            ) : justSaved ? (
+              everyCarrier ? (
+                'Saved. Your quotes show every carrier.'
+              ) : (
+                `Saved. Your quotes show ${selected.size} ${selected.size === 1 ? 'carrier' : 'carriers'}.`
+              )
             ) : (
-              <Link href="/quote" className="font-medium text-brand-ink hover:underline">
-                Open the quoter
-              </Link>
+              'Click a carrier to add or remove it. Changes save right away.'
             )}
           </span>
+          <Link href="/quote" className="t-meta ml-auto font-medium text-brand-ink hover:underline">
+            Open the quoter
+          </Link>
         </div>
       </div>
     </PanelShell>

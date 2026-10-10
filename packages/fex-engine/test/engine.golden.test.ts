@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DrugIndex,
+  ESTIMATED_MONTHLY_FACTOR,
   quoteAll,
   type Applicant,
   type FexBundle,
@@ -86,6 +87,36 @@ describe('fex-engine v18', () => {
       );
     expect(sons('F')?.best?.premium).toBe(49.01);
     expect(sons('M')?.best?.premium).toBe(58.55);
+  });
+
+  it('estimateMonthly prices Combined and CICA monthly at 8.75% of annual, and changes nothing else', () => {
+    const applicant: Applicant = {
+      state: 'TX',
+      sex: 'F',
+      tobacco: false,
+      age: 65,
+      face: 10000,
+      mode: 'monthly',
+      conditions: [],
+      meds: [],
+    };
+    const ids = ['chubb_generational_life', 'cica_superior_choice'];
+    const plain = quoteAll(bundle, structuredClone(applicant));
+    const estimated = quoteAll(bundle, structuredClone(applicant), { estimateMonthly: true });
+    for (const id of ids) {
+      const before = plain.find(r => r.productId === id)?.best;
+      const after = estimated.find(r => r.productId === id)?.best;
+      // v18: no monthly premium, the annual one only.
+      expect(before?.premium, id).toBeNull();
+      expect(before?.annual, id).not.toBeNull();
+      expect(after?.premium, id).toBe(
+        Math.round(after!.annual! * ESTIMATED_MONTHLY_FACTOR * 100) / 100
+      );
+      expect(after?.premiumNote, id).toMatch(/Estimated monthly/);
+    }
+    // A carrier that publishes its own monthly factor is priced exactly as before.
+    const sons = (rs: typeof plain) => rs.find(r => r.productId === 'sons_of_norway_legacysure');
+    expect(sons(estimated)?.best).toEqual(sons(plain)?.best);
   });
 
   it('agentText moves Rx notes out of the reason text (and a decline reason quoting one) and changes nothing else', () => {

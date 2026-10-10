@@ -382,7 +382,9 @@ describe('the customer page', () => {
     expect(within(plan).getByText('$54.27')).toBeTruthy();
     expect(within(plan).getByText('$10,000 coverage')).toBeTruthy();
     expect(within(plan).getByText('7 plans')).toBeTruthy();
-    expect(within(plan).getByText('$651.24')).toBeTruthy(); // the annual premium
+    // Monthly only: the annual premium is never stated.
+    expect(within(plan).queryByText('$651.24')).toBeNull();
+    expect(within(plan).queryByText(/annual/i)).toBeNull();
     // The carrier's mark, at the size it is recognised by.
     expect(plan.querySelector('[data-carrier-logo]')).toBeTruthy();
     // The quote without a choice follows as a row of its own.

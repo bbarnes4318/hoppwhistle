@@ -67,9 +67,8 @@ const CATALOG = {
 };
 let myCarriers: string[] | null = null;
 
-/** A checkbox's or button's state, without a cast the type checker and the linter disagree about. */
+/** A checkbox's state, without a cast the type checker and the linter disagree about. */
 const isChecked = (el: HTMLElement): boolean => el instanceof HTMLInputElement && el.checked;
-const isDisabled = (el: HTMLElement): boolean => el instanceof HTMLButtonElement && el.disabled;
 const carrierWrites: unknown[] = [];
 
 let user: Record<string, unknown> = BUYER;
@@ -257,7 +256,7 @@ describe('the Account page', () => {
     expect(within(panel).queryByText(/Retired Carrier/)).toBeNull();
   });
 
-  it('saves the carriers an agent picks, and every carrier as no pick at all', async () => {
+  it('saves each click at once, and every carrier as no pick at all', async () => {
     user = AGENT;
     await mountAccount();
     const panel = await waitFor(() => {
@@ -265,29 +264,39 @@ describe('the Account page', () => {
       expect(within(el).getAllByRole('checkbox')).toHaveLength(3);
       return el;
     });
-    const save = within(panel).getByRole('button', { name: 'Save carriers' });
-    expect(isDisabled(save)).toBe(true);
+    // No Save button: a click is the save.
+    expect(within(panel).queryByRole('button', { name: /Save carriers/ })).toBeNull();
 
-    // Clearing leaves nothing to quote: it cannot be saved.
-    fireEvent.click(within(panel).getByRole('button', { name: /Clear/ }));
-    expect(within(panel).getByText('Select at least one carrier.')).toBeTruthy();
-    expect(isDisabled(save)).toBe(true);
-
-    fireEvent.click(within(panel).getByRole('checkbox', { name: /Transamerica/ }));
-    fireEvent.click(within(panel).getByRole('checkbox', { name: /Mutual of Omaha/ }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Security National/ }));
     expect(within(panel).getByText('2 of 3 selected')).toBeTruthy();
-    fireEvent.click(save);
     await waitFor(() =>
       expect(within(panel).getByText('Saved. Your quotes show 2 carriers.')).toBeTruthy()
     );
     expect(carrierWrites).toEqual([{ carriers: ['Mutual of Omaha', 'Transamerica'] }]);
+    expect(isChecked(within(panel).getByRole('checkbox', { name: /Security National/ }))).toBe(
+      false
+    );
 
     fireEvent.click(within(panel).getByRole('button', { name: /Select all/ }));
-    fireEvent.click(within(panel).getByRole('button', { name: 'Save carriers' }));
     await waitFor(() =>
       expect(within(panel).getByText('Saved. Your quotes show every carrier.')).toBeTruthy()
     );
     expect(carrierWrites[1]).toEqual({ carriers: null });
+  });
+
+  it('will not remove the last carrier', async () => {
+    user = AGENT;
+    myCarriers = ['Transamerica'];
+    await mountAccount();
+    const panel = await waitFor(() => {
+      const el = document.querySelector('[data-quote-carriers]') as HTMLElement;
+      expect(within(el).getByText('1 of 3 selected')).toBeTruthy();
+      return el;
+    });
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Transamerica/ }));
+    expect(within(panel).getByText(/Keep at least one carrier/)).toBeTruthy();
+    expect(isChecked(within(panel).getByRole('checkbox', { name: /Transamerica/ }))).toBe(true);
+    expect(carrierWrites).toEqual([]);
   });
 
   it('opens on the carriers an agent saved, and filters them by name', async () => {

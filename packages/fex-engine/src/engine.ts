@@ -441,6 +441,27 @@ interface PriceContext {
   tobacco: boolean;
   mode: PaymentMode;
   state: string;
+  /** `QuoteOptions.estimateMonthly`. */
+  estimateMonthly: boolean;
+}
+
+/**
+ * The monthly factor used where a carrier publishes none (Combined/Chubb,
+ * CICA): 8.75% of the annual premium, the most common bank-draft factor among
+ * the carriers that do publish one. Only with `QuoteOptions.estimateMonthly`.
+ */
+export const ESTIMATED_MONTHLY_FACTOR = 0.0875;
+
+const ESTIMATED_MONTHLY_NOTE =
+  'Estimated monthly: the carrier publishes no monthly factor, so this uses the standard 8.75% of annual. Confirm the exact monthly premium with the carrier.';
+
+/** The product's factor for the context's mode, or the estimate where allowed. */
+function modalFactor(ctx: PriceContext): { factor: number | null; estimated: boolean } {
+  const published = ctx.p.modal[ctx.mode];
+  if (published) return { factor: published, estimated: false };
+  if (ctx.mode === 'monthly' && ctx.estimateMonthly)
+    return { factor: ESTIMATED_MONTHLY_FACTOR, estimated: true };
+  return { factor: null, estimated: false };
 }
 
 type RateHit =
@@ -477,7 +498,6 @@ interface Priced {
 function premiumFor(ctx: PriceContext, face: number): Priced | undefined {
   const hit = rateFor(ctx, face);
   if (!hit) return undefined;
-  const modal = ctx.p.modal;
 
   if (hit.byFace) {
     const faces = Object.keys(hit.byFace)
@@ -495,10 +515,11 @@ function premiumFor(ctx: PriceContext, face: number): Priced | undefined {
         note = 'Carrier publishes monthly premiums only';
       }
     } else if (ctx.mode !== 'annual') {
-      const factor = modal[ctx.mode];
+      const { factor, estimated } = modalFactor(ctx);
       premium = factor ? round2(printed * factor) : null;
       annual = printed;
       if (!factor) note = `${MODE_LABEL[ctx.mode]} factor not published`;
+      else if (estimated) note = ESTIMATED_MONTHLY_NOTE;
     }
     return { premium, annual, face: chosen, note, basis: hit.basis };
   }
@@ -538,9 +559,15 @@ function premiumFor(ctx: PriceContext, face: number): Priced | undefined {
         }
       : { premium: annual, annual, face, basis: hit.basis };
   }
-  const factor = modal[ctx.mode];
+  const { factor, estimated } = modalFactor(ctx);
   return factor
-    ? { premium: round2(annualRaw * factor), annual, face, basis: hit.basis }
+    ? {
+        premium: round2(annualRaw * factor),
+        annual,
+        face,
+        basis: hit.basis,
+        ...(estimated ? { note: ESTIMATED_MONTHLY_NOTE } : {}),
+      }
     : {
         premium: null,
         annual,
@@ -643,7 +670,8 @@ function priceClass(
   cls: PlanClass,
   applicant: Applicant,
   age: number,
-  mode: PaymentMode
+  mode: PaymentMode,
+  estimateMonthly = false
 ): QuoteLine | string {
   const limits = faceLimits(product, cls, age, applicant.state);
   const ctx: PriceContext = {
@@ -655,6 +683,7 @@ function priceClass(
     tobacco: applicant.tobacco,
     mode,
     state: applicant.state,
+    estimateMonthly,
   };
   let face: number;
   let faceAdjusted: string | null = null;
@@ -1320,7 +1349,8 @@ export function quoteProduct(
       cls,
       tobaccoRxNote ? { ...applicant, tobacco: true } : applicant,
       age,
-      mode
+      mode,
+      !!options.estimateMonthly
     );
     if (typeof priced === 'string') {
       problems.push(priced);

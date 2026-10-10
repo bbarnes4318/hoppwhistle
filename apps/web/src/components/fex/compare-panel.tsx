@@ -79,10 +79,6 @@ export function ComparePanel({
           '—'
         ),
     },
-    {
-      label: 'Annual',
-      cell: r => (r.best?.annual != null ? money(r.best.annual) : '—'),
-    },
     { label: 'Benefit', cell: r => (r.best ? <BenefitBadge line={r.best} /> : '—') },
     {
       label: 'Face amount',

@@ -6,8 +6,8 @@
  *
  * The selected plan reads as a financial product: the carrier's mark set
  * into the layout, the plan named the way the carrier names it, the monthly
- * premium as the figure the eye lands on, and a facts row (coverage, annual
- * cost, benefit, when and by whom). Every other saved quote follows as one
+ * premium as the figure the eye lands on, and a facts row (coverage, plans
+ * compared, when and by whom). Every other saved quote follows as one
  * row of a comparison table, priced against the selected plan. Any quote
  * opens as it was stored (`SavedQuoteDrawer`); Requote runs the same answers
  * against today's rates as a NEW quote, and the old one stays as it was.
@@ -43,7 +43,7 @@ import {
   type FexQuoteSummary,
   type QuoteSource,
 } from '@/lib/fex/api';
-import { annualPremium, customerName, snapshotDifferences } from '@/lib/fex/customer';
+import { customerName, snapshotDifferences } from '@/lib/fex/customer';
 import { cn } from '@/lib/utils';
 
 import { SavedQuoteDrawer } from '../history/saved-quote-drawer';
@@ -388,7 +388,6 @@ function FeaturedPlan({
 }): JSX.Element {
   const mode = MODE_SHORT[q.paymentMode];
   const fromThis = Boolean(q.applicationId);
-  const annual = annualPremium(q.selectedPremium, q.paymentMode);
   const parts = planParts(q);
 
   return (
@@ -427,9 +426,8 @@ function FeaturedPlan({
         </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 divide-x divide-rule border-y border-rule md:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 divide-x divide-rule border-y border-rule md:grid-cols-3">
         <Fact label="Face amount">{wholeDollars(q.selectedFace)}</Fact>
-        <Fact label="Annual premium">{annual != null ? money(annual) : '—'}</Fact>
         <Fact label="Compared">
           {q.eligibleCount} plan{q.eligibleCount === 1 ? '' : 's'}
         </Fact>

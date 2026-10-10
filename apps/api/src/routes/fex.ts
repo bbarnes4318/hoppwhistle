@@ -263,7 +263,8 @@ export async function registerFexRoutes(fastify: FastifyInstance): Promise<void>
     return quoteAll(
       engine.bundle,
       applicant,
-      { includeUnquotable: false, agentText: true },
+      // Agents quote and sell monthly: never leave a carrier on an annual figure.
+      { includeUnquotable: false, agentText: true, estimateMonthly: true },
       engine.drugs
     ).filter(r => (settings.showPriceOnly || r.uwLoaded) && (!carriers || carriers.has(r.family)));
   }

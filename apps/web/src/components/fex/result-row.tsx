@@ -14,8 +14,7 @@
  * referral, a medication whose use is not confirmed, or the answer that set
  * the class ("COPD → Graded"). A carrier that took every answer at its best
  * class says nothing at all -- silence is the normal case, so the rows that
- * do speak are the ones worth reading. The reasons in full, the annual
- * figure, the rate source, the other classes and the plan's limits are in the
+ * do speak are the ones worth reading. The reasons in full, the rate source, the other classes and the plan's limits are in the
  * opened row, with copy, save and compare.
  *
  * ── Layout ───────────────────────────────────────────────────────────────────
@@ -186,9 +185,10 @@ export function RateVerify({ result }: { result: FexResult }): JSX.Element {
 }
 
 /**
- * The premium and what it buys. Three shapes, each said as what it is: a
- * modal premium ("$71.64 /mo"), an annual one where the carrier publishes no
- * monthly factor ("$1,025.50 /yr"), and a single premium paid once.
+ * The premium and what it buys. Two shapes, each said as what it is: a modal
+ * premium ("$71.64 /mo") and a single premium paid once. Never an annual
+ * figure: a carrier with no published monthly factor is priced on an
+ * estimated one by the server, and a mode the carrier cannot price is a dash.
  */
 const PRICE_SIZE = {
   16: 'text-[16px]',
@@ -213,9 +213,8 @@ export function Price({
   size?: 16 | 17 | 18 | 20 | 26;
 }): JSX.Element {
   const single = line.basis === 'SINGLE_PREMIUM_PER_1000';
-  const annualOnly = line.premium == null && line.annual != null;
-  const amount = line.premium ?? line.annual;
-  const unit = single ? 'single' : annualOnly ? '/yr' : `/${MODE_SHORT[line.mode]}`;
+  const amount = line.premium;
+  const unit = single ? 'single' : `/${MODE_SHORT[line.mode]}`;
   const figure = PRICE_SIZE[size];
   const big = size >= 20;
   return (
@@ -899,11 +898,6 @@ export function ResultDetail({
                 {best.premiumNote ? (
                   <span className="block text-[12px] text-ink-3">{best.premiumNote}</span>
                 ) : null}
-              </Fact>
-              <Fact label="Annual">
-                <span className="tabular-nums">
-                  {best.annual != null ? money(best.annual) : '—'}
-                </span>
               </Fact>
               <Fact label="Face">
                 <span className="tabular-nums">{wholeDollars(best.face)}</span>
