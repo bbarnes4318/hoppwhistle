@@ -12,7 +12,7 @@ interface AlertData {
 
 /**
  * Budget Alert Service
- * 
+ *
  * Sends budget alerts via email and Slack webhooks when thresholds are exceeded.
  */
 export class BudgetAlertService {
@@ -51,7 +51,13 @@ export class BudgetAlertService {
     // Send Slack alert
     if (budget.alertSlackWebhook) {
       try {
-        await this.sendSlackAlert(budget.alertSlackWebhook, tenantId, type, data, budget.tenant.name);
+        await this.sendSlackAlert(
+          budget.alertSlackWebhook,
+          tenantId,
+          type,
+          data,
+          budget.tenant.name
+        );
         sentVia.push('slack');
       } catch (error) {
         logger.error({ msg: 'Failed to send Slack alert', error, tenantId });
@@ -226,4 +232,3 @@ export class BudgetAlertService {
 }
 
 export const budgetAlertService = new BudgetAlertService();
-

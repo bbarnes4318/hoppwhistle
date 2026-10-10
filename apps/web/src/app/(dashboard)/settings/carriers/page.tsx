@@ -260,7 +260,10 @@ export default function CarrierRoutingPage() {
       });
       return;
     }
-    toast({ title: `${carrier.name} updated`, description: 'Applies to the next call on every waterfall.' });
+    toast({
+      title: `${carrier.name} updated`,
+      description: 'Applies to the next call on every waterfall.',
+    });
     await load();
   };
 
@@ -377,10 +380,9 @@ function CarrierSettings({
                   )}
                 </div>
                 <p
-                  className={[
-                    't-meta mt-0.5',
-                    ownsNone ? 'text-ringing-ink' : 'text-ink-3',
-                  ].join(' ')}
+                  className={['t-meta mt-0.5', ownsNone ? 'text-ringing-ink' : 'text-ink-3'].join(
+                    ' '
+                  )}
                 >
                   {carrier.numberProvider
                     ? `${carrier.eligibleCallerIdCount} eligible caller-ID number${
@@ -394,7 +396,10 @@ function CarrierSettings({
                 value={carrier.callerIdStrategy}
                 onValueChange={value => void onUpdate(carrier, { callerIdStrategy: value })}
               >
-                <SelectTrigger className="h-7 w-48 text-xs" aria-label={`${carrier.name} caller ID`}>
+                <SelectTrigger
+                  className="h-7 w-48 text-xs"
+                  aria-label={`${carrier.name} caller ID`}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -459,9 +464,7 @@ function CarrierSettings({
 
               <Switch
                 checked={carrier.status !== 'INACTIVE'}
-                onCheckedChange={v =>
-                  void onUpdate(carrier, { status: v ? 'ACTIVE' : 'INACTIVE' })
-                }
+                onCheckedChange={v => void onUpdate(carrier, { status: v ? 'ACTIVE' : 'INACTIVE' })}
                 aria-label={`${carrier.name} active`}
               />
             </div>

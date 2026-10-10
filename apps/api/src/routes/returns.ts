@@ -556,9 +556,7 @@ export async function registerReturnRoutes(fastify: FastifyInstance): Promise<vo
                 data.publisherPayoutAmount = zero;
                 data.payout = zero;
                 payout = zero;
-                metadata.originalPublisherPayout = (
-                  call.publisherPayoutAmount ?? zero
-                ).toString();
+                metadata.originalPublisherPayout = (call.publisherPayoutAmount ?? zero).toString();
               }
             }
             data.profit = zero.minus(payout).minus(call.cost ?? zero);

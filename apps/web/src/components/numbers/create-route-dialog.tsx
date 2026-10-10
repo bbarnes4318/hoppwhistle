@@ -90,13 +90,21 @@ export function CreateRouteDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!phoneNumberId) {
-      toast({ title: 'Error', description: 'Please select a phone number', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please select a phone number',
+        variant: 'destructive',
+      });
       return;
     }
     if (routeType === 'STATIC' && !destination) {
-      toast({ title: 'Error', description: 'Please enter a destination number', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please enter a destination number',
+        variant: 'destructive',
+      });
       return;
     }
     if (routeType === 'CAMPAIGN' && !campaignId) {
@@ -130,7 +138,7 @@ export function CreateRouteDialog({
         title: 'Route Created',
         description: 'Successfully mapped DID to destination.',
       });
-      
+
       // Reset form
       setPhoneNumberId('');
       setDestination('');
@@ -138,7 +146,7 @@ export function CreateRouteDialog({
       setRouteType('STATIC');
       setLabel('');
       setRecordingEnabled(true);
-      
+
       onSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -215,7 +223,9 @@ export function CreateRouteDialog({
                 disabled={loading}
                 required
               />
-              <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
+              <p className="text-xs text-muted-foreground">
+                The number where calls will be forwarded.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -237,7 +247,9 @@ export function CreateRouteDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Calls will follow the dynamic buyer routing rules of the campaign.</p>
+              <p className="text-xs text-muted-foreground">
+                Calls will follow the dynamic buyer routing rules of the campaign.
+              </p>
             </div>
           )}
 
@@ -268,7 +280,12 @@ export function CreateRouteDialog({
           </div>
 
           <DialogFooter className="pt-4">
-            <Button variant="outline" type="button" onClick={() => onOpenChange(false)} disabled={loading}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>

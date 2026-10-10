@@ -24,8 +24,8 @@ export function AIVoiceSection() {
               </h2>
               <p className="text-slate-400 text-base sm:text-lg leading-relaxed">
                 We screen for the things that decide whether a call is worth taking — state, age
-                band, eligibility, intent — and transfer only the callers who clear them. Your
-                agent answers with those answers already on screen.
+                band, eligibility, intent — and transfer only the callers who clear them. Your agent
+                answers with those answers already on screen.
               </p>
             </div>
 

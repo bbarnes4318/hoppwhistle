@@ -365,12 +365,12 @@ export async function loadAgencyTerms(
   const chargesInPlatform = providerChargesInPlatform(paymentProvider);
 
   const mandateStatus = payingByCard
-    ? profile?.cardMandateStatus ?? AchMandateStatus.NONE
-    : profile?.achMandateStatus ?? AchMandateStatus.NONE;
+    ? (profile?.cardMandateStatus ?? AchMandateStatus.NONE)
+    : (profile?.achMandateStatus ?? AchMandateStatus.NONE);
 
   const settlementPaymentMethodId = payingByCard
-    ? profile?.cardPaymentMethodId ?? null
-    : profile?.achPaymentMethodId ?? null;
+    ? (profile?.cardPaymentMethodId ?? null)
+    : (profile?.achPaymentMethodId ?? null);
 
   /*
    * An OFFLINE agency has nothing to debit and is not missing anything.

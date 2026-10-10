@@ -450,10 +450,7 @@ export async function recordGatewayOutcome(
     if (gateways.length === 0) return;
 
     for (const gateway of gateways) {
-      const update = applyOutcome(
-        { consecutiveFailures: gateway.consecutiveFailures },
-        outcome
-      );
+      const update = applyOutcome({ consecutiveFailures: gateway.consecutiveFailures }, outcome);
 
       await prisma.carrierGateway.update({
         where: { id: gateway.id },
@@ -622,7 +619,10 @@ export async function attributeCallToCarrier(
         AND NOT (COALESCE("metadata", '{}'::jsonb) ? 'carrier')
     `;
   } catch (error) {
-    console.error('[carrier-routing] failed to attribute call to carrier:', (error as Error).message);
+    console.error(
+      '[carrier-routing] failed to attribute call to carrier:',
+      (error as Error).message
+    );
   }
 }
 

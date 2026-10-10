@@ -83,7 +83,10 @@ const calculateEligibility = (_healthAnswers: Record<string, unknown> | undefine
 
 // How each eligibility tier is shown on the quote badge: its name, and whether
 // it is a standard (green), modified (amber) or declined (red) outcome.
-const ELIGIBILITY_BADGES: Record<string, { status: 'standard' | 'modified' | 'declined'; plan: string }> = {
+const ELIGIBILITY_BADGES: Record<
+  string,
+  { status: 'standard' | 'modified' | 'declined'; plan: string }
+> = {
   LEVEL: { status: 'standard', plan: 'Level' },
   ROP: { status: 'standard', plan: 'Return of Premium' },
   GRADED: { status: 'modified', plan: 'Graded' },

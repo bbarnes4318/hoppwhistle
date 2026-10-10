@@ -99,7 +99,11 @@ function gateway(c: Carrier, name: string, over: Partial<Gateway> = {}): void {
 /** The three reads `loadRoute` makes, honouring the tenant filter on each. */
 const prisma = {
   carrierRoute: {
-    findUnique: ({ where }: { where: { tenantId_callType: { tenantId: string; callType: string } } }) => {
+    findUnique: ({
+      where,
+    }: {
+      where: { tenantId_callType: { tenantId: string; callType: string } };
+    }) => {
       const { tenantId, callType } = where.tenantId_callType;
       const key = `${tenantId}:${callType}`;
       const rows = steps.filter(s => s.routeKey === key);
@@ -165,10 +169,34 @@ beforeEach(() => {
   waterfall('B', 'PREDICTIVE_DIALER', [[vonageB, true]]);
 
   numbers.push(
-    { tenantId: 'A', number: '+14155550100', provider: 'vonage', status: 'ACTIVE', callerIdEligible: true },
-    { tenantId: 'A', number: '+14155550101', provider: 'vonage', status: 'ACTIVE', callerIdEligible: true },
-    { tenantId: 'A', number: '+14155550199', provider: 'vonage', status: 'RELEASED', callerIdEligible: true },
-    { tenantId: 'B', number: '+16465550000', provider: 'vonage', status: 'ACTIVE', callerIdEligible: true }
+    {
+      tenantId: 'A',
+      number: '+14155550100',
+      provider: 'vonage',
+      status: 'ACTIVE',
+      callerIdEligible: true,
+    },
+    {
+      tenantId: 'A',
+      number: '+14155550101',
+      provider: 'vonage',
+      status: 'ACTIVE',
+      callerIdEligible: true,
+    },
+    {
+      tenantId: 'A',
+      number: '+14155550199',
+      provider: 'vonage',
+      status: 'RELEASED',
+      callerIdEligible: true,
+    },
+    {
+      tenantId: 'B',
+      number: '+16465550000',
+      provider: 'vonage',
+      status: 'ACTIVE',
+      callerIdEligible: true,
+    }
   );
 });
 

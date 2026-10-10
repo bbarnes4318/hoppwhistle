@@ -224,17 +224,11 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
           },
         });
 
-        await auditCreate(
-          tenantId,
-          'TenantQuota',
-          quota.id,
-          quota,
-          {
-            userId: user?.userId,
-            ipAddress: request.ip,
-            requestId: request.id,
-          }
-        );
+        await auditCreate(tenantId, 'TenantQuota', quota.id, quota, {
+          userId: user?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        });
 
         return quota;
       }
@@ -264,18 +258,11 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
         },
       });
 
-      await auditUpdate(
-        tenantId,
-        'TenantQuota',
-        after.id,
-        before,
-        after,
-        {
-          userId: user?.userId,
-          ipAddress: request.ip,
-          requestId: request.id,
-        }
-      );
+      await auditUpdate(tenantId, 'TenantQuota', after.id, before, after, {
+        userId: user?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
 
       return after;
     }
@@ -336,17 +323,11 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
           },
         });
 
-        await auditCreate(
-          tenantId,
-          'TenantBudget',
-          budget.id,
-          budget,
-          {
-            userId: user?.userId,
-            ipAddress: request.ip,
-            requestId: request.id,
-          }
-        );
+        await auditCreate(tenantId, 'TenantBudget', budget.id, budget, {
+          userId: user?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        });
 
         return budget;
       }
@@ -372,18 +353,11 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
         },
       });
 
-      await auditUpdate(
-        tenantId,
-        'TenantBudget',
-        after.id,
-        before,
-        after,
-        {
-          userId: user?.userId,
-          ipAddress: request.ip,
-          requestId: request.id,
-        }
-      );
+      await auditUpdate(tenantId, 'TenantBudget', after.id, before, after, {
+        userId: user?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
 
       return after;
     }
@@ -528,17 +502,11 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
         },
       });
 
-      await auditCreate(
-        tenantId,
-        'QuotaOverride',
-        override.id,
-        override,
-        {
-          userId: user?.userId,
-          ipAddress: request.ip,
-          requestId: request.id,
-        }
-      );
+      await auditCreate(tenantId, 'QuotaOverride', override.id, override, {
+        userId: user?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
 
       void reply.code(201);
       return override;
@@ -556,10 +524,7 @@ export function registerQuotaRoutes(fastify: FastifyInstance): Promise<void> {
       const overrides = await prisma.quotaOverride.findMany({
         where: {
           tenantId,
-          OR: [
-            { expiresAt: null },
-            { expiresAt: { gt: new Date() } },
-          ],
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
         orderBy: { createdAt: 'desc' },
       });

@@ -24,15 +24,15 @@ Dograh's Asterisk: see `deploy/dograh/vonage-trunk/README.md`.
 
 ## What carries a Vonage call
 
-| Piece | Where |
-| --- | --- |
-| Carrier, gateway (`vonage`, `NANP11`), steps on every waterfall (disabled) | `apps/api/prisma/sql/carrier-catalog.sql`, applied at API boot |
-| SIP trunk | `apps/freeswitch/conf/sip_profiles/external/vonage.xml`, rendered by `apps/freeswitch/scripts/vonage-gateway.sh` |
-| Waterfall resolution | API: `services/carrier-routing.ts`; worker: `services/carrier-routing.ts` (own Prisma client) |
-| Per-leg health and attribution | `apps/freeswitch/scripts/carrier_leg_result.lua` → `GET /api/v1/freeswitch/carrier-result?mode=leg` |
-| Number provisioning | `apps/api/src/services/provisioning/adapters/vonage-adapter.ts` |
-| Inbound | Vonage SIP forwarding → FreeSWITCH `public` context → `inbound_route.lua` → `/api/v1/freeswitch/lookup` |
-| Diagnostics | `pnpm --filter @hopwhistle/api vonage:diagnose -- --tenant <id>` |
+| Piece                                                                      | Where                                                                                                            |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Carrier, gateway (`vonage`, `NANP11`), steps on every waterfall (disabled) | `apps/api/prisma/sql/carrier-catalog.sql`, applied at API boot                                                   |
+| SIP trunk                                                                  | `apps/freeswitch/conf/sip_profiles/external/vonage.xml`, rendered by `apps/freeswitch/scripts/vonage-gateway.sh` |
+| Waterfall resolution                                                       | API: `services/carrier-routing.ts`; worker: `services/carrier-routing.ts` (own Prisma client)                    |
+| Per-leg health and attribution                                             | `apps/freeswitch/scripts/carrier_leg_result.lua` → `GET /api/v1/freeswitch/carrier-result?mode=leg`              |
+| Number provisioning                                                        | `apps/api/src/services/provisioning/adapters/vonage-adapter.ts`                                                  |
+| Inbound                                                                    | Vonage SIP forwarding → FreeSWITCH `public` context → `inbound_route.lua` → `/api/v1/freeswitch/lookup`          |
+| Diagnostics                                                                | `pnpm --filter @hopwhistle/api vonage:diagnose -- --tenant <id>`                                                 |
 
 ## Vonage dashboard setup
 
@@ -45,8 +45,8 @@ Dograh's Asterisk: see `deploy/dograh/vonage-trunk/README.md`.
      dashboard, and leave `VONAGE_SIP_USERNAME`/`VONAGE_SIP_PASSWORD` unset.
    - **Digest:** set both `VONAGE_SIP_USERNAME` (API key) and
      `VONAGE_SIP_PASSWORD` (API secret) on the FreeSWITCH container.
-   The destination is sent as `1XXXXXXXXXX` (no `+`); the caller ID must be a
-   Vonage number on the account, which the `POOL` caller-ID strategy guarantees.
+     The destination is sent as `1XXXXXXXXXX` (no `+`); the caller ID must be a
+     Vonage number on the account, which the `POOL` caller-ID strategy guarantees.
 3. **Inbound.** Numbers forward by SIP to this platform's external profile
    (port 5080). With `VONAGE_NUMBER_ROUTING_MODE=sip` and
    `VONAGE_SIP_URI=sip:<your-freeswitch-host>:5080`, buying or re-configuring a
@@ -64,14 +64,14 @@ Dograh's Asterisk: see `deploy/dograh/vonage-trunk/README.md`.
 
 API container:
 
-| Variable | Purpose |
-| --- | --- |
-| `VONAGE_API_KEY`, `VONAGE_API_SECRET` | Numbers API |
-| `VONAGE_NUMBER_ROUTING_MODE` | `sip` (default for this platform) or `application`. Never inferred from `VONAGE_APPLICATION_ID` |
-| `VONAGE_SIP_URI` | `sip:<host>:5080` or `sip:{msisdn}@<host>:5080`; a fixed user part is refused |
-| `VONAGE_APPLICATION_ID` | `application` mode only |
-| `VONAGE_DEFAULT_COUNTRY` | Country fallback when releasing a number (default `US`) |
-| `CARRIER_LEG_REPORTING` | Default on; `off` stops per-leg reports (API and worker) |
+| Variable                              | Purpose                                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `VONAGE_API_KEY`, `VONAGE_API_SECRET` | Numbers API                                                                                     |
+| `VONAGE_NUMBER_ROUTING_MODE`          | `sip` (default for this platform) or `application`. Never inferred from `VONAGE_APPLICATION_ID` |
+| `VONAGE_SIP_URI`                      | `sip:<host>:5080` or `sip:{msisdn}@<host>:5080`; a fixed user part is refused                   |
+| `VONAGE_APPLICATION_ID`               | `application` mode only                                                                         |
+| `VONAGE_DEFAULT_COUNTRY`              | Country fallback when releasing a number (default `US`)                                         |
+| `CARRIER_LEG_REPORTING`               | Default on; `off` stops per-leg reports (API and worker)                                        |
 
 FreeSWITCH container: `VONAGE_SIP_PROXY` (default `sip.nexmo.com`),
 `VONAGE_SIP_REALM` (default: the proxy), `VONAGE_SIP_USERNAME` and
@@ -80,13 +80,13 @@ Nothing Vonage-related is exposed to the web bundle.
 
 Routing-mode rules, enforced at purchase/configure time and logged at API boot:
 
-| `VONAGE_NUMBER_ROUTING_MODE` | `VONAGE_SIP_URI` | `VONAGE_APPLICATION_ID` | Result |
-| --- | --- | --- | --- |
-| `sip` | set | any | SIP into FreeSWITCH |
-| `application` | any | set | Voice Application |
-| unset | set | unset | SIP into FreeSWITCH |
-| unset | set | set | refused (ambiguous) |
-| unset | unset | set | refused (never attached implicitly) |
+| `VONAGE_NUMBER_ROUTING_MODE` | `VONAGE_SIP_URI` | `VONAGE_APPLICATION_ID` | Result                              |
+| ---------------------------- | ---------------- | ----------------------- | ----------------------------------- |
+| `sip`                        | set              | any                     | SIP into FreeSWITCH                 |
+| `application`                | any              | set                     | Voice Application                   |
+| unset                        | set              | unset                   | SIP into FreeSWITCH                 |
+| unset                        | set              | set                     | refused (ambiguous)                 |
+| unset                        | unset            | set                     | refused (never attached implicitly) |
 
 ## Turning Vonage on
 
@@ -120,7 +120,7 @@ Every tenant already has Vonage on all six waterfalls, switched **off**. In
   count; busy, no-answer and caller cancel never do. Five in a row demote the
   gateway to the back of every chain for 120 s, for that tenant only.
 - **Attribution.** An answered leg writes `calls.metadata.carrier =
-  { gateway, carrierCode, routeType }` on API-created calls. Inbound CDRs record
+{ gateway, carrierCode, routeType }` on API-created calls. Inbound CDRs record
   `metadata.carrier.inboundProvider` (who delivered the DID) and the gateway of
   the answered forward leg.
 

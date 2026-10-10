@@ -10,8 +10,8 @@ import { RecordingService } from '../services/recording-service.js';
 
 async function main() {
   const args = process.argv.slice(2);
-  const limitArg = args.find((arg) => arg.startsWith('--limit='));
-  const recordingIdArg = args.find((arg) => arg.startsWith('--recording-id='));
+  const limitArg = args.find(arg => arg.startsWith('--limit='));
+  const recordingIdArg = args.find(arg => arg.startsWith('--recording-id='));
   const helpArg = args.includes('--help') || args.includes('-h');
 
   if (helpArg) {
@@ -77,4 +77,3 @@ Examples:
 }
 
 void main();
-

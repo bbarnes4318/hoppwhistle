@@ -114,7 +114,10 @@ async function runTests() {
     // Duration used = 60, threshold = 60 -> not billable
     const durEqual = billingService.getBillableDuration({ connectedDuration: 60, duration: 100 });
     const isBillableEqual = billingService.isBillableCall(durEqual, 60);
-    assert('2. Call exactly equal to threshold is NOT billable', isBillableEqual === false && durEqual === 60);
+    assert(
+      '2. Call exactly equal to threshold is NOT billable',
+      isBillableEqual === false && durEqual === 60
+    );
 
     // Case 3: Call above threshold
     // Duration used = 61, threshold = 60 -> billable
@@ -123,7 +126,10 @@ async function runTests() {
     assert('3. Call above threshold IS billable', isBillableAbove === true && durAbove === 61);
 
     // Case 4: Missing connectedDuration but duration present
-    const durFallback = billingService.getBillableDuration({ connectedDuration: null, duration: 75 });
+    const durFallback = billingService.getBillableDuration({
+      connectedDuration: null,
+      duration: 75,
+    });
     assert('4. Fallback to duration when connectedDuration is missing', durFallback === 75);
 
     // Case 5: Missing both durations
@@ -133,7 +139,11 @@ async function runTests() {
     console.log('\n--- Running Database Billing Calculation Integration Tests ---');
 
     // Helper to create a call
-    const createCallHelper = async (connectedDuration: number | null, duration: number | null, targetNumber = '+18652637582') => {
+    const createCallHelper = async (
+      connectedDuration: number | null,
+      duration: number | null,
+      targetNumber = '+18652637582'
+    ) => {
       const callId = 'test-call-' + Math.random().toString(36).substring(2, 7);
       return await prisma.call.create({
         data: {
@@ -147,7 +157,7 @@ async function runTests() {
           targetNumber,
           connectedDuration,
           duration,
-          cost: new Prisma.Decimal(0.50), // carrier cost
+          cost: new Prisma.Decimal(0.5), // carrier cost
           direction: 'INBOUND',
           callerId: '+15005550006',
           toNumber: targetNumber,
@@ -164,10 +174,10 @@ async function runTests() {
     assert(
       '6. Default Campaign payout/price applies',
       resDefault.success &&
-      resDefault.billable === true &&
-      resDefault.payout === '5.0000' &&
-      resDefault.revenue === '15.0000' &&
-      resDefault.profit === '9.5000'
+        resDefault.billable === true &&
+        resDefault.payout === '5.0000' &&
+        resDefault.revenue === '15.0000' &&
+        resDefault.profit === '9.5000'
     );
 
     // Case 7: Campaign Publisher Override
@@ -177,7 +187,7 @@ async function runTests() {
         tenantId: testTenantId,
         campaignId: testCampaignId,
         publisherId: testPublisherId,
-        payoutPerBillableCall: new Prisma.Decimal(7.50),
+        payoutPerBillableCall: new Prisma.Decimal(7.5),
         status: 'ACTIVE',
       },
     });
@@ -187,9 +197,9 @@ async function runTests() {
     assert(
       '7. Campaign Publisher Payout override applies',
       resPubOverride.success &&
-      resPubOverride.payout === '7.5000' &&
-      resPubOverride.revenue === '15.0000' &&
-      resPubOverride.profit === '7.0000'
+        resPubOverride.payout === '7.5000' &&
+        resPubOverride.revenue === '15.0000' &&
+        resPubOverride.profit === '7.0000'
     );
 
     // Case 8: Campaign Buyer Override
@@ -201,7 +211,7 @@ async function runTests() {
         buyerId: testBuyerId,
         buyerEndpointId: testEndpointId,
         destinationNumber: '+18652637582',
-        pricePerBillableCall: new Prisma.Decimal(18.50),
+        pricePerBillableCall: new Prisma.Decimal(18.5),
         status: 'ACTIVE',
       },
     });
@@ -211,9 +221,9 @@ async function runTests() {
     assert(
       '8. Campaign Buyer Price override applies',
       resBuyerOverride.success &&
-      resBuyerOverride.payout === '7.5000' &&
-      resBuyerOverride.revenue === '18.5000' &&
-      resBuyerOverride.profit === '10.5000'
+        resBuyerOverride.payout === '7.5000' &&
+        resBuyerOverride.revenue === '18.5000' &&
+        resBuyerOverride.profit === '10.5000'
     );
 
     // Case 9: BuyerEndpoint.basePrice fallback (when campaign price is 0)
@@ -231,7 +241,7 @@ async function runTests() {
         buyerId: testBuyerId,
         name: 'Fallback Endpoint',
         destination: '+18005551234',
-        basePrice: new Prisma.Decimal(14.00),
+        basePrice: new Prisma.Decimal(14.0),
         status: 'ACTIVE',
         type: 'PSTN',
       },
@@ -242,16 +252,16 @@ async function runTests() {
     assert(
       '9. Fallback to BuyerEndpoint basePrice when campaign default is 0',
       resEndpointFallback.success &&
-      resEndpointFallback.revenue === '14.0000' &&
-      resEndpointFallback.payout === '7.5000' &&
-      resEndpointFallback.profit === '6.0000'
+        resEndpointFallback.revenue === '14.0000' &&
+        resEndpointFallback.payout === '7.5000' &&
+        resEndpointFallback.profit === '6.0000'
     );
 
     // Case 10: Recalculation Idempotency & Duplicate Billing Prevention
     const callIdemp = await createCallHelper(120, 120);
     const run1 = await billingService.calculateCallBilling(callIdemp.id);
     const run2 = await billingService.calculateCallBilling(callIdemp.id);
-    
+
     // Check call object in DB
     const dbCall = await prisma.call.findUnique({
       where: { id: callIdemp.id },
@@ -260,15 +270,15 @@ async function runTests() {
     assert(
       '10. Idempotent recalculation yields identical results and prevents duplicate billing',
       run1.success &&
-      run2.success &&
-      run1.revenue === run2.revenue &&
-      run1.payout === run2.payout &&
-      run1.profit === run2.profit &&
-      dbCall !== null &&
-      dbCall.billingRuleSnapshot !== null &&
-      (dbCall.billingRuleSnapshot as { publisherPayoutRate?: unknown }).publisherPayoutRate === '7.5'
+        run2.success &&
+        run1.revenue === run2.revenue &&
+        run1.payout === run2.payout &&
+        run1.profit === run2.profit &&
+        dbCall !== null &&
+        dbCall.billingRuleSnapshot !== null &&
+        (dbCall.billingRuleSnapshot as { publisherPayoutRate?: unknown }).publisherPayoutRate ===
+          '7.5'
     );
-
   } catch (err) {
     console.error('Test execution aborted due to error:', err);
     failed++;

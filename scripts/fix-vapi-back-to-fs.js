@@ -7,7 +7,7 @@ const PHONE_NUMBER_ID = 'a5855d7f-203a-4c07-9fb5-1bfe0fa71cfe';
 // Switch phone number back to FreeSWITCH credential
 const data = JSON.stringify({
   credentialId: FREESWITCH_CREDENTIAL_ID,
-  name: 'SignalWire via FreeSWITCH +18036135410'
+  name: 'SignalWire via FreeSWITCH +18036135410',
 });
 
 const opts = {
@@ -15,15 +15,15 @@ const opts = {
   path: `/phone-number/${PHONE_NUMBER_ID}`,
   method: 'PATCH',
   headers: {
-    'Authorization': `Bearer ${VAPI_KEY}`,
+    Authorization: `Bearer ${VAPI_KEY}`,
     'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(data)
-  }
+    'Content-Length': Buffer.byteLength(data),
+  },
 };
 
-const req = https.request(opts, (res) => {
+const req = https.request(opts, res => {
   let body = '';
-  res.on('data', (c) => body += c);
+  res.on('data', c => (body += c));
   res.on('end', () => {
     console.log('Status:', res.statusCode);
     console.log('Response:', body);

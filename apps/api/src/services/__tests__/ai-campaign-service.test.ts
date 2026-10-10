@@ -96,7 +96,9 @@ const mockPrisma = {
     if (queryStr.includes('FOR UPDATE')) {
       const campaignId = params[0];
       const tenantId = params[1];
-      const campaign = campaigns.find(c => c.id === campaignId && (!tenantId || c.tenantId === tenantId));
+      const campaign = campaigns.find(
+        c => c.id === campaignId && (!tenantId || c.tenantId === tenantId)
+      );
       if (!campaign) return Promise.resolve([]);
       return Promise.resolve([
         { id: campaign.id, status: campaign.status, archivedAt: campaign.archivedAt },
@@ -152,11 +154,15 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
 
   describe('classifyCall', () => {
     it('should classify customer-ended-call as HUMAN_REACHED', () => {
-      expect(classifyCall({ status: 'COMPLETED', outcome: 'customer-ended-call' })).toBe('HUMAN_REACHED');
+      expect(classifyCall({ status: 'COMPLETED', outcome: 'customer-ended-call' })).toBe(
+        'HUMAN_REACHED'
+      );
     });
 
     it('should classify assistant-ended-call as ASSISTANT_ENDED', () => {
-      expect(classifyCall({ status: 'COMPLETED', outcome: 'assistant-ended-call' })).toBe('ASSISTANT_ENDED');
+      expect(classifyCall({ status: 'COMPLETED', outcome: 'assistant-ended-call' })).toBe(
+        'ASSISTANT_ENDED'
+      );
     });
 
     it('should classify COMPLETED with null/unknown outcome as UNKNOWN (ambiguous)', () => {
@@ -170,7 +176,9 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     });
 
     it('should classify customer-did-not-answer and no-answer as NO_ANSWER', () => {
-      expect(classifyCall({ status: 'NO_ANSWER', outcome: 'customer-did-not-answer' })).toBe('NO_ANSWER');
+      expect(classifyCall({ status: 'NO_ANSWER', outcome: 'customer-did-not-answer' })).toBe(
+        'NO_ANSWER'
+      );
       expect(classifyCall({ status: 'NO_ANSWER', outcome: 'no-answer' })).toBe('NO_ANSWER');
     });
 
@@ -221,12 +229,32 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
 
     it('should exclude customer ended call (human reached) and assistant ended call (assistant ended)', async () => {
       contacts.push(
-        { id: 'c-cust', campaignId, phoneNumber: '+15555550002', status: 'COMPLETED', metadata: {} },
+        {
+          id: 'c-cust',
+          campaignId,
+          phoneNumber: '+15555550002',
+          status: 'COMPLETED',
+          metadata: {},
+        },
         { id: 'c-asst', campaignId, phoneNumber: '+15555550003', status: 'COMPLETED', metadata: {} }
       );
       calls.push(
-        { id: 'call-1', contactId: 'c-cust', campaignId, status: 'COMPLETED', outcome: 'customer-ended-call', startedAt: new Date() },
-        { id: 'call-2', contactId: 'c-asst', campaignId, status: 'COMPLETED', outcome: 'assistant-ended-call', startedAt: new Date() }
+        {
+          id: 'call-1',
+          contactId: 'c-cust',
+          campaignId,
+          status: 'COMPLETED',
+          outcome: 'customer-ended-call',
+          startedAt: new Date(),
+        },
+        {
+          id: 'call-2',
+          contactId: 'c-asst',
+          campaignId,
+          status: 'COMPLETED',
+          outcome: 'assistant-ended-call',
+          startedAt: new Date(),
+        }
       );
 
       const preview = await getRestartUnreachedPreview(campaignId, tenantId);
@@ -246,11 +274,46 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
         { id: 'c-fc', campaignId, phoneNumber: '+15555550008', status: 'FAILED', metadata: {} }
       );
       calls.push(
-        { id: 'call-3', contactId: 'c-vm', campaignId, status: 'VOICEMAIL', outcome: 'voicemail', startedAt: new Date() },
-        { id: 'call-4', contactId: 'c-na', campaignId, status: 'NO_ANSWER', outcome: 'customer-did-not-answer', startedAt: new Date() },
-        { id: 'call-5', contactId: 'c-by', campaignId, status: 'BUSY', outcome: 'customer-busy', startedAt: new Date() },
-        { id: 'call-6', contactId: 'c-st', campaignId, status: 'FAILED', outcome: 'silence-timeout', startedAt: new Date() },
-        { id: 'call-7', contactId: 'c-fc', campaignId, status: 'FAILED', outcome: 'failed-to-connect', startedAt: new Date() }
+        {
+          id: 'call-3',
+          contactId: 'c-vm',
+          campaignId,
+          status: 'VOICEMAIL',
+          outcome: 'voicemail',
+          startedAt: new Date(),
+        },
+        {
+          id: 'call-4',
+          contactId: 'c-na',
+          campaignId,
+          status: 'NO_ANSWER',
+          outcome: 'customer-did-not-answer',
+          startedAt: new Date(),
+        },
+        {
+          id: 'call-5',
+          contactId: 'c-by',
+          campaignId,
+          status: 'BUSY',
+          outcome: 'customer-busy',
+          startedAt: new Date(),
+        },
+        {
+          id: 'call-6',
+          contactId: 'c-st',
+          campaignId,
+          status: 'FAILED',
+          outcome: 'silence-timeout',
+          startedAt: new Date(),
+        },
+        {
+          id: 'call-7',
+          contactId: 'c-fc',
+          campaignId,
+          status: 'FAILED',
+          outcome: 'failed-to-connect',
+          startedAt: new Date(),
+        }
       );
 
       const preview = await getRestartUnreachedPreview(campaignId, tenantId);
@@ -266,8 +329,21 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     });
 
     it('should exclude unknown completed outcome (legacy ambiguous records)', async () => {
-      contacts.push({ id: 'c-unk', campaignId, phoneNumber: '+15555550009', status: 'COMPLETED', metadata: {} });
-      calls.push({ id: 'call-8', contactId: 'c-unk', campaignId, status: 'COMPLETED', outcome: null, startedAt: new Date() });
+      contacts.push({
+        id: 'c-unk',
+        campaignId,
+        phoneNumber: '+15555550009',
+        status: 'COMPLETED',
+        metadata: {},
+      });
+      calls.push({
+        id: 'call-8',
+        contactId: 'c-unk',
+        campaignId,
+        status: 'COMPLETED',
+        outcome: null,
+        startedAt: new Date(),
+      });
 
       const preview = await getRestartUnreachedPreview(campaignId, tenantId);
       expect(preview.totalEligible).toBe(0);
@@ -280,7 +356,13 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     it('should exclude contacts placed on DNC or wrong numbers', async () => {
       contacts.push(
         { id: 'c-dnc', campaignId, phoneNumber: '+15555550010', status: 'PENDING', metadata: {} },
-        { id: 'c-wn', campaignId, phoneNumber: '+15555550011', status: 'FAILED', metadata: { wrongNumber: true } }
+        {
+          id: 'c-wn',
+          campaignId,
+          phoneNumber: '+15555550011',
+          status: 'FAILED',
+          metadata: { wrongNumber: true },
+        }
       );
       // Place c-dnc on DNC list
       dncEntries.push({ phoneNumber: '+15555550010', tenantId, type: 'GLOBAL' });
@@ -295,8 +377,21 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     });
 
     it('should exclude contacts with active calls (QUEUED, RINGING, IN_PROGRESS)', async () => {
-      contacts.push({ id: 'c-act', campaignId, phoneNumber: '+15555550012', status: 'CALLING', metadata: {} });
-      calls.push({ id: 'call-9', contactId: 'c-act', campaignId, status: 'IN_PROGRESS', outcome: null, startedAt: new Date() });
+      contacts.push({
+        id: 'c-act',
+        campaignId,
+        phoneNumber: '+15555550012',
+        status: 'CALLING',
+        metadata: {},
+      });
+      calls.push({
+        id: 'call-9',
+        contactId: 'c-act',
+        campaignId,
+        status: 'IN_PROGRESS',
+        outcome: null,
+        startedAt: new Date(),
+      });
 
       const preview = await getRestartUnreachedPreview(campaignId, tenantId);
       expect(preview.activeCallExcluded).toBe(1);
@@ -307,8 +402,21 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     });
 
     it('should prevent DNC contacts from being restarted when added to DNC after preview', async () => {
-      contacts.push({ id: 'c-post-dnc', campaignId, phoneNumber: '+15555550013', status: 'FAILED', metadata: {} });
-      calls.push({ id: 'call-10', contactId: 'c-post-dnc', campaignId, status: 'NO_ANSWER', outcome: 'no-answer', startedAt: new Date() });
+      contacts.push({
+        id: 'c-post-dnc',
+        campaignId,
+        phoneNumber: '+15555550013',
+        status: 'FAILED',
+        metadata: {},
+      });
+      calls.push({
+        id: 'call-10',
+        contactId: 'c-post-dnc',
+        campaignId,
+        status: 'NO_ANSWER',
+        outcome: 'no-answer',
+        startedAt: new Date(),
+      });
 
       // 1. Run preview (eligible)
       const preview = await getRestartUnreachedPreview(campaignId, tenantId);
@@ -325,8 +433,12 @@ describe('AI Campaign Service — Unit Tests (In-Memory Simulator)', () => {
     });
 
     it('should enforce tenant ownership (cross-tenant access)', async () => {
-      await expect(getRestartUnreachedPreview(campaignId, 'different-tenant')).rejects.toThrow('Campaign not found');
-      await expect(executeRestartUnreached(campaignId, 'different-tenant')).rejects.toThrow('Campaign not found');
+      await expect(getRestartUnreachedPreview(campaignId, 'different-tenant')).rejects.toThrow(
+        'Campaign not found'
+      );
+      await expect(executeRestartUnreached(campaignId, 'different-tenant')).rejects.toThrow(
+        'Campaign not found'
+      );
     });
 
     it('should use raw row-locking to serialize two simultaneous restart requests', async () => {

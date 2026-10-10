@@ -17,12 +17,12 @@ including in the copy. Nothing on this strip is ever labelled "booked".
 
 Four large cards across the full width of every page:
 
-| | |
-| --- | --- |
-| Calls in flight | em dash |
-| Answer rate, last 60 minutes | em dash |
+|                               |         |
+| ----------------------------- | ------- |
+| Calls in flight               | em dash |
+| Answer rate, last 60 minutes  | em dash |
 | Abandon rate, last 60 minutes | em dash |
-| Revenue run rate per hour | $0.00 |
+| Revenue run rate per hour     | $0.00   |
 
 Those are pay-per-call marketplace metrics from this application's previous life
 as a publisher/buyer platform, and they predate the entire agency portal. Three
@@ -55,7 +55,7 @@ rate the trailing window is tracking toward for tomorrow.
 `Rate now` is what the agency is charged per submitted application today. It was
 set by the trailing three-Delivery-Day window, at the last rating run.
 
-`Rate tomorrow` is what the curve returns for the window ending *today*, if
+`Rate tomorrow` is what the curve returns for the window ending _today_, if
 today closed now. Provisional, and driven by a different closing percentage.
 
 They are separate figures, adjacent, and each is labelled with what it does —
@@ -73,15 +73,15 @@ cases labelled "does not set today's rate", where there is room to say so.
 
 Seven for an enrolled agency, in question order:
 
-| Figure | | |
-| --- | --- | --- |
-| Applications | submitted today | `of N block` |
-| Calls delivered | answered by an agent | `N in progress` |
-| Block left | paid for and unused | |
-| Overrun | applications beyond the block | `$N tonight` |
-| Tonight | the projected debit at settlement | provisional |
-| Rate now | dollars per application, today | |
-| Rate tomorrow | what the window ending today returns | provisional |
+| Figure          |                                      |                 |
+| --------------- | ------------------------------------ | --------------- |
+| Applications    | submitted today                      | `of N block`    |
+| Calls delivered | answered by an agent                 | `N in progress` |
+| Block left      | paid for and unused                  |                 |
+| Overrun         | applications beyond the block        | `$N tonight`    |
+| Tonight         | the projected debit at settlement    | provisional     |
+| Rate now        | dollars per application, today       |                 |
+| Rate tomorrow   | what the window ending today returns | provisional     |
 
 Two for an agency that is not enrolled in billing. Three for an agent. Five for
 NetEnroll staff. See §4.
@@ -94,15 +94,15 @@ Nothing on the strip is computed, derived or estimated in the browser — not a
 rate, not a projection, not a total, and not the difference between an agent's
 closing percentage and their agency's, which the server also returns.
 
-More than that: nothing on the strip is a *second definition* of anything. Each
+More than that: nothing on the strip is a _second definition_ of anything. Each
 reading is a projection of a view that already exists and that a page already
 renders.
 
-| reading | from | the page that renders the same view |
-| --- | --- | --- |
-| agency | `getDeliveryToday()` | `/delivery` |
-| agent | `getAgentSelfView()` | `/delivery/me` |
-| platform | `getPlatformOverview()`, plus `getDeliveryToday()` per enrolled agency for tonight's projection | `/delivery`, cross-agency |
+| reading  | from                                                                                            | the page that renders the same view |
+| -------- | ----------------------------------------------------------------------------------------------- | ----------------------------------- |
+| agency   | `getDeliveryToday()`                                                                            | `/delivery`                         |
+| agent    | `getAgentSelfView()`                                                                            | `/delivery/me`                      |
+| platform | `getPlatformOverview()`, plus `getDeliveryToday()` per enrolled agency for tonight's projection | `/delivery`, cross-agency           |
 
 Same function, same tenant, same day. The two screens cannot disagree, because
 there is only one arithmetic and neither of them owns it. Two screens
@@ -256,16 +256,16 @@ shift do not stay in lockstep.
 
 **The API caches on top of that.**
 
-| reading | key | TTL | why |
-| --- | --- | --- | --- |
-| agency | per tenant | 10s | every principal on a floor shares one entry |
-| agent | per tenant and user | 10s | it IS per user; four indexed counts |
-| platform | one, platform-wide | 30s | the expensive one, and the fewest readers |
+| reading  | key                 | TTL | why                                         |
+| -------- | ------------------- | --- | ------------------------------------------- |
+| agency   | per tenant          | 10s | every principal on a floor shares one entry |
+| agent    | per tenant and user | 10s | it IS per user; four indexed counts         |
+| platform | one, platform-wide  | 30s | the expensive one, and the fewest readers   |
 
 Redis being down never fails the request: a miss costs a query, not a page.
 
 The platform reading is the expensive one — a full cross-agency overview plus
-one `getDeliveryToday()` per *enrolled* agency (two at launch, not one per
+one `getDeliveryToday()` per _enrolled_ agency (two at launch, not one per
 tenant) and one grouped in-flight query. It is read by NetEnroll staff, it is
 cached once for everyone, and it is the only reading that pays that cost.
 
@@ -291,10 +291,10 @@ supporting row is not competing with anything.
 These are all the places it applies, because these are the only pages in the
 product with a hero figure the strip also carries:
 
-| | drops | keeps |
-| --- | --- | --- |
-| agency on `/delivery` | the projected charge at tonight's settlement, and the current rate | applications, calls, block, overrun, tomorrow's rate |
-| agent on `/delivery/me` | the agent's own closing percentage | their calls, their applications |
+|                         | drops                                                              | keeps                                                |
+| ----------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| agency on `/delivery`   | the projected charge at tonight's settlement, and the current rate | applications, calls, block, overrun, tomorrow's rate |
+| agent on `/delivery/me` | the agent's own closing percentage                                 | their calls, their applications                      |
 
 **Keyed by reading and path, not by path alone**, and that distinction is load
 bearing. `/delivery` is two pages: an agency's own panel, and the cross-agency

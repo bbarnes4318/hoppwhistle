@@ -14,11 +14,11 @@ Anveo has two requirements:
 
 There are three parts:
 
-| Piece | What it does |
-| --- | --- |
-| `install_anveo_trunk.py` | Adds an `anveo` PJSIP trunk to `dograh-asterisk`. It uses the SIP server and credentials from the FreeSWITCH container. |
-| `../ari-trunk` (V2) | `DOGRAH_ARI_TRUNK=anveo` sends Dograh's outbound calls to that trunk. `DOGRAH_ARI_DIAL_PREFIX=012345` adds the prefix. Transfers never get the prefix. |
-| `set_caller_id_pool.py` | Leaves the 3 Anveo numbers as the only active caller IDs on the Dograh telephony configuration. It can also slow a campaign down: 1 call/s, 3 at once, same-state caller ID off. It saves a backup so this can be undone. |
+| Piece                    | What it does                                                                                                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `install_anveo_trunk.py` | Adds an `anveo` PJSIP trunk to `dograh-asterisk`. It uses the SIP server and credentials from the FreeSWITCH container.                                                                                                   |
+| `../ari-trunk` (V2)      | `DOGRAH_ARI_TRUNK=anveo` sends Dograh's outbound calls to that trunk. `DOGRAH_ARI_DIAL_PREFIX=012345` adds the prefix. Transfers never get the prefix.                                                                    |
+| `set_caller_id_pool.py`  | Leaves the 3 Anveo numbers as the only active caller IDs on the Dograh telephony configuration. It can also slow a campaign down: 1 call/s, 3 at once, same-state caller ID off. It saves a backup so this can be undone. |
 
 `DOGRAH_ARI_TRUNK` applies to every call Dograh places through Asterisk (ARI).
 Campaigns on a different Dograh telephony provider, such as Telnyx, don't go
@@ -66,9 +66,9 @@ on the staged file; it upgrades the patch in place. Then set these under the
 Dograh API services in `/opt/dograh/docker-compose.override.yaml`:
 
 ```yaml
-    environment:
-      DOGRAH_ARI_TRUNK: anveo
-      DOGRAH_ARI_DIAL_PREFIX: "012345"
+environment:
+  DOGRAH_ARI_TRUNK: anveo
+  DOGRAH_ARI_DIAL_PREFIX: '012345'
 ```
 
 ```bash

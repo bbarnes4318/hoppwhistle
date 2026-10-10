@@ -191,10 +191,7 @@ export function addBusinessDays(dayKey: CalendarDayKey, count: number): Calendar
  * If `startDay` is not itself a Business Day the period begins on the next one,
  * because a notice period cannot start on a day nobody is at work.
  */
-export function businessDayPeriodEnd(
-  startDay: CalendarDayKey,
-  length: number
-): CalendarDayKey {
+export function businessDayPeriodEnd(startDay: CalendarDayKey, length: number): CalendarDayKey {
   if (!Number.isInteger(length) || length < 1) {
     throw new Error(`A Business Day period must be at least one day, got ${length}`);
   }
@@ -202,10 +199,7 @@ export function businessDayPeriodEnd(
 }
 
 /** Every Business Day in `[from, to]` inclusive, oldest first. */
-export function businessDaysBetween(
-  from: CalendarDayKey,
-  to: CalendarDayKey
-): CalendarDayKey[] {
+export function businessDaysBetween(from: CalendarDayKey, to: CalendarDayKey): CalendarDayKey[] {
   if (from > to) return [];
   const days: CalendarDayKey[] = [];
   let cursor = from;

@@ -10,7 +10,7 @@ person's phone.
 ## What this does
 
 Callbacks to the AI's caller-ID numbers are answered by a Dograh agent instead
-(for example agent 15, *Final Expense - Alex (Inbound Callback Live Transfer)*).
+(for example agent 15, _Final Expense - Alex (Inbound Callback Live Transfer)_).
 The call never leaves the server:
 
 ```

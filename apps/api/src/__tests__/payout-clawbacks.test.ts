@@ -211,7 +211,11 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
       (await prisma.publisher.create({ data: { tenantId, name, code: `pub-${++seq}` } })).id;
 
     const llp = await agency('Llp');
-    wl = { ...llp, alpha: await publisher(llp.id, 'Alpha Media'), beta: await publisher(llp.id, 'Beta Leads') };
+    wl = {
+      ...llp,
+      alpha: await publisher(llp.id, 'Alpha Media'),
+      beta: await publisher(llp.id, 'Beta Leads'),
+    };
     const ridge = await agency('Ridge');
     other = { ...ridge, publisherId: await publisher(ridge.id, 'Ridge Publisher') };
   });
@@ -331,7 +335,12 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
 
       const response = await record(wl, wl.alpha, DAY1_RANGE);
       expect(response.statusCode, response.body).toBe(201);
-      expect(response.json().data).toMatchObject({ amount: 100, gross: 100, net: 100, clawbacks: [] });
+      expect(response.json().data).toMatchObject({
+        amount: 100,
+        gross: 100,
+        net: 100,
+        clawbacks: [],
+      });
 
       for (const id of [theirs.id, stray.id]) {
         expect(
@@ -373,7 +382,13 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
       const data = await summary(wl);
       const alpha = data.publishers.find((row: any) => row.publisherId === wl.alpha);
       const beta = data.publishers.find((row: any) => row.publisherId === wl.beta);
-      expect(alpha).toMatchObject({ payable: 100, paid: 30, held: 0, returnsPending: 20, netPayable: 80 });
+      expect(alpha).toMatchObject({
+        payable: 100,
+        paid: 30,
+        held: 0,
+        returnsPending: 20,
+        netPayable: 80,
+      });
       expect(beta).toMatchObject({ payable: 5, paid: 0, returnsPending: 12.5, netPayable: -7.5 });
       // A clawback is not anybody's last payment.
       expect(alpha.lastPayment).toBeNull();
@@ -393,9 +408,7 @@ describe.skipIf(!gate.available)('Payout clawbacks', () => {
 
       // Once applied it is no longer pending, and paid does not move for it.
       expect((await record(wl, wl.alpha, DAY1_RANGE)).statusCode).toBe(201);
-      const after = (await summary(wl)).publishers.find(
-        (row: any) => row.publisherId === wl.alpha
-      );
+      const after = (await summary(wl)).publishers.find((row: any) => row.publisherId === wl.alpha);
       expect(after).toMatchObject({ payable: 0, paid: 130, returnsPending: 0, netPayable: 0 });
       expect(after.lastPayment).toMatchObject({ kind: 'PAYMENT', amount: 80 });
     });

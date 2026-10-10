@@ -313,7 +313,9 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           .send({ error: { code: 'VALIDATION_ERROR', message: 'day must be YYYY-MM-DD' } });
       }
 
-      return reply.send({ data: await getAgentSelfView(tenantId, userId, { prisma, day, withTrend: true }) });
+      return reply.send({
+        data: await getAgentSelfView(tenantId, userId, { prisma, day, withTrend: true }),
+      });
     }
   );
 
@@ -790,10 +792,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         where: { tenantId },
         select: { paymentProvider: true },
       });
-      if (
-        providerProfile &&
-        !providerChargesInPlatform(providerProfile.paymentProvider)
-      ) {
+      if (providerProfile && !providerChargesInPlatform(providerProfile.paymentProvider)) {
         return reply.code(409).send({
           error: {
             code: 'PROVIDER_HAS_NO_MANDATE',
@@ -948,10 +947,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         where: { tenantId },
         select: { paymentProvider: true },
       });
-      if (
-        providerProfile &&
-        !providerChargesInPlatform(providerProfile.paymentProvider)
-      ) {
+      if (providerProfile && !providerChargesInPlatform(providerProfile.paymentProvider)) {
         return reply.code(409).send({
           error: {
             code: 'PROVIDER_HAS_NO_MANDATE',
@@ -1803,7 +1799,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
             code: 'SETTLEMENT_IN_FLIGHT',
             message:
               `The settlement for ${inFlight.deliveryDay} is still pending. Let it resolve ` +
-              'before changing this agency\'s payment provider, so the debit it may have ' +
+              "before changing this agency's payment provider, so the debit it may have " +
               'placed is answered for by the provider that placed it.',
           },
         });

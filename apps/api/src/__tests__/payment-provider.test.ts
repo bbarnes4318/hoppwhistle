@@ -3,10 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import type { ChargeRequest, PaymentGateway } from '../services/billing/ach.js';
 import { OfflineGateway } from '../services/billing/offline-gateway.js';
-import {
-  gatewayForProvider,
-  resetGatewayCache,
-} from '../services/billing/payment-gateways.js';
+import { gatewayForProvider, resetGatewayCache } from '../services/billing/payment-gateways.js';
 import { providerChargesInPlatform } from '../services/billing/payment-provider.js';
 
 /**

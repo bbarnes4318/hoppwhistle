@@ -35,17 +35,14 @@ export function phoneNumbersHeldWhere(tenantId: string): Prisma.PhoneNumberWhere
 
 /**
  * Quota Service
- * 
+ *
  * Enforces per-tenant quotas and budgets to prevent runaway spend.
  */
 export class QuotaService {
   /**
    * Check if tenant can make a new call (concurrent calls quota)
    */
-  async checkConcurrentCalls(
-    tenantId: string,
-    overrideToken?: string
-  ): Promise<QuotaCheckResult> {
+  async checkConcurrentCalls(tenantId: string, overrideToken?: string): Promise<QuotaCheckResult> {
     const prisma = getPrismaClient();
 
     // Get tenant quota
@@ -57,10 +54,7 @@ export class QuotaService {
         quotaOverrides: {
           where: {
             quotaType: 'concurrent_calls',
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } },
-            ],
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
           },
         },
       },
@@ -72,7 +66,10 @@ export class QuotaService {
 
     // Check override token if provided
     if (overrideToken && tenant.budget?.overrideToken === overrideToken) {
-      if (tenant.budget.overrideTokenExpiresAt && tenant.budget.overrideTokenExpiresAt < new Date()) {
+      if (
+        tenant.budget.overrideTokenExpiresAt &&
+        tenant.budget.overrideTokenExpiresAt < new Date()
+      ) {
         return { allowed: false, reason: 'Override token expired' };
       }
       await auditLog({
@@ -158,10 +155,7 @@ export class QuotaService {
         quotaOverrides: {
           where: {
             quotaType: 'minutes_per_day',
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } },
-            ],
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
           },
         },
       },
@@ -269,10 +263,7 @@ export class QuotaService {
         quotaOverrides: {
           where: {
             quotaType: 'phone_numbers',
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } },
-            ],
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
           },
         },
       },
@@ -442,11 +433,7 @@ export class QuotaService {
   /**
    * Record call cost and update budget
    */
-  async recordCallCost(
-    tenantId: string,
-    cost: number,
-    _callId: string
-  ): Promise<void> {
+  async recordCallCost(tenantId: string, cost: number, _callId: string): Promise<void> {
     const prisma = getPrismaClient();
 
     const budget = await prisma.tenantBudget.findUnique({
@@ -463,7 +450,11 @@ export class QuotaService {
 
     // Check if we need to reset daily spend (new day)
     const lastUpdate = budget.updatedAt;
-    const lastUpdateStart = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+    const lastUpdateStart = new Date(
+      lastUpdate.getFullYear(),
+      lastUpdate.getMonth(),
+      lastUpdate.getDate()
+    );
 
     let dailySpend = Number(budget.currentDaySpend);
     if (todayStart > lastUpdateStart) {
@@ -516,7 +507,11 @@ export class QuotaService {
 
       if (dailyPercentage >= threshold && dailyPercentage < 100) {
         // Threshold alert
-        if (!budget.lastAlertSentAt || budget.lastAlertSentAt < oneHourAgo || budget.lastAlertType !== 'DAILY_THRESHOLD') {
+        if (
+          !budget.lastAlertSentAt ||
+          budget.lastAlertSentAt < oneHourAgo ||
+          budget.lastAlertType !== 'DAILY_THRESHOLD'
+        ) {
           await budgetAlertService.sendAlert(tenantId, budgetId, 'DAILY_THRESHOLD', {
             threshold,
             actual: dailyPercentage,
@@ -526,7 +521,11 @@ export class QuotaService {
         }
       } else if (dailyPercentage >= 100) {
         // Exceeded alert
-        if (!budget.lastAlertSentAt || budget.lastAlertSentAt < oneHourAgo || budget.lastAlertType !== 'DAILY_EXCEEDED') {
+        if (
+          !budget.lastAlertSentAt ||
+          budget.lastAlertSentAt < oneHourAgo ||
+          budget.lastAlertType !== 'DAILY_EXCEEDED'
+        ) {
           await budgetAlertService.sendAlert(tenantId, budgetId, 'DAILY_EXCEEDED', {
             threshold: 100,
             actual: dailyPercentage,
@@ -539,11 +538,16 @@ export class QuotaService {
 
     // Check monthly budget alerts
     if (budget.monthlyBudget) {
-      const monthlyPercentage = (Number(budget.currentMonthSpend) / Number(budget.monthlyBudget)) * 100;
+      const monthlyPercentage =
+        (Number(budget.currentMonthSpend) / Number(budget.monthlyBudget)) * 100;
       const threshold = Number(budget.alertThreshold);
 
       if (monthlyPercentage >= threshold && monthlyPercentage < 100) {
-        if (!budget.lastAlertSentAt || budget.lastAlertSentAt < oneHourAgo || budget.lastAlertType !== 'MONTHLY_THRESHOLD') {
+        if (
+          !budget.lastAlertSentAt ||
+          budget.lastAlertSentAt < oneHourAgo ||
+          budget.lastAlertType !== 'MONTHLY_THRESHOLD'
+        ) {
           await budgetAlertService.sendAlert(tenantId, budgetId, 'MONTHLY_THRESHOLD', {
             threshold,
             actual: monthlyPercentage,
@@ -552,7 +556,11 @@ export class QuotaService {
           });
         }
       } else if (monthlyPercentage >= 100) {
-        if (!budget.lastAlertSentAt || budget.lastAlertSentAt < oneHourAgo || budget.lastAlertType !== 'MONTHLY_EXCEEDED') {
+        if (
+          !budget.lastAlertSentAt ||
+          budget.lastAlertSentAt < oneHourAgo ||
+          budget.lastAlertType !== 'MONTHLY_EXCEEDED'
+        ) {
           await budgetAlertService.sendAlert(tenantId, budgetId, 'MONTHLY_EXCEEDED', {
             threshold: 100,
             actual: monthlyPercentage,
@@ -566,4 +574,3 @@ export class QuotaService {
 }
 
 export const quotaService = new QuotaService();
-

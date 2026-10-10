@@ -25,7 +25,7 @@ export async function checkRateLimit(
   try {
     // Get current count
     const count = await redis.incr(key);
-    
+
     // Set expiration on first request
     if (count === 1) {
       await redis.expire(key, Math.ceil(config.windowMs / 1000));
@@ -155,4 +155,3 @@ export function rateLimit(options: {
     void reply.header('X-RateLimit-Reset', ipResult.resetAt.toISOString());
   };
 }
-

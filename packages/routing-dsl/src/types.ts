@@ -240,4 +240,3 @@ export const TelephonyEventSchema = z.discriminatedUnion('type', [
 ]);
 
 export type TelephonyEvent = z.infer<typeof TelephonyEventSchema>;
-

@@ -32,8 +32,8 @@ async function main() {
   const sql = readFileSync(sqlPath, 'utf8');
   const statements = sql
     .split(';')
-    .map((s) => s.replace(/--.*$/gm, '').trim())
-    .filter((s) => s.length > 0);
+    .map(s => s.replace(/--.*$/gm, '').trim())
+    .filter(s => s.length > 0);
 
   console.log(`Applying ${statements.length} statements…`);
   for (const stmt of statements) {
@@ -47,7 +47,7 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main().catch(async (e) => {
+main().catch(async e => {
   console.error('Migration apply failed:', e instanceof Error ? e.message : e);
   await prisma.$disconnect();
   process.exit(1);

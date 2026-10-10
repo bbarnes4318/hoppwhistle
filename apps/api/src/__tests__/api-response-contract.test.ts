@@ -75,8 +75,8 @@ describe.skipIf(!gate.available)('the API response contract, through the real we
    * `localStorage`, and only consults either when it believes it is running in
    * a browser. Stubbing those is what lets the browser's own client run here.
    */
-  let apiClient: typeof import('../../../web/src/lib/api')['apiClient'];
-  let payload: typeof import('../../../web/src/lib/api')['payload'];
+  let apiClient: (typeof import('../../../web/src/lib/api'))['apiClient'];
+  let payload: (typeof import('../../../web/src/lib/api'))['payload'];
 
   const store = new Map<string, string>();
 

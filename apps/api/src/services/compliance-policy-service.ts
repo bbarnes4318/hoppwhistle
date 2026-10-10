@@ -13,7 +13,10 @@ export class CompliancePolicyService {
   /**
    * Get active compliance policy for tenant
    */
-  async getPolicy(tenantId: string, policyName: string = 'default'): Promise<CompliancePolicyConfig | null> {
+  async getPolicy(
+    tenantId: string,
+    policyName: string = 'default'
+  ): Promise<CompliancePolicyConfig | null> {
     const policy = await this.prisma.compliancePolicy.findUnique({
       where: {
         tenantId_name: {
@@ -50,11 +53,13 @@ export class CompliancePolicyService {
   /**
    * Get effective policy for tenant
    */
-  async getEffectivePolicy(tenantId: string, policyName: string = 'default'): Promise<CompliancePolicyConfig> {
+  async getEffectivePolicy(
+    tenantId: string,
+    policyName: string = 'default'
+  ): Promise<CompliancePolicyConfig> {
     const policy = await this.getPolicy(tenantId, policyName);
     return policy || this.getDefaultPolicy();
   }
 }
 
 export const compliancePolicyService = new CompliancePolicyService();
-

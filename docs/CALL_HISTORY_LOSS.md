@@ -92,12 +92,12 @@ safely. If it is not, nothing here needs doing.
 Built during this investigation. All of it works; none of it was needed in the
 end, and it is here for the next time a database question comes up.
 
-| Command | What it does |
-| --- | --- |
-| `calls:diagnose --email <you>` | Why is *my* portal empty? Resolves the acting tenant, roles and links the way the API does, replays the portal's own query, and names which of five causes it is. Read-only. |
-| `calls:inventory [--url …]` | What call history does *this* database hold? Works against any database, including one older than the current schema — it reads `information_schema` rather than using the Prisma client. Read-only. |
-| `calls:restore --from … --into-tenant …` | Copies calls, recordings, CDRs, legs and transcripts from another database into the live one. Dry run until `--commit`; inserts only, always `ON CONFLICT DO NOTHING`. |
-| `scripts/find-call-history.sh` | Which PostgreSQL data directory on this host holds call history? Covers detached volumes by copying them and reading the copy — never starts a server on your volume. |
+| Command                                  | What it does                                                                                                                                                                                         |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calls:diagnose --email <you>`           | Why is _my_ portal empty? Resolves the acting tenant, roles and links the way the API does, replays the portal's own query, and names which of five causes it is. Read-only.                         |
+| `calls:inventory [--url …]`              | What call history does _this_ database hold? Works against any database, including one older than the current schema — it reads `information_schema` rather than using the Prisma client. Read-only. |
+| `calls:restore --from … --into-tenant …` | Copies calls, recordings, CDRs, legs and transcripts from another database into the live one. Dry run until `--commit`; inserts only, always `ON CONFLICT DO NOTHING`.                               |
+| `scripts/find-call-history.sh`           | Which PostgreSQL data directory on this host holds call history? Covers detached volumes by copying them and reading the copy — never starts a server on your volume.                                |
 
 Verified against real PostgreSQL 16: the restore moved 250,000 rows in 30
 seconds preserving ids, numbers, durations and dates; the detached-volume read

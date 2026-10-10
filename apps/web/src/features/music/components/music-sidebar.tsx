@@ -65,7 +65,11 @@ export function MusicSidebar() {
         <Link href="/music-console" className="block group">
           <div className="bg-white rounded-lg p-2.5 flex items-center justify-center border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_4px_16px_rgba(20,92,255,0.15)]">
             {/* eslint-disable-next-line @next/next/no-img-element -- static logo; next/image would change loading/rendering */}
-            <img src="/rps-logo.png" alt="RPS / Radio Phone Station" className="h-5.5 w-auto object-contain" />
+            <img
+              src="/rps-logo.png"
+              alt="RPS / Radio Phone Station"
+              className="h-5.5 w-auto object-contain"
+            />
           </div>
           <div className="flex items-center justify-between mt-2.5 px-0.5">
             <span className="text-[9px] font-black tracking-[0.08em] text-[#CBD5E1] uppercase leading-none">
@@ -85,7 +89,8 @@ export function MusicSidebar() {
           <div key={section.title} className="space-y-1">
             <div className="m-sidebar-section-title">{section.title}</div>
             {section.items.map(item => {
-              const isExactDashboard = item.href === '/music-console' && pathname === '/music-console';
+              const isExactDashboard =
+                item.href === '/music-console' && pathname === '/music-console';
               const isSubpage = item.href !== '/music-console' && pathname?.startsWith(item.href);
               const isActive = isExactDashboard || isSubpage;
 
@@ -93,10 +98,7 @@ export function MusicSidebar() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={cn(
-                    'm-sidebar-link',
-                    isActive && 'm-sidebar-link--active'
-                  )}
+                  className={cn('m-sidebar-link', isActive && 'm-sidebar-link--active')}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
                   <span>{item.name}</span>

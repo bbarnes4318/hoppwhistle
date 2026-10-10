@@ -1,5 +1,13 @@
 // pure JS test for S3/MinIO connectivity inside the container
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+  CreateBucketCommand,
+  HeadBucketCommand,
+} from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 
 async function main() {
@@ -37,26 +45,32 @@ async function main() {
     }
 
     console.log(`\nUploading file to S3 with key: ${key}...`);
-    await client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'text/plain',
-    }));
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'text/plain',
+      })
+    );
     console.log('Upload completed!');
 
     console.log('\nChecking file metadata...');
-    const headResult = await client.send(new HeadObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    }));
+    const headResult = await client.send(
+      new HeadObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
+    );
     console.log(`File size: ${headResult.ContentLength} bytes`);
 
     console.log('\nDownloading file...');
-    const getResult = await client.send(new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    }));
+    const getResult = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
+    );
     const chunks = [];
     for await (const chunk of getResult.Body) {
       chunks.push(chunk);
@@ -65,10 +79,12 @@ async function main() {
     console.log(`Downloaded content: "${content}"`);
 
     console.log('\nDeleting file...');
-    await client.send(new DeleteObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    }));
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
+    );
     console.log('Deleted successfully!');
     console.log('\n✓ ALL TESTS PASSED!');
   } catch (error) {

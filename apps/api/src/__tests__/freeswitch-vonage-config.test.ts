@@ -65,7 +65,10 @@ describe('rendering the Vonage trunk at start-up', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'vonage-gw-'));
     copyFileSync(join(FS, 'conf', 'vars.xml'), join(dir, 'vars.xml'));
-    copyFileSync(join(FS, 'conf', 'sip_profiles', 'external', 'vonage.xml'), join(dir, 'vonage.xml'));
+    copyFileSync(
+      join(FS, 'conf', 'sip_profiles', 'external', 'vonage.xml'),
+      join(dir, 'vonage.xml')
+    );
   });
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -91,7 +94,14 @@ describe('rendering the Vonage trunk at start-up', () => {
 
   it('defaults to the shared Vonage endpoint as an IP-authorised trunk', () => {
     const r = render({});
-    expect(r).toMatchObject({ status: 0, proxy: 'sip.nexmo.com', realm: 'sip.nexmo.com', user: '', pass: '', loaded: true });
+    expect(r).toMatchObject({
+      status: 0,
+      proxy: 'sip.nexmo.com',
+      realm: 'sip.nexmo.com',
+      user: '',
+      pass: '',
+      loaded: true,
+    });
     expect(r.output).toContain('auth=ip-authorised');
   });
 
@@ -101,7 +111,9 @@ describe('rendering the Vonage trunk at start-up', () => {
       realm: 'sip-us.nexmo.com',
     });
     copyFileSync(join(FS, 'conf', 'vars.xml'), join(dir, 'vars.xml'));
-    expect(render({ VONAGE_SIP_PROXY: 'sip-eu.nexmo.com', VONAGE_SIP_REALM: 'nexmo.com' })).toMatchObject({
+    expect(
+      render({ VONAGE_SIP_PROXY: 'sip-eu.nexmo.com', VONAGE_SIP_REALM: 'nexmo.com' })
+    ).toMatchObject({
       realm: 'nexmo.com',
     });
   });
@@ -160,12 +172,18 @@ describe('outbound dialplan wiring', () => {
   it('walks the waterfall leg by leg and reports a total failure', () => {
     expect(dialplan).toContain('<anti-action application="set" data="continue_on_fail=true"/>');
     expect(dialplan).toContain('<anti-action application="bridge" data="${carrier_bridge}"/>');
-    expect(dialplan).toMatch(/carrier-result\?chain=\$\{url_encode\(\$\{carrier_bridge\}\)\}.*corr=\$\{uuid\}/);
+    expect(dialplan).toMatch(
+      /carrier-result\?chain=\$\{url_encode\(\$\{carrier_bridge\}\)\}.*corr=\$\{uuid\}/
+    );
   });
 
   it('records and uploads every outbound call regardless of carrier', () => {
-    expect(dialplan).toContain('<action application="record_session" data="/recordings/${hopwhistle_call_id}.wav"/>');
-    expect(dialplan).toContain('api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh');
+    expect(dialplan).toContain(
+      '<action application="record_session" data="/recordings/${hopwhistle_call_id}.wav"/>'
+    );
+    expect(dialplan).toContain(
+      'api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh'
+    );
     expect(dialplan).toContain('nolocal:dtmf_type=rfc2833');
   });
 
@@ -177,9 +195,10 @@ describe('outbound dialplan wiring', () => {
 
 describe('inbound entry point for a Vonage DID', () => {
   const publicXml = read('conf', 'dialplan', 'public.xml');
-  const match = /<extension name="inbound-dynamic-route">\s*<condition field="destination_number" expression="([^"]+)">/.exec(
-    publicXml
-  );
+  const match =
+    /<extension name="inbound-dynamic-route">\s*<condition field="destination_number" expression="([^"]+)">/.exec(
+      publicXml
+    );
 
   it('hands every NANP spelling of the called number to inbound_route.lua', () => {
     expect(match).not.toBeNull();

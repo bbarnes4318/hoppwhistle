@@ -21,7 +21,8 @@ describe('the softphone profile advertises the public media address', () => {
   });
 
   it('defines that list as loopback and nothing else', () => {
-    const list = /<list name="loopback_only" default="deny">([\s\S]*?)<\/list>/.exec(acl)?.[1] ?? '';
+    const list =
+      /<list name="loopback_only" default="deny">([\s\S]*?)<\/list>/.exec(acl)?.[1] ?? '';
     const allowed = [...list.matchAll(/cidr="([^"]+)"/g)].map(m => m[1]);
     expect(allowed).toEqual(['127.0.0.0/8']);
   });

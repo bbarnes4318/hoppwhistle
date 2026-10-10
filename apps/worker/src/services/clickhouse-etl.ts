@@ -126,7 +126,7 @@ export class ClickHouseETL {
 
     // Then process every 30 seconds
     this.intervalId = setInterval(() => {
-      this.processBatch().catch((error) => {
+      this.processBatch().catch(error => {
         logger.error('Error in ETL batch processing:', error);
       });
     }, 30000);
@@ -158,7 +158,7 @@ export class ClickHouseETL {
     try {
       // Get CDRs created since last processing (or last hour if first run)
       const since = this.lastCdrProcessedAt || new Date(Date.now() - 3600000);
-      
+
       const cdrs = await this.prisma.cdr.findMany({
         where: {
           createdAt: {
@@ -186,7 +186,7 @@ export class ClickHouseETL {
         return;
       }
 
-      const rows: CDRRow[] = cdrs.map((cdr) => {
+      const rows: CDRRow[] = cdrs.map(cdr => {
         const call = cdr.call;
         const campaign = call.campaign;
         const publisher = campaign?.publisher;
@@ -216,16 +216,16 @@ export class ClickHouseETL {
       const startTime = Date.now();
       await clickhouseService.insert('cdrs', rows);
       const duration = (Date.now() - startTime) / 1000;
-      
+
       this.lastCdrProcessedAt = cdrs[cdrs.length - 1].createdAt;
-      
+
       etlRecordsProcessed.inc({ table: 'cdrs', status: 'success' }, cdrs.length);
       etlProcessingDuration.observe({ table: 'cdrs' }, duration);
-      
-      logger.info({ 
-        msg: 'Processed CDRs to ClickHouse', 
-        count: cdrs.length, 
-        duration 
+
+      logger.info({
+        msg: 'Processed CDRs to ClickHouse',
+        count: cdrs.length,
+        duration,
       });
     } catch (error) {
       logger.error({ msg: 'Error processing CDRs', err: error });
@@ -258,7 +258,7 @@ export class ClickHouseETL {
         return;
       }
 
-      const rows: EventRow[] = events.map((event) => {
+      const rows: EventRow[] = events.map(event => {
         const payload = event.payload as Record<string, unknown>;
         const campaignId = payload.campaignId as string | undefined;
         const publisherId = payload.publisherId as string | undefined;
@@ -286,7 +286,7 @@ export class ClickHouseETL {
       await this.prisma.event.updateMany({
         where: {
           id: {
-            in: events.map((e) => e.id),
+            in: events.map(e => e.id),
           },
         },
         data: {
@@ -296,14 +296,14 @@ export class ClickHouseETL {
       });
 
       this.lastEventProcessedAt = events[events.length - 1].createdAt;
-      
+
       etlRecordsProcessed.inc({ table: 'events', status: 'success' }, events.length);
       etlProcessingDuration.observe({ table: 'events' }, duration);
-      
-      logger.info({ 
-        msg: 'Processed events to ClickHouse', 
-        count: events.length, 
-        duration 
+
+      logger.info({
+        msg: 'Processed events to ClickHouse',
+        count: events.length,
+        duration,
       });
     } catch (error) {
       logger.error({ msg: 'Error processing events', err: error });
@@ -311,4 +311,3 @@ export class ClickHouseETL {
     }
   }
 }
-

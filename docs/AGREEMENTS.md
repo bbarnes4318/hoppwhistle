@@ -179,15 +179,15 @@ Agreements completed after the deploy are sealed; the admin detail page shows a
 
 ## Configuration
 
-| Variable                        | Purpose                                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `AGREEMENTS_S3_BUCKET`          | Bucket for executed PDFs and drawn signatures (default `agreements`), on the same `S3_*` credentials. |
-| `AGREEMENT_SEAL_P12_BASE64`     | The seal certificate, base64. Optional.                                                               |
-| `AGREEMENT_SEAL_P12_PASSPHRASE` | Its passphrase.                                                                                       |
-| `AGREEMENT_SEAL_<REF>_P12_BASE64` / `_PASSPHRASE` | A white-label suite's own seal, when its `sealSecretRef` is `<REF>`. Optional.      |
-| `SMTP_*`                        | Email. Sends are best-effort; a failed send never fails the record.                                   |
-| `APP_URL`                       | The portal links point at (default `https://agents.netenroll.com`).                                   |
-| `FIELD_ENCRYPTION_KEY`          | Encrypts the stored signing token so **Resend** can rebuild the same link.                            |
+| Variable                                          | Purpose                                                                                               |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `AGREEMENTS_S3_BUCKET`                            | Bucket for executed PDFs and drawn signatures (default `agreements`), on the same `S3_*` credentials. |
+| `AGREEMENT_SEAL_P12_BASE64`                       | The seal certificate, base64. Optional.                                                               |
+| `AGREEMENT_SEAL_P12_PASSPHRASE`                   | Its passphrase.                                                                                       |
+| `AGREEMENT_SEAL_<REF>_P12_BASE64` / `_PASSPHRASE` | A white-label suite's own seal, when its `sealSecretRef` is `<REF>`. Optional.                        |
+| `SMTP_*`                                          | Email. Sends are best-effort; a failed send never fails the record.                                   |
+| `APP_URL`                                         | The portal links point at (default `https://agents.netenroll.com`).                                   |
+| `FIELD_ENCRYPTION_KEY`                            | Encrypts the stored signing token so **Resend** can rebuild the same link.                            |
 
 NetEnroll's notice address and email, the default signatory and the internal
 copy addresses are in **Admin → Agreements → Settings** (seeded by the

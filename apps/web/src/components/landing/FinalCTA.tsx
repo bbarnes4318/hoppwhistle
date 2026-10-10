@@ -21,8 +21,8 @@ export function FinalCTA() {
             Ready to see what a day of delivery looks like?
           </h2>
           <p className="text-slate-400 text-base sm:text-lg max-w-2xl mx-auto">
-            Every agency is set up after a conversation and a signed agreement, so tell us what
-            your licensed agents can work in a day and we will size the block to it.
+            Every agency is set up after a conversation and a signed agreement, so tell us what your
+            licensed agents can work in a day and we will size the block to it.
           </p>
         </div>
 

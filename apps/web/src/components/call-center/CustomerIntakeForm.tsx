@@ -392,7 +392,9 @@ export function CustomerIntakeForm(): JSX.Element {
             <Label className="text-ink-2">Carrier</Label>
             <Select
               value={formData.carrier}
-              onValueChange={value => updateField('carrier', value as CustomerIntakeData['carrier'])}
+              onValueChange={value =>
+                updateField('carrier', value as CustomerIntakeData['carrier'])
+              }
             >
               <SelectTrigger className="bg-sunken border-rule-strong text-ink">
                 <SelectValue placeholder="Select carrier" />

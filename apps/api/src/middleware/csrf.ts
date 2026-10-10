@@ -37,10 +37,7 @@ export function verifyCsrfToken(token: string, sessionId: string): boolean {
 /**
  * CSRF protection middleware for state-changing operations
  */
-export async function csrfProtection(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function csrfProtection(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Only protect state-changing methods
   const protectedMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
   if (!protectedMethods.includes(request.method)) {
@@ -130,4 +127,3 @@ export async function csrfProtection(
     return;
   }
 }
-

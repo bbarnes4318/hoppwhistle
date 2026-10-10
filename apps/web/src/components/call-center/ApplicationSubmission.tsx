@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
-
 import { Button } from '@/components/ui/button';
 import type { ProspectData } from '@/lib/call-center/types';
 import { cn } from '@/lib/utils';

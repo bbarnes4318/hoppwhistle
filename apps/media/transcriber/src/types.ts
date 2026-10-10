@@ -34,4 +34,3 @@ export const TranscriptionReadyEventSchema = z.object({
 });
 
 export type TranscriptionReadyEvent = z.infer<typeof TranscriptionReadyEventSchema>;
-

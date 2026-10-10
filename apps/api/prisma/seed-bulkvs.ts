@@ -7,11 +7,8 @@ async function main() {
   // Find the active tenant
   const tenant = await prisma.tenant.findFirst({
     where: {
-      OR: [
-        { slug: 'test-org' },
-        { domain: 'test.callfabric.local' }
-      ]
-    }
+      OR: [{ slug: 'test-org' }, { domain: 'test.callfabric.local' }],
+    },
   });
 
   if (!tenant) {
@@ -30,7 +27,7 @@ async function main() {
         tenantId: tenant.id,
         name: 'Default Carrier',
         status: 'ACTIVE',
-      }
+      },
     });
     console.log('✅ Created default carrier:', carrier.name);
   } else {
@@ -44,7 +41,7 @@ async function main() {
         carrierId: carrier.id,
         name: 'Default Trunk',
         status: 'ACTIVE',
-      }
+      },
     });
     console.log('✅ Created default trunk:', trunk.name);
   } else {
@@ -52,14 +49,22 @@ async function main() {
   }
 
   const bulkVsDids = [
-    '12816989460', '12816989461',
-    '14063165877', '14402992856',
-    '14402992860', '16102819660',
-    '16102819662', '17038313168',
-    '17042283589', '17042286088',
-    '18036135410', '18036135412',
-    '19124185540', '19124185542',
-    '19542083921', '19542083922'
+    '12816989460',
+    '12816989461',
+    '14063165877',
+    '14402992856',
+    '14402992860',
+    '16102819660',
+    '16102819662',
+    '17038313168',
+    '17042283589',
+    '17042286088',
+    '18036135410',
+    '18036135412',
+    '19124185540',
+    '19124185542',
+    '19542083921',
+    '19542083922',
   ];
 
   const phoneNumbersFormatted = bulkVsDids.map(did => `+${did}`);
@@ -68,8 +73,8 @@ async function main() {
   const deleted = await prisma.phoneNumber.deleteMany({
     where: {
       tenantId: tenant.id,
-      number: { in: phoneNumbersFormatted }
-    }
+      number: { in: phoneNumbersFormatted },
+    },
   });
   console.log(`🧹 Deleted ${deleted.count} matching phone numbers to avoid conflicts.`);
 

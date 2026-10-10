@@ -43,4 +43,3 @@ export const etlProcessingDuration = new Histogram({
   buckets: [1, 5, 10, 30, 60],
   registers: [register],
 });
-

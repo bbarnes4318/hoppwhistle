@@ -183,7 +183,11 @@ export function GuaranteedIssueModal({ policy, onClose }: GuaranteedIssueModalPr
               <FileCheck className="w-4 h-4" />
               Log Call Attempt
             </Button>
-            <Button onClick={() => void handleConvertToGI()} disabled={isSubmitting} className="gap-2">
+            <Button
+              onClick={() => void handleConvertToGI()}
+              disabled={isSubmitting}
+              className="gap-2"
+            >
               <DollarSign className="w-4 h-4" />
               Convert to GI Policy
             </Button>

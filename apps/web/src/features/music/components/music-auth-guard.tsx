@@ -20,7 +20,9 @@ export function MusicAuthGuard({ children }: { children: React.ReactNode }) {
       <div className="flex items-center justify-center h-screen w-screen bg-[var(--m-bg)] text-[var(--m-accent)]">
         <div className="animate-pulse flex flex-col items-center gap-4">
           <div className="h-8 w-8 rounded-full bg-[var(--m-accent)]"></div>
-          <span className="font-mono text-sm font-bold uppercase tracking-widest">Initializing...</span>
+          <span className="font-mono text-sm font-bold uppercase tracking-widest">
+            Initializing...
+          </span>
         </div>
       </div>
     );

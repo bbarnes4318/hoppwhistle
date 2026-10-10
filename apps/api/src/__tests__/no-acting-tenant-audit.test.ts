@@ -88,8 +88,11 @@ const NOT_A_BROWSER_SESSION: Array<{ pattern: RegExp; because: string }> = [
 ];
 
 /** Write routes from the production capture, swept explicitly. */
-const EXPLICIT_WRITES: Array<{ method: 'PUT' | 'POST' | 'DELETE'; url: string; payload?: unknown }> =
-  [{ method: 'PUT', url: '/api/v1/agent/status', payload: { status: 'available' } }];
+const EXPLICIT_WRITES: Array<{
+  method: 'PUT' | 'POST' | 'DELETE';
+  url: string;
+  payload?: unknown;
+}> = [{ method: 'PUT', url: '/api/v1/agent/status', payload: { status: 'available' } }];
 
 describe('audit suite wiring', () => {
   it('runs against a real database when running in CI', () => {
@@ -214,7 +217,7 @@ describe.skipIf(!gate.available)(
 
         let code = '(unparseable body)';
         try {
-          code = (response.json())?.error?.code ?? '(no code)';
+          code = response.json()?.error?.code ?? '(no code)';
         } catch {
           /* a 401 with a non-JSON body is still a 401 */
         }
@@ -269,9 +272,7 @@ describe.skipIf(!gate.available)(
         });
 
         expect(response.statusCode, `${route.method} ${route.url}`).toBe(409);
-        expect((response.json()).error.code, `${route.method} ${route.url}`).toBe(
-          'NO_ACTING_TENANT'
-        );
+        expect(response.json().error.code, `${route.method} ${route.url}`).toBe('NO_ACTING_TENANT');
       }
     });
 

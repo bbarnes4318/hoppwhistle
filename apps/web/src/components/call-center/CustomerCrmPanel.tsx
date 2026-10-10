@@ -883,7 +883,9 @@ export function CustomerCrmPanel({
               <div className="flex gap-2">
                 <select
                   value={newTaskPriority}
-                  onChange={e => setNewTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')}
+                  onChange={e =>
+                    setNewTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')
+                  }
                   className="bg-sunken text-ink text-xs border border-rule rounded p-2 focus:outline-none flex-1"
                 >
                   <option value="LOW">Low Priority</option>

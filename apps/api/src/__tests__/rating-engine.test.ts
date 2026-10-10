@@ -445,9 +445,9 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       });
 
       expect((await measureCalendarDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(1);
-      expect(
-        (await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
-      ).toBe(1);
+      expect((await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications).toBe(
+        1
+      );
     });
 
     it('attributes by submission, not by the call that produced it', async () => {
@@ -471,9 +471,9 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       });
 
       expect((await measureCalendarDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(0);
-      expect(
-        (await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
-      ).toBe(1);
+      expect((await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications).toBe(
+        1
+      );
     });
   });
 

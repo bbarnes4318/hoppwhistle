@@ -163,7 +163,10 @@ describe('CDR for an inbound call to a Vonage DID', () => {
 
   it('records Vonage as the delivering carrier and the gateway that connected the forward leg', async () => {
     await post(cdr());
-    expect(createdCall().metadata.carrier).toEqual({ inboundProvider: 'vonage', gateway: 'vonage' });
+    expect(createdCall().metadata.carrier).toEqual({
+      inboundProvider: 'vonage',
+      gateway: 'vonage',
+    });
     expect(recordGatewayOutcome).toHaveBeenCalledWith(
       'vonage',
       { ok: true, cause: 'NORMAL_CLEARING' },
@@ -173,7 +176,12 @@ describe('CDR for an inbound call to a Vonage DID', () => {
 
   it('names no connecting gateway when nobody answered', async () => {
     await post(
-      cdr({ answeredAt: undefined, answeredParty: '', hangupCause: 'NO_ANSWER', recordingPath: undefined })
+      cdr({
+        answeredAt: undefined,
+        answeredParty: '',
+        hangupCause: 'NO_ANSWER',
+        recordingPath: undefined,
+      })
     );
     expect(createdCall().status).toBe('NO_ANSWER');
     expect(createdCall().metadata.carrier).toEqual({ inboundProvider: 'vonage', gateway: null });

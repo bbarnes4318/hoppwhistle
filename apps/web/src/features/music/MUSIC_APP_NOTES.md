@@ -15,21 +15,23 @@ This is NOT generic call tracking, lead gen, or a call center dashboard.
 Music teams launch AI voice campaigns to opted-in fan audiences to drive pre-saves, ticket sales, merch purchases, VIP upgrades, and verified fan engagement — with real-time proof of every interaction through recordings, transcripts, outcomes, and campaign analytics.
 
 ### Primary Metric
+
 **Cost per Album Pre-Save**
 
 ### Music-Specific Terminology
-| Generic Term | Music Term |
-|---|---|
-| Calls | Fan Interactions |
-| Campaigns | Fan Campaigns |
-| Leads | Fans |
-| Buyers | Conversion Goals |
-| Publishers | Audience Sources |
-| Call Logs | Proof Log |
-| Recordings | Fan Voice Proof |
-| Transcripts | Fan Transcripts |
-| Conversion | Verified Action |
-| Revenue | Campaign Value |
+
+| Generic Term | Music Term       |
+| ------------ | ---------------- |
+| Calls        | Fan Interactions |
+| Campaigns    | Fan Campaigns    |
+| Leads        | Fans             |
+| Buyers       | Conversion Goals |
+| Publishers   | Audience Sources |
+| Call Logs    | Proof Log        |
+| Recordings   | Fan Voice Proof  |
+| Transcripts  | Fan Transcripts  |
+| Conversion   | Verified Action  |
+| Revenue      | Campaign Value   |
 
 ---
 
@@ -37,14 +39,14 @@ Music teams launch AI voice campaigns to opted-in fan audiences to drive pre-sav
 
 All data is local mock data in `features/music/data/demo-music-data.ts`.
 
-| Entity | Count |
-|---|---|
-| Artists | 3 (Nova Eclipse, Kilo Blaze, Aria James) |
-| Fan Campaigns | 5 |
-| Fans | 50 |
-| Fan Interactions | 320 |
-| Proof Records | ~190 (completed interactions) |
-| Transcript Snippets | 15 templates |
+| Entity              | Count                                    |
+| ------------------- | ---------------------------------------- |
+| Artists             | 3 (Nova Eclipse, Kilo Blaze, Aria James) |
+| Fan Campaigns       | 5                                        |
+| Fans                | 50                                       |
+| Fan Interactions    | 320                                      |
+| Proof Records       | ~190 (completed interactions)            |
+| Transcript Snippets | 15 templates                             |
 
 Data is generated deterministically using a seeded PRNG for SSR/hydration safety.
 
@@ -73,15 +75,15 @@ Fans Contacted · Human Answers · Verified Engagements · Pre-Saves · Ticket I
 
 ## Where Real Integration Would Happen
 
-| Area | Current | Future |
-|---|---|---|
-| Fan Interactions | `demo-music-data.ts` | `apiClient.get('/music/interactions')` — maps to existing Call model |
-| Campaigns | `demo-music-data.ts` | `apiClient.get('/music/campaigns')` — maps to existing Campaign model |
-| Recordings | Mock boolean | Existing recording infrastructure (S3) |
-| Transcripts | Static snippets | Existing Vapi transcription pipeline |
-| Fan Database | `demo-music-data.ts` | New `MusicFan` model or extension of Contact |
-| Proof Records | Computed from interactions | Dedicated proof API or view over calls |
-| Analytics | Computed in-browser | Backend aggregation endpoints |
+| Area             | Current                    | Future                                                                |
+| ---------------- | -------------------------- | --------------------------------------------------------------------- |
+| Fan Interactions | `demo-music-data.ts`       | `apiClient.get('/music/interactions')` — maps to existing Call model  |
+| Campaigns        | `demo-music-data.ts`       | `apiClient.get('/music/campaigns')` — maps to existing Campaign model |
+| Recordings       | Mock boolean               | Existing recording infrastructure (S3)                                |
+| Transcripts      | Static snippets            | Existing Vapi transcription pipeline                                  |
+| Fan Database     | `demo-music-data.ts`       | New `MusicFan` model or extension of Contact                          |
+| Proof Records    | Computed from interactions | Dedicated proof API or view over calls                                |
+| Analytics        | Computed in-browser        | Backend aggregation endpoints                                         |
 
 ---
 
@@ -94,9 +96,11 @@ All existing dashboard, campaigns, calls, call-center, settings, billing, buyers
 ## Route Structure
 
 ### Public
+
 - `/music` — Landing page (AI voice engagement positioning)
 
 ### Protected (inside `(dashboard)` layout)
+
 - `/music-console` — Dashboard with 10 KPI cards
 - `/music-console/campaigns` — Fan campaigns
 - `/music-console/fans` — Fan database

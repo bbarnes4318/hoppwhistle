@@ -81,4 +81,3 @@ export class ClickHouseService {
 }
 
 export const clickhouseService = new ClickHouseService();
-

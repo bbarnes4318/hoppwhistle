@@ -109,7 +109,7 @@ export class InvoiceGeneratorService {
       // const { tenant_id, currency } = accountResult.rows[0];
 
       // Calculate totals
-      const lines = accruals.map((accrual) => {
+      const lines = accruals.map(accrual => {
         const amount = new Decimal(accrual.amount);
         return {
           description: accrual.description,
@@ -121,11 +121,11 @@ export class InvoiceGeneratorService {
       });
 
       const subtotal = lines.reduce((sum, line) => sum.plus(line.total), new Decimal(0));
-      
+
       // Tax placeholder (calculate based on tenant settings or metadata)
       const taxRate = new Decimal(0); // TODO: Get from tenant/billing account settings
       const tax = subtotal.mul(taxRate);
-      
+
       const total = subtotal.plus(tax);
 
       // Generate invoice number
@@ -198,7 +198,9 @@ export class InvoiceGeneratorService {
 
       await client.query('COMMIT');
 
-      logger.info(`Generated invoice ${invoiceNumber} (${invoiceId}) for period ${periodDate.toISOString()}`);
+      logger.info(
+        `Generated invoice ${invoiceNumber} (${invoiceId}) for period ${periodDate.toISOString()}`
+      );
       return invoiceId;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -259,7 +261,7 @@ export class InvoiceGeneratorService {
 
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      
+
       const pdf = await page.pdf({
         format: 'A4',
         margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
@@ -397,14 +399,18 @@ export class InvoiceGeneratorService {
       </tr>
     </thead>
     <tbody>
-      ${lines.map(line => `
+      ${lines
+        .map(
+          line => `
         <tr>
           <td>${line.description}</td>
           <td class="text-right">${parseFloat(line.quantity).toFixed(2)}</td>
           <td class="text-right">${parseFloat(line.unit_price).toFixed(4)}</td>
           <td class="text-right">${parseFloat(line.total).toFixed(2)}</td>
         </tr>
-      `).join('')}
+      `
+        )
+        .join('')}
     </tbody>
   </table>
 
@@ -437,7 +443,7 @@ export class InvoiceGeneratorService {
   private async generateInvoiceNumber(billingAccountId: string): Promise<string> {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    
+
     // Get count of invoices for this account this month
     const result = await this.pool.query(
       `SELECT COUNT(*) as count
@@ -453,4 +459,3 @@ export class InvoiceGeneratorService {
     return `INV-${year}${month}-${String(count).padStart(4, '0')}`;
   }
 }
-

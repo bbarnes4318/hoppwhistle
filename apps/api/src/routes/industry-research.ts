@@ -50,9 +50,7 @@ function featureEnabled(): boolean {
 /** Require an authenticated Owner/Admin. Verifies roles against the DB (the
  *  session token does not always embed roles), returns null + error otherwise. */
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<AuthCtx | null> {
-  const user = request.user as
-    | { tenantId?: string; userId?: string; roles?: string[] }
-    | undefined;
+  const user = request.user as { tenantId?: string; userId?: string; roles?: string[] } | undefined;
   const tenantId = user?.tenantId;
   const userId = user?.userId;
   if (!tenantId || !userId) {

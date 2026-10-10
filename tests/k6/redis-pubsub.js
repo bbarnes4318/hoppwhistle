@@ -1,8 +1,8 @@
 /**
  * k6 Load Test: Redis Pub/Sub Throughput
- * 
+ *
  * Target: Measure Redis pub/sub message throughput and latency
- * 
+ *
  * This test simulates high-frequency event publishing (call state updates, events)
  * that would be published to Redis pub/sub channels and consumed by WebSocket clients.
  */
@@ -21,15 +21,15 @@ const pubsubThroughput = new Counter('pubsub_messages_total');
 // Note: VUs are split between subscribers (WebSocket) and publishers (HTTP)
 export const options = {
   stages: [
-    { duration: '30s', target: 50 },   // Ramp up to 50 VUs
-    { duration: '1m', target: 100 },   // Ramp up to 100 VUs
-    { duration: '2m', target: 200 },   // Ramp up to 200 VUs
-    { duration: '3m', target: 200 },   // Stay at 200 VUs
-    { duration: '1m', target: 0 },     // Ramp down
+    { duration: '30s', target: 50 }, // Ramp up to 50 VUs
+    { duration: '1m', target: 100 }, // Ramp up to 100 VUs
+    { duration: '2m', target: 200 }, // Ramp up to 200 VUs
+    { duration: '3m', target: 200 }, // Stay at 200 VUs
+    { duration: '1m', target: 0 }, // Ramp down
   ],
   thresholds: {
-    'pubsub_messages_received': ['rate>0.95'], // 95% message delivery rate
-    'pubsub_message_latency_ms': ['p(95)<100'], // 95% latency below 100ms
+    pubsub_messages_received: ['rate>0.95'], // 95% message delivery rate
+    pubsub_message_latency_ms: ['p(95)<100'], // 95% latency below 100ms
   },
 };
 
@@ -53,16 +53,18 @@ export function subscriber() {
   const response = ws.connect(url, params, function (socket) {
     socket.on('open', () => {
       // Subscribe to call events
-      socket.send(JSON.stringify({
-        type: 'subscribe',
-        channels: ['call.*'],
-      }));
+      socket.send(
+        JSON.stringify({
+          type: 'subscribe',
+          channels: ['call.*'],
+        })
+      );
     });
 
-    socket.on('message', (data) => {
+    socket.on('message', data => {
       try {
         const message = JSON.parse(data);
-        
+
         if (message.type === 'event') {
           // Calculate latency if timestamp is present
           if (message.payload.timestamp) {
@@ -71,7 +73,7 @@ export function subscriber() {
             const latency = receiveTime - messageTime;
             pubsubLatency.add(latency);
           }
-          
+
           pubsubMessageRate.add(1);
           pubsubThroughput.add(1);
         }
@@ -80,7 +82,7 @@ export function subscriber() {
       }
     });
 
-    socket.on('error', (e) => {
+    socket.on('error', e => {
       if (e.error() !== 'websocket: close sent') {
         console.error('WebSocket error:', e);
       }
@@ -91,7 +93,7 @@ export function subscriber() {
   });
 
   check(response, {
-    'WebSocket connection successful': (r) => r && r.status === 101,
+    'WebSocket connection successful': r => r && r.status === 101,
   });
 }
 
@@ -107,7 +109,7 @@ export function publisher() {
 
   // Calculate delay between messages to achieve target rate
   const delayMs = 1000 / MESSAGES_PER_SECOND;
-  
+
   // Event types that trigger pub/sub
   const eventTypes = ['call.started', 'call.answered', 'call.completed'];
 
@@ -129,7 +131,7 @@ export function publisher() {
     });
 
     check(response, {
-      'publish status is 200 or 201': (r) => r.status === 200 || r.status === 201,
+      'publish status is 200 or 201': r => r.status === 200 || r.status === 201,
     });
 
     sleep(delayMs / 1000); // Convert to seconds
@@ -138,7 +140,7 @@ export function publisher() {
 
 /**
  * Main function - distributes VUs between subscribers and publishers
- * 
+ *
  * Note: k6 doesn't support different functions per VU easily, so we use
  * a workaround where first N VUs are publishers and rest are subscribers.
  * For better separation, consider running publisher and subscriber tests separately.
@@ -146,7 +148,7 @@ export function publisher() {
 export default function () {
   const totalVUs = parseInt(__ENV.VUs || '200');
   const publisherCount = Math.min(PUBLISHER_VUS, totalVUs);
-  
+
   // First N VUs are publishers, rest are subscribers
   if (__VU <= publisherCount) {
     publisher();
@@ -157,29 +159,29 @@ export default function () {
 
 export function handleSummary(data) {
   return {
-    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    stdout: textSummary(data, { indent: ' ', enableColors: true }),
     'results/redis-pubsub.json': JSON.stringify(data),
   };
 }
 
 function textSummary(data, options) {
   const indent = options.indent || '';
-  
+
   let summary = '\n';
   summary += `${indent}Redis Pub/Sub Load Test Results\n`;
   summary += `${indent}==============================\n\n`;
-  
+
   // Message metrics
   if (data.metrics.pubsub_messages_received) {
     const rate = data.metrics.pubsub_messages_received.values.rate;
     summary += `${indent}Message Delivery Rate: ${(rate * 100).toFixed(2)}%\n`;
   }
-  
+
   if (data.metrics.pubsub_messages_total) {
     const total = data.metrics.pubsub_messages_total.values.count;
     summary += `${indent}Total Messages Received: ${total}\n`;
   }
-  
+
   if (data.metrics.pubsub_message_latency_ms) {
     const p50 = data.metrics.pubsub_message_latency_ms.values['p(50)'];
     const p95 = data.metrics.pubsub_message_latency_ms.values['p(95)'];
@@ -189,8 +191,7 @@ function textSummary(data, options) {
     summary += `${indent}  p95: ${p95.toFixed(2)}ms\n`;
     summary += `${indent}  p99: ${p99.toFixed(2)}ms\n`;
   }
-  
+
   summary += '\n';
   return summary;
 }
-

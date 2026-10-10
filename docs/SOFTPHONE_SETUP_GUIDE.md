@@ -728,13 +728,13 @@ phone comes up then.
 
 When it is enabled and initialisation fails, the retry is bounded and visible:
 
-| | |
-| --- | --- |
-| attempts | 5, shared with the watchdog rather than bypassable by it |
-| backoff | 2s doubling to a 30s ceiling |
+|          |                                                                                                                                    |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| attempts | 5, shared with the watchdog rather than bypassable by it                                                                           |
+| backoff  | 2s doubling to a 30s ceiling                                                                                                       |
 | terminal | a 403 or 409 from `/agent/webrtc/credentials` stops immediately — a settled answer about who this user is, not a transient failure |
-| state | `phoneStatus` on the context: `disabled`, `connecting`, `registered`, `retrying`, `failed`, with `phoneAttempts` |
-| recovery | `reconnectPhone()` resets the budget; the panel offers it as "Try again" |
+| state    | `phoneStatus` on the context: `disabled`, `connecting`, `registered`, `retrying`, `failed`, with `phoneAttempts`                   |
+| recovery | `reconnectPhone()` resets the budget; the panel offers it as "Try again"                                                           |
 
 `AgentPhonePanel` renders nothing when the status is `disabled`, and shows a red
 launcher rather than the green "Available" one while retrying or failed — an

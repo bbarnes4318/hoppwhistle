@@ -46,11 +46,11 @@ services:
       # Caller ID
       - OUTBOUND_CALLER_ID=${OUTBOUND_CALLER_ID}
     ports:
-      - "8081:8081"
-      - "8082:8082"
-      - "8084:8082"
-      - "5080:5080/tcp"
-      - "5080:5080/udp"
+      - '8081:8081'
+      - '8082:8082'
+      - '8084:8082'
+      - '5080:5080/tcp'
+      - '5080:5080/udp'
     volumes:
       - ./fs_recordings:/usr/share/freeswitch/recordings
       - ../../freeswitch/scripts:/usr/local/bin/scripts:ro

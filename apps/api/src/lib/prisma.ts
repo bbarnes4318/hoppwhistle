@@ -18,4 +18,3 @@ export async function closePrismaClient(): Promise<void> {
     prisma = null;
   }
 }
-

@@ -26,25 +26,27 @@ findings that a `prisma.<model>.<op>` scan was structurally unable to see.
 I traced every path that can produce `ADMIN`/`OWNER`/`PlatformAdmin` on a
 principal and none of them can be reached by an ordinary agent:
 
-| Path | Verdict |
-| --- | --- |
-| JWT role claims | **Cannot escalate.** `routes/auth.ts` signs `{ tenantId, userId, email }` only. `lib/principal.ts#hydratePrincipal` **replaces** `principal.roles` from `UserRole` rows on every authenticated request; it does not merge. A forged or stale `roles` claim is discarded. |
-| Registration | **Cannot escalate.** `POST /api/auth/register` requires an activation token; `assignGrantedRole()` uses the role named by the server-minted grant and, if that role row is missing, assigns **no role at all** rather than guessing. |
-| Agency invitation | **Cannot escalate.** `POST /api/v1/auth/activation-grants` hard-rejects any role but `AGENT`, and takes the tenant from `resolveTenant()` with no `tenantId` field in the body. |
-| `POST /api/v1/users/invite` | Correctly gated: `isAdminOrOwner` required; `OWNER` may only be granted by an `OWNER`. |
-| PlatformAdmin | Granted only by `platform:admins --grant` on the host. No HTTP route mints one. |
-| Acting-tenant / preview | `applyPlatformContext` only fires for a principal with a `PlatformAdmin` row. |
-| Demo-tenant bypass | `ALLOW_DEMO_TENANT_AUTH` is unset in `apps/api/env.example`; the header is stripped globally when off. See F3 for the residual risk. |
+| Path                        | Verdict                                                                                                                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| JWT role claims             | **Cannot escalate.** `routes/auth.ts` signs `{ tenantId, userId, email }` only. `lib/principal.ts#hydratePrincipal` **replaces** `principal.roles` from `UserRole` rows on every authenticated request; it does not merge. A forged or stale `roles` claim is discarded. |
+| Registration                | **Cannot escalate.** `POST /api/auth/register` requires an activation token; `assignGrantedRole()` uses the role named by the server-minted grant and, if that role row is missing, assigns **no role at all** rather than guessing.                                     |
+| Agency invitation           | **Cannot escalate.** `POST /api/v1/auth/activation-grants` hard-rejects any role but `AGENT`, and takes the tenant from `resolveTenant()` with no `tenantId` field in the body.                                                                                          |
+| `POST /api/v1/users/invite` | Correctly gated: `isAdminOrOwner` required; `OWNER` may only be granted by an `OWNER`.                                                                                                                                                                                   |
+| PlatformAdmin               | Granted only by `platform:admins --grant` on the host. No HTTP route mints one.                                                                                                                                                                                          |
+| Acting-tenant / preview     | `applyPlatformContext` only fires for a principal with a `PlatformAdmin` row.                                                                                                                                                                                            |
+| Demo-tenant bypass          | `ALLOW_DEMO_TENANT_AUTH` is unset in `apps/api/env.example`; the header is stripped globally when off. See F3 for the residual risk.                                                                                                                                     |
 
-**What *is* in the repository is a script that does exactly the reported thing:**
+**What _is_ in the repository is a script that does exactly the reported thing:**
 
 - `scripts/seed-admin-roles.sql` inserts `role-admin` into `user_roles` for
   **every row in `users`** that does not already have it:
+
   ```sql
   INSERT INTO user_roles (id, "userId", "roleId", "createdAt")
   SELECT 'ur-' || u.id, u.id, 'role-admin', NOW() FROM users u
   WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = 'role-admin');
   ```
+
   Re-running it after any new account is created makes that account a Company
   Admin. It is referenced by no deploy script, no migration and no CI job — it
   is a hand-run artefact.
@@ -106,11 +108,11 @@ whether a caller exists today.**
 Three separate client-side role/permission definitions exist, and they disagree
 with the server and with each other:
 
-| Location | Definition | Divergence |
-| --- | --- | --- |
-| `apps/web/src/hooks/useUserRoles.ts:7` | `type RoleName = 'OWNER'\|'ADMIN'\|'ANALYST'\|'PUBLISHER'\|'BUYER'\|'READONLY'` | **`AGENT` is absent.** Every `hasRole`/`hasAnyRole` call through this hook is un-typecheckable for agents; `useScriptAccess` derives an agent's job title by elimination rather than by role. |
-| `apps/web/src/hooks/use-auth.tsx:329-331` | `getPermissions()` gives `AGENT` exactly **`['calls:read']`** | Server gives AGENT 20 permissions. The client denies the agent `reports:read`, which the server grants — so `/reports` bounces an agent the API would have served. |
-| `apps/web/src/lib/roles.ts:34` | `getRedirectPath()` sends AGENT to `/dashboard` | `use-auth.tsx:369` sends AGENT to `/call-center`. **The login page uses the first; the dashboard page uses the second**, so every agent login is a redirect to `/dashboard` followed immediately by a client-side redirect to `/call-center`. |
+| Location                                  | Definition                                                                      | Divergence                                                                                                                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/hooks/useUserRoles.ts:7`    | `type RoleName = 'OWNER'\|'ADMIN'\|'ANALYST'\|'PUBLISHER'\|'BUYER'\|'READONLY'` | **`AGENT` is absent.** Every `hasRole`/`hasAnyRole` call through this hook is un-typecheckable for agents; `useScriptAccess` derives an agent's job title by elimination rather than by role.                                                 |
+| `apps/web/src/hooks/use-auth.tsx:329-331` | `getPermissions()` gives `AGENT` exactly **`['calls:read']`**                   | Server gives AGENT 20 permissions. The client denies the agent `reports:read`, which the server grants — so `/reports` bounces an agent the API would have served.                                                                            |
+| `apps/web/src/lib/roles.ts:34`            | `getRedirectPath()` sends AGENT to `/dashboard`                                 | `use-auth.tsx:369` sends AGENT to `/call-center`. **The login page uses the first; the dashboard page uses the second**, so every agent login is a redirect to `/dashboard` followed immediately by a client-side redirect to `/call-center`. |
 
 This is the "multiple authorization systems" the brief asks about, and it lives
 entirely on the client. The server side genuinely has one principal
@@ -166,14 +168,14 @@ names none (`routes/index.ts:4703`). Any caller of that endpoint that omits
 Ordered by severity. None of these is the cause of the reported symptom; all
 were found while tracing it.
 
-### C1 — `GET /api/v1/recordings/local-stream/*` has no authentication at all *(cross-tenant, unauthenticated)*
+### C1 — `GET /api/v1/recordings/local-stream/*` has no authentication at all _(cross-tenant, unauthenticated)_
 
 `apps/api/src/routes/recordings.ts:587-625`. The route is registered on the bare
 plugin (`registerRecordingManagementRoutes` adds no `onRequest`/`preHandler`
 hook), takes no `preHandler`, and its body never reads `request.user`, never
 calls `getActingTenantId()`, and never touches the `recordings` or `calls`
 table. It resolves the wildcard against `LOCAL_STORAGE_DIR` and streams the
-file. Directory traversal *is* handled; authentication is not.
+file. Directory traversal _is_ handled; authentication is not.
 
 The keys are handed out: `services/storage.ts:197-200` returns
 `/api/v1/recordings/local-stream/<storageKey>` from `getSignedUrl()` whenever
@@ -183,7 +185,7 @@ key that ever leaves the building (a log line, a browser history entry, a
 `Referer`, a shared link, a support ticket) is a permanent credential-free
 download of that agency's call audio, from any tenant, by anybody.
 
-*Answers brief question 2.J: yes, recordings can be read cross-tenant.*
+_Answers brief question 2.J: yes, recordings can be read cross-tenant._
 
 ### C2 — Seven-day and one-hour bearer tokens are minted into URLs
 
@@ -217,7 +219,7 @@ is authoritative: `authorizationFromUser()` puts it on the principal and
 `requirePublisherAccess()` / `buildPublisherScopedWhere()` grant that user the
 foreign publisher's calls, earnings and payouts.
 
-*Answers brief question 2.E/2.F: yes, a client-supplied id crosses the boundary here.*
+_Answers brief question 2.E/2.F: yes, a client-supplied id crosses the boundary here._
 
 ### C4 — `leadList.findUnique({ where: { id } })` in the CRM import is not tenant-scoped
 
@@ -335,20 +337,20 @@ Sidebar ──► isPlatformAdmin → hasFullAccess → publisherOnly → buyerO
 **Where authorization state can differ between two moments in one session.**
 This is the brief's central question, so it is answered exhaustively:
 
-| # | Input | Can it change mid-session? | Effect |
-| --- | --- | --- | --- |
-| 1 | `UserRole` rows | **Yes — the only one that matters.** Read fresh on every request. | Role added/removed takes effect on the *next request*, with no re-login. |
-| 2 | `User.status` | Yes | `!== 'ACTIVE'` → 403 on every route. |
-| 3 | `Tenant.status` | Yes | 403 at login; acting-tenant selection dropped for staff. |
-| 4 | `PlatformAdmin` row | Yes | Grants/revokes cross-agency capability immediately. |
-| 5 | `PlatformActingTenant` row | Yes | Changes `tenantId` and roles for staff only. |
-| 6 | `roles` table contents | Yes | A missing role row makes `assignGrantedRole` a no-op. |
-| 7 | JWT claims | **No** — no `exp`, and roles are never read from the token. |
-| 8 | Redis session | 24h TTL, but nothing authorization-relevant reads it. |
-| 9 | `hw_session` cookie | 7d Max-Age; read-only, GET-only, re-resolved server-side. |
-| 10 | Rate limiter | **Yes, per minute** — a 429 on `/api/auth/me` presents as a dead session (B2). |
-| 11 | `localStorage` | Holds only the token + demo flags. No role is ever read from it. |
-| 12 | React state | One `useState` per provider, no TTL, no revalidation, no React Query. |
+| #   | Input                      | Can it change mid-session?                                                     | Effect                                                                   |
+| --- | -------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 1   | `UserRole` rows            | **Yes — the only one that matters.** Read fresh on every request.              | Role added/removed takes effect on the _next request_, with no re-login. |
+| 2   | `User.status`              | Yes                                                                            | `!== 'ACTIVE'` → 403 on every route.                                     |
+| 3   | `Tenant.status`            | Yes                                                                            | 403 at login; acting-tenant selection dropped for staff.                 |
+| 4   | `PlatformAdmin` row        | Yes                                                                            | Grants/revokes cross-agency capability immediately.                      |
+| 5   | `PlatformActingTenant` row | Yes                                                                            | Changes `tenantId` and roles for staff only.                             |
+| 6   | `roles` table contents     | Yes                                                                            | A missing role row makes `assignGrantedRole` a no-op.                    |
+| 7   | JWT claims                 | **No** — no `exp`, and roles are never read from the token.                    |
+| 8   | Redis session              | 24h TTL, but nothing authorization-relevant reads it.                          |
+| 9   | `hw_session` cookie        | 7d Max-Age; read-only, GET-only, re-resolved server-side.                      |
+| 10  | Rate limiter               | **Yes, per minute** — a 429 on `/api/auth/me` presents as a dead session (B2). |
+| 11  | `localStorage`             | Holds only the token + demo flags. No role is ever read from it.               |
+| 12  | React state                | One `useState` per provider, no TTL, no revalidation, no React Query.          |
 
 #### E-verify — the two queries that settle A1 against production
 
@@ -362,6 +364,7 @@ LEFT JOIN roles r       ON r.id = ur."roleId"
 WHERE u.email = '<the new agent>'
 ORDER BY ur."createdAt";
 ```
+
 A `role_granted` far later than `user_created` means something granted it after
 the fact. `role = NULL` means the account has **no roles** — the Dashboard-only
 state — and A1 is confirmed.
@@ -373,6 +376,7 @@ FROM audit_logs
 WHERE "userId" = (SELECT id FROM users WHERE email = '<the new agent>')
 ORDER BY "createdAt";
 ```
+
 `auth.register.success` / `auth.login.success` give the session boundaries;
 `authorization.denied` rows show the exact moment and permission at which the
 account started being refused. If the denials begin ~20 minutes after login and
@@ -385,7 +389,7 @@ name `RATE_LIMIT_EXCEEDED` instead, the cause is B2, not A1.
 Three changes to the diagram above. Everything else stays.
 
 1. **The server tells the client what it may do.** `/api/auth/me` gains an
-   `effectivePermissions: string[]` computed from the *same* `ROLE_PERMISSIONS`
+   `effectivePermissions: string[]` computed from the _same_ `ROLE_PERMISSIONS`
    table `checkPermission()` uses, plus a `navKey` naming which nav to render.
    `use-auth.tsx#getPermissions` and `useUserRoles.ts#RoleName` are deleted. One
    definition, served, never re-derived.
@@ -403,35 +407,35 @@ Three changes to the diagram above. Everything else stays.
 
 `✔` granted · `–` not granted
 
-| Permission | OWNER | ADMIN | AGENT | ANALYST | PUBLISHER | BUYER | READONLY |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `admin:*` | ✔ | – | – | – | – | – | – |
-| `users:read` | ✔ | ✔ | **✔** | – | – | – | – |
-| `users:write` | ✔ | ✔ | **✔** | – | – | – | – |
-| `users:delete` | ✔ | ✔ | – | – | – | – | – |
-| `roles:read` | ✔ | ✔ | **✔** | – | – | – | – |
-| `roles:write` | ✔ | ✔ | – | – | – | – | – |
-| `api_keys:*` | ✔ | ✔ | – | – | – | – | – |
-| `numbers:read` | ✔ | ✔ | ✔ | ✔ | – | – | ✔ |
-| `numbers:write` | ✔ | ✔ | **✔** | – | – | – | – |
-| `numbers:delete` | ✔ | ✔ | **✔** | – | – | – | – |
-| `campaigns:read` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| `campaigns:write` | ✔ | ✔ | **✔** | – | ✔ | – | – |
-| `campaigns:delete` | ✔ | ✔ | **✔** | – | – | – | – |
-| `flows:*` | ✔ | ✔ | – | read | ✔ | – | read |
-| `calls:read` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| `calls:write` | ✔ | ✔ | ✔ | – | – | ✔ | – |
-| `calls:delete` | ✔ | ✔ | **✔** | – | – | – | – |
-| `recordings:read` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| `recordings:write` | ✔ | ✔ | **✔** | – | – | – | – |
-| `recordings:delete` | ✔ | ✔ | **✔** | – | – | – | – |
-| `webhooks:*` | ✔ | ✔ | – | – | – | – | – |
-| `billing:read` | ✔ | ✔ | **✔** | – | – | – | – |
-| `billing:write` | ✔ | ✔ | **✔** | – | – | – | – |
-| `reports:read` | ✔ | ✔ | ✔ | ✔ | – | – | ✔ |
-| `payroll:read` | ✔ | ✔ | ✔ | – | – | – | – |
-| `payroll:write` | ✔ | ✔ | **✔** | – | – | – | – |
-| `payroll:admin` | ✔ | ✔ | – | – | – | – | – |
+| Permission          | OWNER | ADMIN | AGENT  | ANALYST | PUBLISHER | BUYER | READONLY |
+| ------------------- | :---: | :---: | :----: | :-----: | :-------: | :---: | :------: |
+| `admin:*`           |  ✔   |   –   |   –    |    –    |     –     |   –   |    –     |
+| `users:read`        |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `users:write`       |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `users:delete`      |  ✔   |  ✔   |   –    |    –    |     –     |   –   |    –     |
+| `roles:read`        |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `roles:write`       |  ✔   |  ✔   |   –    |    –    |     –     |   –   |    –     |
+| `api_keys:*`        |  ✔   |  ✔   |   –    |    –    |     –     |   –   |    –     |
+| `numbers:read`      |  ✔   |  ✔   |   ✔   |   ✔    |     –     |   –   |    ✔    |
+| `numbers:write`     |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `numbers:delete`    |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `campaigns:read`    |  ✔   |  ✔   |   ✔   |   ✔    |    ✔     |  ✔   |    ✔    |
+| `campaigns:write`   |  ✔   |  ✔   | **✔** |    –    |    ✔     |   –   |    –     |
+| `campaigns:delete`  |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `flows:*`           |  ✔   |  ✔   |   –    |  read   |    ✔     |   –   |   read   |
+| `calls:read`        |  ✔   |  ✔   |   ✔   |   ✔    |    ✔     |  ✔   |    ✔    |
+| `calls:write`       |  ✔   |  ✔   |   ✔   |    –    |     –     |  ✔   |    –     |
+| `calls:delete`      |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `recordings:read`   |  ✔   |  ✔   |   ✔   |   ✔    |    ✔     |  ✔   |    ✔    |
+| `recordings:write`  |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `recordings:delete` |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `webhooks:*`        |  ✔   |  ✔   |   –    |    –    |     –     |   –   |    –     |
+| `billing:read`      |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `billing:write`     |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `reports:read`      |  ✔   |  ✔   |   ✔   |   ✔    |     –     |   –   |    ✔    |
+| `payroll:read`      |  ✔   |  ✔   |   ✔   |    –    |     –     |   –   |    –     |
+| `payroll:write`     |  ✔   |  ✔   | **✔** |    –    |     –     |   –   |    –     |
+| `payroll:admin`     |  ✔   |  ✔   |   –    |    –    |     –     |   –   |    –     |
 
 The 12 bolded AGENT cells are the ones that have no justification in the agent
 workflow. I found no route that requires any of them for an agent to do their
@@ -447,25 +451,25 @@ tenant. That design is correct and should not be touched.
 Derived from the 16 required pages and the endpoints behind them, then
 intersected with least privilege.
 
-| Permission | Keep? | Why |
-|---|:-:|---|
-| `calls:read` | **keep** | Calls page, Live Board, My day. Narrowed to own calls by `buildCallWhere`. |
-| `calls:write` | **keep** | Dispositions, notes, transfer. |
-| `recordings:read` | **keep** | Playback of their own calls; `checkRecordingAccess` already narrows AGENT to own-number/own-created. |
-| `reports:read` | **keep** | Reports and CRM reports. Must be tenant+agent narrowed at the query. |
-| `campaigns:read` | **keep** | Campaigns page is read-only for an agent. |
-| `numbers:read` | **keep** | Numbers page / caller-ID selection. |
-| `payroll:read` | **keep** | My payroll. Already self-scoped by `userId`. |
-| `billing:read` | **keep, narrowed** | Billing / Rate / Delivery / Settlements / Quotas are on the required list. Grant read; the *handlers* must decide what an agent sees, not the permission. |
-| `users:read` | **keep, narrowed** | Agent rosters render colleague names. Should be reduced to a names-only endpoint rather than `GET /api/v1/users`. |
-| `users:write` | **REMOVE** | An agent must never administer another user. |
-| `roles:read` | **REMOVE** | Nothing on the agent surface reads the role catalogue. |
-| `numbers:write`, `numbers:delete` | **REMOVE** | An agent does not provision or release DIDs. |
-| `campaigns:write`, `campaigns:delete` | **REMOVE** | An agent does not author or delete campaigns. |
-| `calls:delete` | **REMOVE** | Destroys the billing and compliance record. |
-| `recordings:write`, `recordings:delete` | **REMOVE** | Destroys the compliance record. |
-| `billing:write` | **REMOVE** | An agent must not move money. |
-| `payroll:write` | **REMOVE** | `payroll:write` is the *admin* verb; the self-service time-entry routes gate on `userId`, not on this. |
+| Permission                              |       Keep?        | Why                                                                                                                                                       |
+| --------------------------------------- | :----------------: | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calls:read`                            |      **keep**      | Calls page, Live Board, My day. Narrowed to own calls by `buildCallWhere`.                                                                                |
+| `calls:write`                           |      **keep**      | Dispositions, notes, transfer.                                                                                                                            |
+| `recordings:read`                       |      **keep**      | Playback of their own calls; `checkRecordingAccess` already narrows AGENT to own-number/own-created.                                                      |
+| `reports:read`                          |      **keep**      | Reports and CRM reports. Must be tenant+agent narrowed at the query.                                                                                      |
+| `campaigns:read`                        |      **keep**      | Campaigns page is read-only for an agent.                                                                                                                 |
+| `numbers:read`                          |      **keep**      | Numbers page / caller-ID selection.                                                                                                                       |
+| `payroll:read`                          |      **keep**      | My payroll. Already self-scoped by `userId`.                                                                                                              |
+| `billing:read`                          | **keep, narrowed** | Billing / Rate / Delivery / Settlements / Quotas are on the required list. Grant read; the _handlers_ must decide what an agent sees, not the permission. |
+| `users:read`                            | **keep, narrowed** | Agent rosters render colleague names. Should be reduced to a names-only endpoint rather than `GET /api/v1/users`.                                         |
+| `users:write`                           |     **REMOVE**     | An agent must never administer another user.                                                                                                              |
+| `roles:read`                            |     **REMOVE**     | Nothing on the agent surface reads the role catalogue.                                                                                                    |
+| `numbers:write`, `numbers:delete`       |     **REMOVE**     | An agent does not provision or release DIDs.                                                                                                              |
+| `campaigns:write`, `campaigns:delete`   |     **REMOVE**     | An agent does not author or delete campaigns.                                                                                                             |
+| `calls:delete`                          |     **REMOVE**     | Destroys the billing and compliance record.                                                                                                               |
+| `recordings:write`, `recordings:delete` |     **REMOVE**     | Destroys the compliance record.                                                                                                                           |
+| `billing:write`                         |     **REMOVE**     | An agent must not move money.                                                                                                                             |
+| `payroll:write`                         |     **REMOVE**     | `payroll:write` is the _admin_ verb; the self-service time-entry routes gate on `userId`, not on this.                                                    |
 
 Invariants that must hold and must be asserted by a test:
 `AGENT ∩ {OWNER, ADMIN, PlatformAdmin} = ∅`; AGENT inherits nothing; no AGENT
@@ -515,16 +519,16 @@ Two dimensions, enforced in this order, server-side, at the query:
    **overwrite of any client-supplied selector, never a validation of it**
    (the pattern `routes/applications.ts:262-277` already uses).
 
-| Surface | Ownership column | Today |
-| --- | --- | --- |
-| Calls | `createdById` ∪ assigned number match | ✅ `buildCallWhere` |
-| Applications | `createdById` | ✅ overwrite |
-| Recordings | via `call.createdById` ∪ number match | ✅ `checkRecordingAccess` |
-| CRM leads | *(none exists)* | ❌ **C6** — needs an owner column and a migration |
-| Payroll / time entries | `userId` | ✅ |
-| My day (`/delivery/me`) | `userId` | ✅ |
-| Live call control | *(none)* | ❌ **C7** — decide policy, then enforce |
-| Campaigns, Publishers, Buyers, Numbers, Rate, Delivery, Settlements, Billing, Reports, Quotas | tenant-wide by nature | read-only for AGENT; no agent dimension needed |
+| Surface                                                                                       | Ownership column                      | Today                                             |
+| --------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------- |
+| Calls                                                                                         | `createdById` ∪ assigned number match | ✅ `buildCallWhere`                               |
+| Applications                                                                                  | `createdById`                         | ✅ overwrite                                      |
+| Recordings                                                                                    | via `call.createdById` ∪ number match | ✅ `checkRecordingAccess`                         |
+| CRM leads                                                                                     | _(none exists)_                       | ❌ **C6** — needs an owner column and a migration |
+| Payroll / time entries                                                                        | `userId`                              | ✅                                                |
+| My day (`/delivery/me`)                                                                       | `userId`                              | ✅                                                |
+| Live call control                                                                             | _(none)_                              | ❌ **C7** — decide policy, then enforce           |
+| Campaigns, Publishers, Buyers, Numbers, Rate, Delivery, Settlements, Billing, Reports, Quotas | tenant-wide by nature                 | read-only for AGENT; no agent dimension needed    |
 
 The CRM is the one that needs a schema change, and it is the one holding the
 PII.
@@ -536,24 +540,24 @@ PII.
 `RG` = `RoleGuard` on the page. "Agent today" is what an AGENT-only session
 actually gets.
 
-| Required page | Route | Exists | RG | API | Agent today | Gap |
-|---|---|:-:|---|---|---|---|
-| Dashboard | `/dashboard` | ✔ | none | `/api/v1/reporting/*` | **redirected to `/call-center`** (`dashboard/page.tsx:178-192`) | page redirects agents away |
-| Live Board | `/admin/live` | ✖ | — | — | 404 | **not built**; `pending: true` in nav |
-| Calls | `/calls` | ✔ | none | `/api/v1/calls` | ✅ own calls | — |
-| Applications | `/applications` | ✔ | none | `/api/v1/applications` | ✅ own rows | — |
-| CRM | `/insurance-leads` | ✔ | none | `/api/v1/insurance-leads` | ⚠ **all agency leads** | C6 |
-| CRM Reports | `/insurance-leads/reports` | ✔ | none | `/api/v1/insurance-leads/stats` | ⚠ tenant-wide | C6 |
-| Campaigns | `/campaigns` | ✔ | `ADMIN,OWNER` | `/api/v1/campaigns` | ✖ bounced | add AGENT read-only |
-| Publishers | `/publishers` | ✔ | `ADMIN,OWNER` | `/api/v1/publishers` | ✖ bounced | add AGENT read-only |
-| Buyers | `/buyers` | ✔ | `ADMIN,OWNER` | `/api/v1/buyers` | ✖ bounced | add AGENT read-only |
-| Numbers | `/numbers` | ✔ | `ADMIN,OWNER` | `/api/v1/numbers` | ✖ bounced | add AGENT read-only |
-| Rate | `/rating` | ✔ | `ADMIN,OWNER` | `/api/v1/rating/*` | ✖ bounced + `requireAgencyPrincipal` on the API | needs an agent reading |
-| Delivery | `/delivery` | ✔ | `ADMIN,OWNER` | `/api/v1/delivery/*` | ✖ bounced + `requireAgencyPrincipal` | `/delivery/me` exists and is the agent's reading |
-| Settlements | `/delivery/settlements` | ✔ | `ADMIN,OWNER` | `/api/v1/delivery/settlements` | ✖ bounced + `requireAgencyPrincipal` | needs a policy decision |
-| Billing | `/billing` | ✔ | `ADMIN,OWNER` | `/api/v1/billing/*` | ✖ bounced | needs a policy decision |
-| Reports | `/reports` | ✔ | `ADMIN,OWNER,READONLY,ANALYST` + `reports:read` | `/api/v1/reporting/*` | ✖ bounced — **server would allow it** (A3) | add AGENT |
-| Quotas & Budget | `/settings/quotas` | ✔ | none | `GET /api/v1/quota/summary` (authenticated) — admin routes are `requirePlatformAdmin` | ⚠ page loads, admin actions 403 | agency owners cannot manage quotas either |
+| Required page   | Route                      | Exists | RG                                              | API                                                                                   | Agent today                                                     | Gap                                              |
+| --------------- | -------------------------- | :----: | ----------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------ |
+| Dashboard       | `/dashboard`               |   ✔   | none                                            | `/api/v1/reporting/*`                                                                 | **redirected to `/call-center`** (`dashboard/page.tsx:178-192`) | page redirects agents away                       |
+| Live Board      | `/admin/live`              |   ✖   | —                                               | —                                                                                     | 404                                                             | **not built**; `pending: true` in nav            |
+| Calls           | `/calls`                   |   ✔   | none                                            | `/api/v1/calls`                                                                       | ✅ own calls                                                    | —                                                |
+| Applications    | `/applications`            |   ✔   | none                                            | `/api/v1/applications`                                                                | ✅ own rows                                                     | —                                                |
+| CRM             | `/insurance-leads`         |   ✔   | none                                            | `/api/v1/insurance-leads`                                                             | ⚠ **all agency leads**                                         | C6                                               |
+| CRM Reports     | `/insurance-leads/reports` |   ✔   | none                                            | `/api/v1/insurance-leads/stats`                                                       | ⚠ tenant-wide                                                  | C6                                               |
+| Campaigns       | `/campaigns`               |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/campaigns`                                                                   | ✖ bounced                                                      | add AGENT read-only                              |
+| Publishers      | `/publishers`              |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/publishers`                                                                  | ✖ bounced                                                      | add AGENT read-only                              |
+| Buyers          | `/buyers`                  |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/buyers`                                                                      | ✖ bounced                                                      | add AGENT read-only                              |
+| Numbers         | `/numbers`                 |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/numbers`                                                                     | ✖ bounced                                                      | add AGENT read-only                              |
+| Rate            | `/rating`                  |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/rating/*`                                                                    | ✖ bounced + `requireAgencyPrincipal` on the API                | needs an agent reading                           |
+| Delivery        | `/delivery`                |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/delivery/*`                                                                  | ✖ bounced + `requireAgencyPrincipal`                           | `/delivery/me` exists and is the agent's reading |
+| Settlements     | `/delivery/settlements`    |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/delivery/settlements`                                                        | ✖ bounced + `requireAgencyPrincipal`                           | needs a policy decision                          |
+| Billing         | `/billing`                 |   ✔   | `ADMIN,OWNER`                                   | `/api/v1/billing/*`                                                                   | ✖ bounced                                                      | needs a policy decision                          |
+| Reports         | `/reports`                 |   ✔   | `ADMIN,OWNER,READONLY,ANALYST` + `reports:read` | `/api/v1/reporting/*`                                                                 | ✖ bounced — **server would allow it** (A3)                     | add AGENT                                        |
+| Quotas & Budget | `/settings/quotas`         |   ✔   | none                                            | `GET /api/v1/quota/summary` (authenticated) — admin routes are `requirePlatformAdmin` | ⚠ page loads, admin actions 403                                | agency owners cannot manage quotas either        |
 
 Also in `AGENT_NAV` today but not on the required list: Call center, My day,
 My payroll, Settings. These work and should stay.
@@ -568,24 +572,24 @@ implementation.
 
 ## L. Backend endpoint matrix — the agent surface
 
-| Endpoint | Guard | Tenant | Agent | Note |
-|---|---|:-:|:-:|---|
-| `GET /api/auth/me` | `authenticate` | n/a | self | principal-aware; the whole frontend is built from it |
-| `GET /api/v1/calls` | none beyond auth | ✔ | ✔ | `buildCallWhere` |
-| `GET /api/v1/calls/:id` | none beyond auth | ✔ | ✔ | |
-| `GET /api/v1/calls/export.csv` | none beyond auth | ✔ | ✔ | mints a 7-day token — **C2** |
-| `GET/POST /api/v1/applications` | `authenticate` | ✔ | ✔ | overwrite pattern — the model to copy |
-| `GET /api/v1/insurance-leads*` (18) | `authenticate` | ✔ | ✖ | **C6** |
-| `GET /api/v1/recordings/:id/{url,stream,download}` | `authenticate` | ✔ | ✔ | `checkRecordingAccess` |
-| `GET /api/v1/recordings/local-stream/*` | **none** | ✖ | ✖ | **C1** |
-| `/api/v1/agent/*` (16) | `requireAgent` | ✔ | ✖ | **C7** |
-| `/api/v1/time-entries*`, `/api/v1/user/{banking,payouts}` | `authenticate` | via user | ✔ | correct |
-| `/api/v1/admin/{time-entries,payroll*}` (6) | `requireRole('ADMIN','OWNER')` | ✔ | n/a | correct |
-| `GET /api/v1/delivery/me` | `authenticate` | ✔ | ✔ | correct |
-| `/api/v1/delivery/*` (money) | `requireAgencyPrincipal` | ✔ | n/a | correct today; §K may change it |
-| `/api/v1/platform/**`, `/api/v1/quota/admin/**`, `/api/v1/bot/**`, `/api/v1/demo/**` | `requirePlatformAdmin` | ✔ | n/a | correct |
-| `POST /api/v1/users/invite` | `isAdminOrOwner` | ✔ | n/a | **C3** on `publisherId` |
-| `POST /api/v1/auth/activation-grants` | OWNER/ADMIN, AGENT-only role | ✔ | n/a | correct |
+| Endpoint                                                                             | Guard                          |  Tenant  | Agent | Note                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------ | :------: | :---: | ---------------------------------------------------- |
+| `GET /api/auth/me`                                                                   | `authenticate`                 |   n/a    | self  | principal-aware; the whole frontend is built from it |
+| `GET /api/v1/calls`                                                                  | none beyond auth               |    ✔    |  ✔   | `buildCallWhere`                                     |
+| `GET /api/v1/calls/:id`                                                              | none beyond auth               |    ✔    |  ✔   |                                                      |
+| `GET /api/v1/calls/export.csv`                                                       | none beyond auth               |    ✔    |  ✔   | mints a 7-day token — **C2**                         |
+| `GET/POST /api/v1/applications`                                                      | `authenticate`                 |    ✔    |  ✔   | overwrite pattern — the model to copy                |
+| `GET /api/v1/insurance-leads*` (18)                                                  | `authenticate`                 |    ✔    |  ✖   | **C6**                                               |
+| `GET /api/v1/recordings/:id/{url,stream,download}`                                   | `authenticate`                 |    ✔    |  ✔   | `checkRecordingAccess`                               |
+| `GET /api/v1/recordings/local-stream/*`                                              | **none**                       |    ✖    |  ✖   | **C1**                                               |
+| `/api/v1/agent/*` (16)                                                               | `requireAgent`                 |    ✔    |  ✖   | **C7**                                               |
+| `/api/v1/time-entries*`, `/api/v1/user/{banking,payouts}`                            | `authenticate`                 | via user |  ✔   | correct                                              |
+| `/api/v1/admin/{time-entries,payroll*}` (6)                                          | `requireRole('ADMIN','OWNER')` |    ✔    |  n/a  | correct                                              |
+| `GET /api/v1/delivery/me`                                                            | `authenticate`                 |    ✔    |  ✔   | correct                                              |
+| `/api/v1/delivery/*` (money)                                                         | `requireAgencyPrincipal`       |    ✔    |  n/a  | correct today; §K may change it                      |
+| `/api/v1/platform/**`, `/api/v1/quota/admin/**`, `/api/v1/bot/**`, `/api/v1/demo/**` | `requirePlatformAdmin`         |    ✔    |  n/a  | correct                                              |
+| `POST /api/v1/users/invite`                                                          | `isAdminOrOwner`               |    ✔    |  n/a  | **C3** on `publisherId`                              |
+| `POST /api/v1/auth/activation-grants`                                                | OWNER/ADMIN, AGENT-only role   |    ✔    |  n/a  | correct                                              |
 
 ---
 
@@ -595,56 +599,35 @@ Written as assertions, in the order they should be built. Each one fails today
 unless marked.
 
 **M1 — role integrity (unit, `middleware/rbac.ts`)**
+
 1. `ROLE_PERMISSIONS.AGENT` equals the §H keep-list exactly. Fails today.
 2. No AGENT permission satisfies `permissionMatches('admin:*', p)`. Passes.
 3. `AGENT ∩ {users:write, roles:write, *:delete, billing:write, payroll:write, payroll:admin} = ∅`. Fails today.
 
-**M2 — lifecycle (integration, real DB)**
-4. Invite → activate → `/api/auth/me` returns exactly `['AGENT']`, the inviter's
-   `tenantId`, `isPlatformAdmin: false`. Passes.
-5. The same token replayed 100 times returns the same role set. Passes.
-6. Granting ADMIN in the DB mid-session changes `/api/auth/me` on the **next**
-   request with no re-login — and revoking it reverts on the next request.
-   Passes; this is the assertion that documents "there is no 20-minute state".
-7. A token whose `roles` claim is hand-forged to `['ADMIN','OWNER']` is answered
-   with the DB role set. Passes.
-8. An agent whose only `UserRole` row is deleted gets a named "no role" state,
-   not the Dashboard-only nav. Fails today.
+**M2 — lifecycle (integration, real DB)** 4. Invite → activate → `/api/auth/me` returns exactly `['AGENT']`, the inviter's
+`tenantId`, `isPlatformAdmin: false`. Passes. 5. The same token replayed 100 times returns the same role set. Passes. 6. Granting ADMIN in the DB mid-session changes `/api/auth/me` on the **next**
+request with no re-login — and revoking it reverts on the next request.
+Passes; this is the assertion that documents "there is no 20-minute state". 7. A token whose `roles` claim is hand-forged to `['ADMIN','OWNER']` is answered
+with the DB role set. Passes. 8. An agent whose only `UserRole` row is deleted gets a named "no role" state,
+not the Dashboard-only nav. Fails today.
 
-**M3 — tenant isolation (integration, two tenants A and B)**
-9. Agent of A on every `GET` in the route table: zero rows belonging to B.
-10. Agent of A fetching each of B's ids by path parameter: 404/403, never 200.
-11. `GET /api/v1/recordings/local-stream/<B's storageKey>` **with no
-    `Authorization` header**: refused. Fails today — **C1**.
-12. `POST /api/v1/users/invite` with B's `publisherId`: refused. Fails today — **C3**.
-13. CRM import naming B's `leadListId`: refused. Fails today — **C4**.
-14. Every CSV export and every aggregate endpoint, driven as A, contains no B row.
-15. With `ALLOW_DEMO_TENANT_AUTH` unset, `X-Demo-Tenant-Id: <B>` and no
-    credential: 401 on every route. Passes; make it explicit and permanent.
+**M3 — tenant isolation (integration, two tenants A and B)** 9. Agent of A on every `GET` in the route table: zero rows belonging to B. 10. Agent of A fetching each of B's ids by path parameter: 404/403, never 200. 11. `GET /api/v1/recordings/local-stream/<B's storageKey>` **with no
+`Authorization` header**: refused. Fails today — **C1**. 12. `POST /api/v1/users/invite` with B's `publisherId`: refused. Fails today — **C3**. 13. CRM import naming B's `leadListId`: refused. Fails today — **C4**. 14. Every CSV export and every aggregate endpoint, driven as A, contains no B row. 15. With `ALLOW_DEMO_TENANT_AUTH` unset, `X-Demo-Tenant-Id: <B>` and no
+credential: 401 on every route. Passes; make it explicit and permanent.
 
-**M4 — agent scope (integration, two agents in one tenant)**
-16. Agent 1 sees none of agent 2's calls, applications, recordings, time entries,
-    payouts or banking details. Passes except recordings edge cases.
-17. Agent 1 cannot read agent 2's leads. Fails today — **C6**.
-18. Agent 1 cannot hang up agent 2's live call. Fails today — **C7**, pending policy.
+**M4 — agent scope (integration, two agents in one tenant)** 16. Agent 1 sees none of agent 2's calls, applications, recordings, time entries,
+payouts or banking details. Passes except recordings edge cases. 17. Agent 1 cannot read agent 2's leads. Fails today — **C6**. 18. Agent 1 cannot hang up agent 2's live call. Fails today — **C7**, pending policy.
 
-**M5 — frontend (component + e2e)**
-19. `sidebar.tsx` renders the agent nav for `['AGENT']`, the named no-role state
-    for `[]`, and an analyst nav for `['ANALYST']`. Partially fails today.
-20. The nav is a pure function of `/api/auth/me`; the same response always
-    produces the same nav. Passes.
-21. `nav-config.test.tsx` (exists, extend): every `href` in `AGENT_NAV` resolves
-    to a file under `src/app` **and** to a page whose `RoleGuard` admits AGENT.
-    The second half is new and fails today.
-22. e2e: sign in as a fresh agent, screenshot the nav, wait **40 minutes** with
-    a poll every 60s, screenshot again, assert byte-identical nav and no 401/429.
-    This is the direct regression test for the reported symptom.
+**M5 — frontend (component + e2e)** 19. `sidebar.tsx` renders the agent nav for `['AGENT']`, the named no-role state
+for `[]`, and an analyst nav for `['ANALYST']`. Partially fails today. 20. The nav is a pure function of `/api/auth/me`; the same response always
+produces the same nav. Passes. 21. `nav-config.test.tsx` (exists, extend): every `href` in `AGENT_NAV` resolves
+to a file under `src/app` **and** to a page whose `RoleGuard` admits AGENT.
+The second half is new and fails today. 22. e2e: sign in as a fresh agent, screenshot the nav, wait **40 minutes** with
+a poll every 60s, screenshot again, assert byte-identical nav and no 401/429.
+This is the direct regression test for the reported symptom.
 
-**M6 — token & proxy hygiene**
-23. A login token carries an `exp` claim. Fails today — **B1**.
-24. No API response body or `Location` header contains `?token=`. Fails today — **C2**.
-25. With `trustProxy` on and `X-Forwarded-For` set, `request.ip` is the client
-    and two different clients get independent rate-limit buckets. Fails today — **B2**.
+**M6 — token & proxy hygiene** 23. A login token carries an `exp` claim. Fails today — **B1**. 24. No API response body or `Location` header contains `?token=`. Fails today — **C2**. 25. With `trustProxy` on and `X-Forwarded-For` set, `request.ip` is the client
+and two different clients get independent rate-limit buckets. Fails today — **B2**.
 
 ---
 
@@ -662,7 +645,7 @@ Ordered. Steps 1–3 are the production repair and can ship ahead of any code.
      the delete, which is what produces the role-less Dashboard-only state.
    - account with **zero** roles → assign the intended role deliberately.
    - account with ANALYST that was meant to be an agent → replace with AGENT.
-   Write an `audit_logs` row for every change.
+     Write an `audit_logs` row for every change.
 3. **Quarantine the hand-run SQL.** Delete `scripts/seed-admin-roles.sql`, or
    move it under `scripts/DANGEROUS/` with a header stating that it grants
    Company Admin to every user on the platform. Replace `demote-user.sql` with a
@@ -695,21 +678,21 @@ Ordered. Steps 1–3 are the production repair and can ship ahead of any code.
 constant in `apps/api`, `apps/web`, `apps/worker` and `packages`. The complete
 list of anything that could change an authorization outcome over time:
 
-| Constant | Value | Relevant? |
-|---|---|---|
-| Login JWT expiry | **none** — no `exp` claim at all | no |
-| Redis session TTL | 24h | no — nothing authorization-relevant reads it |
-| `hw_session` cookie Max-Age | 7 days | no — GET-only, re-resolved from the DB |
-| Recording playback token | 1h (`recordings.ts`) / 7d (`index.ts`) | no |
-| CSV export token | 7 days | no |
-| Activation grant TTL | 7 days | no — consumed at registration |
-| Rate limit window | **1 minute / 100 req, shared platform-wide** | **possibly — see B2** |
-| Platform-context retry | 0ms, 500ms, 1500ms | no |
-| Logout-loop window | 30s | no |
-| `NumberPoolService.REAPER_THRESHOLD_MINUTES` | **20 minutes** | **no — but read the next paragraph** |
-| React Query / SWR staleTime | **n/a — neither `@tanstack/react-query` nor `swr` is a dependency** | no |
-| Next.js `revalidate` | none on any dashboard route | no |
-| `cron` / `setInterval` touching roles | **none exist** | no |
+| Constant                                     | Value                                                               | Relevant?                                    |
+| -------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |
+| Login JWT expiry                             | **none** — no `exp` claim at all                                    | no                                           |
+| Redis session TTL                            | 24h                                                                 | no — nothing authorization-relevant reads it |
+| `hw_session` cookie Max-Age                  | 7 days                                                              | no — GET-only, re-resolved from the DB       |
+| Recording playback token                     | 1h (`recordings.ts`) / 7d (`index.ts`)                              | no                                           |
+| CSV export token                             | 7 days                                                              | no                                           |
+| Activation grant TTL                         | 7 days                                                              | no — consumed at registration                |
+| Rate limit window                            | **1 minute / 100 req, shared platform-wide**                        | **possibly — see B2**                        |
+| Platform-context retry                       | 0ms, 500ms, 1500ms                                                  | no                                           |
+| Logout-loop window                           | 30s                                                                 | no                                           |
+| `NumberPoolService.REAPER_THRESHOLD_MINUTES` | **20 minutes**                                                      | **no — but read the next paragraph**         |
+| React Query / SWR staleTime                  | **n/a — neither `@tanstack/react-query` nor `swr` is a dependency** | no                                           |
+| Next.js `revalidate`                         | none on any dashboard route                                         | no                                           |
+| `cron` / `setInterval` touching roles        | **none exist**                                                      | no                                           |
 
 `REAPER_THRESHOLD_MINUTES = 20` (`services/number-pool-service.ts:54`) is the
 only literal 20-minute constant in the repository. It reclaims **pay-per-call
@@ -722,7 +705,7 @@ Two mechanisms remain that can degrade a session over wall-clock time:
 - **B2, the shared rate-limit bucket.** Because `trustProxy` is off, all users
   share one 100-req/min budget. As a shift fills up, `/api/auth/me` starts
   answering 429; `use-auth.tsx:141-150` treats any non-OK response as "no user", and
-  a null user is a one-item sidebar or a bounce to `/login`. This *would* present
+  a null user is a one-item sidebar or a bounce to `/login`. This _would_ present
   as "it worked for a while, then the pages vanished", and the onset would track
   floor occupancy rather than a fixed interval — which is consistent with
   "approximately 20 minutes" being approximate.

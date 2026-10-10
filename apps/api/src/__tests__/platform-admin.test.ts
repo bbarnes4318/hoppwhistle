@@ -118,7 +118,10 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
    *
    * It is still a refusal. Nothing below is served agency data.
    */
-  function expectCrossAgencyRefusal(response: { statusCode: number; json: () => any }, note?: string) {
+  function expectCrossAgencyRefusal(
+    response: { statusCode: number; json: () => any },
+    note?: string
+  ) {
     expect(response.statusCode, note ?? 'the cross-agency view was served agency data').toBe(409);
     expect(response.json().error.code).toBe('NO_ACTING_TENANT');
   }
@@ -273,10 +276,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(tenantA.ownerId, tenantA.id),
       });
 
-      expect(
-        response.statusCode,
-        `${method} ${url} let an agency OWNER through`
-      ).toBe(403);
+      expect(response.statusCode, `${method} ${url} let an agency OWNER through`).toBe(403);
     });
 
     it("refuses an agency OWNER another agency's quota", async () => {
@@ -845,5 +845,4 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
       expect(response.json().error.code).not.toBe('NO_ACTING_TENANT');
     });
   });
-
 });

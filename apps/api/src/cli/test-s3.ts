@@ -19,12 +19,7 @@ async function main() {
 
   try {
     console.log(`\n1. Attempting to upload dummy file to S3 with key: ${expectedKey}...`);
-    const uploadResult = await storage.uploadRecording(
-      dummyData,
-      callId,
-      format,
-      { test: 'true' }
-    );
+    const uploadResult = await storage.uploadRecording(dummyData, callId, format, { test: 'true' });
     console.log('Upload Result:', uploadResult);
 
     console.log('\n2. Checking if file exists...');

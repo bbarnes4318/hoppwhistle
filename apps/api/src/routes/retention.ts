@@ -228,7 +228,9 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
       });
 
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+        return reply
+          .status(404)
+          .send({ success: false, error: 'Policy not found under this tenant' });
       }
 
       return reply.send({ success: true, data: policy });
@@ -276,7 +278,8 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
             phoneNumber: body.phoneNumber,
             firstName: body.firstName,
             lastName: body.lastName,
-            fullName: (body.firstName && body.lastName) ? `${body.firstName} ${body.lastName}` : undefined,
+            fullName:
+              body.firstName && body.lastName ? `${body.firstName} ${body.lastName}` : undefined,
             email: body.email,
             address: body.address,
             city: body.city,
@@ -349,12 +352,17 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
 
       const existingPolicy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
       if (!existingPolicy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+        return reply
+          .status(404)
+          .send({ success: false, error: 'Policy not found under this tenant' });
       }
 
       // Validate billing date if changed
       const isSsBilling = body.ssBilling !== undefined ? body.ssBilling : existingPolicy.ssBilling;
-      const billingDateStr = body.billingDateStr !== undefined ? body.billingDateStr : (existingPolicy.billingDateStr || undefined);
+      const billingDateStr =
+        body.billingDateStr !== undefined
+          ? body.billingDateStr
+          : existingPolicy.billingDateStr || undefined;
 
       if (!validateBillingDate(isSsBilling, billingDateStr)) {
         return reply.status(400).send({
@@ -368,10 +376,14 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
       const policy = await prisma.retentionPolicy.update({
         where: { id },
         data: {
-          primaryBeneficiary: body.primaryBeneficiary !== undefined ? body.primaryBeneficiary : undefined,
-          primaryRelationship: body.primaryRelationship !== undefined ? body.primaryRelationship : undefined,
-          contingentBeneficiary: body.contingentBeneficiary !== undefined ? body.contingentBeneficiary : undefined,
-          contingentRelationship: body.contingentRelationship !== undefined ? body.contingentRelationship : undefined,
+          primaryBeneficiary:
+            body.primaryBeneficiary !== undefined ? body.primaryBeneficiary : undefined,
+          primaryRelationship:
+            body.primaryRelationship !== undefined ? body.primaryRelationship : undefined,
+          contingentBeneficiary:
+            body.contingentBeneficiary !== undefined ? body.contingentBeneficiary : undefined,
+          contingentRelationship:
+            body.contingentRelationship !== undefined ? body.contingentRelationship : undefined,
           carrier: body.carrier !== undefined ? body.carrier : undefined,
           coverage: body.coverage !== undefined ? body.coverage : undefined,
           monthlyPremium: body.monthlyPremium !== undefined ? body.monthlyPremium : undefined,
@@ -421,7 +433,9 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
 
       const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+        return reply
+          .status(404)
+          .send({ success: false, error: 'Policy not found under this tenant' });
       }
 
       // Add to onboarding attempts count & create note
@@ -466,7 +480,9 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
 
       const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+        return reply
+          .status(404)
+          .send({ success: false, error: 'Policy not found under this tenant' });
       }
 
       const updatedPolicy = await prisma.retentionPolicy.update({
@@ -496,33 +512,38 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // ------------------------------------------------------------------------
   // POST /api/v1/retention/:id/onboarding-attempt - Record onboarding attempt
   // ------------------------------------------------------------------------
-  fastify.post('/api/v1/retention/:id/onboarding-attempt', async (request: FastifyRequest, reply) => {
-    const tenantId = getTenantId(request);
-    if (!tenantId) {
-      return replyTenantRefusal(request, reply);
-    }
-
-    try {
-      const { id } = request.params as { id: string };
-
-      const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
-      if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+  fastify.post(
+    '/api/v1/retention/:id/onboarding-attempt',
+    async (request: FastifyRequest, reply) => {
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return replyTenantRefusal(request, reply);
       }
 
-      const updatedPolicy = await prisma.retentionPolicy.update({
-        where: { id },
-        data: {
-          onboardingAttempts: { increment: 1 },
-        },
-      });
+      try {
+        const { id } = request.params as { id: string };
 
-      return reply.send({ success: true, data: updatedPolicy });
-    } catch (error) {
-      request.log.error(error, 'Failed to log onboarding attempt');
-      return reply.status(500).send({ success: false, error: 'Failed to log attempt' });
+        const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
+        if (!policy) {
+          return reply
+            .status(404)
+            .send({ success: false, error: 'Policy not found under this tenant' });
+        }
+
+        const updatedPolicy = await prisma.retentionPolicy.update({
+          where: { id },
+          data: {
+            onboardingAttempts: { increment: 1 },
+          },
+        });
+
+        return reply.send({ success: true, data: updatedPolicy });
+      } catch (error) {
+        request.log.error(error, 'Failed to log onboarding attempt');
+        return reply.status(500).send({ success: false, error: 'Failed to log attempt' });
+      }
     }
-  });
+  );
 
   // ------------------------------------------------------------------------
   // GET /api/v1/retention/stats - Get retention statistics

@@ -220,8 +220,8 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
           cardBrand: terms.profile?.cardBrand ?? null,
           last4:
             terms.paymentMethod === AgencyPaymentMethod.CARD
-              ? terms.profile?.cardLast4 ?? null
-              : terms.profile?.achLast4 ?? null,
+              ? (terms.profile?.cardLast4 ?? null)
+              : (terms.profile?.achLast4 ?? null),
         }
       ),
       step('OWNER', ownerDone, paymentDone, ['No owner has been invited.'], {
@@ -338,8 +338,7 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
       const contactEmail =
         typeof body.contactEmail === 'string' ? body.contactEmail.trim().toLowerCase() : '';
       const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : '';
-      const agencyState =
-        typeof body.state === 'string' ? body.state.trim().toUpperCase() : '';
+      const agencyState = typeof body.state === 'string' ? body.state.trim().toUpperCase() : '';
 
       if (!name) problems.push('name is required');
       if (!legalName) problems.push('legalName is required');
@@ -411,7 +410,13 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
         action: 'platform.onboarding.tenant.created',
         entityType: 'tenant',
         entityId: tenant.id,
-        changes: { name, slug, legalName, state: agencyState, licensedAgentCount: body.licensedAgentCount },
+        changes: {
+          name,
+          slug,
+          legalName,
+          state: agencyState,
+          licensedAgentCount: body.licensedAgentCount,
+        },
       });
 
       return reply.code(201).send({ data: await onboardingState(tenant.id) });
@@ -675,7 +680,11 @@ export async function registerOnboardingRoutes(fastify: FastifyInstance): Promis
       });
 
       return reply.send({
-        data: { tenantId, paymentMethod: updated.paymentMethod, onboarding: await onboardingState(tenantId) },
+        data: {
+          tenantId,
+          paymentMethod: updated.paymentMethod,
+          onboarding: await onboardingState(tenantId),
+        },
       });
     }
   );

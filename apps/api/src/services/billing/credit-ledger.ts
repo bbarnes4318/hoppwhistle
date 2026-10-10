@@ -85,10 +85,7 @@ function isUniqueViolation(error: unknown): boolean {
  * decision to deliver a call, and a call delivered against a balance that no
  * longer exists is an application nobody agreed to pay for.
  */
-export async function creditBalance(
-  prisma: LedgerClient,
-  tenantId: string
-): Promise<number> {
+export async function creditBalance(prisma: LedgerClient, tenantId: string): Promise<number> {
   const result = await prisma.applicationCreditLedgerEntry.aggregate({
     where: { tenantId },
     _sum: { quantity: true },
@@ -113,10 +110,7 @@ export interface OpenLot {
  * reason the balance is: a lot's remaining credits are the rows that reference
  * it, and nothing else can be true.
  */
-export async function openLots(
-  prisma: LedgerClient,
-  tenantId: string
-): Promise<OpenLot[]> {
+export async function openLots(prisma: LedgerClient, tenantId: string): Promise<OpenLot[]> {
   const rows = await prisma.$queryRaw<
     Array<{
       id: string;
@@ -146,18 +140,20 @@ export async function openLots(
      ORDER BY p."deliveryDay" ASC, p."createdAt" ASC, p."id" ASC
   `;
 
-  return rows
-    .map(row => ({
-      id: row.id,
-      quantity: row.quantity,
-      used: Number(row.used),
-      remaining: row.quantity - Number(row.used),
-      unitRate: row.unitRate === null ? null : toNumber(row.unitRate),
-      deliveryDay: row.deliveryDay,
-    }))
-    // A retired lot has nothing left to spend whatever its arithmetic says: its
-    // credits were issued for a dry run and never paid for.
-    .filter((lot, index) => lot.remaining > 0 && !rows[index].retired);
+  return (
+    rows
+      .map(row => ({
+        id: row.id,
+        quantity: row.quantity,
+        used: Number(row.used),
+        remaining: row.quantity - Number(row.used),
+        unitRate: row.unitRate === null ? null : toNumber(row.unitRate),
+        deliveryDay: row.deliveryDay,
+      }))
+      // A retired lot has nothing left to spend whatever its arithmetic says: its
+      // credits were issued for a dry run and never paid for.
+      .filter((lot, index) => lot.remaining > 0 && !rows[index].retired)
+  );
 }
 
 /**
@@ -226,7 +222,9 @@ export async function recordPurchase(
   input: PurchaseInput
 ): Promise<{ id: string }> {
   if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
-    throw new Error(`A purchase must be a positive whole number of applications, got ${input.quantity}`);
+    throw new Error(
+      `A purchase must be a positive whole number of applications, got ${input.quantity}`
+    );
   }
   if (!Number.isFinite(input.unitRate) || input.unitRate <= 0) {
     throw new Error(`A purchase must have a positive unit rate, got ${input.unitRate}`);
@@ -341,7 +339,12 @@ export async function consumeCreditForApplication(params: {
           },
           select: { id: true },
         });
-        return { outcome: 'OVERRUN', entryId: row.id, entryType: CreditLedgerEntryType.OVERRUN, unitRate: null };
+        return {
+          outcome: 'OVERRUN',
+          entryId: row.id,
+          entryType: CreditLedgerEntryType.OVERRUN,
+          unitRate: null,
+        };
       } catch (error) {
         if (!isUniqueViolation(error)) throw error;
         const raced = await findEntryForApplication(prisma, params.applicationId);

@@ -9,8 +9,8 @@ publisher portals, before (`main` at 16e61eb) and after this branch.
 
 Each screen has three shots:
 
-| File              | What                                  |
-| ----------------- | ------------------------------------- |
+| File                 | What                                   |
+| -------------------- | -------------------------------------- |
 | `<id>-1366.png`      | 1366×768 viewport, as it first appears |
 | `<id>-1366-full.png` | 1366 wide, the whole page              |
 | `<id>-390.png`       | 390 wide (a phone), the whole page     |

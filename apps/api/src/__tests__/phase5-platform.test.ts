@@ -1081,7 +1081,10 @@ describe.skipIf(!gate.available)(
           where: { id: settled.settlementId! },
         });
 
-        return { settlementId: settled.settlementId!, paymentIntentId: row!.stripePaymentIntentId! };
+        return {
+          settlementId: settled.settlementId!,
+          paymentIntentId: row!.stripePaymentIntentId!,
+        };
       }
 
       it('suspends delivery, flags the tenant, and changes no ledger row and no settlement figure', async () => {
@@ -1372,7 +1375,10 @@ describe.skipIf(!gate.available)(
         });
 
         expect(response.statusCode).toBe(409);
-        const codes = response.json().error.blockers.map((b: any) => b.code).sort();
+        const codes = response
+          .json()
+          .error.blockers.map((b: any) => b.code)
+          .sort();
         expect(codes).toEqual([
           'NO_DAILY_BLOCK',
           'NO_MAX_DAILY_DEBIT',
@@ -1427,8 +1433,7 @@ describe.skipIf(!gate.available)(
         expect(created.statusCode).toBe(201);
         const tenantId = created.json().data.tenantId;
 
-        const stepState = (body: any, id: string) =>
-          body.steps.find((s: any) => s.id === id).state;
+        const stepState = (body: any, id: string) => body.steps.find((s: any) => s.id === id).state;
 
         expect(stepState(created.json().data, 'TENANT')).toBe('COMPLETE');
         expect(stepState(created.json().data, 'TERMS')).toBe('READY');

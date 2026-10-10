@@ -24,7 +24,7 @@ prompt to pick somebody. See §2f.
 scope, no level. Holding the row is the capability; revoking is deleting it.
 
 It is deliberately **not** a `RoleName` value and **not** "OWNER of a special
-tenant". `UserRole` grants a name *inside a tenant*, so every existing check on
+tenant". `UserRole` grants a name _inside a tenant_, so every existing check on
 OWNER or ADMIN means "an administrator of **some** agency". Modelling platform
 staff that way would put the capability back inside the tenant dimension, where
 a bug in tenant resolution could confer it, and would make "which agency am I
@@ -34,16 +34,16 @@ A platform admin's `User.tenantId` is null — they belong to no agency.
 
 ## 2. The switch
 
-| Route | Effect |
-| --- | --- |
-| `POST /api/v1/platform/acting-tenant` `{tenantId}` | Enter an agency. Writes the selection row + one `platform.tenant.entered` AuditLog row. |
-| `DELETE /api/v1/platform/acting-tenant` | Leave. Writes one `platform.tenant.left` AuditLog row. |
-| `GET /api/v1/platform/context` | `{isPlatformAdmin, actingTenant:{id,name}}` — what the UI banner renders. Authenticated, not capability-gated, because every page load asks it. |
-| `GET /api/v1/platform/tenants` | The agency picker. Id, name, slug, status only — the list that lets an operator choose must not also be a cross-agency export. |
+| Route                                              | Effect                                                                                                                                          |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/platform/acting-tenant` `{tenantId}` | Enter an agency. Writes the selection row + one `platform.tenant.entered` AuditLog row.                                                         |
+| `DELETE /api/v1/platform/acting-tenant`            | Leave. Writes one `platform.tenant.left` AuditLog row.                                                                                          |
+| `GET /api/v1/platform/context`                     | `{isPlatformAdmin, actingTenant:{id,name}}` — what the UI banner renders. Authenticated, not capability-gated, because every page load asks it. |
+| `GET /api/v1/platform/tenants`                     | The agency picker. Id, name, slug, status only — the list that lets an operator choose must not also be a cross-agency export.                  |
 
 **Default is none.** A platform admin with no agency selected gets the
 cross-agency view, and an agency-scoped route refuses them. "No tenant" is a
-refusal, not a wildcard. It is no longer the *same* refusal an anonymous caller
+refusal, not a wildcard. It is no longer the _same_ refusal an anonymous caller
 gets — see §2b, which is the part that locked the owner out of production.
 
 **The state is a table, not a header and not the session.** Not a header, query
@@ -53,7 +53,7 @@ tenant resolution on the platform. Not the Redis session, because
 `middleware/session.ts` catches and swallows its own errors — a switch that
 decides whose data an operator is looking at must not be able to fail quietly.
 
-**The token is not the authority.** For staff, `PlatformActingTenant` *replaces*
+**The token is not the authority.** For staff, `PlatformActingTenant` _replaces_
 the tenant in the JWT rather than supplementing it. A token is issued at login
 and cannot know which agency the operator entered afterwards; a stale tenant in a
 long-lived token must never decide whose data is served. This is asserted: a
@@ -89,9 +89,9 @@ had to be deleted from the database by hand to restore access.
 
 Phase 2 splits the two:
 
-| | Meaning | What fixes it |
-| --- | --- | --- |
-| `401 UNAUTHORIZED` | Nobody is authenticated. | Sign in. |
+|                        | Meaning                                                                     | What fixes it                                     |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------------------------------------- |
+| `401 UNAUTHORIZED`     | Nobody is authenticated.                                                    | Sign in.                                          |
 | `409 NO_ACTING_TENANT` | Somebody is authenticated, holds the capability, and has entered no agency. | Pick an agency. Signing in again changes nothing. |
 
 409 rather than 403: the caller is permitted to reach the data once they choose
@@ -197,7 +197,7 @@ an operator looking at one agency's callers and money must not be able to
 mistake it for the platform view.
 
 Entering and leaving go through the existing endpoints and then reload the page.
-The selection applies from the *next* request, so a client-side navigation would
+The selection applies from the _next_ request, so a client-side navigation would
 render the new agency's chrome around the old agency's data.
 
 `cross-agency-prompt.tsx` is where an operator with no agency lands on an agency
@@ -233,12 +233,12 @@ help either: `get<T>` types the body as whatever the caller claims, so
 
 **What changed.**
 
-| | |
-| --- | --- |
-| the read | `payload()` in `@/lib/api` — one named, typed unwrap, replacing three ad-hoc copies. `Array.isArray` guards the switcher's list, because the crash was a non-null non-array reaching state |
-| the shape | `/platform/context` and both `acting-tenant` verbs now answer `{ data: ... }` like everything else on the surface (see §2d) |
-| the test | `api-response-contract.test.ts` boots the real routes and drives the **real web client** against them, asserting what each consumer's accessor yields. Reintroducing the bug fails three of its cases |
-| the blast radius | `ErrorBoundary` around the switcher and around the layout's children. A failure in the chrome now renders "Agency switcher unavailable" in place; a failure in a page keeps the shell |
+|                  |                                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the read         | `payload()` in `@/lib/api` — one named, typed unwrap, replacing three ad-hoc copies. `Array.isArray` guards the switcher's list, because the crash was a non-null non-array reaching state            |
+| the shape        | `/platform/context` and both `acting-tenant` verbs now answer `{ data: ... }` like everything else on the surface (see §2d)                                                                           |
+| the test         | `api-response-contract.test.ts` boots the real routes and drives the **real web client** against them, asserting what each consumer's accessor yields. Reintroducing the bug fails three of its cases |
+| the blast radius | `ErrorBoundary` around the switcher and around the layout's children. A failure in the chrome now renders "Agency switcher unavailable" in place; a failure in a page keeps the shell                 |
 
 Next's `error.tsx` would not have helped: it catches errors from a segment's
 children, not from the layout itself, and the switcher is layout chrome.
@@ -367,11 +367,11 @@ is the platform doing this morning" could only be answered one agency at a time.
 Three screens now have a platform-wide counterpart and are exempt from the swap.
 Each decides for itself, from `usePlatformContext`, which reading to render:
 
-| Path | With no acting tenant | Inside an agency |
-| --- | --- | --- |
-| `/delivery` (exact) | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and rate, with platform totals | that agency's own live panel |
-| `/rating` | every agency's closing percentage, current rate and tracking rate, side by side | that agency's own rate |
-| `/delivery/settlements` | every agency's settlements over a range, filterable by agency, export widened to match | that agency's own history |
+| Path                    | With no acting tenant                                                                                                             | Inside an agency             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `/delivery` (exact)     | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and rate, with platform totals | that agency's own live panel |
+| `/rating`               | every agency's closing percentage, current rate and tracking rate, side by side                                                   | that agency's own rate       |
+| `/delivery/settlements` | every agency's settlements over a range, filterable by agency, export widened to match                                            | that agency's own history    |
 
 Each is a component boundary rather than an early return inside one component:
 the agency panel calls hooks, and returning before them would be a conditional
@@ -480,7 +480,7 @@ seconds rather than treating one transient 500 as "not staff".
 **The page mounted before the layout knew.** `platform.loading` starts true, so
 `needsAgency` started false, so `children` rendered immediately: the page
 mounted, fired its agency-scoped requests, collected 409 on every one, and was
-*then* replaced by the prompt. On `/dashboard` that was two refused requests per
+_then_ replaced by the prompt. On `/dashboard` that was two refused requests per
 load for a page the operator never saw. The layout now renders neither the page
 nor the prompt until it knows, with the chrome left up either side.
 
@@ -566,13 +566,13 @@ each: **does this operate on the platform, or on one agency?**
 
 ### Re-gated on the capability
 
-| Route(s) | Was | Why platform-wide |
-| --- | --- | --- |
-| `bot.ts` — all 13 routes | `requireRole('ADMIN','OWNER')` (the `TODO(netenroll)`) | One `dial.py`, one status file, one lead file, one recordings directory. No tenant dimension anywhere. An upload to `/api/bot/leads/upload` replaces the lead file every agency is dialed from. |
-| `quotas.ts` — all 10 routes | `requirePermission('admin:full')` | Every route is `/admin/api/v1/tenants/:tenantId/…` and sets **another** agency's call ceilings, spend caps and budget override tokens. Nothing reads the caller's own tenant. |
-| `index.ts` — `registerAdminTenantRoutes`, `registerAdminNumberRoutes`, `registerAdminCarrierRoutes`, `registerAdminTrunkRoutes`, `registerAdminRateCardRoutes` | **nothing at all** | The `/admin/api/v1/*` console: lists and creates *tenants*, carriers, trunks and rate cards across the platform. Stubs today, which is the only reason it has not leaked; a stub that becomes real behind no gate is how it would. |
-| `demo.ts` — 3 routes | **nothing at all** | Every route reads the tenant with slug `demo`, a seeded platform fixture that is nobody's agency. `/demo/stats` returns its call volume, publisher and buyer counts and total invoiced revenue. |
-| `demo-events.ts` — 2 routes | **nothing at all** | Takes `tenantId` **from the request body** and publishes call events onto the event bus for it — what an agency's WebSocket feed and live board render. Unauthenticated, that is cross-tenant injection: anyone could push fabricated calls onto any agency's live board. |
+| Route(s)                                                                                                                                                       | Was                                                    | Why platform-wide                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot.ts` — all 13 routes                                                                                                                                       | `requireRole('ADMIN','OWNER')` (the `TODO(netenroll)`) | One `dial.py`, one status file, one lead file, one recordings directory. No tenant dimension anywhere. An upload to `/api/bot/leads/upload` replaces the lead file every agency is dialed from.                                                                           |
+| `quotas.ts` — all 10 routes                                                                                                                                    | `requirePermission('admin:full')`                      | Every route is `/admin/api/v1/tenants/:tenantId/…` and sets **another** agency's call ceilings, spend caps and budget override tokens. Nothing reads the caller's own tenant.                                                                                             |
+| `index.ts` — `registerAdminTenantRoutes`, `registerAdminNumberRoutes`, `registerAdminCarrierRoutes`, `registerAdminTrunkRoutes`, `registerAdminRateCardRoutes` | **nothing at all**                                     | The `/admin/api/v1/*` console: lists and creates _tenants_, carriers, trunks and rate cards across the platform. Stubs today, which is the only reason it has not leaked; a stub that becomes real behind no gate is how it would.                                        |
+| `demo.ts` — 3 routes                                                                                                                                           | **nothing at all**                                     | Every route reads the tenant with slug `demo`, a seeded platform fixture that is nobody's agency. `/demo/stats` returns its call volume, publisher and buyer counts and total invoiced revenue.                                                                           |
+| `demo-events.ts` — 2 routes                                                                                                                                    | **nothing at all**                                     | Takes `tenantId` **from the request body** and publishes call events onto the event bus for it — what an agency's WebSocket feed and live board render. Unauthenticated, that is cross-tenant injection: anyone could push fabricated calls onto any agency's live board. |
 
 Two notes on the `:tenantId` in a path (`quotas.ts`) and in a body
 (`demo-events.ts`): those name the **object being administered**, not the acting
@@ -594,21 +594,21 @@ old `requirePermission('admin:full')` gate did.
 
 ### Added in Phase 3
 
-| Route(s) | Gate | Why platform-wide |
-| --- | --- | --- |
-| `delivery-billing.ts` — `/api/v1/platform/delivery/*` (14 routes) | `requirePlatformAdmin` | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; **enrols and un-enrols it from billing, and turns real charging on and off**; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view and its export. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
-| `delivery-billing.ts` — `/api/v1/delivery/*` (10 routes) | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, the derivation of one of them, its ledger and its mandate. No parameter names an agency. |
+| Route(s)                                                          | Gate                             | Why platform-wide                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `delivery-billing.ts` — `/api/v1/platform/delivery/*` (14 routes) | `requirePlatformAdmin`           | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; **enrols and un-enrols it from billing, and turns real charging on and off**; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view and its export. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
+| `delivery-billing.ts` — `/api/v1/delivery/*` (10 routes)          | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, the derivation of one of them, its ledger and its mandate. No parameter names an agency.                                                                                                                                                                                                                                                      |
 
 ### Added in Phase 5
 
-| Route(s) | Gate | Why platform-wide |
-| --- | --- | --- |
-| `delivery-billing.ts` — `/api/v1/platform/delivery/overview`, `/settlements`, `/settlements.csv`, `/agencies` | `requirePlatformAdmin` | The platform-wide readings of `/delivery` and `/delivery/settlements`. Every one lists agencies other than the caller's, which is the definition of a surface an agency may not reach. |
-| `delivery-billing.ts` — `…/agencies/:tenantId/payment-method`, `…/disputes`, `…/disputes/stand-down` | `requirePlatformAdmin` | Sets which instrument an agency is debited on, and decides whether delivery resumes after a chargeback. Both are things done TO an agency. |
-| `rating.ts` — `/api/v1/platform/rating/overview` | `requirePlatformAdmin` | The platform-wide reading of `/rating`. |
-| `platform.ts` — `/api/v1/platform/tenants/volume`, `…/tenants/:tenantId/non-production` | `requirePlatformAdmin` | Every tenant's call and application volume, and the marker that decides what counts toward platform totals. |
-| `onboarding.ts` — 5 routes | `requirePlatformAdmin` | Creates tenants and mints an OWNER activation grant into one. There is no self-serve path and this is why. |
-| `stripe-webhooks.ts` — `POST /api/v1/webhooks/stripe` | **signature**, not a capability | Stripe cannot present a bearer token. Verified against `STRIPE_WEBHOOK_SECRET` over the raw body, and refused before anything is read out of it — an unverified dispute webhook would let anybody who can reach the URL stop an agency's delivery. Nothing in the payload names a tenant: the agency is resolved from the payment intent against rows this platform wrote. See docs/BILLING.md §12. |
+| Route(s)                                                                                                      | Gate                            | Why platform-wide                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `delivery-billing.ts` — `/api/v1/platform/delivery/overview`, `/settlements`, `/settlements.csv`, `/agencies` | `requirePlatformAdmin`          | The platform-wide readings of `/delivery` and `/delivery/settlements`. Every one lists agencies other than the caller's, which is the definition of a surface an agency may not reach.                                                                                                                                                                                                              |
+| `delivery-billing.ts` — `…/agencies/:tenantId/payment-method`, `…/disputes`, `…/disputes/stand-down`          | `requirePlatformAdmin`          | Sets which instrument an agency is debited on, and decides whether delivery resumes after a chargeback. Both are things done TO an agency.                                                                                                                                                                                                                                                          |
+| `rating.ts` — `/api/v1/platform/rating/overview`                                                              | `requirePlatformAdmin`          | The platform-wide reading of `/rating`.                                                                                                                                                                                                                                                                                                                                                             |
+| `platform.ts` — `/api/v1/platform/tenants/volume`, `…/tenants/:tenantId/non-production`                       | `requirePlatformAdmin`          | Every tenant's call and application volume, and the marker that decides what counts toward platform totals.                                                                                                                                                                                                                                                                                         |
+| `onboarding.ts` — 5 routes                                                                                    | `requirePlatformAdmin`          | Creates tenants and mints an OWNER activation grant into one. There is no self-serve path and this is why.                                                                                                                                                                                                                                                                                          |
+| `stripe-webhooks.ts` — `POST /api/v1/webhooks/stripe`                                                         | **signature**, not a capability | Stripe cannot present a bearer token. Verified against `STRIPE_WEBHOOK_SECRET` over the raw body, and refused before anything is read out of it — an unverified dispute webhook would let anybody who can reach the URL stop an agency's delivery. Nothing in the payload names a tenant: the agency is resolved from the payment intent against rows this platform wrote. See docs/BILLING.md §12. |
 
 Two narrowings in Phase 5 rather than additions:
 
@@ -647,25 +647,25 @@ These are gated on ADMIN/OWNER (or an inline `isAdminOrOwner`) and **should**
 be: they mean "an administrator **of this agency**", and every one derives its
 tenant from `request.user` via the Phase 1 helper.
 
-| File | Verdict |
-| --- | --- |
-| `payroll.ts` (`/api/v1/admin/time-entries` and 5 more, `requireRole('ADMIN','OWNER')`) | Agency-scoped — reads `user.tenantId`; an agency admin viewing their own agents' hours. |
-| `admin-billing.ts` | Agency-scoped — despite the name. Phase 1 added `requireOwnBillingAccount`; the inline admin check means "admin of this agency". |
-| `buyer-billing.ts`, `recordings.ts`, `live-metrics.ts`, `index.ts` (the ~57 inline `isAdminOrOwner` sites) | Agency-scoped — role checks *within* an already-tenant-scoped query. Correct as they are. |
-| `carrier-routing.ts` (`requireAnyPermission`) | Agency-scoped — `CarrierRoute` carries `tenantId`; each agency routes its own calls. |
-| `anveo-`, `bulkvs-`, `fractel-procurement.ts` | Agency-scoped — buying numbers *for the caller's agency*. (Named in the brief as likely platform routes; they are not.) |
-| `stir-shaken.ts` | Agency-scoped — per-tenant CNAM and attestation. (Also named in the brief; also not.) |
-| `industry-research.ts` | Agency-scoped — `ResearchRun` carries `tenantId`. (Also named; also not.) |
-| `agent-phone.ts`, `call-center.ts`, `retention.ts`, `insurance-leads.ts`, `prospect-intake.ts`, `compliance.ts`, `flows.ts`, `ai-campaigns.ts`, `music-console-voice.ts`, `caller-id-inventory.ts`, `transcripts.ts`, `recording-analysis*.ts`, `did-routes.ts` (CRUD), `automation.ts`, `dialer-v2-shadow.ts` | Agency-scoped — all resolve the tenant from the session. |
-| `auth.ts` | Mixed and correct — public login/registration plus `POST /api/v1/auth/activation-grants`, which is agency-scoped by construction (an owner invites into their own agency; there is no `tenantId` field to name another). |
+| File                                                                                                                                                                                                                                                                                                           | Verdict                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `payroll.ts` (`/api/v1/admin/time-entries` and 5 more, `requireRole('ADMIN','OWNER')`)                                                                                                                                                                                                                         | Agency-scoped — reads `user.tenantId`; an agency admin viewing their own agents' hours.                                                                                                                                  |
+| `admin-billing.ts`                                                                                                                                                                                                                                                                                             | Agency-scoped — despite the name. Phase 1 added `requireOwnBillingAccount`; the inline admin check means "admin of this agency".                                                                                         |
+| `buyer-billing.ts`, `recordings.ts`, `live-metrics.ts`, `index.ts` (the ~57 inline `isAdminOrOwner` sites)                                                                                                                                                                                                     | Agency-scoped — role checks _within_ an already-tenant-scoped query. Correct as they are.                                                                                                                                |
+| `carrier-routing.ts` (`requireAnyPermission`)                                                                                                                                                                                                                                                                  | Agency-scoped — `CarrierRoute` carries `tenantId`; each agency routes its own calls.                                                                                                                                     |
+| `anveo-`, `bulkvs-`, `fractel-procurement.ts`                                                                                                                                                                                                                                                                  | Agency-scoped — buying numbers _for the caller's agency_. (Named in the brief as likely platform routes; they are not.)                                                                                                  |
+| `stir-shaken.ts`                                                                                                                                                                                                                                                                                               | Agency-scoped — per-tenant CNAM and attestation. (Also named in the brief; also not.)                                                                                                                                    |
+| `industry-research.ts`                                                                                                                                                                                                                                                                                         | Agency-scoped — `ResearchRun` carries `tenantId`. (Also named; also not.)                                                                                                                                                |
+| `agent-phone.ts`, `call-center.ts`, `retention.ts`, `insurance-leads.ts`, `prospect-intake.ts`, `compliance.ts`, `flows.ts`, `ai-campaigns.ts`, `music-console-voice.ts`, `caller-id-inventory.ts`, `transcripts.ts`, `recording-analysis*.ts`, `did-routes.ts` (CRUD), `automation.ts`, `dialer-v2-shadow.ts` | Agency-scoped — all resolve the tenant from the session.                                                                                                                                                                 |
+| `auth.ts`                                                                                                                                                                                                                                                                                                      | Mixed and correct — public login/registration plus `POST /api/v1/auth/activation-grants`, which is agency-scoped by construction (an owner invites into their own agency; there is no `tenantId` field to name another). |
 
 ### Examined, not ADMIN/OWNER-gated, flagged rather than changed
 
-| File | Verdict |
-| --- | --- |
-| `aivoice.ts`, `fish.ts` | Shared third-party workspaces (one Dograh workspace, one Fish account) gated on "any authenticated user". Platform-shaped by resource, but not ADMIN/OWNER-gated, and the sharing is a documented Phase 2/3 plan with its own migration path. Out of this step's scope; flagged here so it is not lost. |
-| `freeswitch-mock.ts`, `did-routes.ts` FreeSWITCH endpoints, `post.ts` `/internal/*`, `signalwire-webhooks.ts`, `websocket.ts`, `ping.ts`, `lead-inject.ts` POST | Machine callback and webhook surfaces. Explicitly out of scope for this phase per the brief; documentation left alone. |
-| `health.ts` | No tenant, no data. Correctly public. |
+| File                                                                                                                                                            | Verdict                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aivoice.ts`, `fish.ts`                                                                                                                                         | Shared third-party workspaces (one Dograh workspace, one Fish account) gated on "any authenticated user". Platform-shaped by resource, but not ADMIN/OWNER-gated, and the sharing is a documented Phase 2/3 plan with its own migration path. Out of this step's scope; flagged here so it is not lost. |
+| `freeswitch-mock.ts`, `did-routes.ts` FreeSWITCH endpoints, `post.ts` `/internal/*`, `signalwire-webhooks.ts`, `websocket.ts`, `ping.ts`, `lead-inject.ts` POST | Machine callback and webhook surfaces. Explicitly out of scope for this phase per the brief; documentation left alone.                                                                                                                                                                                  |
+| `health.ts`                                                                                                                                                     | No tenant, no data. Correctly public.                                                                                                                                                                                                                                                                   |
 
 ---
 
@@ -764,7 +764,7 @@ admin's own `User.tenantId` and uses the acting tenant instead, so it changes
 nothing about what he can see, but it does leave him listed in that agency's
 roster. Removing him from it is a separate decision.
 
-**Why this is not a new way in.** A `PLATFORM_INVITE` confers strictly *less*
+**Why this is not a new way in.** A `PLATFORM_INVITE` confers strictly _less_
 than an ordinary grant: an ordinary one puts an AGENT or OWNER inside a paying
 agency, this one produces an account with nothing. Minting it needs shell access
 to the host and `DATABASE_URL` — the same bar as granting the capability
@@ -796,7 +796,7 @@ pnpm --filter @hopwhistle/api platform:admins -- --invite hallken9@gmail.com
 **What this gives him, and what it does not.** The capability is cross-agency,
 so he lands in the cross-agency view with no tenant. That is not a wildcard: the
 agency-scoped routes refuse him until he enters an agency from the switcher,
-which grants ADMIN and OWNER *inside that one agency only*, for as long as the
+which grants ADMIN and OWNER _inside that one agency only_, for as long as the
 selection row exists, with an audit row for every entry and exit (§1, §2b).
 "Access everything" is one agency at a time, on the record — there is no state
 in this system that is administrator of every agency at once.
@@ -814,7 +814,7 @@ agency he was inside.
 database, driving the real auth hook and the real route plugins.
 
 1. **An agency OWNER is refused every re-gated route** — the shared dialer, the
-   agency picker, another agency's quota, and (separately pinned) *their own*
+   agency picker, another agency's quota, and (separately pinned) _their own_
    agency's quota, because the point is "not a platform operation", not "wrong
    tenant". An ordinary agency user is refused; an anonymous caller gets 401
    rather than 403 so the two stay distinguishable; the operator is admitted.
@@ -826,7 +826,7 @@ database, driving the real auth hook and the real route plugins.
    collapse back into one.
 3. **Exactly one audit row each way** — enter and leave, each naming operator and
    agency; no row for a leave with nothing to leave; a move between agencies
-   records a leave *and* an enter and leaves the operator in exactly one agency;
+   records a leave _and_ an enter and leaves the operator in exactly one agency;
    a refused attempt writes no row and creates no selection.
 4. **Unsettable from the wire** — `X-Demo-Tenant-Id`, a speculative
    `X-Acting-Tenant-Id`/`X-Tenant-Id`, three query parameter spellings, and a
@@ -881,7 +881,7 @@ asserting what each consumer's accessor actually yields rather than what is
 present somewhere in the body.
 
 It pins the switcher's exact operation (`payload(...)` is an array, and
-`.map()` over it returns the agency names), that the body is *not* the payload,
+`.map()` over it returns the agency names), that the body is _not_ the payload,
 that `payload()` answers `undefined` rather than throwing for every non-envelope
 shape, that all four platform GETs and six delivery GETs answer `{ data: ... }`,
 that entering and leaving an agency do too, that the delivery panel's fields
@@ -935,7 +935,7 @@ why it is source-level.
 
 `apps/web/src/components/__tests__/error-boundary.test.tsx` — 5 cases on the
 boundary's own logic: capturing into state, clearing on a `resetKey` change,
-*not* clearing while the key is unchanged (which would be a render loop rather
+_not_ clearing while the key is unchanged (which would be a render loop rather
 than a recovery), and logging rather than swallowing.
 
 Full API suite at the time of writing: **836 passed, 0 skipped**, across 64

@@ -31,7 +31,6 @@ export class StripeService {
         apiVersion: '2023-10-16',
       });
     }
-
   }
 
   /**
@@ -90,14 +89,13 @@ export class StripeService {
       }
 
       // Get invoice lines
-      const linesResult = await client.query(
-        'SELECT * FROM invoice_lines WHERE invoice_id = $1',
-        [invoiceId]
-      );
+      const linesResult = await client.query('SELECT * FROM invoice_lines WHERE invoice_id = $1', [
+        invoiceId,
+      ]);
 
       // Create Stripe invoice items
       await Promise.all(
-        (linesResult.rows as StripeInvoiceLineRow[]).map(async (line) => {
+        (linesResult.rows as StripeInvoiceLineRow[]).map(async line => {
           return await this.stripe!.invoiceItems.create({
             customer: invoice.stripe_customer_id!,
             amount: Math.round(parseFloat(line.total) * 100), // Convert to cents
@@ -133,10 +131,7 @@ export class StripeService {
         `UPDATE invoices
          SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
          WHERE id = $2`,
-        [
-          JSON.stringify({ stripeInvoiceId: stripeInvoice.id }),
-          invoiceId,
-        ]
+        [JSON.stringify({ stripeInvoiceId: stripeInvoice.id }), invoiceId]
       );
 
       logger.info(`Created Stripe invoice ${stripeInvoice.id} for invoice ${invoiceId}`);
@@ -316,10 +311,10 @@ export class StripeService {
         ok: accepted,
         paymentIntentId: intent.id,
         status: intent.status,
-        failureCode: accepted ? null : intent.last_payment_error?.code ?? intent.status,
+        failureCode: accepted ? null : (intent.last_payment_error?.code ?? intent.status),
         failureMessage: accepted
           ? null
-          : intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`,
+          : (intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`),
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
@@ -410,10 +405,10 @@ export class StripeService {
         ok: accepted,
         paymentIntentId: intent.id,
         status: intent.status,
-        failureCode: accepted ? null : intent.last_payment_error?.code ?? intent.status,
+        failureCode: accepted ? null : (intent.last_payment_error?.code ?? intent.status),
         failureMessage: accepted
           ? null
-          : intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`,
+          : (intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`),
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
@@ -474,10 +469,10 @@ export class StripeService {
         ok: accepted,
         paymentIntentId: intent.id,
         status: intent.status,
-        failureCode: accepted ? null : intent.last_payment_error?.code ?? intent.status,
+        failureCode: accepted ? null : (intent.last_payment_error?.code ?? intent.status),
         failureMessage: accepted
           ? null
-          : intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`,
+          : (intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`),
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
@@ -526,7 +521,9 @@ export class StripeService {
    * customer and nothing else: it cannot move money, and no amount is named
    * here or accepted from the caller.
    */
-  async createAchSetupIntent(customerId: string): Promise<{ id: string; clientSecret: string } | null> {
+  async createAchSetupIntent(
+    customerId: string
+  ): Promise<{ id: string; clientSecret: string } | null> {
     if (!this.enabled || !this.stripe) return null;
 
     const intent = await this.stripe.setupIntents.create({
@@ -553,7 +550,7 @@ export class StripeService {
     });
 
     const paymentMethod =
-      typeof intent.payment_method === 'string' ? null : intent.payment_method ?? null;
+      typeof intent.payment_method === 'string' ? null : (intent.payment_method ?? null);
 
     if (!paymentMethod) {
       return {
@@ -623,7 +620,7 @@ export class StripeService {
     });
 
     const paymentMethod =
-      typeof intent.payment_method === 'string' ? null : intent.payment_method ?? null;
+      typeof intent.payment_method === 'string' ? null : (intent.payment_method ?? null);
 
     if (!paymentMethod) {
       return {
@@ -715,4 +712,3 @@ export interface AchMandateFacts {
   last4: string | null;
   customerId: string | null;
 }
-

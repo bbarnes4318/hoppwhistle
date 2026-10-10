@@ -107,14 +107,17 @@ describe.skipIf(!gate.available)('/api/auth/me capabilities', () => {
     await prisma?.$disconnect();
   });
 
-  it.each(Object.values(RoleName))('sends %s exactly the capabilities the server gates on', async role => {
-    const res = await meAs(userIds[role]!);
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
+  it.each(Object.values(RoleName))(
+    'sends %s exactly the capabilities the server gates on',
+    async role => {
+      const res = await meAs(userIds[role]!);
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
 
-    expect(body.roles).toEqual([role]);
-    expect([...body.permissions].sort()).toEqual([...ROLE_PERMISSIONS[role]].sort());
-  });
+      expect(body.roles).toEqual([role]);
+      expect([...body.permissions].sort()).toEqual([...ROLE_PERMISSIONS[role]].sort());
+    }
+  );
 
   it('gives an AGENT reports:read, which the browser copy withheld', async () => {
     const body = JSON.parse((await meAs(userIds[RoleName.AGENT]!)).body);

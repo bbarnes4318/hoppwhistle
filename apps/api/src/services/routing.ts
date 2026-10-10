@@ -173,7 +173,7 @@ export class RoutingService {
     const campaignBuyers = await this.prisma.campaignBuyer.findMany({
       where: {
         // An explicit agent list routes to agents only: match no buyer row.
-        campaignId: onlyAgents ? { in: [] } : campaignId ?? undefined,
+        campaignId: onlyAgents ? { in: [] } : (campaignId ?? undefined),
         status: 'ACTIVE',
         tenantId,
       },

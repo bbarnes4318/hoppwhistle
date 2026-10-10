@@ -9,13 +9,13 @@ export function getRedisClient(): Redis {
       maxRetriesPerRequest: 1,
       connectTimeout: 500,
       commandTimeout: 500,
-      retryStrategy: (times) => {
+      retryStrategy: times => {
         // Never give up reconnecting — exponential backoff capped at 5s
         const delay = Math.min(times * 200, 5000);
         console.warn(`[Redis] Reconnecting attempt ${times}, next retry in ${delay}ms`);
         return delay;
       },
-      reconnectOnError: (err) => {
+      reconnectOnError: err => {
         // Auto-reconnect on connection-related errors
         const targetErrors = ['READONLY', 'ECONNRESET', 'ECONNREFUSED'];
         return targetErrors.some(e => err.message.includes(e));
@@ -23,7 +23,7 @@ export function getRedisClient(): Redis {
       lazyConnect: false,
     });
 
-    redisClient.on('error', (err) => {
+    redisClient.on('error', err => {
       console.error('[Redis] Client Error:', err.message);
     });
 
@@ -45,4 +45,3 @@ export async function closeRedisClient(): Promise<void> {
     redisClient = null;
   }
 }
-

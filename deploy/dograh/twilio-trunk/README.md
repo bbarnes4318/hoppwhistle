@@ -79,7 +79,7 @@ Inbound calls land on FreeSWITCH, not Dograh, and are routed by
 3. Install the firewall (above). It lets Twilio's signaling ranges reach 5080;
    anything else on 5080 is dropped.
 4. Give the number a route in Hopwhistle, then call it. `fs_cli -x "sofia
-   status profile external"` and the FreeSWITCH log show the INVITE.
+status profile external"` and the FreeSWITCH log show the INVITE.
 
 ## Rollback
 

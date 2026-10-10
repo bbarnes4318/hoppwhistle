@@ -100,7 +100,9 @@ describe('the switcher’s data path, against the shape the server actually send
       'fetch',
       vi.fn(() =>
         Promise.resolve(
-          stubResponse(200, { data: [{ id: 't1', name: 'Ridgeline', slug: 'r', status: 'ACTIVE' }] })
+          stubResponse(200, {
+            data: [{ id: 't1', name: 'Ridgeline', slug: 'r', status: 'ACTIVE' }],
+          })
         )
       )
     );
@@ -138,7 +140,9 @@ describe('error bodies', () => {
       'fetch',
       vi.fn(() =>
         Promise.resolve(
-          stubResponse(409, { error: { code: 'DUPLICATE', message: 'That number already has a route' } })
+          stubResponse(409, {
+            error: { code: 'DUPLICATE', message: 'That number already has a route' },
+          })
         )
       )
     );

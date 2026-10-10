@@ -33,10 +33,7 @@ function log(message, color = '') {
 function checkServices() {
   log('Checking docker-compose services...', 'yellow');
   try {
-    const output = execSync(
-      `docker-compose -f "${COMPOSE_FILE}" ps`,
-      { encoding: 'utf-8' }
-    );
+    const output = execSync(`docker-compose -f "${COMPOSE_FILE}" ps`, { encoding: 'utf-8' });
     if (!output.includes('kamailio') || !output.includes('Up')) {
       throw new Error('Kamailio service is not running');
     }
@@ -56,7 +53,7 @@ function runSippTest(testName, scenarioFile, remoteHost, remotePort, extraArgs =
   const scenarioPath = path.isAbsolute(scenarioFile)
     ? scenarioFile
     : path.join(TEST_DIR, path.basename(scenarioFile));
-  
+
   if (!fs.existsSync(scenarioPath)) {
     log(`✗ Scenario file not found: ${scenarioPath}`, 'red');
     testsFailed++;
@@ -71,16 +68,18 @@ function runSippTest(testName, scenarioFile, remoteHost, remotePort, extraArgs =
       SIPP_IMAGE,
       `-sf "/scenarios/${path.basename(scenarioFile)}"`,
       `-s ${testName}`,
-      '-m 1',  // 1 call
-      '-l 1',  // 1 call limit
-      '-r 1',  // 1 call per second
+      '-m 1', // 1 call
+      '-l 1', // 1 call limit
+      '-r 1', // 1 call per second
       '-d 1000', // 1 second between calls
       `${remoteHost}:${remotePort}`,
       extraArgs,
       '-trace_msg',
       '-trace_err',
       '-trace_stat',
-    ].filter(Boolean).join(' ');
+    ]
+      .filter(Boolean)
+      .join(' ');
 
     execSync(dockerCmd, {
       stdio: 'inherit',
@@ -158,4 +157,3 @@ function main() {
 }
 
 main();
-

@@ -51,7 +51,9 @@ async function main() {
             status: 'ACTIVE',
           },
         });
-        console.log(`[CREATED] Assigned publisher to campaign: "${campaign.name}" (${campaign.id})`);
+        console.log(
+          `[CREATED] Assigned publisher to campaign: "${campaign.name}" (${campaign.id})`
+        );
         createdCount++;
       } else {
         console.log(`[SKIPPED] Assignment already exists for: "${campaign.name}" (${campaign.id})`);
@@ -64,7 +66,6 @@ async function main() {
     console.log(`Assignments Created:        ${createdCount}`);
     console.log(`Assignments Skipped:        ${skippedCount}`);
     console.log(`=======================================================`);
-
   } catch (error) {
     console.error('Error executing backfill:', error);
     process.exit(1);

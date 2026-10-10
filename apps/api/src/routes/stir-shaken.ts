@@ -217,7 +217,7 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
     });
 
     return {
-      data: statuses.map((s) => ({
+      data: statuses.map(s => ({
         id: s.id,
         callId: s.callId,
         phoneNumber: s.phoneNumber,
@@ -233,4 +233,3 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
     };
   });
 }
-

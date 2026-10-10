@@ -115,7 +115,11 @@ import {
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { businessDayPeriodEnd, CONTRACT_PERIODS } from '../rating/business-day.js';
-import { calendarDayBounds, lastClosedCalendarDay, nextCalendarDay } from '../rating/calendar-day.js';
+import {
+  calendarDayBounds,
+  lastClosedCalendarDay,
+  nextCalendarDay,
+} from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 import { measureCalendarDay } from '../rating/measurement.js';
 import { toNumber } from '../rating/rate-curve.js';
@@ -457,8 +461,8 @@ export async function settleAgencyForDeliveryDay(
          * minimum and there is no next-day price to derive. It is a distinction
          * an agency reading the row is entitled to see.
          */
-        curveVersionId: effective === null ? null : rateChange?.curveVersionId ?? null,
-        curveVersion: effective === null ? null : rateChange?.curveVersion ?? null,
+        curveVersionId: effective === null ? null : (rateChange?.curveVersionId ?? null),
+        curveVersion: effective === null ? null : (rateChange?.curveVersion ?? null),
         rateChangeId: rating.rateChangeId,
         overrunQuantity,
         overrunAmount: new Prisma.Decimal(overrunAmount.toFixed(2)),
@@ -472,10 +476,7 @@ export async function settleAgencyForDeliveryDay(
         gracePeriodEndsOn:
           initialStatus === SettlementPaymentStatus.HALTED_MAX_DEBIT ||
           initialStatus === SettlementPaymentStatus.HALTED_NO_MANDATE
-            ? businessDayPeriodEnd(
-                deliveryDay,
-                CONTRACT_PERIODS.SETTLEMENT_GRACE_BUSINESS_DAYS
-              )
+            ? businessDayPeriodEnd(deliveryDay, CONTRACT_PERIODS.SETTLEMENT_GRACE_BUSINESS_DAYS)
             : null,
         computedAt: now,
       },
@@ -524,7 +525,14 @@ export async function settleAgencyForDeliveryDay(
   };
 
   if (initialStatus === SettlementPaymentStatus.HALTED_MAX_DEBIT) {
-    await notifyMaxDebitHalt(prisma, tenantId, settlement.id, deliveryDay, totalCharged, terms.maxDailyDebit);
+    await notifyMaxDebitHalt(
+      prisma,
+      tenantId,
+      settlement.id,
+      deliveryDay,
+      totalCharged,
+      terms.maxDailyDebit
+    );
     return base;
   }
 
@@ -643,7 +651,7 @@ export async function settleAgencyForDeliveryDay(
         subject: `Settlement for ${deliveryDay} is payable outside the platform`,
         body:
           `$${totalCharged.toFixed(2)} for Delivery Day ${deliveryDay} was computed in full ` +
-          'and NOT charged: this agency\'s payment provider is OFFLINE. Raise it wherever ' +
+          "and NOT charged: this agency's payment provider is OFFLINE. Raise it wherever " +
           'this agency is billed, and record the reference against the settlement once it ' +
           'is collected.',
         toAgency: false,
@@ -678,7 +686,7 @@ export async function settleAgencyForDeliveryDay(
     nextBlockQuantity,
     nextBlockRate: effective,
     curveVersionId: rateChange?.curveVersionId ?? null,
-    curveVersion: effective === null ? null : rateChange?.curveVersion ?? null,
+    curveVersion: effective === null ? null : (rateChange?.curveVersion ?? null),
     result: base,
     now,
   });
@@ -784,10 +792,7 @@ async function chargeAndFinalise(params: {
                     select: { gracePeriodEndsOn: true },
                   })
                 )?.gracePeriodEndsOn ??
-                businessDayPeriodEnd(
-                  deliveryDay,
-                  CONTRACT_PERIODS.SETTLEMENT_GRACE_BUSINESS_DAYS
-                ),
+                businessDayPeriodEnd(deliveryDay, CONTRACT_PERIODS.SETTLEMENT_GRACE_BUSINESS_DAYS),
             }),
       },
     });

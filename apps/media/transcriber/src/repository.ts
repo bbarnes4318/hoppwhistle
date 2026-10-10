@@ -36,11 +36,7 @@ export class TranscriptRepository {
     });
   }
 
-  async upsertTranscript(
-    tenantId: string,
-    callId: string,
-    data: TranscriptData
-  ): Promise<string> {
+  async upsertTranscript(tenantId: string, callId: string, data: TranscriptData): Promise<string> {
     const client = await this.pool.connect();
     const transcriptId = `tr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -70,7 +66,9 @@ export class TranscriptRepository {
       );
 
       // Delete existing segments
-      await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [transcriptId]);
+      await client.query('DELETE FROM transcript_segments WHERE transcript_id = $1', [
+        transcriptId,
+      ]);
 
       // Insert segments
       if (data.segments && data.segments.length > 0) {
@@ -89,10 +87,7 @@ export class TranscriptRepository {
           VALUES ${segmentValues.map((_, i) => `($${i * 7 + 1}, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7})`).join(', ')}
         `;
 
-        await client.query(
-          segmentQuery,
-          segmentValues.flat()
-        );
+        await client.query(segmentQuery, segmentValues.flat());
       }
 
       // Upsert analysis
@@ -186,4 +181,3 @@ export class TranscriptRepository {
     return result.rows;
   }
 }
-

@@ -10,14 +10,17 @@ export interface WebSocketMessage {
   [key: string]: unknown;
 }
 
-export function useWebSocket(url: string, options: {
-  onMessage?: (message: WebSocketMessage) => void;
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-  autoReconnect?: boolean;
-  reconnectInterval?: number;
-  enabled?: boolean; // New option to enable/disable WebSocket
-} = {}) {
+export function useWebSocket(
+  url: string,
+  options: {
+    onMessage?: (message: WebSocketMessage) => void;
+    onConnect?: () => void;
+    onDisconnect?: () => void;
+    autoReconnect?: boolean;
+    reconnectInterval?: number;
+    enabled?: boolean; // New option to enable/disable WebSocket
+  } = {}
+) {
   const {
     onMessage,
     onConnect,
@@ -54,9 +57,12 @@ export function useWebSocket(url: string, options: {
 
     try {
       // Check backend availability before attempting connection
-      const baseUrl = urlRef.current.split('/ws/')[0].replace('ws://', 'http://').replace('wss://', 'https://');
+      const baseUrl = urlRef.current
+        .split('/ws/')[0]
+        .replace('ws://', 'http://')
+        .replace('wss://', 'https://');
       const backendAvailable = await isBackendAvailable(baseUrl);
-      
+
       if (!backendAvailable) {
         // Backend is not available, don't attempt connection to prevent browser errors
         shouldConnectRef.current = false;
@@ -79,7 +85,7 @@ export function useWebSocket(url: string, options: {
         onConnect?.();
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = event => {
         try {
           const message = JSON.parse(event.data) as WebSocketMessage;
           setLastMessage(message);
@@ -146,4 +152,3 @@ export function useWebSocket(url: string, options: {
     disconnect,
   };
 }
-

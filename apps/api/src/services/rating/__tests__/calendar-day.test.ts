@@ -99,8 +99,7 @@ describe('calendar day', () => {
     expect(window.start.toISOString()).toBe('2026-09-03T04:00:00.000Z');
     expect(window.endExclusive.toISOString()).toBe('2026-09-08T04:00:00.000Z');
     // Five calendar days of span for three days of counts.
-    const spanDays =
-      (window.endExclusive.getTime() - window.start.getTime()) / (24 * 3600_000);
+    const spanDays = (window.endExclusive.getTime() - window.start.getTime()) / (24 * 3600_000);
     expect(spanDays).toBe(5);
   });
 

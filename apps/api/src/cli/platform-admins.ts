@@ -183,9 +183,7 @@ async function invite(email: string): Promise<void> {
       `"activationToken":"${grantResult.token}"}'\n`
   );
   console.log(`  Then, on this host:\n`);
-  console.log(
-    `    pnpm --filter @hopwhistle/api platform:admins -- --grant ${normalized}\n`
-  );
+  console.log(`    pnpm --filter @hopwhistle/api platform:admins -- --grant ${normalized}\n`);
   console.log(
     `  The account this creates belongs to no agency and holds no role. It can\n` +
       `  read nothing until that second command is run.`

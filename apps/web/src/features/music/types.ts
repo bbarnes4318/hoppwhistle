@@ -1,4 +1,4 @@
-export type FanSegment = 
+export type FanSegment =
   | 'superfan'
   | 'vip_list'
   | 'previous_merch'
@@ -36,7 +36,7 @@ export type InteractionStatus =
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 export type IntentLevel = 'high' | 'medium' | 'low' | 'none';
 
-export type MusicCampaignType = 
+export type MusicCampaignType =
   | 'album_presave'
   | 'tour_onsale'
   | 'merch_drop'
@@ -149,7 +149,7 @@ export interface MusicSettings {
   notificationsEnabled: boolean;
   emailReports: boolean;
   reportFrequency: 'daily' | 'weekly' | 'monthly';
-  
+
   defaultArtist: string;
   defaultCampaignOwner: string;
   reportingCurrency: string;
@@ -198,7 +198,14 @@ export interface RpsNetworkSummary {
   averageCostPerVerifiedAction: number;
 }
 
-export type ArtistTier = 'Discovery' | 'Growth' | 'Partner' | 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
+export type ArtistTier =
+  | 'Discovery'
+  | 'Growth'
+  | 'Partner'
+  | 'Bronze'
+  | 'Silver'
+  | 'Gold'
+  | 'Platinum';
 
 export interface ArtistTierConfig {
   tier: ArtistTier;
@@ -222,4 +229,3 @@ export interface SponsorPackage {
   cpaTarget: number;
   description: string;
 }
-

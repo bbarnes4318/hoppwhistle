@@ -113,13 +113,15 @@ const CALL_FOREIGN_KEYS: Array<{ column: string; table: string }> = [
 ];
 
 /** The child tables, in insert order. Each is keyed to a call by `callId`. */
-const CHILD_TABLES: Array<{ table: string; foreignKeys: Array<{ column: string; table: string }> }> =
-  [
-    { table: 'recordings', foreignKeys: [] },
-    { table: 'cdrs', foreignKeys: [] },
-    { table: 'call_legs', foreignKeys: [{ column: 'phoneNumberId', table: 'phone_numbers' }] },
-    { table: 'transcriptions', foreignKeys: [] },
-  ];
+const CHILD_TABLES: Array<{
+  table: string;
+  foreignKeys: Array<{ column: string; table: string }>;
+}> = [
+  { table: 'recordings', foreignKeys: [] },
+  { table: 'cdrs', foreignKeys: [] },
+  { table: 'call_legs', foreignKeys: [{ column: 'phoneNumberId', table: 'phone_numbers' }] },
+  { table: 'transcriptions', foreignKeys: [] },
+];
 
 async function tableExists(client: Client, table: string): Promise<boolean> {
   const res = await client.query<{ exists: boolean }>(
@@ -238,11 +240,7 @@ interface CopyResult {
  * the pass resumable — interrupt it, run it again, and the rows already
  * inserted conflict and are skipped.
  */
-async function copyCalls(
-  source: Client,
-  target: Client,
-  args: Args
-): Promise<CopyResult> {
+async function copyCalls(source: Client, target: Client, args: Args): Promise<CopyResult> {
   const { copy, needsUpdatedAt } = await sharedColumns(source, target, 'calls');
   const selectList = copy.map(c => `"${c}"`).join(', ');
 
@@ -287,7 +285,9 @@ async function copyCalls(
     for (const fk of presentForeignKeys) {
       const ids = [
         ...new Set(
-          page.rows.map(r => r[fk.column]).filter((v): v is string => typeof v === 'string' && v !== '')
+          page.rows
+            .map(r => r[fk.column])
+            .filter((v): v is string => typeof v === 'string' && v !== '')
         ),
       ];
       const present = await existingIds(target, fk.table, ids);
@@ -460,7 +460,9 @@ async function main() {
     line(args.commit ? '  RESTORING CALL HISTORY' : '  DRY RUN — nothing will be written');
     line('─'.repeat(74));
     line();
-    line(`  source calls        ${beforeSource.toLocaleString()}${args.fromTenant ? ` (tenant ${args.fromTenant})` : ''}`);
+    line(
+      `  source calls        ${beforeSource.toLocaleString()}${args.fromTenant ? ` (tenant ${args.fromTenant})` : ''}`
+    );
     line(`  target calls        ${beforeTarget.toLocaleString()}`);
     line(`  into agency         ${tenant.rows[0].name}  (${args.intoTenant})`);
     line(`  it currently holds  ${beforeTenant.toLocaleString()}`);
@@ -481,15 +483,19 @@ async function main() {
           `${(args.commit ? r.skipped.toLocaleString() : '—').padStart(15)}`
       );
       for (const [column, count] of Object.entries(r.nulledReferences)) {
-        line(`      ${column}: ${count.toLocaleString()} reference(s) not in the target, set to NULL`);
+        line(
+          `      ${column}: ${count.toLocaleString()} reference(s) not in the target, set to NULL`
+        );
       }
     }
 
     line();
     if (args.commit) {
       const afterTenant = await countCalls(target, args.intoTenant);
-      line(`  ${tenant.rows[0].name} now holds ${afterTenant.toLocaleString()} calls ` +
-        `(was ${beforeTenant.toLocaleString()}).`);
+      line(
+        `  ${tenant.rows[0].name} now holds ${afterTenant.toLocaleString()} calls ` +
+          `(was ${beforeTenant.toLocaleString()}).`
+      );
       line();
       line('  Verify with:  pnpm --filter @hopwhistle/api calls:inventory');
     } else {

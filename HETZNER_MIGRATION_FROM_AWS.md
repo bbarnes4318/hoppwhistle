@@ -6,25 +6,26 @@ This document details the playbook and instructions to migrate the Hoppwhistle p
 
 To ensure a smooth transition, we define the role of all active environments below.
 
-*   **AWS (Source of Truth)**:
-    *   **Public IP**: `3.214.60.13`
-    *   **Project Path**: `/opt/hopwhistle`
-    *   **Database**: PostgreSQL database `callfabric`, user `callfabric`, host `hopwhistle-postgres-dev`
-    *   **Recordings S3 Bucket**: `hopwhistle-recordings-prod` (Region: `us-east-1`, EBS volume: 200 GB gp3)
-    *   **Role**: Current live production. **This is the single source of truth for database and media migration.**
-*   **Hetzner (Target Production)**:
-    *   **Hetzner Project Name**: `hopwhistle`
-    *   **Target IP**: *[To be assigned upon server provisioning]*
-    *   **Role**: New production environment.
-*   **Vultr (Stale/Legacy Only)**:
-    *   **Public IP**: `45.32.213.201`
-    *   **Role**: Legacy server. **DO NOT migrate database data, logs, or recordings from Vultr.** Treat Vultr references as historical/inactive.
+- **AWS (Source of Truth)**:
+  - **Public IP**: `3.214.60.13`
+  - **Project Path**: `/opt/hopwhistle`
+  - **Database**: PostgreSQL database `callfabric`, user `callfabric`, host `hopwhistle-postgres-dev`
+  - **Recordings S3 Bucket**: `hopwhistle-recordings-prod` (Region: `us-east-1`, EBS volume: 200 GB gp3)
+  - **Role**: Current live production. **This is the single source of truth for database and media migration.**
+- **Hetzner (Target Production)**:
+  - **Hetzner Project Name**: `hopwhistle`
+  - **Target IP**: _[To be assigned upon server provisioning]_
+  - **Role**: New production environment.
+- **Vultr (Stale/Legacy Only)**:
+  - **Public IP**: `45.32.213.201`
+  - **Role**: Legacy server. **DO NOT migrate database data, logs, or recordings from Vultr.** Treat Vultr references as historical/inactive.
 
 ---
 
 ## 2. Step-by-Step Migration Playbook
 
 ### Step 2.1: Stop Write-Heavy Services on AWS
+
 To prevent data drift and out-of-sync database/recording assets during the dump and sync processes, stop all active application services on the AWS instance. Leave only the database and storage services running for retrieval.
 
 1.  SSH into the AWS EC2 instance:
@@ -47,6 +48,7 @@ To prevent data drift and out-of-sync database/recording assets during the dump 
 ---
 
 ### Step 2.2: Dump PostgreSQL Database from AWS
+
 We will perform a binary custom-format dump of the `callfabric` PostgreSQL database, which is fast and supports parallel restores.
 
 1.  On the AWS EC2 instance, execute `pg_dump` to create a backup file:
@@ -65,16 +67,21 @@ We will perform a binary custom-format dump of the `callfabric` PostgreSQL datab
 ---
 
 ### Step 2.3: Sync S3 Recordings to Hetzner MinIO/S3
+
 Recordings are stored in AWS S3 (`hopwhistle-recordings-prod`). We need to sync them to the Hetzner S3-compatible storage (or local MinIO instance). AWS is the single source of truth; do not pull or migrate any recordings from Vultr.
 
 #### Method A: Sync using `rclone` (Recommended Primary Method)
+
 Configure `rclone` with two remotes (`aws` and `hetzner`) and execute the following to sync with optimal performance parameters:
+
 ```bash
 rclone sync aws:hopwhistle-recordings-prod hetzner:hopwhistle-recordings --progress --transfers 16 --checkers 32
 ```
 
 #### Method B: Two-Step Fallback Sync via Local Storage (AWS CLI)
+
 If `rclone` is unavailable, use this safe two-step fallback using the `aws-cli`:
+
 ```bash
 # Step 1: Sync from AWS S3 to local temporary backup folder
 aws s3 sync s3://hopwhistle-recordings-prod ./recordings-backup --source-region us-east-1
@@ -83,11 +90,12 @@ aws s3 sync s3://hopwhistle-recordings-prod ./recordings-backup --source-region 
 aws --endpoint-url "$HETZNER_S3_ENDPOINT" s3 sync ./recordings-backup s3://hopwhistle-recordings
 ```
 
-*Note: Verify object counts and spot-check playback of recordings after the synchronization has completed.*
+_Note: Verify object counts and spot-check playback of recordings after the synchronization has completed._
 
 ---
 
 ### Step 2.4: Copy Configurations, Certs, and Local Keys
+
 Copy the configuration files, certificates, and TLS files from the AWS host to the Hetzner host.
 
 1.  **Environment File**: Copy `/opt/hopwhistle/.env` to the Hetzner host. Update the environment variables to use Hetzner credentials (see **Section 3** for key update lists).
@@ -99,6 +107,7 @@ Copy the configuration files, certificates, and TLS files from the AWS host to t
 ---
 
 ### Step 2.5: Restore PostgreSQL to Hetzner
+
 1.  Transfer the `callfabric_backup.dump` from the AWS host to the Hetzner host:
     ```bash
     scp ./callfabric_backup.dump ubuntu@[HETZNER_IP]:/tmp/
@@ -119,6 +128,7 @@ Copy the configuration files, certificates, and TLS files from the AWS host to t
 Perform these checks immediately after database restoration and recordings sync.
 
 #### Database verification:
+
 ```bash
 # List all tables in the database
 docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] psql -U callfabric -d callfabric -c "\dt"
@@ -131,6 +141,7 @@ docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] psql -U callfabric -d callfabric
 > Database table names may differ depending on the schema version. If the `Call` table does not exist or errors out, list the tables first using the `\dt` command above to verify the actual call/recording-related table names (such as lowercase `calls` or plural `Call`).
 
 #### Recordings verification:
+
 ```bash
 # Verify AWS source size and object count
 rclone size aws:hopwhistle-recordings-prod
@@ -148,6 +159,7 @@ rclone check aws:hopwhistle-recordings-prod hetzner:hopwhistle-recordings --one-
 ---
 
 ### Step 2.6: Start Hetzner Stack
+
 1.  Navigate to the project path on the Hetzner host:
     ```bash
     cd /opt/hopwhistle
@@ -160,6 +172,7 @@ rclone check aws:hopwhistle-recordings-prod hetzner:hopwhistle-recordings --one-
 ---
 
 ### Step 2.7: Run Prisma Generate & Migrate
+
 After restoring the database, run Prisma migrations to deploy any schema changes that might be in the codebase but not yet applied.
 
 1.  Generate the client:
@@ -177,23 +190,23 @@ After restoring the database, run Prisma migrations to deploy any schema changes
 
 When setting up the Hetzner `.env` files, ensure the following variables are customized:
 
-| Env Var | Description / Value |
-| :--- | :--- |
-| `PUBLIC_IP` | Public IP of the Hetzner host |
-| `SIP_PUBLIC_IP` | Public SIP IP (identical to `PUBLIC_IP` unless utilizing multi-homing) |
-| `SIP_DOMAIN` | Target domain name for SIP client registrations (e.g., `hopwhistle.com`) |
-| `DATABASE_URL` | `postgresql://callfabric:[PASSWORD]@[HETZNER_DB_HOST]:5432/callfabric` |
-| `REDIS_URL` | `redis://:[PASSWORD]@[HETZNER_REDIS_HOST]:6379` |
-| `CLICKHOUSE_URL` | `http://[HETZNER_CLICKHOUSE_HOST]:8123` |
-| `S3_ENDPOINT` | MinIO / S3 endpoint URL |
-| `S3_BUCKET` | Recording bucket name |
-| `S3_ACCESS_KEY` | MinIO / S3 access key |
-| `S3_SECRET_KEY` | MinIO / S3 secret key |
-| `S3_REGION` | Storage region (e.g., `us-east-1`) |
-| `S3_FORCE_PATH_STYLE` | `true` |
-| `API_PUBLIC_URL` | Public URL for the API (e.g., `https://api.hopwhistle.com`) |
-| `NEXT_PUBLIC_API_URL` | Frontend client public API URL (e.g., `https://api.hopwhistle.com`) |
-| `NEXT_PUBLIC_WS_URL` | Frontend client WebSocket URL (e.g., `wss://hopwhistle.com/ws`) |
+| Env Var               | Description / Value                                                      |
+| :-------------------- | :----------------------------------------------------------------------- |
+| `PUBLIC_IP`           | Public IP of the Hetzner host                                            |
+| `SIP_PUBLIC_IP`       | Public SIP IP (identical to `PUBLIC_IP` unless utilizing multi-homing)   |
+| `SIP_DOMAIN`          | Target domain name for SIP client registrations (e.g., `hopwhistle.com`) |
+| `DATABASE_URL`        | `postgresql://callfabric:[PASSWORD]@[HETZNER_DB_HOST]:5432/callfabric`   |
+| `REDIS_URL`           | `redis://:[PASSWORD]@[HETZNER_REDIS_HOST]:6379`                          |
+| `CLICKHOUSE_URL`      | `http://[HETZNER_CLICKHOUSE_HOST]:8123`                                  |
+| `S3_ENDPOINT`         | MinIO / S3 endpoint URL                                                  |
+| `S3_BUCKET`           | Recording bucket name                                                    |
+| `S3_ACCESS_KEY`       | MinIO / S3 access key                                                    |
+| `S3_SECRET_KEY`       | MinIO / S3 secret key                                                    |
+| `S3_REGION`           | Storage region (e.g., `us-east-1`)                                       |
+| `S3_FORCE_PATH_STYLE` | `true`                                                                   |
+| `API_PUBLIC_URL`      | Public URL for the API (e.g., `https://api.hopwhistle.com`)              |
+| `NEXT_PUBLIC_API_URL` | Frontend client public API URL (e.g., `https://api.hopwhistle.com`)      |
+| `NEXT_PUBLIC_WS_URL`  | Frontend client WebSocket URL (e.g., `wss://hopwhistle.com/ws`)          |
 
 > [!WARNING]
 > Do not commit or hardcode credentials into any environment template files. Ensure all secrets are kept out of Git.
@@ -205,13 +218,17 @@ When setting up the Hetzner `.env` files, ensure the following variables are cus
 Execute these validation commands on the Hetzner host to ensure the platform is functioning correctly.
 
 ### 4.1. General Docker Status
+
 Ensure all containers are running and healthy:
+
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
 ### 4.2. API /health and Readiness Checks
+
 Verify the API is running and that its backend dependencies are reachable:
+
 ```bash
 # Check service liveness
 curl -s http://localhost:3001/health/live
@@ -221,52 +238,70 @@ curl -s http://localhost:3001/health/ready
 ```
 
 ### 4.3. Prisma Database Connection
+
 Confirm Prisma can query the database:
+
 ```bash
 docker compose exec api npx prisma db pull --print
 ```
 
 ### 4.4. Redis Ping
+
 Ensure Redis is active and accessible:
+
 ```bash
 docker compose exec redis redis-cli ping
 ```
-*Expected output: `PONG`*
+
+_Expected output: `PONG`_
 
 ### 4.5. ClickHouse Ping
+
 Verify ClickHouse analytics database connection:
+
 ```bash
 curl -s http://localhost:8123/ping
 ```
-*Expected output: `Ok.`*
+
+_Expected output: `Ok.`_
 
 ### 4.6. S3/MinIO List Bucket
+
 Verify connection to the S3-compatible recordings bucket:
+
 ```bash
 aws --endpoint-url http://localhost:9000 s3 ls s3://hopwhistle-recordings
 ```
 
 ### 4.7. Recording Upload/Playback
+
 To test file uploads manually, trigger the upload script on a mock file:
+
 ```bash
 # Create dummy recording
 echo "test-audio" > /tmp/test_call.wav
 # Run the upload script manually
 docker compose exec freeswitch /usr/share/freeswitch/scripts/upload-recording.sh /tmp/test_call.wav test_call_id
 ```
+
 Verify the file is uploaded to the bucket:
+
 ```bash
 aws --endpoint-url http://localhost:9000 s3 ls s3://hopwhistle-recordings/test_call_id.wav
 ```
 
 ### 4.8. FreeSWITCH Status
+
 Verify the FreeSWITCH core is running:
+
 ```bash
 docker compose exec freeswitch fs_cli -x "status"
 ```
 
 ### 4.9. SIP OPTIONS & Registration Status
+
 Check registration status and ensure external trunks/gateways (like BulkVS) are active:
+
 ```bash
 # Verify internal profile registrations
 docker compose exec freeswitch fs_cli -x "sofia status profile internal reg"
@@ -276,19 +311,24 @@ docker compose exec freeswitch fs_cli -x "sofia status"
 ```
 
 ### 4.10. Vapi SIP Trunk Validation
+
 Check that the dedicated Vapi SIP profile on port 5070 is up and listening:
+
 ```bash
 docker compose exec freeswitch fs_cli -x "sofia status profile vapi"
 ```
 
 ### 4.11. WebSockets (WSS) /ws Connectivity
+
 Test that client WebRTC connections can reach the WSS port:
+
 ```bash
 # Install wscat if not present, then connect to the WebSocket endpoint
 npm install -g wscat
 wscat -c wss://localhost:7443 -p sip
 ```
-*Expected response: Connection established, protocol upgraded to SIP.*
+
+_Expected response: Connection established, protocol upgraded to SIP._
 
 ---
 

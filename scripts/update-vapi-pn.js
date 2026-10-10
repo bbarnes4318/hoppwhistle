@@ -6,7 +6,7 @@ const SIGNALWIRE_CREDENTIAL_ID = '0d2c6892-fc34-44e4-9db6-11b6daae8eec';
 
 const data = JSON.stringify({
   credentialId: SIGNALWIRE_CREDENTIAL_ID,
-  name: 'SignalWire DID +18036135410'
+  name: 'SignalWire DID +18036135410',
 });
 
 const opts = {
@@ -14,15 +14,15 @@ const opts = {
   path: `/phone-number/${PHONE_NUMBER_ID}`,
   method: 'PATCH',
   headers: {
-    'Authorization': `Bearer ${VAPI_KEY}`,
+    Authorization: `Bearer ${VAPI_KEY}`,
     'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(data)
-  }
+    'Content-Length': Buffer.byteLength(data),
+  },
 };
 
-const req = https.request(opts, (res) => {
+const req = https.request(opts, res => {
   let body = '';
-  res.on('data', (chunk) => body += chunk);
+  res.on('data', chunk => (body += chunk));
   res.on('end', () => {
     console.log('Status:', res.statusCode);
     console.log('Response:', body);

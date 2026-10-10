@@ -120,10 +120,9 @@ describe('the cross-agency landing prompt', () => {
      * an operator who also held PUBLISHER off /delivery before the answer
      * arrived. Anybody deleting this guard as redundant should see this.
      */
-    expect(
-      source,
-      'the role redirect acts on the platform context before it has loaded'
-    ).toMatch(/if \(platform\.loading \|\| platform\.isPlatformAdmin\) return;/);
+    expect(source, 'the role redirect acts on the platform context before it has loaded').toMatch(
+      /if \(platform\.loading \|\| platform\.isPlatformAdmin\) return;/
+    );
   });
 
   it('keeps the call centre inside the rule, since it returns early', () => {

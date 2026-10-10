@@ -50,7 +50,12 @@ export function registerDemoRoutes(fastify: FastifyInstance): Promise<void> {
 
       if (!demoTenant) {
         void reply.code(404);
-        return { error: { code: 'DEMO_NOT_FOUND', message: 'Demo tenant not found. Run db:seed:demo first.' } };
+        return {
+          error: {
+            code: 'DEMO_NOT_FOUND',
+            message: 'Demo tenant not found. Run db:seed:demo first.',
+          },
+        };
       }
 
       return {
@@ -116,4 +121,3 @@ export function registerDemoRoutes(fastify: FastifyInstance): Promise<void> {
 
   return Promise.resolve();
 }
-

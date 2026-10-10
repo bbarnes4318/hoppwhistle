@@ -50,10 +50,7 @@ export type RateOffsetClient = Pick<PrismaClient, 'agencyBillingProfile'>;
  * exist. Zero rather than null throughout, because the offset is an addend and
  * "no offset" and "an offset of nothing" are the same fact.
  */
-export async function loadRateOffset(
-  prisma: RateOffsetClient,
-  tenantId: string
-): Promise<number> {
+export async function loadRateOffset(prisma: RateOffsetClient, tenantId: string): Promise<number> {
   const row = await prisma.agencyBillingProfile.findUnique({
     where: { tenantId },
     select: { rateOffset: true },

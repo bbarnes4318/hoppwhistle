@@ -32,8 +32,8 @@ export function WhatWeDo() {
             An agency portal, not a dialer.
           </h2>
           <p className="text-base sm:text-lg text-slate-500 max-w-2xl mx-auto font-normal">
-            You are not buying software to run yourself. You are buying delivered calls, and this
-            is where you watch them arrive, see what your agents did with them, and check the
+            You are not buying software to run yourself. You are buying delivered calls, and this is
+            where you watch them arrive, see what your agents did with them, and check the
             arithmetic before you pay.
           </p>
         </div>

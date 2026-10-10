@@ -10,12 +10,12 @@ actually receive calls, without NetEnroll in the loop for each one.
 Setting up one agent meant four separate things, in four places, and **two of
 them had no agency-facing surface at all**:
 
-| Step | Where it lived | Who could do it |
-| ---- | -------------- | --------------- |
-| Invite the agent | `POST /api/v1/auth/activation-grants` | The agency — but the token came back in the response with a comment saying "send it to the invitee", and **nothing sent it**. The owner copied it into a text message. |
-| Record licensed states | `PATCH /api/v1/users/:userId` | The agency, on the Users page. |
-| Give them a SIP identity | nowhere | Allocated silently on the agent's first softphone fetch. No screen showed it. |
-| **Put them in a call pool** | **nowhere** | **NetEnroll staff only** — somebody had to hand-build a `BuyerEndpoint` and attach it to the campaign, on `/buyers` and `/campaigns`, which `lib/staff-only-routes.ts` keeps out of the agency portal. |
+| Step                        | Where it lived                        | Who could do it                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Invite the agent            | `POST /api/v1/auth/activation-grants` | The agency — but the token came back in the response with a comment saying "send it to the invitee", and **nothing sent it**. The owner copied it into a text message.                                 |
+| Record licensed states      | `PATCH /api/v1/users/:userId`         | The agency, on the Users page.                                                                                                                                                                         |
+| Give them a SIP identity    | nowhere                               | Allocated silently on the agent's first softphone fetch. No screen showed it.                                                                                                                          |
+| **Put them in a call pool** | **nowhere**                           | **NetEnroll staff only** — somebody had to hand-build a `BuyerEndpoint` and attach it to the campaign, on `/buyers` and `/campaigns`, which `lib/staff-only-routes.ts` keeps out of the agency portal. |
 
 The last row is the one that broke the product model. `CampaignAgent` has been
 in the schema since it was written, carrying a doc comment calling it "the
@@ -34,7 +34,7 @@ endpoints and turns each assignment into a destination at that agent's SIP
 extension.
 
 **It is a source of destinations, not a second routing system.** Those rows
-join the endpoint list *before* every existing gate, so an agent reached this
+join the endpoint list _before_ every existing gate, so an agent reached this
 way is held to exactly the same rules as one reached through a buyer endpoint:
 
 - the accepted-state filter,
@@ -131,8 +131,8 @@ That flag is written by the browser and goes stale when a tab closes or a
 laptop sleeps, so excluding agents on it silenced people who were sitting there
 ready. But the cost of ignoring it is recorded in `routes/agent-phone.ts`: an
 agent on a network that blocked 7443 fetched credentials fine, never opened the
-WebSocket, never sent a REGISTER, *"and every call to them died with
-USER_NOT_REGISTERED while the dashboard still showed them available."* Those
+WebSocket, never sent a REGISTER, _"and every call to them died with
+USER_NOT_REGISTERED while the dashboard still showed them available."_ Those
 calls reached nobody **and** were not offered to an agent who could have taken
 them.
 
@@ -147,7 +147,7 @@ one ESL lookup rather than one per agent per call.
 
 **"Cannot tell" is never "nobody is registered."** Every failure path — ESL
 unreachable, a parse that finds nothing, a wrong profile name — returns `null`,
-and `null` means *do not filter*. Excluding every agent on the strength of an
+and `null` means _do not filter_. Excluding every agent on the strength of an
 ESL blip would be an outage dressed up as a safety feature. The gate only ever
 excludes an extension FreeSWITCH positively says it does not have.
 
@@ -208,14 +208,14 @@ time also enforce nothing.
 
 **Three states, not two:**
 
-| | Means | Routing |
-| --- | --- | --- |
+|                        | Means                  | Routing                       |
+| ---------------------- | ---------------------- | ----------------------------- |
 | No schedule (`DELETE`) | Hours are not enforced | Routable whenever else allows |
-| `days: []` | On leave | Routed nothing |
-| `days: [...]` + times | Works those hours | Gated on them |
+| `days: []`             | On leave               | Routed nothing                |
+| `days: [...]` + times  | Works those hours      | Gated on them                 |
 
 Clearing is its own verb rather than a `PUT` with a `null` body, because a JSON
-`null` body is not reliably distinguishable from *no* body — `apiClient.put(url,
+`null` body is not reliably distinguishable from _no_ body — `apiClient.put(url,
 null)` in the web app sends nothing, since `null` is falsy. An endpoint whose
 "clear" case rested on that distinction would clear on a malformed request and
 refuse a well-formed clear.
@@ -251,14 +251,14 @@ call belonged to the submitting **agent**, so an agent could attribute their
 application to a colleague's call, and the per-agent closing percentages a
 principal decides coaching and pay from would describe the wrong people.
 
-| | Meaning |
-| --- | --- |
-| `CLIENT` | The agent's form named the call, and it is this agency's **and** was answered by this agent |
+|            | Meaning                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `CLIENT`   | The agent's form named the call, and it is this agency's **and** was answered by this agent                                    |
 | `INFERRED` | Matched to the agent's own most recent answered call, within a window (default 30 min, `APPLICATION_CALL_INFERENCE_WINDOW_MS`) |
-| `NONE` | Nothing could be tied to it — a callback, paper, or hours later |
+| `NONE`     | Nothing could be tied to it — a callback, paper, or hours later                                                                |
 
 `INFERRED` is stored apart from `CLIENT` because it can be wrong in a knowable
-way: an agent who hangs up, takes a second call and then writes the *first*
+way: an agent who hangs up, takes a second call and then writes the _first_
 caller's business is matched to the second. A dispute over a price has to tell a
 claim the agent made from one the server inferred.
 
@@ -337,7 +337,7 @@ a call was up, which is exactly when an agent reaches for it ("this is my last
 one"). Turning off never touches the call in progress; it stops the next one.
 
 **Only a boolean toggles it.** A string body is refused rather than coerced:
-`'false'` is truthy, and coercing it would turn an agent's phone *on* while they
+`'false'` is truthy, and coercing it would turn an agent's phone _on_ while they
 were looking at the word "false".
 
 Toggling writes an `on-queue` / `off-queue` agent state event — its own status
@@ -352,7 +352,7 @@ readiness cell renders `UNAVAILABLE` as a muted **Phone off · Sep 21, 12:30**
 rather than the amber warning used for setup faults. An agent who stepped away
 is correctly configured, and a warning triangle would send an owner looking for
 a problem that is not there. The order matters too: `UNAVAILABLE` is the LAST
-blocker checked, so an agent who is off *and* has no campaign still shows the
+blocker checked, so an agent who is off _and_ has no campaign still shows the
 campaign, in amber — that one is the owner's to fix and will still be there when
 the agent comes back.
 
@@ -371,8 +371,8 @@ table and the closing percentage are built on. There was no agent column, no
 agent filter, and no disposition column: the table showed the free-text call
 notes and not the canonical outcome beside them.
 
-The agent's own list was worse than incomplete. The sidebar calls it *"My
-calls — narrowed server-side to the ones you took"*, and it was narrowed to the
+The agent's own list was worse than incomplete. The sidebar calls it _"My
+calls — narrowed server-side to the ones you took"_, and it was narrowed to the
 calls they **created** plus the phone numbers assigned to them. An agent taking
 inbound calls on a softphone satisfies neither: the row is created by the
 inbound handler, and the DID belongs to the agency, so `userNumbers` is empty
@@ -395,7 +395,7 @@ guess.
 three are touched. `answeredAt` in particular is deliberately NOT stamped on a
 disposition save: that endpoint is reachable by any agent on the floor, and
 stamping it would let writing calls up mint billable delivered calls out of
-nothing. What changes is which agent a call *already in the agency's total* is
+nothing. What changes is which agent a call _already in the agency's total_ is
 credited to, so the per-agent rows still reconcile with the agency total.
 
 **The name is resolved tenant-scoped**, in one indexed read per page, rather
@@ -413,7 +413,7 @@ claim about what was recorded, and a floor lead acts differently on each.
 `blockedBy`-style machine readability applies here too: `?agentId=` and
 `?disposition=` filter the list and the export, `disposition=NONE` answers
 "which calls has nobody written up yet" (which leaving the parameter off cannot
-express, since that means *all* calls), and an `agentId` from a non-principal
+express, since that means _all_ calls), and an `agentId` from a non-principal
 is **dropped, not honoured and not refused** — their list is already their own
 calls, refusing would break a link shared from a principal's screen, and
 honouring it would be one agent reading another's calls on a floor where the
@@ -456,7 +456,7 @@ screen somebody builds — with nothing attached.
 
 **One request now, and the order inside it is the point.** The server resolves
 the call, records the application against it, and writes the disposition
-*last*. A refused application refuses the disposition with it, so the label
+_last_. A refused application refuses the disposition with it, so the label
 cannot exist without the sale. On a call that was never tracked the row is
 created bare, the application goes on, and only then is it marked — a single
 create carrying the disposition would write the label before the sale existed.
@@ -518,7 +518,7 @@ application) or **standalone**, with no call attached — a callback taken on th
 agent's own phone, a follow-up that closed, an application submitted the
 morning after the call that produced it. The standalone path is
 `POST /api/v1/applications` and the guard above never touched it: the refusal
-is about sending an application *alongside a disposition that is not a sale*,
+is about sending an application _alongside a disposition that is not a sale_,
 on the disposition endpoint, and it has nothing to say about one sent on its
 own.
 
@@ -575,7 +575,7 @@ exists.
   "back in 30 minutes", and nothing turns them on at the start of their next
   shift.
 - **An agency owner cannot flip it for an agent.** The endpoint is the agent's
-  own. The roster screen *shows* who is off and since when; it has no control
+  own. The roster screen _shows_ who is off and since when; it has no control
   to put somebody back on the queue, deliberately — an owner overriding an
   agent's own "I am not at my desk" delivers a call to an empty chair.
 - **Attribution is not backfilled.** Calls answered before this shipped, on any
@@ -609,4 +609,4 @@ exists.
   drill-down from a closing percentage to the calls behind it.
 - **The measurement still counts by agent and day.** `getAgentBreakdown` and the
   range report group by `answeredByUserId` and `createdById` as before; the new
-  column makes the join *possible* without changing what prices an agency.
+  column makes the join _possible_ without changing what prices an agency.

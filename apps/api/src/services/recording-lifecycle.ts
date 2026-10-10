@@ -211,4 +211,3 @@ export class RecordingLifecycleService {
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   }
 }
-

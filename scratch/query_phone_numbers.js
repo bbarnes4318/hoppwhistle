@@ -14,15 +14,14 @@ async function run() {
           select: {
             role: {
               select: {
-                name: true
-              }
-            }
-          }
-        }
-      }
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
-    console.log("USERS:" + JSON.stringify(users, null, 2));
-
+    console.log('USERS:' + JSON.stringify(users, null, 2));
   } catch (err) {
     console.error(err);
   } finally {

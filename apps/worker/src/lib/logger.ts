@@ -15,7 +15,7 @@ export const logger = pino({
       }
     : undefined,
   formatters: {
-    level: (label) => {
+    level: label => {
       return { level: label };
     },
   },
@@ -32,4 +32,3 @@ export function createServiceLogger(service: string, context?: Record<string, un
     ...context,
   });
 }
-

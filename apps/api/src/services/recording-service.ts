@@ -39,16 +39,11 @@ export class RecordingService {
     const format = data.format || 'wav';
 
     // Upload to S3
-    const uploadResult = await storage.uploadRecording(
-      data.file,
-      data.callId,
+    const uploadResult = await storage.uploadRecording(data.file, data.callId, format, {
+      callId: data.callId,
+      legId: data.legId || '',
       format,
-      {
-        callId: data.callId,
-        legId: data.legId || '',
-        format,
-      }
-    );
+    });
 
     // Get call to extract tenant ID
     const call = await this.prisma.call.findUnique({
@@ -103,10 +98,11 @@ export class RecordingService {
 
     const existingCall = await this.prisma.call.findUnique({
       where: { id: data.callId },
-      select: { metadata: true }
+      select: { metadata: true },
     });
     const callMetadata = (existingCall?.metadata as Prisma.JsonObject | null) || {};
-    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
+    const existingRecordingDebug =
+      (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       uploadAttemptedAt: new Date().toISOString(),
@@ -161,10 +157,11 @@ export class RecordingService {
   async markRecordingFailed(callId: string, error: string): Promise<void> {
     const existingCall = await this.prisma.call.findUnique({
       where: { id: callId },
-      select: { metadata: true }
+      select: { metadata: true },
     });
     const callMetadata = (existingCall?.metadata as Prisma.JsonObject | null) || {};
-    const existingRecordingDebug = (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
+    const existingRecordingDebug =
+      (callMetadata.recordingDebug as Prisma.JsonObject | undefined) || {};
     const recordingDebug = {
       ...existingRecordingDebug,
       uploadAttemptedAt: new Date().toISOString(),
@@ -206,10 +203,7 @@ export class RecordingService {
   /**
    * Generate signed URL for playback
    */
-  async getSignedUrl(
-    recordingId: string,
-    expiresIn: number = 3600
-  ): Promise<string> {
+  async getSignedUrl(recordingId: string, expiresIn: number = 3600): Promise<string> {
     const recording = await this.prisma.recording.findUnique({
       where: { id: recordingId },
     });
@@ -386,7 +380,10 @@ export class RecordingService {
     }
 
     // 6. If recording.url is an external URL, try to stream from it directly
-    if (recording.url && (recording.url.startsWith('http://') || recording.url.startsWith('https://'))) {
+    if (
+      recording.url &&
+      (recording.url.startsWith('http://') || recording.url.startsWith('https://'))
+    ) {
       try {
         const response = await fetch(recording.url);
         if (response.ok && response.body) {
@@ -439,10 +436,7 @@ export class RecordingService {
   async backfillAllMetadata(limit: number = 100): Promise<number> {
     const recordings = await this.prisma.recording.findMany({
       where: {
-        OR: [
-          { size: null },
-          { checksum: null },
-        ],
+        OR: [{ size: null }, { checksum: null }],
         storageKey: { not: null },
         deletedAt: null,
       },

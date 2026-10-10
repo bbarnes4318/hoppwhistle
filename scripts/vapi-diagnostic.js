@@ -72,7 +72,7 @@ async function runDiagnostic() {
       console.log(`[ID] ${call.id}`);
       console.log(`  Destination: ${call.customer?.number}`);
       console.log(`  State:       ${call.endedReason || call.status}`);
-      
+
       // Check for SIP signaling details in the call object
       if (call.endedReason === 'error-sip-outbound-call-failed-to-connect') {
         console.log('  ⚠ Connection Failed Handshake');
@@ -83,11 +83,10 @@ async function runDiagnostic() {
       if (call.messages) {
         // ... search for 'failure'
       }
-      
+
       console.log(`  Monitor:     https://vapi.ai/calls/${call.id}`);
       console.log('-'.repeat(60));
     }
-
   } catch (err) {
     console.error('\n✗ Diagnostic error:', err.message);
   }

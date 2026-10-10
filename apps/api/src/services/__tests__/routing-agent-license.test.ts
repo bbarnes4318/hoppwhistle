@@ -207,7 +207,7 @@ describe('the license gate fails open where it has no fact to act on', () => {
     prisma.user.findMany.mockResolvedValue([agent('u-tn', '1000', ['TN'])]);
     prisma.phoneNumber.findMany.mockResolvedValue([]);
     prisma.agentSipCredential.findMany.mockResolvedValue([]);
-  prisma.campaignAgent.findMany.mockResolvedValue([]);
+    prisma.campaignAgent.findMany.mockResolvedValue([]);
     prisma.call.count.mockResolvedValue(0);
 
     const service = new RoutingService();
