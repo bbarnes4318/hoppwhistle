@@ -10,20 +10,24 @@
  *   declined     -- not eligible (an appointed carrier's, or any when the
  *                   agent includes carriers they are not appointed with)
  *
- * "Needs review" is not a category but a cut of the qualified: a referral,
- * or a medication whose use is still unconfirmed.
+ * "Needs review" is not a category but a cut of the qualified: the ones with
+ * an underwriting or applicant issue the agent must act on -- a referral, a
+ * medication whose use is unconfirmed, or a health answer the carrier had to
+ * assume. A rate book that needs verifying is NOT a review item: it is an
+ * operational status on the row, and has its own Rate status filter.
  */
 
 import type { FexResult } from './api';
 
 export type SortKey = 'price' | 'face' | 'carrier';
 export type BenefitFilter = 'any' | 'level' | 'graded' | 'gi';
+export type RateFilter = 'any' | 'current' | 'verify';
 export type ResultCategory = 'qualified' | 'review' | 'declined' | 'notAppointed';
 
 export interface ResultFilters {
   benefit: BenefitFilter;
-  /** Hide carriers whose rate book is older than current. */
-  hideStale: boolean;
+  /** By how current the carrier's rate book is. */
+  rate: RateFilter;
   /** Include carriers the agency is not appointed with. */
   showNotAppointed: boolean;
   /** Free text against carrier and product. */
@@ -32,9 +36,15 @@ export interface ResultFilters {
 
 export const DEFAULT_FILTERS: ResultFilters = {
   benefit: 'any',
-  hideStale: false,
+  rate: 'any',
   showNotAppointed: false,
   search: '',
+};
+
+export const RATE_FILTER_LABEL: Record<RateFilter, string> = {
+  any: 'Any rate status',
+  current: 'Current rates only',
+  verify: 'Verify rate only',
 };
 
 export const BENEFIT_FILTER_LABEL: Record<BenefitFilter, string> = {
@@ -58,9 +68,33 @@ export function rateNeedsVerify(r: FexResult): boolean {
   return r.ratesStatus === 'STALE_VERIFY' || tone === 'warn' || tone === 'mod' || tone === 'bad';
 }
 
+/**
+ * The health answers a carrier's rules had to assume because the agent left
+ * them unanswered ("diagnosis date not given"), off the engine's own
+ * reasons. Not the result's general notes (an age basis, a build chart not
+ * checked), and not an unconfirmed medication use, which is its own item.
+ */
+export function assumedAnswers(r: FexResult): string[] {
+  const all = r.reasons.flatMap(reason => reason.assumed ?? []);
+  return [...new Set(all)].filter(a => a !== 'indication not confirmed');
+}
+
+/**
+ * Why a qualified carrier needs the agent before applying, in the order to
+ * act on them. Empty for a carrier that took every answer as given.
+ */
+export function reviewReasons(r: FexResult): string[] {
+  if (!r.eligible) return [];
+  const reasons: string[] = [];
+  if (r.refer) reasons.push('Referral required');
+  if (r.needsIndication.length) reasons.push('Medication use unconfirmed');
+  if (assumedAnswers(r).length) reasons.push('Health answers assumed');
+  return reasons;
+}
+
 /** A qualified carrier the agent should look at before applying. */
 export function needsReview(r: FexResult): boolean {
-  return r.eligible && (r.refer || r.needsIndication.length > 0);
+  return reviewReasons(r).length > 0;
 }
 
 export function matchesSearch(r: FexResult, search: string): boolean {
@@ -100,7 +134,8 @@ export function groupResults(
   sort: SortKey | null
 ): ResultGroups {
   const keep = (r: FexResult) =>
-    benefitMatches(r, filters.benefit) && (!filters.hideStale || !rateNeedsVerify(r));
+    benefitMatches(r, filters.benefit) &&
+    (filters.rate === 'any' || (filters.rate === 'verify') === rateNeedsVerify(r));
   const eligible = results.filter(r => r.eligible);
   const kept = eligible.filter(keep);
   const found = (r: FexResult) => matchesSearch(r, filters.search);
@@ -142,7 +177,7 @@ export function activeFilterChips(
   const chips: Array<{ key: keyof ResultFilters; label: string }> = [];
   if (filters.benefit !== 'any')
     chips.push({ key: 'benefit', label: BENEFIT_FILTER_LABEL[filters.benefit] });
-  if (filters.hideStale) chips.push({ key: 'hideStale', label: 'Current rates only' });
+  if (filters.rate !== 'any') chips.push({ key: 'rate', label: RATE_FILTER_LABEL[filters.rate] });
   if (filters.showNotAppointed)
     chips.push({ key: 'showNotAppointed', label: 'Including not appointed' });
   if (filters.search.trim()) chips.push({ key: 'search', label: `“${filters.search.trim()}”` });

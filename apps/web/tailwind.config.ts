@@ -250,6 +250,12 @@ const config: Config = {
       addVariant('cq-lg', '@container (min-width: 900px)');
       addVariant('cq-xl', '@container (min-width: 1180px)');
       addVariant('cq-max-lg', '@container (max-width: 899.98px)');
+      /*
+       * The quoter's two-column split: intake beside results. Below this the
+       * results would be too narrow for a row's logo, full product name,
+       * price and Use Quote, so the workspace goes to one column instead.
+       */
+      addVariant('cq-split', '@container (min-width: 1080px)');
     }),
   ],
 };

@@ -29,10 +29,11 @@
  *
  * The workspace is a size container, and its layout is decided by its OWN
  * width, not the window's: the same code is a full-screen page, a 1180px
- * drawer and a console column. From 900px wide it is two columns that each
- * scroll on their own and the whole never scrolls; below that the results
- * lead, and the applicant is a one-line snapshot whose parts open the intake
- * at that part.
+ * drawer and a console column. From 1080px wide (`cq-split`) it is two
+ * columns that each scroll on their own and the whole never scrolls. Below
+ * that it does not squeeze both columns together: the results lead, the
+ * applicant is a compact summary pinned above them, and Edit applicant opens
+ * the intake as a panel over the top of the results.
  */
 
 import { BENEFIT_LABEL } from '@hopwhistle/fex-engine/catalog';
@@ -438,7 +439,7 @@ export function QuoteWorkspace({
         ...f,
         search: '',
         benefit: 'any',
-        hideStale: false,
+        rate: 'any',
         showNotAppointed: f.showNotAppointed || !r.appointed,
       }));
       setCategory(next);
@@ -636,7 +637,9 @@ export function QuoteWorkspace({
       panel = groups.review.length ? (
         <ul aria-label="Carriers that need review">{list(groups.review)}</ul>
       ) : (
-        empty('Nothing to review: no referral, and every medication’s use is confirmed.')
+        empty(
+          'Nothing to review: no referral, every medication’s use is confirmed, and no carrier assumed a health answer.'
+        )
       );
     } else if (category === 'declined') {
       panel = groups.declined.length ? (
@@ -754,7 +757,9 @@ export function QuoteWorkspace({
   ];
 
   const narrowBar = (
-    <div className="mb-2.5 flex items-center gap-2 rounded-card border border-rule bg-surface px-3 py-2 shadow-card cq-lg:hidden">
+    // Narrow: pinned over the results as they scroll, so who is being quoted
+    // and the way to change it are always in reach.
+    <div className="sticky top-0 z-20 mb-2.5 flex items-center gap-2 rounded-card border border-rule bg-surface px-3 py-2 shadow-card cq-split:hidden">
       <div className="min-w-0 flex-1">
         <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
           {prospectName ? `Quoting ${prospectName}` : 'Applicant'}
@@ -834,12 +839,12 @@ export function QuoteWorkspace({
     >
       <div
         className={cn(
-          // From 900px wide (the container, not the window) the workspace fills
+          // From 1080px wide (the container, not the window) the workspace fills
           // its parent and never scrolls as a whole: the intake and the results
           // each scroll on their own, so both stay on one laptop screen. The
           // intake gets the width its fields need -- no squeezed rail.
-          'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-3',
-          'cq-lg:grid-cols-[minmax(392px,416px)_minmax(0,1fr)] cq-xl:grid-cols-[452px_minmax(0,1fr)]'
+          'cq-split:grid cq-split:h-full cq-split:min-h-0 cq-split:gap-3',
+          'cq-split:grid-cols-[minmax(392px,416px)_minmax(0,1fr)] cq-xl:grid-cols-[452px_minmax(0,1fr)]'
         )}
       >
         {narrowBar}
@@ -850,7 +855,9 @@ export function QuoteWorkspace({
           className={cn(
             // A size container from the two-column width, so the quick
             // reference under the intake appears only when the column is tall.
-            'mb-3 min-w-0 cq-lg:mb-0 cq-lg:flex cq-lg:min-h-0 cq-lg:flex-col cq-lg:gap-3 cq-lg:[container-type:size]',
+            // Narrow, the intake is a panel between the summary and the
+            // results, at a readable width rather than stretched across.
+            'mb-3 min-w-0 max-w-[760px] cq-split:mb-0 cq-split:max-w-none cq-split:flex cq-split:min-h-0 cq-split:flex-col cq-split:gap-3 cq-split:[container-type:size]',
             !editing && 'hidden'
           )}
         >
@@ -895,7 +902,7 @@ export function QuoteWorkspace({
         <section
           ref={resultsRef}
           aria-label="Results"
-          className="cq flex min-w-0 scroll-mt-2 flex-col cq-lg:min-h-0 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pr-1"
+          className="cq flex min-w-0 scroll-mt-2 flex-col cq-split:min-h-0 cq-split:overflow-y-auto cq-split:overflow-x-hidden cq-split:overscroll-contain cq-split:pr-1"
         >
           <div className="flex-1">{body}</div>
           {selection || compare.length ? (

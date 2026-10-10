@@ -25,11 +25,13 @@ import * as React from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { money } from '@/lib/fex/api';
-import type { OutcomeChange } from '@/lib/fex/outcome-diff';
+import { isOutcomeChange, type OutcomeChange } from '@/lib/fex/outcome-diff';
 import {
   activeFilterChips,
   BENEFIT_FILTER_LABEL,
+  RATE_FILTER_LABEL,
   type BenefitFilter,
+  type RateFilter,
   type ResultCategory,
   type ResultFilters,
   type SortKey,
@@ -37,7 +39,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { CheckRow, FOCUS } from './parts';
-import { RESULT_COLUMNS } from './result-row';
+import { changeParts, RESULT_COLUMNS } from './result-row';
 
 /** The keyboard, as the shortcuts menu and the empty pane both list it. */
 export const SHORTCUTS: ReadonlyArray<[string, string]> = [
@@ -125,7 +127,7 @@ export function ResultsBar(props: ResultsBarProps): JSX.Element {
   const chips = activeFilterChips(filters);
   const popoverCount =
     (filters.benefit !== 'any' && filters.benefit !== 'level' ? 1 : 0) +
-    (filters.hideStale ? 1 : 0) +
+    (filters.rate !== 'any' ? 1 : 0) +
     (filters.showNotAppointed ? 1 : 0);
   const categories: ResultCategory[] = [
     'qualified',
@@ -341,18 +343,29 @@ export function ResultsBar(props: ResultsBarProps): JSX.Element {
                     ))}
                   </div>
                 </fieldset>
+                <fieldset className="border-t border-rule pt-3">
+                  <legend className="mb-1.5 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                    Rate status
+                  </legend>
+                  <div className="space-y-1">
+                    {(Object.keys(RATE_FILTER_LABEL) as RateFilter[]).map(rate => (
+                      <label
+                        key={rate}
+                        className="flex cursor-pointer items-center gap-2 text-[13px] text-ink"
+                      >
+                        <input
+                          type="radio"
+                          name={`${idPrefix}-rate`}
+                          checked={filters.rate === rate}
+                          onChange={() => onFilters({ rate })}
+                          className={cn('h-3.5 w-3.5 accent-[var(--brand)]', FOCUS)}
+                        />
+                        {RATE_FILTER_LABEL[rate]}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <div className="space-y-2 border-t border-rule pt-3">
-                  <CheckRow
-                    id={`${idPrefix}-hide-stale`}
-                    checked={filters.hideStale}
-                    onChange={hideStale => onFilters({ hideStale })}
-                    className="text-[13px]"
-                  >
-                    Current rates only
-                    <span className="t-meta block text-ink-3">
-                      Hide carriers marked Verify rate
-                    </span>
-                  </CheckRow>
                   <CheckRow
                     id={`${idPrefix}-not-appointed`}
                     checked={filters.showNotAppointed}
@@ -542,8 +555,10 @@ export function ColumnHeadings({ compare }: { compare: boolean }): JSX.Element {
 // ─── What the last edit did ──────────────────────────────────────────────────
 
 /**
- * "After adding Diabetes · 3 outcomes changed", then each carrier that moved:
- * "↓ Trinity Golden Eagle: Level → Graded". Said in full, not as a count.
+ * "2 outcomes changed · 3 premiums moved, after: Added Diabetes", then each
+ * carrier that moved, outcomes first: "↓ Trinity Golden Eagle: Level →
+ * Graded", "↓ GCU Eternal Advantage: $138.17 → $146.02 (+$7.85)". Said in
+ * full, not as a count.
  */
 export function ChangesStrip({
   changes,
@@ -564,9 +579,7 @@ export function ChangesStrip({
     <div className="border-x border-t border-rule bg-[color-mix(in_srgb,var(--brand-tint)_55%,var(--surface))] px-3 py-2">
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 text-[12.5px] leading-[18px] text-ink">
-          <span className="font-semibold">
-            {changes.length} outcome{changes.length === 1 ? '' : 's'} changed
-          </span>
+          <span className="font-semibold">{changeSummary(changes)}</span>
           {trigger.length ? (
             <span className="text-ink-2">
               {' '}
@@ -611,21 +624,7 @@ export function ChangesStrip({
                 <span className="min-w-0 text-ink">
                   {c.carrier} <span className="text-ink-2">{c.product}</span>
                 </span>
-                <span className="shrink-0 whitespace-nowrap">
-                  <span className="text-ink-3">{c.from} → </span>
-                  <span
-                    className={cn(
-                      'font-semibold',
-                      c.direction === 'worse'
-                        ? 'text-dropped-ink'
-                        : c.direction === 'better'
-                          ? 'text-live-ink'
-                          : 'text-ink'
-                    )}
-                  >
-                    {c.to === 'Declined' ? 'No longer qualifies' : c.to}
-                  </span>
-                </span>
+                <ChangeValues change={c} />
               </button>
             </li>
           );
@@ -645,6 +644,35 @@ export function ChangesStrip({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** "2 outcomes changed · 3 premiums moved · 1 face amount changed". */
+export function changeSummary(changes: OutcomeChange[]): string {
+  const outcomes = changes.filter(isOutcomeChange).length;
+  const premiums = changes.filter(c => c.kind === 'premium').length;
+  const faces = changes.filter(c => c.kind === 'face').length;
+  const parts: string[] = [];
+  if (outcomes) parts.push(`${outcomes} outcome${outcomes === 1 ? '' : 's'} changed`);
+  if (faces) parts.push(`${faces} face amount${faces === 1 ? '' : 's'} changed`);
+  if (premiums) parts.push(`${premiums} premium${premiums === 1 ? '' : 's'} moved`);
+  return parts.join(' · ');
+}
+
+function ChangeValues({ change }: { change: OutcomeChange }): JSX.Element {
+  const { from, to, delta } = changeParts(change);
+  const tone =
+    change.direction === 'worse'
+      ? 'text-dropped-ink'
+      : change.direction === 'better'
+        ? 'text-live-ink'
+        : 'text-ink';
+  return (
+    <span className="shrink-0 whitespace-nowrap tabular-nums">
+      <span className="text-ink-3">{from} → </span>
+      <span className={cn('font-semibold', tone)}>{to}</span>
+      {delta ? <span className={cn('ml-1 font-medium', tone)}>({delta})</span> : null}
+    </span>
   );
 }
 
