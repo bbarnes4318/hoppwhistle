@@ -35,6 +35,37 @@ vi.mock('@/components/ui/use-toast', () => ({
 const phone = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('@/components/phone/phone-provider', () => ({ usePhone: () => phone.value }));
 
+/*
+ * Radix's popover positions itself with floating-ui, which in jsdom (no
+ * layout, every rect zero) spins: one test that opened the filters menu ran
+ * for minutes of CPU. In a real browser it opens in milliseconds. Here it is
+ * a plain toggle, so what is under test is the quoter's own wiring.
+ */
+vi.mock('@/components/ui/popover', async () => {
+  const ReactMod = await import('react');
+  const Ctx = ReactMod.createContext<{ open: boolean; toggle: () => void }>({
+    open: false,
+    toggle: () => undefined,
+  });
+  function Popover({ children }: { children: React.ReactNode }) {
+    const [open, setOpen] = ReactMod.useState(false);
+    return ReactMod.createElement(
+      Ctx.Provider,
+      { value: { open, toggle: () => setOpen(o => !o) } },
+      children
+    );
+  }
+  function PopoverTrigger({ children }: { children: React.ReactElement; asChild?: boolean }) {
+    const { toggle } = ReactMod.useContext(Ctx);
+    return ReactMod.cloneElement(children, { onClick: toggle });
+  }
+  function PopoverContent({ children }: { children: React.ReactNode; className?: string }) {
+    const { open } = ReactMod.useContext(Ctx);
+    return open ? ReactMod.createElement('div', { role: 'dialog' }, children) : null;
+  }
+  return { Popover, PopoverTrigger, PopoverContent };
+});
+
 vi.mock('@/contexts/customer-intake-context', () => ({
   useCustomerIntake: () => ({ formData: { firstName: '', lastName: '', phone: '' } }),
 }));
@@ -760,9 +791,6 @@ describe('QuoteWorkspace', () => {
     ).toBeGreaterThan(0);
   });
 
-  // The only quoter render test that opens a Radix popover, which is slow in
-  // jsdom: on a loaded full-suite run this test alone overran the default 5s.
-  // The filtering itself is unit-tested in fex-results-view.test.ts.
   it('filters by rate status from the filters menu', async () => {
     quoteResults = () => [
       result({
@@ -772,17 +800,11 @@ describe('QuoteWorkspace', () => {
     ];
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
     await screen.findByText('Golden Eagle Final Expense');
-    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
-    // The popover mounts asynchronously; under a loaded test run that can
-    // take longer than the default second.
-    fireEvent.click(
-      await screen.findByRole('radio', { name: 'Verify rate only' }, { timeout: 4000 })
-    );
+    fireEvent.click(screen.getByLabelText('Filters'));
+    fireEvent.click(await screen.findByLabelText('Verify rate only'));
     await waitFor(() => expect(rowIds()).toEqual(['moo_living_promise']));
-    expect(
-      await screen.findByRole('button', { name: 'Remove filter: Verify rate only' })
-    ).toBeTruthy();
-  }, 15000);
+    expect(screen.getByLabelText('Remove filter: Verify rate only')).toBeTruthy();
+  });
 
   it('shows a localized error over the last good results', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
