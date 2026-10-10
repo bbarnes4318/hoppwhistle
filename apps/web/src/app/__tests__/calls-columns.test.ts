@@ -23,6 +23,7 @@ import {
   chargeStatusBadge,
   columnRoleOf,
   defaultVisibleColumns,
+  directionOf,
   disputeBadge,
   exportFilename,
   localDayKey,
@@ -132,6 +133,7 @@ describe('default columns', () => {
   it('opens an owner on where each call went, the recording and the money', () => {
     expect(defaultLabels(OWNER)).toEqual([
       'Time',
+      'Direction',
       'Caller',
       'Campaign',
       'Went to',
@@ -170,6 +172,7 @@ describe('default columns', () => {
   it('opens an agent on their calls, each recording, and the applications they wrote', () => {
     expect(defaultLabels(AGENT)).toEqual([
       'Time',
+      'Direction',
       'Caller',
       'Campaign',
       'Duration',
@@ -220,6 +223,27 @@ describe('default columns', () => {
     for (const id of [...OWNER_DEFAULT_COLUMNS, ...AGENT_DEFAULT_COLUMNS]) {
       expect(ids.has(id), id).toBe(true);
     }
+  });
+});
+
+describe('direction', () => {
+  it('reads inbound or outbound, whatever the case', () => {
+    expect(directionOf({ direction: 'INBOUND' })?.label).toBe('Inbound');
+    expect(directionOf({ direction: 'outbound' })?.label).toBe('Outbound');
+  });
+
+  it('is nothing for a row that carries none', () => {
+    expect(directionOf({ direction: null })).toBeNull();
+    expect(directionOf({})).toBeNull();
+  });
+
+  it('is offered to owners and agents, not buyers or publishers', () => {
+    const offered = (viewer: typeof OWNER) =>
+      visibleColumnsFor(viewer).some(col => col.id === 'direction');
+    expect(offered(OWNER)).toBe(true);
+    expect(offered(AGENT)).toBe(true);
+    expect(offered({ ...OWNER, isAdminOrOwner: false, isBuyer: true })).toBe(false);
+    expect(offered({ ...OWNER, isAdminOrOwner: false, isPublisher: true })).toBe(false);
   });
 });
 

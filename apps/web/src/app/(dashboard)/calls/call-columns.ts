@@ -13,6 +13,7 @@ import { formatEnumLabel, resolveTone, type StatusTone } from '@/components/doma
 
 export type CallColumnId =
   | 'time'
+  | 'direction'
   | 'callerId'
   | 'campaignName'
   | 'wentTo'
@@ -55,6 +56,11 @@ const everyone = () => true;
 /** Every column, in the order the table shows them. */
 export const CALL_COLUMNS: readonly CallColumn[] = [
   { id: 'time', label: 'Time', canSee: everyone },
+  /*
+   * Inbound or outbound. The agency's and the agent's: a buyer or publisher
+   * only ever sees inbound traffic, so for them the column says nothing.
+   */
+  { id: 'direction', label: 'Direction', canSee: v => !v.isBuyer && !v.isPublisher },
   { id: 'callerId', label: 'Caller', canSee: everyone },
   { id: 'campaignName', label: 'Campaign', canSee: everyone },
   /*
@@ -106,6 +112,7 @@ export function columnRoleOf(viewer: CallsViewer): CallColumnRole {
  */
 export const OWNER_DEFAULT_COLUMNS: readonly CallColumnId[] = [
   'time',
+  'direction',
   'callerId',
   'campaignName',
   'wentTo',
@@ -123,6 +130,7 @@ export const OWNER_DEFAULT_COLUMNS: readonly CallColumnId[] = [
  */
 export const AGENT_DEFAULT_COLUMNS: readonly CallColumnId[] = [
   'time',
+  'direction',
   'callerId',
   'campaignName',
   'duration',
@@ -177,8 +185,8 @@ export function visibleColumnsFor(viewer: CallsViewer): CallColumn[] {
  * would otherwise keep a returning owner on the old table indefinitely.
  */
 export function columnStorageKey(role: CallColumnRole): string {
-  // v3: "Went to" joined the defaults and the Return column left them.
-  return `hopwhistle_calls_columns:v3:${role}`;
+  // v4: "Direction" joined the defaults for both roles.
+  return `hopwhistle_calls_columns:v4:${role}`;
 }
 
 // ── Status badges ────────────────────────────────────────────────────────────
@@ -297,6 +305,19 @@ export function answeredByOf(call: {
   if (call.agentName) return { name: call.agentName, kind: 'agent' };
   // "Masked" is the API withholding the buyer's name, not a name.
   if (call.buyerName && call.buyerName !== 'Masked') return { name: call.buyerName, kind: 'buyer' };
+  return null;
+}
+
+/**
+ * A call's direction as the Direction column reads it. Null when the row
+ * carries none, rendered as a dash rather than a guess.
+ */
+export function directionOf(call: {
+  direction?: string | null;
+}): { value: 'INBOUND' | 'OUTBOUND'; label: string } | null {
+  const value = call.direction?.toUpperCase();
+  if (value === 'INBOUND') return { value, label: 'Inbound' };
+  if (value === 'OUTBOUND') return { value, label: 'Outbound' };
   return null;
 }
 

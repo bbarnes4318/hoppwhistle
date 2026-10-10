@@ -122,6 +122,7 @@ describe('the call ledger per role', () => {
     await waitFor(() => {
       expect(headers()).toEqual([
         'Time',
+        'Direction',
         'Caller',
         'Campaign',
         'Went to',
@@ -218,6 +219,7 @@ describe('the call ledger per role', () => {
     await waitFor(() => {
       expect(headers()).toEqual([
         'Time',
+        'Direction',
         'Caller',
         'Campaign',
         'Duration',
@@ -231,7 +233,7 @@ describe('the call ledger per role', () => {
   it('shows an agent the Recording column even if their browser saved it switched off', async () => {
     roles = ['AGENT'];
     localStorage.setItem(
-      'hopwhistle_calls_columns:v3:agent',
+      'hopwhistle_calls_columns:v4:agent',
       JSON.stringify({ recording: false, campaignName: false })
     );
     rows = [{ ...baseCall, id: 'call-rec', primaryRecordingId: 'rec-1' }];

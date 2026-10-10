@@ -13,6 +13,8 @@ import {
   X,
   SlidersHorizontal,
   ListFilter,
+  PhoneIncoming,
+  PhoneOutgoing,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
@@ -83,6 +85,7 @@ import {
   columnRoleOf,
   columnStorageKey,
   defaultVisibleColumns,
+  directionOf,
   disputeBadge,
   dispositionTone,
   exportFilename,
@@ -1015,6 +1018,7 @@ export default function OperationsCallLogsPage() {
   /** Each column's cell classes, beside the one list of columns. */
   const cellClass: Record<CallColumnId, string> = {
     time: 't-data whitespace-nowrap text-ink',
+    direction: 'whitespace-nowrap text-ink-2',
     callerId: 't-data whitespace-nowrap text-ink',
     campaignName: 'max-w-[200px] truncate whitespace-nowrap text-ink-2',
     wentTo: 'max-w-[220px] whitespace-nowrap',
@@ -1042,6 +1046,17 @@ export default function OperationsCallLogsPage() {
     switch (col.id) {
       case 'time':
         return formatTableDateTime(call.createdAt);
+      case 'direction': {
+        const direction = directionOf(call);
+        if (!direction) return <span className="text-ink-3">—</span>;
+        const Icon = direction.value === 'OUTBOUND' ? PhoneOutgoing : PhoneIncoming;
+        return (
+          <span className="inline-flex items-center gap-1.5" data-direction={direction.value}>
+            <Icon className="h-3.5 w-3.5 text-ink-3" aria-hidden />
+            {direction.label}
+          </span>
+        );
+      }
       case 'callerId':
         return callerOf(call) ?? '—';
       case 'campaignName':
