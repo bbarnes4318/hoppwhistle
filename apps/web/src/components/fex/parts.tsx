@@ -15,7 +15,7 @@ import type { StatusTone } from '@/components/domain';
 import { cn } from '@/lib/utils';
 
 export const CONTROL =
-  'h-[38px] w-full min-w-0 rounded-control border border-rule-strong bg-surface px-3 text-sm font-medium text-ink placeholder:font-normal placeholder:text-ink-3 ' +
+  'h-[38px] w-full aria-[invalid=true]:border-dropped min-w-0 rounded-control border border-rule-strong bg-surface px-3 text-sm font-medium text-ink placeholder:font-normal placeholder:text-ink-3 ' +
   'transition-[border-color,box-shadow] duration-150 ease-out ne-motion hover:border-ink-3 ' +
   'focus-visible:border-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ' +
   'disabled:cursor-not-allowed disabled:bg-sunken disabled:text-ink-3 [@media(pointer:coarse)]:min-h-[44px]';
@@ -33,13 +33,14 @@ export function FromLeadTag(): JSX.Element {
  * only uppercase in the form.
  */
 export const FIELD_LABEL =
-  'mb-[5px] flex items-baseline text-[11px] font-medium leading-[14px] text-ink-2';
+  'mb-1 flex items-baseline text-[11.5px] font-semibold leading-[14px] text-ink-2';
 
 export function Field({
   label,
   htmlFor,
   fromLead,
   hint,
+  error,
   className,
   children,
 }: {
@@ -47,6 +48,8 @@ export function Field({
   htmlFor?: string;
   fromLead?: boolean;
   hint?: React.ReactNode;
+  /** Said right under the control, never in a banner somewhere else. */
+  error?: string | null;
   className?: string;
   children: React.ReactNode;
 }): JSX.Element {
@@ -57,7 +60,11 @@ export function Field({
         {fromLead ? <FromLeadTag /> : null}
       </label>
       {children}
-      {hint ? <p className="t-meta mt-1 text-ink-3">{hint}</p> : null}
+      {error ? (
+        <p className="mt-1 text-[11.5px] font-medium leading-4 text-dropped-ink">{error}</p>
+      ) : hint ? (
+        <p className="t-meta mt-1 text-ink-3">{hint}</p>
+      ) : null}
     </div>
   );
 }

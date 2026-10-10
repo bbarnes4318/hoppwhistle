@@ -7,6 +7,7 @@
  * quote is in flight, a medication's use answered from the banner, a used
  * quote posted once and handed on, and the application prefilled from it.
  */
+import type { QuoteLine } from '@hopwhistle/fex-engine/types';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,23 +70,24 @@ import QuotePage from '../(dashboard)/quote/page';
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-const line = (patch: Record<string, unknown> = {}) => ({
-  classCode: 'LEVEL',
-  classLabel: 'Level',
-  uwClass: 'LEVEL',
-  benefit: 'LEVEL',
-  db: null,
-  face: 10000,
-  premium: 41.18,
-  annual: 494.16,
-  mode: 'monthly',
-  modeLabel: 'Monthly',
-  basis: 'ANNUAL_PER_1000',
-  faceAdjusted: null,
-  premiumNote: null,
-  payPeriod: null,
-  ...patch,
-});
+const line = (patch: Record<string, unknown> = {}): QuoteLine =>
+  ({
+    classCode: 'LEVEL',
+    classLabel: 'Level',
+    uwClass: 'LEVEL',
+    benefit: 'LEVEL',
+    db: null,
+    face: 10000,
+    premium: 41.18,
+    annual: 494.16,
+    mode: 'monthly',
+    modeLabel: 'Monthly',
+    basis: 'ANNUAL_PER_1000',
+    faceAdjusted: null,
+    premiumNote: null,
+    payPeriod: null,
+    ...patch,
+  }) as unknown as QuoteLine;
 
 const result = (patch: Partial<FexResult> = {}): FexResult =>
   ({
@@ -272,22 +274,76 @@ const READY: QuoteDraft = {
   ageOrDob: { mode: 'age', age: '68' },
 };
 
-/** Open an intake section (one is open at a time), unless it already is. */
-const openSection = (name: string): void => {
-  const toggle = screen.getByRole('button', { name });
-  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
-};
-
 // ─── QuoteWorkspace ──────────────────────────────────────────────────────────
 
+/** The results list's rows, in order, by product id. */
+const rowIds = (): string[] =>
+  Array.from(document.querySelectorAll('[role="tabpanel"] li[data-product]')).map(
+    li => li.getAttribute('data-product') ?? ''
+  );
+
+const TRINITY = (patch: Partial<FexResult> = {}) =>
+  result({
+    productId: 'trinity_golden_eagle',
+    carrier: 'Trinity',
+    family: 'Family Benefit / Trinity',
+    product: 'Golden Eagle Final Expense',
+    best: line({ premium: 35.88 }),
+    ...patch,
+  });
+const GRADED = (patch: Partial<FexResult> = {}) =>
+  result({
+    productId: 'aetna_protection',
+    carrier: 'Aetna',
+    family: 'Aetna / Continental Life',
+    product: 'Protection Series Final Expense',
+    outcome: 'GRADED',
+    outcomeLabel: 'Graded',
+    best: line({ classCode: 'GRADED', classLabel: 'Graded', benefit: 'GRADED', premium: 52.1 }),
+    ...patch,
+  });
+const DECLINED = () =>
+  result({
+    productId: 'foresters_planright',
+    carrier: 'Foresters',
+    family: 'Foresters',
+    product: 'PlanRight Whole Life',
+    eligible: false,
+    outcome: 'DECLINE',
+    outcomeLabel: 'Declined',
+    best: null,
+    ineligibleReason: 'Insulin use before age 50',
+    reasons: [
+      {
+        kind: 'rule',
+        outcome: 'DECLINE',
+        text: 'Diabetes with insulin before age 50',
+        page: 4,
+        src: 'application',
+      },
+    ] as FexResult['reasons'],
+  });
+
 describe('QuoteWorkspace', () => {
+  it('shows every intake block open at once, with no accordion to work', () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    for (const name of ['Applicant', 'Coverage', 'Health', 'Medications'])
+      expect(screen.getByRole('heading', { name })).toBeTruthy();
+    // Every field is on screen: nothing to open first.
+    expect(valueOf(screen.getByLabelText(/^State/))).toBe('TN');
+    expect(valueOf(screen.getByLabelText(/^Age/))).toBe('68');
+    expect(screen.getByRole('radiogroup', { name: 'Quote by' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Add a condition' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Add a medication' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Applicant' })).toBeNull();
+  });
+
   it('sends one request per burst of edits', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
     await screen.findAllByText(/Living Promise/);
     const before = quotesPosted().length;
     expect(before).toBe(1);
 
-    openSection('Applicant');
     const age = screen.getByLabelText(/^Age/);
     fireEvent.change(age, { target: { value: '6' } });
     fireEvent.change(age, { target: { value: '69' } });
@@ -311,18 +367,19 @@ describe('QuoteWorkspace', () => {
     expect(link.getAttribute('href')).toBe('/account#quote-carriers');
   });
 
-  it('keeps the last results on screen, marked stale, while the next quote runs', async () => {
+  it('keeps the last results on screen, marked updating, while the next quote runs', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
     await screen.findAllByText(/Living Promise/);
+    expect(screen.getByText('Live quoting')).toBeTruthy();
 
     let release!: () => void;
     holdQuote = new Promise(r => (release = r));
-    openSection('Applicant');
     fireEvent.change(screen.getByLabelText(/^Age/), { target: { value: '71' } });
 
     await waitFor(() => expect(quotesPosted().length).toBe(2));
     expect(screen.getAllByText(/Living Promise/).length).toBeGreaterThan(0);
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.getByText('Updating quotes…')).toBeTruthy();
 
     await act(async () => {
       release();
@@ -331,7 +388,7 @@ describe('QuoteWorkspace', () => {
     await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
   });
 
-  it('asks what a medication is for, and re-quotes with the answer', async () => {
+  it("asks what a medication is for in the medication's own row, and re-quotes with it", async () => {
     quoteResults = () => {
       const answered = (
         quotesPosted().at(-1)?.body?.applicant as { meds?: Array<{ indication?: string }> }
@@ -350,69 +407,38 @@ describe('QuoteWorkspace', () => {
     };
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
 
-    const banner = await screen.findByText('Confirm what these are prescribed for');
-    const chip = await within(banner.closest('[role="alert"]') ?? document.body).findByRole(
-      'button',
-      {
-        name: 'Neuropathy',
-      }
-    );
-    fireEvent.click(chip);
+    const meds = screen.getByRole('list', { name: 'Selected medications' });
+    const question = await within(meds).findByRole('radiogroup', {
+      name: 'What gabapentin is prescribed for',
+    });
+    expect(within(meds).getByText(/strictest use it lists/)).toBeTruthy();
+    // Named in the readiness panel and on the Medications block, too.
+    expect(screen.getByText('Quoting on assumptions')).toBeTruthy();
+    expect(screen.getByText('1 to review')).toBeTruthy();
+    fireEvent.click(within(question).getByRole('radio', { name: 'Neuropathy' }));
 
     await waitFor(() => expect(quotesPosted().length).toBe(2));
     expect(quotesPosted()[1].body).toMatchObject({
       applicant: { meds: [{ drugId: 'gabapentin', indication: 'NEUROPATHY' }] },
     });
     await waitFor(() =>
-      expect(screen.queryByText('Confirm what these are prescribed for')).toBeNull()
+      expect(within(meds).queryByRole('radiogroup', { name: /prescribed for/ })).toBeNull()
     );
+    expect(within(meds).getByText(/For Neuropathy/)).toBeTruthy();
   });
 
-  it('keeps four sections, one open at a time, each showing its state', async () => {
-    quoteResults = () => [
-      result({
-        needsIndication: [
-          { drugId: 'gabapentin', name: 'gabapentin', options: ['NEUROPATHY', 'SEIZURES'] },
-        ],
-      }),
-    ];
-    const draft: QuoteDraft = {
-      ...READY,
-      meds: [{ key: 'm1', drugId: 'gabapentin', name: 'gabapentin', lastTakenMonthsAgo: 0 }],
-    };
-    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
-    for (const name of ['Applicant', 'Coverage', 'Health', 'Medications'])
-      expect(screen.getByRole('heading', { name })).toBeTruthy();
-    // The applicant is answered: its state, not its form. Health is open.
-    expect(screen.getByText('TN · Female · Age 68 · Non-tobacco')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Add a condition' })).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Add a medication' })).toBeNull();
-    // Closed, Medications still names what a carrier asked.
-    const meds = screen.getByRole('heading', { name: 'Medications' }).closest('section')!;
-    expect(await within(meds).findByText(/what is it for\?/)).toBeTruthy();
-    // Opened, the use is asked right in the medication's row.
-    openSection('Medications');
-    expect(screen.queryByRole('combobox', { name: 'Add a condition' })).toBeNull();
-    const select = within(meds).getByLabelText('What gabapentin is prescribed for');
-    fireEvent.change(select, { target: { value: 'NEUROPATHY' } });
-    await waitFor(() =>
-      expect(quotesPosted().at(-1)?.body).toMatchObject({
-        applicant: { meds: [{ drugId: 'gabapentin', indication: 'NEUROPATHY' }] },
-      })
-    );
-  });
-
-  it("opens a condition's questions the moment it is added, and returns to the list", async () => {
+  it("opens a condition's questions right under it, and folds back on Done", async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
     await screen.findAllByText(/Living Promise/);
     fireEvent.click(screen.getByRole('button', { name: 'Add Diabetes' }));
-    // The questions replace the list, with the cursor in the first one.
-    const questions = screen.getByRole('group', { name: 'Diabetes questions' });
+    // The questions open inside the condition's own row, cursor in the first.
+    const list = screen.getByRole('list', { name: 'Selected conditions' });
+    const questions = within(list).getByRole('group', { name: 'Diabetes questions' });
     const dx = within(questions).getByLabelText('Diagnosed');
     expect(document.activeElement).toBe(dx);
-    expect(screen.queryByRole('combobox', { name: 'Add a condition' })).toBeNull();
-    const health = screen.getByRole('heading', { name: 'Health' }).closest('section')!;
-    expect(within(health).getByText(/2 details to ask/)).toBeTruthy();
+    expect(within(questions).getByText(/2 details to ask/)).toBeTruthy();
+    // The search stays where it was, for the next condition.
+    expect(screen.getByRole('combobox', { name: 'Add a condition' })).toBeTruthy();
 
     fireEvent.change(dx, { target: { value: '18' } });
     await waitFor(() =>
@@ -421,10 +447,10 @@ describe('QuoteWorkspace', () => {
       })
     );
     fireEvent.click(within(questions).getByRole('button', { name: 'Done' }));
-    // Back on the list: Diabetes answered, the cursor in the search again.
-    const search = await screen.findByRole('combobox', { name: 'Add a condition' });
+    // Folded to one line, the cursor back in the search.
+    const search = screen.getByRole('combobox', { name: 'Add a condition' });
     await waitFor(() => expect(document.activeElement).toBe(search));
-    const list = screen.getByRole('list', { name: 'Selected conditions' });
+    expect(within(list).queryByRole('group')).toBeNull();
     expect(within(list).getByText(/Dx 1–2 yrs/)).toBeTruthy();
 
     // Reopened from its row, the answer is still there.
@@ -432,16 +458,15 @@ describe('QuoteWorkspace', () => {
     expect(valueOf(screen.getByLabelText('Diagnosed'))).toBe('18');
   });
 
-  it('names unanswered details above Get quotes, and each opens its question', async () => {
+  it('names unanswered details in the readiness panel, and each opens its question', async () => {
     const draft: QuoteDraft = {
       ...READY,
       conditions: [{ key: 'c1', code: 'SEIZURES', onMeds: false, detail: {} }],
     };
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={draft} />);
     await screen.findAllByText(/Living Promise/);
-    expect(screen.getByText(/Quoting on assumptions/)).toBeTruthy();
-    openSection('Coverage');
-    fireEvent.click(screen.getByRole('button', { name: 'Seizures / epilepsy' }));
+    expect(screen.getByText('Quoting on assumptions')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Seizures \/ epilepsy · / }));
     const questions = screen.getByRole('group', { name: 'Seizures / epilepsy questions' });
     expect(document.activeElement).toBe(within(questions).getByLabelText('Diagnosed'));
     expect(within(questions).getByLabelText('Last seizure')).toBeTruthy();
@@ -458,9 +483,11 @@ describe('QuoteWorkspace', () => {
         onUseQuote={onUseQuote}
       />
     );
-    // The first row is the best one, marked as such, with the carrier's logo.
+    // The first row is the recommendation, its reason said, with the carrier's logo.
     const [use] = await screen.findAllByRole('button', { name: 'Use Quote' });
     const row = use.closest('li')!;
+    expect(row.hasAttribute('data-recommended')).toBe(true);
+    expect(within(row).getByText('Recommended')).toBeTruthy();
     expect(within(row).getByText('Best price')).toBeTruthy();
     expect(row.querySelector('[data-carrier-logo="Mutual of Omaha"] img')).toBeTruthy();
     fireEvent.click(use);
@@ -482,35 +509,226 @@ describe('QuoteWorkspace', () => {
     expect(toasts.calls).toContainEqual(
       expect.objectContaining({ title: 'Quote saved — Mutual of Omaha Living Promise, $41.18/mo' })
     );
-    // The selected-quote bar, and the row's own button turned to "Selected".
-    const bar = await screen.findByRole('status');
+    // The selected quote, pinned, and the row's own button turned to "Selected".
+    const bar = await screen.findByRole('status', { name: 'Selected quote' });
     expect(within(bar).getByText('Selected')).toBeTruthy();
+    expect(within(bar).getByText('$41.18/mo')).toBeTruthy();
     expect(within(row).getByRole('button', { name: 'Selected' })).toBeTruthy();
+    // View details opens the chosen carrier's row.
+    fireEvent.click(within(bar).getByRole('button', { name: 'View details' }));
+    expect(
+      within(row)
+        .getByRole('button', { name: /Hide details/ })
+        .getAttribute('aria-expanded')
+    ).toBe('true');
+    // Change clears it.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Change' }));
+    expect(screen.queryByRole('status', { name: 'Selected quote' })).toBeNull();
   });
 
-  it('has a Get quotes button that names what is missing, then quotes', async () => {
+  it('lists every required field, marks it, and moves the cursor to the first', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Get quotes' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Needs state to quote.');
-    expect(document.activeElement?.id).toMatch(/-state$/);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('3 items required');
+    for (const name of ['State', 'Sex', 'Age (18–100)'])
+      expect(within(alert).getByRole('button', { name })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement?.id).toMatch(/-state$/));
+    expect(screen.getByLabelText(/^State/).getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getAllByText('Required to quote').length).toBeGreaterThan(0);
+    // Each missing item goes straight to its field.
+    fireEvent.click(within(alert).getByRole('button', { name: 'Age (18–100)' }));
+    await waitFor(() => expect(document.activeElement?.id).toMatch(/-age$/));
     expect(quotesPosted()).toHaveLength(0);
   });
 
-  it('re-runs the quote from Get quotes once the applicant is complete', async () => {
+  it('says it is ready, then live, and refreshes on request', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    expect(screen.getByText('Ready to quote')).toBeTruthy();
     await screen.findAllByText(/Living Promise/);
+    expect(screen.getByText('Live quoting')).toBeTruthy();
+    expect(screen.getByText(/^Updated /)).toBeTruthy();
     const before = quotesPosted().length;
-    fireEvent.click(screen.getByRole('button', { name: 'Get quotes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh quotes' }));
     await waitFor(() => expect(quotesPosted().length).toBe(before + 1));
   });
 
-  it('asks for the minimum before quoting anything', async () => {
-    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft()} />);
-    expect(
-      await screen.findByText(/^Enter state, sex, age and coverage, then press Get quotes/)
-    ).toBeTruthy();
+  it('asks for the minimum before quoting anything, in a compact pane', async () => {
+    const onOpenTab = vi.fn();
+    render(
+      <QuoteWorkspace
+        variant="page"
+        source="PAGE"
+        initialDraft={emptyDraft()}
+        onOpenTab={onOpenTab}
+      />
+    );
+    expect(await screen.findByRole('heading', { name: 'No quote yet' })).toBeTruthy();
+    expect(screen.getByText(/still needed/).parentElement?.textContent).toMatch(
+      /State, Sex, Age \(18–100\)/
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Search underwriting' }));
+    expect(onOpenTab).toHaveBeenCalledWith('conditions');
     await new Promise(r => setTimeout(r, 350));
     expect(quotesPosted()).toHaveLength(0);
+  });
+
+  it('shows full product names, one row shape, and a command bar of the figures', async () => {
+    // The API sends its natural order: lowest price first.
+    quoteResults = () => [TRINITY(), result(), GRADED(), DECLINED()];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    const summary = screen.getByRole('region', { name: 'Summary' });
+    expect(within(summary).getByRole('heading', { level: 2 }).textContent).toMatch(
+      /3 qualify\s*of 4 quoted/
+    );
+    const bestPrice = within(summary).getByText('Best price').parentElement!;
+    expect(bestPrice.textContent).toBe('Best price$35.88/mo');
+    // Lowest price first; every qualifying row the same component.
+    expect(rowIds()).toEqual(['trinity_golden_eagle', 'moo_living_promise', 'aetna_protection']);
+    const rows = document.querySelectorAll('[role="tabpanel"] li[data-product]');
+    expect(rows[0].hasAttribute('data-recommended')).toBe(true);
+    expect(rows[1].hasAttribute('data-recommended')).toBe(false);
+    // The tab counts.
+    expect(screen.getByRole('tab', { name: /Qualified\s*3/ }).getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect(screen.getByRole('tab', { name: /Declined\s*1/ })).toBeTruthy();
+  });
+
+  it('sorts, filters to level, searches, and shows the active filters', async () => {
+    quoteResults = () => [result(), TRINITY(), GRADED()];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'carrier' } });
+    expect(rowIds()).toEqual(['aetna_protection', 'trinity_golden_eagle', 'moo_living_promise']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Level only' }));
+    expect(rowIds()).not.toContain('aetna_protection');
+    const chip = screen.getByRole('button', { name: 'Remove filter: Level only' });
+
+    // Search is an icon until it is wanted.
+    fireEvent.click(screen.getByRole('button', { name: 'Search carriers or products' }));
+    fireEvent.change(
+      await screen.findByRole('searchbox', { name: 'Search carriers or products' }),
+      {
+        target: { value: 'golden' },
+      }
+    );
+    expect(rowIds()).toEqual(['trinity_golden_eagle']);
+
+    fireEvent.click(chip);
+    fireEvent.click(screen.getByRole('button', { name: /Remove filter: “golden”/ }));
+    expect(rowIds()).toHaveLength(3);
+  });
+
+  it('shows declines with their reason and source, in their own category', async () => {
+    quoteResults = () => [result(), DECLINED()];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    expect(screen.queryByText('PlanRight Whole Life')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: /Declined/ }));
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('PlanRight Whole Life')).toBeTruthy();
+    expect(within(panel).getByText('Insulin use before age 50')).toBeTruthy();
+    expect(within(panel).getByText(/Application\s+p\. 4/)).toBeTruthy();
+    // A decline cannot be used or compared.
+    expect(within(panel).queryByRole('button', { name: 'Use Quote' })).toBeNull();
+    // Opened, it says why it was declined.
+    fireEvent.click(within(panel).getByRole('button', { name: /Show details/ }));
+    expect(within(panel).getByRole('heading', { name: 'Why it was declined' })).toBeTruthy();
+  });
+
+  it('puts referrals and unconfirmed medications under Needs review', async () => {
+    quoteResults = () => [result(), TRINITY({ refer: true })];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    fireEvent.click(screen.getByRole('tab', { name: /Needs review\s*1/ }));
+    expect(rowIds()).toEqual(['trinity_golden_eagle']);
+    expect(
+      within(screen.getByRole('tabpanel')).getAllByText('Referral required').length
+    ).toBeGreaterThan(0);
+  });
+
+  it('compares carriers side by side from a pinned tray', async () => {
+    quoteResults = () => [result(), TRINITY(), GRADED()];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Add Family Benefit / Trinity Golden Eagle Final Expense to comparison',
+      })
+    );
+    const tray = screen.getByRole('region', { name: 'Comparison' });
+    expect(within(tray).getByRole('button', { name: 'Compare' }).hasAttribute('disabled')).toBe(
+      true
+    );
+    // C on a focused row adds it too.
+    const toggle = document.querySelector<HTMLElement>(
+      '[data-product="aetna_protection"] [data-row-toggle]'
+    )!;
+    fireEvent.keyDown(toggle, { key: 'c' });
+    expect(within(tray).getByText('2')).toBeTruthy();
+    fireEvent.click(within(tray).getByRole('button', { name: 'Compare' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Compare 2 carriers' });
+    // The lowest premium is marked as the winner of its row.
+    expect(within(dialog).getByText('Lowest')).toBeTruthy();
+    expect(within(dialog).getByText('Health outcome')).toBeTruthy();
+  });
+
+  it('says what changed after a health edit, carrier by carrier', async () => {
+    quoteResults = () => {
+      const conditions = (
+        quotesPosted().at(-1)?.body?.applicant as { conditions?: unknown[] } | undefined
+      )?.conditions;
+      return conditions?.length
+        ? [
+            GRADED({
+              productId: 'moo_living_promise',
+              family: 'Mutual of Omaha',
+              product: 'Living Promise',
+            }),
+            DECLINED(),
+          ]
+        : [
+            result(),
+            result({
+              ...DECLINED(),
+              eligible: true,
+              outcome: 'LEVEL',
+              best: line(),
+              ineligibleReason: undefined,
+              reasons: [],
+            }),
+          ];
+    };
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Diabetes' }));
+    const strip = await screen.findByText(/2 outcomes changed/);
+    expect(strip.parentElement?.textContent).toMatch(/after: Added Diabetes/);
+    const changes = strip.closest('div')!.parentElement!;
+    expect(within(changes).getByText('No longer qualifies')).toBeTruthy();
+    expect(within(changes).getByText('Graded')).toBeTruthy();
+    // And on the row itself.
+    expect(screen.getAllByText(/was Level/).length).toBeGreaterThan(0);
+  });
+
+  it('shows a localized error over the last good results', async () => {
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findAllByText(/Living Promise/);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(json({ error: { code: 'BOOM', message: 'The engine is down' } }, 500))
+      )
+    );
+    fireEvent.change(screen.getByLabelText(/^Age/), { target: { value: '72' } });
+    expect(await screen.findByText('Quotes could not refresh.')).toBeTruthy();
+    expect(screen.getByText(/Showing results from/)).toBeTruthy();
+    expect(screen.getAllByText(/Living Promise/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Retry/ })).toBeTruthy();
   });
 });
 

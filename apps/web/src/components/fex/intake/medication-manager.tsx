@@ -2,13 +2,14 @@
 
 /**
  * Medications: the same shape as Health -- a search over a list, one line
- * per medication, and one medication's questions in place of the list.
+ * per medication, and a medication's questions opening under its own row.
  *
- * A medication with several uses opens its "prescribed for" question the
- * moment it is added. One a carrier asks about later (the quote says so)
- * asks right in its row, so the answer is never further than the line the
- * agent is reading. Each row says what the drug is for when the data says
- * it, and whether that condition is on the Health list.
+ * "What is it prescribed for?" is asked AT the medication, never in a banner
+ * detached from it: a drug with several uses asks the moment it is added,
+ * and one a carrier asks about later (the quote says so) asks in its row as
+ * one-tap answers, with what the carriers do until it is answered. Each row
+ * says what the drug is for when the data says it, and whether that
+ * condition is on the Health list.
  */
 
 import { MED_LAST_TAKEN_BUCKETS } from '@hopwhistle/fex-engine/catalog';
@@ -29,7 +30,7 @@ import { cn } from '@/lib/utils';
 import { Combobox, type ComboOption } from '../combobox';
 import { bucketFrom, bucketValue, Field, FOCUS, NativeSelect, shortLabel } from '../parts';
 
-import { EditorBar, ItemRow } from './items';
+import { ItemRow } from './items';
 
 /** The id of the medication search box, for the workspace's Alt+M. */
 export const medsSearchId = (idPrefix: string): string => `${idPrefix}-meds`;
@@ -148,10 +149,19 @@ export function MedicationManager({
     else setFlash(key);
   };
 
-  if (open) {
-    return <MedicationEditor key={open.key} ctx={ctx} med={open} onBack={() => onItem(null)} />;
-  }
-  return <MedicationList ctx={ctx} draft={draft} flash={flash} onAdd={add} onEdit={onItem} />;
+  return (
+    <MedicationList
+      ctx={ctx}
+      draft={draft}
+      flash={flash}
+      onAdd={add}
+      openKey={open?.key ?? null}
+      onEdit={key => onItem(item === key ? null : key)}
+      renderEditor={med => (
+        <MedicationEditor key={med.key} ctx={ctx} med={med} onBack={() => onItem(null)} />
+      )}
+    />
+  );
 }
 
 function MedicationList({
@@ -159,13 +169,17 @@ function MedicationList({
   draft,
   flash,
   onAdd,
+  openKey,
   onEdit,
+  renderEditor,
 }: {
   ctx: MedContext;
   draft: QuoteDraft;
   flash: string | null;
   onAdd: (hit: FexDrugHit) => void;
+  openKey: string | null;
   onEdit: (key: string) => void;
+  renderEditor: (med: DraftMed) => React.ReactNode;
 }): JSX.Element {
   const { idPrefix, dispatch, needsIndication, conditionLabel } = ctx;
   const [query, setQuery] = React.useState('');
@@ -222,6 +236,7 @@ function MedicationList({
           {draft.meds.map(med => {
             const asked = needsIndication.get(med.drugId);
             const needsUse = medNeedsUse(med, asked, conditionLabel);
+            const isOpen = openKey === med.key;
             return (
               <ItemRow
                 key={med.key}
@@ -229,27 +244,36 @@ function MedicationList({
                 status={needsUse ? 'attention' : 'complete'}
                 title={med.name}
                 capitalize
-                line={needsUse ? 'What is it prescribed for?' : <MedFacts ctx={ctx} med={med} />}
+                line={
+                  needsUse ? (
+                    <>
+                      {med.drugClass ? (
+                        <span className="text-ink-2">{med.drugClass} · </span>
+                      ) : null}
+                      What is it prescribed for?
+                    </>
+                  ) : (
+                    <MedFacts ctx={ctx} med={med} />
+                  )
+                }
                 action={needsUse ? 'Answer' : 'Edit'}
+                open={isOpen}
+                editor={isOpen ? renderEditor(med) : null}
                 onOpen={() => onEdit(med.key)}
                 removeLabel={`Remove ${med.name}`}
                 onRemove={() => dispatch({ type: 'removeMed', key: med.key })}
               >
-                {needsUse ? (
-                  // Asked by the quote after it was added: answered right here.
-                  <div className="pb-2 pl-9 pr-9">
-                    <UseSelect ctx={ctx} med={med} id={`${idPrefix}-${med.key}-use-inline`} />
+                {needsUse && !isOpen ? (
+                  // Asked by the quote (or the drug has several uses): answered right here.
+                  <div className="pb-2.5 pl-9 pr-3">
+                    <UseChoices ctx={ctx} med={med} />
                   </div>
                 ) : null}
               </ItemRow>
             );
           })}
         </ul>
-      ) : (
-        <p className="text-[12.5px] text-ink-3">
-          No medications added. Search by brand or generic.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -279,6 +303,50 @@ function MedFacts({ ctx, med }: { ctx: MedContext; med: DraftMed }): JSX.Element
         </React.Fragment>
       ))}
     </>
+  );
+}
+
+/**
+ * "What is it prescribed for?" as one-tap answers in the medication's row,
+ * with what the carriers do until it is answered.
+ */
+function UseChoices({ ctx, med }: { ctx: MedContext; med: DraftMed }): JSX.Element {
+  const options = medUseOptions(med, ctx.needsIndication.get(med.drugId), ctx.conditionLabel);
+  return (
+    <div>
+      <div
+        role="radiogroup"
+        aria-label={`What ${med.name} is prescribed for`}
+        className="flex flex-wrap gap-1.5"
+      >
+        {options.map(o => {
+          const on = med.indication === o.code;
+          return (
+            <button
+              key={o.code}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() =>
+                ctx.dispatch({ type: 'setIndication', drugId: med.drugId, indication: o.code })
+              }
+              className={cn(
+                'inline-flex h-7 items-center rounded-control border px-2.5 text-[12.5px] font-medium transition-colors duration-150 ne-motion [@media(pointer:coarse)]:min-h-[36px]',
+                on
+                  ? 'border-brand-strong bg-brand-strong text-white'
+                  : 'border-rule-strong bg-surface text-ink hover:border-ink-3',
+                FOCUS
+              )}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[11.5px] leading-4 text-ink-2">
+        Until answered, each carrier applies the strictest use it lists.
+      </p>
+    </div>
   );
 }
 
@@ -339,12 +407,15 @@ function MedicationEditor({
   const forCodes = medConditionCodes(med);
   const missingOnHealth = forCodes.filter(code => !onHealth.has(code));
 
+  const rootRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
+    rootRef.current?.scrollIntoView?.({ block: 'nearest' });
     (useRef.current ?? takenRef.current)?.focus();
   }, []);
 
   return (
     <div
+      ref={rootRef}
       role="group"
       aria-label={`${med.name} questions`}
       onKeyDown={e => {
@@ -354,20 +425,7 @@ function MedicationEditor({
         }
       }}
     >
-      <EditorBar
-        backLabel="Medications"
-        title={med.name}
-        capitalize
-        onBack={onBack}
-        removeLabel="Remove"
-        onRemove={() => {
-          dispatch({ type: 'removeMed', key: med.key });
-          onBack();
-        }}
-      />
-      {med.drugClass ? (
-        <p className="-mt-1 mb-2.5 text-[12px] text-ink-2">{med.drugClass}</p>
-      ) : null}
+      {med.drugClass ? <p className="mb-2 text-[12px] text-ink-2">{med.drugClass}</p> : null}
 
       <div className="grid grid-cols-2 gap-x-2.5 gap-y-2.5">
         {askUse ? (
@@ -435,7 +493,20 @@ function MedicationEditor({
         </div>
       ) : null}
 
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            dispatch({ type: 'removeMed', key: med.key });
+            onBack();
+          }}
+          className={cn(
+            'inline-flex h-8 items-center gap-1 rounded-control px-2 text-[12.5px] font-medium text-ink-2 hover:bg-dropped-tint hover:text-dropped-ink',
+            FOCUS
+          )}
+        >
+          Remove
+        </button>
         <button
           type="button"
           onClick={onBack}

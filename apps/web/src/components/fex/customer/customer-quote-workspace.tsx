@@ -350,7 +350,7 @@ export function CustomerQuoteWorkspace({
           />
         ) : (
           <div
-            className="grid h-full gap-3 lg:grid-cols-[minmax(330px,352px)_1fr] xl:grid-cols-[minmax(368px,392px)_1fr]"
+            className="grid h-full gap-3 lg:grid-cols-[minmax(392px,416px)_1fr] xl:grid-cols-[452px_1fr]"
             aria-busy="true"
             aria-label="Loading the customer"
           >

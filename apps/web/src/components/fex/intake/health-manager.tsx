@@ -5,13 +5,14 @@
  *
  * ── Picking a condition IS answering its questions ──────────────────────────
  *
- * The editor is a list or one condition, never both. Adding a condition --
- * from the search or a common-condition chip -- replaces the list with that
- * condition's questions, in the same place the agent was looking, with the
- * cursor in the first one. Done (or Escape) goes back to the list with the
- * cursor in the search for the next answer. Nothing a pick asks for ever
- * appears below the fold, and nothing grows downward as conditions pile up:
- * each is one line once its questions are answered.
+ * Search (or tap a common condition), and that condition's row opens with
+ * its questions directly under it -- in the same place the agent was
+ * looking, cursor in the first one, opened into view. Done (or Escape) folds
+ * it back to one line ("Dx 1–2 yrs · Treated now") with the cursor in the
+ * search for the next answer. A condition with unanswered questions says so
+ * on its own row ("2 answers needed · Answer"), and only that condition's
+ * questions open when it is clicked. One open at a time, so nothing grows
+ * downward as conditions pile up.
  */
 
 import {
@@ -50,7 +51,7 @@ import {
 } from '../parts';
 
 import { digitsOnly } from './applicant-editor';
-import { EditorBar, ItemRow } from './items';
+import { ItemRow } from './items';
 
 export interface ConditionMeta {
   code: string;
@@ -124,20 +125,6 @@ export function HealthManager({
     onItem(key);
   };
 
-  if (open) {
-    return (
-      <ConditionEditor
-        key={open.key}
-        idPrefix={idPrefix}
-        condition={open}
-        label={labelOf(open.code)}
-        meds={draft.meds.filter(m => medConditionCodes(m).includes(open.code)).map(m => m.name)}
-        dispatch={dispatch}
-        onBack={() => onItem(null)}
-      />
-    );
-  }
-
   return (
     <ConditionList
       idPrefix={idPrefix}
@@ -147,7 +134,19 @@ export function HealthManager({
       byCode={byCode}
       flash={flash}
       onAdd={add}
-      onEdit={onItem}
+      openKey={open?.key ?? null}
+      onEdit={key => onItem(item === key ? null : key)}
+      renderEditor={c => (
+        <ConditionEditor
+          key={c.key}
+          idPrefix={idPrefix}
+          condition={c}
+          label={labelOf(c.code)}
+          meds={draft.meds.filter(m => medConditionCodes(m).includes(c.code)).map(m => m.name)}
+          dispatch={dispatch}
+          onBack={() => onItem(null)}
+        />
+      )}
     />
   );
 }
@@ -162,7 +161,9 @@ function ConditionList({
   byCode,
   flash,
   onAdd,
+  openKey,
   onEdit,
+  renderEditor,
 }: {
   idPrefix: string;
   draft: QuoteDraft;
@@ -171,7 +172,10 @@ function ConditionList({
   byCode: Map<string, ConditionMeta>;
   flash: string | null;
   onAdd: (code: string) => void;
+  /** The condition whose questions are open under its row. */
+  openKey: string | null;
   onEdit: (key: string) => void;
+  renderEditor: (condition: DraftCondition) => React.ReactNode;
 }): JSX.Element {
   const [query, setQuery] = React.useState('');
   const added = React.useMemo(() => new Set(draft.conditions.map(c => c.code)), [draft.conditions]);
@@ -285,8 +289,14 @@ function ConditionList({
                 flash={flash === c.key}
                 status={complete ? 'complete' : 'attention'}
                 title={label}
-                line={complete ? facts.join(' · ') || 'Answered' : detailsNeededText(c)}
+                line={
+                  complete
+                    ? facts.join(' · ') || 'Answered'
+                    : `${detailsNeededText(c)}${facts.length ? ` · ${facts.join(' · ')}` : ''}`
+                }
                 action={complete ? 'Edit' : 'Answer'}
+                open={openKey === c.key}
+                editor={openKey === c.key ? renderEditor(c) : null}
                 onOpen={() => onEdit(c.key)}
                 removeLabel={`Remove ${label}`}
                 onRemove={() => dispatch({ type: 'removeCondition', key: c.key })}
@@ -294,11 +304,7 @@ function ConditionList({
             );
           })}
         </ul>
-      ) : (
-        <p className="text-[12.5px] text-ink-3">
-          No conditions added. Search, or tap a common one.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -328,8 +334,10 @@ function ConditionEditor({
   const open = unansweredQuestions(condition);
   const firstRef = React.useRef<HTMLSelectElement>(null);
 
-  // The questions come to the agent: the cursor is in the first one.
+  // The questions come to the agent: opened into view, the cursor in the first one.
+  const rootRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
+    rootRef.current?.scrollIntoView?.({ block: 'nearest' });
     firstRef.current?.focus();
   }, []);
 
@@ -340,8 +348,10 @@ function ConditionEditor({
 
   return (
     <div
+      ref={rootRef}
       role="group"
       aria-label={`${label} questions`}
+      className="scroll-mb-24"
       onKeyDown={e => {
         if (e.key === 'Escape' && !e.defaultPrevented) {
           e.preventDefault();
@@ -349,17 +359,6 @@ function ConditionEditor({
         }
       }}
     >
-      <EditorBar
-        backLabel="Conditions"
-        title={label}
-        onBack={onBack}
-        removeLabel="Remove"
-        onRemove={() => {
-          dispatch({ type: 'removeCondition', key: condition.key });
-          onBack();
-        }}
-      />
-
       <p
         aria-live="polite"
         className={cn(
@@ -447,7 +446,20 @@ function ConditionEditor({
         lets each carrier assume.
       </p>
 
-      <div className="mt-3 flex items-center justify-end gap-2">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            dispatch({ type: 'removeCondition', key: condition.key });
+            onBack();
+          }}
+          className={cn(
+            'inline-flex h-8 items-center gap-1 rounded-control px-2 text-[12.5px] font-medium text-ink-2 hover:bg-dropped-tint hover:text-dropped-ink',
+            FOCUS
+          )}
+        >
+          Remove
+        </button>
         <button
           type="button"
           onClick={done}

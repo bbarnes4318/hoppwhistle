@@ -83,7 +83,12 @@ export default function QuotePage(): JSX.Element {
   const tabList = (
     <TabsList
       aria-label="Quote sections"
-      className={cn(docked ? 'h-full gap-6 border-b-0' : 'gap-6')}
+      // Docked in the topbar the list is exactly the bar's height: no
+      // overflow in either direction, so no scrollbar (or its arrow handles)
+      // is ever drawn beside the tabs.
+      className={cn(
+        docked ? 'h-full gap-6 overflow-visible border-b-0' : 'gap-6 overflow-y-hidden'
+      )}
     >
       {barSections.map((s, i) => {
         const Icon = s.key === 'insights' ? BarChart3 : null;
@@ -95,7 +100,7 @@ export default function QuotePage(): JSX.Element {
             <TabsTrigger
               value={s.key}
               className={cn(
-                docked ? 'h-full' : 'h-10',
+                docked ? 'mb-0 h-full' : 'h-10',
                 s.secondary
                   ? 'gap-1.5 text-[12.5px] text-ink-3 data-[state=active]:text-ink'
                   : 'text-[13.5px]'
@@ -129,7 +134,7 @@ export default function QuotePage(): JSX.Element {
           value="quote"
           className={cn('w-full max-w-[1600px] lg:min-h-0 lg:flex-1', docked ? 'mt-0' : 'mt-3')}
         >
-          <QuoteTab />
+          <QuoteTab onOpenTab={choose} />
         </TabsContent>
         <TabsContent value="history" className={SCROLLING_TAB}>
           <QuoteHistory />
@@ -184,20 +189,25 @@ function UnderwritingTab({
   );
 }
 
-function QuoteTab(): JSX.Element {
+function QuoteTab({ onOpenTab }: { onOpenTab: (tab: QuoteTabKey) => void }): JSX.Element {
   const { settings, loading } = useFexSettings();
   if (loading && !settings) {
     return (
       <div
-        className="grid h-full gap-3 lg:grid-cols-[minmax(330px,352px)_1fr] xl:grid-cols-[minmax(368px,392px)_1fr]"
+        className="grid h-full gap-3 lg:grid-cols-[minmax(392px,416px)_1fr] xl:grid-cols-[452px_1fr]"
         aria-busy="true"
       >
-        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-[560px] w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
   }
   return (
-    <QuoteWorkspace variant="page" source="PAGE" initialDraft={emptyDraft(settings?.agency)} />
+    <QuoteWorkspace
+      variant="page"
+      source="PAGE"
+      initialDraft={emptyDraft(settings?.agency)}
+      onOpenTab={onOpenTab}
+    />
   );
 }

@@ -50,6 +50,16 @@ export const MISSING_TEXT: Record<string, string> = {
   budget: 'Needs a monthly budget',
 };
 
+/** A missing field by its name, for the readiness list ("State", "Face amount"). */
+export const MISSING_LABEL: Record<string, string> = {
+  state: 'State',
+  sex: 'Sex',
+  age: 'Age (18–100)',
+  dob: 'Date of birth',
+  face: 'Face amount',
+  budget: 'Monthly budget',
+};
+
 /** The section a missing field lives in. */
 export function sectionOfMissing(field: string): IntakeSection {
   return field === 'face' || field === 'budget' ? 'coverage' : 'applicant';

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The quoter: intake on the left, every carrier's answer on the right.
+ * The quoter: an insurance decision workstation.
  *
  * One component, four homes -- the Quote page, the drawer over a live call,
  * the call-center console's Quote tab, and a CRM customer's own quote
@@ -14,35 +14,34 @@
  * handed: `insuranceLeadId` is optional everywhere, and the server decides
  * whether a saved quote may be filed on that customer.
  *
+ * ── What is on screen ────────────────────────────────────────────────────────
+ *
+ *   intake (left)     every answer, open: applicant, coverage, health,
+ *                     medications; then whether it can quote, and the action
+ *   results (right)   a command bar -- how many qualify, the prices that
+ *                     matter, the categories (qualified, needs review,
+ *                     declined), sort, filter and search -- pinned over one
+ *                     dense list with column headings; what the last edit
+ *                     changed, said carrier by carrier; the comparison tray
+ *                     and the selected quote pinned at the foot
+ *
  * ── Layout follows the space it is given ─────────────────────────────────────
  *
  * The workspace is a size container, and its layout is decided by its OWN
  * width, not the window's: the same code is a full-screen page, a 1180px
  * drawer and a console column. From 900px wide it is two columns that each
  * scroll on their own and the whole never scrolls; below that the results
- * lead and the applicant folds to one line with an Edit button.
+ * lead, and the applicant is a one-line snapshot whose parts open the intake
+ * at that part.
  */
 
 import { BENEFIT_LABEL } from '@hopwhistle/fex-engine/catalog';
 import type { QuoteLine } from '@hopwhistle/fex-engine/types';
-import {
-  ArrowDown,
-  Calculator,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  HelpCircle,
-  Pencil,
-  RefreshCw,
-  SlidersHorizontal,
-} from 'lucide-react';
-import Link from 'next/link';
+import { ArrowDown, Pencil, RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
-import { Notice, Panel } from '@/components/domain';
+import { Notice } from '@/components/domain';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/use-toast';
 import { useQuoteSession } from '@/contexts/quote-session-context';
 import { useAuth } from '@/hooks/use-auth';
@@ -60,22 +59,45 @@ import {
   ageFromDob,
   draftReducer,
   emptyDraft,
+  missingFieldsForQuote,
   toApplicant,
   type QuoteDraft,
 } from '@/lib/fex/draft';
+import { describeDraftChange } from '@/lib/fex/draft-diff';
+import {
+  applicantSummary,
+  coverageSummary,
+  MISSING_LABEL,
+  medShortName,
+  type IntakeSection,
+} from '@/lib/fex/intake-status';
 import {
   diffOutcomes,
   outcomeMap,
   type CarrierOutcome,
   type OutcomeChange,
 } from '@/lib/fex/outcome-diff';
+import {
+  DEFAULT_FILTERS,
+  groupResults,
+  type ResultCategory,
+  type ResultFilters,
+  type SortKey,
+} from '@/lib/fex/results-view';
 import { cn } from '@/lib/utils';
 
 import { ComparePanel, CompareTray } from './compare-panel';
-import { CheckRow, FOCUS, shortLabel } from './parts';
-import { QuoteIntake, type QuoteIntakeHandle } from './quote-intake';
-import { ResultCard } from './result-card';
-import { SelectedQuoteBar } from './result-row';
+import { FOCUS, shortLabel } from './parts';
+import { QuoteIntake, type LiveState, type QuoteIntakeHandle } from './quote-intake';
+import { ResultRow, SelectedQuoteBar } from './result-row';
+import {
+  ChangesStrip,
+  ColumnHeadings,
+  LoadingRows,
+  PreQuotePane,
+  ResultsBar,
+  ShortcutList,
+} from './results-parts';
 
 export interface QuoteWorkspaceProps {
   variant: 'page' | 'drawer' | 'embedded';
@@ -91,11 +113,11 @@ export interface QuoteWorkspaceProps {
    */
   sessionKey?: string | null;
   onUseQuote?: (selection: FexSelection) => void;
-  /** The selected-quote bar's primary action (the console: open the disposition). */
+  /** The selected quote's primary action (the console: open the disposition). */
   onStartApplication?: () => void;
-  /** The selected-quote bar's primary action label ("Start application"). */
+  /** The selected quote's primary action label ("Start application"). */
   startLabel?: string;
-  /** Shown in the selected-quote bar instead of a Start button. */
+  /** Shown with the selected quote instead of a Start button. */
   selectedNote?: string;
   /** Every edit to the draft, for a host that shows something about it. */
   onDraftChange?: (draft: QuoteDraft) => void;
@@ -105,9 +127,9 @@ export interface QuoteWorkspaceProps {
   savedWhere?: string;
   /** What "New quote" starts from. Default: an empty draft. A customer's: their record. */
   resetDraft?: () => QuoteDraft;
+  /** The Quote page's other sections, offered before a quote ("Search underwriting"). */
+  onOpenTab?: (tab: 'conditions' | 'history' | 'carriers') => void;
 }
-
-type SortKey = 'price' | 'face';
 
 /** How many carriers fit side by side in the comparison. */
 const COMPARE_MAX = 4;
@@ -129,26 +151,6 @@ export function quoteSummaryText(
   ].join('\n');
 }
 
-/** "TN · F · 68 · Non-tobacco · $10,000 · 2 conditions": the applicant in a line. */
-function applicantLine(draft: QuoteDraft, age: number | null): string {
-  const parts: string[] = [];
-  if (draft.state) parts.push(draft.state);
-  if (draft.sex) parts.push(draft.sex);
-  if (age !== null) parts.push(String(age));
-  if (draft.tobacco !== null) parts.push(draft.tobacco ? 'Tobacco' : 'Non-tobacco');
-  if (draft.heightFt && draft.weightLb)
-    parts.push(`${draft.heightFt}'${draft.heightIn || 0}" ${draft.weightLb} lb`);
-  if (draft.coverage.mode === 'face' && draft.coverage.face)
-    parts.push(wholeDollars(Number(draft.coverage.face)));
-  if (draft.coverage.mode === 'budget' && draft.coverage.budget)
-    parts.push(`${money(Number(draft.coverage.budget))}/mo budget`);
-  if (draft.conditions.length)
-    parts.push(`${draft.conditions.length} condition${draft.conditions.length === 1 ? '' : 's'}`);
-  if (draft.meds.length)
-    parts.push(`${draft.meds.length} med${draft.meds.length === 1 ? '' : 's'}`);
-  return parts.join(' · ');
-}
-
 export function QuoteWorkspace({
   variant,
   initialDraft,
@@ -165,6 +167,7 @@ export function QuoteWorkspace({
   onSaved,
   savedWhere = 'It is in History.',
   resetDraft,
+  onOpenTab,
 }: QuoteWorkspaceProps): JSX.Element {
   const session = useQuoteSession();
   const { isPlatformAdmin } = useAuth();
@@ -191,25 +194,22 @@ export function QuoteWorkspace({
     sessionKey ? session?.setSelection(sessionKey, next) : setLocalSelection(next);
 
   const [sort, setSort] = React.useState<SortKey | null>(null);
-  const [levelOnly, setLevelOnly] = React.useState(false);
-  const [hideStale, setHideStale] = React.useState(false);
-  const [showNotAppointed, setShowNotAppointed] = React.useState(false);
-  const [showDeclined, setShowDeclined] = React.useState(false);
+  const [filters, setFilters] = React.useState<ResultFilters>(DEFAULT_FILTERS);
+  const [category, setCategory] = React.useState<ResultCategory>('qualified');
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [compare, setCompare] = React.useState<string[]>([]);
   const [compareOpen, setCompareOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const resultsRef = React.useRef<HTMLElement>(null);
-  const bannerRef = React.useRef<HTMLDivElement>(null);
-  const declinedRef = React.useRef<HTMLDivElement>(null);
+  const intakeRef = React.useRef<QuoteIntakeHandle>(null);
 
   // Narrow (below the two-column width): the results lead and the applicant
-  // folds to a line. Open to start with only when there is nothing to quote.
+  // folds to a snapshot. Open to start with only when there is nothing to quote.
   const [editing, setEditing] = React.useState(() => !toApplicant(draft));
 
-  const effectiveSort: SortKey = sort ?? (draft.coverage.mode === 'budget' ? 'face' : 'price');
-  const apiOrder = sort === null;
+  const naturalSort: SortKey = draft.coverage.mode === 'budget' ? 'face' : 'price';
+  const effectiveSort: SortKey = sort ?? naturalSort;
 
   const results = React.useMemo(() => quote.data?.results ?? [], [quote.data]);
   const accendoAppointed =
@@ -217,30 +217,49 @@ export function QuoteWorkspace({
     results.find(r => r.productId === 'accendo_final_expense')?.appointed ??
     false;
 
+  const conditionLabel = React.useCallback(
+    (code: string) => catalog?.conditions.find(c => c.code === code)?.label ?? code,
+    [catalog]
+  );
+
   /*
-   * What the last edit did to each carrier's answer. Compared response to
-   * response, off the engine's own results (see outcome-diff.ts); a new quote
-   * starts the comparison over.
+   * What the last edit did to each carrier's answer, compared response to
+   * response off the engine's own results (see outcome-diff.ts), and what the
+   * agent changed in between (draft-diff.ts). A new quote starts it over.
    */
-  const previousOutcomes = React.useRef<Map<string, CarrierOutcome> | null>(null);
-  const [changes, setChanges] = React.useState<OutcomeChange[]>([]);
+  const draftRef = React.useRef(draft);
+  draftRef.current = draft;
+  const previous = React.useRef<{
+    outcomes: Map<string, CarrierOutcome>;
+    draft: QuoteDraft;
+  } | null>(null);
+  const [changes, setChanges] = React.useState<{ list: OutcomeChange[]; trigger: string[] }>({
+    list: [],
+    trigger: [],
+  });
   React.useEffect(() => {
     if (!quote.data) return;
     const next = quote.data.results;
-    setChanges(previousOutcomes.current ? diffOutcomes(previousOutcomes.current, next) : []);
-    previousOutcomes.current = outcomeMap(next);
-  }, [quote.data]);
-  const changeById = React.useMemo(() => new Map(changes.map(c => [c.productId, c])), [changes]);
+    const was = previous.current;
+    const list = was ? diffOutcomes(was.outcomes, next) : [];
+    setChanges({
+      list,
+      trigger:
+        was && list.length ? describeDraftChange(was.draft, draftRef.current, conditionLabel) : [],
+    });
+    previous.current = { outcomes: outcomeMap(next), draft: draftRef.current };
+  }, [quote.data, conditionLabel]);
+  const changeById = React.useMemo(
+    () => new Map(changes.list.map(c => [c.productId, c])),
+    [changes.list]
+  );
 
+  /** Drug ids a carrier asked about, with the uses offered: asked in the medication's row. */
   const needsIndication = React.useMemo(() => {
-    const map = new Map<string, { name: string; options: string[] }>();
+    const map = new Map<string, string[]>();
     for (const r of results) {
       for (const n of r.needsIndication) {
-        const prev = map.get(n.drugId);
-        map.set(n.drugId, {
-          name: n.name,
-          options: [...new Set([...(prev?.options ?? []), ...n.options])],
-        });
+        map.set(n.drugId, [...new Set([...(map.get(n.drugId) ?? []), ...n.options])]);
       }
     }
     // Answered on the draft already: the next quote will drop it.
@@ -248,36 +267,10 @@ export function QuoteWorkspace({
     return map;
   }, [results, draft.meds]);
 
-  const groups = React.useMemo(() => {
-    const keep = (r: FexResult) =>
-      (!levelOnly || r.best?.benefit === 'LEVEL') &&
-      (!hideStale || r.ratesStatus !== 'STALE_VERIFY');
-    const order = (list: FexResult[]) => {
-      if (apiOrder) return list;
-      return [...list].sort((a, b) =>
-        effectiveSort === 'face'
-          ? (b.best?.face ?? 0) - (a.best?.face ?? 0)
-          : (a.best?.premium ?? Infinity) - (b.best?.premium ?? Infinity)
-      );
-    };
-    const eligible = results.filter(r => r.eligible && keep(r));
-    return {
-      qualifies: order(eligible.filter(r => r.appointed && r.uwLoaded)),
-      priceOnly: order(eligible.filter(r => r.appointed && !r.uwLoaded)),
-      notAppointed: order(eligible.filter(r => !r.appointed)),
-      declined: results.filter(r => !r.eligible && (r.appointed || showNotAppointed)),
-    };
-  }, [results, levelOnly, hideStale, apiOrder, effectiveSort, showNotAppointed]);
-
-  const lowestLevel = groups.qualifies
-    .filter(r => r.best?.benefit === 'LEVEL' && r.best.premium != null)
-    .reduce<
-      number | null
-    >((min, r) => (min === null ? r.best!.premium! : Math.min(min, r.best!.premium!)), null);
-  const lowestAny = groups.qualifies
-    .map(r => r.best?.premium)
-    .filter((p): p is number => p != null)
-    .reduce<number | null>((min, p) => (min === null ? p : Math.min(min, p)), null);
+  const groups = React.useMemo(
+    () => groupResults(results, filters, sort),
+    [results, filters, sort]
+  );
 
   const age =
     draft.ageOrDob.mode === 'age'
@@ -357,7 +350,7 @@ export function QuoteWorkspace({
           : [...list, productId]
     );
   }, []);
-  // A carrier that leaves the results (a filter, a re-quote) leaves the comparison.
+  // A carrier that leaves the results (a re-quote) leaves the comparison.
   const compared = React.useMemo(
     () =>
       compare
@@ -374,12 +367,40 @@ export function QuoteWorkspace({
    */
   const healthSubject = React.useMemo(() => {
     if (draft.conditions.length !== 1 || draft.meds.length) return null;
-    const code = draft.conditions[0].code;
-    const label = catalog?.conditions.find(c => c.code === code)?.label;
+    const label = catalog?.conditions.find(c => c.code === draft.conditions[0].code)?.label;
     return label ? shortLabel(label) : null;
   }, [draft.conditions, draft.meds, catalog]);
 
-  const rowProps = (r: FexResult, priceOnly = false) => ({
+  // ── The recommendation, and the labels the figures bear out ──────────────
+  const maxFace = groups.qualified.reduce((max, r) => Math.max(max, r.best?.face ?? 0), 0);
+  const recommendedId = React.useMemo(() => {
+    const priced = groups.qualified.filter(r => r.best?.premium != null);
+    if (!priced.length) return null;
+    const pick =
+      naturalSort === 'face'
+        ? [...priced].sort(
+            (a, b) => b.best!.face - a.best!.face || a.best!.premium! - b.best!.premium!
+          )[0]
+        : [...priced].sort((a, b) => a.best!.premium! - b.best!.premium!)[0];
+    return pick.productId;
+  }, [groups.qualified, naturalSort]);
+  const bestLevelId =
+    groups.lowestLevel === null
+      ? null
+      : (groups.qualified.find(
+          r => r.best?.benefit === 'LEVEL' && r.best.premium === groups.lowestLevel
+        )?.productId ?? null);
+  const labelsFor = (r: FexResult): string[] => {
+    if (!r.best) return [];
+    const labels: string[] = [];
+    const bestPrice = r.best.premium != null && r.best.premium === groups.lowestAny;
+    if (bestPrice) labels.push('Best price');
+    if (naturalSort === 'face' && r.best.face === maxFace) labels.push('Most coverage');
+    if (r.productId === bestLevelId && !bestPrice) labels.push('Best level');
+    return labels;
+  };
+
+  const rowProps = (r: FexResult, opts: { priceOnly?: boolean; ranked?: boolean } = {}) => ({
     result: r,
     expanded: expanded === r.productId,
     onToggle: () => setExpanded(open => (open === r.productId ? null : r.productId)),
@@ -388,8 +409,10 @@ export function QuoteWorkspace({
     onSave: (res: FexResult) => void save(res, null),
     busy: busy === r.productId,
     isStaff: isPlatformAdmin,
-    priceOnly,
+    priceOnly: opts.priceOnly ?? (r.eligible && !r.uwLoaded),
     selected: selection?.productId === r.productId,
+    recommended: Boolean(opts.ranked) && r.productId === recommendedId,
+    labels: opts.ranked ? labelsFor(r) : [],
     compared: compare.includes(r.productId),
     onCompareToggle: () => toggleCompare(r.productId),
     compareFull: compare.length >= COMPARE_MAX,
@@ -400,8 +423,37 @@ export function QuoteWorkspace({
 
   const ready = Boolean(toApplicant(draft));
 
+  /** Open one carrier's row, in whichever category it is, and bring it into view. */
+  const showCarrier = React.useCallback(
+    (productId: string) => {
+      const r = results.find(x => x.productId === productId);
+      if (!r) return;
+      const next: ResultCategory = !r.eligible
+        ? 'declined'
+        : !r.appointed
+          ? 'notAppointed'
+          : 'qualified';
+      // Clear whatever would hide it.
+      setFilters(f => ({
+        ...f,
+        search: '',
+        benefit: 'any',
+        hideStale: false,
+        showNotAppointed: f.showNotAppointed || !r.appointed,
+      }));
+      setCategory(next);
+      setExpanded(productId);
+      setEditing(false);
+      requestAnimationFrame(() =>
+        rootRef.current
+          ?.querySelector(`[data-product="${productId}"]`)
+          ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      );
+    },
+    [results]
+  );
+
   /** Alt+H: the condition search; Alt+M: the medication search. */
-  const intakeRef = React.useRef<QuoteIntakeHandle>(null);
   const focusHealthSearch = React.useCallback((code?: string) => {
     setEditing(true);
     intakeRef.current?.focusSearch(code === 'KeyM' ? 'meds' : 'health');
@@ -451,7 +503,7 @@ export function QuoteWorkspace({
       if (next) {
         event.preventDefault();
         next.focus();
-        next.scrollIntoView({ block: 'nearest' });
+        next.scrollIntoView?.({ block: 'nearest' });
       }
     } else if (event.key === 'c' || event.key === 'C') {
       const productId = target.closest('[data-product]')?.getAttribute('data-product');
@@ -464,67 +516,63 @@ export function QuoteWorkspace({
   };
 
   // ── Results pane ─────────────────────────────────────────────────────────
-  const firstLabel = effectiveSort === 'face' ? 'Most coverage' : 'Best price';
-  const bestLevelId =
-    lowestLevel === null
-      ? null
-      : (groups.qualifies.find(r => r.best?.benefit === 'LEVEL' && r.best.premium === lowestLevel)
-          ?.productId ?? null);
-
-  // The top row's label is checked against the figures, never assumed from
-  // its position: "Best price" only if nothing qualifying costs less.
-  const maxFace = groups.qualifies.reduce((max, r) => Math.max(max, r.best?.face ?? 0), 0);
-  const topEarned = (r: FexResult) =>
-    Boolean(r.best) &&
-    (effectiveSort === 'face'
-      ? r.best!.face === maxFace
-      : r.best!.premium != null && r.best!.premium === lowestAny);
-
-  const showDeclinedList = () => {
-    setShowDeclined(true);
-    requestAnimationFrame(() =>
-      declinedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    );
-  };
-
-  const filterCount = (hideStale ? 1 : 0) + (showNotAppointed ? 1 : 0);
   const mode = MODE_SHORT[draft.paymentMode];
+  const live: LiveState = !quote.data
+    ? 'idle'
+    : quote.stale
+      ? 'updating'
+      : quote.status === 'error'
+        ? 'error'
+        : 'live';
+  const listId = `${idPrefix}-results-list`;
+  const counts: Record<ResultCategory, number> = {
+    qualified: groups.qualified.length + groups.priceOnly.length,
+    review: groups.review.length,
+    declined: groups.declined.length,
+    notAppointed: groups.notAppointed.length,
+  };
+  const coverageText =
+    draft.coverage.mode === 'face'
+      ? Number(draft.coverage.face)
+        ? wholeDollars(Number(draft.coverage.face))
+        : '—'
+      : draft.coverage.budget
+        ? `${money(Number(draft.coverage.budget))}/${mode} budget`
+        : '—';
 
   let body: React.ReactNode;
   if (!ready) {
+    const quotable = catalog?.products.filter(p => p.quotable) ?? null;
     body = (
-      <Panel className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-[14px]">
-        <div className="flex flex-1 flex-col items-center justify-center px-8 py-10 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-[14px] border border-rule bg-brand-tint text-brand-ink shadow-card">
-            <Calculator className="h-6 w-6" aria-hidden />
-          </span>
-          <h2 className="mt-5 text-[20px] font-bold tracking-[-0.015em] text-ink">
-            Quote every carrier at once
-          </h2>
-          <p className="mt-2 max-w-[460px] text-[14px] leading-[22px] text-ink-2">
-            Enter state, sex, age and coverage, then press Get quotes. After that, results update as
-            you type. Add conditions and medications for each carrier&apos;s real answer, with the
-            reason and the page it comes from.
-          </p>
-        </div>
-        <ol className="grid gap-px border-t border-rule bg-rule sm:grid-cols-3">
-          {[
-            ['1', 'Who', 'State, sex, age or date of birth, tobacco'],
-            ['2', 'How much', 'A face amount, or a monthly budget'],
-            ['3', 'Health', 'Conditions and medications, if any'],
-          ].map(([n, title, text]) => (
-            <li key={n} className="flex gap-3 bg-surface px-5 py-4">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[12.5px] font-bold text-brand-ink">
-                {n}
-              </span>
-              <span>
-                <span className="block text-[14px] font-semibold text-ink">{title}</span>
-                <span className="mt-0.5 block text-[12.5px] leading-[18px] text-ink-2">{text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </Panel>
+      <PreQuotePane
+        missing={missingFieldsForQuote(draft).map(f => MISSING_LABEL[f] ?? f)}
+        network={
+          quotable
+            ? { configured: quotable.length, appointed: quotable.filter(p => p.appointed).length }
+            : null
+        }
+        links={
+          onOpenTab
+            ? [
+                {
+                  label: 'Search underwriting',
+                  detail: 'conditions and drugs, by carrier',
+                  onSelect: () => onOpenTab('conditions'),
+                },
+                {
+                  label: 'Recent quotes',
+                  detail: 'reopen or requote',
+                  onSelect: () => onOpenTab('history'),
+                },
+                {
+                  label: 'Carrier coverage',
+                  detail: 'states, ages and rate books',
+                  onSelect: () => onOpenTab('carriers'),
+                },
+              ]
+            : undefined
+        }
+      />
     );
   } else if (quote.status === 'error' && !quote.data) {
     body = (
@@ -541,407 +589,201 @@ export function QuoteWorkspace({
       </Notice>
     );
   } else if (!quote.data) {
-    body = (
-      <Panel className="overflow-hidden" aria-busy="true" aria-label="Quoting every carrier">
-        <div className="flex h-[62px] items-center gap-8 border-b border-rule px-5">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <span key={i} className="space-y-1.5">
-              <Skeleton className="h-4 w-14" />
-              <Skeleton className="h-2.5 w-16" />
-            </span>
-          ))}
-        </div>
-        <ul>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <li
-              key={i}
-              className="flex h-[84px] items-center gap-4 border-b border-rule pl-[44px] pr-4 last:border-0"
-            >
-              <Skeleton className="hidden h-[50px] w-[120px] cq-md:block" />
-              <span className="flex-1 space-y-2">
-                <Skeleton className="h-3.5 w-48" />
-                <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-3 w-20" />
-              </span>
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="hidden h-[34px] w-[96px] cq-sm:block" />
-            </li>
-          ))}
-        </ul>
-      </Panel>
-    );
+    body = <LoadingRows />;
   } else {
-    const qualifiesHeading = `${idPrefix}-qualifies`;
+    const list = (rows: FexResult[], opts: { ranked?: boolean; priceOnly?: boolean } = {}) =>
+      rows.map(r => <ResultRow key={r.productId} {...rowProps(r, opts)} />);
+    const empty = (text: React.ReactNode) => (
+      <p className="px-5 py-8 text-center text-[13px] text-ink-2">{text}</p>
+    );
+    let panel: React.ReactNode;
+    if (category === 'qualified') {
+      panel = (
+        <>
+          {groups.qualified.length ? (
+            <ul aria-label="Qualifying carriers">{list(groups.qualified, { ranked: true })}</ul>
+          ) : (
+            empty(
+              <>
+                No appointed carrier qualifies with these answers
+                {filters.search || groups.hiddenByFilters ? ' and filters' : ''}.{' '}
+                {groups.declined.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setCategory('declined')}
+                    className={cn('font-semibold text-brand-ink hover:underline', FOCUS)}
+                  >
+                    See why {groups.declined.length} declined
+                  </button>
+                ) : null}
+              </>
+            )
+          )}
+          {groups.priceOnly.length ? (
+            <section aria-label="Price only">
+              <h3 className="border-y border-rule bg-sunken px-4 py-1.5 text-[11.5px] font-semibold text-ink-2">
+                Price only{' '}
+                <span className="font-normal text-ink-3">
+                  · {groups.priceOnly.length} · health questions not loaded
+                </span>
+              </h3>
+              <ul>{list(groups.priceOnly, { priceOnly: true })}</ul>
+            </section>
+          ) : null}
+        </>
+      );
+    } else if (category === 'review') {
+      panel = groups.review.length ? (
+        <ul aria-label="Carriers that need review">{list(groups.review)}</ul>
+      ) : (
+        empty('Nothing to review: no referral, and every medication’s use is confirmed.')
+      );
+    } else if (category === 'declined') {
+      panel = groups.declined.length ? (
+        <ul aria-label="Declined carriers">{list(groups.declined)}</ul>
+      ) : (
+        empty('No carrier declined these answers.')
+      );
+    } else {
+      panel = groups.notAppointed.length ? (
+        <ul aria-label="Carriers you are not appointed with">{list(groups.notAppointed)}</ul>
+      ) : (
+        empty('Every qualifying carrier is one you are appointed with.')
+      );
+    }
+
     body = (
-      <div
-        className={cn(
-          'space-y-3 transition-opacity duration-150 ne-motion',
-          quote.stale && 'opacity-60'
-        )}
-        aria-busy={quote.stale}
-      >
+      <div className="flex flex-col">
         {quote.status === 'error' ? (
           <Notice
             tone="error"
+            title="Quotes could not refresh."
+            className="mb-2"
             action={
               <Button size="sm" variant="outline" onClick={quote.retry}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
                 Retry
               </Button>
             }
           >
-            {quote.error} The results below are from the last good quote.
+            Showing results from{' '}
+            {new Date(quote.data.quotedAt).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
+            . {quote.error}
           </Notice>
         ) : null}
 
         {quote.data.licensed === false ? (
-          <Notice tone="warning">
+          <Notice tone="warning" className="mb-2">
             You are not licensed in {draft.state}. Quotes are shown for reference.
           </Notice>
         ) : null}
 
-        {needsIndication.size ? (
-          <div
-            ref={bannerRef}
-            role="alert"
-            className="rounded-card border border-ringing bg-ringing-tint px-4 py-3"
-          >
-            <p className="flex items-center gap-2 text-[13px] font-semibold text-ringing-ink">
-              <HelpCircle className="h-4 w-4" aria-hidden />
-              Confirm what these are prescribed for
-            </p>
-            <p className="mt-0.5 text-[12px] text-ink-2">
-              Until you answer, each carrier applies the strictest use it lists.
-            </p>
-            <ul className="mt-2 space-y-1.5">
-              {[...needsIndication.entries()].map(([drugId, need]) => (
-                <li key={drugId} className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 min-w-[96px] text-[13px] font-medium capitalize text-ink">
-                    {need.name}
-                  </span>
-                  {need.options.map(code => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => dispatch({ type: 'setIndication', drugId, indication: code })}
-                      className={cn(
-                        'h-7 rounded-control border border-rule-strong bg-surface px-2.5 text-xs font-medium text-ink transition-colors duration-150 ne-motion hover:border-ink-2',
-                        FOCUS
-                      )}
-                    >
-                      {catalog?.conditions.find(c => c.code === code)?.label ?? code}
-                    </button>
-                  ))}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <p className="sr-only" aria-live="polite">
+          {quote.stale
+            ? 'Updating quotes'
+            : `${groups.qualified.length} carriers qualify, ${groups.declined.length} declined`}
+        </p>
 
-        {/* The recommendation header: the answer as a headline, the prices
-            that matter as compact stats under it, the sort and filters at
-            the right. Pinned while the cards scroll beneath. */}
-        <section aria-label="Summary" className="sticky top-0 z-10 bg-paper pb-3">
-          <div className="rounded-[14px] border border-rule bg-surface shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 px-5 pb-3 pt-3">
-              <h2 className="flex min-w-0 items-baseline gap-2 text-[22px] font-bold leading-8 tracking-[-0.015em] text-ink">
-                <span>
-                  <span className="tabular-nums">{groups.qualifies.length}</span> carrier
-                  {groups.qualifies.length === 1 ? '' : 's'} qualify
-                </span>
-                <span className="whitespace-nowrap text-[13px] font-medium tracking-normal text-ink-3">
-                  of {results.length} quoted
-                </span>
-                {quote.data?.carriers ? (
-                  // The agent quotes only the carriers they picked on Account.
-                  <Link
-                    href="/account#quote-carriers"
-                    title="Choose the carriers you quote"
-                    className={cn(
-                      'inline-flex items-center gap-1 self-center whitespace-nowrap rounded-full bg-brand-tint px-2 py-0.5 text-[11.5px] font-semibold tracking-normal text-brand-ink hover:underline',
-                      FOCUS
-                    )}
-                  >
-                    <span className="tabular-nums">
-                      {quote.data.carriers.selected} of {quote.data.carriers.total}
-                    </span>{' '}
-                    carriers
-                  </Link>
-                ) : null}
-                {quote.stale ? (
-                  <span className="inline-flex items-center gap-1 self-center text-[12px] font-medium tracking-normal text-ink-3">
-                    <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
-                    <span className="sr-only cq-lg:not-sr-only">Updating</span>
-                  </span>
-                ) : null}
-              </h2>
-              <div
-                role="toolbar"
-                aria-label="Sort and filter results"
-                className="flex flex-wrap items-center gap-2"
-              >
-                <span className="relative inline-flex items-center">
-                  <label htmlFor={`${idPrefix}-sort`} className="sr-only">
-                    Sort by
-                  </label>
-                  <select
-                    id={`${idPrefix}-sort`}
-                    value={effectiveSort}
-                    onChange={e => {
-                      const next = e.target.value as SortKey;
-                      // The mode's own default sort is the API's order.
-                      const natural = draft.coverage.mode === 'budget' ? 'face' : 'price';
-                      setSort(next === natural ? null : next);
-                    }}
-                    className={cn(
-                      'h-9 cursor-pointer appearance-none rounded-control border border-rule-strong bg-surface pl-3 pr-8 text-[13px] font-semibold text-ink transition-colors duration-150 ne-motion hover:border-ink-3',
-                      FOCUS
-                    )}
-                  >
-                    <option value="price">Lowest price</option>
-                    <option value="face">Most coverage</option>
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-2.5 h-4 w-4 text-ink-3"
-                    aria-hidden
-                  />
-                </span>
-                <button
-                  type="button"
-                  aria-pressed={levelOnly}
-                  onClick={() => setLevelOnly(v => !v)}
-                  className={cn(
-                    'inline-flex h-9 items-center gap-2 rounded-control border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion',
-                    levelOnly
-                      ? 'border-brand-ink bg-brand-tint text-brand-ink'
-                      : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
-                    FOCUS
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border',
-                      levelOnly ? 'border-brand-strong bg-brand-strong text-white' : 'border-ink-3'
-                    )}
-                  >
-                    {levelOnly ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
-                  </span>
-                  Level only
-                </button>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        'inline-flex h-9 items-center gap-1.5 rounded-control border px-3 text-[13px] font-medium transition-colors duration-150 ne-motion',
-                        filterCount
-                          ? 'border-ink-2 bg-surface text-ink'
-                          : 'border-rule-strong bg-surface text-ink-2 hover:border-ink-3 hover:text-ink',
-                        FOCUS
-                      )}
-                    >
-                      <SlidersHorizontal className="h-4 w-4" aria-hidden />
-                      <span className="sr-only [@container(min-width:760px)]:not-sr-only">
-                        Filters
-                      </span>
-                      {filterCount ? (
-                        <span className="rounded-full bg-ink px-1.5 text-[10.5px] font-semibold leading-4 text-surface">
-                          {filterCount}
-                        </span>
-                      ) : null}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-64 space-y-2 p-3">
-                    <CheckRow
-                      id={`${idPrefix}-hide-stale`}
-                      checked={hideStale}
-                      onChange={setHideStale}
-                      className="text-[13px]"
-                    >
-                      Hide older rate books
-                      <span className="t-meta block text-ink-3">Carriers marked Rate verify</span>
-                    </CheckRow>
-                    <CheckRow
-                      id={`${idPrefix}-not-appointed`}
-                      checked={showNotAppointed}
-                      onChange={setShowNotAppointed}
-                      className="text-[13px]"
-                    >
-                      Show not appointed
-                      <span className="t-meta block text-ink-3">
-                        Carriers you cannot write, for reference
-                      </span>
-                    </CheckRow>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-y-2 border-t border-rule px-2 py-2">
-              <dl className="flex flex-wrap items-stretch gap-y-2">
-                <SummaryStat label="Best price">
-                  {lowestAny === null ? '—' : money(lowestAny)}
-                  {lowestAny === null ? null : (
-                    <span className="ml-0.5 text-[12px] font-medium text-ink-3">/{mode}</span>
-                  )}
-                </SummaryStat>
-                <SummaryStat label="Best level">
-                  {lowestLevel === null ? '—' : money(lowestLevel)}
-                  {lowestLevel === null ? null : (
-                    <span className="ml-0.5 text-[12px] font-medium text-ink-3">/{mode}</span>
-                  )}
-                </SummaryStat>
-                <SummaryStat label="Declined">
-                  {groups.declined.length ? (
-                    <button
-                      type="button"
-                      onClick={showDeclinedList}
-                      className={cn(
-                        'inline-flex items-center gap-0.5 rounded-[4px] text-dropped-ink underline-offset-2 hover:underline',
-                        FOCUS
-                      )}
-                    >
-                      {groups.declined.length}
-                      <span className="text-[12px] font-medium">view</span>
-                      <ChevronRight className="h-3.5 w-3.5 self-center" aria-hidden />
-                    </button>
-                  ) : (
-                    <span className="text-ink-3">None</span>
-                  )}
-                </SummaryStat>
-              </dl>
-              {needsIndication.size || changes.length ? (
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3">
-                  {needsIndication.size ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      }
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-[4px] text-[12.5px] font-semibold text-ringing-ink hover:underline',
-                        FOCUS
-                      )}
-                    >
-                      <HelpCircle className="h-3.5 w-3.5 self-center" aria-hidden />
-                      {needsIndication.size} need{needsIndication.size === 1 ? 's' : ''} an answer
-                    </button>
-                  ) : null}
-                  {changes.length ? <ChangesNote changes={changes} /> : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
+        <ResultsBar
+          idPrefix={idPrefix}
+          quoted={results.length}
+          qualified={groups.qualified.length}
+          counts={counts}
+          category={category}
+          onCategory={setCategory}
+          showNotAppointedTab={filters.showNotAppointed}
+          lowestAny={groups.lowestAny}
+          lowestLevel={groups.lowestLevel}
+          coverage={coverageText}
+          mode={mode}
+          carriers={quote.data.carriers}
+          updating={quote.stale}
+          sort={effectiveSort}
+          onSort={next => setSort(next === naturalSort ? null : next)}
+          filters={filters}
+          onFilters={patch => {
+            setFilters(f => ({ ...f, ...patch }));
+            if (patch.showNotAppointed === false && category === 'notAppointed')
+              setCategory('qualified');
+          }}
+          hiddenByFilters={groups.hiddenByFilters}
+          listId={listId}
+        >
+          {changes.list.length ? (
+            <ChangesStrip
+              changes={changes.list}
+              trigger={changes.trigger}
+              onShow={showCarrier}
+              onDismiss={() => setChanges({ list: [], trigger: [] })}
+            />
+          ) : null}
+          <ColumnHeadings compare />
+        </ResultsBar>
 
-        {/* The carriers that qualify, in three weights: the recommendation,
-            the two runners-up side by side, then every other one as a quiet
-            card of its own. */}
-        <h3 id={qualifiesHeading} className="sr-only">
-          Qualifies, {groups.qualifies.length}
-        </h3>
-        {groups.qualifies.length ? (
-          <div aria-labelledby={qualifiesHeading} role="group" className="space-y-3">
-            <ul>
-              <ResultCard
-                variant="hero"
-                {...rowProps(groups.qualifies[0])}
-                labels={[
-                  'Recommended',
-                  ...(topEarned(groups.qualifies[0]) ? [firstLabel] : []),
-                  ...(groups.qualifies[0].productId === bestLevelId &&
-                  !(topEarned(groups.qualifies[0]) && effectiveSort === 'price')
-                    ? ['Best level']
-                    : []),
-                ]}
-              />
-            </ul>
-            {groups.qualifies.length > 1 ? (
-              <ul className="grid items-start gap-3 [@container(min-width:620px)]:grid-cols-2">
-                {groups.qualifies.slice(1, 3).map((r, i) => (
-                  <ResultCard
-                    key={r.productId}
-                    variant="pick"
-                    {...rowProps(r)}
-                    labels={[`#${i + 2}`, ...(r.productId === bestLevelId ? ['Best level'] : [])]}
-                  />
-                ))}
-              </ul>
-            ) : null}
-            {groups.qualifies.length > 3 ? (
-              <section aria-label="Other qualifying carriers" className="pt-2">
-                <h3 className="mb-2.5 flex items-center gap-2 px-1 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-2">
-                  Other qualifying carriers
-                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[11.5px] font-semibold tabular-nums tracking-normal text-ink-2">
-                    {groups.qualifies.length - 3}
-                  </span>
-                  <span aria-hidden className="h-px flex-1 bg-rule" />
-                </h3>
-                <ul className="space-y-2">
-                  {groups.qualifies.slice(3).map(r => (
-                    <ResultCard
-                      key={r.productId}
-                      variant="quiet"
-                      {...rowProps(r)}
-                      labels={r.productId === bestLevelId ? ['Best level'] : []}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </div>
-        ) : (
-          <p className="rounded-[14px] border border-rule bg-surface px-5 py-10 text-center text-[13px] text-ink-2 shadow-card">
-            No appointed carrier qualifies with these answers. Open the declined list to see why.
-          </p>
-        )}
-
-        {groups.priceOnly.length ? (
-          <ResultGroup
-            title="Price only"
-            description="Health questions not loaded"
-            count={groups.priceOnly.length}
-          >
-            {groups.priceOnly.map(r => (
-              <ResultCard key={r.productId} variant="quiet" {...rowProps(r)} />
-            ))}
-          </ResultGroup>
-        ) : null}
-
-        {showNotAppointed && groups.notAppointed.length ? (
-          <ResultGroup title="Not appointed" count={groups.notAppointed.length}>
-            {groups.notAppointed.map(r => (
-              <ResultCard key={r.productId} variant="quiet" {...rowProps(r, !r.uwLoaded)} />
-            ))}
-          </ResultGroup>
-        ) : null}
-
-        {groups.declined.length ? (
-          <div ref={declinedRef} className="scroll-mt-28">
-            <ResultGroup
-              title="Declined or not available"
-              count={groups.declined.length}
-              collapsible
-              open={showDeclined}
-              onOpenChange={setShowDeclined}
-            >
-              {groups.declined.map(r => (
-                <ResultCard key={r.productId} variant="quiet" {...rowProps(r)} />
-              ))}
-            </ResultGroup>
-          </div>
-        ) : null}
+        <div
+          id={listId}
+          role="tabpanel"
+          aria-labelledby={`${idPrefix}-cat-${category}`}
+          aria-busy={quote.stale}
+          className="overflow-hidden rounded-b-[12px] border border-t-0 border-rule bg-surface shadow-card"
+        >
+          {panel}
+        </div>
       </div>
     );
   }
 
+  /** The applicant in one line of parts, each opening the intake at that part. */
+  const snapshot: Array<{ section: IntakeSection; text: string }> = [
+    { section: 'applicant', text: applicantSummary(draft).join(' · ') || 'Applicant: not entered' },
+    { section: 'coverage', text: coverageSummary(draft).slice(0, 2).join(' · ') },
+    {
+      section: 'health',
+      text: draft.conditions.length
+        ? draft.conditions.map(c => shortLabel(conditionLabel(c.code))).join(', ')
+        : 'No conditions',
+    },
+    {
+      section: 'meds',
+      text: draft.meds.length ? draft.meds.map(m => medShortName(m.name)).join(', ') : 'No meds',
+    },
+  ];
+
   const narrowBar = (
-    <div className="mb-2.5 flex items-center gap-2 rounded-card border border-rule bg-surface px-3 py-2 cq-lg:hidden">
+    <div className="mb-2.5 flex items-center gap-2 rounded-card border border-rule bg-surface px-3 py-2 shadow-card cq-lg:hidden">
       <div className="min-w-0 flex-1">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-          Applicant
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          {prospectName ? `Quoting ${prospectName}` : 'Applicant'}
         </p>
-        <p className="truncate text-[13px] tabular-nums text-ink">
-          {applicantLine(draft, age) || 'Not entered yet'}
+        <p className="flex flex-wrap items-baseline gap-x-1 text-[13px] leading-5 tabular-nums text-ink">
+          {snapshot.map((part, i) => (
+            <React.Fragment key={part.section}>
+              {i ? (
+                <span aria-hidden className="text-ink-3">
+                  ·
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(true);
+                  intakeRef.current?.focusSection(part.section);
+                }}
+                className={cn(
+                  'max-w-full rounded-[4px] text-left hover:underline',
+                  part.section === 'meds' && draft.meds.length > 0 && 'capitalize',
+                  part.section === 'health' || part.section === 'meds' ? 'text-ink-2' : 'text-ink',
+                  FOCUS
+                )}
+              >
+                {part.text}
+              </button>
+            </React.Fragment>
+          ))}
         </p>
       </div>
       {editing && ready && quote.data ? (
@@ -952,11 +794,11 @@ export function QuoteWorkspace({
           onClick={() => {
             setEditing(false);
             requestAnimationFrame(() =>
-              resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              resultsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
             );
           }}
         >
-          {groups.qualifies.length} qualify
+          {groups.qualified.length} qualify
           <ArrowDown className="ml-1 h-3.5 w-3.5" aria-hidden />
         </Button>
       ) : null}
@@ -973,7 +815,7 @@ export function QuoteWorkspace({
         ) : (
           <>
             <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden />
-            Edit
+            Edit applicant
           </>
         )}
       </Button>
@@ -993,10 +835,11 @@ export function QuoteWorkspace({
       <div
         className={cn(
           // From 900px wide (the container, not the window) the workspace fills
-          // its parent and never scrolls as a whole: the form and the results
-          // each scroll on their own, so both stay on one laptop screen.
-          'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-4',
-          'cq-lg:grid-cols-[minmax(360px,392px)_minmax(0,1fr)] cq-xl:grid-cols-[412px_minmax(0,1fr)]'
+          // its parent and never scrolls as a whole: the intake and the results
+          // each scroll on their own, so both stay on one laptop screen. The
+          // intake gets the width its fields need -- no squeezed rail.
+          'cq-lg:grid cq-lg:h-full cq-lg:min-h-0 cq-lg:gap-3',
+          'cq-lg:grid-cols-[minmax(392px,416px)_minmax(0,1fr)] cq-xl:grid-cols-[452px_minmax(0,1fr)]'
         )}
       >
         {narrowBar}
@@ -1005,9 +848,9 @@ export function QuoteWorkspace({
           id={`${idPrefix}-intake`}
           aria-label="Applicant and health"
           className={cn(
-            // The intake scrolls its own cards (down only: a sideways bar under
-            // the inputs is never wanted) above a fixed Get quotes footer.
-            'mb-3 min-w-0 cq-lg:mb-0 cq-lg:block cq-lg:min-h-0 cq-lg:overflow-hidden cq-lg:pb-3',
+            // A size container from the two-column width, so the quick
+            // reference under the intake appears only when the column is tall.
+            'mb-3 min-w-0 cq-lg:mb-0 cq-lg:flex cq-lg:min-h-0 cq-lg:flex-col cq-lg:gap-3 cq-lg:[container-type:size]',
             !editing && 'hidden'
           )}
         >
@@ -1018,9 +861,9 @@ export function QuoteWorkspace({
             dispatch={dispatch}
             conditions={catalog?.conditions ?? []}
             showAetnaMedSupp={accendoAppointed}
-            needsIndication={
-              new Map([...needsIndication.entries()].map(([id, n]) => [id, n.options]))
-            }
+            needsIndication={needsIndication}
+            live={live}
+            quotedAt={quote.data?.quotedAt ?? null}
             onGetQuotes={() => {
               quote.retry();
               setEditing(false);
@@ -1036,22 +879,27 @@ export function QuoteWorkspace({
               });
               setExpanded(null);
               setCompare([]);
-              previousOutcomes.current = null;
-              setChanges([]);
+              setCategory('qualified');
+              setFilters(DEFAULT_FILTERS);
+              previous.current = null;
+              setChanges({ list: [], trigger: [] });
               setEditing(true);
             }}
+          />
+          <IntakeAside
+            carriers={catalog?.products.filter(p => p.quotable).length ?? null}
+            selection={selection}
           />
         </section>
 
         <section
           ref={resultsRef}
           aria-label="Results"
-          aria-live="polite"
           className="cq flex min-w-0 scroll-mt-2 flex-col cq-lg:min-h-0 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pr-1"
         >
           <div className="flex-1">{body}</div>
           {selection || compare.length ? (
-            <div className="sticky bottom-0 z-10 mt-2.5 space-y-1.5 pb-1">
+            <div className="sticky bottom-0 z-10 mt-2 space-y-1.5 bg-paper pb-1 pt-1">
               {compare.length ? (
                 <CompareTray
                   count={compared.length}
@@ -1065,6 +913,11 @@ export function QuoteWorkspace({
                   onStart={onStartApplication}
                   startLabel={startLabel}
                   note={selectedNote}
+                  onView={
+                    results.some(r => r.productId === selection.productId)
+                      ? () => showCarrier(selection.productId)
+                      : undefined
+                  }
                   onClear={() => setSelection(null)}
                 />
               ) : null}
@@ -1085,146 +938,54 @@ export function QuoteWorkspace({
   );
 }
 
-/** One figure in the results header: a small label over the value. */
-function SummaryStat({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-[112px] border-r border-rule px-3 py-0.5 last:border-r-0">
-      <dt className="text-[10.5px] font-semibold uppercase leading-4 tracking-[0.08em] text-ink-3">
-        {label}
-      </dt>
-      <dd className="mt-0.5 flex items-baseline text-[17px] font-semibold leading-6 tabular-nums text-ink">
-        {children}
-      </dd>
-    </div>
-  );
-}
-
-/** "3 outcomes changed", and which, from the last edit. */
-function ChangesNote({ changes }: { changes: OutcomeChange[] }): JSX.Element {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex h-7 items-center gap-1 rounded-control px-2 text-[12px] font-medium text-ink-2 transition-colors duration-150 ne-motion hover:bg-sunken hover:text-ink',
-            FOCUS
-          )}
-        >
-          {changes.length} outcome{changes.length === 1 ? '' : 's'} changed
-          <ChevronDown className="h-3 w-3" aria-hidden />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
-        <p className="border-b border-rule px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-          Since your last change
-        </p>
-        <ul className="max-h-72 overflow-y-auto py-1">
-          {changes.map(c => (
-            <li key={c.productId} className="flex items-baseline gap-2 px-3 py-1 text-[13px]">
-              <span className="min-w-0 flex-1 truncate text-ink">
-                {c.carrier} <span className="text-ink-2">{c.product}</span>
-              </span>
-              <span className="shrink-0 whitespace-nowrap text-[12px]">
-                <span className="text-ink-3">{c.from}</span>
-                <span className="text-ink-3"> → </span>
-                <span
-                  className={cn(
-                    'font-semibold',
-                    c.direction === 'worse'
-                      ? 'text-dropped-ink'
-                      : c.direction === 'better'
-                        ? 'text-live-ink'
-                        : 'text-ink'
-                  )}
-                >
-                  {c.to}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /**
- * A secondary group under the main list: price-only carriers, those not
- * appointed, the declines. A quiet heading and a count; the declines fold.
+ * Under the intake on a tall screen, the room the questions do not need:
+ * the quote in use, and the keyboard. It is the first thing to give way --
+ * it is shown only when the column is tall enough for it and the intake
+ * together, and below the two-column width not at all.
  */
-function ResultGroup({
-  title,
-  description,
-  count,
-  children,
-  collapsible = false,
-  open: controlledOpen,
-  onOpenChange,
+function IntakeAside({
+  carriers,
+  selection,
 }: {
-  title: string;
-  /** Said after the title, quieter ("Health questions not loaded"). */
-  description?: string;
-  count: number;
-  children: React.ReactNode;
-  collapsible?: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  carriers: number | null;
+  selection: FexSelection | null;
 }): JSX.Element {
-  const [ownOpen, setOwnOpen] = React.useState(true);
-  const open = collapsible ? (controlledOpen ?? ownOpen) : true;
-  const toggle = () => {
-    onOpenChange?.(!open);
-    setOwnOpen(!open);
-  };
-  const headingId = React.useId();
-  const heading = (
-    <>
-      <span className="flex min-w-0 items-baseline gap-1.5">
-        <span className="text-[12.5px] font-semibold text-ink-2">{title}</span>
-        <span className="text-[12.5px] tabular-nums text-ink-3">{count}</span>
-        {description ? (
-          <span className="truncate text-[12px] text-ink-3">· {description}</span>
-        ) : null}
-      </span>
-      {collapsible ? (
-        <span className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-ink-2">
-          {open ? 'Hide' : 'Show'}
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              'h-4 w-4 transition-transform duration-150 ne-motion motion-reduce:transition-none',
-              open && 'rotate-180'
-            )}
-          />
-        </span>
-      ) : null}
-    </>
-  );
   return (
-    <section className="pt-2">
-      <h3 id={headingId} className="m-0 mb-2">
-        {collapsible ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={toggle}
-            className={cn(
-              'flex h-8 w-full items-center justify-between gap-2 rounded-control px-1 text-left hover:bg-sunken',
-              FOCUS
-            )}
-          >
-            {heading}
-          </button>
-        ) : (
-          <span className="flex h-8 items-center justify-between gap-2 px-1">{heading}</span>
-        )}
-      </h3>
-      {open ? (
-        <ul aria-labelledby={headingId} className="space-y-2">
-          {children}
-        </ul>
-      ) : null}
-    </section>
+    <aside
+      aria-label="Quick reference"
+      className="hidden min-h-0 shrink-[999] overflow-hidden rounded-[12px] border border-dashed border-rule-strong [@container(min-height:940px)]:block"
+    >
+      <div className="space-y-4 px-4 py-3.5">
+        {selection ? (
+          <div>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              Quote in use
+            </h3>
+            <p className="mt-1 text-[13px] text-ink">
+              <span className="font-semibold">{selection.carrier}</span> {selection.product}
+            </p>
+            <p className="text-[12.5px] tabular-nums text-ink-2">
+              {selection.classLabel} · {wholeDollars(selection.face)} ·{' '}
+              <span className="font-semibold text-ink">
+                {selection.premium != null ? money(selection.premium) : '—'}/
+                {MODE_SHORT[selection.mode]}
+              </span>
+            </p>
+          </div>
+        ) : null}
+        <div>
+          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            Keyboard
+          </h3>
+          <ShortcutList />
+        </div>
+        {carriers ? (
+          <p className="text-[12px] text-ink-3">
+            {carriers} carriers configured · every one priced and underwritten on each edit
+          </p>
+        ) : null}
+      </div>
+    </aside>
   );
 }

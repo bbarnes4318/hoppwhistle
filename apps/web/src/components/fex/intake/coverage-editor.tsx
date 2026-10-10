@@ -21,7 +21,10 @@ import { digitsOnly } from './applicant-editor';
 const faceText = (amount: number) =>
   amount % 1000 === 0 ? `${amount / 1000}k` : `${(amount / 1000).toFixed(1)}k`;
 
-/** Face or budget: the section's own switch, right of its title. */
+/**
+ * Face amount or monthly budget: the section's own switch, in its title row,
+ * so what is being quoted is said before the amount is.
+ */
 export function CoverageModeSwitch({
   draft,
   dispatch,
@@ -32,11 +35,11 @@ export function CoverageModeSwitch({
   return (
     <ChoiceGroup
       label="Quote by"
-      className="h-7 w-[128px] p-[2px]"
-      itemClassName="text-[12px]"
+      className="h-8 w-[204px] p-[2px]"
+      itemClassName="px-2 text-[12px]"
       options={[
-        { value: 'face' as const, label: 'Face' },
-        { value: 'budget' as const, label: 'Budget' },
+        { value: 'face' as const, label: 'Face amount' },
+        { value: 'budget' as const, label: 'Monthly budget' },
       ]}
       value={draft.coverage.mode}
       onChange={mode => {
@@ -59,11 +62,14 @@ export function CoverageEditor({
   draft,
   dispatch,
   showAetnaMedSupp,
+  invalid,
 }: {
   idPrefix: string;
   draft: QuoteDraft;
   dispatch: React.Dispatch<DraftAction>;
   showAetnaMedSupp: boolean;
+  /** Required fields to mark (after Get quotes was pressed without them). */
+  invalid?: ReadonlySet<string>;
 }): JSX.Element {
   const p = (s: string) => `${idPrefix}-${s}`;
   const face = draft.coverage.mode === 'face' ? draft.coverage.face : '';
@@ -93,12 +99,16 @@ export function CoverageEditor({
     <div className="space-y-3">
       {draft.coverage.mode === 'face' ? (
         <div>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2">
             <p id={labelId} className={cn(FIELD_LABEL, 'mb-0')}>
               Face amount
               {draft.prefilled.has('face') ? <FromLeadTag /> : null}
             </p>
-            <CoverageModeSwitch draft={draft} dispatch={dispatch} />
+            {Number(face) ? (
+              <span className="text-[17px] font-bold tabular-nums tracking-[-0.01em] text-ink">
+                ${Number(face).toLocaleString('en-US')}
+              </span>
+            ) : null}
           </div>
           <ChoiceGroup<FaceChoice>
             labelledBy={labelId}
@@ -136,15 +146,17 @@ export function CoverageEditor({
               />
             </div>
           ) : null}
+          {invalid?.has('face') ? (
+            <p className="mt-1 text-[11.5px] font-medium text-dropped-ink">
+              A face amount from $1,000 to $500,000
+            </p>
+          ) : null}
         </div>
       ) : (
         <div>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <label htmlFor={p('budget')} className={cn(FIELD_LABEL, 'mb-0')}>
-              Monthly budget
-            </label>
-            <CoverageModeSwitch draft={draft} dispatch={dispatch} />
-          </div>
+          <label htmlFor={p('budget')} className={FIELD_LABEL}>
+            Monthly budget
+          </label>
           <div className="relative">
             <span
               aria-hidden
@@ -157,6 +169,7 @@ export function CoverageEditor({
               inputMode="decimal"
               placeholder="50"
               value={draft.coverage.budget}
+              aria-invalid={invalid?.has('budget') || undefined}
               onChange={e =>
                 dispatch({
                   type: 'set',
@@ -168,16 +181,19 @@ export function CoverageEditor({
                   },
                 })
               }
-              className="pl-6"
+              className="h-11 pl-6 text-[17px] font-bold"
             />
           </div>
+          {invalid?.has('budget') ? (
+            <p className="mt-1 text-[11.5px] font-medium text-dropped-ink">$5–$2,000 a month</p>
+          ) : null}
         </div>
       )}
 
       {/* Payment mode and the optional credits share one row: they matter
           less than the amount, and a row of their own each would be height
           the health questions need. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
         <span className="inline-flex items-center gap-2">
           <label htmlFor={p('mode')} className="text-[12px] font-medium text-ink-2">
             Payment
@@ -213,7 +229,7 @@ export function CoverageEditor({
           onChange={checked => dispatch({ type: 'set', patch: { activityCredit: checked } })}
           className="text-[12.5px] text-ink-2"
         >
-          <span title="Transamerica activity credit">Exercises 3+ days/wk</span>
+          <span title="Transamerica activity credit">Exercises 3+/wk</span>
         </CheckRow>
         {showAetnaMedSupp ? (
           <CheckRow
