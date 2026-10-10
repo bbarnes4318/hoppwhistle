@@ -6,8 +6,10 @@ import {
   activeFilterChips,
   DEFAULT_FILTERS,
   groupResults,
+  assumedAnswers,
   needsReview,
   rateNeedsVerify,
+  reviewReasons,
   sortResults,
 } from '../fex/results-view';
 
@@ -88,7 +90,7 @@ describe('groupResults', () => {
     expect(graded.qualified.map(r => r.productId)).toEqual(['b']);
   });
 
-  it('hides rate books that need verifying when asked', () => {
+  it('filters by rate status', () => {
     const stale = [
       result('x', { ratesStatus: 'STALE_VERIFY' }),
       result('y', {
@@ -98,8 +100,12 @@ describe('groupResults', () => {
     ];
     expect(rateNeedsVerify(stale[0])).toBe(true);
     expect(rateNeedsVerify(stale[1])).toBe(true);
-    const g = groupResults(stale, { ...DEFAULT_FILTERS, hideStale: true }, null);
-    expect(g.qualified.map(r => r.productId)).toEqual(['z']);
+    const current = groupResults(stale, { ...DEFAULT_FILTERS, rate: 'current' }, null);
+    expect(current.qualified.map(r => r.productId)).toEqual(['z']);
+    const verify = groupResults(stale, { ...DEFAULT_FILTERS, rate: 'verify' }, null);
+    expect(verify.qualified.map(r => r.productId)).toEqual(['x', 'y']);
+    // A rate book to verify is an operational status, never a review item.
+    expect(verify.review).toEqual([]);
   });
 
   it('searches carrier and product names in every category', () => {
@@ -126,7 +132,26 @@ describe('sortResults', () => {
 });
 
 describe('needsReview and the filter chips', () => {
-  it('flags a referral or an unconfirmed medication', () => {
+  it('flags a referral, an unconfirmed medication, or an assumed health answer', () => {
+    const assumed = result('a', {
+      reasons: [
+        { kind: 'rule', outcome: 'GRADED', text: 'x', assumed: ['diagnosis date not given'] },
+      ] as FexResult['reasons'],
+    });
+    expect(reviewReasons(assumed)).toEqual(['Health answers assumed']);
+    expect(assumedAnswers(assumed)).toEqual(['diagnosis date not given']);
+    // The result's general notes and an unconfirmed indication are not "assumed answers".
+    expect(
+      reviewReasons(
+        result('b', {
+          assumptions: ['Height/weight not entered — build chart not checked'],
+          reasons: [
+            { kind: 'rx', outcome: 'GRADED', text: 'y', assumed: ['indication not confirmed'] },
+          ] as FexResult['reasons'],
+        })
+      )
+    ).toEqual([]);
+    expect(reviewReasons(result('c', { refer: true }))).toEqual(['Referral required']);
     expect(needsReview(result('a', { refer: true }))).toBe(true);
     expect(
       needsReview(result('a', { needsIndication: [{ drugId: 'x', name: 'x', options: [] }] }))
@@ -140,7 +165,7 @@ describe('needsReview and the filter chips', () => {
     expect(
       activeFilterChips({
         benefit: 'level',
-        hideStale: true,
+        rate: 'current',
         showNotAppointed: true,
         search: ' x ',
       }).map(c => c.label)

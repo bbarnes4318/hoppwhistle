@@ -35,6 +35,37 @@ vi.mock('@/components/ui/use-toast', () => ({
 const phone = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('@/components/phone/phone-provider', () => ({ usePhone: () => phone.value }));
 
+/*
+ * Radix's popover positions itself with floating-ui, which in jsdom (no
+ * layout, every rect zero) spins: one test that opened the filters menu ran
+ * for minutes of CPU. In a real browser it opens in milliseconds. Here it is
+ * a plain toggle, so what is under test is the quoter's own wiring.
+ */
+vi.mock('@/components/ui/popover', async () => {
+  const ReactMod = await import('react');
+  const Ctx = ReactMod.createContext<{ open: boolean; toggle: () => void }>({
+    open: false,
+    toggle: () => undefined,
+  });
+  function Popover({ children }: { children: React.ReactNode }) {
+    const [open, setOpen] = ReactMod.useState(false);
+    return ReactMod.createElement(
+      Ctx.Provider,
+      { value: { open, toggle: () => setOpen(o => !o) } },
+      children
+    );
+  }
+  function PopoverTrigger({ children }: { children: React.ReactElement; asChild?: boolean }) {
+    const { toggle } = ReactMod.useContext(Ctx);
+    return ReactMod.cloneElement(children, { onClick: toggle });
+  }
+  function PopoverContent({ children }: { children: React.ReactNode; className?: string }) {
+    const { open } = ReactMod.useContext(Ctx);
+    return open ? ReactMod.createElement('div', { role: 'dialog' }, children) : null;
+  }
+  return { Popover, PopoverTrigger, PopoverContent };
+});
+
 vi.mock('@/contexts/customer-intake-context', () => ({
   useCustomerIntake: () => ({ formData: { firstName: '', lastName: '', phone: '' } }),
 }));
@@ -713,6 +744,66 @@ describe('QuoteWorkspace', () => {
     expect(within(changes).getByText('Graded')).toBeTruthy();
     // And on the row itself.
     expect(screen.getAllByText(/was Level/).length).toBeGreaterThan(0);
+  });
+
+  it('says how much each premium moved, after the outcomes, and ignores rounding', async () => {
+    quoteResults = () => {
+      const age = (quotesPosted().at(-1)?.body?.applicant as { age?: number } | undefined)?.age;
+      return age === 70
+        ? [result({ best: line({ premium: 47.5 }) }), TRINITY({ best: line({ premium: 35.9 }) })]
+        : [result(), TRINITY()];
+    };
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    fireEvent.change(screen.getByLabelText(/^Age/), { target: { value: '70' } });
+    const strip = await screen.findByText('1 premium moved');
+    expect(strip.parentElement?.textContent).toMatch(/after: Age 68 → 70/);
+    const changes = strip.closest('div')!.parentElement!;
+    // $41.18 → $47.50 is material; $35.88 → $35.90 is rounding.
+    expect(changes.textContent).toMatch(/\$41\.18 → \$47\.50\s*\(\+\$6\.32\)/);
+    expect(changes.textContent).not.toMatch(/Golden Eagle/);
+    expect(screen.getAllByText('↓ +$6.32, was $41.18').length).toBeGreaterThan(0);
+  });
+
+  it('puts assumed health answers under Needs review, but not a rate to verify', async () => {
+    quoteResults = () => [
+      result({
+        facts: { ratesStatus: { label: 'Older rate book', tone: 'warn' } } as FexResult['facts'],
+      }),
+      TRINITY({
+        reasons: [
+          {
+            kind: 'rule',
+            outcome: 'LEVEL',
+            text: 'Diabetes',
+            assumed: ['diagnosis date not given'],
+          },
+        ] as FexResult['reasons'],
+      }),
+    ];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    expect(screen.getAllByText('Verify rate').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('tab', { name: /Needs review\s*1/ }));
+    expect(rowIds()).toEqual(['trinity_golden_eagle']);
+    expect(
+      within(screen.getByRole('tabpanel')).getAllByText('1 health answer assumed').length
+    ).toBeGreaterThan(0);
+  });
+
+  it('filters by rate status from the filters menu', async () => {
+    quoteResults = () => [
+      result({
+        facts: { ratesStatus: { label: 'Older rate book', tone: 'warn' } } as FexResult['facts'],
+      }),
+      TRINITY(),
+    ];
+    render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
+    await screen.findByText('Golden Eagle Final Expense');
+    fireEvent.click(screen.getByLabelText('Filters'));
+    fireEvent.click(await screen.findByLabelText('Verify rate only'));
+    await waitFor(() => expect(rowIds()).toEqual(['moo_living_promise']));
+    expect(screen.getByLabelText('Remove filter: Verify rate only')).toBeTruthy();
   });
 
   it('shows a localized error over the last good results', async () => {

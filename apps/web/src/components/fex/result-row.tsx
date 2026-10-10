@@ -51,6 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import { MODE_SHORT, money, wholeDollars, type FexResult, type FexSelection } from '@/lib/fex/api';
 import type { OutcomeChange } from '@/lib/fex/outcome-diff';
+import { assumedAnswers } from '@/lib/fex/results-view';
 import { cn } from '@/lib/utils';
 
 import { benefitShort, benefitTone, benefitWord, FOCUS, outcomeTone } from './parts';
@@ -392,8 +393,8 @@ function reasonSubject(
 
 /**
  * The one thing about underwriting worth a closed row's space, or nothing.
- * A referral and an unconfirmed medication come first: the agent can act on
- * both before applying.
+ * What the agent can act on before applying comes first: a referral, an
+ * unconfirmed medication, a health answer the carrier assumed.
  */
 export function materialNote(
   result: FexResult,
@@ -405,6 +406,14 @@ export function materialNote(
     const [first, ...rest] = result.needsIndication;
     return {
       text: `${capitalize(first.name)} use unconfirmed${rest.length ? ` +${rest.length}` : ''}`,
+      tone: 'warn',
+    };
+  }
+  const assumed = assumedAnswers(result);
+  if (assumed.length) {
+    const n = assumed.length;
+    return {
+      text: `${n} health answer${n === 1 ? '' : 's'} assumed`,
       tone: 'warn',
     };
   }
@@ -693,6 +702,37 @@ function DeclineEvidence({
   );
 }
 
+const signed = (n: number, format: (v: number) => string) =>
+  `${n > 0 ? '+' : n < 0 ? '−' : '±'}${format(Math.abs(n))}`;
+
+/**
+ * What the last edit did to a carrier, said both ways the screen needs it:
+ * `from` → `to` with the delta (the change strip), and a short note for the
+ * row ("↓ was Level", "↑ +$7.85, was $138.17").
+ */
+export function changeParts(change: OutcomeChange): { from: string; to: string; delta?: string } {
+  const { premiumFrom: pf, premiumTo: pt, faceFrom: ff, faceTo: ft } = change;
+  if (change.kind === 'premium' && pf != null && pt != null) {
+    return { from: money(pf), to: money(pt), delta: signed(pt - pf, money) };
+  }
+  if (change.kind === 'face' && ff != null && ft != null) {
+    return {
+      from: `${wholeDollars(ff)} face`,
+      to: `${wholeDollars(ft)} face`,
+      delta: signed(ft - ff, wholeDollars),
+    };
+  }
+  return { from: change.from, to: change.to === 'Declined' ? 'No longer qualifies' : change.to };
+}
+
+export function changeNote(change: OutcomeChange): string {
+  const arrow = change.direction === 'worse' ? '↓' : change.direction === 'better' ? '↑' : '↔';
+  const parts = changeParts(change);
+  if (change.kind === 'premium') return `${arrow} ${parts.delta}, was ${parts.from}`;
+  if (change.kind === 'face') return `${arrow} ${parts.delta} face`;
+  return `${arrow} was ${change.from}`;
+}
+
 /**
  * The one underwriting fact worth the space, then "Price only" and what the
  * last edit changed. Nothing when there is nothing to say.
@@ -750,8 +790,7 @@ export function StatusNote({
                 : 'text-ink-2'
           )}
         >
-          {change.direction === 'worse' ? '↓' : change.direction === 'better' ? '↑' : '↔'} was{' '}
-          {change.from}
+          {changeNote(change)}
         </span>
       ) : null}
     </span>
