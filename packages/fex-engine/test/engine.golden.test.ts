@@ -90,7 +90,7 @@ describe('fex-engine v18', () => {
   });
 
   it('estimateMonthly prices Combined and CICA monthly at 8.75% of annual, and changes nothing else', () => {
-    const applicant = {
+    const applicant: Applicant = {
       state: 'TX',
       sex: 'F',
       tobacco: false,
@@ -99,7 +99,7 @@ describe('fex-engine v18', () => {
       mode: 'monthly',
       conditions: [],
       meds: [],
-    } as const;
+    };
     const ids = ['chubb_generational_life', 'cica_superior_choice'];
     const plain = quoteAll(bundle, structuredClone(applicant));
     const estimated = quoteAll(bundle, structuredClone(applicant), { estimateMonthly: true });
