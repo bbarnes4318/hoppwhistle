@@ -760,6 +760,9 @@ describe('QuoteWorkspace', () => {
     ).toBeGreaterThan(0);
   });
 
+  // The only quoter render test that opens a Radix popover, which is slow in
+  // jsdom: on a loaded full-suite run this test alone overran the default 5s.
+  // The filtering itself is unit-tested in fex-results-view.test.ts.
   it('filters by rate status from the filters menu', async () => {
     quoteResults = () => [
       result({
@@ -779,7 +782,7 @@ describe('QuoteWorkspace', () => {
     expect(
       await screen.findByRole('button', { name: 'Remove filter: Verify rate only' })
     ).toBeTruthy();
-  });
+  }, 15000);
 
   it('shows a localized error over the last good results', async () => {
     render(<QuoteWorkspace variant="page" source="PAGE" initialDraft={READY} />);
