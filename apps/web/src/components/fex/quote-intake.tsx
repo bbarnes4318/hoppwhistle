@@ -1,51 +1,48 @@
 'use client';
 
 /**
- * The quoter's left column: the quote's state, and one place to change it.
+ * The quoter's intake: who is being quoted, how much, and their health --
+ * every answer on screen at once, and one place that says whether it can
+ * quote.
  *
- * ── State, not a form ────────────────────────────────────────────────────────
+ * ── A workflow, not a settings panel ─────────────────────────────────────────
  *
- * Four sections, in the order an agent asks: Applicant, Coverage, Health,
- * Medications. Each is always on screen as what it holds -- "AL · Male ·
- * Age 65 · Non-tobacco", "$10,000 face · Monthly", "Diabetes — 2 details
- * needed" -- with a mark that says complete, needs review, or required.
- * Exactly ONE section is open as an editor at a time, in its own place in
- * the stack. So the column never becomes a page to scroll through: on a
- * laptop all four sections and the Get quotes button stay in view, and the
- * open editor is the only thing with height.
+ * Four blocks in the order an agent asks -- Applicant, Coverage, Health,
+ * Medications -- and all of them open. Nothing is behind an accordion: an
+ * agent on a call changes an answer where they see it. Each block's title
+ * carries its state (a mark, and "1 to review" when something is open).
  *
  * ── Required work never appears out of sight ─────────────────────────────────
  *
- * Health and Medications are a list or ONE item, never both: adding Diabetes
- * replaces the list with Diabetes's questions, right where the search was,
- * cursor in the first. Done returns to the list with the cursor back in the
- * search. Anything still unanswered is named in its section's summary and
- * above Get quotes, and each mention opens that exact question.
+ * A condition's questions open under that condition, opened into view, with
+ * the cursor in the first. A medication's "what is it for?" is asked in the
+ * medication's own row. And the readiness panel at the foot of the column
+ * names every required field still missing, and every answer the carriers
+ * are assuming; each one moves the cursor straight to its question.
  *
- * Every edit re-quotes; the results on the right follow as the agent types.
+ * ── The column ends where its content does ───────────────────────────────────
+ *
+ * The panel is as tall as what it holds, with its readiness and actions
+ * directly under the last block: no stretch of empty column between the
+ * questions and Get quotes. When it holds more than the screen, the blocks
+ * scroll and the actions stay put.
+ *
+ * Every edit re-quotes; the results follow as the agent types.
  */
 
-import { AlertCircle, ArrowRight, RotateCcw } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
-import { missingForQuote, type DraftAction, type QuoteDraft } from '@/lib/fex/draft';
+import { missingFieldsForQuote, type DraftAction, type QuoteDraft } from '@/lib/fex/draft';
 import {
   applicantDone,
-  applicantSummary,
   applicantUnasked,
   attentionItems,
   conditionComplete,
-  conditionFacts,
   coverageDone,
-  coverageSummary,
-  detailsNeededText,
-  medConditionCodes,
   medNeedsUse,
-  medShortName,
-  medTakenText,
-  MISSING_TEXT,
-  SECTION_TITLE,
+  MISSING_LABEL,
   sectionOfMissing,
   type AttentionItem,
   type IntakeSection as SectionKey,
@@ -53,13 +50,16 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ApplicantEditor } from './intake/applicant-editor';
-import { CoverageEditor } from './intake/coverage-editor';
+import { CoverageEditor, CoverageModeSwitch } from './intake/coverage-editor';
 import { HealthManager, healthSearchId, type ConditionMeta } from './intake/health-manager';
 import { MedicationManager, medsSearchId } from './intake/medication-manager';
-import { IntakeSection, SummaryItem, SummaryText, type SectionStatus } from './intake/section';
+import { IntakeBlock, type SectionStatus } from './intake/section';
 import { FOCUS, shortLabel } from './parts';
 
 export { healthSearchId, medsSearchId, type ConditionMeta };
+
+/** Where the quote is, as the intake's footer says it. */
+export type LiveState = 'idle' | 'updating' | 'live' | 'error';
 
 export interface QuoteIntakeProps {
   idPrefix: string;
@@ -74,32 +74,21 @@ export interface QuoteIntakeProps {
   showAetnaMedSupp: boolean;
   /** Drug ids the last quote said need their use confirmed. */
   needsIndication: Map<string, string[]>;
+  /** The live quote's state, once there are results. */
+  live?: LiveState;
+  /** When the results on screen were quoted (ISO). */
+  quotedAt?: string | null;
 }
 
-/** What the workspace may ask of the intake from outside it (Alt+H, Alt+M). */
+/** What the workspace may ask of the intake from outside it (Alt+H, Alt+M, the snapshot). */
 export interface QuoteIntakeHandle {
-  /** Open Health (or Medications) on its list and put the cursor in its search. */
+  /** Put the cursor in the condition (or medication) search. */
   focusSearch: (which: 'health' | 'meds') => void;
-}
-
-const NEXT: Record<SectionKey, SectionKey | null> = {
-  applicant: 'coverage',
-  coverage: 'health',
-  health: 'meds',
-  meds: null,
-};
-
-/** Where a quote starts: the first section that still stops it, else Health. */
-function firstOpen(draft: QuoteDraft): SectionKey {
-  if (!applicantDone(draft) || applicantUnasked(draft).length) return 'applicant';
-  if (!coverageDone(draft)) return 'coverage';
-  return 'health';
+  /** Bring a block into view and put the cursor in its first field. */
+  focusSection: (section: SectionKey) => void;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** How many item lines a closed Health or Medications section shows. */
-const SUMMARY_LINES = 3;
 
 export const QuoteIntake = React.forwardRef<QuoteIntakeHandle, QuoteIntakeProps>(
   function QuoteIntake(props, ref) {
@@ -110,61 +99,65 @@ export const QuoteIntake = React.forwardRef<QuoteIntakeHandle, QuoteIntakeProps>
       (code: string) => byCode.get(code)?.label ?? code,
       [byCode]
     );
+    const rootRef = React.useRef<HTMLDivElement>(null);
 
-    const [open, setOpen] = React.useState<SectionKey | null>(() => firstOpen(draft));
     const [healthItem, setHealthItem] = React.useState<string | null>(null);
     const [medItem, setMedItem] = React.useState<string | null>(null);
+    /** Get quotes was pressed with something missing: mark the fields. */
+    const [tried, setTried] = React.useState(false);
 
-    /*
-     * Focus follows the agent's move, after the editor it lands in has
-     * rendered: a selector, consumed by the effect below on the next commit.
-     */
-    const [focusWanted, setFocusWanted] = React.useState<{ selector: string } | null>(null);
+    const missing = missingFieldsForQuote(draft);
     React.useEffect(() => {
-      if (!focusWanted) return;
-      const target = document.querySelector<HTMLElement>(focusWanted.selector);
-      target?.scrollIntoView?.({ block: 'nearest' });
-      target?.focus();
-      setFocusWanted(null);
-    }, [focusWanted]);
+      if (!missing.length) setTried(false);
+    }, [missing.length]);
+    const invalid = React.useMemo(
+      () => new Set(tried ? missing : []),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [tried, missing.join()]
+    );
+
+    /** Focus the first match inside the intake, scrolled into view. */
+    const focusIn = React.useCallback((selector: string) => {
+      requestAnimationFrame(() => {
+        const target = rootRef.current?.querySelector<HTMLElement>(selector);
+        target?.scrollIntoView?.({ block: 'nearest' });
+        target?.focus();
+      });
+    }, []);
 
     const byId = (id: string) => `[id="${id}"]`;
-    const sectionSel = (s: SectionKey) => byId(`${idPrefix}-sec-${s}-body`);
-    const firstControl = (s: SectionKey) =>
-      `${sectionSel(s)} :is(input, select, [role="radio"][tabindex="0"], button):not([disabled])`;
-
-    /** Open a section (and one of its items); focus lands in it. */
-    const goTo = React.useCallback(
-      (section: SectionKey | null, itemKey: string | null = null) => {
-        setOpen(section);
-        setHealthItem(section === 'health' ? itemKey : null);
-        setMedItem(section === 'meds' ? itemKey : null);
-        // An item's editor focuses its own first question.
-        if (section && !itemKey) setFocusWanted({ selector: firstControl(section) });
-      },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [idPrefix]
-    );
+    const sectionSel = (s: SectionKey) => byId(`${idPrefix}-sec-${s}`);
+    const fieldSel = (field: string) =>
+      field === 'sex'
+        ? `${sectionSel('applicant')} [role="radiogroup"][aria-label="Sex"] [role="radio"]`
+        : field === 'face'
+          ? `${sectionSel('coverage')} [aria-labelledby="${idPrefix}-face-label"] [role="radio"][tabindex="0"]`
+          : byId(`${idPrefix}-${field}`);
 
     React.useImperativeHandle(
       ref,
       () => ({
         focusSearch: which => {
-          setOpen(which);
           setHealthItem(null);
           setMedItem(null);
-          setFocusWanted({
-            selector: byId(which === 'meds' ? medsSearchId(idPrefix) : healthSearchId(idPrefix)),
-          });
+          focusIn(byId(which === 'meds' ? medsSearchId(idPrefix) : healthSearchId(idPrefix)));
         },
+        focusSection: section =>
+          focusIn(
+            section === 'health'
+              ? byId(healthSearchId(idPrefix))
+              : section === 'meds'
+                ? byId(medsSearchId(idPrefix))
+                : `${sectionSel(section)} :is(input, select, [role="radio"][tabindex="0"]):not([disabled])`
+          ),
       }),
-      [idPrefix]
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [idPrefix, focusIn]
     );
 
-    const missing = missingForQuote(draft);
     const attention = attentionItems(draft, needsIndication, conditionLabel);
 
-    // ── Section states ────────────────────────────────────────────────────
+    // ── Block states ──────────────────────────────────────────────────────
     const unasked = applicantUnasked(draft);
     const applicantStatus: SectionStatus = !applicantDone(draft)
       ? 'required'
@@ -187,199 +180,146 @@ export const QuoteIntake = React.forwardRef<QuoteIntakeHandle, QuoteIntakeProps>
         ? 'attention'
         : 'complete';
 
-    const nextOf = (s: SectionKey) => {
-      const next = NEXT[s];
-      return next
-        ? { label: `Next: ${SECTION_TITLE[next]}`, onClick: () => goTo(next) }
-        : { label: 'Done', onClick: () => goTo(null) };
+    const fix = (item: AttentionItem) => {
+      if (item.section === 'health') {
+        setMedItem(null);
+        setHealthItem(item.itemKey ?? null);
+      } else if (item.section === 'meds') {
+        setHealthItem(null);
+        setMedItem(item.itemKey ?? null);
+      } else {
+        focusIn(
+          `${sectionSel('applicant')} [role="radiogroup"][aria-label^="Tobacco"] [role="radio"][tabindex="0"]`
+        );
+      }
     };
-    const common = (s: SectionKey) => ({
-      id: `${idPrefix}-sec-${s}`,
-      title: SECTION_TITLE[s],
-      open: open === s,
-      onOpen: () => goTo(s),
-      onClose: () => goTo(null),
-    });
-
-    const missingHere = (s: SectionKey) =>
-      missing && sectionOfMissing(missing) === s
-        ? (MISSING_TEXT[missing] ?? 'Needs an answer')
-        : null;
 
     return (
-      <div className="flex min-w-0 flex-col cq-lg:h-full cq-lg:min-h-0">
-        {/* One scroll region, and in the common case nothing to scroll: the
-            open editor is the only part of the stack with height. */}
+      <div
+        ref={rootRef}
+        className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-rule bg-surface shadow-card max-h-full min-h-0 shrink"
+      >
         <div
           data-intake-body=""
-          className="min-w-0 cq-lg:min-h-0 cq-lg:flex-1 cq-lg:overflow-y-auto cq-lg:overflow-x-hidden cq-lg:overscroll-contain cq-lg:pb-2.5 cq-lg:pr-1"
+          // No container queries in here: the column is a size container of its own
+          // from the two-column width. Without a height to fill (narrow), these
+          // do nothing.
+          className="min-h-0 min-w-0 flex-1 divide-y divide-rule overflow-y-auto overflow-x-hidden overscroll-contain"
         >
-          <div className="divide-y divide-rule rounded-[12px] border border-rule bg-surface shadow-card">
-            <IntakeSection
-              {...common('applicant')}
-              status={applicantStatus}
-              meta={
-                missingHere('applicant') ??
-                (unasked.length ? `Ask ${unasked.join(', ').toLowerCase()}` : null)
-              }
-              metaTone="attention"
-              summary={
-                <SummaryText tone={applicantSummary(draft).length ? 'ink' : 'quiet'}>
-                  {applicantSummary(draft).join(' · ') || 'Not entered yet'}
-                </SummaryText>
-              }
-              next={nextOf('applicant')}
-            >
-              <ApplicantEditor idPrefix={idPrefix} draft={draft} dispatch={dispatch} />
-            </IntakeSection>
+          <IntakeBlock
+            id={`${idPrefix}-sec-applicant`}
+            title="Applicant"
+            status={applicantStatus}
+            meta={
+              missing.some(m => sectionOfMissing(m) === 'applicant')
+                ? 'Required to quote'
+                : unasked.length
+                  ? `Ask ${unasked.join(', ').toLowerCase()}`
+                  : null
+            }
+            metaTone="attention"
+          >
+            <ApplicantEditor
+              idPrefix={idPrefix}
+              draft={draft}
+              dispatch={dispatch}
+              invalid={invalid}
+            />
+          </IntakeBlock>
 
-            <IntakeSection
-              {...common('coverage')}
-              status={coverageStatus}
-              meta={missingHere('coverage')}
-              metaTone="attention"
-              summary={<SummaryText>{coverageSummary(draft).join(' · ')}</SummaryText>}
-              next={nextOf('coverage')}
-            >
-              <CoverageEditor
-                idPrefix={idPrefix}
-                draft={draft}
-                dispatch={dispatch}
-                showAetnaMedSupp={showAetnaMedSupp}
-              />
-            </IntakeSection>
+          <IntakeBlock
+            id={`${idPrefix}-sec-coverage`}
+            title="Coverage"
+            status={coverageStatus}
+            action={<CoverageModeSwitch draft={draft} dispatch={dispatch} />}
+          >
+            <CoverageEditor
+              idPrefix={idPrefix}
+              draft={draft}
+              dispatch={dispatch}
+              showAetnaMedSupp={showAetnaMedSupp}
+              invalid={invalid}
+            />
+          </IntakeBlock>
 
-            <IntakeSection
-              {...common('health')}
-              status={healthStatus}
-              meta={
-                healthOpen
-                  ? `${healthOpen} to review`
-                  : draft.conditions.length
-                    ? plural(draft.conditions.length, 'condition')
-                    : null
-              }
-              metaTone={healthOpen ? 'attention' : 'quiet'}
-              summary={
-                draft.conditions.length ? (
-                  <ItemSummary
-                    count={draft.conditions.length}
-                    items={draft.conditions.map(c => {
-                      const complete = conditionComplete(c);
-                      const meds = draft.meds
-                        .filter(m => medConditionCodes(m).includes(c.code))
-                        .map(m => medShortName(m.name));
-                      return {
-                        key: c.key,
-                        complete,
-                        title: shortLabel(conditionLabel(c.code)),
-                        detail: [...conditionFacts(c), ...meds].join(' · '),
-                        attention: complete ? undefined : detailsNeededText(c),
-                      };
-                    })}
-                    onItem={key => goTo('health', key)}
-                    onMore={() => goTo('health')}
-                  />
-                ) : (
-                  <SummaryText tone="quiet">No conditions</SummaryText>
-                )
-              }
-              next={healthItem ? undefined : nextOf('health')}
-            >
-              <HealthManager
-                idPrefix={idPrefix}
-                draft={draft}
-                dispatch={dispatch}
-                conditions={conditions}
-                item={healthItem}
-                onItem={setHealthItem}
-              />
-            </IntakeSection>
+          <IntakeBlock
+            id={`${idPrefix}-sec-health`}
+            title="Health"
+            status={healthStatus}
+            meta={
+              healthOpen
+                ? `${healthOpen} to review`
+                : draft.conditions.length
+                  ? plural(draft.conditions.length, 'condition')
+                  : null
+            }
+            metaTone={healthOpen ? 'attention' : 'quiet'}
+          >
+            <HealthManager
+              idPrefix={idPrefix}
+              draft={draft}
+              dispatch={dispatch}
+              conditions={conditions}
+              item={healthItem}
+              onItem={key => {
+                setHealthItem(key);
+                if (key) setMedItem(null);
+              }}
+            />
+          </IntakeBlock>
 
-            <IntakeSection
-              {...common('meds')}
-              status={medsStatus}
-              meta={
-                medsOpen
-                  ? `${medsOpen} to review`
-                  : draft.meds.length
-                    ? plural(draft.meds.length, 'medication')
-                    : null
-              }
-              metaTone={medsOpen ? 'attention' : 'quiet'}
-              summary={
-                draft.meds.length ? (
-                  <ItemSummary
-                    count={draft.meds.length}
-                    capitalize
-                    items={draft.meds.map(m => {
-                      const needs = medNeedsUse(m, needsIndication.get(m.drugId), conditionLabel);
-                      const uses = medConditionCodes(m).map(code =>
-                        shortLabel(conditionLabel(code))
-                      );
-                      const taken = medTakenText(m);
-                      return {
-                        key: m.key,
-                        complete: !needs,
-                        title: m.name,
-                        detail: [...uses.map(u => `for ${u}`), taken].filter(Boolean).join(' · '),
-                        attention: needs ? 'what is it for?' : undefined,
-                      };
-                    })}
-                    onItem={key => goTo('meds', key)}
-                    onMore={() => goTo('meds')}
-                  />
-                ) : (
-                  <SummaryText tone="quiet">No medications</SummaryText>
-                )
-              }
-              next={medItem ? undefined : nextOf('meds')}
-            >
-              <MedicationManager
-                idPrefix={idPrefix}
-                draft={draft}
-                dispatch={dispatch}
-                needsIndication={needsIndication}
-                conditionLabel={conditionLabel}
-                item={medItem}
-                onItem={setMedItem}
-              />
-            </IntakeSection>
-          </div>
+          <IntakeBlock
+            id={`${idPrefix}-sec-meds`}
+            title="Medications"
+            status={medsStatus}
+            meta={
+              medsOpen
+                ? `${medsOpen} to review`
+                : draft.meds.length
+                  ? plural(draft.meds.length, 'medication')
+                  : null
+            }
+            metaTone={medsOpen ? 'attention' : 'quiet'}
+          >
+            <MedicationManager
+              idPrefix={idPrefix}
+              draft={draft}
+              dispatch={dispatch}
+              needsIndication={needsIndication}
+              conditionLabel={conditionLabel}
+              item={medItem}
+              onItem={key => {
+                setMedItem(key);
+                if (key) setHealthItem(null);
+              }}
+            />
+          </IntakeBlock>
         </div>
 
-        <IntakeFooter
-          {...props}
+        <QuoteReadiness
           missing={missing}
           attention={attention}
-          onFix={item => {
-            goTo(item.section, item.itemKey ?? null);
-            if (item.section === 'applicant')
-              setFocusWanted({
-                selector: `${sectionSel('applicant')} [role="radiogroup"][aria-label^="Tobacco"] [role="radio"][tabindex="0"]`,
-              });
-          }}
-          onFixMissing={field => {
-            const section = sectionOfMissing(field);
-            setOpen(section);
-            setHealthItem(null);
-            setMedItem(null);
-            setFocusWanted({
-              selector:
-                field === 'sex'
-                  ? `${sectionSel(section)} [role="radiogroup"][aria-label="Sex"] [role="radio"]`
-                  : field === 'face'
-                    ? `${sectionSel(section)} [aria-labelledby="${idPrefix}-face-label"] [role="radio"]`
-                    : byId(`${idPrefix}-${field}`),
-            });
+          tried={tried}
+          live={props.live ?? 'idle'}
+          quotedAt={props.quotedAt ?? null}
+          onFixMissing={field => focusIn(fieldSel(field))}
+          onFix={fix}
+          onGetQuotes={() => {
+            if (missing.length) {
+              setTried(true);
+              focusIn(fieldSel(missing[0]));
+              return;
+            }
+            props.onGetQuotes?.();
           }}
           onReset={
             onReset
               ? () => {
                   onReset();
+                  setTried(false);
                   setHealthItem(null);
                   setMedItem(null);
-                  setOpen('applicant');
+                  focusIn(byId(`${idPrefix}-state`));
                 }
               : undefined
           }
@@ -389,164 +329,175 @@ export const QuoteIntake = React.forwardRef<QuoteIntakeHandle, QuoteIntakeProps>
   }
 );
 
-/** A closed Health or Medications section: one line per item, each opening it. */
-function ItemSummary({
-  count,
-  items,
-  capitalize,
-  onItem,
-  onMore,
-}: {
-  count: number;
-  items: Array<{
-    key: string;
-    complete: boolean;
-    title: string;
-    detail: string;
-    attention?: string;
-  }>;
-  capitalize?: boolean;
-  onItem: (key: string) => void;
-  onMore: () => void;
-}): JSX.Element {
-  // What needs the agent first, so it is never the line cut off.
-  const ordered = [...items].sort((a, b) => Number(a.complete) - Number(b.complete));
-  const shown = ordered.slice(0, count > SUMMARY_LINES ? SUMMARY_LINES - 1 : SUMMARY_LINES);
-  const hidden = count - shown.length;
-  return (
-    <div className="space-y-0.5">
-      {shown.map(item => (
-        <SummaryItem
-          key={item.key}
-          status={item.complete ? 'complete' : 'attention'}
-          title={item.title}
-          detail={item.detail}
-          attention={item.attention}
-          capitalize={capitalize}
-          onClick={() => onItem(item.key)}
-        />
-      ))}
-      {hidden > 0 ? (
-        <button
-          type="button"
-          onClick={onMore}
-          className={cn(
-            'rounded-[4px] pl-5 text-[12.5px] font-medium text-brand-ink hover:underline',
-            FOCUS
-          )}
-        >
-          +{hidden} more
-        </button>
-      ) : null}
-    </div>
-  );
-}
+const timeOf = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : null;
 
 /**
- * The column's foot: what the quote is waiting on, and the one button.
- * Quotes also run on every edit, but an agent should never have to know
- * that: this is where they look for "go". With something required missing
- * it says what and opens the question; with details unanswered it quotes,
- * and says which answers the carriers are assuming.
+ * The column's foot: can it quote, and the one button.
+ *
+ *   2 items required    • State  • Face amount        (each moves the cursor)
+ *   Quoting on assumptions   Tobacco · Diabetes       (each opens its question)
+ *   Ready to quote      All required information entered
+ *
+ * Before the first quote the action is Get quotes. After it, every edit
+ * re-quotes by itself, so the foot says so -- "Live quoting · updated
+ * 11:42:03 AM", or "Updating quotes…" -- with Refresh as the quiet action.
  */
-function IntakeFooter({
-  draft,
+function QuoteReadiness({
   missing,
   attention,
-  onFix,
+  tried,
+  live,
+  quotedAt,
   onFixMissing,
+  onFix,
   onGetQuotes,
   onReset,
-}: QuoteIntakeProps & {
-  missing: string | null;
+}: {
+  missing: string[];
   attention: AttentionItem[];
-  onFix: (item: AttentionItem) => void;
+  tried: boolean;
+  live: LiveState;
+  quotedAt: string | null;
   onFixMissing: (field: string) => void;
+  onFix: (item: AttentionItem) => void;
+  onGetQuotes: () => void;
+  onReset?: () => void;
 }): JSX.Element {
-  const [tried, setTried] = React.useState(false);
-  React.useEffect(() => {
-    if (!missing) setTried(false);
-  }, [missing]);
-
+  const quoting = live !== 'idle' && !missing.length;
   return (
-    <div className="shrink-0 space-y-2 border-t border-rule pt-2.5 cq-lg:mr-1">
-      {missing ? (
-        <div className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-ringing" />
-          {/* After a press of Get quotes, the same line is announced. */}
-          <p role={tried ? 'alert' : undefined} className="min-w-0 truncate">
-            <button
-              type="button"
-              onClick={() => onFixMissing(missing)}
-              className={cn('rounded-[4px] font-semibold text-ringing-ink hover:underline', FOCUS)}
-            >
-              {MISSING_TEXT[missing] ?? 'Needs more answers'}
-            </button>{' '}
-            to quote.
+    <div className="shrink-0 space-y-2 border-t border-rule bg-paper px-4 pb-3 pt-2.5">
+      {missing.length ? (
+        <div role={tried ? 'alert' : undefined}>
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+            <AlertCircle className="h-4 w-4 shrink-0 text-ringing-ink" aria-hidden />
+            {missing.length === 1 ? '1 item required' : `${missing.length} items required`}
           </p>
+          <ul className="mt-1 flex flex-wrap gap-x-1 gap-y-1 pl-[22px]">
+            {missing.map(field => (
+              <li key={field}>
+                <button
+                  type="button"
+                  onClick={() => onFixMissing(field)}
+                  className={cn(
+                    'inline-flex h-6 items-center gap-1 rounded-full bg-ringing-tint px-2 text-[12px] font-semibold text-ringing-ink hover:underline',
+                    FOCUS
+                  )}
+                >
+                  {MISSING_LABEL[field] ?? field}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : attention.length ? (
-        <div className="flex items-center gap-1.5 text-[12.5px] leading-[18px] text-ink-2">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-ringing-ink" aria-hidden />
-          <p className="min-w-0 truncate">
-            <span className="text-ink-2">Quoting on assumptions · </span>
-            {attention.slice(0, 3).map((item, i) => (
-              <React.Fragment key={`${item.section}-${item.itemKey}`}>
-                {i ? ', ' : null}
+        <div>
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+            <AlertCircle className="h-4 w-4 shrink-0 text-ringing-ink" aria-hidden />
+            Quoting on assumptions
+          </p>
+          <ul className="mt-1 flex flex-wrap gap-x-1 gap-y-1 pl-[22px]">
+            {attention.map(item => (
+              <li key={`${item.section}-${item.itemKey ?? item.subject}`}>
                 <button
                   type="button"
                   onClick={() => onFix(item)}
                   title={`${item.subject}: ${item.need}`}
                   className={cn(
-                    'rounded-[4px] font-semibold text-ringing-ink underline-offset-2 hover:underline',
-                    item.section === 'meds' && 'capitalize',
+                    'inline-flex h-6 items-center gap-1 rounded-full bg-ringing-tint px-2 text-[12px] font-semibold text-ringing-ink hover:underline',
                     FOCUS
                   )}
                 >
-                  {shortLabel(item.subject)}
+                  <span className={cn(item.section === 'meds' && 'capitalize')}>
+                    {shortLabel(item.subject)}
+                  </span>
+                  <span className="font-normal">· {item.need}</span>
                 </button>
-              </React.Fragment>
+              </li>
             ))}
-            {attention.length > 3 ? ` +${attention.length - 3} more` : null}
-          </p>
+          </ul>
         </div>
-      ) : (
-        <p className="flex items-center gap-1.5 text-[12.5px] text-live-ink" aria-live="polite">
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-live" />
-          {draft.conditions.length || draft.meds.length
-            ? 'Every answer in · quoting live'
-            : 'Ready · quoting live as you edit'}
+      ) : quoting ? null : (
+        <p className="flex items-center gap-1.5 text-[13px] leading-[18px]">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-live-ink" aria-hidden />
+          <span className="font-semibold text-ink">Ready to quote</span>
+          <span className="truncate text-[12px] text-ink-2">
+            · all required information entered
+          </span>
         </p>
       )}
 
-      <div className="flex items-stretch gap-2">
-        {onReset ? (
+      {quoting ? (
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 text-[12.5px] leading-4" aria-live="polite">
+            {live === 'updating' ? (
+              <span className="flex items-center gap-1.5 font-semibold text-ink">
+                <RefreshCw className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
+                Updating quotes…
+              </span>
+            ) : live === 'error' ? (
+              <span className="font-semibold text-dropped-ink">Quotes could not refresh</span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-semibold text-ink">
+                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-live" />
+                Live quoting
+              </span>
+            )}
+            {quotedAt && live !== 'updating' ? (
+              <span className="block truncate pl-3.5 text-[11.5px] font-normal text-ink-3">
+                Updated {timeOf(quotedAt)}
+              </span>
+            ) : null}
+          </p>
           <Button
             type="button"
             variant="outline"
-            onClick={onReset}
-            className="h-12 shrink-0 rounded-[10px] px-3 text-[13px] font-medium text-ink-2"
+            onClick={onGetQuotes}
+            className="h-9 shrink-0 px-3 text-[13px]"
           >
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-            New quote
+            Refresh quotes
           </Button>
-        ) : null}
-        <Button
-          type="button"
-          onClick={() => {
-            if (missing) {
-              setTried(true);
-              onFixMissing(missing);
-              return;
-            }
-            onGetQuotes?.();
-          }}
-          className="h-12 min-w-0 flex-1 rounded-[10px] text-[15.5px] font-semibold tracking-[-0.005em] shadow-raised"
-        >
-          Get quotes
-          {missing ? null : <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
-        </Button>
-      </div>
+          {onReset ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onReset}
+              className="h-9 shrink-0 px-2.5 text-[13px] font-medium text-ink-2"
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              New quote
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex items-stretch gap-2">
+          {onReset ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onReset}
+              className="h-11 shrink-0 px-3 text-[13px] font-medium text-ink-2"
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              New quote
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            onClick={onGetQuotes}
+            className="h-11 min-w-0 flex-1 rounded-[10px] text-[15px] font-semibold shadow-raised"
+          >
+            Get quotes
+            {missing.length ? null : <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

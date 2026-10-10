@@ -1359,3 +1359,13 @@ a.rounded-card:hover,
 .react-flow__attribution a:visited {
   color: var(--ink-2) !important;
 }
+
+/* The quoter's re-quote bar: a short segment sweeping a 2px track. */
+@keyframes ne-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}

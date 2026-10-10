@@ -203,25 +203,34 @@ export function heightInches(draft: Pick<QuoteDraft, 'heightFt' | 'heightIn'>): 
   return Math.round(ft * 12 + inches);
 }
 
-/** Why the draft cannot be quoted yet, or null when it can. */
-export function missingForQuote(draft: QuoteDraft): string | null {
-  if (!draft.state) return 'state';
-  if (!draft.sex) return 'sex';
+/**
+ * Every field the draft still needs before it can be quoted, in the order
+ * they are asked: state, sex, age (or date of birth), then coverage.
+ */
+export function missingFieldsForQuote(draft: QuoteDraft): string[] {
+  const missing: string[] = [];
+  if (!draft.state) missing.push('state');
+  if (!draft.sex) missing.push('sex');
   if (draft.ageOrDob.mode === 'age') {
     const age = intOf(draft.ageOrDob.age);
-    if (age === null || age < 18 || age > 100) return 'age';
+    if (age === null || age < 18 || age > 100) missing.push('age');
   } else {
     const age = ageFromDob(draft.ageOrDob.dob);
-    if (age === null || age < 18 || age > 100) return 'dob';
+    if (age === null || age < 18 || age > 100) missing.push('dob');
   }
   if (draft.coverage.mode === 'face') {
     const face = intOf(draft.coverage.face);
-    if (face === null || face < 1000 || face > 500000) return 'face';
+    if (face === null || face < 1000 || face > 500000) missing.push('face');
   } else {
     const budget = intOf(draft.coverage.budget);
-    if (budget === null || budget < 5 || budget > 2000) return 'budget';
+    if (budget === null || budget < 5 || budget > 2000) missing.push('budget');
   }
-  return null;
+  return missing;
+}
+
+/** Why the draft cannot be quoted yet (the first missing field), or null when it can. */
+export function missingForQuote(draft: QuoteDraft): string | null {
+  return missingFieldsForQuote(draft)[0] ?? null;
 }
 
 /**

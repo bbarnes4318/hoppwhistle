@@ -38,8 +38,10 @@ export function CompareTray({
       className="flex items-center gap-2 rounded-card border border-rule-strong bg-surface px-3 py-1.5 shadow-raised"
     >
       <p className="flex-1 text-[13px] text-ink">
-        <span className="font-semibold tabular-nums">{count}</span> selected to compare
-        {count < 2 ? <span className="text-ink-3"> · pick at least 2</span> : null}
+        <span className="font-semibold tabular-nums">{count}</span> selected
+        <span className="text-ink-3">
+          {count < 2 ? ' · pick at least 2 to compare' : ' · compare side by side (up to 4)'}
+        </span>
       </p>
       <Button size="sm" variant="ghost" className="h-8" onClick={onClear}>
         Clear
@@ -66,6 +68,23 @@ export function ComparePanel({
   onUse?: (result: FexResult, line: QuoteLine) => void;
   busyId?: string | null;
 }): JSX.Element {
+  /*
+   * The winner of a row that has one, read off the figures: the lowest
+   * premium, the most coverage, a Level benefit. Ties all win; a row where
+   * every carrier is the same has no winner.
+   */
+  const winners = (pick: (r: FexResult) => number | null, want: 'min' | 'max') => {
+    const values = results.map(pick).filter((v): v is number => v != null);
+    if (values.length < 2 || new Set(values).size < 2) return new Set<string>();
+    const target = want === 'min' ? Math.min(...values) : Math.max(...values);
+    return new Set(results.filter(r => pick(r) === target).map(r => r.productId));
+  };
+  const wins: Record<string, Set<string>> = {
+    Premium: winners(r => r.best?.premium ?? null, 'min'),
+    'Face amount': winners(r => r.best?.face ?? null, 'max'),
+    Benefit: winners(r => (r.best ? (r.best.benefit === 'LEVEL' ? 1 : 0) : null), 'max'),
+  };
+
   const rows: Array<{ label: string; cell: (r: FexResult) => React.ReactNode }> = [
     {
       label: 'Premium',
@@ -93,6 +112,22 @@ export function ComparePanel({
         ) : (
           '—'
         ),
+    },
+    {
+      label: 'Health outcome',
+      cell: r => (
+        <span>
+          {r.outcomeLabel || (r.best ? r.best.classLabel : '—')}
+          {r.refer ? (
+            <span className="t-meta block text-ringing-ink">Referral required</span>
+          ) : null}
+          {r.needsIndication.length ? (
+            <span className="t-meta block text-ringing-ink">
+              {r.needsIndication.map(n => n.name).join(', ')}: use unconfirmed
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     { label: 'Appointed', cell: r => (r.appointed ? 'Yes' : 'No') },
     {
@@ -130,7 +165,7 @@ export function ComparePanel({
           : 'None',
     },
     {
-      label: 'Why',
+      label: 'Why (with source page)',
       cell: r =>
         r.reasons.length ? (
           <ul className="space-y-1">
@@ -222,11 +257,29 @@ export function ComparePanel({
                 >
                   {row.label}
                 </th>
-                {results.map(r => (
-                  <td key={r.productId} className="px-2 py-2 align-top tabular-nums text-ink">
-                    {row.cell(r)}
-                  </td>
-                ))}
+                {results.map(r => {
+                  const won = wins[row.label]?.has(r.productId);
+                  return (
+                    <td
+                      key={r.productId}
+                      className={cn(
+                        'px-2 py-2 align-top tabular-nums text-ink',
+                        won && 'bg-live-tint'
+                      )}
+                    >
+                      {row.cell(r)}
+                      {won ? (
+                        <span className="mt-0.5 block text-[10.5px] font-bold uppercase tracking-[0.07em] text-live-ink">
+                          {row.label === 'Premium'
+                            ? 'Lowest'
+                            : row.label === 'Face amount'
+                              ? 'Most'
+                              : 'Level'}
+                        </span>
+                      ) : null}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

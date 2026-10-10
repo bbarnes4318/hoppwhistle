@@ -40,15 +40,22 @@ function Unit({ children }: { children: string }): JSX.Element {
   );
 }
 
+/** Said under a required field the agent tried to quote without. */
+const REQUIRED = 'Required to quote';
+
 export function ApplicantEditor({
   idPrefix,
   draft,
   dispatch,
+  invalid,
 }: {
   idPrefix: string;
   draft: QuoteDraft;
   dispatch: React.Dispatch<DraftAction>;
+  /** Required fields to mark (after Get quotes was pressed without them). */
+  invalid?: ReadonlySet<string>;
 }): JSX.Element {
+  const bad = (field: string) => Boolean(invalid?.has(field));
   const p = (s: string) => `${idPrefix}-${s}`;
   const lead = (f: Parameters<QuoteDraft['prefilled']['has']>[0]) => draft.prefilled.has(f);
   const dobMode = draft.ageOrDob.mode === 'dob';
@@ -67,11 +74,17 @@ export function ApplicantEditor({
     });
 
   return (
-    <div className="grid grid-cols-3 gap-x-2.5 gap-y-3">
-      <Field label="State" htmlFor={p('state')} fromLead={lead('state')}>
+    <div className="grid grid-cols-3 gap-x-3 gap-y-3">
+      <Field
+        label="State"
+        htmlFor={p('state')}
+        fromLead={lead('state')}
+        error={bad('state') ? REQUIRED : null}
+      >
         <NativeSelect
           id={p('state')}
           value={draft.state}
+          aria-invalid={bad('state') || undefined}
           className="px-2 pr-6"
           onChange={e =>
             dispatch({ type: 'set', patch: { state: e.target.value }, fields: ['state'] })
@@ -86,8 +99,9 @@ export function ApplicantEditor({
         </NativeSelect>
       </Field>
 
-      <Field label="Sex" fromLead={lead('sex')}>
+      <Field label="Sex" fromLead={lead('sex')} error={bad('sex') ? REQUIRED : null}>
         <ChoiceGroup
+          className={bad('sex') ? 'ring-1 ring-dropped' : undefined}
           label="Sex"
           options={[
             { value: 'F' as const, label: 'Female' },
@@ -110,6 +124,7 @@ export function ApplicantEditor({
                 id={p('dob')}
                 type="date"
                 value={(draft.ageOrDob as { dob: string }).dob}
+                aria-invalid={bad('dob') || undefined}
                 className="rounded-r-none"
                 onChange={e =>
                   dispatch({
@@ -133,6 +148,7 @@ export function ApplicantEditor({
               maxLength={3}
               placeholder="65"
               value={(draft.ageOrDob as { age: string }).age}
+              aria-invalid={bad('age') || undefined}
               className="min-w-0 flex-1 rounded-r-none px-2"
               onChange={e =>
                 dispatch({
@@ -156,6 +172,11 @@ export function ApplicantEditor({
             {dobMode ? 'Age' : 'DOB'}
           </button>
         </div>
+        {bad('age') || bad('dob') ? (
+          <p className="mt-1 text-[11.5px] font-medium leading-4 text-dropped-ink">
+            {dobMode ? 'A date of birth, age 18–100' : 'Age 18–100'}
+          </p>
+        ) : null}
       </div>
 
       <Field label="Tobacco" fromLead={lead('tobacco')}>

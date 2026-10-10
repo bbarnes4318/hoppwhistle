@@ -42,15 +42,29 @@ const SIZE = {
   quoteHero: { box: 'h-[76px] w-[190px]', square: 'h-[76px] w-[76px]' },
   quotePick: { box: 'h-[62px] w-[160px]', square: 'h-[62px] w-[62px]' },
   quoteRow: { box: 'h-[56px] w-[150px]', square: 'h-[56px] w-[56px]' },
+  /*
+   * The quoter's result list: one plate size for every carrier, so a column
+   * of twenty logos lines up and no carrier is bigger than its neighbour
+   * because of where it ranked. 104x44 lets a wordmark read at a glance in a
+   * row ~68px tall.
+   */
+  quoteList: { box: 'h-[44px] w-[104px]', square: 'h-[44px] w-[44px]' },
 } as const;
 
 /** The plate sizes that fill edge to edge, with the mark scaled to the plate. */
-const FILL_SIZES: ReadonlySet<Size> = new Set(['row', 'quoteHero', 'quotePick', 'quoteRow']);
+const FILL_SIZES: ReadonlySet<Size> = new Set([
+  'row',
+  'quoteHero',
+  'quotePick',
+  'quoteRow',
+  'quoteList',
+]);
 const PLATE_PADDING: Partial<Record<Size, string>> = {
   row: 'p-[5px]',
   quoteHero: 'px-3 py-2.5',
   quotePick: 'px-2.5 py-2',
   quoteRow: 'px-2.5 py-[7px]',
+  quoteList: 'px-2 py-[5px]',
 };
 
 type Size = keyof typeof SIZE;
